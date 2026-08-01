@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Canonical;
 
+use Docuccino\Core\Document\PathItem;
 use stdClass;
 
 /**
@@ -17,8 +18,6 @@ use stdClass;
  */
 final class Canonicalizer
 {
-    private const array METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace', 'query'];
-
     private const array PARAMETER_IN_RANK = ['path' => 0, 'query' => 1, 'header' => 2, 'cookie' => 3];
 
     /**
@@ -194,7 +193,7 @@ final class Canonicalizer
                 'parameters' => $this->canonicalizeParameterList(...),
             ];
 
-            foreach (self::METHODS as $method) {
+            foreach (PathItem::METHODS as $method) {
                 $handlers[$method] = $this->canonicalizeOperation(...);
             }
 

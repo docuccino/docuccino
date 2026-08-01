@@ -8,7 +8,7 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi32Emitter;
-use Docuccino\Core\Emitter\UirEmitter;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Validation\Validator;
 
 /**

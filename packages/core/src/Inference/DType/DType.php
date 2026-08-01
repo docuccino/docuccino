@@ -92,6 +92,41 @@ abstract readonly class DType
     }
 
     /**
+     * Shared canonicalisation for {@see UnionT::of()} / {@see IntersectionT::of()}:
+     * flatten nested members of the same composite kind, deduplicate by
+     * {@see canonicalKey()}, then sort — so `A|B` and `B|A` yield identical,
+     * byte-stable survivors. Collapsing an empty/single result back to a concrete
+     * type is left to each caller.
+     *
+     * @param  list<DType>  $members
+     * @param  class-string<IntersectionT|UnionT>  $composite  the wrapper kind to flatten through
+     * @return list<DType>
+     */
+    protected static function canonicalMembers(array $members, string $composite): array
+    {
+        $flat = [];
+        foreach ($members as $member) {
+            if ($member instanceof $composite) {
+                foreach ($member->members as $inner) {
+                    $flat[] = $inner;
+                }
+
+                continue;
+            }
+            $flat[] = $member;
+        }
+
+        $byKey = [];
+        foreach ($flat as $member) {
+            $byKey[$member->canonicalKey()] = $member;
+        }
+
+        ksort($byKey);
+
+        return array_values($byKey);
+    }
+
+    /**
      * @param  array<array-key, mixed>  $data
      */
     public static function fromArray(array $data): self

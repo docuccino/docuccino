@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Canonical\Canonicalizer;
-use Docuccino\Core\Emitter\UirEmitter;
+use Docuccino\Core\Emit\UirEmitter;
 
 /**
  * Reverses the key order of every map (associative array) at every depth while leaving

@@ -125,7 +125,7 @@ final class OverlayApplier
     private function applyUpdate(array $document, array $paths, mixed $update): array
     {
         foreach ($paths as $path) {
-            $old = $this->valueAt($document, $path);
+            $old = Arr::valueAt($document, $path);
 
             if (self::isMap($old) && self::isMap($update)) {
                 /** @var array<string, mixed> $oldMap */
@@ -170,7 +170,7 @@ final class OverlayApplier
             return $document;
         }
 
-        $parent = $this->valueAt($document, $parentPath);
+        $parent = Arr::valueAt($document, $parentPath);
         if (! self::isMap($parent)) {
             return $document;
         }
@@ -181,25 +181,6 @@ final class OverlayApplier
         $parentMap = self::attachProvenance($parentMap, [$field], $overrode);
 
         return Arr::stringKeyed($this->setAt($document, $parentPath, $parentMap));
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $document
-     * @param  list<int|string>  $path
-     */
-    private function valueAt(array $document, array $path): mixed
-    {
-        $node = $document;
-
-        foreach ($path as $key) {
-            if (! is_array($node) || ! array_key_exists($key, $node)) {
-                return null;
-            }
-
-            $node = $node[$key];
-        }
-
-        return $node;
     }
 
     /**

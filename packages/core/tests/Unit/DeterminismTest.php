@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Document\UirDocument;
-use Docuccino\Core\Emitter\UirEmitter;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Identity\ContentHasher;
 
 beforeEach(function (): void {

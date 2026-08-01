@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Document\UirDocument;
-use Docuccino\Core\Emitter\UirEmitter;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Validation\Validator;
 
 /**

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Overlay;
 
+use Docuccino\Core\Support\Arr;
+
 /**
  * Resolves an OpenAPI Overlay `target` (a JSONPath expression) against a document, returning the
  * concrete key-paths it matches. Docuccino supports a **documented subset** of JSONPath focused
@@ -153,7 +155,7 @@ final class TargetResolver
         $out = [];
 
         foreach ($paths as $path) {
-            $node = $this->valueAt($document, $path);
+            $node = Arr::valueAt($document, $path);
 
             match ($segment['type']) {
                 'member' => $this->expandMember($segment, $path, $node, $out),
@@ -213,24 +215,5 @@ final class TargetResolver
                 $out[] = [...$path, $index];
             }
         }
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $document
-     * @param  list<int|string>  $path
-     */
-    private function valueAt(array $document, array $path): mixed
-    {
-        $node = $document;
-
-        foreach ($path as $key) {
-            if (! is_array($node) || ! array_key_exists($key, $node)) {
-                return null;
-            }
-
-            $node = $node[$key];
-        }
-
-        return $node;
     }
 }

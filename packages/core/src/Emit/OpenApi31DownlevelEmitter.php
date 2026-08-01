@@ -23,7 +23,7 @@ use Docuccino\Core\Support\Arr;
  * Everything else in 3.2 is a superset-compatible subset of 3.1's JSON Schema dialect and
  * passes through unchanged.
  */
-final readonly class OpenApi31DownlevelEmitter
+final readonly class OpenApi31DownlevelEmitter implements Emitter
 {
     private const string DIALECT_32 = 'https://spec.openapis.org/oas/3.2/dialect/base';
 

@@ -23,25 +23,7 @@ final readonly class IntersectionT extends DType
      */
     public static function of(array $members): DType
     {
-        $flat = [];
-        foreach ($members as $member) {
-            if ($member instanceof self) {
-                foreach ($member->members as $inner) {
-                    $flat[] = $inner;
-                }
-
-                continue;
-            }
-            $flat[] = $member;
-        }
-
-        $byKey = [];
-        foreach ($flat as $member) {
-            $byKey[$member->canonicalKey()] = $member;
-        }
-
-        ksort($byKey);
-        $unique = array_values($byKey);
+        $unique = self::canonicalMembers($members, self::class);
 
         return match (count($unique)) {
             0 => new UnknownT('empty intersection'),

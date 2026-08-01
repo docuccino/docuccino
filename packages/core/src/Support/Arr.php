@@ -41,4 +41,26 @@ final class Arr
 
         return $values;
     }
+
+    /**
+     * The value at a concrete key-path, or null when any segment is missing or a
+     * non-array is encountered mid-walk.
+     *
+     * @param  array<array-key, mixed>  $document
+     * @param  list<int|string>  $path
+     */
+    public static function valueAt(array $document, array $path): mixed
+    {
+        $node = $document;
+
+        foreach ($path as $key) {
+            if (! is_array($node) || ! array_key_exists($key, $node)) {
+                return null;
+            }
+
+            $node = $node[$key];
+        }
+
+        return $node;
+    }
 }
