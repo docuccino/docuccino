@@ -8,6 +8,7 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 
@@ -38,8 +39,8 @@ final readonly class PoisonInjectingTypeEngine implements TypeEngine
         return $this->inner->classMetadata($class);
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
-        $this->inner->trace($action, $visitor);
+        return $this->inner->trace($action, $visitor);
     }
 }

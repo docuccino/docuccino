@@ -13,9 +13,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * tmpDir, so this also exercises cold-container reproducibility.
  */
 beforeEach(function (): void {
-    if (! FixtureRunner::available()) {
-        test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
-    }
+    ensureFixtureAvailable(FixtureRunner::available());
 });
 
 it('produces an identical serialized ActionAnalysis across two cold runs', function (): void {

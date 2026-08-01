@@ -22,6 +22,13 @@ interface TypeEngine
     /** Expand a class's shape (properties, docblocks); lazy + memoised. */
     public function classMetadata(ClassRef $class): ClassMetadata;
 
-    /** Drive an interactive, bounded, interprocedural walk from an action. */
-    public function trace(ActionRef $action, TraceVisitor $visitor): void;
+    /**
+     * Drive an interactive, bounded, interprocedural walk from an action.
+     *
+     * The visitor harvests as it walks; the returned {@see TraceReport} carries
+     * the transitive dependency-file set the walk read, so callers can key a
+     * fragment cache on it (a walk that descends N files deep must invalidate
+     * when any of those files change).
+     */
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport;
 }

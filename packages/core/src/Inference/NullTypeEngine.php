@@ -27,8 +27,9 @@ final readonly class NullTypeEngine implements TypeEngine
         return new ClassMetadata($class->fqcn);
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
-        // Nothing to walk.
+        // Nothing to walk — no dependency files read.
+        return new TraceReport;
     }
 }

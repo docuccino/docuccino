@@ -10,7 +10,9 @@ namespace Docuccino\Core\Inference;
  *   - `scalar`     — a string / int / float / bool / null literal;
  *   - `descriptor` — a factory static-call we deliberately do NOT collapse to
  *     its runtime type (`AllowedFilter::exact('status')` → factory + folded
- *     args). This variant is the crux of the Scramble-Pro-beater (Spike B):
+ *     args). The `factory` records the FULLY-QUALIFIED `Class::method`
+ *     (`Spatie\QueryBuilder\AllowedFilter::exact`); {@see render()} shortens the
+ *     class for display. This variant is the crux of the Scramble-Pro-beater (Spike B):
  *     PHPStan would tell us the *type* is `AllowedFilter`, but the docs need the
  *     *call*, so factory calls are folded at the AST level before PHPStan type
  *     collapse;
@@ -88,7 +90,7 @@ final readonly class ConstValue
             self::KIND_SCALAR => $this->renderScalar($this->scalar),
             self::KIND_DESCRIPTOR => sprintf(
                 '%s(%s)',
-                (string) $this->factory,
+                self::shortFactory((string) $this->factory),
                 implode(', ', array_map(static fn (ConstValue $a): string => $a->render(), $this->args)),
             ),
             self::KIND_ARRAY => sprintf(
@@ -155,6 +157,22 @@ final readonly class ConstValue
             static fn (mixed $i): self => is_array($i) ? self::fromArray($i) : self::unknown('malformed const value'),
             $items,
         ));
+    }
+
+    /**
+     * Shorten a fully-qualified `Class::method` factory to `ShortClass::method`
+     * for display, leaving the stored `factory` (an FQCN) untouched.
+     */
+    private static function shortFactory(string $factory): string
+    {
+        $sep = strpos($factory, '::');
+        $class = $sep === false ? $factory : substr($factory, 0, $sep);
+        $method = $sep === false ? null : substr($factory, $sep + 2);
+
+        $pos = strrpos($class, '\\');
+        $shortClass = $pos !== false ? substr($class, $pos + 1) : $class;
+
+        return $method === null ? $shortClass : $shortClass.'::'.$method;
     }
 
     private function renderScalar(string|int|float|bool|null $value): string

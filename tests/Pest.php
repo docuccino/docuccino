@@ -63,3 +63,25 @@ function loadGolden(string $name): string
 
     return $contents;
 }
+
+/**
+ * Gate for the fixture-app-dependent integration tests. Normally a missing
+ * fixture app skips the test (contributors without it still get a green local
+ * run). Under `DOCUCCINO_REQUIRE_FIXTURE=1` — the CI fixture job — a missing
+ * fixture app is instead a hard FAILURE, so the suite can never silently pass by
+ * skipping the very tests the job exists to run.
+ */
+function ensureFixtureAvailable(bool $available): void
+{
+    if ($available) {
+        return;
+    }
+
+    if (getenv('DOCUCCINO_REQUIRE_FIXTURE') === '1') {
+        throw new RuntimeException(
+            'Fixture app required (DOCUCCINO_REQUIRE_FIXTURE=1) but absent — provision per spikes/fixture-app-setup.md',
+        );
+    }
+
+    test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
+}

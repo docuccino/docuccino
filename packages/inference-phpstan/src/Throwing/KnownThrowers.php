@@ -72,4 +72,33 @@ final class KnownThrowers
     {
         return $this->methods[$name] ?? null;
     }
+
+    /**
+     * The exception-FQCN → fixed-status map, derived from every registered
+     * thrower that declares a fixed status. This is the SINGLE source of
+     * exception-status knowledge: the throw analyzer consults it to enrich an
+     * explicit throw (layer 1) with the same status the registry uses to rescue
+     * an implicit forwarder (layer 2), so a user's `withMethod()` thrower enriches
+     * both layers rather than only the rescue path. Throwers that fold their
+     * status from a call argument (`abort`) carry no fixed status and are absent.
+     *
+     * @return array<string, int>
+     */
+    public function knownStatuses(): array
+    {
+        $map = [];
+        foreach ([...array_values($this->functions), ...array_values($this->methods)] as $thrower) {
+            if ($thrower->fixedStatus !== null) {
+                $map[$thrower->exceptionFqcn] = $thrower->fixedStatus;
+            }
+        }
+
+        return $map;
+    }
+
+    /** The fixed HTTP status for an exactly-matching exception FQCN, or null. */
+    public function statusForExceptionFqcn(string $fqcn): ?int
+    {
+        return $this->knownStatuses()[$fqcn] ?? null;
+    }
 }

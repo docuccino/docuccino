@@ -14,12 +14,15 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
+use Docuccino\Inference\PhpStan\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
+use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\Tracer;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PHPStan\Node\MethodReturnStatementsNode;
@@ -139,25 +142,30 @@ final class PhpStanTypeEngine implements TypeEngine
         return $this->classMetadataFactory->forClass($class);
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
         if ($action->class === null) {
-            return;
+            return new TraceReport([$action->file]);
         }
 
+        $tracer = new Tracer(
+            $this->adapter,
+            $this->translator,
+            $this->projectFilter,
+            new CalleeResolver($this->adapter->reflectionProvider()),
+            $visitor,
+            $this->config->traceDepth,
+            $this->config->fileBudget,
+        );
+
         try {
-            $tracer = new Tracer(
-                $this->adapter,
-                $this->translator,
-                $this->projectFilter,
-                $visitor,
-                $this->config->traceDepth,
-                $this->config->fileBudget,
-            );
             $tracer->run($action->class, $action->method, $action->file);
         } catch (Throwable) {
-            // Trace is best-effort; the visitor keeps whatever it harvested.
+            // Trace is best-effort; the visitor keeps whatever it harvested and
+            // the report still carries every file the walk reached before failing.
         }
+
+        return new TraceReport($tracer->visitedFiles());
     }
 
     private function makeThrowAnalyzer(): ThrowAnalyzer
@@ -167,19 +175,16 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->projectFilter,
             $this->fileAnalyzer,
             $this->config->knownThrowers,
+            new CalleeResolver($this->adapter->reflectionProvider()),
             $this->config->throwDepth,
         );
     }
 
     private function selfLabel(ActionRef $action): string
     {
-        $class = $action->class;
-        if ($class !== null) {
-            $pos = strrpos($class, '\\');
-            $class = $pos !== false ? substr($class, $pos + 1) : $class;
-        } else {
-            $class = basename($action->file, '.php');
-        }
+        $class = $action->class !== null
+            ? Fqcn::short($action->class)
+            : basename($action->file, '.php');
 
         return $class.'::'.$action->method;
     }

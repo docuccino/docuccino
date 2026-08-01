@@ -53,15 +53,26 @@ final class QueryBuilderProbe implements TraceVisitor
         return $this->terminals !== [];
     }
 
+    /**
+     * The outermost terminal — the one at the call site. The Tracer walks the
+     * entry method fully before descending, so the first terminal recorded is the
+     * shallowest (here `paginateList(25)`, not the vendor `paginate` it forwards
+     * to one hop deeper). Per design §4 this outermost call supplies per-page.
+     *
+     * @return Terminal|null
+     */
+    public function outermostTerminal(): ?array
+    {
+        return $this->terminals[0] ?? null;
+    }
+
+    /**
+     * Per-page folds from the OUTERMOST terminal's argument (the call site),
+     * NOT merely the first terminal that happens to carry a constant.
+     */
     public function recoveredPerPage(): ?int
     {
-        foreach ($this->terminals as $terminal) {
-            if ($terminal['perPage'] !== null) {
-                return $terminal['perPage'];
-            }
-        }
-
-        return null;
+        return $this->outermostTerminal()['perPage'] ?? null;
     }
 
     private function visitMethodCall(Node\Expr\MethodCall $node, TypeScope $scope): void

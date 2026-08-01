@@ -15,13 +15,11 @@ use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
-use ReflectionEnum;
-use ReflectionEnumUnitCase;
+use Docuccino\Inference\PhpStan\Support\EnumCases;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionType;
 use ReflectionUnionType;
-use Throwable;
 
 /**
  * Maps a native PHP `ReflectionType` to a {@see DType}. Used by
@@ -74,28 +72,7 @@ final class NativeTypeMapper
             'object' => new UnknownT('object'),
             'mixed' => new UnknownT('mixed'),
             'self', 'static', 'parent' => new UnknownT($name),
-            default => enum_exists($name) ? new EnumT($name, $this->enumCases($name)) : new ClassT($name),
+            default => enum_exists($name) ? new EnumT($name, EnumCases::names($name)) : new ClassT($name),
         };
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function enumCases(string $name): array
-    {
-        if (! enum_exists($name)) {
-            return [];
-        }
-
-        try {
-            $reflection = new ReflectionEnum($name);
-
-            return array_values(array_map(
-                static fn (ReflectionEnumUnitCase $case): string => $case->getName(),
-                $reflection->getCases(),
-            ));
-        } catch (Throwable) {
-            return [];
-        }
     }
 }

@@ -21,6 +21,20 @@ it('folds a factory call descriptor with nested args', function (): void {
         ->and(ConstValue::fromArray($value->toArray())->render())->toBe($value->render());
 });
 
+it('records the FQCN on a descriptor but shortens the class for display', function (): void {
+    $value = ConstValue::descriptor(
+        'Spatie\\QueryBuilder\\AllowedFilter::exact',
+        [ConstValue::scalar('status')],
+    );
+
+    // The stored factory keeps the FQCN (and survives serialization)…
+    expect($value->factory)->toBe('Spatie\\QueryBuilder\\AllowedFilter::exact')
+        ->and($value->toArray()['factory'])->toBe('Spatie\\QueryBuilder\\AllowedFilter::exact')
+        // …while render() shortens the class only for display.
+        ->and($value->render())->toBe("AllowedFilter::exact('status')")
+        ->and(ConstValue::fromArray($value->toArray())->render())->toBe($value->render());
+});
+
 it('round-trips an array of mixed const values', function (): void {
     $value = ConstValue::array([
         ConstValue::scalar('name'),

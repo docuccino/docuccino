@@ -10,7 +10,10 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
+use Docuccino\Inference\PhpStan\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Trace\Callee;
+use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Node\MethodReturnStatementsNode;
@@ -43,9 +46,6 @@ final class ThrowAnalyzer
         ThrowConfidence::Likely->value => 1,
     ];
 
-    /** @var array<string, int|null> */
-    private array $statusByType;
-
     private int $droppedCount = 0;
 
     /** @var array<string, true> */
@@ -56,15 +56,9 @@ final class ThrowAnalyzer
         private readonly ProjectFilter $projectFilter,
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly KnownThrowers $knownThrowers,
+        private readonly CalleeResolver $calleeResolver,
         private readonly int $maxDepth = 3,
-    ) {
-        $this->statusByType = [
-            KnownThrowers::HTTP_EXCEPTION => null, // resolved by folding the abort arg
-            KnownThrowers::AUTHORIZATION_EXCEPTION => 403,
-            KnownThrowers::MODEL_NOT_FOUND_EXCEPTION => 404,
-            KnownThrowers::VALIDATION_EXCEPTION => 422,
-        ];
-    }
+    ) {}
 
     /**
      * @return list<ThrownException>
@@ -111,11 +105,12 @@ final class ThrowAnalyzer
             $type = $throwPoint->getType();
             $scope = $throwPoint->getScope();
             $explicit = $throwPoint->isExplicit();
-            $callee = $this->resolveCallee($node, $scope);
+            $calleeName = $this->calleeResolver->name($node);
+            $callee = $this->calleeResolver->resolve($node, $scope);
             $frame = $this->frame($selfLabel, $scope, $node);
 
-            // --- Layer 2: KnownThrowers registry (keyed on resolved callee). ---
-            $registryResult = $this->applyRegistry($callee, $node, $scope, $type, $explicit, $priorChain, $frame);
+            // --- Layer 2: KnownThrowers registry (keyed on the callee name). ---
+            $registryResult = $this->applyRegistry($calleeName, $node, $scope, $type, $explicit, $priorChain, $frame);
             if ($registryResult !== null) {
                 $results[] = $registryResult;
 
@@ -124,7 +119,7 @@ final class ThrowAnalyzer
 
             // --- Layer 1: explicit concrete type (literal throw, @throws, stub). ---
             if ($explicit && ! $this->isBareThrowable($type)) {
-                foreach ($this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame) as $result) {
+                foreach ($this->applyExplicit($callee, $node, $type, $priorChain, $frame) as $result) {
                     $results[] = $result;
                 }
 
@@ -133,7 +128,7 @@ final class ThrowAnalyzer
 
             // --- Layer 3: implicit bare Throwable — descend or drop. ---
             if (! $explicit) {
-                $descended = $this->applyDescent($callee, $scope, $depth, $visited, $priorChain, $frame);
+                $descended = $this->applyDescent($callee, $depth, $visited, $priorChain, $frame);
                 if ($descended !== null) {
                     foreach ($descended as $result) {
                         $results[] = $result;
@@ -149,11 +144,10 @@ final class ThrowAnalyzer
     }
 
     /**
-     * @param  array{name: string, recvClasses: list<string>}|null  $callee
      * @param  list<Frame>  $priorChain
      */
     private function applyRegistry(
-        ?array $callee,
+        ?string $calleeName,
         Node $node,
         Scope $scope,
         Type $type,
@@ -161,16 +155,16 @@ final class ThrowAnalyzer
         array $priorChain,
         Frame $frame,
     ): ?ThrownException {
-        if ($callee === null) {
+        if ($calleeName === null) {
             return null;
         }
 
-        $thrower = $this->knownThrowers->forFunction($callee['name']);
+        $thrower = $this->knownThrowers->forFunction($calleeName);
         $status = null;
         if ($thrower !== null) {
             $status = $this->foldStatusArg($node, $scope, (int) $thrower->statusArgIndex);
         } else {
-            $thrower = $this->knownThrowers->forMethod($callee['name']);
+            $thrower = $this->knownThrowers->forMethod($calleeName);
             if ($thrower !== null) {
                 $status = $thrower->fixedStatus;
             }
@@ -194,14 +188,12 @@ final class ThrowAnalyzer
     }
 
     /**
-     * @param  array{name: string, recvClasses: list<string>}|null  $callee
      * @param  list<Frame>  $priorChain
      * @return list<ThrownException>
      */
     private function applyExplicit(
-        ?array $callee,
+        ?Callee $callee,
         Node $node,
-        Scope $scope,
         Type $type,
         array $priorChain,
         Frame $frame,
@@ -212,7 +204,7 @@ final class ThrowAnalyzer
         // A declared (non-literal) exception documents intent only when it comes
         // from PROJECT code; a vendor call's @throws is internal plumbing.
         $calleeIsProject = ! $isLiteral && $callee !== null
-            && $this->declaringProjectMethod($callee, $scope) !== null;
+            && $this->projectFilter->isProjectFile($callee->file);
 
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
@@ -231,39 +223,41 @@ final class ThrowAnalyzer
     }
 
     /**
-     * @param  array{name: string, recvClasses: list<string>}|null  $callee
      * @param  list<string>  $visited
      * @param  list<Frame>  $priorChain
      * @return list<ThrownException>|null null when there is nothing to descend into
      */
     private function applyDescent(
-        ?array $callee,
-        Scope $scope,
+        ?Callee $callee,
         int $depth,
         array $visited,
         array $priorChain,
         Frame $frame,
     ): ?array {
-        $project = $callee !== null ? $this->declaringProjectMethod($callee, $scope) : null;
-        if ($project === null || $depth >= $this->maxDepth) {
+        // The vendor-file gate — not raw depth — does the real containment: a
+        // callee resolving into vendor code is a terminal, never descended.
+        if ($callee === null
+            || ! $this->projectFilter->isProjectFile($callee->file)
+            || $depth >= $this->maxDepth
+        ) {
             return null;
         }
 
-        $key = $project['class'].'::'.$project['method'];
+        $key = $callee->key();
         if (in_array($key, $visited, true)) {
             return []; // cycle guard — treated as descended (no drop)
         }
 
-        $this->visitedFiles[$project['file']] = true;
-        $childMap = $this->fileAnalyzer->analyze($project['file']);
-        if (! isset($childMap[$project['method']])) {
+        $this->visitedFiles[$callee->file] = true;
+        $childMap = $this->fileAnalyzer->analyze($callee->file);
+        if (! isset($childMap[$callee->method])) {
             return [];
         }
 
-        $childLabel = $this->shortFqcn($project['class']).'::'.$project['method'];
+        $childLabel = Fqcn::short($callee->class).'::'.$callee->method;
 
         return $this->analyzeMethod(
-            $childMap[$project['method']],
+            $childMap[$callee->method],
             $childLabel,
             $depth + 1,
             [...$visited, $key],
@@ -301,38 +295,6 @@ final class ThrowAnalyzer
         return new Frame($selfLabel, new SourceLocation($scope->getFile(), $node->getStartLine()));
     }
 
-    /**
-     * @return array{name: string, recvClasses: list<string>}|null
-     */
-    private function resolveCallee(Node $node, Scope $scope): ?array
-    {
-        if ($node instanceof Node\Expr\FuncCall) {
-            return $node->name instanceof Node\Name
-                ? ['name' => $node->name->toString(), 'recvClasses' => []]
-                : null;
-        }
-        if ($node instanceof Node\Expr\MethodCall) {
-            if (! $node->name instanceof Node\Identifier) {
-                return null;
-            }
-
-            return [
-                'name' => $node->name->toString(),
-                'recvClasses' => $scope->getType($node->var)->getObjectClassNames(),
-            ];
-        }
-        if ($node instanceof Node\Expr\StaticCall) {
-            if (! $node->name instanceof Node\Identifier) {
-                return null;
-            }
-            $recvClasses = $node->class instanceof Node\Name ? [$scope->resolveName($node->class)] : [];
-
-            return ['name' => $node->name->toString(), 'recvClasses' => $recvClasses];
-        }
-
-        return null;
-    }
-
     private function foldStatusArg(Node $node, Scope $scope, int $argIndex): ?int
     {
         if (! method_exists($node, 'getArgs')) {
@@ -346,30 +308,6 @@ final class ThrowAnalyzer
         $argType = $scope->getType($args[$argIndex]->value);
 
         return $argType instanceof ConstantIntegerType ? $argType->getValue() : null;
-    }
-
-    /**
-     * @param  array{name: string, recvClasses: list<string>}  $callee
-     * @return array{file: string, class: string, method: string}|null
-     */
-    private function declaringProjectMethod(array $callee, Scope $scope): ?array
-    {
-        foreach ($callee['recvClasses'] as $recvClass) {
-            if (! $this->reflectionProvider->hasClass($recvClass)) {
-                continue;
-            }
-            $classReflection = $this->reflectionProvider->getClass($recvClass);
-            if (! $classReflection->hasMethod($callee['name'])) {
-                continue;
-            }
-            $declaringClass = $classReflection->getMethod($callee['name'], $scope)->getDeclaringClass();
-            $file = $declaringClass->getFileName();
-            if ($file !== null && $this->projectFilter->isProjectFile($file)) {
-                return ['file' => $file, 'class' => $declaringClass->getName(), 'method' => $callee['name']];
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -392,26 +330,22 @@ final class ThrowAnalyzer
 
     private function statusForType(string $fqcn): int
     {
-        if (array_key_exists($fqcn, $this->statusByType) && $this->statusByType[$fqcn] !== null) {
-            return $this->statusByType[$fqcn];
+        // Single source: the KnownThrowers registry. An exact FQCN match wins;
+        // otherwise a subclass of a known thrower's exception inherits its status.
+        $exact = $this->knownThrowers->statusForExceptionFqcn($fqcn);
+        if ($exact !== null) {
+            return $exact;
         }
 
         if ($this->reflectionProvider->hasClass($fqcn)) {
             $reflection = $this->reflectionProvider->getClass($fqcn);
-            foreach ($this->statusByType as $known => $status) {
-                if ($status !== null && $reflection->is($known)) {
+            foreach ($this->knownThrowers->knownStatuses() as $known => $status) {
+                if ($reflection->is($known)) {
                     return $status;
                 }
             }
         }
 
         return 500; // internal / unhandled
-    }
-
-    private function shortFqcn(string $fqcn): string
-    {
-        $pos = strrpos($fqcn, '\\');
-
-        return $pos !== false ? substr($fqcn, $pos + 1) : $fqcn;
     }
 }

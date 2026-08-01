@@ -15,9 +15,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\PoolRunner;
  *       siblings still succeed.
  */
 beforeEach(function (): void {
-    if (! PoolRunner::available()) {
-        test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
-    }
+    ensureFixtureAvailable(PoolRunner::available());
 });
 
 afterEach(function (): void {

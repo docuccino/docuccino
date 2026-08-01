@@ -81,6 +81,7 @@ $result = match ($mode) {
             'terminals' => $probe->terminals,
             'paginates' => $probe->paginates(),
             'perPage' => $probe->recoveredPerPage(),
+            'outermost' => $probe->outermostTerminal()['terminal'] ?? null,
         ];
     })(),
     default => ['error' => 'unknown mode: '.$mode],

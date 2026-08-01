@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Throwable;
@@ -79,9 +80,9 @@ final class OrchestratedTypeEngine implements TypeEngine
         return $this->inProcess()->classMetadata($class);
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
-        $this->inProcess()->trace($action, $visitor);
+        return $this->inProcess()->trace($action, $visitor);
     }
 
     private function inProcess(): TypeEngine

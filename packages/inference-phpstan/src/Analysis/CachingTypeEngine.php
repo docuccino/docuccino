@@ -8,6 +8,7 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Cache\EngineResultCache;
@@ -58,8 +59,11 @@ final readonly class CachingTypeEngine implements TypeEngine
         return $metadata;
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
-        $this->inner->trace($action, $visitor);
+        // Never cached: the visitor is a live, stateful object handed live
+        // `PhpParser\Node`s, so there is nothing serializable to store or replay.
+        // The inner engine's report (dependency files) passes straight through.
+        return $this->inner->trace($action, $visitor);
     }
 }

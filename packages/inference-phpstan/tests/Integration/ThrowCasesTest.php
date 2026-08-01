@@ -12,9 +12,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * exception identity by (fqcn, status).
  */
 beforeEach(function (): void {
-    if (! FixtureRunner::available()) {
-        test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
-    }
+    ensureFixtureAvailable(FixtureRunner::available());
 });
 
 /**

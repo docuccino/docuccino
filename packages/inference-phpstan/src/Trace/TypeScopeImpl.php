@@ -60,7 +60,9 @@ final class TypeScopeImpl implements TypeScope
             && $expr->class instanceof Node\Name
             && $expr->name instanceof Node\Identifier
         ) {
-            $factory = $this->shortName($expr->class->toString()).'::'.$expr->name->toString();
+            // Record the FQCN (resolved through the scope's imports/aliases);
+            // ConstValue::render() shortens the class for display.
+            $factory = $this->scope->resolveName($expr->class).'::'.$expr->name->toString();
             $args = [];
             foreach ($expr->getArgs() as $arg) {
                 $args[] = $this->constantValueOf($arg->value)
@@ -97,12 +99,5 @@ final class TypeScopeImpl implements TypeScope
             $node->getStartLine(),
             $pos < 0 ? null : $pos,
         );
-    }
-
-    private function shortName(string $fqcn): string
-    {
-        $parts = explode('\\', $fqcn);
-
-        return end($parts) ?: $fqcn;
     }
 }

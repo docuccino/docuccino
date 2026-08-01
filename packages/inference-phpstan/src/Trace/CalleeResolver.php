@@ -6,20 +6,54 @@ namespace Docuccino\Inference\PhpStan\Trace;
 
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
-use ReflectionMethod;
-use Throwable;
+use PHPStan\Reflection\ReflectionProvider;
 
 /**
- * Resolves a call node to the method it actually dispatches to (design §4 —
- * "resolve via reflection → file+method"). A magic/forwarded call (e.g. Spatie
- * QB forwards `paginate` to the Eloquent builder via `__call`) has no
- * `ReflectionMethod` → `resolve()` returns null, which is exactly the right
- * signal: those are vendor terminals matched by name, never descended (Spike B
- * trap #6). `ReflectionMethod` throwing IS the vendor-terminal boundary.
+ * The single call-resolution service for BOTH the {@see Tracer} and the throw
+ * analyzer. Previously each had its own: the tracer used a native
+ * `ReflectionMethod` (throwing on magic/forwarded calls), the throw analyzer used
+ * the PHPStan `ReflectionProvider`. Two reflection stacks could classify the same
+ * call differently, so they are unified here on the `ReflectionProvider`.
+ *
+ * `resolve()` returns null for every "vendor terminal, don't descend" case — a
+ * non-method call, an unresolved receiver, a magic/forwarded call
+ * (`__call`, e.g. Spatie QB forwarding `paginate`), or a PHP-internal/stub method
+ * with no file. That null is exactly the boundary signal both callers act on
+ * (Spike B trap #6); the caller then applies its own {@see ProjectFilter} gate.
  */
 final class CalleeResolver
 {
-    public static function resolve(Node $node, Scope $scope): ?Callee
+    public function __construct(
+        private readonly ReflectionProvider $reflectionProvider,
+    ) {}
+
+    /**
+     * The syntactic callee name (function / method / static-method), or null.
+     * Used by the throw registry, which keys on the name regardless of whether
+     * the call resolves to a concrete method.
+     */
+    public function name(Node $node): ?string
+    {
+        if ($node instanceof Node\Expr\FuncCall) {
+            return $node->name instanceof Node\Name ? $node->name->toString() : null;
+        }
+
+        if (($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\StaticCall)
+            && $node->name instanceof Node\Identifier
+        ) {
+            return $node->name->toString();
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve a method/static call to the concrete method it dispatches to
+     * (declaring class, method, file). Returns null for the vendor-terminal
+     * cases described in the class docblock — the first candidate receiver that
+     * resolves wins, so a union receiver is handled deterministically.
+     */
+    public function resolve(Node $node, Scope $scope): ?Callee
     {
         if ($node instanceof Node\Expr\MethodCall) {
             if (! $node->name instanceof Node\Identifier) {
@@ -27,32 +61,33 @@ final class CalleeResolver
             }
             $method = $node->name->toString();
             $classNames = $scope->getType($node->var)->getObjectClassNames();
-            $class = count($classNames) === 1 ? $classNames[0] : null;
         } elseif ($node instanceof Node\Expr\StaticCall) {
             if (! $node->name instanceof Node\Identifier || ! $node->class instanceof Node\Name) {
                 return null;
             }
             $method = $node->name->toString();
-            $class = $scope->resolveName($node->class);
+            $classNames = [$scope->resolveName($node->class)];
         } else {
             return null;
         }
 
-        if ($class === null || ! class_exists($class)) {
-            return null;
+        foreach ($classNames as $class) {
+            if (! $this->reflectionProvider->hasClass($class)) {
+                continue;
+            }
+            $classReflection = $this->reflectionProvider->getClass($class);
+            if (! $classReflection->hasMethod($method)) {
+                continue;
+            }
+            $declaring = $classReflection->getMethod($method, $scope)->getDeclaringClass();
+            $file = $declaring->getFileName();
+            if ($file === null) {
+                return null; // PHP-internal / stub-only ⇒ vendor terminal
+            }
+
+            return new Callee($declaring->getName(), $method, $file);
         }
 
-        try {
-            $reflection = new ReflectionMethod($class, $method);
-        } catch (Throwable) {
-            return null; // magic/forwarded — vendor terminal, don't descend
-        }
-
-        $file = $reflection->getFileName();
-        if ($file === false) {
-            return null; // internal / PHP-defined
-        }
-
-        return new Callee($reflection->getDeclaringClass()->getName(), $method, $file);
+        return null; // magic / forwarded / unresolvable ⇒ vendor terminal
     }
 }

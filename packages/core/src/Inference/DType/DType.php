@@ -60,12 +60,35 @@ abstract readonly class DType
     /**
      * A deterministic total-order key: kind ordinal (zero-padded) followed by
      * the JSON of the type's canonical serialization.
+     *
+     * Float literals are normalised to a fixed 17-significant-digit form BEFORE
+     * encoding, so the key never depends on the ambient `serialize_precision` ini
+     * (raw `json_encode` of a float would). 17 significant digits round-trips any
+     * IEEE-754 double, keeping distinct floats distinct — this mirrors the
+     * precision-independence the canonical serializer enforces for output.
      */
     final public function canonicalKey(): string
     {
         $ordinal = self::KIND_ORDER[$this->kind()] ?? 99;
 
-        return sprintf('%02d:', $ordinal).(json_encode($this->toArray()) ?: '');
+        return sprintf('%02d:', $ordinal).(json_encode(self::normalizeFloats($this->toArray())) ?: '');
+    }
+
+    /**
+     * Recursively replace any float with a precision- and locale-independent
+     * string so canonical keys are stable across `serialize_precision` settings.
+     */
+    private static function normalizeFloats(mixed $value): mixed
+    {
+        if (is_float($value)) {
+            return sprintf('%.17g', $value);
+        }
+
+        if (is_array($value)) {
+            return array_map(self::normalizeFloats(...), $value);
+        }
+
+        return $value;
     }
 
     /**

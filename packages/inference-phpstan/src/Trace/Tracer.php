@@ -35,6 +35,7 @@ final class Tracer
         private readonly RuntimeAdapter $adapter,
         private readonly TypeTranslator $translator,
         private readonly ProjectFilter $projectFilter,
+        private readonly CalleeResolver $calleeResolver,
         private readonly TraceVisitor $visitor,
         private readonly int $maxDepth = 4,
         private readonly int $fileBudget = 40,
@@ -75,7 +76,7 @@ final class Tracer
                 return;
             }
 
-            $callee = CalleeResolver::resolve($node, $scope);
+            $callee = $this->calleeResolver->resolve($node, $scope);
             if ($callee === null || ! $this->projectFilter->isProjectFile($callee->file)) {
                 return; // vendor / magic / unresolvable — the engine declines
             }

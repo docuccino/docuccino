@@ -13,9 +13,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * the engine subprocess emits.
  */
 beforeEach(function (): void {
-    if (! FixtureRunner::available()) {
-        test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
-    }
+    ensureFixtureAvailable(FixtureRunner::available());
 });
 
 /**

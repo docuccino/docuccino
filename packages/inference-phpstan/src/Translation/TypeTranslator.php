@@ -20,6 +20,7 @@ use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
+use Docuccino\Inference\PhpStan\Support\EnumCases;
 use PHPStan\Type\Accessory\AccessoryType;
 use PHPStan\Type\Constant\ConstantArrayType;
 use PHPStan\Type\Generic\GenericObjectType;
@@ -29,8 +30,6 @@ use PHPStan\Type\NeverType;
 use PHPStan\Type\Type;
 use PHPStan\Type\UnionType;
 use PHPStan\Type\VerbosityLevel;
-use ReflectionEnum;
-use ReflectionEnumUnitCase;
 use Throwable;
 
 /**
@@ -206,34 +205,13 @@ final class TypeTranslator
     private function translateObject(string $className, array $typeArgs, TranslationBudget $budget): DType
     {
         if (enum_exists($className)) {
-            return new EnumT($className, $this->enumCases($className));
+            return new EnumT($className, EnumCases::names($className));
         }
 
         return new ClassT(
             $className,
             array_map(fn (Type $t): DType => $this->translate($t, $budget->descend()), $typeArgs),
         );
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function enumCases(string $className): array
-    {
-        if (! enum_exists($className)) {
-            return [];
-        }
-
-        try {
-            $reflection = new ReflectionEnum($className);
-
-            return array_values(array_map(
-                static fn (ReflectionEnumUnitCase $case): string => $case->getName(),
-                $reflection->getCases(),
-            ));
-        } catch (Throwable) {
-            return [];
-        }
     }
 
     private function describe(Type $type): string

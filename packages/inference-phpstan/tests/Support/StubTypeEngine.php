@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 
@@ -46,8 +47,9 @@ final readonly class StubTypeEngine implements TypeEngine
         return new ClassMetadata($class->fqcn);
     }
 
-    public function trace(ActionRef $action, TraceVisitor $visitor): void
+    public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
         // Nothing to walk.
+        return new TraceReport;
     }
 }
