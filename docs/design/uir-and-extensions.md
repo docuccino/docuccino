@@ -128,6 +128,20 @@ interface ExceptionToResponse {
     public function supports(DType $exceptionType, RouteContext $ctx): bool;
     public function toResponse(DType $exceptionType, RouteContext $ctx, ComponentRegistry $components): ResponseDraft;
 }
+// Error-response resolution chain (first supports() wins; Phase 4):
+//   1. InferredHandlerExceptionToResponse — analyses the APP'S REAL exception handling:
+//      render callbacks discovered by reflecting the BOOTED app's handler (catches
+//      package/provider-registered ones AST parsing would miss); ReflectionFunction →
+//      file/line → NodeScopeResolver over the closure body (JsonResponse<TPayload> stub
+//      preserves response()->json shapes; statuses constant-folded). Catch-all
+//      render(Throwable) bodies analysed once per thrown exception type with the param
+//      NARROWED to that type — PHPStan's instanceof narrowing resolves the branches
+//      (the Eos ProblemDetailsRenderer pattern). Exception-class render() /
+//      Responsable::toResponse() analysed the same way. Too-dynamic body → defer (null)
+//      + diagnostic at the exact expression. Handler files join dependencyFiles.
+//   2. FrameworkDefaultsExceptionToResponse — Laravel's stock JSON shapes
+//      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
+//   3. Presets (problem-details) + user extensions; attributes/config override anything.
 
 interface ExampleProvider { /* chain: static/@example/#[Example] (v1) → factory render / response-calls (v1.1) */ }
 
