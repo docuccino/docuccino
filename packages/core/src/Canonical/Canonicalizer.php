@@ -686,6 +686,38 @@ final class Canonicalizer
     }
 
     /**
+     * Schema-annotation keywords stripped from inline-schema identity: prose that must not
+     * change a schema's structural `sch:` id (design §2). Stripped ONLY in schema-annotation
+     * position — never when they appear as property NAMES inside a `properties`-like map.
+     */
+    private const array SCHEMA_ANNOTATION_KEYS = ['description', 'title', 'example', 'examples', 'x-docuccino'];
+
+    /**
+     * Keywords whose value is a single subschema.
+     */
+    private const array SCHEMA_SUBSCHEMA_KEYS = ['items', 'contains', 'not', 'if', 'then', 'else', 'propertyNames', 'additionalProperties'];
+
+    /**
+     * Keywords whose value is a map of subschemas: the map KEYS are structural identifiers
+     * (property names, `$defs` names, pattern strings) and must be preserved verbatim; only the
+     * subschema VALUES recurse through the annotation strip.
+     */
+    private const array SCHEMA_SUBSCHEMA_MAP_KEYS = ['properties', '$defs', 'patternProperties', 'dependentSchemas'];
+
+    /**
+     * Keywords whose value is a list of subschemas.
+     */
+    private const array SCHEMA_SUBSCHEMA_LIST_KEYS = ['allOf', 'anyOf', 'oneOf', 'prefixItems'];
+
+    /**
+     * Keyword-aware structural view of a schema for inline-schema identity (design §2). Annotation
+     * keywords are dropped only where they are schema annotations; recursion follows the JSON Schema
+     * applicator keywords, so a real property literally named `description`/`title`/`example` keeps
+     * its place in identity. `required` is order-normalised here (identity only, never in canonical
+     * output) so member reordering does not fork the id (architecture N2). Non-applicator keyword
+     * values (`type`, `enum`, `const`, `default`, numeric bounds, …) are data and pass through
+     * untouched — their nested members are never treated as annotations.
+     *
      * @param  array<mixed, mixed>  $schema
      * @return array<string, mixed>
      */
@@ -694,13 +726,80 @@ final class Canonicalizer
         $out = [];
 
         foreach ($schema as $key => $value) {
-            if ($key === 'description' || $key === 'example' || $key === 'examples' || $key === 'x-docuccino' || $key === 'title') {
+            if (in_array($key, self::SCHEMA_ANNOTATION_KEYS, true)) {
                 continue;
             }
 
-            $out[(string) $key] = is_array($value) ? $this->stripForStructuralHash($value) : $value;
+            if ($key === 'required' && is_array($value)) {
+                $out['required'] = $this->sortedRequired($value);
+
+                continue;
+            }
+
+            if (in_array($key, self::SCHEMA_SUBSCHEMA_MAP_KEYS, true) && is_array($value)) {
+                $out[(string) $key] = $this->stripSubschemaMap($value);
+
+                continue;
+            }
+
+            if (in_array($key, self::SCHEMA_SUBSCHEMA_LIST_KEYS, true) && is_array($value)) {
+                $out[(string) $key] = array_map(
+                    fn (mixed $item): mixed => is_array($item) ? $this->stripForStructuralHash($item) : $item,
+                    array_values($value),
+                );
+
+                continue;
+            }
+
+            if (in_array($key, self::SCHEMA_SUBSCHEMA_KEYS, true) && is_array($value)) {
+                $out[(string) $key] = $this->stripForStructuralHash($value);
+
+                continue;
+            }
+
+            $out[(string) $key] = $value;
         }
 
         return $out;
+    }
+
+    /**
+     * Recurses the annotation strip through a map of subschemas without treating the map keys
+     * (property/`$defs`/pattern names) as annotations.
+     *
+     * @param  array<mixed, mixed>  $map
+     * @return array<string, mixed>
+     */
+    private function stripSubschemaMap(array $map): array
+    {
+        $out = [];
+
+        foreach ($map as $name => $subschema) {
+            $out[(string) $name] = is_array($subschema) ? $this->stripForStructuralHash($subschema) : $subschema;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Order-normalises a `required` list for identity: string members deduplicated and sorted by
+     * code point. Applies to the identity-strip path only, so canonical output preserves order.
+     *
+     * @param  array<mixed, mixed>  $required
+     * @return list<string>
+     */
+    private function sortedRequired(array $required): array
+    {
+        $names = [];
+        foreach ($required as $name) {
+            if (is_string($name)) {
+                $names[$name] = true;
+            }
+        }
+
+        $sorted = array_keys($names);
+        usort($sorted, $this->compareKeys(...));
+
+        return $sorted;
     }
 }
