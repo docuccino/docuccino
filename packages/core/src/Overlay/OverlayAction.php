@@ -8,7 +8,9 @@ namespace Docuccino\Core\Overlay;
  * A single OpenAPI Overlay 1.0 action: a `target` selector plus exactly one operation — either
  * an `update` (merge an object / replace a scalar or array at the target) or a `remove` (delete
  * the targeted node). `update` may legitimately be `null` or `false`, so its presence is tracked
- * explicitly rather than inferred from the value.
+ * explicitly rather than inferred from the value. An action declaring BOTH `update` and `remove`
+ * is a conflict: it parses (both flags stay set) and {@see OverlayApplier} surfaces an error
+ * diagnostic at apply time rather than silently guessing which operation was intended.
  */
 final readonly class OverlayAction
 {
@@ -42,7 +44,7 @@ final readonly class OverlayAction
         return new self(
             target: $target,
             remove: $remove,
-            hasUpdate: $hasUpdate && ! $remove,
+            hasUpdate: $hasUpdate,
             update: $hasUpdate ? $data['update'] : null,
             description: is_string($description) ? $description : null,
         );

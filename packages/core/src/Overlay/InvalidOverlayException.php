@@ -36,4 +36,9 @@ final class InvalidOverlayException extends RuntimeException
     {
         return new self(sprintf('Overlay action #%d is missing the required "target" selector.', $index));
     }
+
+    public static function malformedActions(): self
+    {
+        return new self('Overlay document "actions" must be a JSON array of action objects.');
+    }
 }

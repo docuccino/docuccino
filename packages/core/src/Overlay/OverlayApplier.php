@@ -46,6 +46,17 @@ final class OverlayApplier
      */
     private function applyAction(array $document, OverlayAction $action, array &$diagnostics): array
     {
+        if ($action->remove && $action->hasUpdate) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Error,
+                code: 'overlay.conflicting-operation',
+                message: sprintf('Overlay action for target "%s" declares both "update" and "remove"; an action must carry exactly one operation.', $action->target),
+                help: 'Split the action into two: one with "update" and one with "remove".',
+            );
+
+            return $document;
+        }
+
         try {
             $paths = $this->resolver->resolve($action->target, $document);
         } catch (UnsupportedSelectorException $e) {

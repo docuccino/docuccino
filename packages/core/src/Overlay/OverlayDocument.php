@@ -43,7 +43,11 @@ final readonly class OverlayDocument
         }
 
         $actions = [];
-        if (isset($data['actions']) && is_array($data['actions'])) {
+        if (array_key_exists('actions', $data)) {
+            if (! is_array($data['actions']) || ! array_is_list($data['actions'])) {
+                throw InvalidOverlayException::malformedActions();
+            }
+
             $index = 0;
             foreach ($data['actions'] as $action) {
                 if (is_array($action)) {
