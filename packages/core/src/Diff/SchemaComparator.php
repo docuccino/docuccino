@@ -11,8 +11,11 @@ namespace Docuccino\Core\Diff;
  * is double-counted and no ref resolution or cycle handling is needed.
  *
  * Breaking here: a type narrowed/changed or constraint added; an enum value removed or an enum
- * constraint introduced; a required property added to a *request* schema. Non-breaking: type
- * widened, enum value added, required removed, description/format changes, property add/remove.
+ * constraint introduced; a required property added to a *request* schema; a property removed from a
+ * *response* schema (a field consumers relied on receiving vanishes); a `format` tightened on a
+ * *request* schema (added or changed — stricter input validation). Non-breaking: type widened, enum
+ * value added, required removed, description edits, property added, a property removed from a request
+ * schema (the client simply stops sending it), a format removed or any format change on a response.
  * `required` on non-request schemas (response/component, usage context unknown) is reported but
  * classed non-breaking — a documented judgment call.
  */
@@ -29,7 +32,7 @@ final class SchemaComparator
 
         $this->compareRef($old, $new, $path, $id, $changes);
         $this->compareType($old, $new, $path, $id, $changes);
-        $this->compareFormat($old, $new, $path, $id, $changes);
+        $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $changes);
         $this->compareRequired($old, $new, $path, $id, $request, $changes);
         $this->compareProperties($old, $new, $path, $id, $request, $changes);
@@ -97,14 +100,20 @@ final class SchemaComparator
      * @param  array<string, mixed>  $new
      * @param  list<Change>  $changes
      */
-    private function compareFormat(array $old, array $new, string $path, string $id, array &$changes): void
+    private function compareFormat(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
         $oldFormat = $old['format'] ?? null;
         $newFormat = $new['format'] ?? null;
 
-        if ($oldFormat !== $newFormat) {
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.format', false, 'schema.format-changed', 'format', $oldFormat, $newFormat);
+        if ($oldFormat === $newFormat) {
+            return;
         }
+
+        // A format added or changed on a request schema tightens the values the API will accept —
+        // breaking. Removing a format widens (non-breaking); on a response, format is descriptive.
+        $breaking = $request && $newFormat !== null;
+
+        $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.format', $breaking, 'schema.format-changed', 'format', $oldFormat, $newFormat);
     }
 
     /**
@@ -188,7 +197,9 @@ final class SchemaComparator
             $propPath = $path.'.properties.'.$name;
 
             if (! isset($newProps[$name])) {
-                $changes[] = $this->change(ChangeKind::Removed, $id, $propPath, false, 'schema.property-removed', null, null, null);
+                // Removing a property a response used to return breaks consumers reading it; on a
+                // request schema the client simply stops sending it (non-breaking).
+                $changes[] = $this->change(ChangeKind::Removed, $id, $propPath, ! $request, 'schema.property-removed', null, null, null);
 
                 continue;
             }

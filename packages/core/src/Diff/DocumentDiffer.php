@@ -125,9 +125,56 @@ final class DocumentDiffer
             $changes[] = new Change(ChangeKind::Changed, ChangeTarget::Operation, $id, $path, false, 'operation.tags-changed', [new FieldChange('tags', $oldOp->tags, $newOp->tags)]);
         }
 
+        $this->diffSecurity($id, $path, $oldOp, $newOp, $changes);
         $this->diffParameters($id, $path, $oldOp, $newOp, $changes);
         $this->diffResponses($id, $path, $oldOp, $newOp, $changes);
         $this->diffRequestBody($id, $path, $oldOp, $newOp, $changes);
+    }
+
+    /**
+     * Diffs an operation's `security` requirements. Adding a requirement forces existing clients to
+     * satisfy authentication they did not before (breaking); removing one relaxes access (non-breaking).
+     * Each requirement is compared as a whole by its canonical JSON, so a reordered scheme map is not
+     * a change.
+     *
+     * @param  list<Change>  $changes
+     */
+    private function diffSecurity(string $opId, string $path, Operation $old, Operation $new, array &$changes): void
+    {
+        $oldReqs = self::securityRequirementKeys($old);
+        $newReqs = self::securityRequirementKeys($new);
+
+        foreach (array_keys($newReqs) as $key) {
+            if (! array_key_exists($key, $oldReqs)) {
+                $changes[] = new Change(ChangeKind::Added, ChangeTarget::Operation, $opId, $path.' security', true, 'operation.security-added', [new FieldChange('security', null, $newReqs[$key])]);
+            }
+        }
+
+        foreach (array_keys($oldReqs) as $key) {
+            if (! array_key_exists($key, $newReqs)) {
+                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Operation, $opId, $path.' security', false, 'operation.security-removed', [new FieldChange('security', $oldReqs[$key], null)]);
+            }
+        }
+    }
+
+    /**
+     * A requirement's canonical key → the requirement itself, so added/removed requirements are set
+     * differences insensitive to declaration order and scheme-map key order.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private static function securityRequirementKeys(Operation $op): array
+    {
+        $out = [];
+
+        foreach ($op->security ?? [] as $requirement) {
+            $canonical = $requirement;
+            ksort($canonical);
+            $key = json_encode($canonical);
+            $out[is_string($key) ? $key : ''] = $requirement;
+        }
+
+        return $out;
     }
 
     /**
@@ -223,7 +270,8 @@ final class DocumentDiffer
             $inNew = array_key_exists($media, $newContent);
 
             if (! $inNew) {
-                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Response, $id, $mediaPath, false, 'response.content-removed');
+                // Dropping a media type a response used to offer breaks consumers negotiating it.
+                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Response, $id, $mediaPath, true, 'response.content-removed');
             } elseif (! $inOld) {
                 $changes[] = new Change(ChangeKind::Added, ChangeTarget::Response, $id, $mediaPath, false, 'response.content-added');
             } else {
