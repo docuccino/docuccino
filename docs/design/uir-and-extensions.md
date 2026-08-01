@@ -40,7 +40,9 @@ Top level:
 ## 2. Identity model
 
 Every operation, parameter, named schema, response, security scheme carries
-`x-docuccino.id` = `<kind>:<algoVersion>:<base32(sha256)[:16bytes]>`.
+`x-docuccino.id` = `<kind>:<algoVersion>:<hash>`, where `<hash>` is the first 16 base32
+characters of the full SHA-256 of the identity tuple (~80 bits) — matching the impl and the
+schema's `nodeId` pattern.
 
 | Kind | Identity inputs (hashed canonical tuple) | Survives | Breaks on |
 |---|---|---|---|
@@ -87,6 +89,11 @@ Producers: `inference`, `attribute`, `docblock`, `integration:<name>`, `overlay`
 `--provenance=none|winners|full`, default `winners` for committed artifacts.
 Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
 All other `x-*` members pass through untouched.
+
+`source.line` is provenance, not identity, so it never affects `contentHash` or any `id`.
+Committed UIR artifacts should therefore emit with `--provenance=none` (or `winners` and
+accept that source line numbers churn as code moves); the churn is cosmetic and cannot alter
+identities or the content hash (architecture N5 — documented, not a hashing change).
 
 ## 5. Pipeline
 
@@ -167,15 +174,17 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
   nothing resolves until a build starts (post-boot by definition). `Docuccino::extend()`
   works from any provider register()/boot(); config `extensions` merges at resolve time.
   No API returns the extension list before resolve — early snapshot is impossible.
-- Extensions are container-resolved (constructor DI). Core depends only on PSR-11.
+- Extensions are container-resolved (constructor DI). Core is framework-agnostic (no
+  illuminate/symfony-framework deps); its only runtime dependencies are `psr/container`,
+  `opis/json-schema`, `symfony/yaml` and `nikic/php-parser`.
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
   `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
 
 ## 7. Precedence / patch semantics
 
-`inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45, OpenAPI
-Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
+`fallback(5) < inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45,
+OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
 
 - Unset field → accepted. Higher-over-lower → accepted, loser appended to `overrode`.
 - Lower/equal-over-existing → rejected (`PatchResult::Shadowed`), info diagnostic.
