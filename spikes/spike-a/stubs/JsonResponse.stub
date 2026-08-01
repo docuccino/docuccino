@@ -1,0 +1,13 @@
+<?php
+
+namespace Illuminate\Http;
+
+/**
+ * Docuccino Spike A stub: give JsonResponse a payload type parameter so the
+ * shape recovered by JsonResponseFactoryExtension has somewhere to live.
+ *
+ * @template TPayload
+ */
+class JsonResponse extends \Symfony\Component\HttpFoundation\JsonResponse
+{
+}
