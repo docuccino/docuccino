@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Diagnostics;
 
 use Docuccino\Core\Provenance\Source;
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * A single build diagnostic. The CLI is the primary channel; these are embedded in the
@@ -30,8 +30,6 @@ final readonly class Diagnostic
         $severity = $data['severity'] ?? Severity::Info->value;
         $code = $data['code'] ?? '';
         $message = $data['message'] ?? '';
-        $routeSignature = $data['routeSignature'] ?? null;
-        $help = $data['help'] ?? null;
 
         return new self(
             severity: is_string($severity)
@@ -39,11 +37,9 @@ final readonly class Diagnostic
                 : Severity::Info,
             code: is_string($code) ? $code : '',
             message: is_string($message) ? $message : '',
-            source: isset($data['source']) && is_array($data['source'])
-                ? Source::fromArray(Arr::stringKeyed($data['source']))
-                : null,
-            routeSignature: is_string($routeSignature) ? $routeSignature : null,
-            help: is_string($help) ? $help : null,
+            source: Hydrate::objectOrNull($data['source'] ?? null, Source::fromArray(...)),
+            routeSignature: Hydrate::stringOrNull($data['routeSignature'] ?? null),
+            help: Hydrate::stringOrNull($data['help'] ?? null),
         );
     }
 

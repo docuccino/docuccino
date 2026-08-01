@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 use Docuccino\Core\Provenance\Provenance;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * Node-level `x-docuccino` member (operations, parameters, responses, schemas).
@@ -28,7 +29,7 @@ final readonly class DocuccinoExtension
      */
     public static function fromArray(array $data): self
     {
-        $id = $data['id'] ?? null;
+        $id = Hydrate::stringOrNull($data['id'] ?? null);
         unset($data['id']);
 
         $provenance = null;
@@ -47,7 +48,7 @@ final readonly class DocuccinoExtension
         unset($data['mock']);
 
         return new self(
-            id: is_string($id) ? $id : null,
+            id: $id,
             provenance: $provenance,
             mock: $mock,
             rest: $data,

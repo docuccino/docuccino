@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Document;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * The OAS components object. Reusable schemas/responses/parameters are modelled; the
@@ -30,32 +30,9 @@ final readonly class Components
      */
     public static function fromArray(array $data): self
     {
-        $schemas = [];
-        if (isset($data['schemas']) && is_array($data['schemas'])) {
-            foreach ($data['schemas'] as $name => $schema) {
-                if (is_array($schema)) {
-                    $schemas[(string) $name] = SchemaObject::fromArray(Arr::stringKeyed($schema));
-                }
-            }
-        }
-
-        $responses = [];
-        if (isset($data['responses']) && is_array($data['responses'])) {
-            foreach ($data['responses'] as $name => $response) {
-                if (is_array($response)) {
-                    $responses[(string) $name] = ResponseObject::fromArray(Arr::stringKeyed($response));
-                }
-            }
-        }
-
-        $parameters = [];
-        if (isset($data['parameters']) && is_array($data['parameters'])) {
-            foreach ($data['parameters'] as $name => $parameter) {
-                if (is_array($parameter)) {
-                    $parameters[(string) $name] = Parameter::fromArray(Arr::stringKeyed($parameter));
-                }
-            }
-        }
+        $schemas = Hydrate::mapOf($data['schemas'] ?? null, SchemaObject::fromArray(...));
+        $responses = Hydrate::mapOf($data['responses'] ?? null, ResponseObject::fromArray(...));
+        $parameters = Hydrate::mapOf($data['parameters'] ?? null, Parameter::fromArray(...));
 
         unset($data['schemas'], $data['responses'], $data['parameters']);
 

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Diff;
 
+use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
+
 /**
  * Field-level schema comparison with breaking-change classification (design/plan breaking
  * rules). `$ref`s are compared opaquely (by target string) — a referenced component schema's
@@ -48,8 +51,8 @@ final class SchemaComparator
      */
     private function compareRef(array $old, array $new, string $path, string $id, array &$changes): void
     {
-        $oldRef = self::stringOrNull($old['$ref'] ?? null);
-        $newRef = self::stringOrNull($new['$ref'] ?? null);
+        $oldRef = Hydrate::stringOrNull($old['$ref'] ?? null);
+        $newRef = Hydrate::stringOrNull($new['$ref'] ?? null);
 
         if ($oldRef !== null && $newRef !== null && $oldRef !== $newRef) {
             $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.$ref', false, 'schema.ref-changed', '$ref', $oldRef, $newRef);
@@ -166,8 +169,8 @@ final class SchemaComparator
      */
     private function compareRequired(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
-        $oldRequired = self::stringList($old['required'] ?? null);
-        $newRequired = self::stringList($new['required'] ?? null);
+        $oldRequired = Hydrate::stringList($old['required'] ?? null);
+        $newRequired = Hydrate::stringList($new['required'] ?? null);
 
         $added = array_values(array_diff($newRequired, $oldRequired));
         $removed = array_values(array_diff($oldRequired, $newRequired));
@@ -191,7 +194,7 @@ final class SchemaComparator
         $oldProps = self::properties($old);
         $newProps = self::properties($new);
 
-        $names = self::sortedUnion(array_keys($oldProps), array_keys($newProps));
+        $names = Arr::sortedUnion(array_keys($oldProps), array_keys($newProps));
 
         foreach ($names as $name) {
             $propPath = $path.'.properties.'.$name;
@@ -227,7 +230,7 @@ final class SchemaComparator
         $newItems = $new['items'] ?? null;
 
         if (is_array($oldItems) && is_array($newItems)) {
-            foreach ($this->compare(self::stringKeyed($oldItems), self::stringKeyed($newItems), $path.'.items', $id, $request) as $child) {
+            foreach ($this->compare(Arr::stringKeyed($oldItems), Arr::stringKeyed($newItems), $path.'.items', $id, $request) as $child) {
                 $changes[] = $child;
             }
         }
@@ -277,7 +280,7 @@ final class SchemaComparator
         $out = [];
         foreach ($properties as $name => $value) {
             if (is_array($value)) {
-                $out[(string) $name] = self::stringKeyed($value);
+                $out[(string) $name] = Arr::stringKeyed($value);
             }
         }
 
@@ -326,56 +329,5 @@ final class SchemaComparator
         $encoded = json_encode($value);
 
         return $encoded === false ? gettype($value) : $encoded;
-    }
-
-    /**
-     * @param  list<string>  $a
-     * @param  list<string>  $b
-     * @return list<string>
-     */
-    private static function sortedUnion(array $a, array $b): array
-    {
-        $union = array_values(array_unique([...$a, ...$b]));
-        sort($union);
-
-        return $union;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function stringList(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $item) {
-            if (is_string($item)) {
-                $out[] = $item;
-            }
-        }
-
-        return $out;
-    }
-
-    private static function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) ? $value : null;
-    }
-
-    /**
-     * @param  array<mixed, mixed>  $value
-     * @return array<string, mixed>
-     */
-    private static function stringKeyed(array $value): array
-    {
-        $out = [];
-        foreach ($value as $key => $item) {
-            $out[(string) $key] = $item;
-        }
-
-        return $out;
     }
 }

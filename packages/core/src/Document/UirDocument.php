@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Document;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * The immutable in-memory model of a UIR document. Modelled members are typed; anything
@@ -54,20 +54,15 @@ final readonly class UirDocument
             $info = $data['info'];
         }
 
-        $servers = self::listOfMaps($data['servers'] ?? null);
-        $security = self::listOfMaps($data['security'] ?? null);
-        $tags = self::listOfMaps($data['tags'] ?? null);
+        $servers = Hydrate::listOfMaps($data['servers'] ?? null);
+        $security = Hydrate::listOfMaps($data['security'] ?? null);
+        $tags = Hydrate::listOfMaps($data['tags'] ?? null);
 
         $paths = self::pathMap($data['paths'] ?? null);
         $webhooks = self::pathMap($data['webhooks'] ?? null);
 
-        $components = isset($data['components']) && is_array($data['components'])
-            ? Components::fromArray(Arr::stringKeyed($data['components']))
-            : null;
-
-        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
-            ? DocumentExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
-            : null;
+        $components = Hydrate::objectOrNull($data['components'] ?? null, Components::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocumentExtension::fromArray(...));
 
         unset(
             $data['$schema'], $data['uir'], $data['openapi'], $data['jsonSchemaDialect'],
@@ -93,42 +88,11 @@ final readonly class UirDocument
     }
 
     /**
-     * @return list<array<string, mixed>>|null
-     */
-    private static function listOfMaps(mixed $value): ?array
-    {
-        if (! is_array($value)) {
-            return null;
-        }
-
-        $out = [];
-        foreach ($value as $item) {
-            if (is_array($item)) {
-                /** @var array<string, mixed> $item */
-                $out[] = $item;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
      * @return array<string, PathItem>|null
      */
     private static function pathMap(mixed $value): ?array
     {
-        if (! is_array($value)) {
-            return null;
-        }
-
-        $out = [];
-        foreach ($value as $template => $item) {
-            if (is_array($item)) {
-                $out[(string) $template] = PathItem::fromArray(Arr::stringKeyed($item));
-            }
-        }
-
-        return $out;
+        return is_array($value) ? Hydrate::mapOf($value, PathItem::fromArray(...)) : null;
     }
 
     /**

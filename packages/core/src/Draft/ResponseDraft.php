@@ -9,6 +9,7 @@ use Docuccino\Core\Document\ResponseObject;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * A mutable OAS response builder, keyed in its parent operation by status. Description and
@@ -62,7 +63,7 @@ final class ResponseDraft
         return $this->guard;
     }
 
-    public function withId(?string $id): self
+    public function assignId(?string $id): self
     {
         $this->id = $id;
 
@@ -73,8 +74,8 @@ final class ResponseDraft
     {
         $resolved = $this->guard->resolved();
 
-        $ref = self::stringOrNull($resolved['$ref'] ?? null);
-        $description = self::stringOrNull($resolved['description'] ?? null);
+        $ref = Hydrate::stringOrNull($resolved['$ref'] ?? null);
+        $description = Hydrate::stringOrNull($resolved['description'] ?? null);
 
         $headers = null;
         if (isset($resolved['headers']) && is_array($resolved['headers'])) {
@@ -102,10 +103,5 @@ final class ResponseDraft
             docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
-    }
-
-    private static function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) ? $value : null;
     }
 }

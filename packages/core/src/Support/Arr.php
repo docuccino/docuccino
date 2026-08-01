@@ -24,4 +24,21 @@ final class Arr
 
         return $out;
     }
+
+    /**
+     * The sorted, deduplicated union of two arrays' values, each coerced to a
+     * string. Used to walk both sides of a diff in a stable order.
+     *
+     * @param  list<int|string>  $a
+     * @param  list<int|string>  $b
+     * @return list<string>
+     */
+    public static function sortedUnion(array $a, array $b): array
+    {
+        $values = array_map(static fn (int|string $v): string => (string) $v, [...$a, ...$b]);
+        $values = array_values(array_unique($values));
+        sort($values);
+
+        return $values;
+    }
 }

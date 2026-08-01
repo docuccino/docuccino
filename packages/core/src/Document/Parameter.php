@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Document;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS parameter object. Modelled fields are typed; every other member (style, explode,
@@ -31,28 +31,22 @@ final readonly class Parameter
      */
     public static function fromArray(array $data): self
     {
-        $name = $data['name'] ?? null;
-        $in = $data['in'] ?? null;
-        $description = $data['description'] ?? null;
-        $required = $data['required'] ?? null;
-        $deprecated = $data['deprecated'] ?? null;
-
-        $schema = isset($data['schema']) && is_array($data['schema'])
-            ? SchemaObject::fromArray(Arr::stringKeyed($data['schema']))
-            : null;
-
-        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
-            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
-            : null;
+        $name = Hydrate::stringOrNull($data['name'] ?? null);
+        $in = Hydrate::stringOrNull($data['in'] ?? null);
+        $description = Hydrate::stringOrNull($data['description'] ?? null);
+        $required = Hydrate::boolOrNull($data['required'] ?? null);
+        $deprecated = Hydrate::boolOrNull($data['deprecated'] ?? null);
+        $schema = Hydrate::objectOrNull($data['schema'] ?? null, SchemaObject::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
 
         unset($data['name'], $data['in'], $data['description'], $data['required'], $data['deprecated'], $data['schema'], $data['x-docuccino']);
 
         return new self(
-            name: is_string($name) ? $name : null,
-            in: is_string($in) ? $in : null,
-            description: is_string($description) ? $description : null,
-            required: is_bool($required) ? $required : null,
-            deprecated: is_bool($deprecated) ? $deprecated : null,
+            name: $name,
+            in: $in,
+            description: $description,
+            required: $required,
+            deprecated: $deprecated,
             schema: $schema,
             docuccino: $docuccino,
             rest: $data,

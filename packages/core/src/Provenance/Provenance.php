@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Provenance;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * An ordered list of provenance records attached to a UIR node.
@@ -23,14 +23,7 @@ final readonly class Provenance
      */
     public static function fromArray(array $data): self
     {
-        $records = [];
-        foreach ($data as $record) {
-            if (is_array($record)) {
-                $records[] = ProvenanceRecord::fromArray(Arr::stringKeyed($record));
-            }
-        }
-
-        return new self($records);
+        return new self(Hydrate::listOf($data, ProvenanceRecord::fromArray(...)));
     }
 
     /**

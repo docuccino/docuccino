@@ -51,7 +51,7 @@ final class SchemaDraft
         return isset($this->properties[$name]);
     }
 
-    public function withId(?string $id): self
+    public function assignId(?string $id): self
     {
         $this->id = $id;
 
@@ -61,7 +61,7 @@ final class SchemaDraft
     /**
      * @param  array<string, mixed>|null  $mock
      */
-    public function withMock(?array $mock): self
+    public function assignMock(?array $mock): self
     {
         $this->mock = $mock;
 

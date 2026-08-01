@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Document;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS operation object. Parameters and responses are modelled; every other member
@@ -37,61 +37,24 @@ final readonly class Operation
      */
     public static function fromArray(array $data): self
     {
-        $operationId = $data['operationId'] ?? null;
-        $summary = $data['summary'] ?? null;
-        $description = $data['description'] ?? null;
-        $deprecated = $data['deprecated'] ?? null;
-
-        $tags = [];
-        if (isset($data['tags']) && is_array($data['tags'])) {
-            foreach ($data['tags'] as $tag) {
-                if (is_string($tag)) {
-                    $tags[] = $tag;
-                }
-            }
-        }
-
-        $parameters = [];
-        if (isset($data['parameters']) && is_array($data['parameters'])) {
-            foreach ($data['parameters'] as $parameter) {
-                if (is_array($parameter)) {
-                    $parameters[] = Parameter::fromArray(Arr::stringKeyed($parameter));
-                }
-            }
-        }
-
-        $responses = [];
-        if (isset($data['responses']) && is_array($data['responses'])) {
-            foreach ($data['responses'] as $status => $response) {
-                if (is_array($response)) {
-                    $responses[(string) $status] = ResponseObject::fromArray(Arr::stringKeyed($response));
-                }
-            }
-        }
-
-        $security = null;
-        if (isset($data['security']) && is_array($data['security'])) {
-            $security = [];
-            foreach ($data['security'] as $requirement) {
-                if (is_array($requirement)) {
-                    /** @var array<string, mixed> $requirement */
-                    $security[] = $requirement;
-                }
-            }
-        }
-
-        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
-            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
-            : null;
+        $operationId = Hydrate::stringOrNull($data['operationId'] ?? null);
+        $summary = Hydrate::stringOrNull($data['summary'] ?? null);
+        $description = Hydrate::stringOrNull($data['description'] ?? null);
+        $deprecated = Hydrate::boolOrNull($data['deprecated'] ?? null);
+        $tags = Hydrate::stringList($data['tags'] ?? null);
+        $parameters = Hydrate::listOf($data['parameters'] ?? null, Parameter::fromArray(...));
+        $responses = Hydrate::mapOf($data['responses'] ?? null, ResponseObject::fromArray(...));
+        $security = Hydrate::listOfMaps($data['security'] ?? null);
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
 
         unset($data['operationId'], $data['summary'], $data['description'], $data['deprecated'], $data['tags'], $data['parameters'], $data['responses'], $data['security'], $data['x-docuccino']);
 
         return new self(
-            operationId: is_string($operationId) ? $operationId : null,
-            summary: is_string($summary) ? $summary : null,
-            description: is_string($description) ? $description : null,
+            operationId: $operationId,
+            summary: $summary,
+            description: $description,
             tags: $tags,
-            deprecated: is_bool($deprecated) ? $deprecated : null,
+            deprecated: $deprecated,
             parameters: $parameters,
             responses: $responses,
             security: $security,

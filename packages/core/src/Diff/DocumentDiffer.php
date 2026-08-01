@@ -91,7 +91,7 @@ final class DocumentDiffer
         $oldOps = $this->indexOperations($old);
         $newOps = $this->indexOperations($new);
 
-        foreach (self::sortedUnionKeys($oldOps, $newOps) as $key) {
+        foreach (Arr::sortedUnion(array_keys($oldOps), array_keys($newOps)) as $key) {
             $inOld = array_key_exists($key, $oldOps);
             $inNew = array_key_exists($key, $newOps);
 
@@ -185,7 +185,7 @@ final class DocumentDiffer
         $oldParams = $this->indexParameters($old);
         $newParams = $this->indexParameters($new);
 
-        foreach (self::sortedUnionKeys($oldParams, $newParams) as $key) {
+        foreach (Arr::sortedUnion(array_keys($oldParams), array_keys($newParams)) as $key) {
             $inOld = array_key_exists($key, $oldParams);
             $inNew = array_key_exists($key, $newParams);
 
@@ -235,7 +235,7 @@ final class DocumentDiffer
         $oldResponses = $old->responses;
         $newResponses = $new->responses;
 
-        foreach (self::sortedUnionKeys($oldResponses, $newResponses) as $status) {
+        foreach (Arr::sortedUnion(array_keys($oldResponses), array_keys($newResponses)) as $status) {
             $inOld = array_key_exists($status, $oldResponses);
             $inNew = array_key_exists($status, $newResponses);
 
@@ -264,7 +264,7 @@ final class DocumentDiffer
         $oldContent = self::contentSchemas($old->content);
         $newContent = self::contentSchemas($new->content);
 
-        foreach (self::sortedUnionKeys($oldContent, $newContent) as $media) {
+        foreach (Arr::sortedUnion(array_keys($oldContent), array_keys($newContent)) as $media) {
             $mediaPath = $responsePath.' '.$media;
             $inOld = array_key_exists($media, $oldContent);
             $inNew = array_key_exists($media, $newContent);
@@ -290,7 +290,7 @@ final class DocumentDiffer
         $oldContent = self::requestBodySchemas($old);
         $newContent = self::requestBodySchemas($new);
 
-        foreach (self::sortedUnionKeys($oldContent, $newContent) as $media) {
+        foreach (Arr::sortedUnion(array_keys($oldContent), array_keys($newContent)) as $media) {
             if (! array_key_exists($media, $oldContent) || ! array_key_exists($media, $newContent)) {
                 continue;
             }
@@ -309,7 +309,7 @@ final class DocumentDiffer
         $oldSchemas = $this->indexComponentSchemas($old);
         $newSchemas = $this->indexComponentSchemas($new);
 
-        foreach (self::sortedUnionKeys($oldSchemas, $newSchemas) as $key) {
+        foreach (Arr::sortedUnion(array_keys($oldSchemas), array_keys($newSchemas)) as $key) {
             $inOld = array_key_exists($key, $oldSchemas);
             $inNew = array_key_exists($key, $newSchemas);
 
@@ -336,7 +336,7 @@ final class DocumentDiffer
         $oldPages = $this->indexPages($old);
         $newPages = $this->indexPages($new);
 
-        foreach (self::sortedUnionKeys($oldPages, $newPages) as $key) {
+        foreach (Arr::sortedUnion(array_keys($oldPages), array_keys($newPages)) as $key) {
             $inOld = array_key_exists($key, $oldPages);
             $inNew = array_key_exists($key, $newPages);
 
@@ -548,19 +548,5 @@ final class DocumentDiffer
         $parts = explode(':', $id);
 
         return count($parts) === 3 && $parts[1] !== '' ? $parts[1] : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $a
-     * @param  array<string, mixed>  $b
-     * @return list<string>
-     */
-    private static function sortedUnionKeys(array $a, array $b): array
-    {
-        $keys = array_values(array_unique([...array_keys($a), ...array_keys($b)]));
-        $keys = array_map(static fn (int|string $k): string => (string) $k, $keys);
-        sort($keys);
-
-        return $keys;
     }
 }

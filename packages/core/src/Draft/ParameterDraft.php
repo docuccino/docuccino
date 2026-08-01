@@ -9,6 +9,7 @@ use Docuccino\Core\Document\Parameter;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * A mutable OAS parameter builder, keyed in its parent operation by `(in, name)`. `in` and
@@ -60,25 +61,34 @@ final class ParameterDraft
         return $this->guard;
     }
 
-    public function withId(?string $id): self
+    public function assignId(?string $id): self
     {
         $this->id = $id;
 
         return $this;
     }
 
+    /**
+     * The collection key for a parameter identified by `(in, name)` — the single
+     * owner of the `in:name` convention, shared with {@see OperationDraft}.
+     */
+    public static function keyFor(string $in, string $name): string
+    {
+        return $in.':'.$name;
+    }
+
     public function key(): string
     {
-        return $this->in.':'.$this->name;
+        return self::keyFor($this->in, $this->name);
     }
 
     public function freeze(): Parameter
     {
         $resolved = $this->guard->resolved();
 
-        $description = self::stringOrNull($resolved['description'] ?? null);
-        $required = self::boolOrNull($resolved['required'] ?? null);
-        $deprecated = self::boolOrNull($resolved['deprecated'] ?? null);
+        $description = Hydrate::stringOrNull($resolved['description'] ?? null);
+        $required = Hydrate::boolOrNull($resolved['required'] ?? null);
+        $deprecated = Hydrate::boolOrNull($resolved['deprecated'] ?? null);
 
         unset($resolved['description'], $resolved['required'], $resolved['deprecated']);
 
@@ -97,15 +107,5 @@ final class ParameterDraft
             docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
-    }
-
-    private static function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) ? $value : null;
-    }
-
-    private static function boolOrNull(mixed $value): ?bool
-    {
-        return is_bool($value) ? $value : null;
     }
 }

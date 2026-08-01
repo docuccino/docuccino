@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Provenance;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * One contribution to a node: which producer/layer set which fields, from where,
@@ -33,32 +33,15 @@ final readonly class ProvenanceRecord
         $producer = $data['producer'] ?? '';
         $layer = $data['layer'] ?? '';
 
-        $fields = [];
-        if (isset($data['fields']) && is_array($data['fields'])) {
-            foreach ($data['fields'] as $field) {
-                if (is_string($field)) {
-                    $fields[] = $field;
-                }
-            }
-        }
-
-        $source = isset($data['source']) && is_array($data['source'])
-            ? Source::fromArray(Arr::stringKeyed($data['source']))
-            : null;
+        $fields = Hydrate::stringList($data['fields'] ?? null);
+        $source = Hydrate::objectOrNull($data['source'] ?? null, Source::fromArray(...));
 
         $confidence = null;
         if (isset($data['confidence']) && (is_float($data['confidence']) || is_int($data['confidence']))) {
             $confidence = (float) $data['confidence'];
         }
 
-        $overrode = [];
-        if (isset($data['overrode']) && is_array($data['overrode'])) {
-            foreach ($data['overrode'] as $entry) {
-                if (is_array($entry)) {
-                    $overrode[] = OverrodeEntry::fromArray(Arr::stringKeyed($entry));
-                }
-            }
-        }
+        $overrode = Hydrate::listOf($data['overrode'] ?? null, OverrodeEntry::fromArray(...));
 
         return new self(
             producer: is_string($producer) ? $producer : '',

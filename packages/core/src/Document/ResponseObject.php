@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Document;
 
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS response object (or a `$ref` to one). Non-modelled members survive in `rest`.
@@ -30,8 +30,8 @@ final readonly class ResponseObject
      */
     public static function fromArray(array $data): self
     {
-        $ref = $data['$ref'] ?? null;
-        $description = $data['description'] ?? null;
+        $ref = Hydrate::stringOrNull($data['$ref'] ?? null);
+        $description = Hydrate::stringOrNull($data['description'] ?? null);
 
         $headers = null;
         if (isset($data['headers']) && is_array($data['headers'])) {
@@ -45,15 +45,13 @@ final readonly class ResponseObject
             $content = $data['content'];
         }
 
-        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
-            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
-            : null;
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
 
         unset($data['$ref'], $data['description'], $data['headers'], $data['content'], $data['x-docuccino']);
 
         return new self(
-            ref: is_string($ref) ? $ref : null,
-            description: is_string($description) ? $description : null,
+            ref: $ref,
+            description: $description,
             headers: $headers,
             content: $content,
             docuccino: $docuccino,

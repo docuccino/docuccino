@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Inference;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * The result of {@see TypeEngine::analyzeAction()}: every return path's type,
@@ -53,30 +53,12 @@ final readonly class ActionAnalysis
      */
     public static function fromArray(array $data): self
     {
-        $returns = $data['returns'] ?? [];
-        $throws = $data['throws'] ?? [];
-        $diagnostics = $data['diagnostics'] ?? [];
         $deps = $data['dependencyFiles'] ?? [];
 
         return new self(
-            is_array($returns)
-                ? array_values(array_map(
-                    static fn (mixed $r): ReturnSite => is_array($r) ? ReturnSite::fromArray($r) : ReturnSite::fromArray([]),
-                    $returns,
-                ))
-                : [],
-            is_array($throws)
-                ? array_values(array_map(
-                    static fn (mixed $t): ThrownException => is_array($t) ? ThrownException::fromArray($t) : ThrownException::fromArray([]),
-                    $throws,
-                ))
-                : [],
-            is_array($diagnostics)
-                ? array_values(array_map(
-                    static fn (mixed $d): Diagnostic => Diagnostic::fromArray(is_array($d) ? Arr::stringKeyed($d) : []),
-                    $diagnostics,
-                ))
-                : [],
+            Hydrate::listOf($data['returns'] ?? null, ReturnSite::fromArray(...)),
+            Hydrate::listOf($data['throws'] ?? null, ThrownException::fromArray(...)),
+            Hydrate::listOf($data['diagnostics'] ?? null, Diagnostic::fromArray(...)),
             is_array($deps) ? array_values(array_filter($deps, 'is_string')) : [],
         );
     }

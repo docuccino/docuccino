@@ -9,7 +9,7 @@ use Docuccino\Core\Patch\PatchResult;
 use Docuccino\Core\Patch\Remove;
 
 it('freezes into the immutable Operation model with provenance and overrode', function (): void {
-    $draft = (new OperationDraft)->withId('op:v1:aaaaaaaaaaaaaaaa');
+    $draft = (new OperationDraft)->assignId('op:v1:aaaaaaaaaaaaaaaa');
 
     $draft->setSummary('Index forms', Contribution::docblock());
     $draft->setSummary('List forms', Contribution::attribute());
@@ -117,7 +117,7 @@ it('drops a field written with the Remove sentinel while keeping siblings', func
 });
 
 it('carries schema mock hints through freeze into x-docuccino.mock', function (): void {
-    $schema = (new SchemaDraft)->withMock(['faker' => 'numberBetween:1,100']);
+    $schema = (new SchemaDraft)->assignMock(['faker' => 'numberBetween:1,100']);
     $schema->set('type', 'integer', Contribution::inference());
 
     $frozen = $schema->freeze()->toArray();

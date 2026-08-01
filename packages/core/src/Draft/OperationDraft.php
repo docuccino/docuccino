@@ -9,6 +9,7 @@ use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * The mutable operation builder (design §5/§7). Scalar fields go through the guard; parameters
@@ -80,19 +81,19 @@ final class OperationDraft
 
     public function parameter(string $in, string $name): ParameterDraft
     {
-        $key = $in.':'.$name;
+        $key = ParameterDraft::keyFor($in, $name);
 
         return $this->parameters[$key] ??= new ParameterDraft($in, $name);
     }
 
     public function hasParameter(string $in, string $name): bool
     {
-        return isset($this->parameters[$in.':'.$name]);
+        return isset($this->parameters[ParameterDraft::keyFor($in, $name)]);
     }
 
     public function removeParameter(string $in, string $name): void
     {
-        unset($this->parameters[$in.':'.$name]);
+        unset($this->parameters[ParameterDraft::keyFor($in, $name)]);
     }
 
     public function response(string $status): ResponseDraft
@@ -115,7 +116,7 @@ final class OperationDraft
         return $this->guard;
     }
 
-    public function withId(?string $id): self
+    public function assignId(?string $id): self
     {
         $this->id = $id;
 
@@ -126,12 +127,12 @@ final class OperationDraft
     {
         $resolved = $this->guard->resolved();
 
-        $operationId = self::stringOrNull($resolved['operationId'] ?? null);
-        $summary = self::stringOrNull($resolved['summary'] ?? null);
-        $description = self::stringOrNull($resolved['description'] ?? null);
-        $deprecated = self::boolOrNull($resolved['deprecated'] ?? null);
-        $tags = self::stringList($resolved['tags'] ?? null);
-        $security = self::securityList($resolved['security'] ?? null);
+        $operationId = Hydrate::stringOrNull($resolved['operationId'] ?? null);
+        $summary = Hydrate::stringOrNull($resolved['summary'] ?? null);
+        $description = Hydrate::stringOrNull($resolved['description'] ?? null);
+        $deprecated = Hydrate::boolOrNull($resolved['deprecated'] ?? null);
+        $tags = Hydrate::stringList($resolved['tags'] ?? null);
+        $security = Hydrate::listOfMaps($resolved['security'] ?? null);
 
         unset(
             $resolved['operationId'], $resolved['summary'], $resolved['description'],
@@ -162,54 +163,5 @@ final class OperationDraft
             docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
-    }
-
-    private static function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) ? $value : null;
-    }
-
-    private static function boolOrNull(mixed $value): ?bool
-    {
-        return is_bool($value) ? $value : null;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function stringList(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $item) {
-            if (is_string($item)) {
-                $out[] = $item;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return list<array<string, mixed>>|null
-     */
-    private static function securityList(mixed $value): ?array
-    {
-        if (! is_array($value)) {
-            return null;
-        }
-
-        $out = [];
-        foreach ($value as $item) {
-            if (is_array($item)) {
-                /** @var array<string, mixed> $item */
-                $out[] = $item;
-            }
-        }
-
-        return $out;
     }
 }

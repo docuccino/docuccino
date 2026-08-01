@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS path item: shared parameters plus one operation per HTTP method.
@@ -43,19 +44,10 @@ final readonly class PathItem
             unset($data[$method]);
         }
 
-        $parameters = [];
-        if (isset($data['parameters']) && is_array($data['parameters'])) {
-            foreach ($data['parameters'] as $parameter) {
-                if (is_array($parameter)) {
-                    $parameters[] = Parameter::fromArray(Arr::stringKeyed($parameter));
-                }
-            }
-        }
+        $parameters = Hydrate::listOf($data['parameters'] ?? null, Parameter::fromArray(...));
         unset($data['parameters']);
 
-        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
-            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
-            : null;
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
         unset($data['x-docuccino']);
 
         return new self(

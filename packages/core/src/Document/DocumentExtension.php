@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * Document-level `x-docuccino` member: identity, generator, content tree and diagnostics.
@@ -30,14 +30,10 @@ final readonly class DocumentExtension
      */
     public static function fromArray(array $data): self
     {
-        $document = isset($data['document']) && is_array($data['document'])
-            ? DocumentMeta::fromArray(Arr::stringKeyed($data['document']))
-            : null;
+        $document = Hydrate::objectOrNull($data['document'] ?? null, DocumentMeta::fromArray(...));
         unset($data['document']);
 
-        $generator = isset($data['generator']) && is_array($data['generator'])
-            ? Generator::fromArray(Arr::stringKeyed($data['generator']))
-            : null;
+        $generator = Hydrate::objectOrNull($data['generator'] ?? null, Generator::fromArray(...));
         unset($data['generator']);
 
         $content = null;
@@ -47,14 +43,7 @@ final readonly class DocumentExtension
         }
         unset($data['content']);
 
-        $diagnostics = [];
-        if (isset($data['diagnostics']) && is_array($data['diagnostics'])) {
-            foreach ($data['diagnostics'] as $diagnostic) {
-                if (is_array($diagnostic)) {
-                    $diagnostics[] = Diagnostic::fromArray(Arr::stringKeyed($diagnostic));
-                }
-            }
-        }
+        $diagnostics = Hydrate::listOf($data['diagnostics'] ?? null, Diagnostic::fromArray(...));
         unset($data['diagnostics']);
 
         return new self(
