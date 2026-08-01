@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Metadata;
 
+use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
 use PHPStan\PhpDocParser\Parser\ConstExprParser;
@@ -36,13 +37,8 @@ final class DocBlockReader
     /** The leading prose (summary + description), or null when absent. */
     public function summary(?string $docComment): ?string
     {
-        if ($docComment === null || $docComment === '') {
-            return null;
-        }
-
-        try {
-            $node = $this->parser->parse(new TokenIterator($this->lexer->tokenize($docComment)));
-        } catch (Throwable) {
+        $node = $this->parse($docComment);
+        if ($node === null) {
             return null;
         }
 
@@ -61,13 +57,8 @@ final class DocBlockReader
     /** The first `@example` value, or null. */
     public function example(?string $docComment): ?string
     {
-        if ($docComment === null || $docComment === '') {
-            return null;
-        }
-
-        try {
-            $node = $this->parser->parse(new TokenIterator($this->lexer->tokenize($docComment)));
-        } catch (Throwable) {
+        $node = $this->parse($docComment);
+        if ($node === null) {
             return null;
         }
 
@@ -79,5 +70,19 @@ final class DocBlockReader
         }
 
         return null;
+    }
+
+    /** Parse a raw docblock, or null when it is empty or unparseable. */
+    private function parse(?string $docComment): ?PhpDocNode
+    {
+        if ($docComment === null || $docComment === '') {
+            return null;
+        }
+
+        try {
+            return $this->parser->parse(new TokenIterator($this->lexer->tokenize($docComment)));
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

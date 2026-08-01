@@ -13,7 +13,7 @@ final readonly class ValidationResult
      * @param  list<ValidationError>  $errors
      */
     public function __construct(
-        public bool $valid,
+        private bool $valid,
         public array $errors = [],
     ) {}
 

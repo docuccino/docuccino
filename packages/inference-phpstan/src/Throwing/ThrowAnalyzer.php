@@ -40,12 +40,6 @@ use PHPStan\Type\Type;
  */
 final class ThrowAnalyzer
 {
-    private const CONFIDENCE_RANK = [
-        ThrowConfidence::Certain->value => 3,
-        ThrowConfidence::Declared->value => 2,
-        ThrowConfidence::Likely->value => 1,
-    ];
-
     private int $droppedCount = 0;
 
     /** @var array<string, true> */
@@ -279,7 +273,7 @@ final class ThrowAnalyzer
         foreach ($raw as $throw) {
             $key = $throw->identityKey();
             if (! isset($byIdentity[$key])
-                || self::CONFIDENCE_RANK[$throw->confidence->value] > self::CONFIDENCE_RANK[$byIdentity[$key]->confidence->value]
+                || $throw->confidence->rank() > $byIdentity[$key]->confidence->rank()
             ) {
                 $byIdentity[$key] = $throw;
             }

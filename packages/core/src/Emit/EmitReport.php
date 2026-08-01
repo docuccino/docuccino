@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 
 /**
  * Diagnostics collected during emission (e.g. lossy downlevel transforms). Ordering is the
@@ -31,7 +32,7 @@ final readonly class EmitReport
     {
         return array_values(array_filter(
             $this->diagnostics,
-            static fn (Diagnostic $d): bool => $d->severity->value === 'warning',
+            static fn (Diagnostic $d): bool => $d->severity === Severity::Warning,
         ));
     }
 

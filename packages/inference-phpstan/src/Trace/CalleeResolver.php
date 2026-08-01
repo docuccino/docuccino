@@ -71,6 +71,9 @@ final class CalleeResolver
             return null;
         }
 
+        // `getObjectClassNames()` preserves the type's member order, so for a given
+        // resolved receiver the "first resolvable candidate wins" choice is
+        // deterministic across runs — scheduling never affects which callee we pick.
         foreach ($classNames as $class) {
             if (! $this->reflectionProvider->hasClass($class)) {
                 continue;
