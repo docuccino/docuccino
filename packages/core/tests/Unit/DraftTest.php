@@ -1,0 +1,126 @@
+<?php
+
+declare(strict_types=1);
+
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\SchemaDraft;
+use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Patch\PatchResult;
+use Docuccino\Core\Patch\Remove;
+
+it('freezes into the immutable Operation model with provenance and overrode', function (): void {
+    $draft = (new OperationDraft)->withId('op:v1:aaaaaaaaaaaaaaaa');
+
+    $draft->setSummary('Index forms', Contribution::docblock());
+    $draft->setSummary('List forms', Contribution::attribute());
+    $draft->setOperationId('forms.index', Contribution::inference());
+
+    $operation = $draft->freeze();
+
+    expect($operation->summary)->toBe('List forms');
+    expect($operation->operationId)->toBe('forms.index');
+    expect($operation->xUir?->id)->toBe('op:v1:aaaaaaaaaaaaaaaa');
+
+    $provenance = $operation->xUir?->provenance?->toArray() ?? [];
+    $byLayer = [];
+    foreach ($provenance as $record) {
+        $byLayer[$record['layer']] = $record;
+    }
+
+    expect($byLayer['attribute']['fields'])->toBe(['summary']);
+    expect($byLayer['attribute']['overrode'])->toBe([
+        ['field' => 'summary', 'value' => 'Index forms', 'producer' => 'docblock'],
+    ]);
+    expect($byLayer['inference']['fields'])->toBe(['operationId']);
+});
+
+it('surfaces a shadowed write when a lower layer writes over a higher owner', function (): void {
+    $draft = new OperationDraft;
+
+    expect($draft->setSummary('Attribute wins', Contribution::attribute()))->toBe(PatchResult::Accepted);
+    expect($draft->setSummary('Docblock loses', Contribution::docblock()))->toBe(PatchResult::Shadowed);
+
+    expect($draft->freeze()->summary)->toBe('Attribute wins');
+});
+
+it('merges parameters by (in, name) rather than replacing the collection', function (): void {
+    $draft = new OperationDraft;
+
+    $status = $draft->parameter('query', 'status');
+    $again = $draft->parameter('query', 'status');
+    $perPage = $draft->parameter('query', 'per_page');
+
+    expect($status)->toBe($again);
+    expect($status)->not->toBe($perPage);
+
+    $status->setRequired(false, Contribution::integration('spatie-query-builder'));
+    $status->schema()->set('type', 'string', Contribution::integration('spatie-query-builder'));
+    $perPage->setRequired(false, Contribution::inference());
+
+    $operation = $draft->freeze();
+
+    expect($operation->parameters)->toHaveCount(2);
+    $names = array_map(static fn ($p) => $p->name, $operation->parameters);
+    expect($names)->toContain('status')->toContain('per_page');
+});
+
+it('merges responses by status and content by media type', function (): void {
+    $draft = new OperationDraft;
+
+    $ok = $draft->response('200');
+    $ok->setDescription('Paginated list', Contribution::inference());
+    $ok->content('application/json')->set('type', 'object', Contribution::inference());
+    $ok->content('application/json')->set('title', 'Forms', Contribution::attribute());
+    $ok->content('application/xml')->set('type', 'object', Contribution::inference());
+
+    expect($draft->response('200'))->toBe($ok);
+
+    $operation = $draft->freeze();
+
+    expect($operation->responses)->toHaveKey('200');
+    $content = $operation->responses['200']->content ?? [];
+    expect($content)->toHaveKey('application/json');
+    expect($content)->toHaveKey('application/xml');
+    expect($content['application/json']['schema']['type'])->toBe('object');
+    expect($content['application/json']['schema']['title'])->toBe('Forms');
+});
+
+it('merges schema properties by name, patching a sibling without discarding others', function (): void {
+    $schema = new SchemaDraft;
+    $schema->set('type', 'object', Contribution::inference());
+
+    $schema->property('id')->set('type', 'integer', Contribution::inference());
+    $schema->property('title')->set('type', 'string', Contribution::inference());
+    // A later, higher layer patches only the title description.
+    $schema->property('title')->set('description', 'The form title', Contribution::attribute());
+
+    $frozen = $schema->freeze()->toArray();
+
+    expect($frozen['properties'])->toHaveKey('id');
+    expect($frozen['properties'])->toHaveKey('title');
+    expect($frozen['properties']['id']['type'])->toBe('integer');
+    expect($frozen['properties']['title']['type'])->toBe('string');
+    expect($frozen['properties']['title']['description'])->toBe('The form title');
+});
+
+it('drops a field written with the Remove sentinel while keeping siblings', function (): void {
+    $draft = new OperationDraft;
+    $draft->setSummary('Kept', Contribution::inference());
+    $draft->setDeprecated(true, Contribution::inference());
+    $draft->set('deprecated', Remove::value(), Contribution::attribute());
+
+    $operation = $draft->freeze();
+
+    expect($operation->summary)->toBe('Kept');
+    expect($operation->deprecated)->toBeNull();
+    expect($operation->toArray())->not->toHaveKey('deprecated');
+});
+
+it('carries schema mock hints through freeze into x-uir.mock', function (): void {
+    $schema = (new SchemaDraft)->withMock(['faker' => 'numberBetween:1,100']);
+    $schema->set('type', 'integer', Contribution::inference());
+
+    $frozen = $schema->freeze()->toArray();
+
+    expect($frozen['x-uir']['mock'])->toBe(['faker' => 'numberBetween:1,100']);
+});
