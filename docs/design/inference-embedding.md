@@ -93,6 +93,25 @@ interface TypeScope {
 
 `PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
 
+**Trace contract refinements (Spike B, all-PASS — see spikes/spike-b/FINDINGS.md):**
+- Responsibility split: the visitor is pure semantics + harvesting (zero PHPStan imports);
+  the ENGINE owns bounded depth, per-`class::method` memoization, cycle guard, callee
+  resolution, per-file parser priming, deterministic ordering. `enterNode` returning `true`
+  is a *request the engine may decline* (vendor/magic/over-budget).
+- `ConstValue` is a closed set that MUST include a **call-descriptor variant**
+  `{factory, args: ConstValue[]}` — factory statics (`AllowedFilter::exact('status')`)
+  must be folded at the AST level BEFORE PHPStan collapses them to a plain object type.
+- Terminal detection has two separable outputs: "reaches a paginating terminal" =
+  name-match on a builder-typed receiver (works at any depth); the per-page value folds
+  from the OUTERMOST terminal call's argument (lives at the call site).
+- Traps: the parser service is `PHPStan\Parser\Parser` (CachedParser), not
+  `PhpParser\Parser`; re-prime `setAnalysedFiles` on both parser+resolver before EVERY
+  descended file; collect descent targets and recurse AFTER the walk returns (never nest
+  `processNodes`); sort descent by `Node::getStartFilePos()` (callback order ≠ source
+  order); `ReflectionMethod` throwing on forwarded/magic terminals (`__call`) is itself
+  the correct "vendor terminal, don't descend" signal; Larastan resolves `static<T>`
+  factories (`ListQueryBuilder::for()`) with no custom stub.
+
 ## 5. DType model + translator
 
 Closed set: `ScalarT, LiteralT, ArrayShapeT(fields, isList), ListT/MapT, UnionT,
