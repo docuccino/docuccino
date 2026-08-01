@@ -33,6 +33,11 @@ final readonly class EmitOptions
         return new self($this->keepIds, $key, $this->provenance, $this->yaml);
     }
 
+    public function withProvenance(ProvenanceLevel $provenance): self
+    {
+        return new self($this->keepIds, $this->mockFakerKey, $provenance, $this->yaml);
+    }
+
     public function withYaml(bool $yaml = true): self
     {
         return new self($this->keepIds, $this->mockFakerKey, $this->provenance, $yaml);

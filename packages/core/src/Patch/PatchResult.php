@@ -17,14 +17,4 @@ enum PatchResult
 
     /** The value was `null` ("not specified"); nothing was written. */
     case NoOp;
-
-    public function accepted(): bool
-    {
-        return $this === self::Accepted;
-    }
-
-    public function shadowed(): bool
-    {
-        return $this === self::Shadowed;
-    }
 }

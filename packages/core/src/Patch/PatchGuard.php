@@ -65,11 +65,6 @@ final class PatchGuard
         return isset($this->fields[$field]);
     }
 
-    public function raw(string $field): mixed
-    {
-        return isset($this->fields[$field]) ? $this->fields[$field]->value : null;
-    }
-
     /**
      * The resolved field→value map, with {@see Remove} sentinels omitted.
      *

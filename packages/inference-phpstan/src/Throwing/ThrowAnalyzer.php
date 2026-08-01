@@ -162,7 +162,11 @@ final class ThrowAnalyzer
         $thrower = $this->knownThrowers->forFunction($calleeName);
         $status = null;
         if ($thrower !== null) {
-            $status = $this->foldStatusArg($node, $scope, (int) $thrower->statusArgIndex);
+            // A function thrower either folds its status from a call argument
+            // (abort($status)) or carries a fixed one — never assume arg 0.
+            $status = $thrower->foldsStatusFromArgument()
+                ? $this->foldStatusArg($node, $scope, $thrower->statusArgIndex)
+                : $thrower->fixedStatus;
         } else {
             $thrower = $this->knownThrowers->forMethod($calleeName);
             if ($thrower !== null) {
@@ -295,9 +299,9 @@ final class ThrowAnalyzer
         return new Frame($selfLabel, new SourceLocation($scope->getFile(), $node->getStartLine()));
     }
 
-    private function foldStatusArg(Node $node, Scope $scope, int $argIndex): ?int
+    private function foldStatusArg(Node $node, Scope $scope, ?int $argIndex): ?int
     {
-        if (! method_exists($node, 'getArgs')) {
+        if ($argIndex === null || ! method_exists($node, 'getArgs')) {
             return null;
         }
         /** @var list<Node\Arg> $args */
