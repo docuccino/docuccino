@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
-use Docuccino\Core\Document\DocuccinoExtension;
+use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
@@ -149,7 +149,7 @@ final class OperationDraft
             $responses[$status] = $draft->freeze();
         }
 
-        $docuccino = new DocuccinoExtension(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance());
 
         return new Operation(
             operationId: $operationId,

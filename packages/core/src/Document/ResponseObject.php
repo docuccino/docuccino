@@ -21,7 +21,7 @@ final readonly class ResponseObject
         public ?string $description = null,
         public ?array $headers = null,
         public ?array $content = null,
-        public ?DocuccinoExtension $docuccino = null,
+        public ?NodeExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -45,7 +45,7 @@ final readonly class ResponseObject
             $content = $data['content'];
         }
 
-        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, NodeExtension::fromArray(...));
 
         unset($data['$ref'], $data['description'], $data['headers'], $data['content'], $data['x-docuccino']);
 

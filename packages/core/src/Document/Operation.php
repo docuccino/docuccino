@@ -28,7 +28,7 @@ final readonly class Operation
         public array $parameters = [],
         public array $responses = [],
         public ?array $security = null,
-        public ?DocuccinoExtension $docuccino = null,
+        public ?NodeExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -45,7 +45,7 @@ final readonly class Operation
         $parameters = Hydrate::listOf($data['parameters'] ?? null, Parameter::fromArray(...));
         $responses = Hydrate::mapOf($data['responses'] ?? null, ResponseObject::fromArray(...));
         $security = Hydrate::listOfMaps($data['security'] ?? null);
-        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, NodeExtension::fromArray(...));
 
         unset($data['operationId'], $data['summary'], $data['description'], $data['deprecated'], $data['tags'], $data['parameters'], $data['responses'], $data['security'], $data['x-docuccino']);
 

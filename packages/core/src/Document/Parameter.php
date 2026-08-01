@@ -22,7 +22,7 @@ final readonly class Parameter
         public ?bool $required = null,
         public ?bool $deprecated = null,
         public ?SchemaObject $schema = null,
-        public ?DocuccinoExtension $docuccino = null,
+        public ?NodeExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -37,7 +37,7 @@ final readonly class Parameter
         $required = Hydrate::boolOrNull($data['required'] ?? null);
         $deprecated = Hydrate::boolOrNull($data['deprecated'] ?? null);
         $schema = Hydrate::objectOrNull($data['schema'] ?? null, SchemaObject::fromArray(...));
-        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, NodeExtension::fromArray(...));
 
         unset($data['name'], $data['in'], $data['description'], $data['required'], $data['deprecated'], $data['schema'], $data['x-docuccino']);
 

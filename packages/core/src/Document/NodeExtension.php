@@ -8,10 +8,12 @@ use Docuccino\Core\Provenance\Provenance;
 use Docuccino\Core\Support\Hydrate;
 
 /**
- * Node-level `x-docuccino` member (operations, parameters, responses, schemas).
- * Unknown members are preserved verbatim to honour additive forward compatibility.
+ * Node-level `x-docuccino` member (operations, parameters, responses, schemas):
+ * id, provenance and mock hints. The document-level counterpart (identity,
+ * generator, content, diagnostics) is {@see DocumentExtension}. Unknown members
+ * are preserved verbatim to honour additive forward compatibility.
  */
-final readonly class DocuccinoExtension
+final readonly class NodeExtension
 {
     /**
      * @param  array<string, mixed>|null  $mock

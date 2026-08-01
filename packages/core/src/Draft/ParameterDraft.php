@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
-use Docuccino\Core\Document\DocuccinoExtension;
+use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\Parameter;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
@@ -95,7 +95,7 @@ final class ParameterDraft
         $schema = $this->schema->freeze();
         $schemaOrNull = $schema->toArray() === [] ? null : $schema;
 
-        $docuccino = new DocuccinoExtension(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance());
 
         return new Parameter(
             name: $this->name,

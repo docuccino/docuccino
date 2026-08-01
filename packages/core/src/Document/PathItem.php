@@ -28,7 +28,7 @@ final readonly class PathItem
     public function __construct(
         public array $operations = [],
         public array $parameters = [],
-        public ?DocuccinoExtension $docuccino = null,
+        public ?NodeExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -48,7 +48,7 @@ final readonly class PathItem
         $parameters = Hydrate::listOf($data['parameters'] ?? null, Parameter::fromArray(...));
         unset($data['parameters']);
 
-        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, DocuccinoExtension::fromArray(...));
+        $docuccino = Hydrate::objectOrNull($data['x-docuccino'] ?? null, NodeExtension::fromArray(...));
         unset($data['x-docuccino']);
 
         return new self(
