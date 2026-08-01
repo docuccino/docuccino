@@ -10,12 +10,25 @@ permissions:
 
 jobs:
   quality:
-    name: PHP ${{ matrix.php }}
+    name: >-
+      Quality PHP ${{ matrix.php }}${{ matrix.deps == 'lowest' && ' (prefer-lowest)' || '' }}${{ matrix.phpstan && format(' (phpstan {0})', matrix.phpstan) || '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Include-only matrix: each entry is one job, so the extra axes never merge
+      # into the base PHP jobs. Base = PHP 8.3/8.4/8.5 on the committed lock.
       matrix:
-        php: ['8.3', '8.4']
+        include:
+          - { php: '8.3', deps: 'locked' }
+          - { php: '8.4', deps: 'locked' }
+          - { php: '8.5', deps: 'locked' }
+          # Floor axis: resolve the lowest allowed dependency versions.
+          - { php: '8.3', deps: 'lowest' }
+          # PHPStan-minor axis: the inference-phpstan constraint is
+          # `~2.2.0 || ~2.3.0` (two tested minors), so exercise both. If it is
+          # ever narrowed to a single minor, drop one entry — the seam stays.
+          - { php: '8.4', deps: 'locked', phpstan: '~2.2.0' }
+          - { php: '8.4', deps: 'locked', phpstan: '~2.3.0' }
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +47,14 @@ jobs:
           composer validate --strict packages/attributes/composer.json
 
       - name: Install dependencies
-        run: composer install --no-interaction --no-progress
+        run: |
+          if [ "${{ matrix.deps }}" = "lowest" ]; then
+            composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+          elif [ -n "${{ matrix.phpstan }}" ]; then
+            composer update --with "phpstan/phpstan:${{ matrix.phpstan }}" --no-interaction --no-progress
+          else
+            composer install --no-interaction --no-progress
+          fi
 
       - name: Pint (code style)
         run: vendor/bin/pint --test
@@ -42,5 +62,55 @@ jobs:
       - name: PHPStan (level max)
         run: vendor/bin/phpstan analyse --no-progress
 
-      - name: Pest
-        run: vendor/bin/pest
+      - name: Pest (unit + non-fixture integration)
+        run: vendor/bin/pest --exclude-group=fixture
+
+  fixture:
+    name: Fixture suite (PHP 8.3)
+    runs-on: ubuntu-latest
+    # Runs ONCE (not across the quality matrix): it provisions a full Laravel +
+    # Larastan app, which is the slow part, and the fixture behaviour is
+    # PHP-version-agnostic.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, json, dom, curl, fileinfo, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Cache fixture app
+        id: fixture-cache
+        uses: actions/cache@v4
+        with:
+          path: spikes/fixture-app
+          # Re-provision only when the setup recipe or any fixture source changes.
+          key: docuccino-fixture-${{ hashFiles('spikes/fixture-app-setup.md', 'spikes/spike-*/fixture-src/**') }}
+
+      - name: Provision fixture app
+        if: steps.fixture-cache.outputs.cache-hit != 'true'
+        # Mirrors spikes/fixture-app-setup.md — keep the two in lockstep.
+        run: |
+          set -euo pipefail
+          cd spikes
+          composer create-project laravel/laravel fixture-app "^12.0" --no-interaction --no-progress
+          cd fixture-app
+          composer require --dev larastan/larastan --no-interaction --no-progress
+          composer require spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
+          cd ..
+          cp -R spike-a/fixture-src/app/. fixture-app/app/
+          cp -R spike-b/fixture-src/app/. fixture-app/app/
+          cp -R spike-c/fixture-src/app/. fixture-app/app/
+
+      - name: Install root dependencies (Pest)
+        run: composer install --no-interaction --no-progress
+
+      - name: Run fixture suite
+        # DOCUCCINO_REQUIRE_FIXTURE=1 turns a missing/broken fixture app into a
+        # hard failure instead of a silent skip, so this job can never pass green
+        # while executing zero fixture tests.
+        env:
+          DOCUCCINO_REQUIRE_FIXTURE: '1'
+        run: vendor/bin/pest --group=fixture
