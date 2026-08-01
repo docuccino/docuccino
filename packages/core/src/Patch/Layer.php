@@ -11,6 +11,7 @@ namespace Docuccino\Core\Patch;
  */
 enum Layer: int
 {
+    case Fallback = 5;
     case Inference = 10;
     case Integration = 20;
     case Docblock = 30;
@@ -24,6 +25,7 @@ enum Layer: int
     public function label(): string
     {
         return match ($this) {
+            self::Fallback => 'fallback',
             self::Inference => 'inference',
             self::Integration => 'integration',
             self::Docblock => 'docblock',

@@ -24,6 +24,11 @@ final readonly class Contribution
         public int $specificity = 0,
     ) {}
 
+    public static function fallback(?Source $source = null): self
+    {
+        return new self(Layer::Fallback, 'fallback', $source);
+    }
+
     public static function inference(?Source $source = null, ?float $confidence = null): self
     {
         return new self(Layer::Inference, 'inference', $source, $confidence);
