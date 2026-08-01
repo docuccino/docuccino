@@ -8,10 +8,14 @@
         <testsuite name="core">
             <directory>packages/core/tests</directory>
         </testsuite>
+        <testsuite name="inference">
+            <directory>packages/inference-phpstan/tests</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
             <directory>packages/core/src</directory>
+            <directory>packages/inference-phpstan/src</directory>
         </include>
     </source>
 </phpunit>

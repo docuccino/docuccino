@@ -1,6 +1,18 @@
+# PHPStan-internal class visibility (docuccino/inference-phpstan):
+#
+# The inference package references unprefixed PHPStan\* classes (NodeScopeResolver,
+# the Type hierarchy, MethodReturnStatementsNode, …). When PHPStan analyses our
+# code it resolves those from its OWN running phar automatically — no scanDirectories
+# or phar:// includes needed (verified: only genuine type errors surface). So the
+# ONLY discipline required is that our src carries no hard imports of classes that
+# live in the host Laravel app rather than the phar/host-vendor — illuminate/*,
+# larastan/*, spatie/* are referenced by FQCN string, never `use`d — keeping the
+# static-analysis dependency surface to phar + nikic/php-parser + phpstan/phpdoc-parser,
+# all present in the root vendor. No sweeping ignores.
 parameters:
     level: max
     paths:
         - packages/core/src
         - packages/attributes/src
+        - packages/inference-phpstan/src
     tmpDir: build/phpstan

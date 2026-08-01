@@ -24,7 +24,9 @@
     ],
     "autoload-dev": {
         "psr-4": {
-            "Docuccino\\Core\\Tests\\": "packages/core/tests/"
+            "Docuccino\\Core\\Tests\\": "packages/core/tests/",
+            "Docuccino\\Inference\\PhpStan\\": "packages/inference-phpstan/src/",
+            "Docuccino\\Inference\\PhpStan\\Tests\\": "packages/inference-phpstan/tests/"
         }
     },
     "minimum-stability": "dev",
@@ -37,7 +39,8 @@
     },
     "scripts": {
         "test": "pest",
-        "analyse": "phpstan analyse",
+        "test:inference-fixture": "pest --group=fixture",
+        "analyse": "phpstan analyse --memory-limit=1G",
         "lint": "pint --test"
     }
 }
