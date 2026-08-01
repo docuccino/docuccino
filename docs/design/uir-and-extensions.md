@@ -145,6 +145,14 @@ interface ExceptionToResponse {
 
 interface ExampleProvider { /* chain: static/@example/#[Example] (v1) → factory render / response-calls (v1.1) */ }
 
+interface VersioningPolicy { // diff enforcement: changeset severity vs info.version delta
+    public function evaluate(Changeset $changes, string $oldVersion, string $newVersion): PolicyVerdict;
+    // Built-ins: SemverPolicy (breaking → major bump required), DateVersionPolicy
+    // (breaking → new date version), NoVersioningPolicy (breaking → fail/warn outright).
+    // Per-document config; wired into docuccino:diff --enforce (nonzero exit for CI).
+    // Longitudinal governance (deprecation windows, history, cross-repo) = SaaS, not here.
+}
+
 interface DocumentTransformer { public function transform(UirDocumentDraft $doc, DocumentContext $ctx): void; }
 interface Emitter { public function format(): string; public function emit(UirDocument $doc, EmitOptions $o): string; }
 interface Viewer  { public function render(ViewerContext $ctx): Response; }
