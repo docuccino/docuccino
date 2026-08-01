@@ -1,0 +1,155 @@
+# Design: PHPStan/Larastan Embedding (docuccino/inference-phpstan)
+
+Status: approved (2026-08-01); load-bearing assumptions PROVEN by Spike A
+(`spikes/spike-a/FINDINGS.md`) — read it alongside this doc; where the spike found
+deviations, the spike wins.
+
+## 1. Verified ground truth
+
+- The phpstan/phpstan phar exposes **unprefixed `PHPStan\*` classes** via its
+  `PharAutoloader` (`vendor/phpstan/phpstan/bootstrap.php`) — programmatic use of
+  `ContainerFactory`, `NodeScopeResolver`, `ScopeFactory`, `PHPStan\Type\*` is the same
+  mechanism Rector and every extension test harness use. Only PHPStan's third-party deps
+  are PHP-Scoper-prefixed. `PhpParser\*` and `PHPStan\PhpDocParser\*` resolve from the
+  HOST's composer packages → we require `nikic/php-parser ^5`, `phpstan/phpdoc-parser ^2`.
+- A scoped private PHPStan copy is IMPOSSIBLE while reusing Larastan (identical FQCNs
+  can't coexist; Larastan binds unprefixed `PHPStan\*`). → **Share the host's PHPStan.**
+  Larastan 3.x requires `phpstan/phpstan ^2.2`, so one version satisfies everyone.
+  Composer constraint = tested-minor allowlist (`~2.2.0 || ~2.3.0`), widened per CI matrix,
+  never open-ended.
+- Larastan's bootstrap boots the Laravel app (from `getcwd()/bootstrap/app.php`) — doc
+  generation runs in app context (same constraint Scramble has). Package is a normal
+  `require-dev` of the end-user app.
+
+## 2. Embedding mechanics (+ Spike A traps — MUST honor)
+
+```php
+$factory = new ContainerFactory($projectRoot);           // cwd MUST be the Laravel app root
+$container = $factory->create($cacheDir, [$generatedNeon], $entryFiles);
+```
+
+Generated neon includes: host's `larastan/extension.neon` (absolute path), our bundled
+extensions, optional user `docuccino.neon`; sets `phpVersion`, `resultCachePath`, empty paths.
+
+Per file: parse with `defaultAnalysisParser`, then
+`NodeScopeResolver::processNodes($nodes, ScopeFactory::create(ScopeContext::create($file)), $callback)`.
+Harvest the virtual node `MethodReturnStatementsNode`: `getReturnStatements()` (each return
+paired with flow-refined scope — `$scope->getType($expr)` per return path) and
+`getStatementResult()->getThrowPoints()` (escaping exceptions, caught subtracted, `@throws`
+consulted).
+
+**Spike A traps (regression-test each):**
+1. `bootstrapFiles` are NOT auto-run by a raw ContainerFactory embed — read
+   `getParameter('bootstrapFiles')` and `require_once` each, or Larastan fails with
+   `Undefined constant LARAVEL_VERSION`.
+2. **Body-stripping parser**: `PathRoutingParser` rich-parses only files in its analysed
+   set; others go through `CleaningParser` which DELETES method bodies →
+   `MethodReturnStatementsNode` silently reports zero returns. Call `setAnalysedFiles()`
+   on BOTH the `NodeScopeResolver` and the `pathRoutingParser` service — for EVERY file
+   analysed, including descent targets.
+3. Normalise all paths through the container's `FileHelper`.
+4. Dynamic-return-type extensions must target contracts (e.g.
+   `Illuminate\Contracts\Routing\ResponseFactory`), not concrete classes, or they never fire.
+
+All internal-API touches live in ONE adapter class per supported PHPStan minor
+(`Runtime/V2_2/RuntimeAdapter`, ~6 methods + parser-priming helper). Extension APIs
+(`Scope`, `Type`, dynamic return types) ARE covered by PHPStan's BC promise.
+Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; deterministic.
+
+## 3. Scoped analysis / parallelism / containment
+
+- Entry set = route-referenced action files only; everything else lazy via
+  `ReflectionProvider` (autoloader-backed). On-demand descent into callee bodies,
+  memoized per file, bounded (depth default 4, per-action file budget 40).
+- Parent orchestrator + K workers (Symfony Process, NDJSON of already-translated results);
+  recycle workers after N routes (50) or RSS watermark (1 GiB). Parent sorts results by
+  canonical action id — scheduling never affects bytes.
+- Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Worker fatal → re-queue
+  batch with size 1 (bisection isolates the poison action). Engine boot failure → fatal
+  diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build).
+
+## 4. Boundary (contract in docuccino/core; zero PHPStan imports)
+
+```php
+interface TypeEngine {
+    public function analyzeAction(ActionRef $a): ActionAnalysis;
+    public function classMetadata(ClassRef $c): ClassMetadata;
+    public function trace(ActionRef $a, TraceVisitor $v): void;
+}
+final readonly class ActionRef { public string $file; public ?string $class; public string $method; public int $line; }
+final readonly class ActionAnalysis {
+    /** @var list<ReturnSite> */    public array $returns;
+    /** @var list<ThrownException> */ public array $throws;
+    /** @var list<Diagnostic> */    public array $diagnostics;
+    /** @var list<string> */        public array $dependencyFiles;   // depfile → fragment cache key
+}
+interface TraceVisitor { public function enterNode(PhpParser\Node $n, TypeScope $s): bool; } // true = descend
+interface TypeScope {
+    public function typeOf(Node\Expr $e): DType;
+    public function constantValueOf(Node\Expr $e): ?ConstValue;  // literals + call descriptors (AllowedFilter::exact('status'))
+    public function location(Node $n): SourceLocation;
+}
+```
+
+`PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
+
+## 5. DType model + translator
+
+Closed set: `ScalarT, LiteralT, ArrayShapeT(fields, isList), ListT/MapT, UnionT,
+IntersectionT, ClassT(fqcn, typeArgs), EnumT(fqcn, cases), CallableT, NullT/VoidT/NeverT,
+UnknownT(reason — always carries why)`. Nullability = `UnionT[..., NullT]`.
+
+Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
+ConstantArrayType → ArrayShapeT (optional keys honored, isList from accessory);
+Constant scalars → LiteralT; UnionType → flatten + canonical sort; IntersectionType →
+strip accessory types, collapse single survivor; GenericObjectType/ObjectType →
+ClassT/EnumT via ClassReflection (source location = provenance); TemplateType → its bound,
+else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason).
+Translation is EAGER at query time (serializable across workers/cache); class expansion
+is LAZY via `classMetadata()` (memoized per class per run).
+
+## 6. Exception flow (3 layers)
+
+1. PHPStan throw points (free). Drop `canContainAnyThrowable` points (verbose-log, count).
+2. `KnownThrowers` registry (user-extensible), keyed on resolved callee symbol:
+   `abort/abort_if/abort_unless` → HttpException (status via constantValueOf(arg0)),
+   `authorize`/`Gate::authorize` → AuthorizationException/403, `findOrFail/firstOrFail/sole`
+   → ModelNotFoundException/404, `validate()`/FormRequest param → ValidationException/422,
+   route-model binding → 404.
+3. Bounded descent into project-code callees lacking `@throws` (depth 3, memoized,
+   cycle-guarded); vendor never descended.
+Result model: `ThrownException{exceptionFqcn, httpStatusHint, callChain, confidence:
+certain|likely|declared}`. Engine stops at "exceptions + status hints"; response bodies
+are the pipeline's ExceptionToResponse job.
+
+## 7. Bundled PHPStan extensions (BC-stable APIs)
+
+- `ResponseJsonReturnTypeExtension` on `Illuminate\Contracts\Routing\ResponseFactory::json`
+  + `JsonResponse<TPayload>` stub → payload ConstantArrayType survives to return harvest
+  (proven in Spike A).
+- `Data::from/collect` precision; `Resource::collection` → `AnonymousResourceCollection<T>`
+  (threading the inner resource type through anonymous collections needs a dedicated
+  extension — flagged by Spike A as not-free; Phase 4).
+- User's own PHPStan extensions (via `docuccino.neon` include) improve their docs with
+  zero Docuccino-specific API — headline feature.
+
+## 8. Engine result cache & determinism
+
+PHPStan's own result cache is CLI-rule-oriented — unusable; we point its temp dirs into
+our cache dir and build our own: per-ActionRef serialized ActionAnalysis + per-ClassRef
+ClassMetadata. Key = sha256(engine ver ‖ phpstan ver ‖ larastan ver ‖ generated neon hash ‖
+composer.lock hash ‖ action file hash ‖ each descended-file hash). Canonical member
+ordering everywhere; no absolute paths in payloads. CI invariants: 1-vs-8 workers
+byte-diff; cold-vs-warm byte-diff.
+
+## 9. Risks
+
+| Risk | Mitigation |
+|---|---|
+| PHPStan internal churn | tested-minor allowlist; adapter-per-minor; CI matrix lowest+highest patch |
+| Larastan can't boot user app (env issues) | fatal diagnostic + NullTypeEngine fallback; document a docuccino env |
+| Memory growth | worker recycling (count + RSS watermark); scoped entry set; file budget |
+| Dynamic chains defeat constant tracking | UnknownT(reason) + diagnostic at exact expression; attribute escape hatch |
+| Throw-point noise | drop any-throwable; registry + @throws + bounded project-only descent |
+| Determinism regressions | canonical serialization + the two CI diff tests |
+| php-parser skew (host on 4.x) | hard require ^5 (composer surfaces at install) |
