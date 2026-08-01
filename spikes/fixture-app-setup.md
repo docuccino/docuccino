@@ -73,6 +73,30 @@ cp -R spikes/spike-a/fixture-src/app/. spikes/fixture-app/app/
 
 The default `App\Models\User` model is used as-is.
 
+## Fixture source authored by Spike B (QueryBuilder deep-chain trace)
+
+Spike B adds the Eos-style QueryBuilder pattern that defeats Scramble Pro: an
+allowed-filters chain built inside a Query class, reached two calls deep, plus a
+custom pagination terminal. The canonical copies live at
+`spikes/spike-b/fixture-src/`; copy them into the ignored app the same way:
+
+```bash
+cp -R spikes/spike-b/fixture-src/app/. spikes/fixture-app/app/
+```
+
+- `app/Support/ListQueryBuilder.php` — `final class ListQueryBuilder extends
+  Spatie\QueryBuilder\QueryBuilder` with a custom `paginateList()` terminal that
+  internally calls the vendor `paginate()`.
+- `app/Queries/UserIndexQuery.php` — `final readonly class`; its `query()` builds
+  `ListQueryBuilder::for(User::class)->allowedFilters([...])->allowedSorts([...])
+  ->defaultSort('name')` (the chain lives here, NOT in the controller).
+- `app/Http/Controllers/UserListController.php` — `listUsers()` returns
+  `(new UserIndexQuery())->query()->paginateList(25)`.
+
+No routes/migrations/composer changes needed (the spike drives files by path);
+`App\Models\User` (default) is reused as-is. `spatie/laravel-query-builder` is
+already required by the base install above.
+
 ## Fixture source authored by Spike C (exception-flow analysis)
 
 Spike C adds an exception-heavy controller plus a two-level service layer. The
