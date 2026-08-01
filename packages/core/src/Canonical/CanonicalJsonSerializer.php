@@ -41,17 +41,36 @@ final class CanonicalJsonSerializer
         };
     }
 
+    /**
+     * Encodes a float independent of the ambient `serialize_precision` ini (design §3.5:
+     * "shortest-round-trip floats"). `json_encode`'s float formatting is governed by that ini —
+     * so we pin it to `-1` (shortest string that round-trips) for the duration of the encode and
+     * restore it, making the bytes identical whether the host runs with `serialize_precision` at
+     * its default `-1`, at `17`, or anything else.
+     *
+     * Consequence of shortest-round-trip: an integer-valued float renders WITHOUT a decimal point
+     * (`10.0` → `10`), so it is byte-identical to the integer `10`. This is an accepted canonical
+     * normalisation — the canonical form does not distinguish `10.0` from `10`.
+     */
     private function encodeFloat(float $value): string
     {
         if (! is_finite($value)) {
             throw new RuntimeException('Non-finite floats cannot be serialised to JSON.');
         }
 
+        $previous = ini_set('serialize_precision', '-1');
+
         try {
-            return json_encode($value, self::ENCODE_FLAGS);
+            $encoded = json_encode($value, self::ENCODE_FLAGS);
         } catch (JsonException $e) {
             throw new RuntimeException('Failed to encode float.', previous: $e);
+        } finally {
+            if (is_string($previous)) {
+                ini_set('serialize_precision', $previous);
+            }
         }
+
+        return $encoded;
     }
 
     private function encodeString(string $value): string
