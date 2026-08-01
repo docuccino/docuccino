@@ -10,7 +10,8 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 /**
  * `contentHash` (design §1): SHA-256 (hex) over the canonical serialization of the document
  * with `x-docuccino.generator` and `x-docuccino.diagnostics` excluded, so tool upgrades and diagnostic
- * churn never dirty committed diffs.
+ * churn never dirty committed diffs. The `x-docuccino.document.contentHash` field is itself excluded —
+ * a hash cannot be one of its own inputs, so the value is recomputable and stable across rewrites.
  */
 final readonly class ContentHasher
 {
@@ -26,6 +27,14 @@ final readonly class ContentHasher
     {
         if (isset($document['x-docuccino']) && is_array($document['x-docuccino'])) {
             unset($document['x-docuccino']['generator'], $document['x-docuccino']['diagnostics']);
+
+            if (isset($document['x-docuccino']['document']) && is_array($document['x-docuccino']['document'])) {
+                unset($document['x-docuccino']['document']['contentHash']);
+
+                if ($document['x-docuccino']['document'] === []) {
+                    unset($document['x-docuccino']['document']);
+                }
+            }
 
             if ($document['x-docuccino'] === []) {
                 unset($document['x-docuccino']);

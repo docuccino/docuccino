@@ -123,7 +123,7 @@
     }
   },
   "x-docuccino": {
-    "document": { "id": "doc:default", "configHash": "cfg-abc", "contentHash": "will-be-recomputed" },
+    "document": { "id": "doc:default", "configHash": "cfg-abc", "contentHash": "0c20465437f26cfc77667b04c27fcb7b23caab39f234d84a9fabe67594d4284d" },
     "generator": { "name": "docuccino/laravel", "version": "0.1.0", "specVersion": "1.0.0" }
   }
 }
