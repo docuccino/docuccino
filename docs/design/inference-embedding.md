@@ -108,19 +108,31 @@ else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason
 Translation is EAGER at query time (serializable across workers/cache); class expansion
 is LAZY via `classMetadata()` (memoized per class per run).
 
-## 6. Exception flow (3 layers)
+## 6. Exception flow (3 layers) — CORRECTED per Spike C (8/8 PASS, see spikes/spike-c/FINDINGS.md)
 
-1. PHPStan throw points (free). Drop `canContainAnyThrowable` points (verbose-log, count).
-2. `KnownThrowers` registry (user-extensible), keyed on resolved callee symbol:
-   `abort/abort_if/abort_unless` → HttpException (status via constantValueOf(arg0)),
-   `authorize`/`Gate::authorize` → AuthorizationException/403, `findOrFail/firstOrFail/sole`
-   → ModelNotFoundException/404, `validate()`/FormRequest param → ValidationException/422,
-   route-model binding → 404.
-3. Bounded descent into project-code callees lacking `@throws` (depth 3, memoized,
-   cycle-guarded); vendor never descended.
-Result model: `ThrownException{exceptionFqcn, httpStatusHint, callChain, confidence:
-certain|likely|declared}`. Engine stops at "exceptions + status hints"; response bodies
-are the pipeline's ExceptionToResponse job.
+1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
+   (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
+   points, including real signal, flag it). Dropped/demoted points are counted + verbose-logged.
+2. `KnownThrowers` registry (user-extensible), keyed on resolved callee symbol — **dual role**:
+   (a) *enrich* explicit stubbed points with a status (`authorize` → 403, `validate` → 422),
+   (b) *rescue* still-implicit forwarders by callee name (static `Model::findOrFail` surfaces
+   only as implicit bare Throwable — unlike Builder `firstOrFail` — the registry restores
+   ModelNotFoundException/404 as `likely`). `abort/abort_if/abort_unless` → HttpException
+   with status via constantValueOf (arg 0 for abort, arg 1 for abort_if/unless).
+   Route-model binding → 404 (pipeline supplies).
+3. Bounded descent into project-code callees lacking `@throws` (**depth 3** — observed max
+   real depth 2; the vendor-file gate, not depth, does the real containment), memoized,
+   cycle-guarded; vendor never descended. **Trap: descent targets must be added to the
+   analysed set on BOTH parser+resolver BEFORE first parse**, or CachedParser caches a
+   body-stripped copy and descent silently reads zero throw points.
+
+Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
+confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
+vendor-declared 500-class exceptions are demoted to `internal`, project-declared kept.
+**Exception identity = (fqcn, httpStatusHint)**: two aborts (403/404) are two responses;
+never dedupe by fqcn alone. Engine stops at "exceptions + status hints"; response bodies
+are the pipeline's ExceptionToResponse job. Known limitation (accepted): an incomplete
+`@throws` docblock suppresses descent, hiding deeper exceptions — docblock is trusted.
 
 ## 7. Bundled PHPStan extensions (BC-stable APIs)
 
