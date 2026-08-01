@@ -6,7 +6,7 @@ See `docs/plan.md` for scope/roadmap; this doc carries implementation-level deta
 
 ## 1. UIR document
 
-OAS 3.2-shaped JSON with one reserved key `x-uir` allowed on every node. Schemas are
+OAS 3.2-shaped JSON with one reserved key `x-docuccino` allowed on every node. Schemas are
 JSON Schema 2020-12 (`jsonSchemaDialect: https://spec.openapis.org/oas/3.2/dialect/base`).
 
 Top level:
@@ -20,7 +20,7 @@ Top level:
   "info": {}, "servers": [], "security": [], "tags": [],
   "paths": {}, "webhooks": {},
   "components": { "schemas": {}, "responses": {}, "parameters": {}, "securitySchemes": {}, "examples": {}, "headers": {} },
-  "x-uir": {
+  "x-docuccino": {
     "document": { "id": "doc:default", "configHash": "…", "contentHash": "…" },
     "generator": { "name": "docuccino/laravel", "version": "…", "specVersion": "1.0.0" },
     "content": { "pages": [] },
@@ -29,25 +29,25 @@ Top level:
 }
 ```
 
-- `contentHash` = SHA-256 over canonical serialization EXCLUDING `x-uir.generator` and
-  `x-uir.diagnostics` (tool upgrades don't dirty CI diffs).
+- `contentHash` = SHA-256 over canonical serialization EXCLUDING `x-docuccino.generator` and
+  `x-docuccino.diagnostics` (tool upgrades don't dirty CI diffs).
 - No timestamps anywhere — banned by the UIR schema itself.
-- `x-uir.diagnostics` embedded only with `--embed-diagnostics` (CLI is the primary channel).
+- `x-docuccino.diagnostics` embedded only with `--embed-diagnostics` (CLI is the primary channel).
 - UIR spec semver is independent of PHP packages; `$schema` URL embeds major.minor.
-  Consumers MUST ignore unknown `x-uir` members (additive = minor; shape/identity change =
+  Consumers MUST ignore unknown `x-docuccino` members (additive = minor; shape/identity change =
   major + new `$schema` URL).
 
 ## 2. Identity model
 
 Every operation, parameter, named schema, response, security scheme carries
-`x-uir.id` = `<kind>:<algoVersion>:<base32(sha256)[:16bytes]>`.
+`x-docuccino.id` = `<kind>:<algoVersion>:<base32(sha256)[:16bytes]>`.
 
 | Kind | Identity inputs (hashed canonical tuple) | Survives | Breaks on |
 |---|---|---|---|
 | `op:` | doc id + upper method + path template with params positionally normalized (`/forms/{p0}/fields/{p1}`) | file moves, controller/method renames, path-param renames, param reorder | URI or method change |
 | `par:` | parent op id + `in` + name | reorder, description/schema edits | rename (a real contract change for query/header) |
 | `sch:` (named) | source FQCN (+ generic args); pinnable via `#[SchemaId('…')]` | file moves | class rename without pin |
-| `sch:` (inline) | structural hash of canonical schema with descriptions/examples/x-uir stripped | prose edits | shape change (correct) |
+| `sch:` (inline) | structural hash of canonical schema with descriptions/examples/x-docuccino stripped | prose edits | shape change (correct) |
 | `res:` | parent op id + status + media type | — | status change (correct) |
 | `doc:` | config key | everything | doc renamed in config |
 | `page:` | content page slug | file moves within content dir | slug change |
@@ -69,7 +69,7 @@ configurable strategy. Identical tuples (two routes claiming `GET /x`) = error d
 
 ## 4. Provenance
 
-`x-uir.provenance` = list of contribution records:
+`x-docuccino.provenance` = list of contribution records:
 
 ```json
 {
@@ -85,7 +85,7 @@ configurable strategy. Identical tuples (two routes claiming `GET /x`) = error d
 Producers: `inference`, `attribute`, `docblock`, `integration:<name>`, `overlay`,
 `config`, `fallback`. `source.file` is project-root-relative. Emit levels:
 `--provenance=none|winners|full`, default `winners` for committed artifacts.
-Mock hints: `x-uir.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
+Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
 All other `x-*` members pass through untouched.
 
 ## 5. Pipeline
@@ -217,7 +217,7 @@ validate always run fresh. Watch mode later = loop incremental build + SSE push.
 "paths": {
   "/api/v1/forms": {
     "get": {
-      "x-uir": {
+      "x-docuccino": {
         "id": "op:v1:mfz3q8k2w9r7t1ua",
         "provenance": [
           { "producer": "inference", "layer": "inference", "fields": ["responses.200"],
@@ -232,19 +232,19 @@ validate always run fresh. Watch mode later = loop incremental build + SSE push.
       "summary": "List forms",
       "tags": ["Forms"],
       "parameters": [
-        { "x-uir": { "id": "par:v1:ab12cd34ef56ab78",
+        { "x-docuccino": { "id": "par:v1:ab12cd34ef56ab78",
             "provenance": [ { "producer": "integration:spatie-query-builder", "layer": "integration", "fields": ["*"],
               "source": { "file": "modules/Form/Queries/FormIndexQuery.php", "line": 22 }, "confidence": 0.9 } ] },
           "name": "filter[status]", "in": "query", "required": false,
           "schema": { "type": "string", "enum": ["draft", "published", "archived"],
                       "x-enumDescriptions": { "draft": "Not yet visible", "published": "Live", "archived": "Read-only" } } },
-        { "x-uir": { "id": "par:v1:77aa88bb99cc00dd" },
+        { "x-docuccino": { "id": "par:v1:77aa88bb99cc00dd" },
           "name": "per_page", "in": "query", "required": false,
           "schema": { "type": "integer", "default": 15, "minimum": 1, "maximum": 100,
-                      "x-uir": { "mock": { "faker": "numberBetween:1,100" } } } }
+                      "x-docuccino": { "mock": { "faker": "numberBetween:1,100" } } } }
       ],
       "responses": {
-        "200": { "x-uir": { "id": "res:v1:e1f2a3b4c5d6e7f8" }, "description": "Paginated list of forms",
+        "200": { "x-docuccino": { "id": "res:v1:e1f2a3b4c5d6e7f8" }, "description": "Paginated list of forms",
                  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedFormData" } } } },
         "401": { "$ref": "#/components/responses/ProblemUnauthenticated" },
         "422": { "$ref": "#/components/responses/ProblemValidation" }
