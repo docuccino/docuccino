@@ -1,0 +1,17 @@
+{
+    "name": "docuccino/inference-phpstan",
+    "description": "PHPStan/Larastan type inference engine for Docuccino (Phase 2 — placeholder).",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "docuccino/core": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Docuccino\\InferencePhpstan\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

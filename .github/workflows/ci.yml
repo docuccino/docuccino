@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, intl, json
+          coverage: none
+
+      - name: Validate composer files
+        run: |
+          composer validate --no-check-publish
+          composer validate --strict packages/core/composer.json
+          composer validate --strict packages/attributes/composer.json
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Pint (code style)
+        run: vendor/bin/pint --test
+
+      - name: PHPStan (level max)
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Pest
+        run: vendor/bin/pest

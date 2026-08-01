@@ -1,0 +1,26 @@
+{
+    "name": "docuccino/core",
+    "description": "Framework-agnostic UIR model, canonicalizer, identity, validator and emitters.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "psr/container": "^1.1 || ^2.0",
+        "opis/json-schema": "^2.4"
+    },
+    "require-dev": {
+        "docuccino/attributes": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Docuccino\\Core\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Docuccino\\Core\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

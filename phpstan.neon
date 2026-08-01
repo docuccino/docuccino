@@ -1,0 +1,6 @@
+parameters:
+    level: max
+    paths:
+        - packages/core/src
+        - packages/attributes/src
+    tmpDir: build/phpstan

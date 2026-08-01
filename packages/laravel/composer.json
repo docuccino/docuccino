@@ -1,0 +1,17 @@
+{
+    "name": "docuccino/laravel",
+    "description": "Laravel adapter for Docuccino (Phase 3 — placeholder).",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "docuccino/core": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Docuccino\\Laravel\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

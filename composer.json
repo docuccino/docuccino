@@ -1,0 +1,43 @@
+{
+    "name": "docuccino/docuccino",
+    "description": "UIR-based API documentation generator for Laravel (monorepo).",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "docuccino/core": "*",
+        "docuccino/attributes": "*"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.18",
+        "pestphp/pest": "^4.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/*",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "autoload-dev": {
+        "psr-4": {
+            "Docuccino\\Core\\Tests\\": "packages/core/tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse",
+        "lint": "pint --test"
+    }
+}
