@@ -22,7 +22,7 @@ final readonly class Parameter
         public ?bool $required = null,
         public ?bool $deprecated = null,
         public ?SchemaObject $schema = null,
-        public ?XUir $xUir = null,
+        public ?DocuccinoExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -41,11 +41,11 @@ final readonly class Parameter
             ? SchemaObject::fromArray(Arr::stringKeyed($data['schema']))
             : null;
 
-        $xUir = isset($data['x-uir']) && is_array($data['x-uir'])
-            ? XUir::fromArray(Arr::stringKeyed($data['x-uir']))
+        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
+            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
             : null;
 
-        unset($data['name'], $data['in'], $data['description'], $data['required'], $data['deprecated'], $data['schema'], $data['x-uir']);
+        unset($data['name'], $data['in'], $data['description'], $data['required'], $data['deprecated'], $data['schema'], $data['x-docuccino']);
 
         return new self(
             name: is_string($name) ? $name : null,
@@ -54,7 +54,7 @@ final readonly class Parameter
             required: is_bool($required) ? $required : null,
             deprecated: is_bool($deprecated) ? $deprecated : null,
             schema: $schema,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $data,
         );
     }
@@ -66,8 +66,8 @@ final readonly class Parameter
     {
         $out = [];
 
-        if ($this->xUir !== null && ! $this->xUir->isEmpty()) {
-            $out['x-uir'] = $this->xUir->toArray();
+        if ($this->docuccino !== null && ! $this->docuccino->isEmpty()) {
+            $out['x-docuccino'] = $this->docuccino->toArray();
         }
 
         if ($this->name !== null) {

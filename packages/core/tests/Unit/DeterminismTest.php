@@ -24,18 +24,18 @@ it('produces the same bytes from the model as from the raw array', function (): 
     expect($this->emitter->emit($document))->toBe($this->emitter->emitArray($array));
 });
 
-it('keeps contentHash stable when only x-uir.generator changes', function (): void {
+it('keeps contentHash stable when only x-docuccino.generator changes', function (): void {
     $a = workedExample();
     $b = workedExample();
-    $b['x-uir']['generator'] = ['name' => 'docuccino/laravel', 'version' => '99.9.9', 'specVersion' => '1.0.0'];
+    $b['x-docuccino']['generator'] = ['name' => 'docuccino/laravel', 'version' => '99.9.9', 'specVersion' => '1.0.0'];
 
     expect($this->hasher->hash($a))->toBe($this->hasher->hash($b));
 });
 
-it('keeps contentHash stable when only x-uir.diagnostics changes', function (): void {
+it('keeps contentHash stable when only x-docuccino.diagnostics changes', function (): void {
     $a = workedExample();
     $b = workedExample();
-    $b['x-uir']['diagnostics'] = [
+    $b['x-docuccino']['diagnostics'] = [
         ['severity' => 'warning', 'code' => 'W1', 'message' => 'noise'],
     ];
 

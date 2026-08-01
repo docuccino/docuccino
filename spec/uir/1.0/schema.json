@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec.docuccino.app/uir/1.0/schema.json",
   "title": "UIR Document",
-  "description": "Universal Intermediate Representation 1.0 (draft). An OAS 3.2-shaped document with one reserved member, `x-uir`, allowed on every object node. OAS structure is permitted structurally (objects with `x-*` passthrough); everything under `x-uir` is defined strictly. Determinism guarantee: no timestamp-like or otherwise non-deterministic members are defined anywhere, and the strict `x-uir` objects forbid additional members, so none can be introduced.",
+  "description": "Universal Intermediate Representation 1.0 (draft). An OAS 3.2-shaped document with one reserved member, `x-docuccino`, allowed on every object node. OAS structure is permitted structurally (objects with `x-*` passthrough); everything under `x-docuccino` is defined strictly. Determinism guarantee: no timestamp-like or otherwise non-deterministic members are defined anywhere, and the strict `x-docuccino` objects forbid additional members, so none can be introduced.",
   "type": "object",
   "required": ["uir", "openapi", "info", "paths"],
-  "x-canonicalOrder": ["$schema", "uir", "openapi", "jsonSchemaDialect", "info", "servers", "security", "tags", "paths", "webhooks", "components", "x-uir"],
+  "x-canonicalOrder": ["$schema", "uir", "openapi", "jsonSchemaDialect", "info", "servers", "security", "tags", "paths", "webhooks", "components", "x-docuccino"],
   "properties": {
     "$schema": { "type": "string", "format": "uri" },
     "uir": { "$ref": "#/$defs/semver" },
@@ -18,7 +18,7 @@
     "paths": { "$ref": "#/$defs/paths" },
     "webhooks": { "type": "object", "additionalProperties": { "$ref": "#/$defs/pathItem" } },
     "components": { "$ref": "#/$defs/components" },
-    "x-uir": { "$ref": "#/$defs/xUirDocument" }
+    "x-docuccino": { "$ref": "#/$defs/docuccinoDocument" }
   },
   "patternProperties": { "^x-": true },
   "additionalProperties": false,
@@ -48,7 +48,7 @@
     },
     "info": {
       "type": "object",
-      "x-canonicalOrder": ["title", "summary", "description", "termsOfService", "contact", "license", "version", "x-uir"],
+      "x-canonicalOrder": ["title", "summary", "description", "termsOfService", "contact", "license", "version", "x-docuccino"],
       "required": ["title", "version"],
       "properties": {
         "title": { "type": "string" },
@@ -58,31 +58,31 @@
         "contact": { "type": "object" },
         "license": { "type": "object" },
         "version": { "type": "string" },
-        "x-uir": { "$ref": "#/$defs/xUirNode" }
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" }
       },
       "patternProperties": { "^x-": true }
     },
     "server": {
       "type": "object",
-      "x-canonicalOrder": ["url", "description", "variables", "x-uir"],
+      "x-canonicalOrder": ["url", "description", "variables", "x-docuccino"],
       "required": ["url"],
       "properties": {
         "url": { "type": "string" },
         "description": { "type": "string" },
         "variables": { "type": "object" },
-        "x-uir": { "$ref": "#/$defs/xUirNode" }
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" }
       },
       "patternProperties": { "^x-": true }
     },
     "tag": {
       "type": "object",
-      "x-canonicalOrder": ["name", "description", "externalDocs", "x-uir"],
+      "x-canonicalOrder": ["name", "description", "externalDocs", "x-docuccino"],
       "required": ["name"],
       "properties": {
         "name": { "type": "string" },
         "description": { "type": "string" },
         "externalDocs": { "type": "object" },
-        "x-uir": { "$ref": "#/$defs/xUirNode" }
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" }
       },
       "patternProperties": { "^x-": true }
     },
@@ -93,9 +93,9 @@
     },
     "pathItem": {
       "type": "object",
-      "x-canonicalOrder": ["x-uir", "$ref", "summary", "description", "servers", "parameters", "get", "put", "post", "delete", "options", "head", "patch", "trace", "query"],
+      "x-canonicalOrder": ["x-docuccino", "$ref", "summary", "description", "servers", "parameters", "get", "put", "post", "delete", "options", "head", "patch", "trace", "query"],
       "properties": {
-        "x-uir": { "$ref": "#/$defs/xUirNode" },
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" },
         "$ref": { "type": "string" },
         "summary": { "type": "string" },
         "description": { "type": "string" },
@@ -116,9 +116,9 @@
     },
     "operation": {
       "type": "object",
-      "x-canonicalOrder": ["x-uir", "operationId", "summary", "description", "externalDocs", "deprecated", "tags", "security", "servers", "parameters", "requestBody", "responses", "callbacks"],
+      "x-canonicalOrder": ["x-docuccino", "operationId", "summary", "description", "externalDocs", "deprecated", "tags", "security", "servers", "parameters", "requestBody", "responses", "callbacks"],
       "properties": {
-        "x-uir": { "$ref": "#/$defs/xUirNode" },
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" },
         "operationId": { "type": "string" },
         "summary": { "type": "string" },
         "description": { "type": "string" },
@@ -137,9 +137,9 @@
     },
     "parameter": {
       "type": "object",
-      "x-canonicalOrder": ["x-uir", "name", "in", "description", "required", "deprecated", "allowEmptyValue", "style", "explode", "allowReserved", "schema", "example", "examples", "content"],
+      "x-canonicalOrder": ["x-docuccino", "name", "in", "description", "required", "deprecated", "allowEmptyValue", "style", "explode", "allowReserved", "schema", "example", "examples", "content"],
       "properties": {
-        "x-uir": { "$ref": "#/$defs/xUirNode" },
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" },
         "$ref": { "type": "string" },
         "name": { "type": "string" },
         "in": { "enum": ["path", "query", "header", "cookie"] },
@@ -160,9 +160,9 @@
     },
     "response": {
       "type": "object",
-      "x-canonicalOrder": ["x-uir", "$ref", "summary", "description", "headers", "content", "links"],
+      "x-canonicalOrder": ["x-docuccino", "$ref", "summary", "description", "headers", "content", "links"],
       "properties": {
-        "x-uir": { "$ref": "#/$defs/xUirNode" },
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" },
         "$ref": { "type": "string" },
         "summary": { "type": "string" },
         "description": { "type": "string" },
@@ -175,9 +175,9 @@
     },
     "schema": {
       "type": ["object", "boolean"],
-      "x-canonicalOrder": ["x-uir", "$ref", "type", "format", "enum", "const", "default", "items", "prefixItems", "properties", "required", "additionalProperties", "allOf", "anyOf", "oneOf", "not"],
+      "x-canonicalOrder": ["x-docuccino", "$ref", "type", "format", "enum", "const", "default", "items", "prefixItems", "properties", "required", "additionalProperties", "allOf", "anyOf", "oneOf", "not"],
       "properties": {
-        "x-uir": { "$ref": "#/$defs/xUirNode" },
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" },
         "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/schema" } },
         "patternProperties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/schema" } },
         "items": { "$ref": "#/$defs/schema" },
@@ -192,7 +192,7 @@
     },
     "components": {
       "type": "object",
-      "x-canonicalOrder": ["schemas", "responses", "parameters", "examples", "requestBodies", "headers", "securitySchemes", "links", "callbacks", "pathItems", "x-uir"],
+      "x-canonicalOrder": ["schemas", "responses", "parameters", "examples", "requestBodies", "headers", "securitySchemes", "links", "callbacks", "pathItems", "x-docuccino"],
       "properties": {
         "schemas": { "type": "object", "additionalProperties": { "$ref": "#/$defs/schema" } },
         "responses": { "type": "object", "additionalProperties": { "$ref": "#/$defs/response" } },
@@ -204,14 +204,14 @@
         "links": { "type": "object" },
         "callbacks": { "type": "object" },
         "pathItems": { "type": "object", "additionalProperties": { "$ref": "#/$defs/pathItem" } },
-        "x-uir": { "$ref": "#/$defs/xUirNode" }
+        "x-docuccino": { "$ref": "#/$defs/docuccinoNode" }
       },
       "patternProperties": { "^x-": true },
       "additionalProperties": false
     },
-    "xUirNode": {
+    "docuccinoNode": {
       "type": "object",
-      "description": "Node-level x-uir. Strictly closed (additionalProperties false) so no timestamp-like or non-deterministic members can be introduced.",
+      "description": "Node-level x-docuccino. Strictly closed (additionalProperties false) so no timestamp-like or non-deterministic members can be introduced.",
       "x-canonicalOrder": ["id", "provenance", "mock"],
       "properties": {
         "id": { "$ref": "#/$defs/nodeId" },
@@ -220,9 +220,9 @@
       },
       "additionalProperties": false
     },
-    "xUirDocument": {
+    "docuccinoDocument": {
       "type": "object",
-      "description": "Document-level x-uir. Strictly closed; carries no timestamps by design.",
+      "description": "Document-level x-docuccino. Strictly closed; carries no timestamps by design.",
       "x-canonicalOrder": ["document", "generator", "content", "diagnostics"],
       "properties": {
         "document": { "$ref": "#/$defs/documentMeta" },

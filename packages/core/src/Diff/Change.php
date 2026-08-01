@@ -6,7 +6,7 @@ namespace Docuccino\Core\Diff;
 
 /**
  * A single semantic change between two documents: what kind of change, on which target node
- * (identified by its stable `x-uir.id` where available), a human-readable path, whether it is
+ * (identified by its stable `x-docuccino.id` where available), a human-readable path, whether it is
  * a breaking change, a stable classification `code`, and any field-level detail.
  */
 final readonly class Change

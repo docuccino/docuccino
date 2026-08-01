@@ -17,7 +17,7 @@ it('validates the worked example from the design doc', function (): void {
 
 it('rejects a document with an invalid provenance layer and reports where', function (): void {
     $doc = workedExample();
-    $doc['paths']['/api/v1/forms']['get']['x-uir']['provenance'][0]['layer'] = 'bogus';
+    $doc['paths']['/api/v1/forms']['get']['x-docuccino']['provenance'][0]['layer'] = 'bogus';
 
     $result = $this->validator->validate($doc);
 
@@ -27,18 +27,18 @@ it('rejects a document with an invalid provenance layer and reports where', func
     expect(implode("\n", $result->messages()))->toContain('layer');
 });
 
-it('rejects an unknown member under x-uir provenance (strictly closed)', function (): void {
+it('rejects an unknown member under x-docuccino provenance (strictly closed)', function (): void {
     $doc = workedExample();
-    $doc['paths']['/api/v1/forms']['get']['x-uir']['provenance'][0]['generatedAt'] = '2026-08-01T00:00:00Z';
+    $doc['paths']['/api/v1/forms']['get']['x-docuccino']['provenance'][0]['generatedAt'] = '2026-08-01T00:00:00Z';
 
     $result = $this->validator->validate($doc);
 
     expect($result->isValid())->toBeFalse();
 });
 
-it('rejects a timestamp-like member inside an x-uir source record', function (): void {
+it('rejects a timestamp-like member inside an x-docuccino source record', function (): void {
     $doc = workedExample();
-    $doc['paths']['/api/v1/forms']['get']['x-uir']['provenance'][0]['source']['timestamp'] = 123;
+    $doc['paths']['/api/v1/forms']['get']['x-docuccino']['provenance'][0]['source']['timestamp'] = 123;
 
     $result = $this->validator->validate($doc);
 

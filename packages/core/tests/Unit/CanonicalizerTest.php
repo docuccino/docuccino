@@ -8,7 +8,7 @@ use Docuccino\Core\Emitter\UirEmitter;
 /**
  * Reverses the key order of every map (associative array) at every depth while leaving
  * list order untouched, so canonicalisation must be what makes two scrambled inputs equal.
- * Contents of `x-*` members other than `x-uir` are left verbatim, mirroring the
+ * Contents of `x-*` members other than `x-docuccino` are left verbatim, mirroring the
  * canonicaliser's passthrough contract (their internal order is intentionally preserved).
  */
 function scrambleMaps(mixed $value): mixed
@@ -23,7 +23,7 @@ function scrambleMaps(mixed $value): mixed
 
     $out = [];
     foreach (array_reverse($value, true) as $key => $inner) {
-        $isVerbatimExtension = is_string($key) && str_starts_with($key, 'x-') && $key !== 'x-uir';
+        $isVerbatimExtension = is_string($key) && str_starts_with($key, 'x-') && $key !== 'x-docuccino';
         $out[$key] = $isVerbatimExtension ? $inner : scrambleMaps($inner);
     }
 

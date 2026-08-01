@@ -28,7 +28,7 @@ final readonly class Operation
         public array $parameters = [],
         public array $responses = [],
         public ?array $security = null,
-        public ?XUir $xUir = null,
+        public ?DocuccinoExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -80,11 +80,11 @@ final readonly class Operation
             }
         }
 
-        $xUir = isset($data['x-uir']) && is_array($data['x-uir'])
-            ? XUir::fromArray(Arr::stringKeyed($data['x-uir']))
+        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
+            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
             : null;
 
-        unset($data['operationId'], $data['summary'], $data['description'], $data['deprecated'], $data['tags'], $data['parameters'], $data['responses'], $data['security'], $data['x-uir']);
+        unset($data['operationId'], $data['summary'], $data['description'], $data['deprecated'], $data['tags'], $data['parameters'], $data['responses'], $data['security'], $data['x-docuccino']);
 
         return new self(
             operationId: is_string($operationId) ? $operationId : null,
@@ -95,7 +95,7 @@ final readonly class Operation
             parameters: $parameters,
             responses: $responses,
             security: $security,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $data,
         );
     }
@@ -107,8 +107,8 @@ final readonly class Operation
     {
         $out = [];
 
-        if ($this->xUir !== null && ! $this->xUir->isEmpty()) {
-            $out['x-uir'] = $this->xUir->toArray();
+        if ($this->docuccino !== null && ! $this->docuccino->isEmpty()) {
+            $out['x-docuccino'] = $this->docuccino->toArray();
         }
 
         if ($this->operationId !== null) {

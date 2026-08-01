@@ -26,7 +26,7 @@ final readonly class PathItem
     public function __construct(
         public array $operations = [],
         public array $parameters = [],
-        public ?XUir $xUir = null,
+        public ?DocuccinoExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -53,15 +53,15 @@ final readonly class PathItem
         }
         unset($data['parameters']);
 
-        $xUir = isset($data['x-uir']) && is_array($data['x-uir'])
-            ? XUir::fromArray(Arr::stringKeyed($data['x-uir']))
+        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
+            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
             : null;
-        unset($data['x-uir']);
+        unset($data['x-docuccino']);
 
         return new self(
             operations: $operations,
             parameters: $parameters,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $data,
         );
     }
@@ -73,8 +73,8 @@ final readonly class PathItem
     {
         $out = [];
 
-        if ($this->xUir !== null && ! $this->xUir->isEmpty()) {
-            $out['x-uir'] = $this->xUir->toArray();
+        if ($this->docuccino !== null && ! $this->docuccino->isEmpty()) {
+            $out['x-docuccino'] = $this->docuccino->toArray();
         }
 
         $out += $this->rest;

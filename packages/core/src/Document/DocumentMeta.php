@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 /**
- * `x-uir.document` — document identity and content-addressing metadata.
+ * `x-docuccino.document` — document identity and content-addressing metadata.
  */
 final readonly class DocumentMeta
 {

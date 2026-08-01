@@ -20,7 +20,7 @@ function overlayBaseDocument(): array
         'paths' => [
             '/api/v1/forms' => [
                 'get' => [
-                    'x-uir' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
+                    'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
                     'summary' => 'List forms',
                     'parameters' => [
                         ['name' => 'status', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']],
@@ -74,7 +74,7 @@ it('updates a scalar member and records overlay provenance with the overridden v
 
     expect($get['summary'])->toBe('List all forms');
 
-    $provenance = $get['x-uir']['provenance'];
+    $provenance = $get['x-docuccino']['provenance'];
     $overlayRecord = array_values(array_filter($provenance, static fn ($r) => $r['producer'] === 'overlay'))[0];
     expect($overlayRecord['layer'])->toBe('overlay');
     expect($overlayRecord['fields'])->toBe(['summary']);
@@ -96,7 +96,7 @@ it('deep-merges an object update, keeping inferred siblings', function (): void 
     expect($get['parameters'])->toHaveCount(2);
     expect($get['responses'])->toHaveKey('200');
 
-    $overlayRecord = array_values(array_filter($get['x-uir']['provenance'], static fn ($r) => $r['producer'] === 'overlay'))[0];
+    $overlayRecord = array_values(array_filter($get['x-docuccino']['provenance'], static fn ($r) => $r['producer'] === 'overlay'))[0];
     expect($overlayRecord['fields'])->toContain('description')->toContain('summary');
     // Only the pre-existing member (summary) was overridden.
     expect($overlayRecord['overrode'])->toBe([['field' => 'summary', 'value' => 'List forms']]);

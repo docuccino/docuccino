@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
+use Docuccino\Core\Document\DocuccinoExtension;
 use Docuccino\Core\Document\ResponseObject;
-use Docuccino\Core\Document\XUir;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -92,14 +92,14 @@ final class ResponseDraft
             }
         }
 
-        $xUir = new XUir(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new DocuccinoExtension(id: $this->id, provenance: $this->guard->provenance());
 
         return new ResponseObject(
             ref: $ref,
             description: $description,
             headers: $headers,
             content: $content,
-            xUir: $xUir->isEmpty() ? null : $xUir,
+            docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
     }

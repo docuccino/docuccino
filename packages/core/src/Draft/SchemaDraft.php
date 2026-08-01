@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
+use Docuccino\Core\Document\DocuccinoExtension;
 use Docuccino\Core\Document\SchemaObject;
-use Docuccino\Core\Document\XUir;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -85,14 +85,14 @@ final class SchemaDraft
             $data['properties'] = $properties;
         }
 
-        $xUir = new XUir(
+        $docuccino = new DocuccinoExtension(
             id: $this->id,
             provenance: $this->guard->provenance(),
             mock: $this->mock,
         );
 
-        if (! $xUir->isEmpty()) {
-            $data['x-uir'] = $xUir->toArray();
+        if (! $docuccino->isEmpty()) {
+            $data['x-docuccino'] = $docuccino->toArray();
         }
 
         return new SchemaObject($data);

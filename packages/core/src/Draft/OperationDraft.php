@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
+use Docuccino\Core\Document\DocuccinoExtension;
 use Docuccino\Core\Document\Operation;
-use Docuccino\Core\Document\XUir;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -14,7 +14,7 @@ use Docuccino\Core\Patch\PatchResult;
  * The mutable operation builder (design §5/§7). Scalar fields go through the guard; parameters
  * merge by `(in, name)` and responses by status, each a nested draft with its own guard — so
  * a targeted patch never wipes inferred siblings. {@see freeze()} produces the immutable
- * Phase 1a {@see Operation}, provenance assembled into every node's `x-uir`.
+ * Phase 1a {@see Operation}, provenance assembled into every node's `x-docuccino`.
  */
 final class OperationDraft
 {
@@ -148,7 +148,7 @@ final class OperationDraft
             $responses[$status] = $draft->freeze();
         }
 
-        $xUir = new XUir(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new DocuccinoExtension(id: $this->id, provenance: $this->guard->provenance());
 
         return new Operation(
             operationId: $operationId,
@@ -159,7 +159,7 @@ final class OperationDraft
             parameters: $parameters,
             responses: $responses,
             security: $security,
-            xUir: $xUir->isEmpty() ? null : $xUir,
+            docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
     }

@@ -21,7 +21,7 @@ final readonly class ResponseObject
         public ?string $description = null,
         public ?array $headers = null,
         public ?array $content = null,
-        public ?XUir $xUir = null,
+        public ?DocuccinoExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -45,18 +45,18 @@ final readonly class ResponseObject
             $content = $data['content'];
         }
 
-        $xUir = isset($data['x-uir']) && is_array($data['x-uir'])
-            ? XUir::fromArray(Arr::stringKeyed($data['x-uir']))
+        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
+            ? DocuccinoExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
             : null;
 
-        unset($data['$ref'], $data['description'], $data['headers'], $data['content'], $data['x-uir']);
+        unset($data['$ref'], $data['description'], $data['headers'], $data['content'], $data['x-docuccino']);
 
         return new self(
             ref: is_string($ref) ? $ref : null,
             description: is_string($description) ? $description : null,
             headers: $headers,
             content: $content,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $data,
         );
     }
@@ -68,8 +68,8 @@ final readonly class ResponseObject
     {
         $out = [];
 
-        if ($this->xUir !== null && ! $this->xUir->isEmpty()) {
-            $out['x-uir'] = $this->xUir->toArray();
+        if ($this->docuccino !== null && ! $this->docuccino->isEmpty()) {
+            $out['x-docuccino'] = $this->docuccino->toArray();
         }
 
         if ($this->ref !== null) {

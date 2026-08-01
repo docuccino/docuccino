@@ -9,14 +9,14 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Document\UirDocument;
 
 /**
- * Emits a {@see UirDocument} as pure OpenAPI 3.2 (JSON or YAML): every `x-uir` member is
+ * Emits a {@see UirDocument} as pure OpenAPI 3.2 (JSON or YAML): every `x-docuccino` member is
  * stripped, along with the UIR-only top-level `$schema` and `uir` version. Options may re-emit
- * ids as flat `x-uir-id` members and map schema mock hints to a faker member; provenance is
- * always dropped. The content layer (`x-uir.content`) has nowhere to live in OAS and is
+ * ids as flat `x-docuccino-id` members and map schema mock hints to a faker member; provenance is
+ * always dropped. The content layer (`x-docuccino.content`) has nowhere to live in OAS and is
  * dropped — `info.description`/tag descriptions already sit in standard fields.
  *
  * Output flows through the shared canonical serializer, so 3.2 emission is byte-deterministic
- * and, with default options, round-trips losslessly against the x-uir-stripped UIR.
+ * and, with default options, round-trips losslessly against the x-docuccino-stripped UIR.
  */
 final readonly class OpenApi32Emitter
 {
@@ -67,8 +67,8 @@ final readonly class OpenApi32Emitter
             return array_map(fn (mixed $item): mixed => $this->strip($item, $options), $node);
         }
 
-        $xUir = $node['x-uir'] ?? null;
-        unset($node['x-uir']);
+        $docuccino = $node['x-docuccino'] ?? null;
+        unset($node['x-docuccino']);
 
         $out = [];
         foreach ($node as $key => $value) {
@@ -77,8 +77,8 @@ final readonly class OpenApi32Emitter
                 : $this->strip($value, $options);
         }
 
-        if (is_array($xUir)) {
-            $this->projectXUir($out, $xUir, $options);
+        if (is_array($docuccino)) {
+            $this->projectDocuccino($out, $docuccino, $options);
         }
 
         return $out;
@@ -86,19 +86,19 @@ final readonly class OpenApi32Emitter
 
     /**
      * @param  array<string, mixed>  $out
-     * @param  array<mixed, mixed>  $xUir
+     * @param  array<mixed, mixed>  $docuccino
      */
-    private function projectXUir(array &$out, array $xUir, EmitOptions $options): void
+    private function projectDocuccino(array &$out, array $docuccino, EmitOptions $options): void
     {
-        if ($options->keepIds && isset($xUir['id']) && is_string($xUir['id'])) {
-            $out['x-uir-id'] = $xUir['id'];
+        if ($options->keepIds && isset($docuccino['id']) && is_string($docuccino['id'])) {
+            $out['x-docuccino-id'] = $docuccino['id'];
         }
 
         if ($options->mockFakerKey !== null
-            && isset($xUir['mock']) && is_array($xUir['mock'])
-            && isset($xUir['mock']['faker']) && is_string($xUir['mock']['faker'])
+            && isset($docuccino['mock']) && is_array($docuccino['mock'])
+            && isset($docuccino['mock']['faker']) && is_string($docuccino['mock']['faker'])
         ) {
-            $out[$options->mockFakerKey] = $xUir['mock']['faker'];
+            $out[$options->mockFakerKey] = $docuccino['mock']['faker'];
         }
     }
 }

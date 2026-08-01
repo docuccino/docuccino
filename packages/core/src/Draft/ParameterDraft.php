@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Draft;
 
+use Docuccino\Core\Document\DocuccinoExtension;
 use Docuccino\Core\Document\Parameter;
-use Docuccino\Core\Document\XUir;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -85,7 +85,7 @@ final class ParameterDraft
         $schema = $this->schema->freeze();
         $schemaOrNull = $schema->toArray() === [] ? null : $schema;
 
-        $xUir = new XUir(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new DocuccinoExtension(id: $this->id, provenance: $this->guard->provenance());
 
         return new Parameter(
             name: $this->name,
@@ -94,7 +94,7 @@ final class ParameterDraft
             required: $required,
             deprecated: $deprecated,
             schema: $schemaOrNull,
-            xUir: $xUir->isEmpty() ? null : $xUir,
+            docuccino: $docuccino->isEmpty() ? null : $docuccino,
             rest: $resolved,
         );
     }

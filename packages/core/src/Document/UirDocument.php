@@ -34,7 +34,7 @@ final readonly class UirDocument
         public ?array $paths = null,
         public ?array $webhooks = null,
         public ?Components $components = null,
-        public ?DocumentExtension $xUir = null,
+        public ?DocumentExtension $docuccino = null,
         public array $rest = [],
     ) {}
 
@@ -65,14 +65,14 @@ final readonly class UirDocument
             ? Components::fromArray(Arr::stringKeyed($data['components']))
             : null;
 
-        $xUir = isset($data['x-uir']) && is_array($data['x-uir'])
-            ? DocumentExtension::fromArray(Arr::stringKeyed($data['x-uir']))
+        $docuccino = isset($data['x-docuccino']) && is_array($data['x-docuccino'])
+            ? DocumentExtension::fromArray(Arr::stringKeyed($data['x-docuccino']))
             : null;
 
         unset(
             $data['$schema'], $data['uir'], $data['openapi'], $data['jsonSchemaDialect'],
             $data['info'], $data['servers'], $data['security'], $data['tags'],
-            $data['paths'], $data['webhooks'], $data['components'], $data['x-uir'],
+            $data['paths'], $data['webhooks'], $data['components'], $data['x-docuccino'],
         );
 
         return new self(
@@ -87,7 +87,7 @@ final readonly class UirDocument
             paths: $paths,
             webhooks: $webhooks,
             components: $components,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $data,
         );
     }
@@ -183,14 +183,14 @@ final readonly class UirDocument
             $out['components'] = $this->components->toArray();
         }
 
-        if ($this->xUir !== null) {
-            $out['x-uir'] = $this->xUir->toArray();
+        if ($this->docuccino !== null) {
+            $out['x-docuccino'] = $this->docuccino->toArray();
         }
 
         return $out + $this->rest;
     }
 
-    public function withDocumentExtension(DocumentExtension $xUir): self
+    public function withDocumentExtension(DocumentExtension $docuccino): self
     {
         return new self(
             uir: $this->uir,
@@ -204,7 +204,7 @@ final readonly class UirDocument
             paths: $this->paths,
             webhooks: $this->webhooks,
             components: $this->components,
-            xUir: $xUir,
+            docuccino: $docuccino,
             rest: $this->rest,
         );
     }

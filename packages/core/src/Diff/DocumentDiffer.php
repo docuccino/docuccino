@@ -12,7 +12,7 @@ use Docuccino\Core\Support\Arr;
 
 /**
  * The semantic diff engine (plan §"Easy wins"/design §2): compares two {@see UirDocument}s by
- * their stable `x-uir.id`s, so a path-parameter rename (same op id) reads as no change while a
+ * their stable `x-docuccino.id`s, so a path-parameter rename (same op id) reads as no change while a
  * URI change reads as remove + add. It walks operations, their parameters/responses/request
  * bodies, named component schemas and content pages, delegating field-level schema comparison
  * to {@see SchemaComparator}, and classifies each {@see Change} as breaking or not.
@@ -63,7 +63,7 @@ final class DocumentDiffer
     private function firstAlgoVersion(UirDocument $document): ?string
     {
         foreach ($this->operations($document) as [$op]) {
-            $id = $op->xUir?->id;
+            $id = $op->docuccino?->id;
             $algo = self::algoVersionOf($id);
             if ($algo !== null) {
                 return $algo;
@@ -144,12 +144,12 @@ final class DocumentDiffer
 
             if (! $inNew) {
                 $param = $oldParams[$key];
-                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Parameter, self::nodeId($param->xUir?->id, $opId, $key), $path.' parameters '.self::paramLabel($param), true, 'parameter.removed');
+                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Parameter, self::nodeId($param->docuccino?->id, $opId, $key), $path.' parameters '.self::paramLabel($param), true, 'parameter.removed');
             } elseif (! $inOld) {
                 $param = $newParams[$key];
                 $breaking = $param->required === true;
                 $code = $breaking ? 'parameter.added-required' : 'parameter.added';
-                $changes[] = new Change(ChangeKind::Added, ChangeTarget::Parameter, self::nodeId($param->xUir?->id, $opId, $key), $path.' parameters '.self::paramLabel($param), $breaking, $code);
+                $changes[] = new Change(ChangeKind::Added, ChangeTarget::Parameter, self::nodeId($param->docuccino?->id, $opId, $key), $path.' parameters '.self::paramLabel($param), $breaking, $code);
             } else {
                 $this->diffParameterPair($opId, $path, $key, $oldParams[$key], $newParams[$key], $changes);
             }
@@ -161,7 +161,7 @@ final class DocumentDiffer
      */
     private function diffParameterPair(string $opId, string $path, string $key, Parameter $old, Parameter $new, array &$changes): void
     {
-        $id = self::nodeId($new->xUir?->id, $opId, $key);
+        $id = self::nodeId($new->docuccino?->id, $opId, $key);
         $paramPath = $path.' parameters '.self::paramLabel($new);
 
         if ($old->required !== true && $new->required === true) {
@@ -194,10 +194,10 @@ final class DocumentDiffer
 
             if (! $inNew) {
                 $response = $oldResponses[$status];
-                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Response, self::nodeId($response->xUir?->id, $opId, $status), $path.' responses '.$status, true, 'response.removed');
+                $changes[] = new Change(ChangeKind::Removed, ChangeTarget::Response, self::nodeId($response->docuccino?->id, $opId, $status), $path.' responses '.$status, true, 'response.removed');
             } elseif (! $inOld) {
                 $response = $newResponses[$status];
-                $changes[] = new Change(ChangeKind::Added, ChangeTarget::Response, self::nodeId($response->xUir?->id, $opId, $status), $path.' responses '.$status, false, 'response.added');
+                $changes[] = new Change(ChangeKind::Added, ChangeTarget::Response, self::nodeId($response->docuccino?->id, $opId, $status), $path.' responses '.$status, false, 'response.added');
             } else {
                 $this->diffResponsePair($opId, $path, $status, $oldResponses[$status], $newResponses[$status], $changes);
             }
@@ -209,7 +209,7 @@ final class DocumentDiffer
      */
     private function diffResponsePair(string $opId, string $path, string $status, ResponseObject $old, ResponseObject $new, array &$changes): void
     {
-        $id = self::nodeId($new->xUir?->id, $opId, $status);
+        $id = self::nodeId($new->docuccino?->id, $opId, $status);
         $responsePath = $path.' responses '.$status;
 
         $this->scalarChange($changes, ChangeTarget::Response, $id, $responsePath, 'response.description-changed', 'description', $old->description, $new->description);
@@ -324,7 +324,7 @@ final class DocumentDiffer
         $out = [];
 
         foreach ($this->operations($document) as [$op, $method, $path]) {
-            $id = $op->xUir?->id;
+            $id = $op->docuccino?->id;
             $key = $id ?? '_'.strtoupper($method).' '.$path;
             $out[$key] = ['path' => $path, 'method' => $method, 'op' => $op];
         }
@@ -356,7 +356,7 @@ final class DocumentDiffer
         $out = [];
 
         foreach ($op->parameters as $param) {
-            $id = $param->xUir?->id;
+            $id = $param->docuccino?->id;
             $key = $id ?? self::paramLabel($param);
             $out[$key] = $param;
         }
@@ -393,7 +393,7 @@ final class DocumentDiffer
     {
         $out = [];
 
-        $content = $document->xUir?->content;
+        $content = $document->docuccino?->content;
         $pages = is_array($content) ? ($content['pages'] ?? null) : null;
 
         if (! is_array($pages)) {
@@ -482,10 +482,10 @@ final class DocumentDiffer
      */
     private static function schemaId(array $schema): ?string
     {
-        $xUir = $schema['x-uir'] ?? null;
+        $docuccino = $schema['x-docuccino'] ?? null;
 
-        if (is_array($xUir) && isset($xUir['id']) && is_string($xUir['id'])) {
-            return $xUir['id'];
+        if (is_array($docuccino) && isset($docuccino['id']) && is_string($docuccino['id'])) {
+            return $docuccino['id'];
         }
 
         return null;

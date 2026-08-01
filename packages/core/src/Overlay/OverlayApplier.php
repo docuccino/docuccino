@@ -13,7 +13,7 @@ use Docuccino\Core\Support\Arr;
  * (design §7). Each action's `target` is resolved by {@see TargetResolver}; `update` merges an
  * object (deep, update wins) or replaces a scalar/array, `remove` deletes the matched node.
  *
- * Every value an `update` changes is recorded in the affected node's `x-uir.provenance` with
+ * Every value an `update` changes is recorded in the affected node's `x-docuccino.provenance` with
  * `producer: overlay`, `layer: overlay`, and the prior value captured in `overrode` — so the
  * "why is it documented this way" trail survives regeneration. An unsupported selector yields an
  * error diagnostic; a target matching nothing yields a warning — never a silent skip.
@@ -260,8 +260,8 @@ final class OverlayApplier
     {
         $stringFields = array_map(static fn (int|string $f): string => (string) $f, $fields);
 
-        $xUir = isset($node['x-uir']) && is_array($node['x-uir']) ? Arr::stringKeyed($node['x-uir']) : [];
-        $provenance = isset($xUir['provenance']) && is_array($xUir['provenance']) ? array_values($xUir['provenance']) : [];
+        $docuccino = isset($node['x-docuccino']) && is_array($node['x-docuccino']) ? Arr::stringKeyed($node['x-docuccino']) : [];
+        $provenance = isset($docuccino['provenance']) && is_array($docuccino['provenance']) ? array_values($docuccino['provenance']) : [];
 
         $overrode = [];
         foreach ($stringFields as $field) {
@@ -276,8 +276,8 @@ final class OverlayApplier
         }
 
         $provenance[] = $record;
-        $xUir['provenance'] = $provenance;
-        $node['x-uir'] = $xUir;
+        $docuccino['provenance'] = $provenance;
+        $node['x-docuccino'] = $docuccino;
 
         return $node;
     }

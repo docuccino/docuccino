@@ -9,7 +9,7 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 
 /**
  * `contentHash` (design §1): SHA-256 (hex) over the canonical serialization of the document
- * with `x-uir.generator` and `x-uir.diagnostics` excluded, so tool upgrades and diagnostic
+ * with `x-docuccino.generator` and `x-docuccino.diagnostics` excluded, so tool upgrades and diagnostic
  * churn never dirty committed diffs.
  */
 final readonly class ContentHasher
@@ -24,11 +24,11 @@ final readonly class ContentHasher
      */
     public function hash(array $document): string
     {
-        if (isset($document['x-uir']) && is_array($document['x-uir'])) {
-            unset($document['x-uir']['generator'], $document['x-uir']['diagnostics']);
+        if (isset($document['x-docuccino']) && is_array($document['x-docuccino'])) {
+            unset($document['x-docuccino']['generator'], $document['x-docuccino']['diagnostics']);
 
-            if ($document['x-uir'] === []) {
-                unset($document['x-uir']);
+            if ($document['x-docuccino'] === []) {
+                unset($document['x-docuccino']);
             }
         }
 

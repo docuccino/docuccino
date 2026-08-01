@@ -25,25 +25,25 @@ function diffBase(): array
         'paths' => [
             '/api/v1/forms/{id}' => [
                 'get' => [
-                    'x-uir' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
+                    'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
                     'operationId' => 'forms.show',
                     'summary' => 'Show a form',
                     'tags' => ['Forms'],
                     'parameters' => [
                         [
-                            'x-uir' => ['id' => 'par:v1:bbbbbbbbbbbbbbbb'],
+                            'x-docuccino' => ['id' => 'par:v1:bbbbbbbbbbbbbbbb'],
                             'name' => 'id', 'in' => 'path', 'required' => true,
                             'schema' => ['type' => 'integer'],
                         ],
                         [
-                            'x-uir' => ['id' => 'par:v1:cccccccccccccccc'],
+                            'x-docuccino' => ['id' => 'par:v1:cccccccccccccccc'],
                             'name' => 'status', 'in' => 'query', 'required' => false,
                             'schema' => ['type' => 'string', 'enum' => ['draft', 'published', 'archived']],
                         ],
                     ],
                     'responses' => [
                         '200' => [
-                            'x-uir' => ['id' => 'res:v1:dddddddddddddddd'],
+                            'x-docuccino' => ['id' => 'res:v1:dddddddddddddddd'],
                             'description' => 'The form',
                             'content' => [
                                 'application/json' => [
@@ -65,13 +65,13 @@ function diffBase(): array
         'components' => [
             'schemas' => [
                 'FormData' => [
-                    'x-uir' => ['id' => 'sch:v1:eeeeeeeeeeeeeeee'],
+                    'x-docuccino' => ['id' => 'sch:v1:eeeeeeeeeeeeeeee'],
                     'type' => 'object',
                     'properties' => ['id' => ['type' => 'integer']],
                 ],
             ],
         ],
-        'x-uir' => [
+        'x-docuccino' => [
             'content' => [
                 'pages' => [
                     ['id' => 'page:v1:ffffffffffffffff', 'slug' => 'getting-started', 'title' => 'Getting started', 'content' => 'Welcome.'],
@@ -119,7 +119,7 @@ it('treats a path-parameter rename as cosmetic (same op id, no change)', functio
 
 it('ignores provenance-only differences', function (): void {
     $new = diffBase();
-    $new['paths']['/api/v1/forms/{id}']['get']['x-uir']['provenance'] = [
+    $new['paths']['/api/v1/forms/{id}']['get']['x-docuccino']['provenance'] = [
         ['producer' => 'overlay', 'layer' => 'overlay', 'fields' => ['summary']],
     ];
 
@@ -128,7 +128,7 @@ it('ignores provenance-only differences', function (): void {
 
 it('refuses to diff documents built with different identity-algorithm versions', function (): void {
     $new = diffBase();
-    $new['paths']['/api/v1/forms/{id}']['get']['x-uir']['id'] = 'op:v2:aaaaaaaaaaaaaaaa';
+    $new['paths']['/api/v1/forms/{id}']['get']['x-docuccino']['id'] = 'op:v2:aaaaaaaaaaaaaaaa';
 
     expect(fn () => diffOf(diffBase(), $new))->toThrow(IncomparableDocumentsException::class);
 });
@@ -174,7 +174,7 @@ it('classifies a parameter becoming required as breaking', function (): void {
 it('classifies an added required parameter as breaking', function (): void {
     $new = diffBase();
     $new['paths']['/api/v1/forms/{id}']['get']['parameters'][] = [
-        'x-uir' => ['id' => 'par:v1:9999999999999999'],
+        'x-docuccino' => ['id' => 'par:v1:9999999999999999'],
         'name' => 'tenant', 'in' => 'query', 'required' => true,
         'schema' => ['type' => 'string'],
     ];
@@ -207,7 +207,7 @@ it('classifies a removed enum value as breaking', function (): void {
 it('classifies a required request property added as breaking', function (): void {
     $old = diffBase();
     $old['paths']['/api/v1/forms/{id}']['put'] = [
-        'x-uir' => ['id' => 'op:v1:1111111111111111'],
+        'x-docuccino' => ['id' => 'op:v1:1111111111111111'],
         'operationId' => 'forms.update',
         'requestBody' => ['content' => ['application/json' => ['schema' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string']]]]]],
         'responses' => ['200' => ['description' => 'ok']],
@@ -226,7 +226,7 @@ it('classifies additions, widenings and prose edits as non-breaking', function (
     $new = diffBase();
     // Added optional parameter.
     $new['paths']['/api/v1/forms/{id}']['get']['parameters'][] = [
-        'x-uir' => ['id' => 'par:v1:8888888888888888'],
+        'x-docuccino' => ['id' => 'par:v1:8888888888888888'],
         'name' => 'include', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string'],
     ];
     // Added enum value.
@@ -266,8 +266,8 @@ it('classifies a widened type as non-breaking', function (): void {
 
 it('diffs content pages as non-breaking prose changes', function (): void {
     $new = diffBase();
-    $new['x-uir']['content']['pages'][0]['content'] = 'Welcome, updated.';
-    $new['x-uir']['content']['pages'][] = ['id' => 'page:v1:1010101010101010', 'slug' => 'auth', 'title' => 'Authentication', 'content' => 'Use a token.'];
+    $new['x-docuccino']['content']['pages'][0]['content'] = 'Welcome, updated.';
+    $new['x-docuccino']['content']['pages'][] = ['id' => 'page:v1:1010101010101010', 'slug' => 'auth', 'title' => 'Authentication', 'content' => 'Use a token.'];
 
     $changeset = diffOf(diffBase(), $new);
 

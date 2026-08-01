@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * Raised when two documents cannot be compared because their identities were minted by
- * different identity-algorithm versions (the algo version is embedded in every `x-uir.id`).
+ * different identity-algorithm versions (the algo version is embedded in every `x-docuccino.id`).
  * A cross-version diff would silently mis-pair nodes, so the differ refuses instead.
  */
 final class IncomparableDocumentsException extends RuntimeException

@@ -13,7 +13,7 @@ use stdClass;
  *
  * Handlers accept `mixed` and pass malformed values through unchanged so canonicalisation
  * is total. Empty object-typed members are emitted as {@see stdClass} so the serializer
- * writes `{}` rather than `[]`; `x-*` members other than `x-uir` pass through verbatim.
+ * writes `{}` rather than `[]`; `x-*` members other than `x-docuccino` pass through verbatim.
  */
 final class Canonicalizer
 {
@@ -39,13 +39,13 @@ final class Canonicalizer
             'paths' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizePathItem(...)),
             'webhooks' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizePathItem(...)),
             'components' => $this->canonicalizeComponents(...),
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
         ]);
     }
 
     /**
      * Structural view of a schema used for inline-schema identity: descriptions, examples
-     * and `x-uir` stripped recursively, then canonicalised.
+     * and `x-docuccino` stripped recursively, then canonicalised.
      *
      * @param  array<string, mixed>  $schema
      * @return array<string, mixed>|stdClass
@@ -134,7 +134,7 @@ final class Canonicalizer
                 'url' => $this->keep(...),
             ])),
             'version' => $this->keep(...),
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
         ]));
     }
 
@@ -151,7 +151,7 @@ final class Canonicalizer
                 'default' => $this->keep(...),
                 'description' => $this->keep(...),
             ]))),
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
         ]));
     }
 
@@ -164,7 +164,7 @@ final class Canonicalizer
             'name' => $this->keep(...),
             'description' => $this->keep(...),
             'externalDocs' => $this->canonicalizeExternalDocs(...),
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
         ]));
     }
 
@@ -186,7 +186,7 @@ final class Canonicalizer
     {
         return $this->object($node, function (array $item) {
             $handlers = [
-                'x-uir' => $this->canonicalizeXUir(...),
+                'x-docuccino' => $this->canonicalizeDocuccino(...),
                 '$ref' => $this->keep(...),
                 'summary' => $this->keep(...),
                 'description' => $this->keep(...),
@@ -208,7 +208,7 @@ final class Canonicalizer
     private function canonicalizeOperation(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $operation) => $this->build($operation, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             'operationId' => $this->keep(...),
             'summary' => $this->keep(...),
             'description' => $this->keep(...),
@@ -272,7 +272,7 @@ final class Canonicalizer
     private function canonicalizeParameter(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $parameter) => $this->build($parameter, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             '$ref' => $this->keep(...),
             'name' => $this->keep(...),
             'in' => $this->keep(...),
@@ -296,7 +296,7 @@ final class Canonicalizer
     private function canonicalizeRequestBody(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $body) => $this->build($body, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             '$ref' => $this->keep(...),
             'description' => $this->keep(...),
             'required' => $this->keep(...),
@@ -310,7 +310,7 @@ final class Canonicalizer
     private function canonicalizeResponse(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $response) => $this->build($response, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             '$ref' => $this->keep(...),
             'summary' => $this->keep(...),
             'description' => $this->keep(...),
@@ -326,7 +326,7 @@ final class Canonicalizer
     private function canonicalizeHeader(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $header) => $this->build($header, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             '$ref' => $this->keep(...),
             'description' => $this->keep(...),
             'required' => $this->keep(...),
@@ -346,7 +346,7 @@ final class Canonicalizer
     private function canonicalizeMediaType(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $media) => $this->build($media, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             'schema' => $this->canonicalizeSchema(...),
             'example' => $this->keep(...),
             'examples' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeExample(...)),
@@ -360,7 +360,7 @@ final class Canonicalizer
     private function canonicalizeExample(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $example) => $this->build($example, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             'summary' => $this->keep(...),
             'description' => $this->keep(...),
             'value' => $this->canonicalizeGeneric(...),
@@ -384,7 +384,7 @@ final class Canonicalizer
             'links' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeGeneric(...)),
             'callbacks' => fn (mixed $v): mixed => $this->sortedMap($v, fn (mixed $cb): mixed => $this->sortedMap($cb, $this->canonicalizePathItem(...))),
             'pathItems' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizePathItem(...)),
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
         ]));
     }
 
@@ -394,7 +394,7 @@ final class Canonicalizer
     private function canonicalizeSchema(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $schema) => $this->build($schema, [
-            'x-uir' => $this->canonicalizeXUir(...),
+            'x-docuccino' => $this->canonicalizeDocuccino(...),
             '$ref' => $this->keep(...),
             '$id' => $this->keep(...),
             '$anchor' => $this->keep(...),
@@ -452,7 +452,7 @@ final class Canonicalizer
     /**
      * @return array<string, mixed>|stdClass
      */
-    private function canonicalizeXUir(mixed $node): array|stdClass
+    private function canonicalizeDocuccino(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $xuir) => $this->build($xuir, [
             'id' => $this->keep(...),
@@ -694,7 +694,7 @@ final class Canonicalizer
         $out = [];
 
         foreach ($schema as $key => $value) {
-            if ($key === 'description' || $key === 'example' || $key === 'examples' || $key === 'x-uir' || $key === 'title') {
+            if ($key === 'description' || $key === 'example' || $key === 'examples' || $key === 'x-docuccino' || $key === 'title') {
                 continue;
             }
 

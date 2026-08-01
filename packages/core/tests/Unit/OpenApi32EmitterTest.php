@@ -10,58 +10,58 @@ use Docuccino\Core\Emit\OpenApi32Emitter;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Recursively strips every `x-uir` member and the UIR-only top-level `$schema`/`uir`, so the
+ * Recursively strips every `x-docuccino` member and the UIR-only top-level `$schema`/`uir`, so the
  * remainder is exactly what a lossless OAS 3.2 transcode must equal.
  *
  * @param  array<string, mixed>  $node
  * @return array<string, mixed>
  */
-function stripXUir(array $node): array
+function stripDocuccino(array $node): array
 {
-    unset($node['x-uir']);
+    unset($node['x-docuccino']);
 
     $out = [];
     foreach ($node as $key => $value) {
         $key = (string) $key;
-        $out[$key] = str_starts_with($key, 'x-') ? $value : stripXUirRecursive($value);
+        $out[$key] = str_starts_with($key, 'x-') ? $value : stripDocuccinoRecursive($value);
     }
 
     return $out;
 }
 
-function stripXUirRecursive(mixed $value): mixed
+function stripDocuccinoRecursive(mixed $value): mixed
 {
     if (! is_array($value)) {
         return $value;
     }
 
     if (array_is_list($value)) {
-        return array_map(stripXUirRecursive(...), $value);
+        return array_map(stripDocuccinoRecursive(...), $value);
     }
 
-    return stripXUir($value);
+    return stripDocuccino($value);
 }
 
 beforeEach(function (): void {
     $this->emitter = new OpenApi32Emitter;
 });
 
-it('strips every x-uir member and the UIR-only top-level fields by default', function (): void {
+it('strips every x-docuccino member and the UIR-only top-level fields by default', function (): void {
     $json = $this->emitter->emit(UirDocument::fromArray(workedExample()));
 
-    expect($json)->not->toContain('x-uir');
+    expect($json)->not->toContain('x-docuccino');
     expect($json)->not->toContain('"uir"');
     expect($json)->not->toContain('provenance');
-    // Non-x-uir vendor members survive.
+    // Non-x-docuccino vendor members survive.
     expect($json)->toContain('x-enumDescriptions');
 });
 
-it('round-trips losslessly: OAS 3.2 output equals the x-uir-stripped canonical UIR', function (): void {
+it('round-trips losslessly: OAS 3.2 output equals the x-docuccino-stripped canonical UIR', function (): void {
     $uir = workedExample();
 
     $oas = $this->emitter->emit(UirDocument::fromArray($uir));
 
-    $stripped = stripXUir($uir);
+    $stripped = stripDocuccino($uir);
     unset($stripped['$schema'], $stripped['uir']);
 
     $expected = (new CanonicalJsonSerializer)->serialize((new Canonicalizer)->canonicalize($stripped));
@@ -69,12 +69,12 @@ it('round-trips losslessly: OAS 3.2 output equals the x-uir-stripped canonical U
     expect($oas)->toBe($expected);
 });
 
-it('re-emits ids as flat x-uir-id when keepIds is enabled', function (): void {
+it('re-emits ids as flat x-docuccino-id when keepIds is enabled', function (): void {
     $options = (new EmitOptions)->withKeepIds();
 
     $json = $this->emitter->emit(UirDocument::fromArray(workedExample()), $options);
 
-    expect($json)->toContain('x-uir-id');
+    expect($json)->toContain('x-docuccino-id');
     expect($json)->toContain('op:v1:mfz3q8k2w9r7t1ua');
     expect($json)->not->toContain('provenance');
 });
@@ -105,7 +105,7 @@ it('emits YAML that carries the same structure as the JSON', function (): void {
     $yaml = $this->emitter->emit($document, (new EmitOptions)->withYaml());
 
     expect($yaml)->toContain('openapi: 3.2.0');
-    expect($yaml)->not->toContain('x-uir');
+    expect($yaml)->not->toContain('x-docuccino');
 
     $decoded = Yaml::parse($yaml);
     $json = json_decode($this->emitter->emit($document), true);

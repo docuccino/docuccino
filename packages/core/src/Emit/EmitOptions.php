@@ -7,8 +7,8 @@ namespace Docuccino\Core\Emit;
 /**
  * Emitter options shared by the OAS 3.2 and 3.1 emitters.
  *
- * - `keepIds`: re-emit each node's `x-uir.id` as a flat `x-uir-id` member (default: drop).
- * - `mockFakerKey`: map schema `x-uir.mock.faker` to this member (e.g. `x-faker`); `null`
+ * - `keepIds`: re-emit each node's `x-docuccino.id` as a flat `x-docuccino-id` member (default: drop).
+ * - `mockFakerKey`: map schema `x-docuccino.mock.faker` to this member (e.g. `x-faker`); `null`
  *   drops mock hints (the default — pure OpenAPI carries no mock metadata).
  * - `provenance`: retained for symmetry with UIR emission; OAS emitters ignore it (they never
  *   emit provenance).

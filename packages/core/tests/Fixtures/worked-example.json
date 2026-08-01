@@ -13,7 +13,7 @@
   "paths": {
     "/api/v1/forms": {
       "get": {
-        "x-uir": {
+        "x-docuccino": {
           "id": "op:v1:mfz3q8k2w9r7t1ua",
           "provenance": [
             {
@@ -40,7 +40,7 @@
         "tags": ["Forms"],
         "parameters": [
           {
-            "x-uir": {
+            "x-docuccino": {
               "id": "par:v1:ab12cd34ef56ab78",
               "provenance": [
                 {
@@ -62,7 +62,7 @@
             }
           },
           {
-            "x-uir": { "id": "par:v1:77aa88bb99cc00dd" },
+            "x-docuccino": { "id": "par:v1:77aa88bb99cc00dd" },
             "name": "per_page",
             "in": "query",
             "required": false,
@@ -71,13 +71,13 @@
               "default": 15,
               "minimum": 1,
               "maximum": 100,
-              "x-uir": { "mock": { "faker": "numberBetween:1,100" } }
+              "x-docuccino": { "mock": { "faker": "numberBetween:1,100" } }
             }
           }
         ],
         "responses": {
           "200": {
-            "x-uir": { "id": "res:v1:e1f2a3b4c5d6e7f8" },
+            "x-docuccino": { "id": "res:v1:e1f2a3b4c5d6e7f8" },
             "description": "Paginated list of forms",
             "content": {
               "application/json": {
@@ -122,7 +122,7 @@
       }
     }
   },
-  "x-uir": {
+  "x-docuccino": {
     "document": { "id": "doc:default", "configHash": "cfg-abc", "contentHash": "will-be-recomputed" },
     "generator": { "name": "docuccino/laravel", "version": "0.1.0", "specVersion": "1.0.0" }
   }

@@ -7,10 +7,10 @@ namespace Docuccino\Core\Document;
 use Docuccino\Core\Provenance\Provenance;
 
 /**
- * Node-level `x-uir` member (operations, parameters, responses, schemas).
+ * Node-level `x-docuccino` member (operations, parameters, responses, schemas).
  * Unknown members are preserved verbatim to honour additive forward compatibility.
  */
-final readonly class XUir
+final readonly class DocuccinoExtension
 {
     /**
      * @param  array<string, mixed>|null  $mock

@@ -8,7 +8,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Support\Arr;
 
 /**
- * Document-level `x-uir` member: identity, generator, content tree and diagnostics.
+ * Document-level `x-docuccino` member: identity, generator, content tree and diagnostics.
  */
 final readonly class DocumentExtension
 {

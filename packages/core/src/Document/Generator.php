@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 /**
- * `x-uir.generator` — excluded from `contentHash` so tool upgrades never dirty diffs.
+ * `x-docuccino.generator` — excluded from `contentHash` so tool upgrades never dirty diffs.
  */
 final readonly class Generator
 {

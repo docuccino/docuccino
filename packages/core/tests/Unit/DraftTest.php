@@ -19,9 +19,9 @@ it('freezes into the immutable Operation model with provenance and overrode', fu
 
     expect($operation->summary)->toBe('List forms');
     expect($operation->operationId)->toBe('forms.index');
-    expect($operation->xUir?->id)->toBe('op:v1:aaaaaaaaaaaaaaaa');
+    expect($operation->docuccino?->id)->toBe('op:v1:aaaaaaaaaaaaaaaa');
 
-    $provenance = $operation->xUir?->provenance?->toArray() ?? [];
+    $provenance = $operation->docuccino?->provenance?->toArray() ?? [];
     $byLayer = [];
     foreach ($provenance as $record) {
         $byLayer[$record['layer']] = $record;
@@ -116,11 +116,11 @@ it('drops a field written with the Remove sentinel while keeping siblings', func
     expect($operation->toArray())->not->toHaveKey('deprecated');
 });
 
-it('carries schema mock hints through freeze into x-uir.mock', function (): void {
+it('carries schema mock hints through freeze into x-docuccino.mock', function (): void {
     $schema = (new SchemaDraft)->withMock(['faker' => 'numberBetween:1,100']);
     $schema->set('type', 'integer', Contribution::inference());
 
     $frozen = $schema->freeze()->toArray();
 
-    expect($frozen['x-uir']['mock'])->toBe(['faker' => 'numberBetween:1,100']);
+    expect($frozen['x-docuccino']['mock'])->toBe(['faker' => 'numberBetween:1,100']);
 });
