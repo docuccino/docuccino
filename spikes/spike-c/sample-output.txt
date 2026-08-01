@@ -1,0 +1,161 @@
+== Docuccino Spike C — exception-flow noise evaluation ==
+Analysing: /Users/tmartin/Projects/docuccino/spikes/fixture-app/app/Http/Controllers/ThrowsController.php
+
+──────────────────────────────────────────────────────────────────────
+ RAW THROW POINTS (Layer 1) — signal vs noise
+──────────────────────────────────────────────────────────────────────
+
+ abortAction()  [2 points]
+   SIGNAL  @L33  explicit Symfony\Component\HttpKernel\Exception\HttpException
+   SIGNAL  @L35  explicit Illuminate\Http\Exceptions\HttpResponseException|Symfony\Component\HttpKernel\Exception\HttpException
+
+ authorizeAction()  [3 points]
+   SIGNAL  @L45  explicit Illuminate\Auth\Access\AuthorizationException
+   noise   @L47  implicit Throwable
+   noise   @L47  implicit Throwable
+
+ findOrFailAction()  [2 points]
+   noise   @L57  implicit Throwable
+   noise   @L-1  implicit Throwable
+
+ validateAction()  [3 points]
+   SIGNAL  @L68  explicit Illuminate\Validation\ValidationException
+   noise   @L72  implicit Throwable
+   noise   @L72  implicit Throwable
+
+ deepUndeclared()  [3 points]
+   noise   @L82  implicit Throwable
+   noise   @L84  implicit Throwable
+   noise   @L84  implicit Throwable
+
+ deepDeclared()  [3 points]
+   SIGNAL  @L95  explicit App\Exceptions\OutOfStockException
+   noise   @L97  implicit Throwable
+   noise   @L97  implicit Throwable
+
+ anyThrowableNoise()  [3 points]
+   SIGNAL  @L107 explicit Psr\SimpleCache\InvalidArgumentException
+   noise   @L109 implicit Throwable
+   noise   @L109 implicit Throwable
+
+ tryCatch()  [3 points]
+   SIGNAL  @L126 explicit RuntimeException
+   noise   @L128 implicit Throwable
+   noise   @L128 implicit Throwable
+
+──────────────────────────────────────────────────────────────────────
+ LAYER 2 — KnownThrowers registry hits (callee → exception + status)
+──────────────────────────────────────────────────────────────────────
+   abortAction            abort_if() @L33  → HttpException  status=403  (arg1 folded)
+   abortAction            abort() @L35  → HttpException  status=404  (arg0 folded)
+   authorizeAction        authorize() @L45  → AuthorizationException  status=403  (enrich)
+   findOrFailAction       findOrFail() @L57  → ModelNotFoundException  status=404  (RESCUE)
+   validateAction         validate() @L68  → ValidationException  status=422  (enrich)
+
+──────────────────────────────────────────────────────────────────────
+ LAYER 3 — bounded descent (project callees w/o @throws)
+──────────────────────────────────────────────────────────────────────
+
+ deepUndeclared():
+   OutOfStockException      status=500 [certain]
+     chain: ThrowsController::deepUndeclared → place() @L82  ⇒  OrderService::place throws OutOfStockException @L30
+   RuntimeException         status=500 [certain]
+     chain: ThrowsController::deepUndeclared → place() @L82  ⇒  OrderService::place → reserve() @L33  ⇒  OrderService::reserve throws RuntimeException @L58
+
+ deepDeclared():
+
+  docblock-trust check: @throws on placeDeclared() surfaces only OutOfStockException at the call site (no descent).
+  If we DID descend placeDeclared(), the full set is: OutOfStockException, RuntimeException
+  → the undeclared RuntimeException (depth 2) is HIDDEN by an incomplete @throws.
+
+──────────────────────────────────────────────────────────────────────
+ PER-ACTION EXCEPTION TABLE (kept API errors)
+──────────────────────────────────────────────────────────────────────
+
+ abortAction()
+    HttpException              → 403  [certain ]  ThrowsController::abortAction → abort_if() @L33
+    HttpException              → 404  [certain ]  ThrowsController::abortAction → abort() @L35
+
+ authorizeAction()
+    AuthorizationException     → 403  [certain ]  ThrowsController::authorizeAction → authorize() @L45
+
+ findOrFailAction()
+    ModelNotFoundException     → 404  [likely  ]  ThrowsController::findOrFailAction → findOrFail() @L57
+
+ validateAction()
+    ValidationException        → 422  [certain ]  ThrowsController::validateAction → validate() @L68
+
+ deepUndeclared()
+    OutOfStockException        → 500  [certain ]  ThrowsController::deepUndeclared → place() @L82 ⇒ OrderService::place throws OutOfStockException @L30
+    RuntimeException           → 500  [certain ]  ThrowsController::deepUndeclared → place() @L82 ⇒ OrderService::place → reserve() @L33 ⇒ OrderService::reserve throws RuntimeException @L58
+
+ deepDeclared()
+    OutOfStockException        → 500  [declared]  ThrowsController::deepDeclared call declares OutOfStockException @L95
+
+ anyThrowableNoise()
+  · InvalidArgumentException   → 500  [declared]  ThrowsController::anyThrowableNoise call declares InvalidArgumentException @L107
+
+ tryCatch()
+    RuntimeException           → 500  [certain ]  ThrowsController::tryCatch throws RuntimeException @L126
+
+  legend: leading '·' = mapped to 500 (internal) and demoted from API-error docs
+
+──────────────────────────────────────────────────────────────────────
+ NOISE / MISS SCORECARD
+──────────────────────────────────────────────────────────────────────
+
+ PASS  abortAction
+   want: HttpException@403, HttpException@404
+   got : HttpException@403, HttpException@404
+   note: both abort statuses constant-folded
+
+ PASS  authorizeAction
+   want: AuthorizationException@403
+   got : AuthorizationException@403
+
+ PASS  findOrFailAction
+   want: ModelNotFoundException@404
+   got : ModelNotFoundException@404
+   note: static findOrFail is implicit → Layer 2 rescue
+
+ PASS  validateAction
+   want: ValidationException@422
+   got : ValidationException@422
+
+ PASS  deepUndeclared
+   want: OutOfStockException@500, RuntimeException@500
+   got : OutOfStockException@500, RuntimeException@500
+   note: both via Layer 3 descent
+
+ PASS  deepDeclared
+   want: OutOfStockException@500
+   got : OutOfStockException@500
+   note: docblock; RuntimeException knowingly hidden
+
+ PASS  anyThrowableNoise
+   want: (none)
+   got : (none)
+   note: no API error; noise counted
+
+ PASS  tryCatch
+   want: RuntimeException@500
+   got : RuntimeException@500
+   note: OutOfStock caught → subtracted
+
+──────────────────────────────────────────────────────────────────────
+ OVERALL: PASS (all 8 cases)
+──────────────────────────────────────────────────────────────────────
+
+ dropped implicit 'any-throwable' points: 13
+   · ThrowsController::authorizeAction @L47: implicit Throwable (call to response())
+   · ThrowsController::authorizeAction @L47: implicit Throwable (call to json())
+   · ThrowsController::findOrFailAction @L-1: implicit Throwable (call to __construct())
+   · ThrowsController::validateAction @L72: implicit Throwable (call to response())
+   · ThrowsController::validateAction @L72: implicit Throwable (call to json())
+   · ThrowsController::deepUndeclared @L84: implicit Throwable (call to response())
+
+── run stats ──
+files analysed (parsed+processed): 2
+max descent depth reached: 2 (action → place → reserve)
+wall clock (container build + analyse): 0.46s
+peak memory (real): 100.5 MB

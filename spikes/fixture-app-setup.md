@@ -72,3 +72,25 @@ cp -R spikes/spike-a/fixture-src/app/. spikes/fixture-app/app/
 ```
 
 The default `App\Models\User` model is used as-is.
+
+## Fixture source authored by Spike C (exception-flow analysis)
+
+Spike C adds an exception-heavy controller plus a two-level service layer. The
+canonical copies live at `spikes/spike-c/fixture-src/`; copy them into the
+ignored app the same way:
+
+```bash
+cp -R spikes/spike-c/fixture-src/app/. spikes/fixture-app/app/
+```
+
+- `app/Http/Controllers/ThrowsController.php` — eight actions, one per Spike C
+  case (abort/abort_if, authorize, findOrFail, inline validate, a 2-deep service
+  call with no `@throws`, the same with `@throws`, a vendor any-throwable call,
+  and a try/catch).
+- `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`,
+  the 2-level throw chain descended by Layer 3.
+- `app/Exceptions/OutOfStockException.php` — a custom domain exception.
+
+No routes, migrations, or `composer` changes are needed — the spike drives the
+files by path (it never boots HTTP), and `App\Models\User` / `UserResource`
+(from Spike A) are reused as-is.
