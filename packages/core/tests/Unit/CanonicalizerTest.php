@@ -109,6 +109,39 @@ it('preserves declaration order while deduplicating enum values', function (): v
     expect($canonical['components']['schemas']['S']['enum'])->toBe(['b', 'a', 'c']);
 });
 
+it('orders map keys by unicode code point, including multibyte keys', function (): void {
+    // UTF-8 byte order equals Unicode code-point order for well-formed sequences, so the
+    // canonicaliser's byte-wise key sort IS the normative code-point sort (design §3). Code points:
+    // A=U+0041, a=U+0061, z=U+007A, é=U+00E9, 💡=U+1F4A1.
+    $doc = [
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'T', 'version' => '1.0.0'],
+        'paths' => [],
+        'components' => [
+            'schemas' => [
+                'S' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'é' => ['type' => 'string'],
+                        'z' => ['type' => 'string'],
+                        'A' => ['type' => 'string'],
+                        '💡' => ['type' => 'string'],
+                        'a' => ['type' => 'string'],
+                        '日本語' => ['type' => 'string'],
+                        'Z' => ['type' => 'string'],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $canonical = $this->canonicalizer->canonicalize($doc);
+    $order = array_keys($canonical['components']['schemas']['S']['properties']);
+
+    expect($order)->toBe(['A', 'Z', 'a', 'z', 'é', '日本語', '💡']);
+});
+
 it('passes unknown x-* members through verbatim but canonicalises known members', function (): void {
     $doc = [
         'openapi' => '3.2.0',

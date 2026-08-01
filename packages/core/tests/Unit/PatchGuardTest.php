@@ -14,6 +14,7 @@ use Docuccino\Core\Patch\Remove;
 function layerContributions(): array
 {
     return [
+        'fallback' => Contribution::fallback(),
         'inference' => Contribution::inference(),
         'integration' => Contribution::integration('spatie-query-builder'),
         'docblock' => Contribution::docblock(),
@@ -135,7 +136,29 @@ it('groups fields sharing a producer into one deterministically ordered record',
     expect($byLayer['inference'])->toBe(['operationId']);
 });
 
+it('accepts a fallback write to an unset field but lets any other layer override it', function (): void {
+    $guard = new PatchGuard;
+
+    // Fallback (rank 5) is the lowest layer: it writes to unset fields...
+    expect($guard->apply('summary', 'fallback value', Contribution::fallback()))->toBe(PatchResult::Accepted);
+    expect($guard->resolved())->toBe(['summary' => 'fallback value']);
+
+    // ...but loses to inference, the next layer up.
+    expect($guard->apply('summary', 'inferred value', Contribution::inference()))->toBe(PatchResult::Accepted);
+    expect($guard->resolved())->toBe(['summary' => 'inferred value']);
+});
+
+it('rejects a fallback write over any existing owner', function (): void {
+    $guard = new PatchGuard;
+
+    $guard->apply('summary', 'inferred value', Contribution::inference());
+
+    expect($guard->apply('summary', 'fallback value', Contribution::fallback()))->toBe(PatchResult::Shadowed);
+    expect($guard->resolved())->toBe(['summary' => 'inferred value']);
+});
+
 it('backs the precedence ranks stated in the design doc', function (): void {
+    expect(Layer::Fallback->value)->toBe(5);
     expect(Layer::Inference->value)->toBe(10);
     expect(Layer::Integration->value)->toBe(20);
     expect(Layer::Docblock->value)->toBe(30);

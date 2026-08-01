@@ -78,3 +78,58 @@ it('is insensitive to property order for inline-schema identity', function (): v
 
     expect($this->ids->inlineSchemaId($a))->toBe($this->ids->inlineSchemaId($b));
 });
+
+it('keeps a real property named like an annotation keyword in inline-schema identity', function (string $keyword, mixed $a, mixed $b): void {
+    // Two schemas that differ ONLY in a property literally named `description`/`title`/`example`
+    // must have DIFFERENT ids — the annotation strip must not erase property names (architecture C1).
+    $schemaA = ['type' => 'object', 'properties' => [$keyword => $a]];
+    $schemaB = ['type' => 'object', 'properties' => [$keyword => $b]];
+
+    expect($this->ids->inlineSchemaId($schemaA))->not->toBe($this->ids->inlineSchemaId($schemaB));
+})->with([
+    'description property' => ['description', ['type' => 'integer'], ['type' => 'string']],
+    'title property' => ['title', ['type' => 'integer'], ['type' => 'string']],
+    'example property' => ['example', ['type' => 'boolean'], ['type' => 'number']],
+]);
+
+it('still strips annotation keywords in schema-annotation position for inline identity', function (): void {
+    // The keyword-aware strip must keep the original behaviour: differing only in an annotation
+    // `description`/`title`/`example` value yields the SAME id.
+    $base = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
+    $annotated = ['type' => 'object', 'title' => 'Form', 'description' => 'A form', 'properties' => ['id' => ['type' => 'integer', 'description' => 'The id', 'example' => 5]]];
+
+    expect($this->ids->inlineSchemaId($base))->toBe($this->ids->inlineSchemaId($annotated));
+});
+
+it('excludes x-docuccino members from inline-schema identity', function (): void {
+    // Two schemas differing only in their x-docuccino members share one structural id (QA L10).
+    $base = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer', 'x-docuccino' => ['mock' => ['faker' => 'randomNumber']]]]];
+    $other = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer', 'x-docuccino' => ['id' => 'sch:v1:aaaaaaaaaaaaaaaa']]]];
+
+    expect($this->ids->inlineSchemaId($base))->toBe($this->ids->inlineSchemaId($other));
+});
+
+it('is insensitive to the order of the required array for inline-schema identity', function (): void {
+    $a = ['type' => 'object', 'required' => ['a', 'b', 'c'], 'properties' => ['a' => [], 'b' => [], 'c' => []]];
+    $b = ['type' => 'object', 'required' => ['c', 'a', 'b'], 'properties' => ['a' => [], 'b' => [], 'c' => []]];
+
+    expect($this->ids->inlineSchemaId($a))->toBe($this->ids->inlineSchemaId($b));
+});
+
+it('mints identical op ids for two routes claiming the same method and path', function (): void {
+    // The collision signal: two colliding operations share one id, so the assembler can detect it.
+    $a = $this->ids->operationId('doc:default', 'GET', '/forms/{form}');
+    $b = $this->ids->operationId('doc:default', 'GET', '/forms/{form}');
+
+    expect($a)->toBe($b);
+});
+
+it('derives a response id that breaks on status and on media-type change', function (): void {
+    $op = 'op:v1:aaaaaaaaaaaaaaaa';
+
+    $base = $this->ids->responseId($op, '200', 'application/json');
+
+    expect($base)->toBe($this->ids->responseId($op, '200', 'application/json'));
+    expect($base)->not->toBe($this->ids->responseId($op, '201', 'application/json'));
+    expect($base)->not->toBe($this->ids->responseId($op, '200', 'application/xml'));
+});

@@ -35,3 +35,31 @@ function workedExample(): array
 {
     return loadFixture('worked-example.json');
 }
+
+/**
+ * A maximal valid UIR document exercising every modelled surface (requestBody, securitySchemes +
+ * operation-level security, servers with variables, webhooks, path/header/cookie params, the 3.2
+ * `query` method, multiple media types, examples, externalDocs, deprecated, content pages, floats
+ * and unicode keys).
+ *
+ * @return array<string, mixed>
+ */
+function kitchenSink(): array
+{
+    return loadFixture('kitchen-sink.uir.json');
+}
+
+/**
+ * Reads a committed golden artifact byte-for-byte.
+ */
+function loadGolden(string $name): string
+{
+    $path = dirname(__DIR__).'/packages/core/tests/Fixtures/golden/'.$name;
+    $contents = file_get_contents($path);
+
+    if ($contents === false) {
+        throw new RuntimeException('Golden not found: '.$path);
+    }
+
+    return $contents;
+}

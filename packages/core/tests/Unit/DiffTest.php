@@ -277,6 +277,118 @@ it('diffs content pages as non-breaking prose changes', function (): void {
     expect($codes)->toContain('page.added');
 });
 
+it('classifies an added operation security requirement as breaking', function (): void {
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['security'] = [['apiKey' => []]];
+
+    $changes = changesByCode(diffOf(diffBase(), $new));
+    expect($changes)->toHaveKey('operation.security-added');
+    expect($changes['operation.security-added']->breaking)->toBeTrue();
+});
+
+it('classifies a removed operation security requirement as non-breaking', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['security'] = [['apiKey' => []]];
+
+    $changes = changesByCode(diffOf($old, diffBase()));
+    expect($changes)->toHaveKey('operation.security-removed');
+    expect($changes['operation.security-removed']->breaking)->toBeFalse();
+});
+
+it('is insensitive to security scheme-map key order', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['security'] = [['apiKey' => [], 'oauth2' => ['read']]];
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['security'] = [['oauth2' => ['read'], 'apiKey' => []]];
+
+    expect(diffOf($old, $new)->isEmpty())->toBeTrue();
+});
+
+it('classifies a property removed from a response schema as breaking', function (): void {
+    $new = diffBase();
+    unset($new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['title']);
+
+    $changes = changesByCode(diffOf(diffBase(), $new));
+    expect($changes)->toHaveKey('schema.property-removed');
+    expect($changes['schema.property-removed']->breaking)->toBeTrue();
+});
+
+it('classifies a required request property removed as non-breaking', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['put'] = [
+        'x-docuccino' => ['id' => 'op:v1:1111111111111111'],
+        'operationId' => 'forms.update',
+        'requestBody' => ['content' => ['application/json' => ['schema' => ['type' => 'object', 'required' => ['title'], 'properties' => ['title' => ['type' => 'string']]]]]],
+        'responses' => ['200' => ['description' => 'ok']],
+    ];
+    $new = $old;
+    unset($new['paths']['/api/v1/forms/{id}']['put']['requestBody']['content']['application/json']['schema']['properties']['title']);
+    $new['paths']['/api/v1/forms/{id}']['put']['requestBody']['content']['application/json']['schema']['required'] = [];
+
+    $changeset = diffOf($old, $new);
+    $changes = changesByCode($changeset);
+    expect($changes)->toHaveKey('schema.property-removed');
+    expect($changes['schema.property-removed']->breaking)->toBeFalse();
+});
+
+it('classifies a format tightened on a request schema as breaking, but not on a response', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['put'] = [
+        'x-docuccino' => ['id' => 'op:v1:1111111111111111'],
+        'operationId' => 'forms.update',
+        'requestBody' => ['content' => ['application/json' => ['schema' => ['type' => 'object', 'properties' => ['at' => ['type' => 'string']]]]]],
+        'responses' => ['200' => ['description' => 'ok', 'content' => ['application/json' => ['schema' => ['type' => 'object', 'properties' => ['at' => ['type' => 'string']]]]]]],
+    ];
+
+    // Request: format added → breaking.
+    $reqNew = $old;
+    $reqNew['paths']['/api/v1/forms/{id}']['put']['requestBody']['content']['application/json']['schema']['properties']['at']['format'] = 'date-time';
+    $reqChanges = changesByCode(diffOf($old, $reqNew));
+    expect($reqChanges)->toHaveKey('schema.format-changed');
+    expect($reqChanges['schema.format-changed']->breaking)->toBeTrue();
+
+    // Response: same format add → non-breaking.
+    $resNew = $old;
+    $resNew['paths']['/api/v1/forms/{id}']['put']['responses']['200']['content']['application/json']['schema']['properties']['at']['format'] = 'date-time';
+    $resChanges = changesByCode(diffOf($old, $resNew));
+    expect($resChanges)->toHaveKey('schema.format-changed');
+    expect($resChanges['schema.format-changed']->breaking)->toBeFalse();
+});
+
+it('classifies a removed response media type as breaking', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/xml'] = ['schema' => ['type' => 'object']];
+    $new = diffBase();
+
+    $changes = changesByCode(diffOf($old, $new));
+    expect($changes)->toHaveKey('response.content-removed');
+    expect($changes['response.content-removed']->breaking)->toBeTrue();
+});
+
+it('classifies an added operation as non-breaking', function (): void {
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['delete'] = [
+        'x-docuccino' => ['id' => 'op:v1:2222222222222222'],
+        'operationId' => 'forms.destroy',
+        'responses' => ['204' => ['description' => 'Deleted']],
+    ];
+
+    $changeset = diffOf(diffBase(), $new);
+    $changes = changesByCode($changeset);
+    expect($changes)->toHaveKey('operation.added');
+    expect($changes['operation.added']->breaking)->toBeFalse();
+    expect($changeset->isBreaking())->toBeFalse();
+});
+
+it('classifies a parameter becoming optional as non-breaking', function (): void {
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][0]['required'] = false;
+
+    $changes = changesByCode(diffOf(diffBase(), $new));
+    expect($changes)->toHaveKey('parameter.became-optional');
+    expect($changes['parameter.became-optional']->breaking)->toBeFalse();
+});
+
 // --- Determinism, model and rendering --------------------------------------
 
 it('produces a deterministic toArray with breaking-first ordering', function (): void {

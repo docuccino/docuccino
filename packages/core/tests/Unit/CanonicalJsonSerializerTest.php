@@ -43,3 +43,39 @@ it('formats floats deterministically and round-trips them', function (): void {
 it('rejects non-finite floats', function (): void {
     $this->serializer->serialize(['x' => INF]);
 })->throws(RuntimeException::class);
+
+it('encodes floats identically regardless of the serialize_precision ini', function (): void {
+    $value = ['a' => 0.1, 'b' => 1.5, 'c' => 1e-7, 'd' => 10.0, 'e' => 1.0 / 3.0];
+
+    $original = ini_get('serialize_precision');
+
+    try {
+        ini_set('serialize_precision', '17');
+        $at17 = $this->serializer->serialize($value);
+
+        ini_set('serialize_precision', '-1');
+        $atMinus1 = $this->serializer->serialize($value);
+    } finally {
+        ini_set('serialize_precision', $original === false ? '-1' : $original);
+    }
+
+    expect($at17)->toBe($atMinus1);
+    // Shortest round-trip form is used regardless of the ambient ini.
+    expect($at17)->toContain('"a": 0.1')->toContain('"b": 1.5');
+});
+
+it('renders an integer-valued float as a bare integer (10.0 collapses to 10)', function (): void {
+    // Documented consequence of shortest-round-trip float encoding: 10.0 is byte-identical to 10.
+    expect($this->serializer->serialize(['x' => 10.0]))->toBe($this->serializer->serialize(['x' => 10]));
+});
+
+it('leaves serialize_precision unchanged after encoding a float', function (): void {
+    ini_set('serialize_precision', '9');
+
+    try {
+        $this->serializer->serialize(['x' => 0.1]);
+        expect(ini_get('serialize_precision'))->toBe('9');
+    } finally {
+        ini_set('serialize_precision', '-1');
+    }
+});

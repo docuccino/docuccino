@@ -166,6 +166,39 @@ it('produces a document that still validates against the UIR schema', function (
         ->and($validation->errors)->toBe([]);
 });
 
+it('emits an error diagnostic for an action declaring both update and remove', function (): void {
+    $overlay = overlayWith([
+        ['target' => "\$.paths['/api/v1/forms'].get.summary", 'update' => 'X', 'remove' => true],
+    ]);
+
+    $result = (new OverlayApplier)->apply(overlayBaseDocument(), $overlay);
+
+    expect($result->document)->toBe(overlayBaseDocument());
+    expect($result->hasErrors())->toBeTrue();
+    expect($result->diagnostics[0]->severity)->toBe(Severity::Error);
+    expect($result->diagnostics[0]->code)->toBe('overlay.conflicting-operation');
+});
+
+it('rejects an overlay whose actions member is not a list', function (): void {
+    expect(fn () => OverlayDocument::fromArray(['overlay' => '1.0.0', 'actions' => 'nope']))
+        ->toThrow(InvalidOverlayException::class);
+    expect(fn () => OverlayDocument::fromArray(['overlay' => '1.0.0', 'actions' => ['target' => '$.info']]))
+        ->toThrow(InvalidOverlayException::class);
+});
+
+it('lets post-overlay validation catch an update that injects a schema-invalid member', function (): void {
+    // An overlay may write anything; the pipeline's validation step is the safety net.
+    $overlay = overlayWith([
+        ['target' => '$.info.title', 'update' => 12345],
+    ]);
+
+    $result = (new OverlayApplier)->apply(workedExample(), $overlay);
+
+    $validation = (new Validator)->validate($result->document);
+
+    expect($validation->isValid())->toBeFalse();
+});
+
 it('applies multiple actions in order', function (): void {
     $overlay = overlayWith([
         ['target' => "\$.paths['/api/v1/forms'].get.summary", 'update' => 'First'],

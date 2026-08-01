@@ -49,3 +49,17 @@ it('changes contentHash when a documented field changes', function (): void {
 
     expect($this->hasher->hash($a))->not->toBe($this->hasher->hash($b));
 });
+
+it('excludes the contentHash field itself from the hash (recomputable, no chicken-and-egg)', function (): void {
+    $a = workedExample();
+    $b = workedExample();
+    $b['x-docuccino']['document']['contentHash'] = 'a-completely-different-value';
+
+    expect($this->hasher->hash($a))->toBe($this->hasher->hash($b));
+});
+
+it('recomputes the contentHash baked into the worked-example fixture', function (): void {
+    $doc = workedExample();
+
+    expect($this->hasher->hash($doc))->toBe($doc['x-docuccino']['document']['contentHash']);
+});
