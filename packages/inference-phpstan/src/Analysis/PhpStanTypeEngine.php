@@ -48,6 +48,20 @@ use Throwable;
  */
 final class PhpStanTypeEngine implements TypeEngine
 {
+    /**
+     * Per-build memo of callable analyses, keyed by {@see CallableRef::symbol()} (arch I1). A render
+     * callback (or any callable) analysed once is reused across every route that reaches it — the
+     * inferred-handler tier queries the same handler bodies for many routes.
+     *
+     * NOTE (deliberate deferral): under the worker orchestrator each worker holds its OWN memo, so a
+     * callable analysed on two workers is analysed twice. A shared cross-worker callable cache is
+     * deferred (see docs/plan.md, Phase 2b) — it needs the same serialize/transport plumbing as the
+     * engine result cache and is not built here.
+     *
+     * @var array<string, ActionAnalysis>
+     */
+    private array $callableMemo = [];
+
     public function __construct(
         private readonly RuntimeAdapter $adapter,
         private readonly EngineConfig $config,
@@ -145,6 +159,11 @@ final class PhpStanTypeEngine implements TypeEngine
     }
 
     public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        return $this->callableMemo[$callable->symbol()] ??= $this->analyzeCallableUncached($callable);
+    }
+
+    private function analyzeCallableUncached(CallableRef $callable): ActionAnalysis
     {
         try {
             return $this->doAnalyzeCallable($callable);
