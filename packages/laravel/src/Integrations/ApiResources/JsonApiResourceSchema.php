@@ -11,8 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Support\Fqcn;
-use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
+use Docuccino\Laravel\Integrations\Support\ComponentHoist;
 
 /**
  * Maps a Laravel 13 first-party JSON:API resource
@@ -23,12 +22,16 @@ use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
  *
  * Runs ahead of {@see JsonResourceSchema} (a JSON:API resource IS a `JsonResource`), so it wins the
  * chain for these types. The `include`/`fields[type]` query params are added by
- * {@see JsonApiParametersExtension}.
+ * {@see JsonApiParametersExtension}. Component hoisting — including the self-reference cycle-break a
+ * resource that relates to its own type needs — is owned by {@see ComponentHoist}.
  */
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class JsonApiResourceSchema implements TypeToSchema
 {
-    public function __construct(private readonly ToArrayObject $toArray = new ToArrayObject) {}
+    public function __construct(
+        private readonly ToArrayObject $toArray = new ToArrayObject,
+        private readonly ComponentHoist $hoist = new ComponentHoist,
+    ) {}
 
     public function supports(DType $type): bool
     {
@@ -41,31 +44,28 @@ final class JsonApiResourceSchema implements TypeToSchema
             return null;
         }
 
-        $data = [
-            'type' => 'object',
-            'properties' => [
-                'id' => ['type' => 'string'],
-                'type' => ['type' => 'string'],
-            ],
-            'required' => ['id', 'type'],
-        ];
+        return $this->hoist->hoist($context, $type->fqcn, function () use ($type, $context): array {
+            $data = [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'string'],
+                    'type' => ['type' => 'string'],
+                ],
+                'required' => ['id', 'type'],
+            ];
 
-        foreach (['attributes' => 'toAttributes', 'relationships' => 'toRelationships', 'links' => 'toLinks', 'meta' => 'toMeta'] as $member => $method) {
-            $object = $this->toArray->analyze($type->fqcn, $method, $context);
-            if ($object !== null && ($object['properties'] ?? []) !== []) {
-                $data['properties'][$member] = $object;
+            foreach (['attributes' => 'toAttributes', 'relationships' => 'toRelationships', 'links' => 'toLinks', 'meta' => 'toMeta'] as $member => $method) {
+                $object = $this->toArray->analyze($type->fqcn, $method, $context);
+                if ($object !== null && ($object['properties'] ?? []) !== []) {
+                    $data['properties'][$member] = $object;
+                }
             }
-        }
 
-        $document = [
-            'type' => 'object',
-            'properties' => ['data' => $data],
-            'required' => ['data'],
-        ];
-
-        $schemaId = SchemaIdentity::id($type->fqcn) ?? $type->fqcn;
-        $name = SchemaIdentity::name($type->fqcn) ?? Fqcn::short($type->fqcn);
-
-        return new SchemaResult($context->reference($name, $document, $schemaId), 0.9);
+            return [
+                'type' => 'object',
+                'properties' => ['data' => $data],
+                'required' => ['data'],
+            ];
+        });
     }
 }

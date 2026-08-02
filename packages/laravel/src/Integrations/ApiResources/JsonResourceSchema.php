@@ -11,8 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Support\Fqcn;
-use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
+use Docuccino\Laravel\Integrations\Support\ComponentHoist;
 
 /**
  * Maps a Laravel API Resource to a schema (superseding the core class mapper for resource types).
@@ -29,12 +28,10 @@ use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class JsonResourceSchema implements TypeToSchema
 {
-    /**
-     * @var array<string, string> FQCN mid-expansion → reserved component name (self-reference break)
-     */
-    private array $expanding = [];
-
-    public function __construct(private readonly ToArrayObject $toArray = new ToArrayObject) {}
+    public function __construct(
+        private readonly ToArrayObject $toArray = new ToArrayObject,
+        private readonly ComponentHoist $hoist = new ComponentHoist,
+    ) {}
 
     public function supports(DType $type): bool
     {
@@ -55,26 +52,6 @@ final class JsonResourceSchema implements TypeToSchema
             return new SchemaResult(['type' => 'array', 'items' => $item !== null ? $context->convert($item) : []], 0.9);
         }
 
-        return $this->resource($type->fqcn, $context);
-    }
-
-    private function resource(string $fqcn, SchemaContext $context): SchemaResult
-    {
-        if (isset($this->expanding[$fqcn])) {
-            return new SchemaResult(['$ref' => '#/components/schemas/'.$this->expanding[$fqcn]], 0.9);
-        }
-
-        $schemaId = SchemaIdentity::id($fqcn) ?? $fqcn;
-        $name = $context->reserveComponentName(SchemaIdentity::name($fqcn) ?? Fqcn::short($fqcn), $schemaId);
-
-        $this->expanding[$fqcn] = $name;
-        $object = $this->toArray->analyze($fqcn, 'toArray', $context);
-        unset($this->expanding[$fqcn]);
-
-        if ($object === null) {
-            return new SchemaResult(['type' => 'object'], 0.4);
-        }
-
-        return new SchemaResult($context->reference($name, $object, $schemaId), 0.9);
+        return $this->hoist->hoist($context, $type->fqcn, fn (): ?array => $this->toArray->analyze($type->fqcn, 'toArray', $context));
     }
 }

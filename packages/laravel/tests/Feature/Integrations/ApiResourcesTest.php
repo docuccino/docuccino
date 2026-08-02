@@ -21,6 +21,7 @@ use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\ArticleJsonApiResource;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\ArticleResource;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\AuthorResource;
+use Docuccino\Laravel\Tests\Fixtures\ApiResources\CommentJsonApiResource;
 
 /**
  * The API Resources integration (Phase 4): a JsonResource's toArray shape → hoisted component with
@@ -57,6 +58,14 @@ function apiResourceEngine(): StubTypeEngine
             new ArrayShapeField('self', ScalarT::string()),
         ]),
         // No toMeta analysis → the meta member is omitted.
+        CommentJsonApiResource::class.'::toAttributes' => $shape([
+            new ArrayShapeField('body', ScalarT::string()),
+        ]),
+        // The replies relationship types back to the comment resource itself — a self-reference the
+        // component-hoist cycle-break must resolve to a $ref rather than recurse into.
+        CommentJsonApiResource::class.'::toRelationships' => $shape([
+            new ArrayShapeField('replies', new ClassT(CommentJsonApiResource::class)),
+        ]),
     ]);
 }
 
@@ -109,6 +118,21 @@ it('maps a first-party JSON:API resource to a JSON:API document schema', functio
         ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'relationships', 'links'])
         ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
         ->and($data['properties']['id'])->toBe(['type' => 'string']);
+});
+
+it('cycle-breaks a self-referential JSON:API resource via a $ref to its own component', function (): void {
+    $components = new ComponentRegistry;
+    $ref = resourceConverter($components)->toSchema(new ClassT(CommentJsonApiResource::class))->schema;
+
+    // The top-level conversion returns a $ref to the hoisted component (not an inlined document),
+    // and terminates — an un-broken cycle would recurse until the stack overflows.
+    expect($ref)->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
+
+    $document = $components->schemas()['CommentJsonApiResource'];
+    $relationships = $document['properties']['data']['properties']['relationships'];
+
+    // The self-referential `replies` relationship folds to a $ref back at the same component.
+    expect($relationships['properties']['replies'])->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
 });
 
 it('detects when a return type involves JSON:API', function (): void {

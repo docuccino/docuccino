@@ -14,7 +14,7 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Support\Fqcn;
+use Docuccino\Laravel\Integrations\Support\ComponentHoist;
 use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
 
 /**
@@ -37,12 +37,10 @@ use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DataSchema implements TypeToSchema
 {
-    /**
-     * @var array<string, string> FQCN mid-expansion → its reserved component name (cycle break)
-     */
-    private array $expanding = [];
-
-    public function __construct(private readonly DataClassReflector $reflector = new DataClassReflector) {}
+    public function __construct(
+        private readonly DataClassReflector $reflector = new DataClassReflector,
+        private readonly ComponentHoist $hoist = new ComponentHoist,
+    ) {}
 
     public function supports(DType $type): bool
     {
@@ -66,11 +64,6 @@ final class DataSchema implements TypeToSchema
     private function object(ClassT $type, SchemaContext $context): SchemaResult
     {
         $fqcn = $type->fqcn;
-
-        if (isset($this->expanding[$fqcn])) {
-            return new SchemaResult(['$ref' => '#/components/schemas/'.$this->expanding[$fqcn]], 0.9);
-        }
-
         $facts = $this->reflector->classFacts($fqcn);
         $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
@@ -78,46 +71,44 @@ final class DataSchema implements TypeToSchema
         // property type / #[Hidden] / MapName must invalidate the warm fragment.
         $context->dependsOn(...$metadata->dependencyFiles);
 
+        // An unexpandable Data class degrades to a bare object without reserving a component name —
+        // there is no body, so nothing self-references it.
         if ($metadata->properties === []) {
             return new SchemaResult(['type' => 'object'], 0.4);
         }
 
-        $schemaId = $facts['schemaId'] ?? $fqcn;
-        $name = $context->reserveComponentName($facts['schemaName'] ?? Fqcn::short($fqcn), $schemaId);
-        $this->expanding[$fqcn] = $name;
+        return $this->hoist->hoist($context, $fqcn, function () use ($fqcn, $facts, $metadata, $context): array {
+            $properties = [];
+            $required = [];
+            foreach ($metadata->properties as $property) {
+                if (in_array($property->name, $facts['hidden'], true) || $this->reflector->isPropertyHidden($fqcn, $property->name)) {
+                    continue;
+                }
 
-        $properties = [];
-        $required = [];
-        foreach ($metadata->properties as $property) {
-            if (in_array($property->name, $facts['hidden'], true) || $this->reflector->isPropertyHidden($fqcn, $property->name)) {
-                continue;
+                $clean = self::stripMarkers($property->type);
+                $schema = $context->convert($clean);
+                if ($property->summary !== null) {
+                    $schema['description'] = $property->summary;
+                }
+                if ($property->example !== null) {
+                    $schema['example'] = $property->example;
+                }
+
+                $key = $this->reflector->outputName($fqcn, $property->name);
+                $properties[$key] = $schema;
+
+                if (! $this->reflector->isPropertyOptional($fqcn, $property->name) && ! ($clean instanceof UnionT && $clean->containsNull())) {
+                    $required[] = $key;
+                }
             }
 
-            $clean = self::stripMarkers($property->type);
-            $schema = $context->convert($clean);
-            if ($property->summary !== null) {
-                $schema['description'] = $property->summary;
-            }
-            if ($property->example !== null) {
-                $schema['example'] = $property->example;
+            $object = ['type' => 'object', 'properties' => $properties];
+            if ($required !== []) {
+                $object['required'] = $required;
             }
 
-            $key = $this->reflector->outputName($fqcn, $property->name);
-            $properties[$key] = $schema;
-
-            if (! $this->reflector->isPropertyOptional($fqcn, $property->name) && ! ($clean instanceof UnionT && $clean->containsNull())) {
-                $required[] = $key;
-            }
-        }
-
-        unset($this->expanding[$fqcn]);
-
-        $object = ['type' => 'object', 'properties' => $properties];
-        if ($required !== []) {
-            $object['required'] = $required;
-        }
-
-        return new SchemaResult($context->reference($name, $object, $schemaId), 0.9);
+            return $object;
+        }, $facts['schemaName'], $facts['schemaId']);
     }
 
     private function collection(ClassT $type, SchemaContext $context): SchemaResult

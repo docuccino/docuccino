@@ -15,9 +15,8 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Support\Fqcn;
+use Docuccino\Laravel\Integrations\Support\ComponentHoist;
 use Docuccino\Laravel\Integrations\Support\EnumReflection;
-use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
 
 /**
  * Maps an Eloquent model to an object schema (superseding the core class mapper for models). Columns
@@ -35,12 +34,10 @@ use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class ModelSchema implements TypeToSchema
 {
-    /**
-     * @var array<string, string> FQCN mid-expansion → reserved component name (self-reference break)
-     */
-    private array $expanding = [];
-
-    public function __construct(private readonly EloquentModelReflector $reflector = new EloquentModelReflector) {}
+    public function __construct(
+        private readonly EloquentModelReflector $reflector = new EloquentModelReflector,
+        private readonly ComponentHoist $hoist = new ComponentHoist,
+    ) {}
 
     public function supports(DType $type): bool
     {
@@ -54,58 +51,51 @@ final class ModelSchema implements TypeToSchema
         }
 
         $fqcn = $type->fqcn;
-        if (isset($this->expanding[$fqcn])) {
-            return new SchemaResult(['$ref' => '#/components/schemas/'.$this->expanding[$fqcn]], 0.9);
-        }
 
-        $facts = $this->reflector->facts($fqcn);
-        $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
+        return $this->hoist->hoist($context, $fqcn, function () use ($fqcn, $context): array {
+            $facts = $this->reflector->facts($fqcn);
+            $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
-        // The model's reflected shape is a fragment-cache dependency (design §10): editing the model
-        // (a new column/cast, a changed $hidden list) must invalidate the warm fragment. Enum-cast
-        // third files are recorded as each cast is resolved in castSchema().
-        $context->dependsOn(...$metadata->dependencyFiles);
+            // The model's reflected shape is a fragment-cache dependency (design §10): editing the model
+            // (a new column/cast, a changed $hidden list) must invalidate the warm fragment. Enum-cast
+            // third files are recorded as each cast is resolved in castSchema().
+            $context->dependsOn(...$metadata->dependencyFiles);
 
-        $schemaId = SchemaIdentity::id($fqcn) ?? $fqcn;
-        $name = $context->reserveComponentName(SchemaIdentity::name($fqcn) ?? Fqcn::short($fqcn), $schemaId);
-        $this->expanding[$fqcn] = $name;
+            $hidden = [...$facts['hidden'], ...$facts['classHidden']];
 
-        $hidden = [...$facts['hidden'], ...$facts['classHidden']];
+            $properties = [];
+            $required = [];
+            foreach ($metadata->properties as $property) {
+                if (! self::isColumnVisible($property->name, $facts['visible'], $hidden)) {
+                    continue;
+                }
 
-        $properties = [];
-        $required = [];
-        foreach ($metadata->properties as $property) {
-            if (! self::isColumnVisible($property->name, $facts['visible'], $hidden)) {
-                continue;
+                $schema = $this->columnSchema($property->name, $property->type, $facts['casts'], $context);
+                if ($property->summary !== null) {
+                    $schema['description'] = $property->summary;
+                }
+                $properties[$property->name] = $schema;
+
+                if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
+                    $required[] = $property->name;
+                }
             }
 
-            $schema = $this->columnSchema($property->name, $property->type, $facts['casts'], $context);
-            if ($property->summary !== null) {
-                $schema['description'] = $property->summary;
+            // Appended accessors: optional, permissive unless a cast pins the shape.
+            foreach ($facts['appends'] as $append) {
+                if (isset($properties[$append])) {
+                    continue;
+                }
+                $properties[$append] = $this->castSchema($append, $facts['casts'], $context) ?? [];
             }
-            $properties[$property->name] = $schema;
 
-            if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
-                $required[] = $property->name;
+            $object = ['type' => 'object', 'properties' => $properties];
+            if ($required !== []) {
+                $object['required'] = $required;
             }
-        }
 
-        // Appended accessors: optional, permissive unless a cast pins the shape.
-        foreach ($facts['appends'] as $append) {
-            if (isset($properties[$append])) {
-                continue;
-            }
-            $properties[$append] = $this->castSchema($append, $facts['casts'], $context) ?? [];
-        }
-
-        unset($this->expanding[$fqcn]);
-
-        $object = ['type' => 'object', 'properties' => $properties];
-        if ($required !== []) {
-            $object['required'] = $required;
-        }
-
-        return new SchemaResult($context->reference($name, $object, $schemaId), 0.9);
+            return $object;
+        });
     }
 
     /**
