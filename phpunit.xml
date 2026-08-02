@@ -4,6 +4,11 @@
          bootstrap="vendor/autoload.php"
          colors="true"
          cacheDirectory="build/phpunit">
+    <php>
+        <!-- The inference suite boots PHPStan/Larastan in-process; the whole run accumulates past
+             the 128M default (the `analyse` script raises the same limit for the same reason). -->
+        <ini name="memory_limit" value="1G"/>
+    </php>
     <testsuites>
         <testsuite name="core">
             <directory>packages/core/tests</directory>

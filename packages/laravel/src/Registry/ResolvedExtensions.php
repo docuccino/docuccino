@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
+use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
 
@@ -25,6 +26,7 @@ final readonly class ResolvedExtensions
      * @param  list<TypeToSchema>  $typeToSchema
      * @param  list<ExceptionToResponse>  $exceptionToResponse
      * @param  list<DocumentTransformer>  $documentTransformers
+     * @param  list<RuleTransformer>  $ruleTransformers  the validation rule vocabulary chain
      */
     public function __construct(
         public array $routeResolvers = [],
@@ -32,6 +34,7 @@ final readonly class ResolvedExtensions
         public array $typeToSchema = [],
         public array $exceptionToResponse = [],
         public array $documentTransformers = [],
+        public array $ruleTransformers = [],
     ) {}
 
     /**
@@ -56,7 +59,7 @@ final readonly class ResolvedExtensions
     public function classSignature(): array
     {
         $classes = [];
-        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers] as $partition) {
+        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers, $this->ruleTransformers] as $partition) {
             foreach ($partition as $extension) {
                 $classes[$extension::class] = true;
             }

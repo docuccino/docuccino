@@ -8,6 +8,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
+use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\TypeEngine;
@@ -37,6 +38,7 @@ final class RouteContextBuilder
     /**
      * @param  list<TypeToSchema>  $typeMappers
      * @param  list<ExceptionToResponse>  $exceptionMappers
+     * @param  list<RuleTransformer>  $ruleTransformers
      */
     public function build(
         RouteDescriptor $descriptor,
@@ -44,6 +46,7 @@ final class RouteContextBuilder
         TypeEngine $engine,
         array $typeMappers,
         array $exceptionMappers,
+        array $ruleTransformers,
         ComponentRegistry $components,
     ): ?RouteContext {
         $route = $this->locate($descriptor);
@@ -68,6 +71,7 @@ final class RouteContextBuilder
             document: $document,
             typeMappers: $typeMappers,
             exceptionMappers: $exceptionMappers,
+            ruleTransformers: $ruleTransformers,
             pathParameters: $pathParameters,
             optionalPathParameters: $optional,
             routeBindings: $this->routeBindings($reflected, $pathParameters),

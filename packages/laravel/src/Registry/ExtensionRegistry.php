@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
+use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
 use Illuminate\Contracts\Container\Container;
@@ -61,6 +62,7 @@ final class ExtensionRegistry
             typeToSchema: $sorter->sort($this->partition($instances, TypeToSchema::class)),
             exceptionToResponse: $sorter->sort($this->partition($instances, ExceptionToResponse::class)),
             documentTransformers: $sorter->sort($this->partition($instances, DocumentTransformer::class)),
+            ruleTransformers: $sorter->sort($this->partition($instances, RuleTransformer::class)),
         );
     }
 

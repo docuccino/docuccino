@@ -146,6 +146,7 @@ final class DocumentGenerator
                 $engine,
                 $resolved->typeToSchema,
                 $resolved->exceptionToResponse,
+                $resolved->ruleTransformers,
                 $components,
             );
 
@@ -163,7 +164,9 @@ final class DocumentGenerator
             [$deltaSchemas, $deltaSchemaIds] = $this->componentDelta($components, $before);
 
             $fragment = new OperationFragment($path, $method, $operation->freeze(), $signature, $diagnostics, $deltaSchemas, $deltaSchemaIds);
-            $this->cache->put($cacheKey, $fragment, $context->analysis()->dependencyFiles);
+            // Merge trace-derived dependency files (design §10 seam): integrations that recover facts
+            // by tracing widen the cache key, so a deep chain invalidates when any traced file changes.
+            $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
 
             return $fragment;
         } catch (Throwable $exception) {

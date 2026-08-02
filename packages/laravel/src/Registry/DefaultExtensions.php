@@ -14,6 +14,8 @@ use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
+use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
+use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 
 /**
@@ -40,6 +42,10 @@ final class DefaultExtensions
             SecurityExtension::class,
             AttributeOverridesExtension::class,
             DefaultExceptionToResponse::class,
+            // FormRequest / inline validate() request documentation (design §Phase 4). Consumes only
+            // public contracts (dogfooding); the rule vocabulary registers through the same chain.
+            ValidationRequestExtension::class,
+            ...ValidationIntegration::transformers(),
             ...DefaultTypeMappers::all(),
         ];
     }
