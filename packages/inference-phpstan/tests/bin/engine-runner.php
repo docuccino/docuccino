@@ -14,14 +14,16 @@ declare(strict_types=1);
  * PSR-4 map for the docuccino packages under test.
  *
  * Usage:
- *   php engine-runner.php analyze  <controllerFile> <class> <method>
- *   php engine-runner.php trace-qb <controllerFile> <class> <method>
+ *   php engine-runner.php analyze        <controllerFile> <class> <method>
+ *   php engine-runner.php trace-qb       <controllerFile> <class> <method>
+ *   php engine-runner.php class-metadata <ignored>        <class>
  *
  * Emits `@@RESULT@@` followed by a single JSON line (so any incidental host
  * output before it is ignored by the caller).
  */
 
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
@@ -70,6 +72,7 @@ $ref = new ActionRef($file, $class === '' ? null : $class, $method);
 
 $result = match ($mode) {
     'analyze' => $engine->analyzeAction($ref)->toArray(),
+    'class-metadata' => $engine->classMetadata(new ClassRef($class))->toArray(),
     'trace-qb' => (static function () use ($engine, $ref): array {
         $probe = new QueryBuilderProbe;
         $engine->trace($ref, $probe);

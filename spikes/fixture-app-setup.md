@@ -118,3 +118,19 @@ cp -R spikes/spike-c/fixture-src/app/. spikes/fixture-app/app/
 No routes, migrations, or `composer` changes are needed — the spike drives the
 files by path (it never boots HTTP), and `App\Models\User` / `UserResource`
 (from Spike A) are reused as-is.
+
+## Fixture source authored by Phase 4 (real-engine integration tests)
+
+Phase 4's real-engine integration tests (`packages/laravel/tests/Feature/Integrations/
+RealEngineIntegrationsTest.php`) analyse a spatie Data class through the actual engine
+(classMetadata → property types). The canonical copy lives at
+`spikes/phase-4/fixture-src/`; copy it into the ignored app the same way:
+
+```bash
+cp -R spikes/phase-4/fixture-src/app/. spikes/fixture-app/app/
+```
+
+- `app/Data/ArticleData.php` — a `spatie/laravel-data` Data class with typed public
+  promoted properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine
+  recovers precise property types by reflection. `spatie/laravel-data` is already required
+  by the base install above. No routes/migrations/composer changes needed.

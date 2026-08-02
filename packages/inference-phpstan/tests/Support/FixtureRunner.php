@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Support;
 
+use Docuccino\Core\Inference\ClassMetadata;
 use RuntimeException;
 
 /**
@@ -53,6 +54,17 @@ final class FixtureRunner
     public static function traceQb(string $controllerRelPath, string $class, string $method): array
     {
         return self::invoke('trace-qb', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
+     * The real engine's {@see ClassMetadata} for a class (its property
+     * names + reflected types), serialized. The file argument is unused for this mode.
+     *
+     * @return array<string, mixed>
+     */
+    public static function classMetadata(string $class): array
+    {
+        return self::invoke('class-metadata', '', $class, '');
     }
 
     /**
