@@ -19,12 +19,14 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Maps a polymorphic morph — a union of two or more Eloquent models, as `MorphTo<Post|Video>`
- * surfaces once inference resolves the related type — to an OAS `oneOf` of the variant schemas plus
- * a `discriminator` (design §Phase 4). The discriminator `propertyName` is the morph-type field
- * (`type`) and its `mapping` comes from `Relation::morphMap()` (the alias each model serialises as);
- * a model with no morph-map alias falls back to its FQCN (Laravel's default morph type) and raises
- * an info diagnostic. Runs ahead of the core union mapper so a model union becomes a discriminated
- * `oneOf` rather than a bare `anyOf`; a nullable morph keeps a `null` branch.
+ * surfaces once inference resolves the related type — to an OAS `oneOf` of the variant schemas.
+ * A `discriminator` (propertyName `type`, `mapping` from `Relation::morphMap()`) is emitted ONLY
+ * when polymorphism is evidenced — every variant has a morph-map alias — so clients get a stable,
+ * complete mapping they can trust. If any variant is unmapped the mapper emits a bare `oneOf`
+ * (no discriminator) and raises an info diagnostic per unmapped variant: a partial discriminator
+ * whose values are unstable FQCNs would mislead a client into mis-parsing, worse than none.
+ * Runs ahead of the core union mapper so a model union becomes `oneOf` rather than a bare `anyOf`;
+ * a nullable morph keeps a `null` branch.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class MorphToSchema implements TypeToSchema
@@ -49,23 +51,26 @@ final class MorphToSchema implements TypeToSchema
 
         $variants = [];
         $mapping = [];
+        $allMapped = true;
         foreach ($models as $model) {
             $ref = $context->convert($model);
             $variants[] = $ref;
 
             $alias = $this->morphAlias($model->fqcn);
             if ($alias === null) {
+                $allMapped = false;
                 $context->diagnostic(new Diagnostic(
                     severity: Severity::Info,
                     code: 'eloquent.unmapped-morph',
-                    message: sprintf('Morph variant %s has no Relation::morphMap() alias; using its FQCN as the discriminator value.', $model->fqcn),
-                    help: 'Register an alias in Relation::enforceMorphMap([...]) so the discriminator value is stable across refactors.',
+                    message: sprintf('Morph variant %s has no Relation::morphMap() alias; the union is emitted as a bare oneOf without a discriminator.', $model->fqcn),
+                    help: 'Register an alias in Relation::enforceMorphMap([...]) for every variant so a stable discriminator can be emitted.',
                 ));
+
+                continue;
             }
 
-            $key = $alias ?? $model->fqcn;
             if (is_string($ref['$ref'] ?? null)) {
-                $mapping[$key] = $ref['$ref'];
+                $mapping[$alias] = $ref['$ref'];
             }
         }
 
@@ -73,10 +78,14 @@ final class MorphToSchema implements TypeToSchema
             $variants[] = ['type' => 'null'];
         }
 
-        return new SchemaResult([
-            'oneOf' => $variants,
-            'discriminator' => ['propertyName' => self::DISCRIMINATOR_PROPERTY, 'mapping' => $mapping],
-        ], 0.9);
+        $schema = ['oneOf' => $variants];
+        // A discriminator is only sound when every variant is morph-mapped: a partial mapping (or
+        // FQCN-valued keys) would let a client mis-parse an unmapped variant (arch I3).
+        if ($allMapped && $mapping !== []) {
+            $schema['discriminator'] = ['propertyName' => self::DISCRIMINATOR_PROPERTY, 'mapping' => $mapping];
+        }
+
+        return new SchemaResult($schema, 0.9);
     }
 
     /**

@@ -19,10 +19,10 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
- * Polymorphic morph unions → discriminated `oneOf` (design §Phase 4). The discriminator mapping is
- * dataset-driven over the morph-map entries; an unmapped variant degrades to its FQCN + a
- * diagnostic; a nullable morph keeps a null branch; a non-model union falls through to the core
- * mapper.
+ * Polymorphic morph unions → `oneOf` (design §Phase 4). A `discriminator` is emitted only when every
+ * variant is morph-mapped (arch I3); an unmapped variant degrades the union to a bare `oneOf` (no
+ * discriminator) + an info diagnostic; a nullable morph keeps a null branch; a non-model union falls
+ * through to the core mapper.
  */
 afterEach(function (): void {
     Relation::morphMap([], false);
@@ -60,14 +60,16 @@ it('maps a model union to a discriminated oneOf keyed by every morph-map alias',
     'gadget alias' => ['gadget', Gadget::class],
 ]);
 
-it('degrades an unmapped morph variant to its FQCN + an info diagnostic', function (): void {
+it('drops the discriminator (bare oneOf) + raises an info diagnostic when a variant is unmapped', function (): void {
     Relation::morphMap(['widget' => Widget::class], false); // gadget deliberately unmapped
 
     $components = new ComponentRegistry;
     $schema = morphConverter($components)->toSchema(morphUnion())->schema;
 
-    expect($schema['discriminator']['mapping']['widget'] ?? null)->toBe('#/components/schemas/Widget')
-        ->and($schema['discriminator']['mapping'][Gadget::class] ?? null)->toBe('#/components/schemas/Gadget');
+    // Polymorphism is not fully evidenced, so no discriminator is emitted — just the oneOf variants.
+    expect($schema)->toHaveKey('oneOf')
+        ->and($schema)->not->toHaveKey('discriminator')
+        ->and($schema['oneOf'])->toHaveCount(2);
 
     $codes = array_map(static fn ($d): string => $d->code, $components->diagnostics());
     expect($codes)->toContain('eloquent.unmapped-morph');
