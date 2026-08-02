@@ -85,7 +85,7 @@ final class RuntimeAdapter implements RuntimeAdapterContract
         }
 
         if (! is_dir($this->config->tmpDir)) {
-            mkdir($this->config->tmpDir, 0777, true);
+            mkdir($this->config->tmpDir, 0755, true);
         }
 
         $generatedNeon = $this->writeGeneratedNeon($larastanNeon);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Http;
 
+use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\ViewerContext;
@@ -103,7 +104,20 @@ final class DocsController
         $path = is_string($export['path'] ?? null) ? $export['path'] : 'docs/openapi.json';
         $absolute = str_starts_with($path, '/') ? $path : base_path($path);
         $contents = @file_get_contents($absolute);
+        if ($contents === false) {
+            return '';
+        }
 
-        return $contents === false ? '' : $contents;
+        // A UIR artifact (carries the `uir` field) is not a viewer-consumable OpenAPI document; the
+        // Scalar viewer expects OAS, so re-emit it through the OpenAPI 3.2 emitter (security L1 —
+        // never stream a UIR's internal x-docuccino provenance to the browser). A plain OpenAPI
+        // artifact streams through unchanged.
+        $decoded = json_decode($contents, true);
+        if (is_array($decoded) && isset($decoded['uir'])) {
+            /** @var array<string, mixed> $decoded */
+            return (new OpenApi32Emitter)->emit(UirDocument::fromArray($decoded));
+        }
+
+        return $contents;
     }
 }

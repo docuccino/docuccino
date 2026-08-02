@@ -201,7 +201,7 @@ final readonly class FilesystemEngineResultCache implements EngineResultCache
     {
         $dir = dirname($path);
         if (! is_dir($dir)) {
-            @mkdir($dir, 0o777, true);
+            @mkdir($dir, 0755, true);
         }
 
         $tmp = $path.'.'.getmypid().'.'.bin2hex(random_bytes(6)).'.tmp';

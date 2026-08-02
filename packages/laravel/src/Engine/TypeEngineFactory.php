@@ -40,7 +40,7 @@ final readonly class TypeEngineFactory
         $projectPaths = $this->projectPaths($config);
 
         if (! is_dir($this->tmpDir)) {
-            @mkdir($this->tmpDir, 0777, true);
+            @mkdir($this->tmpDir, 0755, true);
         }
 
         $runtime = new RuntimeConfig(

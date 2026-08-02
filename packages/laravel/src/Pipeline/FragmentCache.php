@@ -152,7 +152,7 @@ final readonly class FragmentCache
     {
         $directory = dirname($file);
         if (! is_dir($directory)) {
-            @mkdir($directory, 0777, true);
+            @mkdir($directory, 0755, true);
         }
 
         $temp = $file.'.'.getmypid().'.'.bin2hex(random_bytes(4)).'.tmp';

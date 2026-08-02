@@ -107,7 +107,9 @@ it('reads the old artifact from a git ref via --against', function (): void {
     bindStubEngine();
 
     $uir = (new UirEmitter)->emit(generateWorkbench()->document);
-    Process::fake(['git show *' => Process::result(output: $uir)]);
+    // The command runs array-form (no shell, security L3), so its Symfony commandline is escaped
+    // per-argument ('git' 'show' 'HEAD:docs/openapi.json') — match on the escaped form.
+    Process::fake(['*git*show*' => Process::result(output: $uir)]);
 
     $this->artisan('docuccino:diff', ['old' => 'docs/openapi.json', '--against' => 'HEAD'])
         ->expectsOutputToContain('No API changes.')
