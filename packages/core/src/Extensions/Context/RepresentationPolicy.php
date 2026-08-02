@@ -14,8 +14,11 @@ namespace Docuccino\Core\Extensions\Context;
  *   emitted alongside the enum, never changing the `enum` member itself.
  * - `nullable`: `type-array` (default, `type: [x, null]`) | `anyof` (a `{type: null}` branch) —
  *   how a "single type plus null" union is expressed.
- *
- * Query filter styles remain Phase 4; the seam is deliberately open for them.
+ * - `filterStyle` (Query Builder): `bracketed` (default — one flat `filter[status]` param each, and
+ *   `fields[articles]` for sparse fieldsets) | `deepObject` (a single `filter` / `fields` object
+ *   parameter, `style: deepObject, explode: true`) — how filter/field maps are expressed.
+ * - `listStyle` (Query Builder): `comma` (default — a single comma-separated string parameter) |
+ *   `array` (`style: form, explode: false`, `items` enum) — how `sort`/`include` lists are expressed.
  */
 final readonly class RepresentationPolicy
 {
@@ -23,6 +26,8 @@ final readonly class RepresentationPolicy
         public string $operationId = 'route-name',
         public string $enumNaming = 'none',
         public string $nullable = 'type-array',
+        public string $filterStyle = 'bracketed',
+        public string $listStyle = 'comma',
     ) {}
 
     /**
@@ -37,7 +42,21 @@ final readonly class RepresentationPolicy
             operationId: self::keyword($representation['operation_id'] ?? null, 'route-name'),
             enumNaming: self::keyword($enumNaming, 'none'),
             nullable: self::keyword($representation['nullable'] ?? null, 'type-array'),
+            filterStyle: self::keyword($representation['filters'] ?? null, 'bracketed'),
+            listStyle: self::keyword($representation['lists'] ?? null, 'comma'),
         );
+    }
+
+    /** Whether filter/field maps are expressed as a single deep-object parameter. */
+    public function filtersDeepObject(): bool
+    {
+        return $this->filterStyle === 'deepObject';
+    }
+
+    /** Whether `sort`/`include` lists are expressed as an exploded array parameter. */
+    public function listsAsArray(): bool
+    {
+        return $this->listStyle === 'array';
     }
 
     private static function keyword(mixed $value, string $default): string

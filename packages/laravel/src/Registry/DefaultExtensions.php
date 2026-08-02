@@ -18,6 +18,7 @@ use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
@@ -64,6 +65,9 @@ final class DefaultExtensions
             // Conditional integrations (Telescope-style class_exists guard): registered only when the
             // target package is installed, so docuccino/laravel never hard-requires it.
             ...(SpatieDataIntegration::installed() ? SpatieDataIntegration::extensions() : []),
+            // Spatie Query Builder (design §Phase 4 — the Scramble-Pro-beater): trace-recovered
+            // allowedFilters/Sorts/Includes/Fields + pagination, added only when the package exists.
+            ...(QueryBuilderIntegration::installed() ? QueryBuilderIntegration::extensions() : []),
             ...DefaultTypeMappers::all(),
         ];
     }
