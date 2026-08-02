@@ -40,6 +40,11 @@ final readonly class DocumentConfigFactory
             errorResponses: is_string($config['error_responses'] ?? null) ? $config['error_responses'] : 'none',
             overlays: self::stringList($config['overlays'] ?? []),
             onRouteError: $onRouteError,
+            security: $security,
+            tags: self::arr($config['tags'] ?? []),
+            representation: self::arr($config['representation'] ?? []),
+            viewer: self::arr($config['viewer'] ?? []),
+            versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
             raw: $config,
         );
     }

@@ -6,9 +6,12 @@ namespace Docuccino\Laravel;
 
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Console\DiffCommand;
 use Docuccino\Laravel\Console\ExportCommand;
+use Docuccino\Laravel\Console\ValidateCommand;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
+use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Illuminate\Contracts\Foundation\Application;
@@ -29,7 +32,9 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $package
             ->name('docuccino')
             ->hasConfigFile()
-            ->hasCommand(ExportCommand::class);
+            ->hasCommand(ExportCommand::class)
+            ->hasCommand(ValidateCommand::class)
+            ->hasCommand(DiffCommand::class);
     }
 
     public function packageRegistered(): void
@@ -55,6 +60,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(DocumentGenerator::class)
             ->needs('$generatorVersion')
             ->give(self::VERSION);
+
+        $this->app->when(DocumentBuilder::class)
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
         // NullTypeEngine; production builds it from config, degrading to null on boot failure.

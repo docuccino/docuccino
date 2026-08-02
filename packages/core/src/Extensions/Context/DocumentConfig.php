@@ -20,6 +20,11 @@ final readonly class DocumentConfig
      * @param  callable(RouteDescriptor): bool|null  $routeFilter  optional closure filter
      * @param  string|null  $authMiddleware  wildcard matched against middleware to require auth
      * @param  list<string>  $overlays  glob patterns of Overlay 1.0 documents
+     * @param  array<string, mixed>  $security  the `security` config (schemes + document requirement)
+     * @param  array<string, mixed>  $tags  the `tags` config (map + mapper class-string + list)
+     * @param  array<string, mixed>  $representation  the `representation` policy config
+     * @param  array<string, mixed>  $viewer  the `viewer` config (driver/route/gate/source/cdn)
+     * @param  string  $versioning  the versioning policy keyword (`semver|date|none`)
      * @param  array<string, mixed>  $raw  the full config array for this document
      */
     public function __construct(
@@ -33,6 +38,22 @@ final readonly class DocumentConfig
         public string $errorResponses = 'none',
         public array $overlays = [],
         public string $onRouteError = 'skeleton',
+        public array $security = [],
+        public array $tags = [],
+        public array $representation = [],
+        public array $viewer = [],
+        public string $versioning = 'none',
         public array $raw = [],
     ) {}
+
+    /**
+     * The value of a `representation.*` policy keyword, or the given default. Kept behaviour-
+     * preserving: an absent key returns the default (which encodes today's behaviour).
+     */
+    public function representationPolicy(string $key, string $default): string
+    {
+        $value = $this->representation[$key] ?? null;
+
+        return is_string($value) && $value !== '' ? $value : $default;
+    }
 }

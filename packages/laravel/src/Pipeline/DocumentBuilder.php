@@ -1,0 +1,168 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Pipeline;
+
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Overlay\InvalidOverlayException;
+use Docuccino\Core\Overlay\OverlayDocument;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Symfony\Component\Yaml\Yaml;
+
+/**
+ * The single entry point every command and the runtime viewer share for turning
+ * `config('docuccino.documents.*')` into a built {@see GenerationResult}: it resolves the
+ * {@see DocumentConfig}, loads the document's Overlay 1.0 files (a malformed overlay becomes a
+ * warning diagnostic rather than a fatal), merges the config extensions, and runs the pipeline.
+ * Centralising this keeps export/validate/diff/cache/viewer on one identical build path.
+ */
+final class DocumentBuilder
+{
+    public function __construct(
+        private readonly DocumentConfigFactory $configs,
+        private readonly DocumentGenerator $generator,
+        private readonly string $basePath,
+    ) {}
+
+    /**
+     * The configured document keys, in config declaration order.
+     *
+     * @return list<string>
+     */
+    public function documentKeys(): array
+    {
+        return array_map(
+            static fn (int|string $key): string => (string) $key,
+            array_keys($this->documents()),
+        );
+    }
+
+    public function hasDocument(string $key): bool
+    {
+        return is_array($this->documents()[$key] ?? null);
+    }
+
+    public function config(string $key): DocumentConfig
+    {
+        return $this->configs->make($key, $this->rawConfig($key), $this->onRouteError());
+    }
+
+    /**
+     * Build one document. Overlay-parse warnings are folded into the returned diagnostics so a
+     * caller sees them alongside the pipeline's own.
+     */
+    public function build(string $key, TypeEngine $engine): GenerationResult
+    {
+        $config = $this->config($key);
+        [$overlays, $overlayDiagnostics] = $this->overlays($config);
+
+        $result = $this->generator->generate($config, $engine, $this->configExtensions(), $overlays);
+
+        if ($overlayDiagnostics === []) {
+            return $result;
+        }
+
+        return new GenerationResult($result->document, $this->sort([...$overlayDiagnostics, ...$result->diagnostics]));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function documents(): array
+    {
+        /** @var array<string, mixed> $documents */
+        $documents = (array) config('docuccino.documents', []);
+
+        return $documents;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function rawConfig(string $key): array
+    {
+        $raw = $this->documents()[$key] ?? [];
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $k => $v) {
+            $out[(string) $k] = $v;
+        }
+
+        return $out;
+    }
+
+    private function onRouteError(): string
+    {
+        $configured = config('docuccino.on_route_error');
+
+        return is_string($configured) ? $configured : 'skeleton';
+    }
+
+    /**
+     * @return list<class-string|object>
+     */
+    private function configExtensions(): array
+    {
+        $out = [];
+        foreach ((array) config('docuccino.extensions', []) as $extension) {
+            if (is_object($extension)) {
+                $out[] = $extension;
+            } elseif (is_string($extension) && class_exists($extension)) {
+                $out[] = $extension;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array{0: list<OverlayDocument>, 1: list<Diagnostic>}
+     */
+    private function overlays(DocumentConfig $config): array
+    {
+        $overlays = [];
+        $diagnostics = [];
+
+        foreach ($config->overlays as $pattern) {
+            foreach (glob($this->absolute($pattern)) ?: [] as $file) {
+                try {
+                    /** @var array<string, mixed> $parsed */
+                    $parsed = (array) Yaml::parseFile($file);
+                    $overlays[] = OverlayDocument::fromArray($parsed);
+                } catch (InvalidOverlayException $exception) {
+                    $diagnostics[] = new Diagnostic(
+                        severity: Severity::Warning,
+                        code: 'overlay.invalid',
+                        message: sprintf('Skipped overlay %s: %s', $file, $exception->getMessage()),
+                    );
+                }
+            }
+        }
+
+        return [$overlays, $diagnostics];
+    }
+
+    private function absolute(string $path): string
+    {
+        return str_starts_with($path, '/') ? $path : $this->basePath.'/'.ltrim($path, '/');
+    }
+
+    /**
+     * @param  list<Diagnostic>  $diagnostics
+     * @return list<Diagnostic>
+     */
+    private function sort(array $diagnostics): array
+    {
+        $bag = new DiagnosticBag;
+        $bag->addAll($diagnostics);
+
+        return $bag->sorted();
+    }
+}

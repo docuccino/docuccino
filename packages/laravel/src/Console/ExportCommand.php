@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Console;
 
-use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
@@ -14,20 +13,19 @@ use Docuccino\Core\Emit\ProvenanceLevel;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
-use Docuccino\Core\Overlay\InvalidOverlayException;
-use Docuccino\Core\Overlay\OverlayDocument;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\GenerationResult;
 use Illuminate\Console\Command;
-use Symfony\Component\Yaml\Yaml;
 
 /**
- * Runs the pipeline for a document and writes its UIR / OpenAPI artifact (design §Commands).
- * Diagnostics are printed grouped by route deterministically; the exit code honours `--fail-on`.
+ * Runs the pipeline for a document (or every document) and writes its UIR / OpenAPI artifact
+ * (design §Commands). Diagnostics are printed grouped by route deterministically; the exit code
+ * honours `--fail-on`.
  */
 final class ExportCommand extends Command
 {
+    use RendersDiagnostics;
+
     protected $signature = 'docuccino:export
         {document? : The configured document key (defaults to every document)}
         {--format= : uir | openapi-3.2 | openapi-3.1 (defaults to openapi-3.2)}
@@ -38,44 +36,26 @@ final class ExportCommand extends Command
 
     protected $description = 'Generate and export API documentation from your routes.';
 
-    public function handle(
-        DocumentConfigFactory $configs,
-        TypeEngine $engine,
-        DocumentGenerator $generator,
-    ): int {
-        /** @var array<string, mixed> $documents */
-        $documents = (array) config('docuccino.documents', []);
-        $configuredError = config('docuccino.on_route_error');
-        $onRouteError = is_string($configuredError) ? $configuredError : 'skeleton';
-
+    public function handle(DocumentBuilder $builder, TypeEngine $engine): int
+    {
         $only = $this->argument('document');
-        if (is_string($only) && ! isset($documents[$only])) {
+        if (is_string($only) && ! $builder->hasDocument($only)) {
             $this->error(sprintf('Unknown document "%s".', $only));
 
             return self::FAILURE;
         }
 
-        /** @var list<class-string|object> $configExtensions */
-        $configExtensions = array_values(array_filter(
-            (array) config('docuccino.extensions', []),
-            static fn (mixed $extension): bool => is_string($extension) || is_object($extension),
-        ));
-
         $exit = self::SUCCESS;
 
-        foreach ($documents as $key => $raw) {
+        foreach ($builder->documentKeys() as $key) {
             if (is_string($only) && $key !== $only) {
                 continue;
             }
-            if (! is_array($raw)) {
-                continue;
-            }
 
-            $config = $configs->make((string) $key, $this->stringKeyed($raw), $onRouteError);
-            $result = $generator->generate($config, $engine, $configExtensions, $this->overlays($config));
+            $result = $builder->build($key, $engine);
 
-            $this->write($config, $result->document);
-            $this->renderDiagnostics((string) $key, $result->diagnostics);
+            $this->write($builder->config($key), $result->document);
+            $this->renderDiagnostics($key, $result->diagnostics);
 
             if ($this->shouldFail($result)) {
                 $exit = self::FAILURE;
@@ -132,64 +112,6 @@ final class ExportCommand extends Command
     {
         return ProvenanceLevel::tryFrom(is_string($this->option('provenance')) ? $this->option('provenance') : '')
             ?? ProvenanceLevel::Winners;
-    }
-
-    /**
-     * @return list<OverlayDocument>
-     */
-    private function overlays(DocumentConfig $config): array
-    {
-        $overlays = [];
-        foreach ($config->overlays as $pattern) {
-            foreach (glob($this->absolute($pattern)) ?: [] as $file) {
-                try {
-                    /** @var array<string, mixed> $parsed */
-                    $parsed = (array) Yaml::parseFile($file);
-                    $overlays[] = OverlayDocument::fromArray($parsed);
-                } catch (InvalidOverlayException $exception) {
-                    $this->warn(sprintf('Skipped overlay %s: %s', $file, $exception->getMessage()));
-                }
-            }
-        }
-
-        return $overlays;
-    }
-
-    /**
-     * @param  list<Diagnostic>  $diagnostics
-     */
-    private function renderDiagnostics(string $document, array $diagnostics): void
-    {
-        if ($diagnostics === []) {
-            return;
-        }
-
-        $this->newLine();
-        $this->line(sprintf('<comment>Diagnostics for %s:</comment>', $document));
-
-        $current = "\0";
-        foreach ($diagnostics as $diagnostic) {
-            $group = $diagnostic->routeSignature ?? '(document)';
-            if ($group !== $current) {
-                $current = $group;
-                $this->line('  '.$group);
-            }
-            $this->line(sprintf('    [%s] %s: %s', $diagnostic->severity->value, $diagnostic->code, $diagnostic->message));
-        }
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $value
-     * @return array<string, mixed>
-     */
-    private function stringKeyed(array $value): array
-    {
-        $out = [];
-        foreach ($value as $key => $item) {
-            $out[(string) $key] = $item;
-        }
-
-        return $out;
     }
 
     private function shouldFail(GenerationResult $result): bool
