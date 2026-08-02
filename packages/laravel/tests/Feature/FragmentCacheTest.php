@@ -12,8 +12,11 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Facades\Docuccino;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
+use Docuccino\Laravel\Tests\Support\LateBoundMarker;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /**
@@ -106,6 +109,59 @@ it('invalidates a fragment when one of its dependency files changes', function (
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 
     @unlink($dependency);
+});
+
+it('invalidates every fragment when the resolved extension set changes', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    buildDefault();
+    $engine->analyzeCount = 0;
+
+    // Registering a new extension changes the resolved extension signature → every key changes.
+    Docuccino::extend(new LateBoundMarker);
+    buildDefault();
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('invalidates a fragment when one of its dependency files is REMOVED', function (): void {
+    enableFragmentCache();
+
+    $dependency = sys_get_temp_dir().'/docuccino-dep-'.uniqid('', true).'.php';
+    file_put_contents($dependency, '<?php // v1');
+
+    $stub = new StubTypeEngine(
+        analyses: [
+            'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(
+                returns: [new ReturnSite(new ListT(new ClassT('Workbench\\App\\Data\\FormData')), new SourceLocation(''))],
+                dependencyFiles: [$dependency],
+            ),
+        ],
+    );
+    $engine = new CountingTypeEngine($stub);
+    app()->instance(TypeEngine::class, $engine);
+
+    buildDefault();
+    $engine->analyzeCount = 0;
+
+    // Deleting the dependency makes its stored hash unverifiable → the dependent fragment invalidates.
+    @unlink($dependency);
+    buildDefault();
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('keys fragments per route so distinct routes never collide', function (): void {
+    $cache = new FragmentCache(true, sys_get_temp_dir(), 't', 's', 'v');
+
+    $forms = $cache->key('GET /api/forms', 'cfg', ['Ext@1.0']);
+    $widgets = $cache->key('POST /api/widgets', 'cfg', ['Ext@1.0']);
+    $formsOtherExt = $cache->key('GET /api/forms', 'cfg', ['Ext@2.0']);
+
+    expect($forms)->not->toBe($widgets)
+        ->and($forms)->not->toBe($formsOtherExt);
 });
 
 it('is a no-op when disabled (default): the engine runs on every build', function (): void {
