@@ -33,6 +33,15 @@ final class EnumTypeToSchema implements TypeToSchema
             return new SchemaResult(['type' => 'string'], 0.5);
         }
 
-        return new SchemaResult(['type' => 'string', 'enum' => $type->cases], 0.9);
+        $schema = ['type' => 'string', 'enum' => $type->cases];
+
+        // Codegen name hints (design §Representation policies): additive x-* members that never
+        // touch the `enum` member itself. Default `none` emits nothing.
+        $naming = $context->representation()->enumNaming;
+        if ($naming === 'x-enumNames' || $naming === 'x-enum-varnames') {
+            $schema[$naming] = $type->cases;
+        }
+
+        return new SchemaResult($schema, 0.9);
     }
 }

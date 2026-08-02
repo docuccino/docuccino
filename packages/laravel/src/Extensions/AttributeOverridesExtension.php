@@ -38,8 +38,9 @@ final class AttributeOverridesExtension implements OperationExtension
         $operation->setSummary($context->summary, Contribution::docblock());
         $operation->setDescription($context->description, Contribution::docblock());
 
-        // Default operationId (route-name strategy) at fallback precedence, so #[OperationId] wins.
-        $operation->setOperationId($context->route->name, Contribution::fallback());
+        // Default operationId from the representation policy, at fallback precedence so
+        // #[OperationId] still wins.
+        $operation->setOperationId($this->defaultOperationId($context), Contribution::fallback());
 
         $attribute = Contribution::attribute($context->actionSource());
 
@@ -68,6 +69,28 @@ final class AttributeOverridesExtension implements OperationExtension
                 $operation->setDescription(rtrim($contents, "\n"), $attribute);
             }
         }
+    }
+
+    /**
+     * The operationId the representation policy dictates: `route-name` (default) uses the route's
+     * name; `controller-method` derives `{ShortController}@{method}` from the action, falling back
+     * to the route name for closure routes with no class.
+     */
+    private function defaultOperationId(RouteContext $context): ?string
+    {
+        if ($context->representation()->operationId !== 'controller-method') {
+            return $context->route->name;
+        }
+
+        $class = $context->actionRef->class;
+        if ($class === null) {
+            return $context->route->name;
+        }
+
+        $position = strrpos($class, '\\');
+        $short = $position === false ? $class : substr($class, $position + 1);
+
+        return $short.'@'.$context->actionRef->method;
     }
 
     /**

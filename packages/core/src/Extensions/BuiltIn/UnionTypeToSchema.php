@@ -44,7 +44,7 @@ final class UnionTypeToSchema implements TypeToSchema
             $schema = $context->convert($nonNull[0]);
 
             if ($hasNull) {
-                $schema = self::makeNullable($schema);
+                $schema = self::makeNullable($schema, $context->representation()->nullable);
             }
 
             return new SchemaResult($schema);
@@ -62,17 +62,19 @@ final class UnionTypeToSchema implements TypeToSchema
      * @param  array<string, mixed>  $schema
      * @return array<string, mixed>
      */
-    private static function makeNullable(array $schema): array
+    private static function makeNullable(array $schema, string $policy): array
     {
         $type = $schema['type'] ?? null;
 
-        if (is_string($type)) {
+        // `type-array` (default) folds null into a simple typed schema; `anyof` always expresses
+        // nullability as an explicit `{type: null}` branch (design §Representation policies).
+        if ($policy !== 'anyof' && is_string($type)) {
             $schema['type'] = [$type, 'null'];
 
             return $schema;
         }
 
-        // Not a simple typed schema (e.g. a $ref or anyOf) — express nullability as a branch.
+        // Not a simple typed schema (a $ref or anyOf), or the anyof policy — express as a branch.
         return ['anyOf' => [$schema, ['type' => 'null']]];
     }
 }

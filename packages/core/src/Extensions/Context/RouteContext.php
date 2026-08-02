@@ -31,6 +31,8 @@ final class RouteContext
 
     private ?SchemaConverter $converter = null;
 
+    private ?RepresentationPolicy $representation = null;
+
     /**
      * @param  list<TypeToSchema>  $typeMappers  the resolved type→schema chain (document-wide)
      * @param  list<ExceptionToResponse>  $exceptionMappers  the resolved exception→response chain
@@ -97,6 +99,12 @@ final class RouteContext
      */
     public function converter(): SchemaConverter
     {
-        return $this->converter ??= new SchemaConverter($this->typeMappers, $this->engine, $this->components);
+        return $this->converter ??= new SchemaConverter($this->typeMappers, $this->engine, $this->components, $this->representation());
+    }
+
+    /** The document's representation policy (design §Representation policies), resolved once. */
+    public function representation(): RepresentationPolicy
+    {
+        return $this->representation ??= RepresentationPolicy::fromConfig($this->document->representation);
     }
 }

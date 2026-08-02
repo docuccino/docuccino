@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Schema;
 
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Inference\DType\DType;
@@ -27,6 +28,7 @@ final class SchemaConverter implements SchemaContext
         private readonly array $mappers,
         private readonly TypeEngine $typeEngine,
         private readonly ComponentRegistry $components,
+        private readonly RepresentationPolicy $representation = new RepresentationPolicy,
     ) {}
 
     /**
@@ -70,6 +72,11 @@ final class SchemaConverter implements SchemaContext
     public function engine(): TypeEngine
     {
         return $this->typeEngine;
+    }
+
+    public function representation(): RepresentationPolicy
+    {
+        return $this->representation;
     }
 
     public function lowerConfidence(float $confidence): void

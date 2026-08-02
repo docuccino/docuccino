@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Contracts;
 
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\TypeEngine;
 
@@ -35,6 +36,9 @@ interface SchemaContext
 
     /** The inference engine, for {@see TypeEngine::classMetadata()} class expansion. */
     public function engine(): TypeEngine;
+
+    /** The document's representation policy (enum naming, nullable expression …). */
+    public function representation(): RepresentationPolicy;
 
     /** Record that the current conversion is imprecise; the lowest value seen wins. */
     public function lowerConfidence(float $confidence): void;

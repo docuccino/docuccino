@@ -53,9 +53,10 @@ return [
                 // 'resources/docs/overlays/*.yaml',
             ],
             'representation' => [
-                'filters' => 'bracketed',
-                'nullable' => 'type-array',
-                'operation_id' => 'route-name',
+                'filters' => 'bracketed',          // bracketed | deepObject (filter styles: Phase 4)
+                'nullable' => 'type-array',        // type-array (type: [x, null]) | anyof ({type: null} branch)
+                'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
+                // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
             ],
             'export' => [
                 'path' => 'docs/openapi.json',
