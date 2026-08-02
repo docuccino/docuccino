@@ -6,10 +6,10 @@ namespace Docuccino\Laravel\Integrations\Support;
 
 /**
  * The JSON paginator envelopes Laravel serialises around a page of items (`{data, links, meta}`),
- * shared by every integration that documents a paginated collection — spatie `PaginatedDataCollection`
- * and API-resource `AnonymousResourceCollection::paginate()` alike — so the wrapper shape stays
- * identical whoever produces it. Each builder takes the already-converted item schema and wraps it;
- * `data` is the only guaranteed member (an empty page still carries it).
+ * shared by the integrations that document a paginated collection so the wrapper shape stays
+ * identical whoever produces it. Two shapes are modelled — length-aware ({@see length()}) and cursor
+ * ({@see cursor()}); each builder takes the already-converted item schema and wraps it. `data` is the
+ * only guaranteed member (an empty page still carries it).
  */
 final class PaginationEnvelope
 {
@@ -37,32 +37,6 @@ final class PaginationEnvelope
                 'per_page' => ['type' => 'integer'],
                 'to' => self::nullableInteger(),
                 'total' => ['type' => 'integer'],
-            ]),
-        ]);
-    }
-
-    /**
-     * The simple paginator shape (`simplePaginate()`): like length-aware but without `last_page`/`total`
-     * (it never counts the full set).
-     *
-     * @param  array<string, mixed>  $items
-     * @return array<string, mixed>
-     */
-    public static function simple(array $items): array
-    {
-        return self::wrap($items, [
-            'links' => self::object([
-                'first' => self::nullableString(),
-                'last' => self::nullableString(),
-                'prev' => self::nullableString(),
-                'next' => self::nullableString(),
-            ]),
-            'meta' => self::object([
-                'current_page' => ['type' => 'integer'],
-                'from' => self::nullableInteger(),
-                'path' => self::nullableString(),
-                'per_page' => ['type' => 'integer'],
-                'to' => self::nullableInteger(),
             ]),
         ]);
     }
