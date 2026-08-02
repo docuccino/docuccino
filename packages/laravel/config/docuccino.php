@@ -33,8 +33,17 @@ return [
                 'closure' => null, // fn (RouteDescriptor $route): bool => ...
             ],
             'security' => [
-                // Full scheme set lands in Phase 4; Phase 3a reads auto_detect_middleware only.
+                // Routes whose middleware matches this wildcard get the `default` requirement below.
                 'auto_detect_middleware' => 'auth*',
+                // Optional (omitted here to keep the default document unauthenticated):
+                //   'schemes' => [                              // → components.securitySchemes
+                //       'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
+                //       'apiKey' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
+                //       'oauth2' => ['type' => 'oauth2', 'flows' => [...]],
+                //       'oidc'   => ['type' => 'openIdConnect', 'openIdConnectUrl' => 'https://…'],
+                //   ],
+                //   'default'  => [['bearer' => []]],           // per-op requirement for auth-detected routes
+                //   'document' => [['bearer' => []]],           // document-wide `security` requirement
             ],
             'error_responses' => 'default', // 'default' | 'none' (presets: Phase 4)
             'tags' => [

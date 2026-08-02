@@ -91,6 +91,72 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The `security.schemes` map (name → OAS security-scheme object) for `components.securitySchemes`.
+     * Malformed entries (non-array values) are dropped so a typo can't break the document.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function securitySchemes(): array
+    {
+        $schemes = $this->security['schemes'] ?? null;
+        if (! is_array($schemes)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($schemes as $name => $scheme) {
+            if (is_string($name) && is_array($scheme)) {
+                /** @var array<string, mixed> $scheme */
+                $out[$name] = $scheme;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The document-level security requirement from `security.document` (an OAS `security` array —
+     * a list of `{scheme: scopes[]}` requirement objects), or null when none is configured.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function documentSecurity(): ?array
+    {
+        return self::requirement($this->security['document'] ?? null);
+    }
+
+    /**
+     * The default per-operation requirement from `security.default`, applied by the auto-detect
+     * middleware layer to routes whose middleware matches {@see $authMiddleware}.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function defaultSecurity(): ?array
+    {
+        return self::requirement($this->security['default'] ?? null);
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private static function requirement(mixed $value): ?array
+    {
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $out = [];
+        foreach ($value as $entry) {
+            if (is_array($entry)) {
+                /** @var array<string, mixed> $entry */
+                $out[] = $entry;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The value of a `representation.*` policy keyword, or the given default. Kept behaviour-
      * preserving: an absent key returns the default (which encodes today's behaviour).
      */

@@ -70,6 +70,11 @@ final class Assembler
             $doc['servers'] = $document->servers;
         }
 
+        $documentSecurity = $document->documentSecurity();
+        if ($documentSecurity !== null) {
+            $doc['security'] = $documentSecurity;
+        }
+
         $tags = $document->tagDefinitions();
         if ($tags !== []) {
             $doc['tags'] = $tags;
@@ -77,8 +82,18 @@ final class Assembler
 
         $doc['paths'] = $paths;
 
+        $componentsOut = [];
         if ($componentSchemas !== []) {
-            $doc['components'] = ['schemas' => $componentSchemas];
+            $componentsOut['schemas'] = $componentSchemas;
+        }
+
+        $securitySchemes = $document->securitySchemes();
+        if ($securitySchemes !== []) {
+            $componentsOut['securitySchemes'] = $securitySchemes;
+        }
+
+        if ($componentsOut !== []) {
+            $doc['components'] = $componentsOut;
         }
 
         $doc['x-docuccino'] = [
