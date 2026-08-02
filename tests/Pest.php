@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Docuccino\Laravel\Tests\TestCase;
 
 /*
  * Monorepo Pest bootstrap. Test files live alongside their package
@@ -9,6 +10,7 @@ declare(strict_types=1);
  */
 
 uses()->in(dirname(__DIR__).'/packages/core/tests');
+uses(TestCase::class)->in(dirname(__DIR__).'/packages/laravel/tests');
 
 /**
  * @return array<string, mixed>
