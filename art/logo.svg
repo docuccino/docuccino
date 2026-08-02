@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="115 140 556 170" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="115 140 541 170" width="100%" height="100%">
     <defs>
         <!-- Clipping path for the top-right diagonal fold -->
         <clipPath id="baseClip">
-            <path d="M 135 145 H 254 L 284 175 A 80 80 0 0 1 210 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" />
+            <path d="M 135 145 H 254 L 284 175 V 290 A 15 15 0 0 1 269 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" />
         </clipPath>
     </defs>
 
@@ -19,73 +19,72 @@
         <path d="M 254 145 L 254 175 L 284 175 Z" fill="#B0957C" />
 
         <!-- Outlines / Strokes -->
-        <path d="M 135 145 H 254 L 284 175 A 80 80 0 0 1 210 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
+        <path d="M 135 145 H 254 L 284 175 V 290 A 15 15 0 0 1 269 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
         <path d="M 254 145 V 175 H 284" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
 
         <!-- Subtle overlapping edge curve (implying the cup curve over the document) -->
-        <path d="M 165 159 A 80 80 0 0 0 165 291" fill="none" stroke="#131416" stroke-width="4" stroke-linecap="round" opacity="0.4" />
+        <path d="M 157 159 A 80 80 0 0 0 157 291" fill="none" stroke="#131416" stroke-width="4" stroke-linecap="round" opacity="0.4" />
     </g>
 
-    <!-- Coffee Mug Handle (straight-cut, filled — v2 style) -->
+    <!-- Coffee Mug Handle -->
     <g>
-        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="#967D64" />
-        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
+        <path d="M 256 205 C 282 205, 282 245, 256 245" fill="none" stroke="#131416" stroke-width="6" stroke-linecap="round" />
     </g>
 
     <!-- Cup Interior & Coffee Liquid -->
     <g>
         <!-- Dark inner rim of the cup -->
-        <circle cx="210" cy="225" r="60" fill="#1E2124" stroke="#131416" stroke-width="4" />
+        <circle cx="202" cy="225" r="60" fill="#1E2124" stroke="#131416" stroke-width="4" />
 
         <!-- Coffee liquid base -->
-        <circle cx="210" cy="225" r="56" fill="#C8B097" />
+        <circle cx="202" cy="225" r="56" fill="#C8B097" />
 
         <!-- Latte art / cream swirls -->
-        <path d="M 175 225 C 175 190, 245 200, 245 225 C 245 250, 190 260, 190 225" fill="none" stroke="#E8D5C4" stroke-width="6" stroke-linecap="round" />
-        <path d="M 165 225 C 165 170, 255 180, 255 225 C 255 270, 175 280, 175 225" fill="none" stroke="#E8D5C4" stroke-width="4" stroke-linecap="round" opacity="0.6" />
-        <path d="M 185 225 C 185 205, 235 210, 235 225 C 235 240, 200 245, 200 225" fill="none" stroke="#A68A73" stroke-width="4" stroke-linecap="round" />
+        <path d="M 167 225 C 167 190, 237 200, 237 225 C 237 250, 182 260, 182 225" fill="none" stroke="#E8D5C4" stroke-width="6" stroke-linecap="round" />
+        <path d="M 157 225 C 157 170, 247 180, 247 225 C 247 270, 167 280, 167 225" fill="none" stroke="#E8D5C4" stroke-width="4" stroke-linecap="round" opacity="0.6" />
+        <path d="M 177 225 C 177 205, 227 210, 227 225 C 227 240, 192 245, 192 225" fill="none" stroke="#A68A73" stroke-width="4" stroke-linecap="round" />
     </g>
 
     <!-- Developer Braces '{ }' floating in the coffee -->
     <g fill="none" stroke="#F25A38" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M 192 198 Q 182 198 182 208 Q 182 220 172 225 Q 182 230 182 242 Q 182 252 192 252" />
-        <path d="M 228 198 Q 238 198 238 208 Q 238 220 248 225 Q 238 230 238 242 Q 238 252 228 252" />
+        <path d="M 184 198 Q 174 198 174 208 Q 174 220 164 225 Q 174 230 174 242 Q 174 252 184 252" />
+        <path d="M 220 198 Q 230 198 230 208 Q 230 220 240 225 Q 230 230 230 242 Q 230 252 220 252" />
     </g>
 
-    <!-- Wordmark (nudged +14 right to clear the straight-cut handle) -->
-    <g fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" transform="translate(14,0)">
+    <!-- Wordmark (Shifted left by 15px for a tighter lockup) -->
+    <g fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
         <!-- 'd' -->
         <g stroke="#F25A38">
-            <circle cx="342" cy="228" r="17" />
-            <path d="M 359 184 V 245" />
+            <circle cx="327" cy="228" r="17" />
+            <path d="M 344 184 V 245" />
         </g>
 
         <!-- 'ocuccino' -->
         <g stroke="#EBE2DA">
             <!-- o -->
-            <circle cx="386" cy="228" r="17" />
+            <circle cx="371" cy="228" r="17" />
 
             <!-- c -->
-            <path d="M 442 216 A 17 17 0 1 0 442 240" />
+            <path d="M 427 216 A 17 17 0 1 0 427 240" />
 
             <!-- u -->
-            <path d="M 457 211 V 231 A 14 14 0 0 0 485 231 V 211 M 485 211 V 245" />
+            <path d="M 442 211 V 231 A 14 14 0 0 0 470 231 V 211 M 470 211 V 245" />
 
             <!-- c -->
-            <path d="M 524 216 A 17 17 0 1 0 524 240" />
+            <path d="M 509 216 A 17 17 0 1 0 509 240" />
 
             <!-- c -->
-            <path d="M 568 216 A 17 17 0 1 0 568 240" />
+            <path d="M 553 216 A 17 17 0 1 0 553 240" />
 
             <!-- i -->
-            <path d="M 583 211 V 245" />
-            <circle cx="583" cy="190" r="4" fill="#EBE2DA" stroke="none" />
+            <path d="M 568 211 V 245" />
+            <circle cx="568" cy="190" r="4" fill="#EBE2DA" stroke="none" />
 
             <!-- n -->
-            <path d="M 593 211 V 245 M 593 225 A 14 14 0 0 1 621 225 V 245" />
+            <path d="M 578 211 V 245 M 578 225 A 14 14 0 0 1 606 225 V 245" />
 
             <!-- o -->
-            <circle cx="648" cy="228" r="17" />
+            <circle cx="633" cy="228" r="17" />
         </g>
     </g>
 </svg>
