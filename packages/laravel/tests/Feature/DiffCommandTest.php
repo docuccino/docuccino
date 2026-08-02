@@ -122,3 +122,82 @@ it('fails when the old artifact is missing', function (): void {
     $this->artisan('docuccino:diff', ['old' => '/nonexistent/path.json'])
         ->assertFailed();
 });
+
+it('fails a breaking change under date-version enforcement without a newer date', function (): void {
+    bindStubEngine();
+    config()->set('docuccino.documents.default.versioning', 'date');
+
+    $old = writeArtifact(withExtraOperation(...));
+
+    $this->artisan('docuccino:diff', ['old' => $old, '--enforce' => true])
+        ->assertFailed();
+
+    @unlink($old);
+});
+
+it('passes enforcement for a purely additive (non-breaking) change', function (): void {
+    bindStubEngine();
+    config()->set('docuccino.documents.default.versioning', 'semver');
+
+    // The old side is missing an operation the current document has → an addition, not a removal.
+    $old = writeArtifact(function (array $uir): array {
+        $paths = is_array($uir['paths'] ?? null) ? $uir['paths'] : [];
+        unset($paths['/api/forms']);
+        $uir['paths'] = $paths;
+
+        return $uir;
+    });
+
+    $this->artisan('docuccino:diff', ['old' => $old, '--enforce' => true])
+        ->assertSuccessful();
+
+    @unlink($old);
+});
+
+it('fails when the two documents were built with different identity-algorithm versions', function (): void {
+    bindStubEngine();
+
+    // Re-stamp every operation identity to a different algo version → the differ refuses to pair.
+    $old = writeArtifact(fn (array $uir): array => json_decode(
+        str_replace('op:v1:', 'op:v2:', (string) json_encode($uir)),
+        true,
+        flags: JSON_THROW_ON_ERROR,
+    ));
+
+    $this->artisan('docuccino:diff', ['old' => $old])
+        ->expectsOutputToContain('identity-algorithm')
+        ->assertFailed();
+
+    @unlink($old);
+});
+
+it('fails on a malformed old artifact', function (): void {
+    bindStubEngine();
+
+    $old = sys_get_temp_dir().'/docuccino-bad-'.uniqid().'.json';
+    file_put_contents($old, '{ this is not json');
+
+    $this->artisan('docuccino:diff', ['old' => $old])
+        ->expectsOutputToContain('Could not parse')
+        ->assertFailed();
+
+    @unlink($old);
+});
+
+it('fails when git show cannot read the ref', function (): void {
+    bindStubEngine();
+
+    Process::fake(['*git*show*' => Process::result(errorOutput: 'fatal: bad revision', exitCode: 128)]);
+
+    $this->artisan('docuccino:diff', ['old' => 'docs/openapi.json', '--against' => 'HEAD'])
+        ->expectsOutputToContain('git show')
+        ->assertFailed();
+});
+
+it('rejects a git ref that starts with a dash', function (): void {
+    bindStubEngine();
+
+    $this->artisan('docuccino:diff', ['old' => 'docs/openapi.json', '--against' => '--upload-pack=evil'])
+        ->expectsOutputToContain('must not start with')
+        ->assertFailed();
+});

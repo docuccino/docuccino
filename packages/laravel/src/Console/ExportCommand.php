@@ -27,6 +27,9 @@ final class ExportCommand extends Command
     use GuardsEnabled;
     use RendersDiagnostics;
 
+    /** The emitter formats a caller may name via --format. */
+    private const FORMATS = ['uir', 'openapi-3.2', 'openapi-3.1'];
+
     protected $signature = 'docuccino:export
         {document? : The configured document key (defaults to every document)}
         {--format= : uir | openapi-3.2 | openapi-3.1 (defaults to openapi-3.2)}
@@ -46,6 +49,15 @@ final class ExportCommand extends Command
         $only = $this->argument('document');
         if (is_string($only) && ! $builder->hasDocument($only)) {
             $this->error(sprintf('Unknown document "%s".', $only));
+
+            return self::FAILURE;
+        }
+
+        // An explicit --format must name a real emitter — a typo errors rather than silently
+        // falling back to OpenAPI 3.2 (which would ship the wrong artifact).
+        $format = $this->option('format');
+        if (is_string($format) && $format !== '' && ! in_array($format, self::FORMATS, true)) {
+            $this->error(sprintf('Unknown --format "%s"; expected one of: %s.', $format, implode(', ', self::FORMATS)));
 
             return self::FAILURE;
         }

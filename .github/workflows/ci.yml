@@ -56,6 +56,11 @@ jobs:
             composer install --no-interaction --no-progress
           fi
 
+      # Golden fixtures must be committed, never regenerated in CI: DOCUCCINO_UPDATE_GOLDEN=1
+      # rewrites them in place, which would let a drifting document masquerade as green.
+      - name: Guard against golden auto-update in CI
+        run: test -z "$DOCUCCINO_UPDATE_GOLDEN"
+
       - name: Pint (code style)
         run: vendor/bin/pint --test
 
