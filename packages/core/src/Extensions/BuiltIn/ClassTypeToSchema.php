@@ -10,7 +10,6 @@ use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Support\Fqcn;
 
@@ -75,7 +74,7 @@ final class ClassTypeToSchema implements TypeToSchema
                 $schema['description'] = $property->summary;
             }
             $properties[$property->name] = $schema;
-            if (! self::isNullable($property->type)) {
+            if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
                 $required[] = $property->name;
             }
         }
@@ -88,20 +87,5 @@ final class ClassTypeToSchema implements TypeToSchema
         }
 
         return new SchemaResult($context->reference($name, $object, $fqcn), 0.9);
-    }
-
-    private static function isNullable(DType $type): bool
-    {
-        if (! $type instanceof UnionT) {
-            return false;
-        }
-
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

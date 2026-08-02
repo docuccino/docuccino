@@ -14,7 +14,6 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
-use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\EnumReflection;
@@ -86,7 +85,7 @@ final class ModelSchema implements TypeToSchema
             }
             $properties[$property->name] = $schema;
 
-            if (! self::isNullable($property->type)) {
+            if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
                 $required[] = $property->name;
             }
         }
@@ -157,20 +156,5 @@ final class ModelSchema implements TypeToSchema
     {
         // $visible is an allow-list when set; otherwise everything not in $hidden is visible.
         return $visible !== [] ? in_array($column, $visible, true) : ! in_array($column, $hidden, true);
-    }
-
-    private static function isNullable(DType $type): bool
-    {
-        if (! $type instanceof UnionT) {
-            return false;
-        }
-
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

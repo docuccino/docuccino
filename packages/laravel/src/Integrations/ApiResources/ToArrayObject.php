@@ -9,7 +9,6 @@ use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use ReflectionMethod;
 use Throwable;
@@ -77,7 +76,7 @@ final class ToArrayObject
 
             $properties[$key] = $context->convert($type);
 
-            if (! $field->optional && ! $conditional && ! self::isNullable($type)) {
+            if (! $field->optional && ! $conditional && ! ($type instanceof UnionT && $type->containsNull())) {
                 $required[] = $key;
             }
         }
@@ -103,31 +102,14 @@ final class ToArrayObject
             return [$type, false];
         }
 
-        $survivors = array_values(array_filter(
-            $type->members,
-            static fn (DType $member): bool => ! ($member instanceof ClassT && is_a($member->fqcn, ResourceReflector::MISSING_VALUE, true)),
-        ));
+        $stripped = $type->without(
+            static fn (DType $member): bool => $member instanceof ClassT && is_a($member->fqcn, ResourceReflector::MISSING_VALUE, true),
+        );
 
-        $conditional = count($survivors) !== count($type->members);
-        if (! $conditional) {
-            return [$type, false];
-        }
+        // A marker was present iff stripping changed the type (a bare `MissingValue` collapses the
+        // union to a single survivor; a fully-marker union is returned unchanged by without()).
+        $conditional = $stripped->canonicalKey() !== $type->canonicalKey();
 
-        return [count($survivors) === 1 ? $survivors[0] : UnionT::of($survivors), true];
-    }
-
-    private static function isNullable(DType $type): bool
-    {
-        if (! $type instanceof UnionT) {
-            return false;
-        }
-
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
+        return [$stripped, $conditional];
     }
 }

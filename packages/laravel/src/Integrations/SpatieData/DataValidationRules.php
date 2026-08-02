@@ -65,7 +65,7 @@ final class DataValidationRules
             $out[] = ValidationRule::of('required');
         }
 
-        if (self::isNullable($type) && ! in_array('nullable', $named, true)) {
+        if (($type instanceof UnionT && $type->containsNull()) && ! in_array('nullable', $named, true)) {
             $out[] = ValidationRule::of('nullable');
         }
 
@@ -104,26 +104,10 @@ final class DataValidationRules
             return $type;
         }
 
-        $members = array_values(array_filter(
-            $type->members,
-            static fn (DType $member): bool => ! $member instanceof NullT,
-        ));
+        // Strip null; a simple `T|null` collapses to `T`. A multi-member union (`A|B|null`) keeps its
+        // original shape — there is no single base type to derive a scalar rule from.
+        $stripped = $type->without(static fn (DType $member): bool => $member instanceof NullT);
 
-        return count($members) === 1 ? $members[0] : $type;
-    }
-
-    private static function isNullable(DType $type): bool
-    {
-        if (! $type instanceof UnionT) {
-            return false;
-        }
-
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
+        return $stripped instanceof UnionT ? $type : $stripped;
     }
 }

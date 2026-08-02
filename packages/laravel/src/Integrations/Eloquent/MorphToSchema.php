@@ -13,7 +13,6 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
@@ -74,7 +73,7 @@ final class MorphToSchema implements TypeToSchema
             }
         }
 
-        if ($this->isNullable($type)) {
+        if ($type->containsNull()) {
             $variants[] = ['type' => 'null'];
         }
 
@@ -103,17 +102,6 @@ final class MorphToSchema implements TypeToSchema
         }
 
         return $models;
-    }
-
-    private function isNullable(UnionT $type): bool
-    {
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /** The morph-map alias a model serialises its type as, or null when it is unmapped. */

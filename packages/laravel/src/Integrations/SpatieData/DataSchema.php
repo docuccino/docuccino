@@ -13,7 +13,6 @@ use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
@@ -106,7 +105,7 @@ final class DataSchema implements TypeToSchema
             $key = $this->reflector->outputName($fqcn, $property->name);
             $properties[$key] = $schema;
 
-            if (! $this->reflector->isPropertyOptional($fqcn, $property->name) && ! self::isNullable($clean)) {
+            if (! $this->reflector->isPropertyOptional($fqcn, $property->name) && ! ($clean instanceof UnionT && $clean->containsNull())) {
                 $required[] = $key;
             }
         }
@@ -142,29 +141,7 @@ final class DataSchema implements TypeToSchema
             return $type;
         }
 
-        $members = array_values(array_filter(
-            $type->members,
-            static fn (DType $member): bool => ! (
-                $member instanceof ClassT
-                && (is_a($member->fqcn, DataClassReflector::OPTIONAL, true) || is_a($member->fqcn, DataClassReflector::LAZY, true))
-            ),
-        ));
-
-        return $members === [] ? $type : UnionT::of($members);
-    }
-
-    private static function isNullable(DType $type): bool
-    {
-        if (! $type instanceof UnionT) {
-            return false;
-        }
-
-        foreach ($type->members as $member) {
-            if ($member instanceof NullT) {
-                return true;
-            }
-        }
-
-        return false;
+        return $type->without(static fn (DType $member): bool => $member instanceof ClassT
+            && (is_a($member->fqcn, DataClassReflector::OPTIONAL, true) || is_a($member->fqcn, DataClassReflector::LAZY, true)));
     }
 }

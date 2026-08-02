@@ -44,6 +44,33 @@ final readonly class UnionT extends DType
         return self::KIND;
     }
 
+    /** Whether this union has a `null` member (its nullability). */
+    public function containsNull(): bool
+    {
+        foreach ($this->members as $member) {
+            if ($member instanceof NullT) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * This union with every member the predicate rejects removed (e.g. a `MissingValue`/`Optional`
+     * marker, or `null`). Re-canonicalises via {@see of()}, so a single survivor collapses to that
+     * member. Rejecting every member is treated as a no-op — the union is returned unchanged rather
+     * than an empty/unknown type, since a type made purely of markers has nothing to strip to.
+     *
+     * @param  callable(DType): bool  $reject
+     */
+    public function without(callable $reject): DType
+    {
+        $survivors = array_values(array_filter($this->members, static fn (DType $member): bool => ! $reject($member)));
+
+        return $survivors === [] ? $this : self::of($survivors);
+    }
+
     public function toArray(): array
     {
         return [
