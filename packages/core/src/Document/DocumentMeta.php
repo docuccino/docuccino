@@ -6,6 +6,8 @@ namespace Docuccino\Core\Document;
 
 /**
  * `x-docuccino.document` — document identity and content-addressing metadata.
+ *
+ * @internal
  */
 final readonly class DocumentMeta
 {

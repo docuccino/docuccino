@@ -12,6 +12,8 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
  * with `x-docuccino.generator` and `x-docuccino.diagnostics` excluded, so tool upgrades and diagnostic
  * churn never dirty committed diffs. The `x-docuccino.document.contentHash` field is itself excluded —
  * a hash cannot be one of its own inputs, so the value is recomputable and stable across rewrites.
+ *
+ * @internal
  */
 final readonly class ContentHasher
 {

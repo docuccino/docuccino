@@ -15,6 +15,8 @@ use stdClass;
  * Handlers accept `mixed` and pass malformed values through unchanged so canonicalisation
  * is total. Empty object-typed members are emitted as {@see stdClass} so the serializer
  * writes `{}` rather than `[]`; `x-*` members other than `x-docuccino` pass through verbatim.
+ *
+ * @internal
  */
 final class Canonicalizer
 {

@@ -22,6 +22,8 @@ use Docuccino\Core\Support\Arr;
  *
  * Everything else in 3.2 is a superset-compatible subset of 3.1's JSON Schema dialect and
  * passes through unchanged.
+ *
+ * @internal
  */
 final readonly class OpenApi31DownlevelEmitter implements Emitter
 {

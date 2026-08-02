@@ -21,6 +21,8 @@ use Docuccino\Core\Overlay\OverlayDocument;
  * path/method, hoists and identifies components, stamps document identity + generator metadata,
  * applies overlays and document transformers, and computes the content hash. Duplicate operation
  * identities (two routes claiming one `GET /x`) are error diagnostics, never silent overwrites.
+ *
+ * @internal
  */
 final class Assembler
 {

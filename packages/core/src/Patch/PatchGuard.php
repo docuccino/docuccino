@@ -23,6 +23,8 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  * Provenance is reconstructed on demand: fields sharing a producer/layer/source/confidence
  * collapse into one record; only currently-winning fields yield records, so losers survive
  * solely inside `overrode`.
+ *
+ * @internal
  */
 final class PatchGuard
 {

@@ -17,6 +17,8 @@ use Docuccino\Core\Document\UirDocument;
  *
  * Output flows through the shared canonical serializer, so 3.2 emission is byte-deterministic
  * and, with default options, round-trips losslessly against the x-docuccino-stripped UIR.
+ *
+ * @internal
  */
 final readonly class OpenApi32Emitter implements Emitter
 {

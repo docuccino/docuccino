@@ -15,6 +15,8 @@ use Docuccino\Core\Document\Operation;
  * unit — a warm cache hit can reconstruct the operation, restore every component it points at, and
  * replay its diagnostics without touching the type engine, and can never leave a dangling `$ref`
  * when the route that first owned a shared component is removed.
+ *
+ * @internal
  */
 final readonly class OperationFragment
 {

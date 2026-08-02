@@ -11,6 +11,8 @@ use ReflectionFunctionAbstract;
  * A route's action resolved to the pieces both the resolver (attribute filtering) and the
  * context builder (attribute collection, inference) need: the engine {@see ActionRef}, the
  * PHP reflection of the handler, and the controller/invokable FQCN (null for closure routes).
+ *
+ * @internal
  */
 final readonly class ReflectedAction
 {

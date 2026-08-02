@@ -11,6 +11,8 @@ use Docuccino\Core\Diagnostics\Severity;
  * Collects build diagnostics and returns them in a deterministic order (design §5: never
  * time-based) — grouped by route signature, then by severity, code and message — so CLI output
  * and any `--embed-diagnostics` payload are byte-stable across runs.
+ *
+ * @internal
  */
 final class DiagnosticBag
 {

@@ -16,6 +16,8 @@ use Docuccino\Core\Inference\TypeEngine;
  * a null result defers to the next. Nested types recurse through {@see convert()}, so mappers
  * compose without knowing the chain. It is the {@see SchemaContext} the mappers receive, and it
  * tracks the lowest confidence any mapper reports across a whole top-level conversion.
+ *
+ * @internal
  */
 final class SchemaConverter implements SchemaContext
 {

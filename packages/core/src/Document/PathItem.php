@@ -9,6 +9,8 @@ use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS path item: shared parameters plus one operation per HTTP method.
+ *
+ * @internal
  */
 final readonly class PathItem
 {

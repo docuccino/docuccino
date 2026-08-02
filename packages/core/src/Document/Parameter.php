@@ -9,6 +9,8 @@ use Docuccino\Core\Support\Hydrate;
 /**
  * An OAS parameter object. Modelled fields are typed; every other member (style, explode,
  * example, content, $ref, x-*) is preserved verbatim in `rest`.
+ *
+ * @internal
  */
 final readonly class Parameter
 {

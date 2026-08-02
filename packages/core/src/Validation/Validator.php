@@ -18,6 +18,8 @@ use RuntimeException;
  * dependency-light (no illuminate/symfony). The document is canonicalised and serialised
  * first, then decoded to the object graph opis expects — so validation runs against the
  * exact bytes the emitter would produce, and empty objects present as `{}` not `[]`.
+ *
+ * @internal
  */
 final class Validator
 {

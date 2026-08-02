@@ -24,6 +24,8 @@ use ReflectionNamedType;
  * docblock summary/description, and derives path parameters and route-model bindings from the
  * template and the action signature. Returns null when the action cannot be reflected so the
  * generator emits a skeleton.
+ *
+ * @internal
  */
 final class RouteContextBuilder
 {

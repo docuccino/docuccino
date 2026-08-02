@@ -17,6 +17,8 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
  * key remains legible.
  *
  * Identity inputs never include file paths, line numbers or array positions.
+ *
+ * @internal
  */
 final readonly class IdentityGenerator
 {

@@ -20,6 +20,8 @@ use Throwable;
  * The extension set for one build, partitioned by contract and pre-sorted within each partition
  * by {@see ExtensionSorter}. One instance may satisfy several
  * contracts and appears in each matching partition.
+ *
+ * @internal
  */
 final readonly class ResolvedExtensions
 {

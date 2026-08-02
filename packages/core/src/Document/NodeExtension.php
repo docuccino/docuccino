@@ -12,6 +12,8 @@ use Docuccino\Core\Support\Hydrate;
  * id, provenance and mock hints. The document-level counterpart (identity,
  * generator, content, diagnostics) is {@see DocumentExtension}. Unknown members
  * are preserved verbatim to honour additive forward compatibility.
+ *
+ * @internal
  */
 final readonly class NodeExtension
 {

@@ -19,6 +19,8 @@ use Symfony\Component\Yaml\Yaml;
  * {@see DocumentConfig}, loads the document's Overlay 1.0 files (a malformed overlay becomes a
  * warning diagnostic rather than a fatal), merges the config extensions, and runs the pipeline.
  * Centralising this keeps export/validate/diff/cache/viewer on one identical build path.
+ *
+ * @internal
  */
 final class DocumentBuilder
 {

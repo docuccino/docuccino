@@ -10,6 +10,8 @@ use Docuccino\Core\Document\UirDocument;
 
 /**
  * A generated document plus its deterministically-ordered diagnostics.
+ *
+ * @internal
  */
 final readonly class GenerationResult
 {

@@ -8,6 +8,8 @@ use Docuccino\Core\Support\Hydrate;
 
 /**
  * An OAS response object (or a `$ref` to one). Non-modelled members survive in `rest`.
+ *
+ * @internal
  */
 final readonly class ResponseObject
 {

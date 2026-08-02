@@ -14,6 +14,8 @@ use Throwable;
  * class-level (the {@see AttributeSet} preserves this most-specific-first order, so method
  * attributes beat class attributes — design §7). Only `Docuccino\Attributes\*` instances are
  * materialised; foreign attributes are ignored, and any that fail to instantiate are skipped.
+ *
+ * @internal
  */
 final class AttributeCollector
 {

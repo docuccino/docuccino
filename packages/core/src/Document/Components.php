@@ -9,6 +9,8 @@ use Docuccino\Core\Support\Hydrate;
 /**
  * The OAS components object. Reusable schemas/responses/parameters are modelled; the
  * remaining sections (examples, headers, securitySchemes, …) are preserved in `rest`.
+ *
+ * @internal
  */
 final readonly class Components
 {

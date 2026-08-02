@@ -6,6 +6,8 @@ namespace Docuccino\Core\Identity;
 
 /**
  * RFC 4648 base32 encoder, lowercase, no padding — the alphabet used for UIR identities.
+ *
+ * @internal
  */
 final class Base32
 {

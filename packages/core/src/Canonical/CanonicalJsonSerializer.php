@@ -15,6 +15,8 @@ use stdClass;
  * Member order is the caller's responsibility (see {@see Canonicalizer}); this writer
  * preserves the insertion order it is given. Empty objects must be passed as
  * {@see stdClass} so they serialize as `{}` rather than `[]`.
+ *
+ * @internal
  */
 final class CanonicalJsonSerializer
 {

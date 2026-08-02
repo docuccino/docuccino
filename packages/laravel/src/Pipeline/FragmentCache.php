@@ -23,6 +23,8 @@ use JsonException;
  *
  * Storage is a flat directory of `{key}.json` files written atomically (temp file + rename), with a
  * simple `enabled` off-switch.
+ *
+ * @internal
  */
 final readonly class FragmentCache
 {

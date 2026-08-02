@@ -17,6 +17,8 @@ use Docuccino\Core\Support\Arr;
  * `producer: overlay`, `layer: overlay`, and the prior value captured in `overrode` — so the
  * "why is it documented this way" trail survives regeneration. An unsupported selector yields an
  * error diagnostic; a target matching nothing yields a warning — never a silent skip.
+ *
+ * @internal
  */
 final class OverlayApplier
 {

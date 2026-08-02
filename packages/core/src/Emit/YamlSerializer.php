@@ -15,6 +15,8 @@ use Symfony\Component\Yaml\Yaml;
  * Style: 2-space indent, block collections at every depth (only empty maps/lists render
  * inline, as `{  }` / `[]`), multi-line string literals preserved as literal blocks, and
  * `stdClass` empty-object markers dumped as maps.
+ *
+ * @internal
  */
 final class YamlSerializer
 {

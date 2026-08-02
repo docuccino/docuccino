@@ -24,6 +24,8 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
  * implements only the core contracts). Class-strings are container-resolved; the core type
  * mappers are stateless instances. Resolved through the same {@see ExtensionRegistry} path as
  * config and programmatic registrations.
+ *
+ * @internal
  */
 final class DefaultExtensions
 {

@@ -17,6 +17,8 @@ use Throwable;
  * action shapes: a `Class@method` controller, a single-action invokable class (`__invoke`), and
  * a closure route. Returns null when the handler cannot be reflected (e.g. a string action whose
  * class is missing) so callers can fall back to a skeleton.
+ *
+ * @internal
  */
 final class RouteReflector
 {

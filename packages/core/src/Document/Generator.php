@@ -6,6 +6,8 @@ namespace Docuccino\Core\Document;
 
 /**
  * `x-docuccino.generator` — excluded from `contentHash` so tool upgrades never dirty diffs.
+ *
+ * @internal
  */
 final readonly class Generator
 {

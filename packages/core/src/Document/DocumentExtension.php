@@ -9,6 +9,8 @@ use Docuccino\Core\Support\Hydrate;
 
 /**
  * Document-level `x-docuccino` member: identity, generator, content tree and diagnostics.
+ *
+ * @internal
  */
 final readonly class DocumentExtension
 {

@@ -21,6 +21,8 @@ use Docuccino\Core\Document\UirDocument;
  *
  * The default is `full`, so a plain `emit()` reproduces the committed goldens byte-for-byte;
  * the CLI selects `winners` for committed artifacts.
+ *
+ * @internal
  */
 final readonly class UirEmitter implements Emitter
 {

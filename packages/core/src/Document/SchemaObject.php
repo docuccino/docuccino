@@ -7,6 +7,8 @@ namespace Docuccino\Core\Document;
 /**
  * A JSON Schema 2020-12 object. The keyword space is open and recursive, so the raw
  * associative form is preserved wholesale; `x-docuccino` and any `x-*` members survive verbatim.
+ *
+ * @internal
  */
 final readonly class SchemaObject
 {

@@ -10,6 +10,8 @@ namespace Docuccino\Core\Support;
  * the immutable document model expects, dropping anything malformed. Every
  * `fromArray()` in the model reaches for one of these instead of hand-rolling
  * the same guarded loops.
+ *
+ * @internal
  */
 final class Hydrate
 {

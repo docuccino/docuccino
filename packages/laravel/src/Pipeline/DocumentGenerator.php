@@ -30,6 +30,8 @@ use Throwable;
  * validate against the bundled UIR schema, and return a {@see UirDocument} with deterministic
  * diagnostics. A broken route yields a skeleton (or is omitted) and an error diagnostic — never a
  * dead build.
+ *
+ * @internal
  */
 final class DocumentGenerator
 {

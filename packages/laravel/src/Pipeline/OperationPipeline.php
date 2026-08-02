@@ -14,6 +14,8 @@ use Docuccino\Laravel\Registry\ResolvedExtensions;
  * {@see OperationPhase} declaration order, and within a phase the extensions in their resolved
  * (topologically sorted) order. All writes flow through the draft's PatchGuard, so precedence
  * and provenance hold regardless of execution order.
+ *
+ * @internal
  */
 final class OperationPipeline
 {

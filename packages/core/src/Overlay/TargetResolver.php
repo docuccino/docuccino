@@ -22,6 +22,8 @@ use Docuccino\Core\Support\Arr;
  * Anything else — wildcards `*`, recursive descent `..`, slices `[1:3]`, unions, or comparison
  * operators other than `==` — is outside the subset and raises {@see UnsupportedSelectorException},
  * which the applier turns into an error diagnostic (never a silent skip).
+ *
+ * @internal
  */
 final class TargetResolver
 {

@@ -7,6 +7,8 @@ namespace Docuccino\Core\Support;
 /**
  * Small array helpers for the JSON boundary, where decoded data is typed
  * `array<mixed, mixed>` but object members are always string-keyed.
+ *
+ * @internal
  */
 final class Arr
 {

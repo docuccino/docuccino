@@ -9,6 +9,8 @@ use Docuccino\Core\Support\Hydrate;
 /**
  * An OAS operation object. Parameters and responses are modelled; every other member
  * (requestBody, callbacks, externalDocs, servers, x-*) is preserved verbatim in `rest`.
+ *
+ * @internal
  */
 final readonly class Operation
 {
