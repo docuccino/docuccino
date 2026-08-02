@@ -115,6 +115,22 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'image' => [[['image']], ['description' => 'An image file.', 'format' => 'binary', 'type' => 'string']],
 ]);
 
+it('normalises regex delimiters to a bare ECMA-262 pattern across delimiter styles', function (string $raw, string $expected): void {
+    $property = convertFieldRules([['regex', [$raw]]])->schema['properties']['f'];
+
+    expect($property['pattern'])->toBe($expected)
+        ->and($property['type'])->toBe('string');
+})->with([
+    'slash' => ['/^[a-z]+$/', '^[a-z]+$'],
+    'hash delimiter' => ['#^[a-z]+$#', '^[a-z]+$'],
+    'tilde + trailing flags' => ['~^\\d+$~i', '^\\d+$'],
+    'brace bracket-pair' => ['{^[0-9]+$}', '^[0-9]+$'],
+    'paren bracket-pair' => ['(hello)', 'hello'],
+    'angle bracket-pair' => ['<^x$>', '^x$'],
+    'too short → kept verbatim' => ['x', 'x'],
+    'no closing delimiter → kept verbatim' => ['/abc', '/abc'],
+]);
+
 it('applies every presence-rule entry to the required/nullable contract', function (): void {
     // required / present / filled all mark the field required.
     expect(convertFieldRules([['string'], ['required']])->schema['required'] ?? [])->toBe(['f']);
