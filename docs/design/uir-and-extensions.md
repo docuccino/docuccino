@@ -180,6 +180,22 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
   `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
+- **Placement rule (Tom, 2026-08-02 — decides "core or adapter?" for every new piece):**
+  **anything whose INPUT is the UIR document belongs in core; anything whose INPUT is
+  Laravel code belongs in the adapter.** Recovery is adapter-side; representation and
+  document-level analysis are core-side; framework-neutral machinery with framework-owned
+  vocabulary splits accordingly. Worked examples that set the precedent:
+  - Validation: normalized rule model + transformer chain + schema builder = core
+    (machinery); the Laravel rule VOCABULARY + rule RECOVERY (FormRequest/inline/Data
+    attributes) = adapter (`Integrations/Validation` + per-source integrations).
+  - Data-leakage lint (`Core\Lint\SensitiveFieldLint`): scans the emitted document —
+    core, even though some default heuristics table entries look Laravel-flavored
+    (they're neutral strings); the adapter contributes only config plumbing/registration.
+    `Core\Lint` is where future document-level rules (description coverage, naming)
+    accumulate — reusable by the reference CLI, other-language producers, and the SaaS.
+  - Corollary: pure, stable core utilities that integrations legitimately need (e.g.
+    `Core\Support\Fqcn`) get allow-listed in the arch test with justification — never
+    duplicated to dodge the boundary.
 
 ## 7. Precedence / patch semantics
 
