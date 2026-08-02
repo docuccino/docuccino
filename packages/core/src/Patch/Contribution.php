@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Patch;
 
+use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Provenance\Source;
 
 /**
@@ -57,6 +58,27 @@ final readonly class Contribution
     public static function config(?Source $source = null): self
     {
         return new self(Layer::Config, 'config', $source);
+    }
+
+    /**
+     * Build a contribution for a producer named at runtime (e.g. the winning
+     * {@see ExceptionToResponse} mapper), mapping the producer
+     * string to its precedence layer so a `fallback`-produced response can still be overridden by a
+     * later `inference`/`integration` one.
+     */
+    public static function forProducer(string $producer, ?Source $source = null, ?float $confidence = null): self
+    {
+        $layer = match (true) {
+            $producer === 'fallback' => Layer::Fallback,
+            $producer === 'docblock' => Layer::Docblock,
+            $producer === 'attribute' => Layer::Attribute,
+            $producer === 'overlay' => Layer::Overlay,
+            $producer === 'config' => Layer::Config,
+            str_starts_with($producer, 'integration:') => Layer::Integration,
+            default => Layer::Inference,
+        };
+
+        return new self($layer, $producer, $source, $confidence);
     }
 
     /**

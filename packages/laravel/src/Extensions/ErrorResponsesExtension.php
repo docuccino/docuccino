@@ -47,17 +47,17 @@ final class ErrorResponsesExtension implements OperationExtension
                     continue;
                 }
 
-                $this->merge($operation, $draft);
+                $this->merge($operation, $draft, $mapper->producer());
                 break;
             }
         }
     }
 
-    private function merge(OperationDraft $operation, ResponseDraft $draft): void
+    private function merge(OperationDraft $operation, ResponseDraft $draft, string $producer): void
     {
         $frozen = $draft->freeze();
         $response = $operation->response($draft->status);
-        $contribution = Contribution::inference();
+        $contribution = Contribution::forProducer($producer);
 
         if ($frozen->description !== null) {
             $response->setDescription($frozen->description, $contribution);

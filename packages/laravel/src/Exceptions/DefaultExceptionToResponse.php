@@ -40,6 +40,11 @@ final class DefaultExceptionToResponse implements ExceptionToResponse
         return true;
     }
 
+    public function producer(): string
+    {
+        return 'fallback';
+    }
+
     public function toResponse(
         ThrownException $exception,
         RouteContext $context,

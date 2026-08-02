@@ -212,8 +212,8 @@
               "id": "res:v1:far53ijjlik5mgki",
               "provenance": [
                 {
-                  "producer": "inference",
-                  "layer": "inference",
+                  "producer": "fallback",
+                  "layer": "fallback",
                   "fields": [
                     "description"
                   ]
@@ -227,8 +227,8 @@
                   "x-docuccino": {
                     "provenance": [
                       {
-                        "producer": "inference",
-                        "layer": "inference",
+                        "producer": "fallback",
+                        "layer": "fallback",
                         "fields": [
                           "properties",
                           "type"
@@ -579,7 +579,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "a97d5ea2e68d1b05feb07773ba214c9cee7f8c7bc84b31616e0bfba55cc03571",
-      "contentHash": "be205fbaa0cede35f1f2961d133f77b5a599cb34f7b28cb01338a120dec6fbda"
+      "contentHash": "7786d809efe4358e79b951b217767bcea784b6a37661b4b971a98d7c73bc2129"
     },
     "generator": {
       "name": "docuccino/laravel",
