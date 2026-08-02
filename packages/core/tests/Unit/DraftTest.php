@@ -126,7 +126,7 @@ it('carries a parameter x-docuccino semantic fact through freeze alongside id/pr
     $frozen = $parameter->freeze()->toArray();
 
     expect($frozen['x-docuccino']['id'])->toBe('par:v1:bbbbbbbbbbbbbbbb')
-        ->and($frozen['x-docuccino']['routeBinding'])->toBe(['withTrashed' => true]);
+        ->and($frozen['x-docuccino']['facts']['routeBinding'])->toBe(['withTrashed' => true]);
 });
 
 it('carries schema mock hints through freeze into x-docuccino.mock', function (): void {

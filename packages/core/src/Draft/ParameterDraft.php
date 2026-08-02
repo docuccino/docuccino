@@ -22,9 +22,9 @@ final class ParameterDraft
     private readonly SchemaDraft $schema;
 
     /**
-     * Additive semantic facts an integration records under this parameter's `x-docuccino` (design
-     * §Representation policies — facts stay stable regardless of representation). Not contested
-     * fields, so they bypass the guard.
+     * Additive semantic facts an integration records under this parameter's `x-docuccino.facts`
+     * (design §Representation policies — facts stay stable regardless of representation). Not
+     * contested fields, so they bypass the guard.
      *
      * @var array<string, mixed>
      */
@@ -110,7 +110,11 @@ final class ParameterDraft
         $schema = $this->schema->freeze();
         $schemaOrNull = $schema->toArray() === [] ? null : $schema;
 
-        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance(), rest: $this->facts);
+        $docuccino = new NodeExtension(
+            id: $this->id,
+            provenance: $this->guard->provenance(),
+            rest: $this->facts === [] ? [] : ['facts' => $this->facts],
+        );
 
         return new Parameter(
             name: $this->name,

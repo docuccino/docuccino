@@ -19,8 +19,8 @@ use Docuccino\Core\Patch\Contribution;
  * the higher attribute layer.
  *
  * When the route allows trashed bindings (`->withTrashed()`), each bound parameter is flagged: a note
- * is appended to its description and a stable `x-docuccino.routeBinding.withTrashed` semantic fact is
- * recorded, so consumers know a soft-deleted record resolves here.
+ * is appended to its description and a stable `x-docuccino.facts.routeBinding.withTrashed` semantic
+ * fact is recorded, so consumers know a soft-deleted record resolves here.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class PathParametersExtension implements OperationExtension

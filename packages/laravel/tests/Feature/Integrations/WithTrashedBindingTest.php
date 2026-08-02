@@ -32,7 +32,7 @@ it('flags a withTrashed bound parameter with a note and an x-docuccino fact', fu
     $parameter = pathParameter($operation, 'form');
     expect($parameter)->not->toBeNull();
     expect($parameter['description'])->toContain('soft-deleted (trashed)')
-        ->and($parameter['x-docuccino']['routeBinding'])->toBe(['withTrashed' => true]);
+        ->and($parameter['x-docuccino']['facts']['routeBinding'])->toBe(['withTrashed' => true]);
 });
 
 it('leaves a normal bound parameter unflagged', function (): void {
@@ -41,6 +41,6 @@ it('leaves a normal bound parameter unflagged', function (): void {
 
     $parameter = pathParameter($operation, 'form');
     expect($parameter)->not->toBeNull();
-    expect($parameter['x-docuccino']['routeBinding'] ?? null)->toBeNull();
+    expect($parameter['x-docuccino']['facts'] ?? null)->toBeNull();
     expect($parameter['description'] ?? null)->not->toBe('Resolves soft-deleted (trashed) records as well as active ones.');
 });

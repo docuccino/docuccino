@@ -67,6 +67,13 @@ final class WorkbenchEngine
         $missing = new ClassT('Illuminate\\Http\\Resources\\MissingValue');
 
         return new StubTypeEngine(
+            traces: [
+                // Scripts the Query Builder trace so the golden exercises the QB integration
+                // deterministically (the stub engine has no real trace) — mirrors the Spike-B chain.
+                'Workbench\\App\\Http\\Controllers\\WidgetQueryController::index' => QbTraceScript::forChain(
+                    "QueryBuilder::for(Form::class)->allowedFilters(['name', AllowedFilter::exact('status')])->allowedSorts(['name', 'created_at'])->defaultSort('name')->paginate(20)",
+                ),
+            ],
             analyses: [
                 'Workbench\\App\\Http\\Requests\\StoreWidgetRequest::rules' => new ActionAnalysis(
                     returns: [new ReturnSite($storeWidgetRules, $location)],

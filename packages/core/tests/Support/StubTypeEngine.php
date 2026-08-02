@@ -22,10 +22,14 @@ final class StubTypeEngine implements TypeEngine
     /**
      * @param  array<string, ActionAnalysis>  $analyses  keyed by ActionRef::symbol()
      * @param  array<string, ClassMetadata>  $classes  keyed by FQCN
+     * @param  array<string, callable(TraceVisitor): void>  $traces  keyed by ActionRef::symbol(): a
+     *                                                               scripted walk that drives the visitor deterministically (stands in for the real trace so a
+     *                                                               trace-based integration, e.g. the Query Builder, can be exercised in-process)
      */
     public function __construct(
         private array $analyses = [],
         private array $classes = [],
+        private array $traces = [],
     ) {}
 
     public function analyzeAction(ActionRef $action): ActionAnalysis
@@ -40,6 +44,11 @@ final class StubTypeEngine implements TypeEngine
 
     public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
-        return new TraceReport;
+        $script = $this->traces[$action->symbol()] ?? null;
+        if ($script !== null) {
+            $script($visitor);
+        }
+
+        return new TraceReport($action->file === '' ? [] : [$action->file]);
     }
 }

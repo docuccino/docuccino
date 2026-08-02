@@ -13,6 +13,7 @@ use Workbench\App\Http\Controllers\IntegrationsController;
 use Workbench\App\Http\Controllers\SecretController;
 use Workbench\App\Http\Controllers\ValidationController;
 use Workbench\App\Http\Controllers\WidgetController;
+use Workbench\App\Http\Controllers\WidgetQueryController;
 
 /**
  * The base testbench case for the Laravel adapter: registers the package provider and the
@@ -48,6 +49,13 @@ abstract class TestCase extends Orchestra
         $router->get('api/secret', [SecretController::class, 'index']);
         $router->get('api/broken', [BrokenController::class, 'ghost']);
         $router->get('api/ping', static fn () => response()->json(['pong' => true]));
+
+        // Phase-4b wave-1 integration routes: Query Builder (scripted trace), rate limiting,
+        // spatie/laravel-permission, and a withTrashed route-model binding.
+        $router->get('api/widget-query', [WidgetQueryController::class, 'index']);
+        $router->get('api/rate-limited', [FormController::class, 'index'])->middleware('throttle:60,1');
+        $router->get('api/moderated-forms', [FormController::class, 'index'])->middleware('permission:moderate forms,web');
+        $router->get('api/archived-forms/{form}', [FormController::class, 'show'])->withTrashed();
 
         // Phase-4 integration routes (Spatie Data, API Resources, JSON:API, Eloquent, status codes).
         $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);

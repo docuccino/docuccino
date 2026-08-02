@@ -6,6 +6,52 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/archived-forms/{form}": {
+      "get": {
+        "summary": "Show a form.",
+        "tags": [
+          "Forms"
+        ],
+        "parameters": [
+          {
+            "name": "form",
+            "in": "path",
+            "description": "Resolves soft-deleted (trashed) records as well as active ones.",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormData"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/article-resources": {
       "get": {
         "summary": "An anonymous resource collection → array of the item schema.",
@@ -277,8 +323,102 @@
         }
       }
     },
+    "/api/moderated-forms": {
+      "get": {
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-permissions": [
+          {
+            "type": "permission",
+            "values": [
+              "moderate forms"
+            ],
+            "guard": "web"
+          }
+        ]
+      }
+    },
     "/api/ping": {
       "get": {}
+    },
+    "/api/rate-limited": {
+      "get": {
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests — the rate limit for this endpoint has been exceeded.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before making another request.",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "The maximum number of requests permitted in the current window.",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "The number of requests remaining in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "/api/reports": {
       "post": {
@@ -381,6 +521,63 @@
             }
           }
         }
+      }
+    },
+    "/api/widget-query": {
+      "get": {
+        "summary": "List forms, filterable and sortable via the query string.",
+        "parameters": [
+          {
+            "name": "filter[name]",
+            "in": "query",
+            "description": "Partial-match filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filter[status]",
+            "in": "query",
+            "description": "Exact-match filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Items per page.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort by: name, created_at (prefix `-` for descending).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "name"
+            }
+          }
+        ]
       }
     },
     "/api/widgets": {
