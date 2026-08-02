@@ -11,11 +11,18 @@
         <testsuite name="inference">
             <directory>packages/inference-phpstan/tests</directory>
         </testsuite>
+        <testsuite name="attributes">
+            <directory>packages/attributes/tests</directory>
+        </testsuite>
+        <testsuite name="laravel">
+            <directory>packages/laravel/tests</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
             <directory>packages/core/src</directory>
             <directory>packages/inference-phpstan/src</directory>
+            <directory>packages/laravel/src</directory>
         </include>
     </source>
 </phpunit>
