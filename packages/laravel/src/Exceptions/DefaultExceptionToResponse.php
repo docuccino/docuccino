@@ -53,7 +53,10 @@ final class DefaultExceptionToResponse implements ExceptionToResponse
         $status = $exception->httpStatusHint ?? 500;
 
         $draft = new ResponseDraft((string) $status);
-        $contribution = Contribution::inference();
+        // This is the terminal fallback tier: its contribution must carry the fallback producer/layer
+        // (matching producer() above), so any inference/integration/preset response for the same
+        // status correctly outranks it rather than tying at the inference layer.
+        $contribution = Contribution::forProducer('fallback', $context->actionSource());
 
         $draft->setDescription(self::STATUS_TEXT[$status] ?? 'Error', $contribution);
         $draft->content('application/json')->set('type', 'object', $contribution);
