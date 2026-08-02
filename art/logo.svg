@@ -26,9 +26,10 @@
         <path d="M 165 159 A 80 80 0 0 0 165 291" fill="none" stroke="#131416" stroke-width="4" stroke-linecap="round" opacity="0.4" />
     </g>
 
-    <!-- Coffee Mug Handle -->
+    <!-- Coffee Mug Handle (straight-cut, filled — v2 style) -->
     <g>
-        <path d="M 264 205 C 290 205, 290 245, 264 245" fill="none" stroke="#131416" stroke-width="6" stroke-linecap="round" />
+        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="#967D64" />
+        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
     </g>
 
     <!-- Cup Interior & Coffee Liquid -->
@@ -51,8 +52,8 @@
         <path d="M 228 198 Q 238 198 238 208 Q 238 220 248 225 Q 238 230 238 242 Q 238 252 228 252" />
     </g>
 
-    <!-- Wordmark -->
-    <g fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Wordmark (nudged +14 right to clear the straight-cut handle) -->
+    <g fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" transform="translate(14,0)">
         <!-- 'd' -->
         <g stroke="#F25A38">
             <circle cx="342" cy="228" r="17" />

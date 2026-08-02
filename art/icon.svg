@@ -1,7 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="106 131 188 188" width="100%" height="100%">
-    <!-- Icon-only mark derived from logo.svg v3 (stroke handle, no text — fully
-         font-independent). Square viewBox for avatar/favicon use, with margin so the
-         handle curve (extends to ~x287 incl. stroke) never clips the right edge. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="112 116 220 220" width="100%" height="100%">
+    <!-- Icon-only mark matching logo.svg (straight-cut filled handle). Square viewBox
+         for avatar/favicon use; handle extends to ~x328 incl. stroke, right margin kept. -->
     <defs>
         <clipPath id="baseClip">
             <path d="M 135 145 H 254 L 284 175 A 80 80 0 0 1 210 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" />
@@ -20,9 +19,10 @@
         <path d="M 165 159 A 80 80 0 0 0 165 291" fill="none" stroke="#131416" stroke-width="4" stroke-linecap="round" opacity="0.4" />
     </g>
 
-    <!-- Coffee Mug Handle -->
+    <!-- Coffee Mug Handle (straight-cut, filled — matches logo) -->
     <g>
-        <path d="M 264 205 C 290 205, 290 245, 264 245" fill="none" stroke="#131416" stroke-width="6" stroke-linecap="round" />
+        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="#967D64" />
+        <path d="M 280 190 h 30 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -30" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
     </g>
 
     <!-- Cup Interior & Coffee Liquid -->
