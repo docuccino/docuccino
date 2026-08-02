@@ -31,8 +31,8 @@ final class CastSchema
             'real', 'float', 'double' => ['type' => 'number'],
             'decimal' => ['type' => 'string'],
             'string', 'encrypted', 'hashed' => ['type' => 'string'],
-            'array', 'collection', 'encrypted:array', 'encrypted:collection' => ['type' => 'array'],
-            'object', 'encrypted:object' => ['type' => 'object'],
+            'array', 'collection' => ['type' => 'array'],
+            'object' => ['type' => 'object'],
             default => null,
         };
     }
