@@ -89,6 +89,13 @@ final class Assembler
             $componentsOut['schemas'] = $componentSchemas;
         }
 
+        // Reusable response components (design §6 error-response chain) — emitted in registry order
+        // (deterministic: routes process in sorted order); the canonicalizer sorts the keys.
+        $componentResponses = $components->responses();
+        if ($componentResponses !== []) {
+            $componentsOut['responses'] = $componentResponses;
+        }
+
         $securitySchemes = $document->securitySchemes();
         if ($securitySchemes !== []) {
             $componentsOut['securitySchemes'] = $securitySchemes;

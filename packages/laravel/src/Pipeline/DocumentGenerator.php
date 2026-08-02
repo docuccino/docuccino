@@ -176,9 +176,9 @@ final class DocumentGenerator
             $this->assignIds($operation, $documentId, $method, $path);
 
             $frozen = $operation->freeze();
-            [$referencedSchemas, $referencedSchemaIds] = $this->componentClosure($frozen->toArray(), $components);
+            [$referencedSchemas, $referencedSchemaIds, $referencedResponses] = $this->componentClosure($frozen->toArray(), $components);
 
-            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds);
+            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses);
             // Merge trace-derived dependency files (design §10 seam): integrations that recover facts
             // by tracing widen the cache key, so a deep chain invalidates when any traced file changes.
             $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
@@ -192,66 +192,92 @@ final class DocumentGenerator
     }
 
     /**
-     * The transitive closure of the schema components this operation references (design §5 hoist /
-     * arch F7): every component reachable from a `$ref` in the operation, plus every component those
-     * components in turn reference. Carrying the full closure — not just the components this route
-     * happened to register first — makes each cached fragment self-sufficient: a warm hit restores
-     * everything it points at, so removing the route that first *owned* a shared component never
-     * leaves a surviving referencer with a dangling `$ref`.
+     * The transitive closure of the schema AND response components this operation references (design
+     * §5 hoist / arch F7): every component reachable from a `$ref` in the operation, plus every
+     * component those components in turn reference (a response component's content `$ref`s a schema).
+     * Carrying the full closure — not just the components this route happened to register first —
+     * makes each cached fragment self-sufficient: a warm hit restores everything it points at, so
+     * removing the route that first *owned* a shared component never leaves a surviving referencer
+     * with a dangling `$ref`.
      *
      * @param  array<string, mixed>  $operation
-     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>}
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>}
      */
     private function componentClosure(array $operation, ComponentRegistry $components): array
     {
-        $registry = $components->schemas();
-        $ids = $components->schemaIds();
+        $schemaRegistry = $components->schemas();
+        $schemaIdMap = $components->schemaIds();
+        $responseRegistry = $components->responses();
 
         $schemas = [];
         $schemaIds = [];
-        $seen = [];
-        $queue = $this->schemaRefs($operation);
+        $responses = [];
+        $seenSchema = [];
+        $seenResponse = [];
+        $schemaQueue = $this->refs($operation, 'schemas');
+        $responseQueue = $this->refs($operation, 'responses');
 
-        while ($queue !== []) {
-            $name = array_shift($queue);
-            if (isset($seen[$name]) || ! isset($registry[$name])) {
+        // Responses first: pulling in a response can reveal further schema (or response) refs.
+        while ($responseQueue !== []) {
+            $name = array_shift($responseQueue);
+            if (isset($seenResponse[$name]) || ! isset($responseRegistry[$name])) {
                 continue;
             }
-            $seen[$name] = true;
+            $seenResponse[$name] = true;
+            $responses[$name] = $responseRegistry[$name];
 
-            $schemas[$name] = $registry[$name];
-            if (isset($ids[$name])) {
-                $schemaIds[$name] = $ids[$name];
+            foreach ($this->refs($responseRegistry[$name], 'responses') as $nested) {
+                if (! isset($seenResponse[$nested])) {
+                    $responseQueue[] = $nested;
+                }
+            }
+            foreach ($this->refs($responseRegistry[$name], 'schemas') as $schemaRef) {
+                $schemaQueue[] = $schemaRef;
+            }
+        }
+
+        while ($schemaQueue !== []) {
+            $name = array_shift($schemaQueue);
+            if (isset($seenSchema[$name]) || ! isset($schemaRegistry[$name])) {
+                continue;
+            }
+            $seenSchema[$name] = true;
+
+            $schemas[$name] = $schemaRegistry[$name];
+            if (isset($schemaIdMap[$name])) {
+                $schemaIds[$name] = $schemaIdMap[$name];
             }
 
-            foreach ($this->schemaRefs($registry[$name]) as $nested) {
-                if (! isset($seen[$nested])) {
-                    $queue[] = $nested;
+            foreach ($this->refs($schemaRegistry[$name], 'schemas') as $nested) {
+                if (! isset($seenSchema[$nested])) {
+                    $schemaQueue[] = $nested;
                 }
             }
         }
 
-        return [$schemas, $schemaIds];
+        return [$schemas, $schemaIds, $responses];
     }
 
     /**
-     * The component-schema names a node references via `$ref` (`#/components/schemas/NAME`), scanned
+     * The component names a node references via `$ref` (`#/components/{$kind}/NAME`), scanned
      * recursively.
      *
      * @param  array<array-key, mixed>  $node
      * @return list<string>
      */
-    private function schemaRefs(array $node): array
+    private function refs(array $node, string $kind): array
     {
+        $prefix = '#/components/'.$kind.'/';
+
         $refs = [];
         foreach ($node as $key => $value) {
-            if ($key === '$ref' && is_string($value) && str_starts_with($value, '#/components/schemas/')) {
-                $refs[] = substr($value, strlen('#/components/schemas/'));
+            if ($key === '$ref' && is_string($value) && str_starts_with($value, $prefix)) {
+                $refs[] = substr($value, strlen($prefix));
 
                 continue;
             }
             if (is_array($value)) {
-                foreach ($this->schemaRefs($value) as $ref) {
+                foreach ($this->refs($value, $kind) as $ref) {
                     $refs[] = $ref;
                 }
             }
@@ -264,6 +290,9 @@ final class DocumentGenerator
     {
         foreach ($fragment->componentSchemas as $name => $schema) {
             $components->registerSchema($name, $schema, $fragment->componentSchemaIds[$name] ?? null);
+        }
+        foreach ($fragment->componentResponses as $name => $response) {
+            $components->registerResponse($name, $response);
         }
     }
 

@@ -37,6 +37,10 @@ final class ComponentRegistry
     private array $reservedIds = [];
 
     /**
+     * Reusable response components (name → OAS response object) hoisted to `components.responses`
+     * — e.g. the shared `Problem*` responses a Problem Details preset references from many
+     * operations (design §6 error-response chain). Same hoist/dedupe discipline as schemas.
+     *
      * @var array<string, array<string, mixed>>
      */
     private array $responses = [];
@@ -171,6 +175,74 @@ final class ComponentRegistry
     }
 
     /**
+     * Register a reusable response component and return the `{"$ref": …}` array pointing at its
+     * final name. Mirrors {@see reference()} for schemas.
+     *
+     * @param  array<string, mixed>  $response
+     * @return array<string, mixed>
+     */
+    public function referenceResponse(string $name, array $response): array
+    {
+        return ['$ref' => '#/components/responses/'.$this->registerResponse($name, $response)];
+    }
+
+    /**
+     * Register a named response component, returning the final component name (suffixed on genuine
+     * collision). A structurally-identical re-registration under the same name is deduped, so one
+     * shared response (e.g. `ProblemUnauthenticated`) hoists once regardless of how many operations
+     * reference it.
+     *
+     * @param  array<string, mixed>  $response
+     */
+    public function registerResponse(string $name, array $response): string
+    {
+        return $this->registerNamed($this->responses, $name, $response, 'responses');
+    }
+
+    /**
+     * Hoist a named body into a component bucket, deduping a structurally-equal body and suffixing a
+     * genuine collision (with a warning). Shared by the response path and mirrors the schema path's
+     * hoist/dedupe discipline; schemas additionally reserve names for self-reference cycles, so they
+     * keep a specialised variant in {@see registerSchema()}.
+     *
+     * @param  array<string, array<string, mixed>>  $bucket
+     * @param  array<string, mixed>  $body
+     */
+    private function registerNamed(array &$bucket, string $name, array $body, string $kind): string
+    {
+        $name = self::sanitize($name);
+
+        if (! isset($bucket[$name])) {
+            $bucket[$name] = $body;
+
+            return $name;
+        }
+
+        if (self::structurallyEqual($bucket[$name], $body)) {
+            return $name;
+        }
+
+        $suffixed = $name;
+        $n = 1;
+        while (isset($bucket[$suffixed]) && ! self::structurallyEqual($bucket[$suffixed], $body)) {
+            $n++;
+            $suffixed = $name.'_'.$n;
+        }
+
+        if (! isset($bucket[$suffixed])) {
+            $bucket[$suffixed] = $body;
+            $this->diagnostics[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'components.name-collision',
+                message: sprintf('Two distinct %s claimed component name "%s"; the second was hoisted as "%s".', $kind, $name, $suffixed),
+                help: 'Disambiguate the source of one of them.',
+            );
+        }
+
+        return $suffixed;
+    }
+
+    /**
      * A restorable snapshot of the whole registry, so a route that fails mid-pipeline after
      * registering components can be rolled back — leaving no orphaned schemas/responses/diagnostics
      * (or leaked name reservations) from a route that never made it into the document
@@ -215,17 +287,6 @@ final class ComponentRegistry
     public function schemaIds(): array
     {
         return $this->schemaIds;
-    }
-
-    /**
-     * @param  array<string, mixed>  $response
-     */
-    public function registerResponse(string $name, array $response): string
-    {
-        $name = self::sanitize($name);
-        $this->responses[$name] ??= $response;
-
-        return $name;
     }
 
     /**
