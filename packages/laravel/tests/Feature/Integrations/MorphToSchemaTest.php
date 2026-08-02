@@ -93,3 +93,16 @@ it('leaves a non-model union to the core mapper (anyOf, no discriminator)', func
 
     expect($schema)->toHaveKey('anyOf')->and($schema)->not->toHaveKey('discriminator');
 });
+
+it('declines a single-model union (needs two morph variants), leaving it to the core mapper', function (): void {
+    Relation::morphMap(['widget' => Widget::class], false);
+
+    // Only one model member: not a polymorphic morph, so MorphToSchema declines and the core union
+    // mapper handles it — no discriminator is emitted for a degenerate one-variant union.
+    $schema = morphConverter(new ComponentRegistry)
+        ->toSchema(new UnionT([new ClassT(Widget::class), ScalarT::string()]))
+        ->schema;
+
+    expect($schema)->not->toHaveKey('discriminator')
+        ->and($schema)->toHaveKey('anyOf');
+});
