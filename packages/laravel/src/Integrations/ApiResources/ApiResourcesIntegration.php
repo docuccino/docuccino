@@ -13,13 +13,20 @@ namespace Docuccino\Laravel\Integrations\ApiResources;
 final class ApiResourcesIntegration
 {
     /**
+     * The always-on `JsonResource` mapper, plus the JSON:API pieces when Laravel's first-party
+     * `JsonApiResource` class exists. The class-presence probe is injectable so the older-Laravel
+     * branch (JSON:API absent) is testable where the class is in fact present.
+     *
+     * @param  (callable(string): bool)|null  $probe
      * @return list<class-string>
      */
-    public static function extensions(): array
+    public static function extensions(?callable $probe = null): array
     {
+        $probe ??= static fn (string $class): bool => class_exists($class);
+
         $extensions = [JsonResourceSchema::class];
 
-        if (class_exists(ResourceReflector::JSON_API_RESOURCE)) {
+        if ($probe(ResourceReflector::JSON_API_RESOURCE)) {
             $extensions[] = JsonApiResourceSchema::class;
             $extensions[] = JsonApiParametersExtension::class;
         }

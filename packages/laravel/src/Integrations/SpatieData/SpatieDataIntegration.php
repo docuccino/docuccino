@@ -15,11 +15,16 @@ namespace Docuccino\Laravel\Integrations\SpatieData;
 final class SpatieDataIntegration
 {
     /**
-     * Whether the host app has `spatie/laravel-data` installed.
+     * Whether the host app has `spatie/laravel-data` installed. The class-presence probe is injectable
+     * so the gated-off branch (package absent) is testable where the package is in fact present.
+     *
+     * @param  (callable(string): bool)|null  $probe
      */
-    public static function installed(): bool
+    public static function installed(?callable $probe = null): bool
     {
-        return class_exists(DataClassReflector::DATA);
+        $probe ??= static fn (string $class): bool => class_exists($class);
+
+        return $probe(DataClassReflector::DATA);
     }
 
     /**

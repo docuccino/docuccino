@@ -13,9 +13,17 @@ final class PermissionIntegration
 {
     public const PROVIDER = 'Spatie\\Permission\\PermissionServiceProvider';
 
-    public static function installed(): bool
+    /**
+     * The class-presence probe is injectable so the gated-off branch is testable where the package
+     * is in fact present.
+     *
+     * @param  (callable(string): bool)|null  $probe
+     */
+    public static function installed(?callable $probe = null): bool
     {
-        return class_exists(self::PROVIDER);
+        $probe ??= static fn (string $class): bool => class_exists($class);
+
+        return $probe(self::PROVIDER);
     }
 
     /**
