@@ -70,6 +70,11 @@ final class Assembler
             $doc['servers'] = $document->servers;
         }
 
+        $tags = $document->tagDefinitions();
+        if ($tags !== []) {
+            $doc['tags'] = $tags;
+        }
+
         $doc['paths'] = $paths;
 
         if ($componentSchemas !== []) {

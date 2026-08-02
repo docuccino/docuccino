@@ -38,7 +38,13 @@ return [
             ],
             'error_responses' => 'default', // 'default' | 'none' (presets: Phase 4)
             'tags' => [
+                // Raw tag => display tag. An exact match wins, else the first prefix the tag starts with.
                 'map' => [],
+                // Optional keys (omitted here to keep the default config minimal):
+                //   'mapper' => Custom::class,   // container-resolved TagMapper; defaults to PrefixTagMapper over `map`.
+                //   'definitions' => [           // OAS top-level `tags`, sorted by weight then name:
+                //       ['name' => 'Forms', 'description' => '…', 'weight' => 0],
+                //   ],
             ],
             'content' => [
                 'dir' => null,

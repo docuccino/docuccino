@@ -6,17 +6,22 @@ namespace Docuccino\Laravel\Config;
 
 use Closure;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Core\Support\Hydrate;
+use Docuccino\Laravel\Tags\PrefixTagMapper;
+use Illuminate\Contracts\Container\Container;
 
 /**
  * Builds a framework-agnostic {@see DocumentConfig} from one `config('docuccino.documents.*')`
  * entry, resolving an `info.description.file` reference to the file's contents so the pipeline
- * never touches the filesystem.
+ * never touches the filesystem, and resolving the document's tag mapper (a custom `tags.mapper`
+ * class-string from the container, else the built-in {@see PrefixTagMapper} over `tags.map`).
  */
 final readonly class DocumentConfigFactory
 {
     public function __construct(
         private string $basePath,
+        private Container $container,
     ) {}
 
     /**
@@ -26,6 +31,7 @@ final readonly class DocumentConfigFactory
     {
         $routes = self::arr($config['routes'] ?? []);
         $security = self::arr($config['security'] ?? []);
+        $tags = self::arr($config['tags'] ?? []);
 
         $closure = $routes['closure'] ?? null;
 
@@ -41,12 +47,53 @@ final readonly class DocumentConfigFactory
             overlays: self::stringList($config['overlays'] ?? []),
             onRouteError: $onRouteError,
             security: $security,
-            tags: self::arr($config['tags'] ?? []),
+            tags: $tags,
             representation: self::arr($config['representation'] ?? []),
             viewer: self::arr($config['viewer'] ?? []),
             versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
+            tagMapper: $this->resolveTagMapper($tags),
             raw: $config,
         );
+    }
+
+    /**
+     * Resolve the document's tag mapper: a `tags.mapper` class-string is container-resolved (so a
+     * custom mapper gets constructor DI); otherwise a non-empty `tags.map` builds the built-in
+     * {@see PrefixTagMapper}. No mapper (null) means tags pass through unchanged.
+     *
+     * @param  array<string, mixed>  $tags
+     */
+    private function resolveTagMapper(array $tags): ?TagMapper
+    {
+        $mapper = $tags['mapper'] ?? null;
+        if (is_string($mapper) && $mapper !== '') {
+            $resolved = $this->container->make($mapper);
+
+            return $resolved instanceof TagMapper ? $resolved : null;
+        }
+
+        $map = self::stringMap($tags['map'] ?? null);
+
+        return $map === [] ? null : new PrefixTagMapper($map);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function stringMap(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $key => $item) {
+            if (is_string($item)) {
+                $out[(string) $key] = $item;
+            }
+        }
+
+        return $out;
     }
 
     /**

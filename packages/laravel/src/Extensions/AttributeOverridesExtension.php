@@ -77,8 +77,9 @@ final class AttributeOverridesExtension implements OperationExtension
     {
         $tags = [];
         foreach ($context->attributes->all(Group::class) as $group) {
-            if (! in_array($group->name, $tags, true)) {
-                $tags[] = $group->name;
+            $mapped = $context->document->mapTag($group->name);
+            if (! in_array($mapped, $tags, true)) {
+                $tags[] = $mapped;
             }
         }
 
