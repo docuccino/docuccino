@@ -11,7 +11,10 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Provenance\Source;
+use Docuccino\Core\Provenance\SourcePathResolver;
 
 /**
  * Everything an {@see OperationExtension} needs about the route it is documenting (design §5):
@@ -49,12 +52,43 @@ final class RouteContext
         public readonly ?string $summary = null,
         public readonly ?string $description = null,
         public readonly ComponentRegistry $components = new ComponentRegistry,
+        public readonly ?SourcePathResolver $pathResolver = null,
     ) {}
 
     /** The action's inference result, computed once and memoised. */
     public function analysis(): ActionAnalysis
     {
         return $this->analysis ??= $this->engine->analyzeAction($this->actionRef);
+    }
+
+    /**
+     * A provenance {@see Source} for an engine {@see SourceLocation}, with the file path made
+     * project-root-relative via the resolver (design §4). Returns null when no resolver or no
+     * usable file is available, so a contribution simply carries no source rather than a churny
+     * absolute path.
+     */
+    public function sourceAt(SourceLocation $location, ?string $symbol = null): ?Source
+    {
+        if ($this->pathResolver === null || $location->file === '') {
+            return null;
+        }
+
+        return new Source($this->pathResolver->relative($location->file), $location->line, $symbol);
+    }
+
+    /**
+     * A provenance {@see Source} pointing at the action itself (the reflection target for
+     * attribute-produced contributions, and a fallback location for reflection-derived inference).
+     */
+    public function actionSource(): ?Source
+    {
+        if ($this->pathResolver === null || $this->actionRef->file === '') {
+            return null;
+        }
+
+        $line = $this->actionRef->line > 0 ? $this->actionRef->line : null;
+
+        return new Source($this->pathResolver->relative($this->actionRef->file), $line, $this->actionRef->symbol());
     }
 
     /**
