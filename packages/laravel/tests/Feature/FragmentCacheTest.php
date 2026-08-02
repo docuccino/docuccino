@@ -20,6 +20,8 @@ use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\LateBoundMarker;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Write a throwaway PHP file and return its path — a stand-in for a returned DTO/model/enum/resource
@@ -194,6 +196,57 @@ it('invalidates a fragment when a resource toArray file is edited (analysis depe
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 
     @unlink($resourceFile);
+});
+
+it('invalidates fragments when Relation::morphMap() changes (booted-app cache input)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // A morph-map change alters the discriminator vocabulary → the document-level env digest changes.
+    Relation::morphMap(['widget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget', 'gadget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget', 'sprocket' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget'], false);
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    // Restore the morph map so this test never leaks into another (see TestCase setUp).
+    Relation::morphMap(['widget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget', 'gadget' => 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget'], false);
+});
+
+it('invalidates fragments when a render callback is registered (booted-app cache input)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // Adding a handler must re-document the inferred-handler error tier (the add-a-handler asymmetry
+    // per-file hashes miss); the registered render-callback set is folded into the env digest.
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable(static fn (RuntimeException $e) => response()->json(['error' => 'boom'], 400));
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('invalidates fragments when app.url changes (booted-app cache input)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // app.url feeds Passport oauth2 flow URLs into operation security → folded into the env digest.
+    config()->set('app.url', 'https://changed.example.test');
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
 
 it('invalidates every fragment when the resolved extension set changes', function (): void {

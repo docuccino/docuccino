@@ -17,11 +17,15 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Validation\Validator;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Registry\ResolvedExtensions;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Throwable;
 
 /**
@@ -69,7 +73,11 @@ final class DocumentGenerator
         $components = new ComponentRegistry;
         $bag = new DiagnosticBag;
 
-        $configHash = $document->hash();
+        // Booted-app facts the fragments depend on but that no route file reflects (design §10, A2):
+        // the registered render-callback set (an added handler must re-document error tiers), the
+        // polymorphic morph map (discriminators), and app.url (Passport oauth2 flow URLs). Folded into
+        // the document-level cache input because each is global — a change can affect any route.
+        $configHash = $document->hash().'|env:'.$this->environmentDigest();
         $extensionClasses = $resolved->cacheSignature();
 
         $fragments = [];
@@ -105,6 +113,56 @@ final class DocumentGenerator
         }
 
         return new GenerationResult(UirDocument::fromArray($assembly->document), $bag->sorted());
+    }
+
+    /**
+     * A canonical digest of the booted-app facts the fragment cache must key on beyond config,
+     * routes, and extensions (design §10, A2). Each is a global fact whose change can alter any
+     * route's fragment, so it lives at the document level:
+     *
+     * - the registered render-callback set (exception FQCN + source location, in registration
+     *   order) — adding/removing/replacing a handler must re-document the inferred-handler error
+     *   tier, which the per-file dependency hashes alone can miss (the add-a-handler asymmetry);
+     * - `Relation::morphMap()` — drives MorphTo discriminator mappings;
+     * - `app.url` — feeds Passport oauth2 flow URLs into operation security.
+     *
+     * Every read is defensive: an unresolvable fact contributes an empty segment rather than
+     * failing the build, keeping the digest total and deterministic.
+     */
+    private function environmentDigest(): string
+    {
+        $callbacks = '';
+        try {
+            $handler = $this->container->make(ExceptionHandler::class);
+            $records = [];
+            foreach ((new HandlerReflector($handler))->renderCallbacks() as $callback) {
+                $records[] = $callback->exceptionType.'@'.$callback->file.':'.$callback->line;
+            }
+            $callbacks = implode(',', $records);
+        } catch (Throwable) {
+            // No resolvable handler (or an unexpected shape): contribute nothing.
+        }
+
+        $morphMap = Relation::morphMap();
+        ksort($morphMap);
+        $morphs = [];
+        foreach ($morphMap as $alias => $fqcn) {
+            $morphs[] = $alias.'=>'.$fqcn;
+        }
+
+        $appUrl = '';
+        try {
+            $value = $this->container->make(ConfigRepository::class)->get('app.url');
+            $appUrl = is_string($value) ? $value : '';
+        } catch (Throwable) {
+            // No config repository bound: contribute nothing.
+        }
+
+        return hash('sha256', implode("\0", [
+            'render:'.$callbacks,
+            'morph:'.implode(',', $morphs),
+            'appurl:'.$appUrl,
+        ]));
     }
 
     /**
