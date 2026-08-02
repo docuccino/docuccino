@@ -19,6 +19,7 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
+use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
@@ -62,6 +63,8 @@ final class DefaultExtensions
             // Eloquent model schemas (always-on): columns from the engine refined by the model's
             // visible/hidden/appends/casts + class-level #[Hidden].
             ...EloquentIntegration::extensions(),
+            // Rate limiting (always-on): `throttle` middleware → 429 + Retry-After/X-RateLimit-* headers.
+            ...RateLimitIntegration::extensions(),
             // Conditional integrations (Telescope-style class_exists guard): registered only when the
             // target package is installed, so docuccino/laravel never hard-requires it.
             ...(SpatieDataIntegration::installed() ? SpatieDataIntegration::extensions() : []),
