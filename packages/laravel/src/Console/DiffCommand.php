@@ -32,6 +32,8 @@ use JsonException;
  */
 final class DiffCommand extends Command
 {
+    use GuardsEnabled;
+
     protected $signature = 'docuccino:diff
         {old : Path to the committed UIR/OpenAPI artifact to diff against}
         {document? : The configured document key to generate as the new side (defaults to "default")}
@@ -50,6 +52,10 @@ final class DiffCommand extends Command
 
     public function handle(DocumentBuilder $builder, TypeEngine $engine): int
     {
+        if ($this->abortIfDisabled()) {
+            return self::FAILURE;
+        }
+
         $key = $this->documentKey($builder);
         if ($key === null) {
             return self::FAILURE;
@@ -134,8 +140,16 @@ final class DiffCommand extends Command
 
     private function readFromGit(string $ref, string $path): ?string
     {
-        // Developer-invoked CLI: the ref and path come from arguments, escaped for the shell.
-        $result = Process::run(sprintf('git show %s', escapeshellarg($ref.':'.$path)));
+        // Reject a ref or path that git would parse as an option (e.g. `--upload-pack=…`), so a
+        // hostile argument cannot smuggle a flag past the `<ref>:<path>` operand (security L3).
+        if (str_starts_with($ref, '-') || str_starts_with($path, '-')) {
+            $this->error('The git ref and path must not start with "-".');
+
+            return null;
+        }
+
+        // Array-form Process runs git directly with no shell, so nothing is word-split or expanded.
+        $result = Process::run(['git', 'show', $ref.':'.$path]);
 
         if (! $result->successful()) {
             $this->error(sprintf('git show %s:%s failed: %s', $ref, $path, trim($result->errorOutput())));

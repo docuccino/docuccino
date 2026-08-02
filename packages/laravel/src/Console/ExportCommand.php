@@ -24,6 +24,7 @@ use Illuminate\Console\Command;
  */
 final class ExportCommand extends Command
 {
+    use GuardsEnabled;
     use RendersDiagnostics;
 
     protected $signature = 'docuccino:export
@@ -38,6 +39,10 @@ final class ExportCommand extends Command
 
     public function handle(DocumentBuilder $builder, TypeEngine $engine): int
     {
+        if ($this->abortIfDisabled()) {
+            return self::FAILURE;
+        }
+
         $only = $this->argument('document');
         if (is_string($only) && ! $builder->hasDocument($only)) {
             $this->error(sprintf('Unknown document "%s".', $only));
@@ -93,7 +98,7 @@ final class ExportCommand extends Command
         $path = $this->outputPath($config);
         $directory = dirname($path);
         if (! is_dir($directory)) {
-            @mkdir($directory, 0777, true);
+            @mkdir($directory, 0755, true);
         }
 
         file_put_contents($path, $output);

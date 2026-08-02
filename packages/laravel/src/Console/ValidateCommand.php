@@ -18,6 +18,7 @@ use Illuminate\Console\Command;
  */
 final class ValidateCommand extends Command
 {
+    use GuardsEnabled;
     use RendersDiagnostics;
 
     protected $signature = 'docuccino:validate
@@ -28,6 +29,10 @@ final class ValidateCommand extends Command
 
     public function handle(DocumentBuilder $builder, TypeEngine $engine): int
     {
+        if ($this->abortIfDisabled()) {
+            return self::FAILURE;
+        }
+
         $only = $this->argument('document');
         if (is_string($only) && ! $builder->hasDocument($only)) {
             $this->error(sprintf('Unknown document "%s".', $only));

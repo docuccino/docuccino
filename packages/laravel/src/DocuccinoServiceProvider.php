@@ -123,6 +123,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
      */
     public function packageBooted(): void
     {
+        // The master off-switch (security M3): when disabled, register no runtime endpoints at all.
+        if (config('docuccino.enabled', true) === false) {
+            return;
+        }
+
         /** @var array<string, mixed> $documents */
         $documents = (array) config('docuccino.documents', []);
 
@@ -138,10 +143,29 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             }
 
             $base = '/'.ltrim($route, '/');
+            $middleware = self::viewerMiddleware($viewer);
 
-            Route::get($base, [DocsController::class, 'show'])->defaults('document', (string) $key);
-            Route::get($base.'.json', [DocsController::class, 'spec'])->defaults('document', (string) $key);
-            Route::get($base.'/assets/scalar.js', [DocsController::class, 'asset']);
+            Route::get($base, [DocsController::class, 'show'])->middleware($middleware)->defaults('document', (string) $key);
+            Route::get($base.'.json', [DocsController::class, 'spec'])->middleware($middleware)->defaults('document', (string) $key);
+            Route::get($base.'/assets/scalar.js', [DocsController::class, 'asset'])->middleware($middleware);
         }
+    }
+
+    /**
+     * The middleware stack for a document's viewer routes (security M1/M2): `viewer.middleware`,
+     * defaulting to `['web', 'throttle:60,1']` so the spec endpoint is session-scoped and rate
+     * limited out of the box.
+     *
+     * @param  array<array-key, mixed>  $viewer
+     * @return list<string>
+     */
+    private static function viewerMiddleware(array $viewer): array
+    {
+        $configured = $viewer['middleware'] ?? null;
+        if (! is_array($configured)) {
+            return ['web', 'throttle:60,1'];
+        }
+
+        return array_values(array_filter($configured, 'is_string'));
     }
 }

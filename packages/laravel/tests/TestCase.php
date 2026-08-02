@@ -28,6 +28,15 @@ abstract class TestCase extends Orchestra
         return [DocuccinoServiceProvider::class];
     }
 
+    /**
+     * The default `viewer.middleware` includes the `web` group, whose session/cookie encryption
+     * needs an application key — set a fixed one so the viewer feature tests run as a real app would.
+     */
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmF0FYqwoDL18E=');
+    }
+
     protected function defineRoutes($router): void
     {
         /** @var Router $router */

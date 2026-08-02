@@ -578,8 +578,8 @@
   "x-docuccino": {
     "document": {
       "id": "doc:default",
-      "configHash": "a97d5ea2e68d1b05feb07773ba214c9cee7f8c7bc84b31616e0bfba55cc03571",
-      "contentHash": "7786d809efe4358e79b951b217767bcea784b6a37661b4b971a98d7c73bc2129"
+      "configHash": "2077120bce1a283b6c8e298e8ab264e2edb3508c16320adb992e75b55b17d0e2",
+      "contentHash": "401751717b389046f86d3a87be746b38b0ed88f6d67278fab7d0356fe276231e"
     },
     "generator": {
       "name": "docuccino/laravel",

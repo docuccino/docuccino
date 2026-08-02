@@ -16,6 +16,7 @@ use Illuminate\Console\Command;
  */
 final class CacheCommand extends Command
 {
+    use GuardsEnabled;
     use RendersDiagnostics;
 
     protected $signature = 'docuccino:cache {document? : The configured document key (defaults to every document)}';
@@ -24,6 +25,10 @@ final class CacheCommand extends Command
 
     public function handle(DocumentBuilder $builder, TypeEngine $engine, DocumentCache $cache): int
     {
+        if ($this->abortIfDisabled()) {
+            return self::FAILURE;
+        }
+
         $only = $this->argument('document');
         if (is_string($only) && ! $builder->hasDocument($only)) {
             $this->error(sprintf('Unknown document "%s".', $only));

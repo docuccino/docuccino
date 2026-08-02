@@ -75,7 +75,13 @@ return [
                 'driver' => 'scalar',
                 'route' => '/docs/api',       // null disables the runtime endpoints for this document
                 'gate' => null,               // Gate ability name; null = local environment only
-                'source' => 'generate',       // generate | artifact (export.path) | cache (docuccino:cache)
+                // Middleware for the registered viewer routes. `throttle` protects the (potentially
+                // expensive) spec endpoint from abuse; keep it when exposing the viewer publicly.
+                'middleware' => ['web', 'throttle:60,1'],
+                // generate | artifact (export.path) | cache (docuccino:cache). NOTE: `generate`
+                // rebuilds the whole document on every request — fine for local/gated use, but for an
+                // exposed viewer prefer `cache` (warmed by `docuccino:cache`) or `artifact`.
+                'source' => 'generate',
                 // 'cdn' => false,            // true loads Scalar from a CDN instead of the bundled asset
             ],
         ],
