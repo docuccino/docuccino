@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel;
 
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Console\DiffCommand;
 use Docuccino\Laravel\Console\ExportCommand;
@@ -13,6 +14,7 @@ use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Illuminate\Contracts\Foundation\Application;
 use Spatie\LaravelPackageTools\Package;
@@ -40,6 +42,13 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(ExtensionRegistry::class);
+
+        // Provenance `source.file` paths are relativised against the app base path (design §4);
+        // the resolver falls back to a composer-root walk for files outside it (the workbench).
+        $this->app->bind(
+            SourcePathResolver::class,
+            fn (Application $app): SourcePathResolver => new LaravelSourcePathResolver($app->basePath()),
+        );
 
         $this->app->when(DocumentConfigFactory::class)
             ->needs('$basePath')

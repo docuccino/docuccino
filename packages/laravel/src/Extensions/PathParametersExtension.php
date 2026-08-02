@@ -32,7 +32,9 @@ final class PathParametersExtension implements OperationExtension
             $parameter = $operation->parameter('path', $name);
 
             $isBound = isset($context->routeBindings[$name]);
-            $contribution = $isBound ? Contribution::inference() : Contribution::fallback();
+            $contribution = $isBound
+                ? Contribution::inference($context->actionSource())
+                : Contribution::fallback();
 
             $parameter->setRequired(! in_array($name, $context->optionalPathParameters, true), $contribution);
             $parameter->schema()->set('type', $isBound ? 'integer' : 'string', $contribution);

@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Docblock\DocblockReader;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
@@ -27,6 +28,7 @@ final class RouteContextBuilder
 {
     public function __construct(
         private readonly Router $router,
+        private readonly ?SourcePathResolver $pathResolver = null,
         private readonly RouteReflector $reflector = new RouteReflector,
         private readonly AttributeCollector $attributes = new AttributeCollector,
         private readonly DocblockReader $docblocks = new DocblockReader,
@@ -72,6 +74,7 @@ final class RouteContextBuilder
             summary: $prose['summary'],
             description: $prose['description'],
             components: $components,
+            pathResolver: $this->pathResolver,
         );
     }
 

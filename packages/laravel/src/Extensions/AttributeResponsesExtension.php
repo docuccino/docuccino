@@ -42,12 +42,12 @@ final class AttributeResponsesExtension implements OperationExtension
             $response = $operation->response($status);
 
             $response->setDescription('OK', Contribution::fallback());
-            $response->setDescription($attribute->description, Contribution::attribute());
+            $response->setDescription($attribute->description, Contribution::attribute($context->actionSource()));
 
             if ($attribute->type !== null) {
                 $schema = $context->converter()->toSchema($this->types->parse($attribute->type))->schema;
                 foreach ($schema as $keyword => $value) {
-                    $response->content($attribute->mediaType)->set($keyword, $value, Contribution::attribute());
+                    $response->content($attribute->mediaType)->set($keyword, $value, Contribution::attribute($context->actionSource()));
                 }
             }
         }
@@ -77,7 +77,7 @@ final class AttributeResponsesExtension implements OperationExtension
         }
 
         foreach ($byStatus as $status => $headers) {
-            $operation->response((string) $status)->set('headers', $headers, Contribution::attribute());
+            $operation->response((string) $status)->set('headers', $headers, Contribution::attribute($context->actionSource()));
         }
     }
 
@@ -88,7 +88,7 @@ final class AttributeResponsesExtension implements OperationExtension
                 continue;
             }
 
-            $operation->response('200')->content('application/json')->set('example', $example->value, Contribution::attribute());
+            $operation->response('200')->content('application/json')->set('example', $example->value, Contribution::attribute($context->actionSource()));
 
             return; // the first concrete example wins for the success body
         }

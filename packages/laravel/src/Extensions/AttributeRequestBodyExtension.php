@@ -59,6 +59,6 @@ final class AttributeRequestBodyExtension implements OperationExtension
 
         $operation->set('requestBody', [
             'content' => ['application/json' => ['schema' => $schema]],
-        ], Contribution::attribute());
+        ], Contribution::attribute($context->actionSource()));
     }
 }

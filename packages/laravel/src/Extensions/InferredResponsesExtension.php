@@ -33,10 +33,12 @@ final class InferredResponsesExtension implements OperationExtension
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
         $types = [];
+        $location = null;
         foreach ($context->analysis()->returns as $return) {
             if ($return->type instanceof VoidT || $return->type instanceof NeverT) {
                 continue;
             }
+            $location ??= $return->location;
             $types[] = $return->type;
         }
 
@@ -47,7 +49,10 @@ final class InferredResponsesExtension implements OperationExtension
         $type = count($types) === 1 ? $types[0] : UnionT::of($this->dedupe($types));
         $result = $context->converter()->toSchema($type);
 
-        $contribution = Contribution::inference(confidence: $result->confidence);
+        // Anchor the inferred body to the first contributing return path (design §4); an engine that
+        // reports no usable location yields a sourceless contribution rather than a churny one.
+        $source = $location !== null ? $context->sourceAt($location) : null;
+        $contribution = Contribution::inference($source, $result->confidence);
 
         $response = $operation->response('200');
         $response->setDescription('OK', Contribution::fallback());

@@ -59,7 +59,7 @@ final class AttributeParametersExtension implements OperationExtension
             $parameter = $operation->parameter('path', $attribute->name);
             $this->apply($parameter, $context, $attribute->type, $attribute->description, true, null, $attribute->example);
             if ($attribute->format !== null) {
-                $parameter->schema()->set('format', $attribute->format, Contribution::attribute());
+                $parameter->schema()->set('format', $attribute->format, Contribution::attribute($context->actionSource()));
             }
         }
     }
@@ -73,7 +73,7 @@ final class AttributeParametersExtension implements OperationExtension
         mixed $default,
         mixed $example,
     ): void {
-        $contribution = Contribution::attribute();
+        $contribution = Contribution::attribute($context->actionSource());
 
         $parameter->setRequired($required, $contribution);
         $parameter->setDescription($description, $contribution);

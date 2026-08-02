@@ -26,7 +26,7 @@ final class SecurityExtension implements OperationExtension
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
         if ($context->attributes->has(Unauthenticated::class)) {
-            $operation->setSecurity([], Contribution::attribute());
+            $operation->setSecurity([], Contribution::attribute($context->actionSource()));
         }
     }
 }

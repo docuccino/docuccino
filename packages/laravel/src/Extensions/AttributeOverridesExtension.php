@@ -41,7 +41,7 @@ final class AttributeOverridesExtension implements OperationExtension
         // Default operationId (route-name strategy) at fallback precedence, so #[OperationId] wins.
         $operation->setOperationId($context->route->name, Contribution::fallback());
 
-        $attribute = Contribution::attribute();
+        $attribute = Contribution::attribute($context->actionSource());
 
         $operationId = $context->attributes->first(OperationId::class);
         if ($operationId !== null) {

@@ -35,7 +35,12 @@
               "layer": "attribute",
               "fields": [
                 "tags"
-              ]
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 23,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
             },
             {
               "producer": "docblock",
@@ -104,7 +109,12 @@
               "layer": "attribute",
               "fields": [
                 "tags"
-              ]
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 32,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+              }
             },
             {
               "producer": "docblock",
@@ -129,7 +139,12 @@
                   "layer": "inference",
                   "fields": [
                     "required"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                  }
                 }
               ]
             },
@@ -144,7 +159,12 @@
                     "layer": "inference",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/FormController.php",
+                      "line": 32,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                    }
                   }
                 ]
               },
@@ -247,7 +267,12 @@
               "fields": [
                 "security",
                 "tags"
-              ]
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/WidgetController.php",
+                "line": 25,
+                "symbol": "Workbench\\App\\Http\\Controllers\\WidgetController::store"
+              }
             },
             {
               "producer": "docblock",
@@ -274,7 +299,12 @@
                   "fields": [
                     "description",
                     "required"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/WidgetController.php",
+                    "line": 25,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\WidgetController::store"
+                  }
                 }
               ]
             },
@@ -290,7 +320,12 @@
                     "layer": "attribute",
                     "fields": [
                       "type"
-                    ]
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/WidgetController.php",
+                      "line": 25,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\WidgetController::store"
+                    }
                   }
                 ]
               },
@@ -309,6 +344,11 @@
                   "fields": [
                     "description"
                   ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/WidgetController.php",
+                    "line": 25,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\WidgetController::store"
+                  },
                   "overrode": [
                     {
                       "field": "description",
@@ -330,7 +370,12 @@
                         "layer": "attribute",
                         "fields": [
                           "$ref"
-                        ]
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/WidgetController.php",
+                          "line": 25,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\WidgetController::store"
+                        }
                       }
                     ]
                   },
@@ -393,7 +438,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "a97d5ea2e68d1b05feb07773ba214c9cee7f8c7bc84b31616e0bfba55cc03571",
-      "contentHash": "7b257fe926e9543e325d4c7d74967558f1f70c2e3304ba9a4bd70608f3741280"
+      "contentHash": "fe0f4ece3e3bb0bab7362dca56359ca4afc6fb10147bc1dff08e570a32f7935a"
     },
     "generator": {
       "name": "docuccino/laravel",
