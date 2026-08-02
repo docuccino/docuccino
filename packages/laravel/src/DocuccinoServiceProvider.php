@@ -7,6 +7,8 @@ namespace Docuccino\Laravel;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Console\CacheCommand;
+use Docuccino\Laravel\Console\ClearCommand;
 use Docuccino\Laravel\Console\DiffCommand;
 use Docuccino\Laravel\Console\ExportCommand;
 use Docuccino\Laravel\Console\ValidateCommand;
@@ -16,6 +18,7 @@ use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
+use Docuccino\Laravel\Runtime\DocumentCache;
 use Illuminate\Contracts\Foundation\Application;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -36,7 +39,9 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             ->hasCommand(ExportCommand::class)
             ->hasCommand(ValidateCommand::class)
-            ->hasCommand(DiffCommand::class);
+            ->hasCommand(DiffCommand::class)
+            ->hasCommand(CacheCommand::class)
+            ->hasCommand(ClearCommand::class);
     }
 
     public function packageRegistered(): void
@@ -65,6 +70,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(TypeEngineFactory::class)
             ->needs('$tmpDir')
             ->give(fn (): string => $this->app->storagePath('docuccino'));
+
+        // The runtime document cache uses the configured Laravel cache store (null = default store).
+        $this->app->when(DocumentCache::class)
+            ->needs('$store')
+            ->give(function (): ?string {
+                $store = config('docuccino.cache.store');
+
+                return is_string($store) ? $store : null;
+            });
 
         $this->app->when(DocumentGenerator::class)
             ->needs('$generatorVersion')
