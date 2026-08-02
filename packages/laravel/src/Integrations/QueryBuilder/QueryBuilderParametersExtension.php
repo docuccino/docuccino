@@ -45,7 +45,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
             return;
         }
 
-        $contribution = Contribution::integration('spatie-query-builder', $context->actionSource());
+        $contribution = Contribution::integration('query-builder', $context->actionSource());
 
         foreach ($this->builder->build($facts, $context->representation()) as $spec) {
             $parameter = $operation->parameter('query', $spec->name);

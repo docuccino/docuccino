@@ -1587,7 +1587,7 @@
               }
             },
             {
-              "producer": "integration:validation",
+              "producer": "integration:form-request",
               "layer": "integration",
               "fields": [
                 "requestBody"
@@ -1718,7 +1718,7 @@
               "id": "par:v1:43nyihen2jbzkodp",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1740,7 +1740,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "type"
@@ -1761,7 +1761,7 @@
               "id": "par:v1:om3glzbgs2ncfkqc",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1783,7 +1783,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "type"
@@ -1804,7 +1804,7 @@
               "id": "par:v1:vfm3p6pcroyso5ka",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1826,7 +1826,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -1851,7 +1851,7 @@
               "id": "par:v1:gkubth3zy46xiuut",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1873,7 +1873,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -1898,7 +1898,7 @@
               "id": "par:v1:32etn2hh4wjg54vk",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1920,7 +1920,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -2355,7 +2355,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "2077120bce1a283b6c8e298e8ab264e2edb3508c16320adb992e75b55b17d0e2",
-      "contentHash": "f0c4981290d58c1dd49c778b5698a047a0402d6f635ff725922fc8f20dd64249"
+      "contentHash": "71c919596f819fcae1bbf5446b2c1a46c037798e9fa0c4765e011d34002fecb2"
     },
     "generator": {
       "name": "docuccino/laravel",

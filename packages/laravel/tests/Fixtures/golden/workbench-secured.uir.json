@@ -1539,7 +1539,7 @@
               }
             },
             {
-              "producer": "integration:validation",
+              "producer": "integration:form-request",
               "layer": "integration",
               "fields": [
                 "requestBody"
@@ -1670,7 +1670,7 @@
               "id": "par:v1:oloxikgxqb6bg27l",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1692,7 +1692,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "type"
@@ -1713,7 +1713,7 @@
               "id": "par:v1:kager2jx6f6g5onf",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1735,7 +1735,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "type"
@@ -1756,7 +1756,7 @@
               "id": "par:v1:j3k7eymrvf4qshni",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1778,7 +1778,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -1803,7 +1803,7 @@
               "id": "par:v1:6mesocag6mncmcuj",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1825,7 +1825,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -1850,7 +1850,7 @@
               "id": "par:v1:6ux3hmansochoslr",
               "provenance": [
                 {
-                  "producer": "integration:spatie-query-builder",
+                  "producer": "integration:query-builder",
                   "layer": "integration",
                   "fields": [
                     "description",
@@ -1872,7 +1872,7 @@
               "x-docuccino": {
                 "provenance": [
                   {
-                    "producer": "integration:spatie-query-builder",
+                    "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
                       "default",
@@ -2371,7 +2371,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "7902c9972fd602dc8a43259ae6a42f239d6805b0011aca97cfd74193cdda89c1",
-      "contentHash": "e03b719b34d133a0b629900c5520a8364de8708ddccb68bfa50a9f000147cbd4"
+      "contentHash": "dbdd25e2e25d0903c7515ae32940bdf0ffd6786458c34640f45ee4875578c2cd"
     },
     "generator": {
       "name": "docuccino/laravel",

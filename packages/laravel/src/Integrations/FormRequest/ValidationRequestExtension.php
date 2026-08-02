@@ -90,7 +90,7 @@ final class ValidationRequestExtension implements OperationExtension
             $body = ['required' => true] + $body;
         }
 
-        $operation->set('requestBody', $body, Contribution::integration('validation', $context->actionSource()));
+        $operation->set('requestBody', $body, Contribution::integration('form-request', $context->actionSource()));
     }
 
     private function applyQueryParameters(OperationDraft $operation, RouteContext $context, ValidationSchema $result): void
@@ -101,7 +101,7 @@ final class ValidationRequestExtension implements OperationExtension
         }
 
         $required = is_array($result->schema['required'] ?? null) ? $result->schema['required'] : [];
-        $contribution = Contribution::integration('validation', $context->actionSource());
+        $contribution = Contribution::integration('form-request', $context->actionSource());
 
         foreach ($properties as $name => $schema) {
             if (! is_string($name) || ! is_array($schema)) {

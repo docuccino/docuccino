@@ -75,7 +75,7 @@ configurable strategy. Identical tuples (two routes claiming `GET /x`) = error d
 
 ```json
 {
-  "producer": "integration:spatie-query-builder",
+  "producer": "integration:query-builder",
   "layer": "integration",
   "fields": ["schema", "description"],
   "source": { "file": "modules/Form/Queries/FormIndexQuery.php", "line": 28, "symbol": "…::query" },
@@ -86,6 +86,33 @@ configurable strategy. Identical tuples (two routes claiming `GET /x`) = error d
 
 Producers: `inference`, `attribute`, `docblock`, `integration:<name>`, `overlay`,
 `config`, `fallback`. `source.file` is project-root-relative. Emit levels:
+
+**Integration producer-name convention (frozen at v1).** `<name>` is the integration's
+directory name (`packages/laravel/src/Integrations/<Dir>/`) kebab-cased — the one canonical
+string, used identically whether the contribution is built via `Contribution::integration('<name>')`
+or an `ExceptionToResponse::producer()` returning `'integration:<name>'`. The full set:
+
+| Directory          | Producer `<name>`   |
+|--------------------|---------------------|
+| `SpatieData`       | `spatie-data`       |
+| `ApiResources`     | `api-resources`     |
+| `Eloquent`         | `eloquent`          |
+| `Enum`             | `enum`              |
+| `QueryBuilder`     | `query-builder`     |
+| `RateLimit`        | `rate-limit`        |
+| `Sanctum`          | `sanctum`           |
+| `Passport`         | `passport`          |
+| `Permission`       | `permission`        |
+| `ProblemDetails`   | `problem-details`   |
+| `FrameworkErrors`  | `framework-errors`  |
+| `InferredHandler`  | `inferred-handler`  |
+| `Validation`       | `validation`        |
+| `FormRequest`      | `form-request`      |
+
+`Validation` is the always-on shared rule chain (it owns the rule vocabulary); `FormRequest`
+is the FormRequest request-body recovery extension — a distinct producer, so a body recovered
+from a FormRequest's rules is attributed to `integration:form-request`, not `integration:validation`.
+
 `--provenance=none|winners|full`, default `winners` for committed artifacts.
 Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
 All other `x-*` members pass through untouched.
@@ -280,7 +307,7 @@ validate always run fresh. Watch mode later = loop incremental build + SSE push.
       "tags": ["Forms"],
       "parameters": [
         { "x-docuccino": { "id": "par:v1:ab12cd34ef56ab78",
-            "provenance": [ { "producer": "integration:spatie-query-builder", "layer": "integration", "fields": ["*"],
+            "provenance": [ { "producer": "integration:query-builder", "layer": "integration", "fields": ["*"],
               "source": { "file": "modules/Form/Queries/FormIndexQuery.php", "line": 22 }, "confidence": 0.9 } ] },
           "name": "filter[status]", "in": "query", "required": false,
           "schema": { "type": "string", "enum": ["draft", "published", "archived"],
