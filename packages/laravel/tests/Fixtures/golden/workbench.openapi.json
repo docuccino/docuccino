@@ -157,9 +157,102 @@
         }
       }
     },
+    "/api/attachments/{id}": {
+      "get": {
+        "summary": "A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Gadget"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Widget"
+                    }
+                  ],
+                  "discriminator": {
+                    "mapping": {
+                      "gadget": "#/components/schemas/Gadget",
+                      "widget": "#/components/schemas/Widget"
+                    },
+                    "propertyName": "type"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/broken": {
       "get": {
         "description": "Documentation could not be generated for this route."
+      }
+    },
+    "/api/checkout": {
+      "post": {
+        "summary": "Throws a renderable exception whose render() defines a 402 — documented by the inferred tier.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "integer",
+                      "const": 402
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/forms": {
@@ -786,6 +879,17 @@
         "required": [
           "id",
           "title"
+        ]
+      },
+      "Gadget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
         ]
       },
       "Widget": {

@@ -6,6 +6,8 @@ namespace Workbench\App\Http\Controllers;
 
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\ArticleJsonApiResource;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\ArticleResource;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ArticleData;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Http\JsonResponse;
@@ -58,6 +60,18 @@ final class IntegrationsController
 
     /** Distinct return paths carrying distinct statuses (200 + 202). */
     public function storeReport(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /** A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map. */
+    public function showAttachment(string $id): Widget|Gadget
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /** Throws a renderable exception whose render() defines a 402 — documented by the inferred tier. */
+    public function checkout(): JsonResponse
     {
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }

@@ -146,6 +146,17 @@ final class WorkbenchEngine
                     new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('id', ScalarT::int())]), 200), $location),
                     new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('status', new LiteralT('accepted'))]), 202), $location),
                 ]),
+
+                // A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.
+                self::CONTROLLER.'showAttachment' => new ActionAnalysis(
+                    returns: [new ReturnSite(UnionT::of([new ClassT(self::WIDGET_MODEL), new ClassT(self::GADGET_MODEL)]), $location)],
+                ),
+
+                // A success 200 plus a renderable exception the inferred-handler tier documents as 402.
+                self::CONTROLLER.'checkout' => new ActionAnalysis(
+                    returns: [new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('ok', ScalarT::bool())]), 200), $location)],
+                    throws: [new ThrownException(self::PAYMENT_EXCEPTION, 402, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
+                ),
             ],
             classes: [
                 'Workbench\\App\\Data\\FormData' => $formData,
@@ -173,8 +184,23 @@ final class WorkbenchEngine
                     new PropertyMetadata('status', ScalarT::string()),
                     new PropertyMetadata('meta', ScalarT::string()),
                 ]),
+                self::GADGET_MODEL => new ClassMetadata(self::GADGET_MODEL, [
+                    new PropertyMetadata('id', ScalarT::int()),
+                    new PropertyMetadata('label', ScalarT::string()),
+                ]),
             ],
-            callables: $callables,
+            callables: [
+                // The renderable exception's render() as the engine recovers it — the inferred-handler
+                // tier analyses PaymentRequiredException::render and documents its 402 body.
+                self::PAYMENT_EXCEPTION.'::render' => new ActionAnalysis(
+                    returns: [new ReturnSite($jsonResponse(new ArrayShapeT([
+                        new ArrayShapeField('type', ScalarT::string()),
+                        new ArrayShapeField('title', ScalarT::string()),
+                        new ArrayShapeField('status', new LiteralT(402)),
+                    ]), 402), $location)],
+                ),
+                ...$callables,
+            ],
         );
     }
 
@@ -191,4 +217,8 @@ final class WorkbenchEngine
     private const JSONAPI_RESOURCE = 'Docuccino\\Laravel\\Tests\\Fixtures\\ApiResources\\ArticleJsonApiResource';
 
     private const WIDGET_MODEL = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget';
+
+    private const GADGET_MODEL = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Gadget';
+
+    private const PAYMENT_EXCEPTION = 'Workbench\\App\\Exceptions\\PaymentRequiredException';
 }

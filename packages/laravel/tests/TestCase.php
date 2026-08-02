@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Tests;
 
 use Docuccino\Laravel\DocuccinoServiceProvider;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Routing\Router;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Workbench\App\Http\Controllers\BrokenController;
@@ -37,6 +40,9 @@ abstract class TestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmF0FYqwoDL18E=');
+
+        // The morph map the /api/attachments discriminator resolves its aliases from (design §Phase 4).
+        Relation::morphMap(['widget' => Widget::class, 'gadget' => Gadget::class], false);
     }
 
     protected function defineRoutes($router): void
@@ -65,5 +71,10 @@ abstract class TestCase extends Orchestra
         $router->get('api/model-widgets/{id}', [IntegrationsController::class, 'showWidget']);
         $router->delete('api/model-widgets/{id}', [IntegrationsController::class, 'destroyWidget']);
         $router->post('api/reports', [IntegrationsController::class, 'storeReport']);
+
+        // Phase-4b wave-2 routes: a polymorphic morph (discriminated oneOf) and a renderable
+        // exception the inferred-handler tier documents.
+        $router->get('api/attachments/{id}', [IntegrationsController::class, 'showAttachment']);
+        $router->post('api/checkout', [IntegrationsController::class, 'checkout']);
     }
 }
