@@ -11,7 +11,8 @@ namespace Docuccino\Core\Support;
  * derivation — every site that shorts an FQCN for display must do it identically,
  * so a private copy in each risked drift.
  *
- * @internal
+ * Public (not `@internal`): a pure, stable string helper that built-in integrations use directly
+ * rather than inlining a copy to dodge the arch-test allow-list (see IntegrationsArchTest).
  */
 final class Fqcn
 {

@@ -28,6 +28,10 @@ arch('built-in integrations consume only the public extension surface')
         'Docuccino\Laravel\Integrations',
         'Illuminate',
         'PhpParser',
+        // A pure, stable string helper (last namespace segment of an FQCN). Integrations short an
+        // FQCN for a component name identically to the core; allow-listing the single class beats
+        // each integration inlining a private copy (Tom's standing correction).
+        'Docuccino\Core\Support\Fqcn',
     ]);
 
 arch('built-in integrations never reach into core internals or adapter wiring')
