@@ -59,8 +59,49 @@ final class LaravelRouteResolver implements RouteResolver
             uri: '/'.ltrim($route->uri(), '/'),
             name: $route->getName(),
             action: $route->getActionName(),
-            middleware: self::strings($route->gatherMiddleware()),
+            middleware: $this->gatherMiddleware($route),
         );
+    }
+
+    /**
+     * The route's gathered middleware with kernel middleware GROUPS expanded to their members
+     * (recursively, cycle-guarded), so middleware registered app-wide via a group — e.g. Sanctum's
+     * `EnsureFrontendRequestsAreStateful` prepended to the `api` group by `statefulApi()`, or a
+     * group's `throttle:` — is detected the same as if declared on the route. Aliases and
+     * `alias:params` entries are left verbatim (the detectors read their short forms), so this widens
+     * detection without the wholesale alias resolution `Router::gatherRouteMiddleware()` would do.
+     *
+     * @return list<string>
+     */
+    private function gatherMiddleware(Route $route): array
+    {
+        $groups = $this->router->getMiddlewareGroups();
+
+        $out = [];
+        foreach (self::strings($route->gatherMiddleware()) as $entry) {
+            $this->expandMiddleware($entry, $groups, $out, []);
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $groups
+     * @param  list<string>  $out
+     * @param  list<string>  $visiting  the group names currently being expanded (cycle guard)
+     */
+    private function expandMiddleware(string $entry, array $groups, array &$out, array $visiting): void
+    {
+        if (! array_key_exists($entry, $groups) || in_array($entry, $visiting, true)) {
+            $out[] = $entry;
+
+            return;
+        }
+
+        $members = is_array($groups[$entry]) ? $groups[$entry] : [];
+        foreach (self::strings($members) as $member) {
+            $this->expandMiddleware($member, $groups, $out, [...$visiting, $entry]);
+        }
     }
 
     /**

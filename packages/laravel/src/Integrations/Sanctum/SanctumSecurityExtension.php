@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 
 /**
  * Auto-configures Sanctum security on protected operations (design §Phase 4 — Sanctum auto-config),
@@ -31,6 +32,7 @@ final class SanctumSecurityExtension implements OperationExtension
 
     public function __construct(
         private readonly SanctumDetector $detector = new SanctumDetector,
+        private readonly ?ConfigRepository $config = null,
     ) {}
 
     public function phase(): OperationPhase
@@ -100,11 +102,21 @@ final class SanctumSecurityExtension implements OperationExtension
         return $filtered === [] ? self::DEFAULT_MODES : $filtered;
     }
 
+    /**
+     * The stateful cookie name for the apiKey-in-cookie scheme. The Sanctum stateful cookie IS the
+     * Laravel session cookie, so resolve: an explicit per-document override, else the app's real
+     * `session.cookie` (customised per app — e.g. `myapp_session`), else Laravel's default name.
+     */
     private function sessionCookie(RouteContext $context): string
     {
         $sanctum = $context->document->security['sanctum'] ?? null;
         $cookie = is_array($sanctum) ? ($sanctum['cookie'] ?? null) : null;
+        if (is_string($cookie) && $cookie !== '') {
+            return $cookie;
+        }
 
-        return is_string($cookie) && $cookie !== '' ? $cookie : 'laravel_session';
+        $sessionCookie = $this->config?->get('session.cookie');
+
+        return is_string($sessionCookie) && $sessionCookie !== '' ? $sessionCookie : 'laravel_session';
     }
 }

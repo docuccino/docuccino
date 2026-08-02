@@ -47,6 +47,24 @@ it('emits an OR-list of both schemes for a dual-auth (token + stateful) route', 
         ]);
 });
 
+it('detects group-prepended stateful middleware (statefulApi) through the expanded route middleware', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    // Simulate statefulApi() prepending EnsureFrontendRequestsAreStateful to an app-wide group: the
+    // route carries only the GROUP name, not the FQCN. The resolver must expand the group so the
+    // stateful mode is detected the same as if declared inline.
+    $router->middlewareGroup('docuccino-stateful-api', [SANCTUM_STATEFUL]);
+    $router->get('api/sanctum-grouped', [FormController::class, 'index'])->middleware(['auth:sanctum', 'docuccino-stateful-api']);
+
+    $document = autoConfiguredDocument();
+
+    expect($document['components']['securitySchemes'])->toHaveKeys(['sanctumToken', 'sanctumStateful'])
+        ->and($document['paths']['/api/sanctum-grouped']['get']['security'])->toBe([
+            ['sanctumToken' => []],
+            ['sanctumStateful' => []],
+        ]);
+});
+
 it('filters modes per document: a token-only document drops the stateful mode from a dual route', function (): void {
     /** @var Router $router */
     $router = app('router');
