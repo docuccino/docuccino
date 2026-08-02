@@ -37,7 +37,12 @@ function fakeTransformers(): array
         {
             public function supports(ValidationRule $rule): bool
             {
-                return in_array($rule->name, ['required', 'nullable', 'str', 'int'], true);
+                return in_array($rule->name, $this->handledRuleNames(), true);
+            }
+
+            public function handledRuleNames(): array
+            {
+                return ['required', 'nullable', 'str', 'int'];
             }
 
             public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
@@ -129,7 +134,12 @@ it('lets an earlier transformer intercept a rule ahead of later ones', function 
     {
         public function supports(ValidationRule $rule): bool
         {
-            return $rule->name === 'mystery';
+            return in_array($rule->name, $this->handledRuleNames(), true);
+        }
+
+        public function handledRuleNames(): array
+        {
+            return ['mystery'];
         }
 
         public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

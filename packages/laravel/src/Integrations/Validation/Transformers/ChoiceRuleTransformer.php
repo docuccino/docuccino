@@ -18,7 +18,12 @@ final class ChoiceRuleTransformer implements RuleTransformer
 {
     public function supports(ValidationRule $rule): bool
     {
-        return $rule->name === 'in' || $rule->name === 'enum';
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return ['in', 'enum'];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

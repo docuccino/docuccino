@@ -40,6 +40,11 @@ final class TypeRuleTransformer implements RuleTransformer
         return isset(self::TYPES[$rule->name]);
     }
 
+    public function handledRuleNames(): array
+    {
+        return array_keys(self::TYPES);
+    }
+
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
         $mapping = self::TYPES[$rule->name];

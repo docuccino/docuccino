@@ -21,7 +21,12 @@ final class SizeRuleTransformer implements RuleTransformer
 
     public function supports(ValidationRule $rule): bool
     {
-        return in_array($rule->name, self::NAMES, true);
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return self::NAMES;
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

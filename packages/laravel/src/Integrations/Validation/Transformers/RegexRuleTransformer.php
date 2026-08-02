@@ -18,7 +18,12 @@ final class RegexRuleTransformer implements RuleTransformer
 {
     public function supports(ValidationRule $rule): bool
     {
-        return $rule->name === 'regex';
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return ['regex'];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

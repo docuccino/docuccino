@@ -18,7 +18,12 @@ final class DateFormatRuleTransformer implements RuleTransformer
 {
     public function supports(ValidationRule $rule): bool
     {
-        return $rule->name === 'date_format';
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return ['date_format'];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

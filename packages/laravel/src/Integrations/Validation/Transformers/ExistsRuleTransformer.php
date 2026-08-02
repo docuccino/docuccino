@@ -19,7 +19,12 @@ final class ExistsRuleTransformer implements RuleTransformer
 {
     public function supports(ValidationRule $rule): bool
     {
-        return $rule->name === 'exists' || $rule->name === 'unique';
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return ['exists', 'unique'];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void

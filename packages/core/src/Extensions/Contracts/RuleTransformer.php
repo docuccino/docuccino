@@ -23,4 +23,13 @@ interface RuleTransformer
     public function supports(ValidationRule $rule): bool;
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void;
+
+    /**
+     * The exhaustive list of rule names this transformer handles — the single source of truth its
+     * {@see supports()} is derived from, so the vocabulary can be guarded: every declared name must
+     * route to exactly one transformer and carry a dataset row (design §Test-coverage standards).
+     *
+     * @return list<string>
+     */
+    public function handledRuleNames(): array;
 }

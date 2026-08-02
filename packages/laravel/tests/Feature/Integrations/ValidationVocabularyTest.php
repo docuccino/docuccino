@@ -196,6 +196,34 @@ it('switches to multipart and documents the confirmed partner', function (): voi
         ->and($confirmed['required'])->toBe(['password', 'password_confirmation']);
 });
 
+/**
+ * The vocabulary guard (design §Test-coverage standards; the FrameworkErrors derive-from-table
+ * pattern): the dataset is DERIVED from every transformer's declared handledRuleNames(), so a name
+ * added to a transformer without a row here fails the guard. Each declared name must route to exactly
+ * one transformer — proving no gap (a declared name supports() rejects) and no overlap (two
+ * transformers claiming the same name).
+ *
+ * @return iterable<string, array{string}>
+ */
+function handledRuleNameRows(): iterable
+{
+    foreach (ValidationIntegration::transformers() as $transformer) {
+        foreach ($transformer->handledRuleNames() as $name) {
+            yield $name => [$name];
+        }
+    }
+}
+
+it('routes every declared rule name to exactly one transformer', function (string $name): void {
+    $rule = ValidationRule::of($name);
+    $matching = array_filter(
+        ValidationIntegration::transformers(),
+        static fn ($transformer): bool => $transformer->supports($rule),
+    );
+
+    expect($matching)->toHaveCount(1);
+})->with(handledRuleNameRows());
+
 it('raises an info diagnostic for a rule no transformer handles', function (): void {
     $result = convertLaravelRules(['token' => 'string|starts_with:abc']);
 

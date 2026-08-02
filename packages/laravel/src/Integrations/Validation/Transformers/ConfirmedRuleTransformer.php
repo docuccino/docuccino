@@ -18,7 +18,12 @@ final class ConfirmedRuleTransformer implements RuleTransformer
 {
     public function supports(ValidationRule $rule): bool
     {
-        return $rule->name === 'confirmed';
+        return in_array($rule->name, $this->handledRuleNames(), true);
+    }
+
+    public function handledRuleNames(): array
+    {
+        return ['confirmed'];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
