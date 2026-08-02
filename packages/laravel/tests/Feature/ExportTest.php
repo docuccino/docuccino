@@ -5,37 +5,13 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\UirEmitter;
-use Docuccino\Core\Extensions\Context\DocumentConfig;
-use Docuccino\Core\Inference\TypeEngine;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Facades\Docuccino;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
-use Docuccino\Laravel\Pipeline\GenerationResult;
 use Docuccino\Laravel\Tests\Support\LateBoundMarker;
-use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /**
  * End-to-end coverage of the Laravel adapter against the workbench app: golden export bytes,
  * late-bound registration, per-route failure isolation, and determinism.
  */
-function bindStubEngine(): void
-{
-    app()->instance(TypeEngine::class, WorkbenchEngine::make());
-}
-
-function workbenchConfig(): DocumentConfig
-{
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-
-    return app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-}
-
-function generateWorkbench(): GenerationResult
-{
-    return app(DocumentGenerator::class)->generate(workbenchConfig(), app(TypeEngine::class));
-}
-
 function golden(string $name): string
 {
     return dirname(__DIR__).'/Fixtures/golden/'.$name;
@@ -58,7 +34,7 @@ function assertGolden(string $name, string $actual): void
 it('exports UIR and OpenAPI byte-identical to the committed goldens', function (): void {
     bindStubEngine();
 
-    $document = generateWorkbench()->document;
+    $document = generateDocument()->document;
 
     assertGolden('workbench.uir.json', (new UirEmitter)->emit($document));
     assertGolden('workbench.openapi.json', (new OpenApi32Emitter)->emit($document));
@@ -83,7 +59,7 @@ it('picks up an extension registered AFTER the app has booted (late-binding trap
     // The app is fully booted here; a registration made now must still take effect at build time.
     Docuccino::extend(new LateBoundMarker);
 
-    $document = generateWorkbench()->document;
+    $document = generateDocument()->document;
 
     expect($document->info['title'] ?? null)->toBe('LATE-BOUND');
 });
@@ -91,7 +67,7 @@ it('picks up an extension registered AFTER the app has booted (late-binding trap
 it('isolates a broken route to a skeleton without failing the build', function (): void {
     bindStubEngine();
 
-    $result = generateWorkbench();
+    $result = generateDocument();
     $paths = $result->document->paths ?? [];
 
     // The healthy routes are documented...
@@ -112,8 +88,8 @@ it('isolates a broken route to a skeleton without failing the build', function (
 it('produces byte-identical output across two runs (determinism)', function (): void {
     bindStubEngine();
 
-    $first = (new UirEmitter)->emit(generateWorkbench()->document);
-    $second = (new UirEmitter)->emit(generateWorkbench()->document);
+    $first = (new UirEmitter)->emit(generateDocument()->document);
+    $second = (new UirEmitter)->emit(generateDocument()->document);
 
     expect($second)->toBe($first);
 });

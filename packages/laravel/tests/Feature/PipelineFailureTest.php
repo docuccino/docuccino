@@ -20,15 +20,6 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
  * Pipeline failure semantics (design §5): --fail-on exit-code matrix, the validate command's
  * schema-violation failure, per-route engine-exception isolation, and component rollback (arch A3).
  */
-function buildDefaultDoc(): array
-{
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-
-    return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document->toArray();
-}
-
 it('honours the --fail-on matrix against the broken route', function (string $failOn, bool $fails): void {
     app()->instance(TypeEngine::class, WorkbenchEngine::make());
     $out = sys_get_temp_dir().'/docuccino-failon-'.uniqid().'.json';
@@ -104,7 +95,7 @@ it('rolls back components registered by a route that then throws (A3)', function
         }
     });
 
-    $document = buildDefaultDoc();
+    $document = generateDocument()->document->toArray();
 
     // The failed route left no orphaned component behind...
     expect($document['components']['schemas'] ?? [])->not->toHaveKey('OrphanFromPing')

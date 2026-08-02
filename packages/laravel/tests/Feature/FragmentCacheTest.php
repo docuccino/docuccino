@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -11,9 +10,7 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Facades\Docuccino;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\LateBoundMarker;
@@ -33,15 +30,6 @@ function enableFragmentCache(): string
     return $dir;
 }
 
-function buildDefault(): UirDocument
-{
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-
-    return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document;
-}
-
 afterEach(function (): void {
     foreach (glob(sys_get_temp_dir().'/docuccino-fragments-*') ?: [] as $dir) {
         array_map('unlink', glob($dir.'/*') ?: []);
@@ -55,12 +43,12 @@ it('serves a warm cache hit byte-identically while skipping the engine', functio
     app()->instance(TypeEngine::class, $engine);
 
     // Cold run: the engine is exercised and fragments are written.
-    $cold = (new UirEmitter)->emit(buildDefault());
+    $cold = (new UirEmitter)->emit(generateDocument()->document);
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 
     // Warm run: every fragment is served from cache; the engine is never touched.
     $engine->analyzeCount = 0;
-    $warm = (new UirEmitter)->emit(buildDefault());
+    $warm = (new UirEmitter)->emit(generateDocument()->document);
 
     expect($warm)->toBe($cold)
         ->and($engine->analyzeCount)->toBe(0);
@@ -71,12 +59,12 @@ it('invalidates fragments when the document config changes', function (): void {
     $engine = new CountingTypeEngine(WorkbenchEngine::make());
     app()->instance(TypeEngine::class, $engine);
 
-    buildDefault();
+    generateDocument()->document;
     $engine->analyzeCount = 0;
 
     // A representation policy change alters the document configHash → every key changes → miss.
     config()->set('docuccino.documents.default.representation.operation_id', 'controller-method');
-    buildDefault();
+    generateDocument()->document;
 
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
@@ -99,12 +87,12 @@ it('invalidates a fragment when one of its dependency files changes', function (
     $engine = new CountingTypeEngine($stub);
     app()->instance(TypeEngine::class, $engine);
 
-    buildDefault();
+    generateDocument()->document;
     $engine->analyzeCount = 0;
 
     // Touch the dependency: its stored hash no longer matches → the dependent fragment invalidates.
     file_put_contents($dependency, '<?php // v2');
-    buildDefault();
+    generateDocument()->document;
 
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 
@@ -116,12 +104,12 @@ it('invalidates every fragment when the resolved extension set changes', functio
     $engine = new CountingTypeEngine(WorkbenchEngine::make());
     app()->instance(TypeEngine::class, $engine);
 
-    buildDefault();
+    generateDocument()->document;
     $engine->analyzeCount = 0;
 
     // Registering a new extension changes the resolved extension signature → every key changes.
     Docuccino::extend(new LateBoundMarker);
-    buildDefault();
+    generateDocument()->document;
 
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
@@ -143,12 +131,12 @@ it('invalidates a fragment when one of its dependency files is REMOVED', functio
     $engine = new CountingTypeEngine($stub);
     app()->instance(TypeEngine::class, $engine);
 
-    buildDefault();
+    generateDocument()->document;
     $engine->analyzeCount = 0;
 
     // Deleting the dependency makes its stored hash unverifiable → the dependent fragment invalidates.
     @unlink($dependency);
-    buildDefault();
+    generateDocument()->document;
 
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
@@ -169,12 +157,12 @@ it('is a no-op when disabled (default): the engine runs on every build', functio
     $engine = new CountingTypeEngine(WorkbenchEngine::make());
     app()->instance(TypeEngine::class, $engine);
 
-    buildDefault();
+    generateDocument()->document;
     $first = $engine->analyzeCount;
     expect($first)->toBeGreaterThan(0);
 
     $engine->analyzeCount = 0;
-    buildDefault();
+    generateDocument()->document;
 
     expect($engine->analyzeCount)->toBe($first);
 });

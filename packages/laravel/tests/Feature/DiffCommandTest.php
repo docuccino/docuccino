@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Process;
  */
 function writeArtifact(?callable $mutate = null): string
 {
-    $document = generateWorkbench()->document;
+    $document = generateDocument()->document;
 
     /** @var array<string, mixed> $uir */
     $uir = json_decode((new UirEmitter)->emit($document), true, flags: JSON_THROW_ON_ERROR);
@@ -106,7 +106,7 @@ it('emits machine-readable JSON with --format=json', function (): void {
 it('reads the old artifact from a git ref via --against', function (): void {
     bindStubEngine();
 
-    $uir = (new UirEmitter)->emit(generateWorkbench()->document);
+    $uir = (new UirEmitter)->emit(generateDocument()->document);
     // The command runs array-form (no shell, security L3), so its Symfony commandline is escaped
     // per-argument ('git' 'show' 'HEAD:docs/openapi.json') — match on the escaped form.
     Process::fake(['*git*show*' => Process::result(output: $uir)]);

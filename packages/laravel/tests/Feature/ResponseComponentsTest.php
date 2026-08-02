@@ -8,9 +8,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Facades\Docuccino;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
@@ -18,17 +16,7 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
  * Reusable response components (design §6 error-response chain / the Problem Details preset seam):
  * shared `components.responses` are hoisted once, referenced by `$ref` from many operations, roll
  * back with a failed route, and survive a warm cache hit — the same discipline schemas get (S5).
- */
-function responsesDocument(): array
-{
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-
-    return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document->toArray();
-}
-
-/**
+ *
  * An extension that references a shared response component (`$name`) from status 418 of every
  * operation; for `$throwOnUri` it additionally registers an orphan response and then explodes.
  */
@@ -71,7 +59,7 @@ it('hoists a shared response component once and resolves every $ref to it', func
     app()->instance(TypeEngine::class, WorkbenchEngine::make());
     Docuccino::extend(shareResponseExtension('SharedProblem'));
 
-    $document = responsesDocument();
+    $document = generateDocument()->document->toArray();
 
     expect($document['components']['responses']['SharedProblem']['description'] ?? null)
         ->toBe('A shared problem response');
@@ -94,7 +82,7 @@ it('rolls back a response component registered by a route that then throws', fun
     app()->instance(TypeEngine::class, WorkbenchEngine::make());
     Docuccino::extend(shareResponseExtension('SharedResponse', throwOnUri: '/api/ping'));
 
-    $document = responsesDocument();
+    $document = generateDocument()->document->toArray();
 
     // The healthy routes' shared response survives; the failed route's orphan left nothing behind.
     expect($document['components']['responses'] ?? [])->toHaveKey('SharedResponse')
@@ -110,14 +98,14 @@ it('restores a response component from a warm cache hit without touching the eng
     app()->instance(TypeEngine::class, $engine);
     Docuccino::extend(shareResponseExtension('SharedProblem'));
 
-    $cold = responsesDocument();
+    $cold = generateDocument()->document->toArray();
     expect($cold['components']['responses'] ?? [])->toHaveKey('SharedProblem')
         ->and($engine->analyzeCount)->toBeGreaterThan(0);
 
     // Warm run: fragments are served from cache (the extension never re-runs), yet the referenced
     // response component is restored from the fragment and re-emitted.
     $engine->analyzeCount = 0;
-    $warm = responsesDocument();
+    $warm = generateDocument()->document->toArray();
 
     expect($warm['components']['responses'] ?? [])->toHaveKey('SharedProblem')
         ->and($engine->analyzeCount)->toBe(0);

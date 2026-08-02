@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Pipeline\GenerationResult;
+use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
 
 /*
@@ -11,6 +16,34 @@ use Docuccino\Laravel\Tests\TestCase;
 
 uses()->in(dirname(__DIR__).'/packages/core/tests');
 uses(TestCase::class)->in(dirname(__DIR__).'/packages/laravel/tests');
+
+/**
+ * Bind the deterministic workbench stub {@see TypeEngine} the Laravel feature tests build against.
+ */
+function bindStubEngine(): void
+{
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+}
+
+/**
+ * Build the `default` workbench document, optionally mutating its raw config first. The single
+ * shared build helper the Laravel feature tests use instead of each re-rolling the config →
+ * generator wiring (and coupling across files via a peer test's global function).
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
+ */
+function generateDocument(?callable $mutateConfig = null): GenerationResult
+{
+    /** @var array<string, mixed> $raw */
+    $raw = config('docuccino.documents.default');
+    if ($mutateConfig !== null) {
+        $raw = $mutateConfig($raw);
+    }
+
+    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+
+    return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
+}
 
 /**
  * @return array<string, mixed>
