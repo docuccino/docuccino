@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\ViewerContext;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Runtime\DocumentCache;
+use Docuccino\Laravel\Support\Paths;
 use Docuccino\Laravel\Viewer\ScalarViewer;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
@@ -100,9 +101,7 @@ final class DocsController
 
     private function fromArtifact(DocumentConfig $config): string
     {
-        $export = is_array($config->raw['export'] ?? null) ? $config->raw['export'] : [];
-        $path = is_string($export['path'] ?? null) ? $export['path'] : 'docs/openapi.json';
-        $absolute = str_starts_with($path, '/') ? $path : base_path($path);
+        $absolute = Paths::absolute($config->exportPath(), base_path());
         $contents = @file_get_contents($absolute);
         if ($contents === false) {
             return '';

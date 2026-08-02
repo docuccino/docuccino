@@ -13,6 +13,7 @@ use Docuccino\Core\Diff\Policy\VersioningPolicies;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
+use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 use JsonException;
@@ -126,7 +127,7 @@ final class DiffCommand extends Command
 
     private function readFromDisk(string $path): ?string
     {
-        $absolute = str_starts_with($path, '/') ? $path : base_path($path);
+        $absolute = Paths::absolute($path, base_path());
         $contents = @file_get_contents($absolute);
 
         if ($contents === false) {

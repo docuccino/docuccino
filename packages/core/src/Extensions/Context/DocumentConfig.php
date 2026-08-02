@@ -137,4 +137,16 @@ final readonly class DocumentConfig
     {
         return Hydrate::listOfMaps($this->security['default'] ?? null);
     }
+
+    /**
+     * The configured export target from `export.path` (the file the `docuccino:export` artifact is
+     * written to and the viewer's `artifact` source reads back), defaulting to `docs/openapi.json`.
+     * Framework-agnostic: may be relative — the adapter resolves it against the app base path.
+     */
+    public function exportPath(): string
+    {
+        $export = is_array($this->raw['export'] ?? null) ? $this->raw['export'] : [];
+
+        return is_string($export['path'] ?? null) ? $export['path'] : 'docs/openapi.json';
+    }
 }

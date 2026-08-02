@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\GenerationResult;
+use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
 
 /**
@@ -120,19 +121,9 @@ final class ExportCommand extends Command
     private function outputPath(DocumentConfig $config): string
     {
         $out = $this->option('out');
-        if (is_string($out) && $out !== '') {
-            return $this->absolute($out);
-        }
+        $path = is_string($out) && $out !== '' ? $out : $config->exportPath();
 
-        $export = is_array($config->raw['export'] ?? null) ? $config->raw['export'] : [];
-        $path = is_string($export['path'] ?? null) ? $export['path'] : 'docs/openapi.json';
-
-        return $this->absolute($path);
-    }
-
-    private function absolute(string $path): string
-    {
-        return str_starts_with($path, '/') ? $path : base_path($path);
+        return Paths::absolute($path, base_path());
     }
 
     private function provenanceLevel(): ProvenanceLevel

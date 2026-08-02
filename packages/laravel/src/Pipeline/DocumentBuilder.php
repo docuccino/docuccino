@@ -13,6 +13,7 @@ use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\TypeEngineMode;
+use Docuccino\Laravel\Support\Paths;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -141,7 +142,7 @@ final class DocumentBuilder
         $diagnostics = [];
 
         foreach ($config->overlays as $pattern) {
-            foreach (glob($this->absolute($pattern)) ?: [] as $file) {
+            foreach (glob(Paths::absolute($pattern, $this->basePath)) ?: [] as $file) {
                 try {
                     /** @var array<string, mixed> $parsed */
                     $parsed = (array) Yaml::parseFile($file);
@@ -157,11 +158,6 @@ final class DocumentBuilder
         }
 
         return [$overlays, $diagnostics];
-    }
-
-    private function absolute(string $path): string
-    {
-        return str_starts_with($path, '/') ? $path : $this->basePath.'/'.ltrim($path, '/');
     }
 
     /**
