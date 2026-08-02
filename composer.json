@@ -30,7 +30,9 @@
     },
     "require-dev": {
         "larastan/larastan": "^3.10",
+        "laravel/passport": "^12.0",
         "laravel/pint": "^1.18",
+        "laravel/sanctum": "^4.0",
         "orchestra/testbench": "^10.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-type-coverage": "^4.0",

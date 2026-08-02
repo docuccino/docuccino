@@ -96,7 +96,9 @@ final class Assembler
             $componentsOut['responses'] = $componentResponses;
         }
 
-        $securitySchemes = $document->securitySchemes();
+        // Explicit config schemes win over integration-contributed ones (Sanctum/Passport auto-config);
+        // the canonicalizer sorts the keys.
+        $securitySchemes = $document->securitySchemes() + $components->securitySchemes();
         if ($securitySchemes !== []) {
             $componentsOut['securitySchemes'] = $securitySchemes;
         }

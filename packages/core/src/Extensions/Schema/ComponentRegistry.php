@@ -46,6 +46,16 @@ final class ComponentRegistry
     private array $responses = [];
 
     /**
+     * Security schemes contributed by integrations (name → OAS security-scheme object) — e.g. the
+     * Sanctum `bearer`/`apiKey` or Passport `oauth2` an integration auto-configures when the package
+     * is installed and no scheme was set in config. Merged UNDER config schemes by the assembler
+     * (explicit config wins). Same hoist/dedupe discipline as responses.
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    private array $securitySchemes = [];
+
+    /**
      * @var list<Diagnostic>
      */
     private array $diagnostics = [];
@@ -200,6 +210,19 @@ final class ComponentRegistry
     }
 
     /**
+     * Register a security scheme an integration auto-configured, returning the final component name.
+     * A structurally-identical re-registration under the same name dedupes, so many operations
+     * sharing one scheme (`sanctum`, `passport`) hoist it once; the returned name is what an
+     * operation's `security` requirement references.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    public function registerSecurityScheme(string $name, array $definition): string
+    {
+        return $this->registerNamed($this->securitySchemes, $name, $definition, 'security schemes');
+    }
+
+    /**
      * Hoist a named body into a component bucket, deduping a structurally-equal body and suffixing a
      * genuine collision (with a warning). Shared by the response path and mirrors the schema path's
      * hoist/dedupe discipline; schemas additionally reserve names for self-reference cycles, so they
@@ -248,7 +271,7 @@ final class ComponentRegistry
      * (or leaked name reservations) from a route that never made it into the document
      * (design §5 isolated try/catch).
      *
-     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
      */
     public function snapshot(): array
     {
@@ -257,12 +280,13 @@ final class ComponentRegistry
             'schemaIds' => $this->schemaIds,
             'reservedIds' => $this->reservedIds,
             'responses' => $this->responses,
+            'securitySchemes' => $this->securitySchemes,
             'diagnostics' => $this->diagnostics,
         ];
     }
 
     /**
-     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
      */
     public function restore(array $snapshot): void
     {
@@ -270,6 +294,7 @@ final class ComponentRegistry
         $this->schemaIds = $snapshot['schemaIds'];
         $this->reservedIds = $snapshot['reservedIds'];
         $this->responses = $snapshot['responses'];
+        $this->securitySchemes = $snapshot['securitySchemes'];
         $this->diagnostics = $snapshot['diagnostics'];
     }
 
@@ -295,6 +320,14 @@ final class ComponentRegistry
     public function responses(): array
     {
         return $this->responses;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function securitySchemes(): array
+    {
+        return $this->securitySchemes;
     }
 
     /**

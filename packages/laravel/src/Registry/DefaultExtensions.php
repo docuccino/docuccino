@@ -18,8 +18,10 @@ use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
+use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
+use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
@@ -71,6 +73,10 @@ final class DefaultExtensions
             // Spatie Query Builder (design §Phase 4 — the Scramble-Pro-beater): trace-recovered
             // allowedFilters/Sorts/Includes/Fields + pagination, added only when the package exists.
             ...(QueryBuilderIntegration::installed() ? QueryBuilderIntegration::extensions() : []),
+            // Security auto-config (Telescope-style guards): Sanctum → bearer/cookie scheme;
+            // Passport → oauth2 scheme + per-operation scopes from scope:/scopes: middleware.
+            ...(SanctumIntegration::installed() ? SanctumIntegration::extensions() : []),
+            ...(PassportIntegration::installed() ? PassportIntegration::extensions() : []),
             ...DefaultTypeMappers::all(),
         ];
     }
