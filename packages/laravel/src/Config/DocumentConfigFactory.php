@@ -8,6 +8,7 @@ use Closure;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Core\Support\Hydrate;
+use Docuccino\Laravel\Support\ConfinedPath;
 use Docuccino\Laravel\Tags\PrefixTagMapper;
 use Illuminate\Contracts\Container\Container;
 
@@ -105,8 +106,10 @@ final readonly class DocumentConfigFactory
         $description = $info['description'] ?? null;
 
         if (is_array($description) && isset($description['file']) && is_string($description['file'])) {
-            $path = $this->basePath.'/'.ltrim($description['file'], '/');
-            $contents = @file_get_contents($path);
+            // Confine the description file to the app base path (security L2): a `../` escape reads
+            // nothing rather than leaking an out-of-tree file.
+            $resolved = ConfinedPath::resolve($this->basePath, $description['file']);
+            $contents = $resolved === null ? false : @file_get_contents($resolved);
             $info['description'] = $contents === false ? '' : rtrim($contents, "\n");
         }
 

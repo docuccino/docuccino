@@ -9,11 +9,14 @@ use Docuccino\Attributes\DescriptionFromFile;
 use Docuccino\Attributes\Group;
 use Docuccino\Attributes\Internal;
 use Docuccino\Attributes\OperationId;
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Support\ConfinedPath;
 
 /**
  * The overrides layer: docblock summary/description (docblock precedence), then the operation
@@ -64,11 +67,37 @@ final class AttributeOverridesExtension implements OperationExtension
 
         $fromFile = $context->attributes->first(DescriptionFromFile::class);
         if ($fromFile !== null) {
-            $contents = @file_get_contents($this->basePath.'/'.ltrim($fromFile->path, '/'));
-            if ($contents !== false) {
-                $operation->setDescription(rtrim($contents, "\n"), $attribute);
-            }
+            $this->applyDescriptionFromFile($operation, $context, $fromFile->path, $attribute);
         }
+    }
+
+    /**
+     * Load a `#[DescriptionFromFile]` markdown file into the description, confined to the app base
+     * path (security L2): a path escaping the base is rejected with an error diagnostic and no read.
+     * A successfully read file joins the route's fragment-cache dependencies (design §10) so editing
+     * it invalidates the cached operation.
+     */
+    private function applyDescriptionFromFile(OperationDraft $operation, RouteContext $context, string $path, Contribution $attribute): void
+    {
+        $resolved = ConfinedPath::resolve($this->basePath, $path);
+        if ($resolved === null) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Error,
+                code: 'description-file.escapes-base-path',
+                message: sprintf('#[DescriptionFromFile] path "%s" escapes the application base path and was rejected.', $path),
+                source: $context->actionSource(),
+            ));
+
+            return;
+        }
+
+        $contents = @file_get_contents($resolved);
+        if ($contents === false) {
+            return;
+        }
+
+        $context->dependencies()->addFile($resolved);
+        $operation->setDescription(rtrim($contents, "\n"), $attribute);
     }
 
     /**
