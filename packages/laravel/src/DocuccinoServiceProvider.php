@@ -14,12 +14,14 @@ use Docuccino\Laravel\Console\ExportCommand;
 use Docuccino\Laravel\Console\ValidateCommand;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
+use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\Route;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -96,5 +98,34 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
             return $app->make(TypeEngineFactory::class)->make($config);
         });
+    }
+
+    /**
+     * Register the runtime viewer routes for each document that configures a `viewer.route`: the
+     * Scalar HTML page, its `.json` spec, and the locally bundled Scalar asset. Guarding lives in
+     * the controller (a `viewer.gate` ability, else local env only).
+     */
+    public function packageBooted(): void
+    {
+        /** @var array<string, mixed> $documents */
+        $documents = (array) config('docuccino.documents', []);
+
+        foreach ($documents as $key => $document) {
+            if (! is_array($document)) {
+                continue;
+            }
+
+            $viewer = is_array($document['viewer'] ?? null) ? $document['viewer'] : [];
+            $route = $viewer['route'] ?? null;
+            if (! is_string($route) || $route === '') {
+                continue;
+            }
+
+            $base = '/'.ltrim($route, '/');
+
+            Route::get($base, [DocsController::class, 'show'])->defaults('document', (string) $key);
+            Route::get($base.'.json', [DocsController::class, 'spec'])->defaults('document', (string) $key);
+            Route::get($base.'/assets/scalar.js', [DocsController::class, 'asset']);
+        }
     }
 }

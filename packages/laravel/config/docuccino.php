@@ -73,9 +73,10 @@ return [
             ],
             'viewer' => [
                 'driver' => 'scalar',
-                'route' => '/docs/api',
-                'gate' => null,
-                'source' => 'generate',
+                'route' => '/docs/api',       // null disables the runtime endpoints for this document
+                'gate' => null,               // Gate ability name; null = local environment only
+                'source' => 'generate',       // generate | artifact (export.path) | cache (docuccino:cache)
+                // 'cdn' => false,            // true loads Scalar from a CDN instead of the bundled asset
             ],
         ],
     ],
