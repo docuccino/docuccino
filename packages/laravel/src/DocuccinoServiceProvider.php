@@ -6,12 +6,12 @@ namespace Docuccino\Laravel;
 
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\SourcePathResolver;
+use Docuccino\Laravel\Commands\CacheCommand;
+use Docuccino\Laravel\Commands\ClearCommand;
+use Docuccino\Laravel\Commands\DiffCommand;
+use Docuccino\Laravel\Commands\ExportCommand;
+use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Console\CacheCommand;
-use Docuccino\Laravel\Console\ClearCommand;
-use Docuccino\Laravel\Console\DiffCommand;
-use Docuccino\Laravel\Console\ExportCommand;
-use Docuccino\Laravel\Console\ValidateCommand;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;

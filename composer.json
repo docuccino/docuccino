@@ -2,11 +2,31 @@
     "name": "docuccino/docuccino",
     "description": "UIR-based API documentation generator for Laravel (monorepo).",
     "type": "project",
+    "keywords": [
+        "openapi",
+        "api-documentation",
+        "laravel",
+        "uir",
+        "swagger",
+        "scramble-alternative"
+    ],
+    "homepage": "https://docuccino.app",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Tom Martin"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/docuccino/docuccino/issues",
+        "source": "https://github.com/docuccino/docuccino"
+    },
     "require": {
         "php": "^8.3",
-        "docuccino/core": "*",
-        "docuccino/attributes": "*"
+        "docuccino/core": "self.version",
+        "docuccino/attributes": "self.version",
+        "docuccino/inference-phpstan": "self.version",
+        "docuccino/laravel": "self.version"
     },
     "require-dev": {
         "laravel/pint": "^1.18",
@@ -29,12 +49,9 @@
     "autoload-dev": {
         "psr-4": {
             "Docuccino\\Core\\Tests\\": "packages/core/tests/",
-            "Docuccino\\Inference\\PhpStan\\": "packages/inference-phpstan/src/",
             "Docuccino\\Inference\\PhpStan\\Tests\\": "packages/inference-phpstan/tests/",
-            "Docuccino\\Laravel\\": "packages/laravel/src/",
             "Docuccino\\Laravel\\Tests\\": "packages/laravel/tests/",
-            "Workbench\\App\\": "packages/laravel/workbench/app/",
-            "Workbench\\Database\\": "packages/laravel/workbench/database/"
+            "Workbench\\App\\": "packages/laravel/workbench/app/"
         }
     },
     "minimum-stability": "dev",

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Console;
+namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Inference\TypeEngine;

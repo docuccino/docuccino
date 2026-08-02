@@ -45,6 +45,8 @@ jobs:
           composer validate --no-check-publish
           composer validate --strict packages/core/composer.json
           composer validate --strict packages/attributes/composer.json
+          composer validate --strict packages/inference-phpstan/composer.json
+          composer validate --strict packages/laravel/composer.json
 
       - name: Install dependencies
         run: |

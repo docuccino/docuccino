@@ -2,7 +2,25 @@
     "name": "docuccino/core",
     "description": "Framework-agnostic UIR model, canonicalizer, identity, validator and emitters.",
     "type": "library",
+    "keywords": [
+        "openapi",
+        "api-documentation",
+        "uir",
+        "swagger",
+        "json-schema",
+        "scramble-alternative"
+    ],
+    "homepage": "https://docuccino.app",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Tom Martin"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/docuccino/docuccino/issues",
+        "source": "https://github.com/docuccino/docuccino"
+    },
     "require": {
         "php": "^8.3",
         "psr/container": "^1.1 || ^2.0",
@@ -11,7 +29,7 @@
         "nikic/php-parser": "^5"
     },
     "require-dev": {
-        "docuccino/attributes": "*"
+        "docuccino/attributes": "self.version"
     },
     "autoload": {
         "psr-4": {
@@ -22,7 +40,5 @@
         "psr-4": {
             "Docuccino\\Core\\Tests\\": "tests/"
         }
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    }
 }

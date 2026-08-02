@@ -2,12 +2,30 @@
     "name": "docuccino/laravel",
     "description": "Laravel adapter for Docuccino: route discovery, extension registry, pipeline and artisan export.",
     "type": "library",
+    "keywords": [
+        "openapi",
+        "api-documentation",
+        "laravel",
+        "uir",
+        "swagger",
+        "scramble-alternative"
+    ],
+    "homepage": "https://docuccino.app",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Tom Martin"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/docuccino/docuccino/issues",
+        "source": "https://github.com/docuccino/docuccino"
+    },
     "require": {
         "php": "^8.3",
-        "docuccino/core": "*",
-        "docuccino/attributes": "*",
-        "docuccino/inference-phpstan": "*",
+        "docuccino/core": "self.version",
+        "docuccino/attributes": "self.version",
+        "docuccino/inference-phpstan": "self.version",
         "phpstan/phpdoc-parser": "^2",
         "spatie/laravel-package-tools": "^1.16",
         "illuminate/console": "^12.0 || ^13.0",
@@ -28,8 +46,7 @@
     "autoload-dev": {
         "psr-4": {
             "Docuccino\\Laravel\\Tests\\": "tests/",
-            "Workbench\\App\\": "workbench/app/",
-            "Workbench\\Database\\": "workbench/database/"
+            "Workbench\\App\\": "workbench/app/"
         }
     },
     "extra": {
@@ -42,8 +59,6 @@
             }
         }
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "config": {
         "sort-packages": true,
         "allow-plugins": {

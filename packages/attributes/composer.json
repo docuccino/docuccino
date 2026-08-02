@@ -2,7 +2,25 @@
     "name": "docuccino/attributes",
     "description": "Dependency-free PHP attribute classes for Docuccino.",
     "type": "library",
+    "keywords": [
+        "openapi",
+        "api-documentation",
+        "uir",
+        "attributes",
+        "php-attributes",
+        "scramble-alternative"
+    ],
+    "homepage": "https://docuccino.app",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Tom Martin"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/docuccino/docuccino/issues",
+        "source": "https://github.com/docuccino/docuccino"
+    },
     "require": {
         "php": "^8.3"
     },
@@ -10,7 +28,5 @@
         "psr-4": {
             "Docuccino\\Attributes\\": "src/"
         }
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    }
 }
