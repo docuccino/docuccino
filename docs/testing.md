@@ -67,16 +67,20 @@ Consequences:
   unit tests for its pure/parent-process classes (translators, registries, protocol,
   orchestration bookkeeping) — not more subprocess fixture tests.
 
-## Measured coverage (baseline, 2026-08-02, this hardening task)
+## Measured coverage (2026-08-02, updated by Phase 4b wave 1)
 
-Line coverage, per package (statements), suite excluding the `fixture` group:
+Line coverage (statements), suite excluding the `fixture` group. The wave-1
+integrations (Query Builder, rate limiting, Sanctum/Passport, permission,
+withTrashed, the core data-leakage lint) landed with in-process dataset + real-path
+tests, lifting overall coverage:
 
 | Package             | Line coverage      |
 |---------------------|--------------------|
-| `core`              | ~91%               |
-| `laravel`           | ~84%               |
-| `inference-phpstan` | ~41% (subprocess — see above) |
-| **Overall**         | **79.45%**         |
+| **Overall (baseline, hardening task)** | **79.45%** |
+| **Overall (Phase 4b wave 1)**          | **81.1%**  |
+
+`inference-phpstan` (~41%) is mostly proven out-of-process (see above); `attributes`
+is dep-free attribute classes not in the coverage `<source>` set.
 
 `attributes` is dep-free attribute classes with no branching logic and is not in the
 coverage `<source>` set.

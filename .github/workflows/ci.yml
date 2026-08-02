@@ -96,7 +96,7 @@ jobs:
         run: composer install --no-interaction --no-progress
 
       - name: Pest line coverage (honest floor — ratchet upward, never down)
-        run: vendor/bin/pest --coverage --exclude-group=fixture --min=78
+        run: vendor/bin/pest --coverage --exclude-group=fixture --min=80
 
       - name: Pest type coverage
         run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100
