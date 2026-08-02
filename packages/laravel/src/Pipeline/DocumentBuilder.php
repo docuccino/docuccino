@@ -12,6 +12,7 @@ use Docuccino\Core\Overlay\InvalidOverlayException;
 use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Engine\TypeEngineMode;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -62,14 +63,38 @@ final class DocumentBuilder
     {
         $config = $this->config($key);
         [$overlays, $overlayDiagnostics] = $this->overlays($config);
+        $preDiagnostics = [...$this->engineModeDiagnostics(), ...$overlayDiagnostics];
 
         $result = $this->generator->generate($config, $engine, $this->configExtensions(), $overlays);
 
-        if ($overlayDiagnostics === []) {
+        if ($preDiagnostics === []) {
             return $result;
         }
 
-        return new GenerationResult($result->document, $this->sort([...$overlayDiagnostics, ...$result->diagnostics]));
+        return new GenerationResult($result->document, $this->sort([...$preDiagnostics, ...$result->diagnostics]));
+    }
+
+    /**
+     * Warn when a not-yet-wired engine mode is selected. The orchestrated and caching compositions
+     * exist in the inference engine but are not plumbed through {@see TypeEngineFactory} yet, so a
+     * build silently runs in-process — surface that rather than let it pass unnoticed.
+     *
+     * @return list<Diagnostic>
+     */
+    private function engineModeDiagnostics(): array
+    {
+        $mode = config('docuccino.engine.mode');
+
+        if ($mode === TypeEngineMode::Orchestrated->value || $mode === TypeEngineMode::Caching->value) {
+            return [new Diagnostic(
+                severity: Severity::Warning,
+                code: 'engine.mode-not-wired',
+                message: sprintf('Engine mode "%s" is not yet wired; inference ran in-process.', $mode),
+                help: 'The orchestrated and caching engine modes arrive in a later phase; set DOCUCCINO_ENGINE=in-process to silence this.',
+            )];
+        }
+
+        return [];
     }
 
     /**

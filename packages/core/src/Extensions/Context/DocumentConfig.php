@@ -137,15 +137,4 @@ final readonly class DocumentConfig
     {
         return Hydrate::listOfMaps($this->security['default'] ?? null);
     }
-
-    /**
-     * The value of a `representation.*` policy keyword, or the given default. Kept behaviour-
-     * preserving: an absent key returns the default (which encodes today's behaviour).
-     */
-    public function representationPolicy(string $key, string $default): string
-    {
-        $value = $this->representation[$key] ?? null;
-
-        return is_string($value) && $value !== '' ? $value : $default;
-    }
 }

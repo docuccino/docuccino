@@ -17,11 +17,6 @@ final class ScalarViewer implements Viewer
 {
     private const CDN_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
 
-    public function driver(): string
-    {
-        return 'scalar';
-    }
-
     public function render(ViewerContext $context): string
     {
         $viewer = $context->config->viewer;

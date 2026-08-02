@@ -56,23 +56,23 @@ return [
                 //   ],
             ],
             'content' => [
-                'dir' => null,
+                'dir' => null,                     // FUTURE (design §9 content.pages): not read yet.
             ],
             'overlays' => [
                 // 'resources/docs/overlays/*.yaml',
             ],
             'representation' => [
-                'filters' => 'bracketed',          // bracketed | deepObject (filter styles: Phase 4)
+                'filters' => 'bracketed',          // FUTURE (filter styles): not read yet | bracketed | deepObject
                 'nullable' => 'type-array',        // type-array (type: [x, null]) | anyof ({type: null} branch)
                 'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
                 // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
             ],
             'export' => [
                 'path' => 'docs/openapi.json',
-                'formats' => ['openapi-3.2'],
+                'formats' => ['openapi-3.2'],      // FUTURE (multi-format export): not read yet; --format selects the emitter today
             ],
             'viewer' => [
-                'driver' => 'scalar',
+                'driver' => 'scalar',         // FUTURE (Phase 5) selectable viewer driver; only Scalar ships today
                 'route' => '/docs/api',       // null disables the runtime endpoints for this document
                 'gate' => null,               // Gate ability name; null = local environment only
                 // Middleware for the registered viewer routes. `throttle` protects the (potentially

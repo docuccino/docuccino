@@ -13,8 +13,5 @@ use Docuccino\Core\Extensions\Context\ViewerContext;
  */
 interface Viewer
 {
-    /** The stable driver identifier, e.g. `scalar`. */
-    public function driver(): string;
-
     public function render(ViewerContext $context): mixed;
 }

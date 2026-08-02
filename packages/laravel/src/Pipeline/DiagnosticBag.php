@@ -36,11 +36,6 @@ final class DiagnosticBag
         }
     }
 
-    public function isEmpty(): bool
-    {
-        return $this->diagnostics === [];
-    }
-
     /**
      * @return list<Diagnostic>
      */
