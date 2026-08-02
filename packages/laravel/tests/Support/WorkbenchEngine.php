@@ -34,7 +34,11 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
  */
 final class WorkbenchEngine
 {
-    public static function make(): StubTypeEngine
+    /**
+     * @param  array<string, ActionAnalysis>  $callables  scripted CallableRef analyses (keyed by
+     *                                                    CallableRef::symbol()) for the inferred-handler tier tests
+     */
+    public static function make(array $callables = []): StubTypeEngine
     {
         $location = new SourceLocation('');
 
@@ -170,6 +174,7 @@ final class WorkbenchEngine
                     new PropertyMetadata('meta', ScalarT::string()),
                 ]),
             ],
+            callables: $callables,
         );
     }
 

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="100%" height="100%">
+    <defs>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@700&amp;display=swap');
+            .logo-text {
+                font-family: 'Quicksand', system-ui, -apple-system, 'Segoe UI', sans-serif;
+                font-weight: 700;
+                letter-spacing: -1.5px;
+            }
+        </style>
+
+        <!-- Clipping path for the main document-cup shape to allow clean inner shadow/shading -->
+        <clipPath id="baseClip">
+            <path d="M 135 145 H 210 A 80 80 0 0 1 210 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" />
+        </clipPath>
+    </defs>
+
+    <!-- Coffee Mug Handle (Extended inward to connect perfectly) -->
+    <g>
+        <path d="M 275 190 h 33 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -33" fill="#967D64" />
+        <path d="M 275 190 h 33 a 15 15 0 0 1 15 15 v 40 a 15 15 0 0 1 -15 15 h -33" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
+    </g>
+
+    <!-- Main Base: Document overlapping a cup -->
+    <g>
+        <!-- Fills with flat shadow slice -->
+        <g clip-path="url(#baseClip)">
+            <rect x="0" y="0" width="400" height="400" fill="#967D64" />
+            <!-- Shadow Slice at bottom of the object -->
+            <rect x="0" y="275" width="400" height="50" fill="#5E4B3C" />
+        </g>
+
+        <!-- Document corner fold (Dog-ear) -->
+        <path d="M 175 145 L 175 175 L 205 175 Z" fill="#B0957C" />
+
+        <!-- Outlines / Strokes -->
+        <path d="M 135 145 H 210 A 80 80 0 0 1 210 305 H 135 A 15 15 0 0 1 120 290 V 160 A 15 15 0 0 1 135 145 Z" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
+        <path d="M 175 145 V 175 H 205" fill="none" stroke="#131416" stroke-width="6" stroke-linejoin="round" />
+
+        <!-- Subtle overlapping edge curve (implying the cup curve over the document) -->
+        <path d="M 165 159 A 80 80 0 0 0 165 291" fill="none" stroke="#131416" stroke-width="4" stroke-linecap="round" opacity="0.4" />
+    </g>
+
+    <!-- Cup Interior & Coffee Liquid -->
+    <g>
+        <!-- Dark inner rim of the cup -->
+        <circle cx="210" cy="225" r="62" fill="#1E2124" stroke="#131416" stroke-width="6" />
+
+        <!-- Coffee liquid base -->
+        <circle cx="210" cy="225" r="54" fill="#C8B097" />
+
+        <!-- Latte art / cream swirls -->
+        <path d="M 175 225 C 175 190, 245 200, 245 225 C 245 250, 190 260, 190 225" fill="none" stroke="#E8D5C4" stroke-width="6" stroke-linecap="round" />
+        <path d="M 165 225 C 165 170, 255 180, 255 225 C 255 270, 175 280, 175 225" fill="none" stroke="#E8D5C4" stroke-width="4" stroke-linecap="round" opacity="0.6" />
+        <path d="M 185 225 C 185 205, 235 210, 235 225 C 235 240, 200 245, 200 225" fill="none" stroke="#A68A73" stroke-width="4" stroke-linecap="round" />
+    </g>
+
+    <!-- Developer Braces '{ }' floating in the coffee -->
+    <g fill="none" stroke="#F25A38" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 192 198 Q 182 198 182 208 Q 182 220 172 225 Q 182 230 182 242 Q 182 252 192 252" />
+        <path d="M 228 198 Q 238 198 238 208 Q 238 220 248 225 Q 238 230 238 242 Q 238 252 228 252" />
+    </g>
+
+    <!-- Wordmark -->
+    <text x="340" y="248" class="logo-text" font-size="75" fill="#EBE2DA">
+        <tspan fill="#F25A38">d</tspan>ocuccino
+    </text>
+
+</svg>

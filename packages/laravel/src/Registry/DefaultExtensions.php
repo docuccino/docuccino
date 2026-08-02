@@ -20,6 +20,7 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
+use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsIntegration;
@@ -56,9 +57,10 @@ final class DefaultExtensions
             SecurityExtension::class,
             AttributeOverridesExtension::class,
             // Error-response chain (design §6, first supports() wins). Ordered by priority:
-            // Problem Details preset (EARLY, self-gated on error_responses => 'problem-details'),
-            // framework-default JSON shapes (LATE, always on), terminal generic fallback (LAST). The
-            // inferred-handler tier slots FIRST, ahead of all of these.
+            // inferred handler = the app's REAL error shapes (FIRST), Problem Details preset (EARLY,
+            // self-gated on error_responses => 'problem-details'), framework-default JSON shapes
+            // (LATE, always on), terminal generic fallback (LAST).
+            ...InferredHandlerIntegration::extensions(),
             ...ProblemDetailsIntegration::extensions(),
             ...FrameworkErrorsIntegration::extensions(),
             DefaultExceptionToResponse::class,

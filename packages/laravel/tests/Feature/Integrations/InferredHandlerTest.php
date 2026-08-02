@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+
+use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+
+/**
+ * The inferred-handler tier wiring (design §6 flagship), stub-side: the mapper reflects the booted
+ * handler's render callbacks, analyses the matching one (here scripted through the stub engine,
+ * keyed by the CallableRef the mapper builds), and emits the handler's REAL status+shape — winning
+ * the chain over the framework-default tier. A too-dynamic body defers to the next tier + a
+ * diagnostic. (Narrowed-catch-all recovery is engine truth, proven by the --group=fixture
+ * InferredHandlerTest in packages/inference-phpstan.)
+ */
+const MODEL_NOT_FOUND = ModelNotFoundException::class;
+
+/**
+ * Register a render callback on the booted handler and return the CallableRef symbol the mapper will
+ * analyse it under (so the stub engine can be scripted for it).
+ */
+function registerRenderCallback(Closure $callback, string $exceptionType): string
+{
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable($callback);
+
+    $function = new ReflectionFunction($callback);
+
+    return (new CallableRef(
+        (string) $function->getFileName(),
+        null,
+        null,
+        $function->getStartLine(),
+        $function->getParameters()[0]->getName(),
+        $exceptionType,
+    ))->symbol();
+}
+
+it('documents the handler’s real status + shape, winning over the framework tier', function (): void {
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['error' => 'gone', 'id' => 1], 410),
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('error', ScalarT::string()), new ArrayShapeField('id', ScalarT::int())]),
+                new LiteralT(410),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $responses = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    // The handler renders a 410 (its real status) — that wins; the framework 404 is not emitted.
+    expect($responses)->toHaveKey('410')->and($responses)->not->toHaveKey('404');
+
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['410']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:inferred-handler')
+        ->and($responses['410']['content']['application/json']['schema']['properties'] ?? [])->toHaveKeys(['error', 'id']);
+});
+
+it('defers to the framework tier + records a diagnostic when the body is too dynamic', function (): void {
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response('not json'),
+        MODEL_NOT_FOUND,
+    );
+
+    // The handler analysis recovers a plain Response (not a JsonResponse) — nothing to document.
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Response'), new SourceLocation(''))]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $result = generateDocument();
+    $responses = $result->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    // Deferred: the framework-default 404 fills in instead.
+    expect($responses)->toHaveKey('404');
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:framework-errors');
+
+    $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
+    expect($codes)->toContain('inferred-handler.too-dynamic');
+});
+
+it('stays inert (framework tier owns the 404) when no handler matches the exception', function (): void {
+    bindStubEngine();
+
+    $responses = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
+
+    expect($producers)->toContain('integration:framework-errors')
+        ->and($producers)->not->toContain('integration:inferred-handler');
+});
