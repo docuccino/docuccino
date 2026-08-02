@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\BuiltIn;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
@@ -30,7 +31,7 @@ final class ArrayShapeTypeToSchema implements TypeToSchema
         }
 
         if ($type->isList) {
-            $memberTypes = array_map(static fn ($field): DType => $field->type, $type->fields);
+            $memberTypes = array_map(static fn (ArrayShapeField $field): DType => $field->type, $type->fields);
 
             return new SchemaResult([
                 'type' => 'array',

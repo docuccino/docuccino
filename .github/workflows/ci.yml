@@ -72,6 +72,35 @@ jobs:
       - name: Pest (unit + non-fixture integration)
         run: vendor/bin/pest --exclude-group=fixture
 
+  coverage:
+    name: Coverage gate (PHP 8.4)
+    runs-on: ubuntu-latest
+    # A dedicated line + type coverage gate, separate from the quality matrix and the
+    # fixture job. It runs the non-fixture suite under pcov: the inference engine's real
+    # path executes in a subprocess (see docs/testing.md) that pcov cannot observe either
+    # way, so provisioning the fixture app here would cost minutes for <0.1pp — the
+    # fixture job proves that path behaviourally instead. The line floor is an honest
+    # ratchet (measured overall minus a small buffer), raised as coverage rises and never
+    # lowered without a docs/plan.md note.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, json
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Pest line coverage (honest floor — ratchet upward, never down)
+        run: vendor/bin/pest --coverage --exclude-group=fixture --min=78
+
+      - name: Pest type coverage
+        run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100
+
   fixture:
     name: Fixture suite (PHP 8.3)
     runs-on: ubuntu-latest
