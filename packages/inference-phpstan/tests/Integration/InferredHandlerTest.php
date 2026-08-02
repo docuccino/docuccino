@@ -76,6 +76,36 @@ it('falls through to the default branch (500) for an unmatched exception type', 
     expect($result['status'])->toBe(500);
 })->group('fixture');
 
+it('raises an ambiguity diagnostic when a negated guard shadows the specific branch', function (): void {
+    // renderAmbiguous puts `if (! ($e instanceof OutOfStockException))` first, so the broad default is
+    // chosen even when narrowing to OutOfStockException — the source-order-first-match misfires and the
+    // narrowing-honesty diagnostic (B2) must flag it rather than pass the shape off as unambiguous.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/ProblemRenderer.php',
+        'App\\Exceptions\\ProblemRenderer',
+        'renderAmbiguous',
+        param: 'e',
+        narrowType: 'App\\Exceptions\\OutOfStockException',
+    ));
+
+    $codes = array_map(static fn ($d): string => $d->code, $analysis->diagnostics);
+    expect($codes)->toContain('inference.ambiguous-narrowing');
+})->group('fixture');
+
+it('does not raise the ambiguity diagnostic for the ordinary sequential-instanceof renderer', function (): void {
+    // The plain `render` (exact instanceof branches ahead of the default) is unambiguous — no diagnostic.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/ProblemRenderer.php',
+        'App\\Exceptions\\ProblemRenderer',
+        'render',
+        param: 'e',
+        narrowType: 'Illuminate\\Validation\\ValidationException',
+    ));
+
+    $codes = array_map(static fn ($d): string => $d->code, $analysis->diagnostics);
+    expect($codes)->not->toContain('inference.ambiguous-narrowing');
+})->group('fixture');
+
 it('recovers a per-exception render-callback closure by file+line', function (): void {
     $source = (string) file_get_contents(FixtureRunner::path('app/Exceptions/RenderCallbacks.php'));
     $line = 0;

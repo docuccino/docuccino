@@ -197,8 +197,11 @@ final class PhpStanTypeEngine implements TypeEngine
             );
         }
 
+        $narrowed = $this->harvestNarrowed($node, $callable);
+
         return new ActionAnalysis(
-            returns: $this->harvestNarrowed($node, $callable),
+            returns: $narrowed['returns'],
+            diagnostics: $narrowed['diagnostics'],
             dependencyFiles: [$callable->file],
         );
     }
@@ -210,7 +213,12 @@ final class PhpStanTypeEngine implements TypeEngine
      * `if ($e instanceof X) return …;` / default control flow) — so a catch-all `render(Throwable $e)`
      * yields exactly the response for the requested exception type.
      *
-     * @return list<ReturnSite>
+     * Narrowing honesty (B2): when MORE THAN ONE return site is guard-satisfiable for the narrowed
+     * type — the ambiguity a negated guard (`if (! ($e instanceof X)) …`) or overlapping `instanceof`
+     * branches produce — the first is still chosen, but an info diagnostic is raised so the recovered
+     * shape is not passed off as unambiguous.
+     *
+     * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>}
      */
     private function harvestNarrowed(ReturnStatementsNode $node, CallableRef $callable): array
     {
@@ -236,19 +244,61 @@ final class PhpStanTypeEngine implements TypeEngine
         }
 
         if ($param === null || $narrowTo === null) {
-            return array_map(static fn (array $s): ReturnSite => $s['site'], $sites);
+            return ['returns' => array_map(static fn (array $s): ReturnSite => $s['site'], $sites), 'diagnostics' => []];
         }
 
-        // Deterministic control-flow order, then the first return whose caught-variable guard the
-        // narrowed type satisfies (an empty/unclassed guard is the unconditional default branch).
+        // Deterministic control-flow order, then every return whose caught-variable guard the narrowed
+        // type satisfies (an empty/unclassed guard is the unconditional default branch).
         usort($sites, static fn (array $a, array $b): int => $a['line'] <=> $b['line']);
-        foreach ($sites as $candidate) {
-            if ($this->guardSatisfies($candidate['guard'], $narrowTo)) {
-                return [$candidate['site']];
-            }
+        $satisfiable = array_values(array_filter(
+            $sites,
+            fn (array $candidate): bool => $this->guardSatisfies($candidate['guard'], $narrowTo),
+        ));
+
+        return [
+            'returns' => $satisfiable === [] ? [] : [$satisfiable[0]['site']],
+            'diagnostics' => $this->narrowingAmbiguity($satisfiable, $narrowTo, $param, $callable),
+        ];
+    }
+
+    /**
+     * The narrowing-honesty diagnostic (B2). The source-order-first-match is trustworthy when the
+     * chosen return is an EXACT guard match for the narrowed type (`instanceof <exact>`), or when it
+     * is the sole satisfiable branch — the ordinary sequential-`instanceof`-plus-default shape, where
+     * the exact branch precedes the reachable-for-any default, is unambiguous. It is AMBIGUOUS when a
+     * broad/negated guard (`if (! ($e instanceof X)) …`, matched only via a supertype) is chosen ahead
+     * of a later exact match, or when two branches both match the type exactly; only then is an info
+     * diagnostic raised, so the chosen shape is not passed off as unambiguous.
+     *
+     * @param  list<array{line: int, site: ReturnSite, guard: list<string>}>  $satisfiable
+     * @return list<Diagnostic>
+     */
+    private function narrowingAmbiguity(array $satisfiable, string $narrowTo, string $param, CallableRef $callable): array
+    {
+        $chosen = $satisfiable[0] ?? null;
+        if ($chosen === null) {
+            return [];
         }
 
-        return [];
+        $exactMatches = array_filter($satisfiable, static fn (array $s): bool => in_array($narrowTo, $s['guard'], true));
+        $chosenIsExact = in_array($narrowTo, $chosen['guard'], true);
+
+        // A broad guard shadowed a later exact match, or two branches claim the type exactly.
+        $ambiguous = $chosenIsExact ? count($exactMatches) > 1 : $exactMatches !== [];
+        if (! $ambiguous) {
+            return [];
+        }
+
+        return [new Diagnostic(
+            Severity::Info,
+            'inference.ambiguous-narrowing',
+            sprintf(
+                'More than one return site is reachable when %s narrows to %s in %s; the first in source order was chosen and the recovered shape may be ambiguous.',
+                '$'.$param,
+                $narrowTo,
+                $callable->symbol(),
+            ),
+        )];
     }
 
     /**

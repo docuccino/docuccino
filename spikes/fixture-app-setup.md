@@ -155,7 +155,10 @@ cp -R spikes/phase-4b/fixture-src/app/. spikes/fixture-app/app/
 
 - `app/Exceptions/ProblemRenderer.php` — a `render(Throwable $e): JsonResponse` with sequential
   `if ($e instanceof …)` branches returning `response()->json($problem, $status)` per exception type
-  (422/401 + a 500 default), so narrowed analysis recovers one branch per thrown type.
+  (422/401 + a 500 default), so narrowed analysis recovers one branch per thrown type. It also carries
+  `renderAmbiguous(Throwable $e)` — a NEGATED guard (`if (! ($e instanceof OutOfStockException))`)
+  putting the broad default ahead of the specific branch, so narrowing to OutOfStockException raises
+  the B2 `inference.ambiguous-narrowing` info diagnostic.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by file+line.
 
