@@ -51,17 +51,6 @@ final class DiagnosticBag
         return $diagnostics;
     }
 
-    public function has(Severity $severity): bool
-    {
-        foreach ($this->diagnostics as $diagnostic) {
-            if ($diagnostic->severity === $severity) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static function rank(Severity $severity): int
     {
         return match ($severity) {

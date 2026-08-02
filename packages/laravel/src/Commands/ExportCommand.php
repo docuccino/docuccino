@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Commands;
 
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
@@ -14,7 +13,6 @@ use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
-use Docuccino\Laravel\Pipeline\GenerationResult;
 use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
 
@@ -25,7 +23,9 @@ use Illuminate\Console\Command;
  */
 final class ExportCommand extends Command
 {
+    use FailsOnSeverity;
     use GuardsEnabled;
+    use IteratesDocuments;
     use RendersDiagnostics;
 
     /** The emitter formats a caller may name via --format. */
@@ -47,13 +47,6 @@ final class ExportCommand extends Command
             return self::FAILURE;
         }
 
-        $only = $this->argument('document');
-        if (is_string($only) && ! $builder->hasDocument($only)) {
-            $this->error(sprintf('Unknown document "%s".', $only));
-
-            return self::FAILURE;
-        }
-
         // An explicit --format must name a real emitter — a typo errors rather than silently
         // falling back to OpenAPI 3.2 (which would ship the wrong artifact).
         $format = $this->option('format');
@@ -67,30 +60,20 @@ final class ExportCommand extends Command
         // the earlier (arch F9). Require a specific document, or drop --out and use per-document
         // export.path.
         $out = $this->option('out');
-        if (is_string($out) && $out !== '' && ! is_string($only) && count($builder->documentKeys()) > 1) {
+        if (is_string($out) && $out !== '' && ! is_string($this->argument('document')) && count($builder->documentKeys()) > 1) {
             $this->error('--out cannot be used when exporting multiple documents; pass a document argument or configure per-document export.path.');
 
             return self::FAILURE;
         }
 
-        $exit = self::SUCCESS;
-
-        foreach ($builder->documentKeys() as $key) {
-            if (is_string($only) && $key !== $only) {
-                continue;
-            }
-
+        return $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
             $result = $builder->build($key, $engine);
 
             $this->write($builder->config($key), $result->document);
             $this->renderDiagnostics($key, $result->diagnostics);
 
-            if ($this->shouldFail($result)) {
-                $exit = self::FAILURE;
-            }
-        }
-
-        return $exit;
+            return $this->failsOn($result) ? self::FAILURE : self::SUCCESS;
+        });
     }
 
     private function write(DocumentConfig $config, UirDocument $document): void
@@ -130,14 +113,5 @@ final class ExportCommand extends Command
     {
         return ProvenanceLevel::tryFrom(is_string($this->option('provenance')) ? $this->option('provenance') : '')
             ?? ProvenanceLevel::Winners;
-    }
-
-    private function shouldFail(GenerationResult $result): bool
-    {
-        return match (is_string($this->option('fail-on')) ? $this->option('fail-on') : 'none') {
-            'warning' => $result->has(Severity::Error) || $result->has(Severity::Warning),
-            'error' => $result->has(Severity::Error),
-            default => false,
-        };
     }
 }

@@ -17,6 +17,7 @@ use Illuminate\Console\Command;
 final class CacheCommand extends Command
 {
     use GuardsEnabled;
+    use IteratesDocuments;
     use RendersDiagnostics;
 
     protected $signature = 'docuccino:cache {document? : The configured document key (defaults to every document)}';
@@ -29,25 +30,14 @@ final class CacheCommand extends Command
             return self::FAILURE;
         }
 
-        $only = $this->argument('document');
-        if (is_string($only) && ! $builder->hasDocument($only)) {
-            $this->error(sprintf('Unknown document "%s".', $only));
-
-            return self::FAILURE;
-        }
-
-        foreach ($builder->documentKeys() as $key) {
-            if (is_string($only) && $key !== $only) {
-                continue;
-            }
-
+        return $this->forEachDocument($builder, function (string $key) use ($builder, $engine, $cache): int {
             $result = $builder->build($key, $engine);
             $cache->put($key, (new OpenApi32Emitter)->emit($result->document));
 
             $this->info(sprintf('Cached document "%s".', $key));
             $this->renderDiagnostics($key, $result->diagnostics);
-        }
 
-        return self::SUCCESS;
+            return self::SUCCESS;
+        });
     }
 }

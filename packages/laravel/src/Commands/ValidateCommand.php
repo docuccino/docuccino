@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Illuminate\Console\Command;
@@ -18,7 +17,9 @@ use Illuminate\Console\Command;
  */
 final class ValidateCommand extends Command
 {
+    use FailsOnSeverity;
     use GuardsEnabled;
+    use IteratesDocuments;
     use RendersDiagnostics;
 
     protected $signature = 'docuccino:validate
@@ -33,20 +34,7 @@ final class ValidateCommand extends Command
             return self::FAILURE;
         }
 
-        $only = $this->argument('document');
-        if (is_string($only) && ! $builder->hasDocument($only)) {
-            $this->error(sprintf('Unknown document "%s".', $only));
-
-            return self::FAILURE;
-        }
-
-        $exit = self::SUCCESS;
-
-        foreach ($builder->documentKeys() as $key) {
-            if (is_string($only) && $key !== $only) {
-                continue;
-            }
-
+        return $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
             $result = $builder->build($key, $engine);
             $schemaErrors = $this->schemaErrors($result->diagnostics);
 
@@ -58,12 +46,8 @@ final class ValidateCommand extends Command
 
             $this->renderDiagnostics($key, $result->diagnostics);
 
-            if ($schemaErrors !== [] || $this->shouldFail($result->diagnostics)) {
-                $exit = self::FAILURE;
-            }
-        }
-
-        return $exit;
+            return $schemaErrors !== [] || $this->failsOn($result) ? self::FAILURE : self::SUCCESS;
+        });
     }
 
     /**
@@ -84,27 +68,5 @@ final class ValidateCommand extends Command
     private function uirVersion(array $document): string
     {
         return is_string($document['uir'] ?? null) ? $document['uir'] : '1.0.0';
-    }
-
-    /**
-     * @param  list<Diagnostic>  $diagnostics
-     */
-    private function shouldFail(array $diagnostics): bool
-    {
-        $has = static function (Severity $severity) use ($diagnostics): bool {
-            foreach ($diagnostics as $diagnostic) {
-                if ($diagnostic->severity === $severity) {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
-        return match (is_string($this->option('fail-on')) ? $this->option('fail-on') : 'none') {
-            'warning' => $has(Severity::Error) || $has(Severity::Warning),
-            'error' => $has(Severity::Error),
-            default => false,
-        };
     }
 }

@@ -13,28 +13,19 @@ use Illuminate\Console\Command;
  */
 final class ClearCommand extends Command
 {
+    use IteratesDocuments;
+
     protected $signature = 'docuccino:clear {document? : The configured document key (defaults to every document)}';
 
     protected $description = 'Clear the cached runtime API document(s).';
 
     public function handle(DocumentBuilder $builder, DocumentCache $cache): int
     {
-        $only = $this->argument('document');
-        if (is_string($only) && ! $builder->hasDocument($only)) {
-            $this->error(sprintf('Unknown document "%s".', $only));
-
-            return self::FAILURE;
-        }
-
-        foreach ($builder->documentKeys() as $key) {
-            if (is_string($only) && $key !== $only) {
-                continue;
-            }
-
+        return $this->forEachDocument($builder, function (string $key) use ($cache): int {
             $cache->forget($key);
             $this->info(sprintf('Cleared cached document "%s".', $key));
-        }
 
-        return self::SUCCESS;
+            return self::SUCCESS;
+        });
     }
 }
