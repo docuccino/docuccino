@@ -25,6 +25,58 @@ it('exposes the default throwers as an exception-FQCN status source', function (
         ->and($registry->statusForExceptionFqcn('App\\Exceptions\\Nope'))->toBeNull();
 });
 
+it('registers every default function thrower with its exception and status source', function (
+    string $name,
+    string $exceptionFqcn,
+    ?int $fixedStatus,
+    ?int $statusArgIndex,
+): void {
+    $thrower = KnownThrowers::default()->forFunction($name);
+
+    expect($thrower)->not->toBeNull()
+        ->and($thrower->exceptionFqcn)->toBe($exceptionFqcn)
+        ->and($thrower->fixedStatus)->toBe($fixedStatus)
+        ->and($thrower->statusArgIndex)->toBe($statusArgIndex)
+        ->and($thrower->foldsStatusFromArgument())->toBe($statusArgIndex !== null);
+})->with([
+    // abort($status) folds the status from arg 0; abort_if/abort_unless($cond, $status) from arg 1.
+    'abort' => ['abort', KnownThrowers::HTTP_EXCEPTION, null, 0],
+    'abort_if' => ['abort_if', KnownThrowers::HTTP_EXCEPTION, null, 1],
+    'abort_unless' => ['abort_unless', KnownThrowers::HTTP_EXCEPTION, null, 1],
+]);
+
+it('registers every default method thrower with its exception and fixed status', function (
+    string $name,
+    string $exceptionFqcn,
+    int $status,
+): void {
+    $registry = KnownThrowers::default();
+    $thrower = $registry->forMethod($name);
+
+    expect($thrower)->not->toBeNull()
+        ->and($thrower->exceptionFqcn)->toBe($exceptionFqcn)
+        ->and($thrower->fixedStatus)->toBe($status)
+        ->and($thrower->foldsStatusFromArgument())->toBeFalse()
+        // Every fixed-status method thrower is also reachable through the FQCN status source.
+        ->and($registry->statusForExceptionFqcn($exceptionFqcn))->toBe($status);
+})->with([
+    'authorize' => ['authorize', KnownThrowers::AUTHORIZATION_EXCEPTION, 403],
+    'authorizeForUser' => ['authorizeForUser', KnownThrowers::AUTHORIZATION_EXCEPTION, 403],
+    'findOrFail' => ['findOrFail', KnownThrowers::MODEL_NOT_FOUND_EXCEPTION, 404],
+    'firstOrFail' => ['firstOrFail', KnownThrowers::MODEL_NOT_FOUND_EXCEPTION, 404],
+    'sole' => ['sole', KnownThrowers::MODEL_NOT_FOUND_EXCEPTION, 404],
+    'validate' => ['validate', KnownThrowers::VALIDATION_EXCEPTION, 422],
+]);
+
+it('returns null for an unregistered function or method name (unknown-entry contract)', function (): void {
+    $registry = KnownThrowers::default();
+
+    expect($registry->forFunction('dd'))->toBeNull()
+        ->and($registry->forFunction('authorize'))->toBeNull()   // a method name is not a function name
+        ->and($registry->forMethod('abort'))->toBeNull()         // a function name is not a method name
+        ->and($registry->forMethod('whereFirst'))->toBeNull();
+});
+
 it('lets a custom withMethod() thrower enrich BOTH layers from one registration', function (): void {
     $custom = 'App\\Exceptions\\TeapotException';
     $registry = KnownThrowers::default()->withMethod(

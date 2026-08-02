@@ -8,6 +8,7 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
@@ -39,6 +40,103 @@ function convertLaravelRules(array $fields): ValidationSchema
 
     return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext());
 }
+
+/**
+ * Convert a single field's rules built as `[name, parameters, note?]` tuples — the low-level path
+ * that lets the floor dataset drive rules (enum values, exists table args) a `pipe|string` cannot
+ * express — through the SHARED ordering + core chain the real integrations use.
+ *
+ * @param  list<array{0: string, 1?: list<string>, 2?: string}>  $rules
+ */
+function convertFieldRules(array $rules): ValidationSchema
+{
+    $ruleObjects = array_map(
+        static fn (array $r): ValidationRule => ValidationRule::of($r[0], $r[1] ?? [], $r[2] ?? null),
+        $rules,
+    );
+
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => $ruleObjects]));
+
+    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext());
+}
+
+/**
+ * The floor list (design §Test-coverage standards): EVERY string-rule entry across ALL transformers
+ * has a dataset row asserting its schema effect. Presence/cross-field/multipart effects — which
+ * surface off the property schema — are asserted in the dedicated tests below, so together every
+ * entry in every transformer's table is proven.
+ */
+it('maps every schema-producing string rule to its fragment', function (array $rules, array $expected): void {
+    $property = convertFieldRules($rules)->schema['properties']['f'];
+    ksort($property);
+    ksort($expected);
+
+    expect($property)->toBe($expected);
+})->with([
+    // TypeRuleTransformer — base type + format entries.
+    'string' => [[['string']], ['type' => 'string']],
+    'integer' => [[['integer']], ['type' => 'integer']],
+    'int' => [[['int']], ['type' => 'integer']],
+    'numeric' => [[['numeric']], ['type' => 'number']],
+    'boolean' => [[['boolean']], ['type' => 'boolean']],
+    'bool' => [[['bool']], ['type' => 'boolean']],
+    'array' => [[['array']], ['type' => 'array']],
+    'email' => [[['email']], ['format' => 'email', 'type' => 'string']],
+    'uuid' => [[['uuid']], ['format' => 'uuid', 'type' => 'string']],
+    'ulid' => [[['ulid']], ['format' => 'ulid', 'type' => 'string']],
+    'url' => [[['url']], ['format' => 'uri', 'type' => 'string']],
+    'ip' => [[['ip']], ['format' => 'ip', 'type' => 'string']],
+    'date' => [[['date']], ['format' => 'date', 'type' => 'string']],
+
+    // ChoiceRuleTransformer — string set and numeric set, plus the enum-FQCN note.
+    'in (string set)' => [[['in', ['draft', 'published']]], ['enum' => ['draft', 'published'], 'type' => 'string']],
+    'in (numeric set)' => [[['in', ['1', '2', '3']]], ['enum' => [1, 2, 3], 'type' => 'integer']],
+    'enum (folded values + note)' => [[['enum', ['a', 'b'], 'App\\Enums\\Kind']], ['description' => 'App\\Enums\\Kind', 'enum' => ['a', 'b'], 'type' => 'string']],
+
+    // SizeRuleTransformer — type-aware min/max/between/size.
+    'min (string length)' => [[['string'], ['min', ['2']]], ['minLength' => 2, 'type' => 'string']],
+    'max (string length)' => [[['string'], ['max', ['9']]], ['maxLength' => 9, 'type' => 'string']],
+    'between (numeric bounds)' => [[['integer'], ['between', ['1', '5']]], ['maximum' => 5, 'minimum' => 1, 'type' => 'integer']],
+    'size (array items)' => [[['array'], ['size', ['3']]], ['maxItems' => 3, 'minItems' => 3, 'type' => 'array']],
+
+    // DateFormatRuleTransformer — date-only vs time-bearing pattern.
+    'date_format (date)' => [[['date_format', ['Y-m-d']]], ['description' => 'Expected format: Y-m-d', 'format' => 'date', 'type' => 'string']],
+    'date_format (date-time)' => [[['date_format', ['Y-m-d H:i:s']]], ['description' => 'Expected format: Y-m-d H:i:s', 'format' => 'date-time', 'type' => 'string']],
+
+    // RegexRuleTransformer — delimiters stripped to a bare ECMA-262 pattern.
+    'regex' => [[['regex', ['/^[a-z]+$/']]], ['pattern' => '^[a-z]+$', 'type' => 'string']],
+
+    // ExistsRuleTransformer — a FK reference contributes a default string type only.
+    'exists' => [[['exists', ['users', 'id']]], ['type' => 'string']],
+    'unique' => [[['unique', ['users']]], ['type' => 'string']],
+
+    // FileRuleTransformer — binary string schema (multipart switch asserted separately).
+    'file' => [[['file']], ['format' => 'binary', 'type' => 'string']],
+    'image' => [[['image']], ['description' => 'An image file.', 'format' => 'binary', 'type' => 'string']],
+]);
+
+it('applies every presence-rule entry to the required/nullable contract', function (): void {
+    // required / present / filled all mark the field required.
+    expect(convertFieldRules([['string'], ['required']])->schema['required'] ?? [])->toBe(['f']);
+    expect(convertFieldRules([['string'], ['present']])->schema['required'] ?? [])->toBe(['f']);
+    expect(convertFieldRules([['string'], ['filled']])->schema['required'] ?? [])->toBe(['f']);
+
+    // sometimes leaves the field optional (no `required` list emitted).
+    expect(convertFieldRules([['string'], ['sometimes']])->schema)->not->toHaveKey('required');
+
+    // nullable widens the type to allow null (2020-12 default policy → `[t, null]`).
+    expect(convertFieldRules([['string'], ['nullable']])->schema['properties']['f']['type'])->toBe(['string', 'null']);
+});
+
+it('documents the confirmed partner and switches file rules to multipart', function (): void {
+    $confirmed = convertFieldRules([['string'], ['required'], ['confirmed']]);
+    expect($confirmed->schema['properties'])->toHaveKey('f_confirmation')
+        ->and($confirmed->schema['properties']['f_confirmation'])->toBe(['type' => 'string'])
+        ->and($confirmed->schema['required'])->toBe(['f', 'f_confirmation']);
+
+    expect(convertFieldRules([['file']])->mediaType)->toBe('multipart/form-data')
+        ->and(convertFieldRules([['image']])->mediaType)->toBe('multipart/form-data');
+});
 
 it('applies size rules type-aware and independent of author order', function (): void {
     $direct = convertLaravelRules(['name' => 'string|min:2|max:100'])->schema;
