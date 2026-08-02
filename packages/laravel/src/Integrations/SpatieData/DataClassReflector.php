@@ -190,22 +190,28 @@ final class DataClassReflector
                 continue;
             }
 
-            $rule = self::RULE_MAP[Fqcn::short($name)] ?? null;
-            if ($rule === null) {
-                continue;
-            }
-
-            if (! in_array($rule, self::VALUE_RULES, true)) {
-                $tokens[] = $rule;
-
-                continue;
-            }
+            $short = Fqcn::short($name);
+            $mapped = self::RULE_MAP[$short] ?? null;
+            // A mapped attribute becomes its Laravel rule; an unmapped one degrades to the snake-cased
+            // short name so the SHARED chain treats it exactly like an unknown string rule (a
+            // transformer handles it if one exists — e.g. Exists — else a permissive + info diagnostic).
+            $rule = $mapped ?? self::snake($short);
 
             $parameters = $this->scalarArguments($attribute->getArguments());
-            $tokens[] = $parameters === '' ? $rule : $rule.':'.$parameters;
+            $carriesParameters = in_array($rule, self::VALUE_RULES, true) || ($mapped === null && $parameters !== '');
+
+            $tokens[] = $carriesParameters && $parameters !== '' ? $rule.':'.$parameters : $rule;
         }
 
         return $tokens;
+    }
+
+    /** CamelCase attribute short name → snake_case rule name (`StartsWith` → `starts_with`). */
+    private static function snake(string $name): string
+    {
+        $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $name);
+
+        return strtolower($snake ?? $name);
     }
 
     /**
