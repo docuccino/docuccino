@@ -22,6 +22,7 @@ use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
+use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsIntegration;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
 use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
@@ -54,9 +55,11 @@ final class DefaultExtensions
             ErrorResponsesExtension::class,
             SecurityExtension::class,
             AttributeOverridesExtension::class,
-            // Error-response chain (design §6, first supports() wins): framework-default JSON shapes
-            // (always on), then the terminal generic fallback. The inferred-handler tier and the
-            // Problem Details preset slot ahead of these (FIRST / EARLY) below.
+            // Error-response chain (design §6, first supports() wins). Ordered by priority:
+            // Problem Details preset (EARLY, self-gated on error_responses => 'problem-details'),
+            // framework-default JSON shapes (LATE, always on), terminal generic fallback (LAST). The
+            // inferred-handler tier slots FIRST, ahead of all of these.
+            ...ProblemDetailsIntegration::extensions(),
             ...FrameworkErrorsIntegration::extensions(),
             DefaultExceptionToResponse::class,
             // FormRequest / inline validate() request documentation (design §Phase 4). Consumes only

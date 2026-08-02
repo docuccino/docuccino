@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\FrameworkErrors;
 
-use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
-
 /**
  * Entry point for the framework-defaults error tier (design §6 error-response chain, tier 2).
  * Always on (illuminate ships everywhere): documents Laravel's stock JSON error shapes — the
@@ -13,9 +11,9 @@ use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
  * the framework itself maps to those statuses, so an app that has NOT installed a preset or written
  * a custom handler still gets its real error contract documented.
  *
- * Ordered AFTER the inferred-handler tier and any active preset, and BEFORE the terminal
- * {@see DefaultExceptionToResponse} fallback — so a real handler or a
- * preset always wins, and this tier only fills the framework exceptions neither covered.
+ * Ordered AFTER the inferred-handler tier and any active preset, and BEFORE the terminal generic
+ * fallback (DefaultExceptionToResponse) — so a real handler or a preset always wins, and this tier
+ * only fills the framework exceptions neither covered.
  */
 final class FrameworkErrorsIntegration
 {

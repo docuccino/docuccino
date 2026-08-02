@@ -59,6 +59,15 @@ final class ErrorResponsesExtension implements OperationExtension
         $response = $operation->response($draft->status);
         $contribution = Contribution::forProducer($producer);
 
+        // A mapper that references a shared response component (the Problem Details preset points at
+        // its reusable `#/components/responses/Problem*`) freezes as a `$ref`; the operation's status
+        // entry becomes that reference rather than an inline body (design §6 / §11 worked example).
+        if ($frozen->ref !== null) {
+            $response->setRef($frozen->ref, $contribution);
+
+            return;
+        }
+
         if ($frozen->description !== null) {
             $response->setDescription($frozen->description, $contribution);
         }
