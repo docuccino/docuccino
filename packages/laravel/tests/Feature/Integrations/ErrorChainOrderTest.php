@@ -2,6 +2,15 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Extensions\Context\AttributeSet;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\ThrowConfidence;
+use Docuccino\Core\Inference\ThrowDisposition;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
@@ -26,4 +35,50 @@ it('resolves the exception mapper chain in the documented tier order', function 
         FrameworkErrorsExceptionToResponse::class,
         DefaultExceptionToResponse::class,
     ]);
+});
+
+it('cascades past the deferring inferred tier to the problem-details preset, skipping the framework tier', function (): void {
+    $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(), []);
+
+    // A document that opted into the Problem Details preset, throwing a framework exception for which
+    // no render callback is registered — so the inferred-handler tier has nothing to fold and defers.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/cascade'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet,
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], errorResponses: 'problem-details'),
+    );
+    $throw = new ThrownException(
+        'Illuminate\\Validation\\ValidationException',
+        422,
+        [],
+        ThrowConfidence::Certain,
+        ThrowDisposition::Signal,
+    );
+
+    // The inferred-handler tier (first in the chain) genuinely defers for this exception.
+    $inferred = array_values(array_filter(
+        $resolved->exceptionToResponse,
+        static fn (object $m): bool => $m instanceof InferredHandlerExceptionToResponse,
+    ))[0];
+    expect($inferred->supports($throw, $context))->toBeFalse();
+
+    // Runtime first-supports-wins: the winner is the Problem Details preset, and the framework tier
+    // sits after it in the chain, so it is never consulted.
+    $winner = null;
+    $reachedFramework = false;
+    foreach ($resolved->exceptionToResponse as $mapper) {
+        if ($mapper instanceof FrameworkErrorsExceptionToResponse) {
+            $reachedFramework = true;
+        }
+        if ($mapper->supports($throw, $context)) {
+            $winner = $mapper;
+            break;
+        }
+    }
+
+    expect($winner)->toBeInstanceOf(ProblemDetailsExceptionToResponse::class)
+        ->and($winner->producer())->toBe('integration:problem-details')
+        ->and($reachedFramework)->toBeFalse();
 });
