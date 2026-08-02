@@ -4,41 +4,25 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Docblock;
 
-use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
+use Docuccino\Inference\PhpStan\Support\PhpDocParserStack;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
-use PHPStan\PhpDocParser\Lexer\Lexer;
-use PHPStan\PhpDocParser\Parser\ConstExprParser;
-use PHPStan\PhpDocParser\Parser\PhpDocParser;
-use PHPStan\PhpDocParser\Parser\TokenIterator;
-use PHPStan\PhpDocParser\Parser\TypeParser;
-use PHPStan\PhpDocParser\ParserConfig;
-use Throwable;
 
 /**
  * Splits a docblock's leading prose into an OAS `summary` (first paragraph) and `description`
- * (the remainder) using phpstan/phpdoc-parser — the one type/doc grammar used everywhere.
+ * (the remainder) using the shared {@see PhpDocParserStack} — the one type/doc grammar everywhere.
  */
 final class DocblockReader
 {
-    private readonly Lexer $lexer;
-
-    private readonly PhpDocParser $parser;
-
-    public function __construct()
-    {
-        $config = new ParserConfig([]);
-        $this->lexer = new Lexer($config);
-        $constExprParser = new ConstExprParser($config);
-        $typeParser = new TypeParser($config, $constExprParser);
-        $this->parser = new PhpDocParser($config, $typeParser, $constExprParser);
-    }
+    public function __construct(
+        private readonly PhpDocParserStack $stack = new PhpDocParserStack,
+    ) {}
 
     /**
      * @return array{summary: ?string, description: ?string}
      */
     public function read(?string $docComment): array
     {
-        $node = $this->parse($docComment);
+        $node = $this->stack->parseDocBlock($docComment);
         if ($node === null) {
             return ['summary' => null, 'description' => null];
         }
@@ -66,18 +50,5 @@ final class DocblockReader
             'summary' => $summary === '' ? null : $summary,
             'description' => ($description === null || $description === '') ? null : $description,
         ];
-    }
-
-    private function parse(?string $docComment): ?PhpDocNode
-    {
-        if ($docComment === null || $docComment === '') {
-            return null;
-        }
-
-        try {
-            return $this->parser->parse(new TokenIterator($this->lexer->tokenize($docComment)));
-        } catch (Throwable) {
-            return null;
-        }
     }
 }

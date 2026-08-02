@@ -4,40 +4,23 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Metadata;
 
-use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
+use Docuccino\Inference\PhpStan\Support\PhpDocParserStack;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
-use PHPStan\PhpDocParser\Lexer\Lexer;
-use PHPStan\PhpDocParser\Parser\ConstExprParser;
-use PHPStan\PhpDocParser\Parser\PhpDocParser;
-use PHPStan\PhpDocParser\Parser\TokenIterator;
-use PHPStan\PhpDocParser\Parser\TypeParser;
-use PHPStan\PhpDocParser\ParserConfig;
-use Throwable;
 
 /**
- * Extracts prose + `@example` from a raw docblock using phpstan/phpdoc-parser —
- * one type grammar everywhere (design). Framework-agnostic; touches no PHPStan
- * analysis internals.
+ * Extracts prose + `@example` from a raw docblock using the shared {@see PhpDocParserStack} —
+ * one type grammar everywhere (design). Framework-agnostic; touches no PHPStan analysis internals.
  */
 final class DocBlockReader
 {
-    private readonly Lexer $lexer;
-
-    private readonly PhpDocParser $parser;
-
-    public function __construct()
-    {
-        $config = new ParserConfig([]);
-        $this->lexer = new Lexer($config);
-        $constExprParser = new ConstExprParser($config);
-        $typeParser = new TypeParser($config, $constExprParser);
-        $this->parser = new PhpDocParser($config, $typeParser, $constExprParser);
-    }
+    public function __construct(
+        private readonly PhpDocParserStack $stack = new PhpDocParserStack,
+    ) {}
 
     /** The leading prose (summary + description), or null when absent. */
     public function summary(?string $docComment): ?string
     {
-        $node = $this->parse($docComment);
+        $node = $this->stack->parseDocBlock($docComment);
         if ($node === null) {
             return null;
         }
@@ -57,7 +40,7 @@ final class DocBlockReader
     /** The first `@example` value, or null. */
     public function example(?string $docComment): ?string
     {
-        $node = $this->parse($docComment);
+        $node = $this->stack->parseDocBlock($docComment);
         if ($node === null) {
             return null;
         }
@@ -70,19 +53,5 @@ final class DocBlockReader
         }
 
         return null;
-    }
-
-    /** Parse a raw docblock, or null when it is empty or unparseable. */
-    private function parse(?string $docComment): ?PhpDocNode
-    {
-        if ($docComment === null || $docComment === '') {
-            return null;
-        }
-
-        try {
-            return $this->parser->parse(new TokenIterator($this->lexer->tokenize($docComment)));
-        } catch (Throwable) {
-            return null;
-        }
     }
 }

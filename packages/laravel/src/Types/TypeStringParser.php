@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Inference\PhpStan\Support\PhpDocParserStack;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFalseNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFloatNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprIntegerNode;
@@ -31,31 +32,18 @@ use PHPStan\PhpDocParser\Ast\Type\IntersectionTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
-use PHPStan\PhpDocParser\Lexer\Lexer;
-use PHPStan\PhpDocParser\Parser\ConstExprParser;
-use PHPStan\PhpDocParser\Parser\TokenIterator;
-use PHPStan\PhpDocParser\Parser\TypeParser;
-use PHPStan\PhpDocParser\ParserConfig;
-use Throwable;
 
 /**
  * Parses a phpstan/phpdoc-parser type string (as written in `#[Response(type: '…')]` and the
- * parameter attributes) into a {@see DType} — the same grammar the inference engine uses for
- * docblocks, kept here so `docuccino/core` stays free of the phpdoc-parser dependency.
+ * parameter attributes) into a {@see DType} via the shared {@see PhpDocParserStack} — the same
+ * grammar the inference engine uses for docblocks, kept out of `docuccino/core` so core stays free
+ * of the phpdoc-parser dependency.
  */
 final class TypeStringParser
 {
-    private readonly Lexer $lexer;
-
-    private readonly TypeParser $parser;
-
-    public function __construct()
-    {
-        $config = new ParserConfig([]);
-        $this->lexer = new Lexer($config);
-        $constExprParser = new ConstExprParser($config);
-        $this->parser = new TypeParser($config, $constExprParser);
-    }
+    public function __construct(
+        private readonly PhpDocParserStack $stack = new PhpDocParserStack,
+    ) {}
 
     public function parse(string $type): DType
     {
@@ -64,9 +52,8 @@ final class TypeStringParser
             return new UnknownT('empty type string');
         }
 
-        try {
-            $node = $this->parser->parse(new TokenIterator($this->lexer->tokenize($type)));
-        } catch (Throwable) {
+        $node = $this->stack->parseType($type);
+        if ($node === null) {
             return new UnknownT('unparseable type: '.$type);
         }
 
