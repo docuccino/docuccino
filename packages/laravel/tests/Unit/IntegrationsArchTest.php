@@ -18,6 +18,7 @@ arch('built-in integrations consume only the public extension surface')
         'Docuccino\Core\Extensions\Validation',
         'Docuccino\Core\Extensions\Context',
         'Docuccino\Core\Extensions\Schema',
+        'Docuccino\Core\Extensions\Ordering',
         'Docuccino\Core\Draft',
         'Docuccino\Core\Inference',
         'Docuccino\Core\Patch',
