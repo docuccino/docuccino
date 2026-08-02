@@ -24,11 +24,7 @@ use Docuccino\Laravel\Pipeline\DocumentGenerator;
  * `{type: object}`). This asserts the Phase-4 unwrapping the workbench stub previously stood in for.
  */
 beforeEach(function (): void {
-    if (! FixtureRunner::available()) {
-        getenv('DOCUCCINO_REQUIRE_FIXTURE') === '1'
-            ? test()->fail('The fixture app is required (DOCUCCINO_REQUIRE_FIXTURE=1) but unavailable.')
-            : test()->markTestSkipped('Fixture app not provisioned; skipping the real-engine pipeline smoke.');
-    }
+    ensureFixtureAvailable(FixtureRunner::available());
 });
 
 it('unwraps a real JsonResponse<payload> into the emitted response schema', function (): void {

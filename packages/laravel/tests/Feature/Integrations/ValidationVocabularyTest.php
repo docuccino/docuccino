@@ -92,12 +92,19 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'in (string set)' => [[['in', ['draft', 'published']]], ['enum' => ['draft', 'published'], 'type' => 'string']],
     'in (numeric set)' => [[['in', ['1', '2', '3']]], ['enum' => [1, 2, 3], 'type' => 'integer']],
     'enum (folded values + note)' => [[['enum', ['a', 'b'], 'App\\Enums\\Kind']], ['description' => 'App\\Enums\\Kind', 'enum' => ['a', 'b'], 'type' => 'string']],
+    // Empty value set: the rule is consumed but contributes no enum (a bare typed field remains).
+    'in (empty values)' => [[['string'], ['in', []]], ['type' => 'string']],
+    // Already-typed guard: an explicit type is preserved, never overridden by the value-inferred one.
+    'in (preserves an existing type)' => [[['integer'], ['in', ['a', 'b']]], ['enum' => ['a', 'b'], 'type' => 'integer']],
 
     // SizeRuleTransformer — type-aware min/max/between/size.
     'min (string length)' => [[['string'], ['min', ['2']]], ['minLength' => 2, 'type' => 'string']],
     'max (string length)' => [[['string'], ['max', ['9']]], ['maxLength' => 9, 'type' => 'string']],
     'between (numeric bounds)' => [[['integer'], ['between', ['1', '5']]], ['maximum' => 5, 'minimum' => 1, 'type' => 'integer']],
     'size (array items)' => [[['array'], ['size', ['3']]], ['maxItems' => 3, 'minItems' => 3, 'type' => 'array']],
+    // Float bounds on a numeric field keep their decimal value (not truncated to int).
+    'min (float bound)' => [[['numeric'], ['min', ['2.5']]], ['minimum' => 2.5, 'type' => 'number']],
+    'max (float bound)' => [[['numeric'], ['max', ['9.75']]], ['maximum' => 9.75, 'type' => 'number']],
 
     // DateFormatRuleTransformer — date-only vs time-bearing pattern.
     'date_format (date)' => [[['date_format', ['Y-m-d']]], ['description' => 'Expected format: Y-m-d', 'format' => 'date', 'type' => 'string']],
@@ -109,6 +116,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     // ExistsRuleTransformer — a FK reference contributes a default string type only.
     'exists' => [[['exists', ['users', 'id']]], ['type' => 'string']],
     'unique' => [[['unique', ['users']]], ['type' => 'string']],
+    // Already-typed guard: an existing integer type survives a FK-reference rule.
+    'exists (preserves an existing type)' => [[['integer'], ['exists', ['users', 'id']]], ['type' => 'integer']],
+    // RegexRuleTransformer already-typed guard: an explicit type is preserved alongside the pattern.
+    'regex (preserves an existing type)' => [[['integer'], ['regex', ['/^\\d+$/']]], ['pattern' => '^\\d+$', 'type' => 'integer']],
 
     // FileRuleTransformer — binary string schema (multipart switch asserted separately).
     'file' => [[['file']], ['format' => 'binary', 'type' => 'string']],
@@ -152,6 +163,15 @@ it('documents the confirmed partner and switches file rules to multipart', funct
 
     expect(convertFieldRules([['file']])->mediaType)->toBe('multipart/form-data')
         ->and(convertFieldRules([['image']])->mediaType)->toBe('multipart/form-data');
+});
+
+it('leaves the confirmed partner optional when the field itself is not required', function (): void {
+    // A non-required `confirmed` field mirrors its type but neither field joins the required list.
+    $confirmed = convertFieldRules([['string'], ['confirmed']]);
+
+    expect($confirmed->schema['properties'])->toHaveKey('f_confirmation')
+        ->and($confirmed->schema['properties']['f_confirmation'])->toBe(['type' => 'string'])
+        ->and($confirmed->schema)->not->toHaveKey('required');
 });
 
 it('applies size rules type-aware and independent of author order', function (): void {

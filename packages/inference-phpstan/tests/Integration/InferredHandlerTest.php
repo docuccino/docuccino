@@ -15,11 +15,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * analysed by file+line. This is engine truth a stub cannot stand in for.
  */
 beforeEach(function (): void {
-    if (! FixtureRunner::available()) {
-        getenv('DOCUCCINO_REQUIRE_FIXTURE') === '1'
-            ? test()->fail('The fixture app is required (DOCUCCINO_REQUIRE_FIXTURE=1) but unavailable.')
-            : test()->markTestSkipped('Fixture app not provisioned; skipping the inferred-handler real-engine test.');
-    }
+    ensureFixtureAvailable(FixtureRunner::available());
 });
 
 /**
