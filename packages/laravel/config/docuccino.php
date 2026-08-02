@@ -45,7 +45,10 @@ return [
                 //   'default'  => [['bearer' => []]],           // per-op requirement for auth-detected routes
                 //   'document' => [['bearer' => []]],           // document-wide `security` requirement
             ],
-            'error_responses' => 'default', // 'default' | 'none' (presets: Phase 4)
+            // Error-response strategy: 'default' documents the framework-default JSON error shapes,
+            // 'problem-details' the RFC 9457 (application/problem+json) preset, and 'none' emits no
+            // error responses at all.
+            'error_responses' => 'default', // 'default' | 'problem-details' | 'none'
             'tags' => [
                 // Raw tag => display tag. An exact match wins, else the first prefix the tag starts with.
                 'map' => [],
@@ -67,6 +70,29 @@ return [
                 'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
                 // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
             ],
+            // Per-integration document-level knobs (design §9). Each key is an integration's directory
+            // name (kebab-cased); an integration reads only its own bag. All optional — omit the whole
+            // `integrations` bag (as here) to use every documented default.
+            //   'integrations' => [
+            //       // API Resources: top-level resource `data`-wrapping (Laravel JsonResource::$wrap).
+            //       'api_resources' => [
+            //           'wrap' => true,   // false → never wrap (a global withoutWrapping()); true → 'data';
+            //                             // a string → force that key; omit → each resource's own $wrap.
+            //       ],
+            //       // Sanctum auto-config (only when laravel/sanctum is installed):
+            //       'sanctum' => [
+            //           'modes'  => ['token', 'stateful'], // which schemes to expose (default: both)
+            //           'cookie' => 'myapp_session',       // stateful cookie name (default: session.cookie)
+            //       ],
+            //       // Passport auto-config (only when laravel/passport is installed):
+            //       'passport' => [
+            //           'url' => 'https://auth.example.com', // oauth2 flow base URL (default: app.url)
+            //       ],
+            //       // Query Builder pagination (only when spatie/laravel-query-builder is installed):
+            //       'query_builder' => [
+            //           'pagination_terminals' => ['paginateList'], // extra paginating method names
+            //       ],
+            //   ],
             'export' => [
                 'path' => 'docs/openapi.json',
                 'formats' => ['openapi-3.2'],      // FUTURE (multi-format export): not read yet; --format selects the emitter today
@@ -105,12 +131,17 @@ return [
     | Document-level lint rules (diagnostics only — never mutate the output). The
     | data-leakage pass warns on schema properties whose names look sensitive
     | (password/token/secret/api_key/…). Safelist known-good properties by name or
-    | JSON pointer; set enabled=false to turn it off.
+    | JSON pointer; add domain-specific heuristics via `patterns`; set enabled=false
+    | to turn it off.
     */
     'lint' => [
         'leakage' => [
             'enabled' => true,
             'allow' => [],   // e.g. ['reset_token', '#/components/schemas/Widget/properties/status']
+            // Extra sensitive-name heuristics MERGED over the built-in table (existing tokens keep
+            // their label). Key = normalized token (lower-cased, non-alphanumerics stripped), matched
+            // when a property name CONTAINS it; value = the human label used in the diagnostic.
+            //   'patterns' => ['sortcode' => 'a bank sort code', 'iban' => 'an IBAN'],
         ],
     ],
 

@@ -72,7 +72,7 @@ it('filters modes per document: a token-only document drops the stateful mode fr
 
     bindStubEngine();
     $document = generateDocument(function (array $raw): array {
-        $raw['security']['sanctum']['modes'] = ['token'];
+        $raw['integrations']['sanctum']['modes'] = ['token'];
 
         return $raw;
     })->document->toArray();

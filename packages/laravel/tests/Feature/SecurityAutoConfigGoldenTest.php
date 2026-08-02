@@ -32,7 +32,7 @@ beforeEach(function (): void {
         'public' => [
             'info' => ['title' => 'Public API', 'version' => '1.0.0'],
             'routes' => ['include' => ['api/secure/*']],
-            'security' => ['sanctum' => ['modes' => ['token']]],
+            'integrations' => ['sanctum' => ['modes' => ['token']]],
         ],
         'internal' => [
             'info' => ['title' => 'Internal API', 'version' => '1.0.0'],

@@ -117,16 +117,29 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->basePath());
 
         // The data-leakage lint is core + framework-agnostic; the adapter only maps its config
-        // (docuccino.lint.leakage.{enabled,allow}) onto the core options and registers it.
+        // (docuccino.lint.leakage.{enabled,allow,patterns}) onto the core options and registers it.
         $this->app->bind(SensitiveFieldLint::class, static function (): SensitiveFieldLint {
             /** @var array<string, mixed> $leakage */
             $leakage = (array) config('docuccino.lint.leakage', []);
             $allow = is_array($leakage['allow'] ?? null) ? array_values(array_filter($leakage['allow'], 'is_string')) : [];
 
-            return new SensitiveFieldLint(new SensitiveFieldLintOptions(
+            $options = new SensitiveFieldLintOptions(
                 enabled: ($leakage['enabled'] ?? true) !== false,
                 allow: $allow,
-            ));
+            );
+
+            // Extra token → label heuristics MERGE over the default table (existing tokens keep their label).
+            $patterns = [];
+            foreach (is_array($leakage['patterns'] ?? null) ? $leakage['patterns'] : [] as $token => $label) {
+                if (is_string($token) && is_string($label)) {
+                    $patterns[$token] = $label;
+                }
+            }
+            if ($patterns !== []) {
+                $options = $options->withPatterns($patterns);
+            }
+
+            return new SensitiveFieldLint($options);
         });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the

@@ -91,8 +91,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
      */
     private function customTerminals(RouteContext $context): array
     {
-        $queryBuilder = $context->document->raw['query_builder'] ?? null;
-        $terminals = is_array($queryBuilder) ? ($queryBuilder['pagination_terminals'] ?? null) : null;
+        $terminals = $context->document->integration('query_builder')['pagination_terminals'] ?? null;
 
         return is_array($terminals) ? array_values(array_filter($terminals, 'is_string')) : [];
     }

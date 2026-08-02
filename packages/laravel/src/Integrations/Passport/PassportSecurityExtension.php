@@ -74,8 +74,7 @@ final class PassportSecurityExtension implements OperationExtension
 
     private function baseUrl(RouteContext $context): string
     {
-        $passport = $context->document->raw['passport'] ?? null;
-        $configured = is_array($passport) ? ($passport['url'] ?? null) : null;
+        $configured = $context->document->integration('passport')['url'] ?? null;
         if (is_string($configured) && $configured !== '') {
             return $configured;
         }

@@ -66,3 +66,18 @@ it('turns off entirely via the config off-switch', function (): void {
 
     expect($diagnostics)->toBe([]);
 });
+
+it('flags an extra property via a custom lint.leakage.patterns heuristic', function (): void {
+    // `title` is not sensitive by default; a custom pattern merged over the built-in table flags it.
+    $diagnostics = leakageDiagnostics(function (array $raw): array {
+        config()->set('docuccino.lint.leakage.patterns', ['title' => 'a document title']);
+
+        return $raw;
+    });
+
+    $messages = implode("\n", array_map(static fn ($d): string => $d->message, $diagnostics));
+    expect($messages)->toContain('"title"')
+        ->and($messages)->toContain('looks like a document title')
+        // The built-in heuristics still fire alongside the custom one.
+        ->and($messages)->toContain('"secret"');
+});

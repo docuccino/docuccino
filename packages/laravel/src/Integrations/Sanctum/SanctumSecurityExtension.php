@@ -88,8 +88,7 @@ final class SanctumSecurityExtension implements OperationExtension
      */
     private function allowedModes(RouteContext $context): array
     {
-        $sanctum = $context->document->security['sanctum'] ?? null;
-        $modes = is_array($sanctum) ? ($sanctum['modes'] ?? null) : null;
+        $modes = $context->document->integration('sanctum')['modes'] ?? null;
         if (! is_array($modes)) {
             return self::DEFAULT_MODES;
         }
@@ -109,8 +108,7 @@ final class SanctumSecurityExtension implements OperationExtension
      */
     private function sessionCookie(RouteContext $context): string
     {
-        $sanctum = $context->document->security['sanctum'] ?? null;
-        $cookie = is_array($sanctum) ? ($sanctum['cookie'] ?? null) : null;
+        $cookie = $context->document->integration('sanctum')['cookie'] ?? null;
         if (is_string($cookie) && $cookie !== '') {
             return $cookie;
         }

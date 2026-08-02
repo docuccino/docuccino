@@ -267,15 +267,31 @@ return [
             'content' => ['dir' => 'resources/docs/api'],
             'overlays' => ['resources/docs/overlays/*.yaml'],
             'representation' => ['filters' => 'bracketed|deepObject', 'nullable' => …, 'enums' => …, 'operation_id' => …],
+            // Per-integration document-level knobs — one bag per integration, keyed by its directory
+            // name (kebab-cased); each integration reads ONLY its own bag (via DocumentConfig::integration()).
+            'integrations' => [
+                'api_resources' => ['wrap' => true],                      // top-level resource `data` wrapping (false | true | '<key>')
+                'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
+                'passport'      => ['url' => 'https://auth.example.com'], // oauth2 flow base URL (default app.url)
+                'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
+            ],
             'export' => ['path' => '…', 'formats' => ['openapi-3.2']],
             'viewer' => ['driver' => 'scalar', 'route' => '/docs/api', 'gate' => 'viewApiDocs', 'source' => 'generate|artifact'],
         ],
     ],
     'extensions' => [],
+    // Data-leakage lint: enabled, an allow-list, and `patterns` (extra token → label heuristics
+    // merged over the built-in sensitive-name table).
+    'lint' => ['leakage' => ['enabled' => true, 'allow' => [], 'patterns' => []]],
     'on_route_error' => 'skeleton',
     'cache' => ['enabled' => true, 'store' => null],
 ];
 ```
+
+`error_responses` accepts `default` (framework-default JSON error shapes), `problem-details`
+(the RFC 9457 preset), or `none` (no error responses). Integration config lives under one `integrations.<name>` bag
+per integration — there is no back-compat read of the old flat `security.sanctum` / `passport` /
+`query_builder` locations (pre-launch).
 
 ## 10. Fragment caching
 
