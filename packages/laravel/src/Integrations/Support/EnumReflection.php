@@ -69,6 +69,25 @@ final class EnumReflection
     }
 
     /**
+     * The file the enum is declared in, or null when it is not reflectable (e.g. an internal enum).
+     * A fragment-cache dependency: an enum-cast column's schema changes when a case is added/removed.
+     */
+    public static function file(string $fqcn): ?string
+    {
+        if (! enum_exists($fqcn)) {
+            return null;
+        }
+
+        try {
+            $file = (new ReflectionEnum($fqcn))->getFileName();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $file !== false ? $file : null;
+    }
+
+    /**
      * @return list<ReflectionEnumUnitCase>
      */
     private static function cases(string $fqcn): array

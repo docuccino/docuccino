@@ -67,6 +67,7 @@ final class ClassMetadataFactory
             fqcn: $fqcn,
             properties: $properties,
             summary: $this->docBlocks->summary($classDoc === false ? null : $classDoc),
+            dependencyFiles: $file !== false ? [$file] : [],
         );
     }
 }

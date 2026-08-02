@@ -48,6 +48,15 @@ interface SchemaContext
     /** The inference engine, for {@see TypeEngine::classMetadata()} class expansion. */
     public function engine(): TypeEngine;
 
+    /**
+     * Record that this conversion read one or more files whose contents affect the emitted schema
+     * (a reflected Data/Model/Resource class, a `classMetadata` source file, an enum cast's backing
+     * enum) so they join the route's fragment cache dependency manifest (design §10, "Fragment cache
+     * soundness"). Without this, editing a returned DTO/model/enum would leave a warm fragment stale.
+     * Empty strings are ignored.
+     */
+    public function dependsOn(string ...$files): void;
+
     /** The document's representation policy (enum naming, nullable expression …). */
     public function representation(): RepresentationPolicy;
 

@@ -54,6 +54,10 @@ final class ClassTypeToSchema implements TypeToSchema
 
         $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
+        // The class's reflected source is a fragment-cache dependency (design §10): editing the class
+        // (adding/retyping a property) must invalidate any warm fragment that referenced it.
+        $context->dependsOn(...$metadata->dependencyFiles);
+
         if ($metadata->properties === []) {
             return new SchemaResult(['type' => 'object'], 0.4);
         }

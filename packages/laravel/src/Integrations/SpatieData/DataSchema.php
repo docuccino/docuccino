@@ -75,6 +75,10 @@ final class DataSchema implements TypeToSchema
         $facts = $this->reflector->classFacts($fqcn);
         $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
+        // The Data class's reflected shape is a fragment-cache dependency (design §10): editing a
+        // property type / #[Hidden] / MapName must invalidate the warm fragment.
+        $context->dependsOn(...$metadata->dependencyFiles);
+
         if ($metadata->properties === []) {
             return new SchemaResult(['type' => 'object'], 0.4);
         }

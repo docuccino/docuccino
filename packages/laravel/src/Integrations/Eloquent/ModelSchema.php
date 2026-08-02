@@ -62,6 +62,11 @@ final class ModelSchema implements TypeToSchema
         $facts = $this->reflector->facts($fqcn);
         $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
+        // The model's reflected shape is a fragment-cache dependency (design §10): editing the model
+        // (a new column/cast, a changed $hidden list) must invalidate the warm fragment. Enum-cast
+        // third files are recorded as each cast is resolved in castSchema().
+        $context->dependsOn(...$metadata->dependencyFiles);
+
         $schemaId = SchemaIdentity::id($fqcn) ?? $fqcn;
         $name = $context->reserveComponentName(SchemaIdentity::name($fqcn) ?? Fqcn::short($fqcn), $schemaId);
         $this->expanding[$fqcn] = $name;
@@ -131,6 +136,12 @@ final class ModelSchema implements TypeToSchema
 
         if (CastSchema::isEnum($cast)) {
             $enum = explode(':', $cast, 2)[0];
+
+            // The backing enum is a third-file cache dependency of the model schema (design §10).
+            $enumFile = EnumReflection::file($enum);
+            if ($enumFile !== null) {
+                $context->dependsOn($enumFile);
+            }
 
             return $context->convert(new EnumT($enum, EnumReflection::names($enum)));
         }

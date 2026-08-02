@@ -53,6 +53,10 @@ final class ToArrayObject
             $line > 0 ? $line : 0,
         ));
 
+        // The resource method's analysed files are fragment-cache dependencies: editing the resource's
+        // toArray (or any file its return shape traced) must invalidate the warm fragment (design §10).
+        $context->dependsOn(...$analysis->dependencyFiles);
+
         $shape = null;
         foreach ($analysis->returns as $return) {
             if ($return->type instanceof ArrayShapeT && ! $return->type->isList) {

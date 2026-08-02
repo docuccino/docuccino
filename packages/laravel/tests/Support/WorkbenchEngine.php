@@ -37,8 +37,13 @@ final class WorkbenchEngine
     /**
      * @param  array<string, ActionAnalysis>  $callables  scripted CallableRef analyses (keyed by
      *                                                    CallableRef::symbol()) for the inferred-handler tier tests
+     * @param  array<string, ClassMetadata>  $classOverrides  class metadata merged over the defaults
+     *                                                        (keyed by FQCN) — e.g. to carry a temp
+     *                                                        dependencyFiles for cache-invalidation tests
+     * @param  array<string, ActionAnalysis>  $analysisOverrides  action analyses merged over the
+     *                                                            defaults (keyed by ActionRef::symbol())
      */
-    public static function make(array $callables = []): StubTypeEngine
+    public static function make(array $callables = [], array $classOverrides = [], array $analysisOverrides = []): StubTypeEngine
     {
         $location = new SourceLocation('');
 
@@ -157,6 +162,7 @@ final class WorkbenchEngine
                     returns: [new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('ok', ScalarT::bool())]), 200), $location)],
                     throws: [new ThrownException(self::PAYMENT_EXCEPTION, 402, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
                 ),
+                ...$analysisOverrides,
             ],
             classes: [
                 'Workbench\\App\\Data\\FormData' => $formData,
@@ -188,6 +194,7 @@ final class WorkbenchEngine
                     new PropertyMetadata('id', ScalarT::int()),
                     new PropertyMetadata('label', ScalarT::string()),
                 ]),
+                ...$classOverrides,
             ],
             callables: [
                 // The renderable exception's render() as the engine recovers it — the inferred-handler

@@ -190,7 +190,10 @@ final class RouteContext
      */
     public function converter(): SchemaConverter
     {
-        return $this->converter ??= new SchemaConverter($this->typeMappers, $this->engine, $this->components, $this->representation());
+        // Share this route's dependency bag with the converter so mappers recording reflected /
+        // classMetadata / enum files via SchemaContext::dependsOn() widen the fragment cache key
+        // (design §10 — editing a returned DTO/model/enum must invalidate the warm fragment).
+        return $this->converter ??= new SchemaConverter($this->typeMappers, $this->engine, $this->components, $this->representation(), $this->dependencies);
     }
 
     /** The document's representation policy (design §Representation policies), resolved once. */

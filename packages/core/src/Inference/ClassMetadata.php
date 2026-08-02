@@ -13,11 +13,15 @@ final readonly class ClassMetadata
 {
     /**
      * @param  list<PropertyMetadata>  $properties
+     * @param  list<string>  $dependencyFiles  the file(s) the class shape was reflected from — fed
+     *                                         into the fragment cache key so editing the class
+     *                                         (adding/retyping a property) invalidates the fragment
      */
     public function __construct(
         public string $fqcn,
         public array $properties = [],
         public ?string $summary = null,
+        public array $dependencyFiles = [],
     ) {}
 
     /**
@@ -25,6 +29,9 @@ final readonly class ClassMetadata
      */
     public function toArray(): array
     {
+        $deps = array_values(array_unique($this->dependencyFiles));
+        sort($deps);
+
         $out = [
             'fqcn' => $this->fqcn,
             'properties' => array_map(static fn (PropertyMetadata $p): array => $p->toArray(), $this->properties),
@@ -32,6 +39,10 @@ final readonly class ClassMetadata
 
         if ($this->summary !== null) {
             $out['summary'] = $this->summary;
+        }
+
+        if ($deps !== []) {
+            $out['dependencyFiles'] = $deps;
         }
 
         return $out;
@@ -45,6 +56,7 @@ final readonly class ClassMetadata
         $fqcn = $data['fqcn'] ?? '';
         $properties = $data['properties'] ?? [];
         $summary = $data['summary'] ?? null;
+        $deps = $data['dependencyFiles'] ?? [];
 
         return new self(
             is_string($fqcn) ? $fqcn : '',
@@ -55,6 +67,7 @@ final readonly class ClassMetadata
                 ))
                 : [],
             is_string($summary) ? $summary : null,
+            is_array($deps) ? array_values(array_filter($deps, 'is_string')) : [],
         );
     }
 }

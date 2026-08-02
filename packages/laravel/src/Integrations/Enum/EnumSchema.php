@@ -34,6 +34,13 @@ final class EnumSchema implements TypeToSchema
             return null;
         }
 
+        // The enum's declaring file is a fragment-cache dependency: adding/removing a case changes
+        // this schema (design §10). Recorded even when reflection later falls back to DType cases.
+        $file = EnumReflection::file($type->fqcn);
+        if ($file !== null) {
+            $context->dependsOn($file);
+        }
+
         $values = EnumReflection::values($type->fqcn);
         if ($values === []) {
             // The engine could not reflect the enum (e.g. it is not autoloadable here); fall back to

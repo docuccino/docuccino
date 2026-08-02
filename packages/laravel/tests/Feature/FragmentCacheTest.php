@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\ListT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -15,6 +20,18 @@ use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\LateBoundMarker;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+
+/**
+ * Write a throwaway PHP file and return its path — a stand-in for a returned DTO/model/enum/resource
+ * source file whose reflected shape a schema mapper records via SchemaContext::dependsOn (A1).
+ */
+function tempDependencyFile(): string
+{
+    $file = sys_get_temp_dir().'/docuccino-schemadep-'.uniqid('', true).'.php';
+    file_put_contents($file, '<?php // v1');
+
+    return $file;
+}
 
 /**
  * The OperationFragment cache (design §10): warm hits are byte-identical and skip the engine, and
@@ -97,6 +114,86 @@ it('invalidates a fragment when one of its dependency files changes', function (
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 
     @unlink($dependency);
+});
+
+it('invalidates a fragment when a returned DTO file is edited (classMetadata dependency)', function (): void {
+    enableFragmentCache();
+
+    $dto = tempDependencyFile();
+    // FormData's reflected shape now declares the temp file as its dependency, mirroring what the
+    // real ClassMetadataFactory surfaces; DataSchema records it via SchemaContext::dependsOn.
+    $metadata = new ClassMetadata('Workbench\\App\\Data\\FormData', [
+        new PropertyMetadata('id', ScalarT::int()),
+        new PropertyMetadata('title', ScalarT::string()),
+    ], dependencyFiles: [$dto]);
+
+    $engine = new CountingTypeEngine(WorkbenchEngine::make(classOverrides: ['Workbench\\App\\Data\\FormData' => $metadata]));
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // Editing the DTO file changes its stored hash → the FormData-dependent fragments rebuild.
+    file_put_contents($dto, '<?php // v2');
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    @unlink($dto);
+});
+
+it('invalidates a fragment when a returned model file is edited (classMetadata dependency)', function (): void {
+    enableFragmentCache();
+
+    $model = tempDependencyFile();
+    $widget = 'Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Widget';
+    $metadata = new ClassMetadata($widget, [
+        new PropertyMetadata('id', ScalarT::int()),
+        new PropertyMetadata('name', ScalarT::string()),
+    ], dependencyFiles: [$model]);
+
+    $engine = new CountingTypeEngine(WorkbenchEngine::make(classOverrides: [$widget => $metadata]));
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    file_put_contents($model, '<?php // v2');
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    @unlink($model);
+});
+
+it('invalidates a fragment when a resource toArray file is edited (analysis dependency propagated)', function (): void {
+    enableFragmentCache();
+
+    $resourceFile = tempDependencyFile();
+    // The resource's toArray analysis declares the temp file as a dependency; ToArrayObject
+    // propagates $analysis->dependencyFiles through SchemaContext::dependsOn.
+    $toArray = new ActionAnalysis(
+        returns: [new ReturnSite(new ArrayShapeT([
+            new ArrayShapeField('id', ScalarT::int()),
+            new ArrayShapeField('title', ScalarT::string()),
+        ]), new SourceLocation(''))],
+        dependencyFiles: [$resourceFile],
+    );
+
+    $engine = new CountingTypeEngine(WorkbenchEngine::make(analysisOverrides: [
+        'Docuccino\\Laravel\\Tests\\Fixtures\\ApiResources\\ArticleResource::toArray' => $toArray,
+    ]));
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    file_put_contents($resourceFile, '<?php // v2');
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    @unlink($resourceFile);
 });
 
 it('invalidates every fragment when the resolved extension set changes', function (): void {

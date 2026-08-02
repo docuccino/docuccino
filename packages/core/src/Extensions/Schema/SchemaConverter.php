@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Context\RouteDependencies;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Inference\DType\DType;
@@ -32,6 +33,7 @@ final class SchemaConverter implements SchemaContext
         private readonly TypeEngine $typeEngine,
         private readonly ComponentRegistry $components,
         private readonly RepresentationPolicy $representation = new RepresentationPolicy,
+        private readonly RouteDependencies $dependencies = new RouteDependencies,
     ) {}
 
     /**
@@ -80,6 +82,11 @@ final class SchemaConverter implements SchemaContext
     public function engine(): TypeEngine
     {
         return $this->typeEngine;
+    }
+
+    public function dependsOn(string ...$files): void
+    {
+        $this->dependencies->addFiles(array_values($files));
     }
 
     public function representation(): RepresentationPolicy
