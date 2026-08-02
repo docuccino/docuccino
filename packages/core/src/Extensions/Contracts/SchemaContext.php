@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Contracts;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\TypeEngine;
@@ -52,4 +53,10 @@ interface SchemaContext
 
     /** Record that the current conversion is imprecise; the lowest value seen wins. */
     public function lowerConfidence(float $confidence): void;
+
+    /**
+     * Record a diagnostic raised while converting a type (e.g. a polymorphic morph variant with no
+     * morph-map alias). Folded into the document's diagnostic channel via the component registry.
+     */
+    public function diagnostic(Diagnostic $diagnostic): void;
 }

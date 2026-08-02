@@ -6,7 +6,8 @@ namespace Docuccino\Laravel\Integrations\Eloquent;
 
 /**
  * The entry point for the Eloquent model schema integration. Always on — illuminate/database ships
- * with every Laravel app — contributing the {@see ModelSchema} type mapper.
+ * with every Laravel app — contributing the {@see ModelSchema} type mapper and {@see MorphToSchema}
+ * (polymorphic morph unions → discriminated `oneOf`).
  */
 final class EloquentIntegration
 {
@@ -15,6 +16,9 @@ final class EloquentIntegration
      */
     public static function extensions(): array
     {
-        return [ModelSchema::class];
+        return [
+            ModelSchema::class,
+            MorphToSchema::class,
+        ];
     }
 }

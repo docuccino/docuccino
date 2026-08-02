@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Schema;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
@@ -89,6 +90,11 @@ final class SchemaConverter implements SchemaContext
     public function lowerConfidence(float $confidence): void
     {
         $this->confidence = min($this->confidence, $confidence);
+    }
+
+    public function diagnostic(Diagnostic $diagnostic): void
+    {
+        $this->components->addDiagnostic($diagnostic);
     }
 
     public function components(): ComponentRegistry
