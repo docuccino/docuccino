@@ -99,6 +99,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Lint
+    |--------------------------------------------------------------------------
+    |
+    | Document-level lint rules (diagnostics only — never mutate the output). The
+    | data-leakage pass warns on schema properties whose names look sensitive
+    | (password/token/secret/api_key/…). Safelist known-good properties by name or
+    | JSON pointer; set enabled=false to turn it off.
+    */
+    'lint' => [
+        'leakage' => [
+            'enabled' => true,
+            'allow' => [],   // e.g. ['reset_token', '#/components/schemas/Widget/properties/status']
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Inference engine
     |--------------------------------------------------------------------------
     |

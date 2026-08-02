@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Registry;
 
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
@@ -82,6 +83,10 @@ final class DefaultExtensions
             // x-permissions extension member + a generated description line.
             ...(PermissionIntegration::installed() ? PermissionIntegration::extensions() : []),
             ...DefaultTypeMappers::all(),
+            // Data-leakage lint (always-on core DocumentTransformer): warns on schema properties whose
+            // names look sensitive (password/token/secret/…); diagnostics only, never mutates output.
+            // Container-resolved so the provider maps the docuccino.lint.leakage config onto its options.
+            SensitiveFieldLint::class,
         ];
     }
 }

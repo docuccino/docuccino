@@ -117,7 +117,7 @@ final class Assembler
         }
 
         $doc = $this->applyOverlays($doc, $overlayDocuments, $diagnostics);
-        $doc = $this->applyTransformers($doc, $document, $documentId, $transformers);
+        $doc = $this->applyTransformers($doc, $document, $documentId, $transformers, $diagnostics);
 
         $doc = $this->stampContentHash($doc);
 
@@ -217,9 +217,10 @@ final class Assembler
     /**
      * @param  array<string, mixed>  $doc
      * @param  list<DocumentTransformer>  $transformers
+     * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private function applyTransformers(array $doc, DocumentConfig $document, string $documentId, array $transformers): array
+    private function applyTransformers(array $doc, DocumentConfig $document, string $documentId, array $transformers, array &$diagnostics): array
     {
         if ($transformers === []) {
             return $doc;
@@ -229,6 +230,10 @@ final class Assembler
         $context = new DocumentContext($document, $documentId);
         foreach ($transformers as $transformer) {
             $transformer->transform($draft, $context);
+        }
+
+        foreach ($context->diagnostics->all() as $diagnostic) {
+            $diagnostics[] = $diagnostic;
         }
 
         return $draft->toArray();

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel;
 
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Lint\SensitiveFieldLint;
+use Docuccino\Core\Lint\SensitiveFieldLintOptions;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Commands\CacheCommand;
 use Docuccino\Laravel\Commands\ClearCommand;
@@ -113,6 +115,19 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(DocumentBuilder::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
+
+        // The data-leakage lint is core + framework-agnostic; the adapter only maps its config
+        // (docuccino.lint.leakage.{enabled,allow}) onto the core options and registers it.
+        $this->app->bind(SensitiveFieldLint::class, static function (): SensitiveFieldLint {
+            /** @var array<string, mixed> $leakage */
+            $leakage = (array) config('docuccino.lint.leakage', []);
+            $allow = is_array($leakage['allow'] ?? null) ? array_values(array_filter($leakage['allow'], 'is_string')) : [];
+
+            return new SensitiveFieldLint(new SensitiveFieldLintOptions(
+                enabled: ($leakage['enabled'] ?? true) !== false,
+                allow: $allow,
+            ));
+        });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
         // NullTypeEngine; production builds it from config, degrading to null on boot failure.
