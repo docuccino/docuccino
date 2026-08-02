@@ -1,0 +1,24 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Attributes;
+
+use Attribute;
+
+/**
+ * Documents a query parameter (patching or adding one). Repeatable; usable on controllers,
+ * actions and closure routes.
+ */
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
+final readonly class QueryParameter
+{
+    public function __construct(
+        public string $name,
+        public ?string $type = null,
+        public ?string $description = null,
+        public bool $required = false,
+        public mixed $default = null,
+        public mixed $example = null,
+    ) {}
+}
