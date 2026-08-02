@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\Support;
 
 use Docuccino\Attributes\CaseDescription;
+use Docuccino\Core\Inference\DType\EnumT;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
 use ReflectionEnumUnitCase;
@@ -26,6 +27,17 @@ final class EnumReflection
     public static function values(string $fqcn): array
     {
         return array_map(self::caseValue(...), self::cases($fqcn));
+    }
+
+    /**
+     * The case names of an enum, in declaration order — the {@see EnumT}
+     * `cases` contract (distinct from backing {@see values()}).
+     *
+     * @return list<string>
+     */
+    public static function names(string $fqcn): array
+    {
+        return array_map(static fn (ReflectionEnumUnitCase $case): string => $case->getName(), self::cases($fqcn));
     }
 
     /**
