@@ -19,6 +19,7 @@ use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
+use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
@@ -53,6 +54,10 @@ final class DefaultExtensions
             ErrorResponsesExtension::class,
             SecurityExtension::class,
             AttributeOverridesExtension::class,
+            // Error-response chain (design §6, first supports() wins): framework-default JSON shapes
+            // (always on), then the terminal generic fallback. The inferred-handler tier and the
+            // Problem Details preset slot ahead of these (FIRST / EARLY) below.
+            ...FrameworkErrorsIntegration::extensions(),
             DefaultExceptionToResponse::class,
             // FormRequest / inline validate() request documentation (design §Phase 4). Consumes only
             // public contracts (dogfooding); the rule vocabulary registers through the same chain.

@@ -128,8 +128,8 @@
               "id": "res:v1:jds4ktiqi7wm4w2w",
               "provenance": [
                 {
-                  "producer": "fallback",
-                  "layer": "fallback",
+                  "producer": "integration:framework-errors",
+                  "layer": "integration",
                   "fields": [
                     "description"
                   ]
@@ -143,10 +143,11 @@
                   "x-docuccino": {
                     "provenance": [
                       {
-                        "producer": "fallback",
-                        "layer": "fallback",
+                        "producer": "integration:framework-errors",
+                        "layer": "integration",
                         "fields": [
                           "properties",
+                          "required",
                           "type"
                         ]
                       }
@@ -157,7 +158,10 @@
                     "message": {
                       "type": "string"
                     }
-                  }
+                  },
+                  "required": [
+                    "message"
+                  ]
                 }
               }
             }
@@ -615,8 +619,8 @@
               "id": "res:v1:far53ijjlik5mgki",
               "provenance": [
                 {
-                  "producer": "fallback",
-                  "layer": "fallback",
+                  "producer": "integration:framework-errors",
+                  "layer": "integration",
                   "fields": [
                     "description"
                   ]
@@ -630,10 +634,11 @@
                   "x-docuccino": {
                     "provenance": [
                       {
-                        "producer": "fallback",
-                        "layer": "fallback",
+                        "producer": "integration:framework-errors",
+                        "layer": "integration",
                         "fields": [
                           "properties",
+                          "required",
                           "type"
                         ]
                       }
@@ -644,7 +649,10 @@
                     "message": {
                       "type": "string"
                     }
-                  }
+                  },
+                  "required": [
+                    "message"
+                  ]
                 }
               }
             }
@@ -2117,7 +2125,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "2077120bce1a283b6c8e298e8ab264e2edb3508c16320adb992e75b55b17d0e2",
-      "contentHash": "1dda35261ddc59d070bc1727770dabffca3ad6a711a02ea8e50397f9af7a21e1"
+      "contentHash": "7be622941de3eae3c9bd6a3375f104b6ce28c2bdbd6905e7374c74bcfe6d6550"
     },
     "generator": {
       "name": "docuccino/laravel",
