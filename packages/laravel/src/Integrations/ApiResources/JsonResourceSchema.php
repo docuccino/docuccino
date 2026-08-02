@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Laravel\Integrations\Support\ComponentHoist;
+use Docuccino\Laravel\Integrations\Support\ResourceWrapping;
 
 /**
  * Maps a Laravel API Resource to a schema (superseding the core class mapper for resource types).
@@ -21,6 +22,10 @@ use Docuccino\Laravel\Integrations\Support\ComponentHoist;
  *   named by `#[SchemaName]` (else short class name) and pinned by `#[SchemaId]` (else the FQCN).
  * - An anonymous resource collection (`Resource::collection(...)`) renders as an array of its item
  *   schema.
+ *
+ * A **top-level** resource (the response root, {@see SchemaContext::depth()} === 1) is wrapped under
+ * its `data` key per Laravel's `JsonResource::$wrap` semantics ({@see ResourceWrapping}); a **nested**
+ * resource (a property of another resource) stays unwrapped so it can be `$ref`-shared.
  *
  * JSON:API resources are handled by {@see JsonApiResourceSchema}, which runs ahead of this mapper;
  * this mapper explicitly declines them.
@@ -48,10 +53,36 @@ final class JsonResourceSchema implements TypeToSchema
 
         if (ResourceReflector::isAnonymousCollection($type->fqcn)) {
             $item = $type->typeArgs[0] ?? null;
+            $itemFqcn = $item instanceof ClassT ? $item->fqcn : null;
+            $array = ['type' => 'array', 'items' => $item !== null ? $context->convert($item) : []];
 
-            return new SchemaResult(['type' => 'array', 'items' => $item !== null ? $context->convert($item) : []], 0.9);
+            return $this->wrapTopLevel(new SchemaResult($array, 0.9), $itemFqcn, $context);
         }
 
-        return $this->hoist->hoist($context, $type->fqcn, fn (): ?array => $this->toArray->analyze($type->fqcn, 'toArray', $context));
+        $result = $this->hoist->hoist($context, $type->fqcn, fn (): ?array => $this->toArray->analyze($type->fqcn, 'toArray', $context));
+
+        return $this->wrapTopLevel($result, $type->fqcn, $context);
+    }
+
+    /**
+     * Wrap a top-level resource/collection schema under its Laravel `data` key; a nested resource
+     * ({@see SchemaContext::depth()} > 1) or a `withoutWrapping()`-disabled document is returned as-is.
+     */
+    private function wrapTopLevel(SchemaResult $result, ?string $itemFqcn, SchemaContext $context): SchemaResult
+    {
+        if ($context->depth() !== 1) {
+            return $result;
+        }
+
+        $key = ResourceWrapping::key($itemFqcn, $context->representation());
+        if ($key === null) {
+            return $result;
+        }
+
+        return new SchemaResult([
+            'type' => 'object',
+            'properties' => [$key => $result->schema],
+            'required' => [$key],
+        ], $result->confidence);
     }
 }

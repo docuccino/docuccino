@@ -25,6 +25,9 @@ final class SchemaConverter implements SchemaContext
 {
     private float $confidence = 1.0;
 
+    /** Recursion depth of the running conversion: 1 while a mapper converts the top-level type, deeper for nested types. */
+    private int $depth = 0;
+
     /**
      * @param  list<TypeToSchema>  $mappers
      */
@@ -43,6 +46,7 @@ final class SchemaConverter implements SchemaContext
     public function toSchema(DType $type): SchemaResult
     {
         $this->confidence = 1.0;
+        $this->depth = 0;
         $schema = $this->convert($type);
 
         return new SchemaResult($schema, $this->confidence);
@@ -50,23 +54,34 @@ final class SchemaConverter implements SchemaContext
 
     public function convert(DType $type): array
     {
-        foreach ($this->mappers as $mapper) {
-            if (! $mapper->supports($type)) {
-                continue;
+        $this->depth++;
+
+        try {
+            foreach ($this->mappers as $mapper) {
+                if (! $mapper->supports($type)) {
+                    continue;
+                }
+
+                $result = $mapper->toSchema($type, $this);
+                if ($result !== null) {
+                    $this->lowerConfidence($result->confidence);
+
+                    return $result->schema;
+                }
             }
 
-            $result = $mapper->toSchema($type, $this);
-            if ($result !== null) {
-                $this->lowerConfidence($result->confidence);
+            // No mapper resolved the type — emit an open `{}` schema at low confidence.
+            $this->lowerConfidence(0.1);
 
-                return $result->schema;
-            }
+            return [];
+        } finally {
+            $this->depth--;
         }
+    }
 
-        // No mapper resolved the type — emit an open `{}` schema at low confidence.
-        $this->lowerConfidence(0.1);
-
-        return [];
+    public function depth(): int
+    {
+        return $this->depth;
     }
 
     public function reference(string $name, array $schema, ?string $schemaId = null): array

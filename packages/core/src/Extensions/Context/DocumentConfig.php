@@ -59,6 +59,20 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The per-integration config sub-bag `integrations.<name>` (design §9), or `[]` when absent —
+     * the single home for an integration's document-level knobs (Sanctum modes/cookie, Passport
+     * url, Query Builder pagination terminals, API-resources wrapping …).
+     *
+     * @return array<string, mixed>
+     */
+    public function integration(string $name): array
+    {
+        $integrations = Hydrate::map($this->raw['integrations'] ?? null);
+
+        return Hydrate::map($integrations[$name] ?? null);
+    }
+
+    /**
      * A deterministic fingerprint of this document's configuration — the single owner of the
      * config-hash (a fragment-cache key input, design §10, and the document's `configHash`). Folds
      * the whole raw config bag through the order-insensitive {@see Json::stable()} encoder so key

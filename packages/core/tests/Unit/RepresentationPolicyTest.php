@@ -66,3 +66,14 @@ it('expresses null as an anyOf branch under the anyof policy', function (): void
 
     expect($schema)->toBe(['anyOf' => [['type' => 'string'], ['type' => 'null']]]);
 });
+
+it('normalises the api_resources wrap config to the resourceWrap keyword', function (mixed $wrap, string $expected): void {
+    expect(RepresentationPolicy::fromConfig([], $wrap)->resourceWrap)->toBe($expected);
+})->with([
+    'unset defers to the resource' => [null, ''],
+    'false disables wrapping' => [false, RepresentationPolicy::WRAP_DISABLED],
+    'true forces the default key' => [true, 'data'],
+    'a string forces that key' => ['records', 'records'],
+    'an empty string defers' => ['', ''],
+    'a non-string non-bool defers' => [42, ''],
+]);

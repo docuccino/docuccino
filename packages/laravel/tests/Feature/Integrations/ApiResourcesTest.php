@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Inference\ActionAnalysis;
@@ -69,20 +70,26 @@ function apiResourceEngine(): StubTypeEngine
     ]);
 }
 
-function resourceConverter(ComponentRegistry $components): SchemaConverter
+function resourceConverter(ComponentRegistry $components, ?RepresentationPolicy $policy = null): SchemaConverter
 {
     return new SchemaConverter(
         [new JsonApiResourceSchema, new JsonResourceSchema, ...DefaultTypeMappers::all()],
         apiResourceEngine(),
         $components,
+        $policy ?? new RepresentationPolicy,
     );
 }
 
-it('maps a JsonResource toArray shape to a component with optional whenLoaded fields', function (): void {
+it('maps a JsonResource toArray shape to a data-wrapped component with optional whenLoaded fields', function (): void {
     $components = new ComponentRegistry;
-    $ref = resourceConverter($components)->toSchema(new ClassT(ArticleResource::class))->schema;
+    $response = resourceConverter($components)->toSchema(new ClassT(ArticleResource::class))->schema;
 
-    expect($ref['$ref'])->toBe('#/components/schemas/ArticleResource');
+    // The top-level resource wraps under `data` (Laravel's default $wrap); the component stays unwrapped.
+    expect($response)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['$ref' => '#/components/schemas/ArticleResource']],
+        'required' => ['data'],
+    ]);
 
     $schemas = $components->schemas();
     expect($schemas)->toHaveKeys(['ArticleResource', 'AuthorResource']);
@@ -91,18 +98,43 @@ it('maps a JsonResource toArray shape to a component with optional whenLoaded fi
     expect(array_keys($article['properties']))->toBe(['id', 'title', 'author', 'excerpt'])
         // author (whenLoaded) and excerpt (when) are optional; id/title are required.
         ->and($article['required'])->toBe(['id', 'title'])
-        // the whenLoaded value folds to the nested resource component.
+        // the whenLoaded value folds to the nested resource component — nested resources stay unwrapped.
         ->and($article['properties']['author'])->toBe(['$ref' => '#/components/schemas/AuthorResource'])
         // the when value strips MissingValue, leaving a nullable string.
         ->and($article['properties']['excerpt'])->toBe(['type' => ['string', 'null']]);
 });
 
-it('maps an anonymous resource collection to an array of its item', function (): void {
+it('data-wraps a top-level anonymous resource collection around an array of its item', function (): void {
     $collection = new ClassT(ResourceReflector::ANONYMOUS_COLLECTION, [new ClassT(ArticleResource::class)]);
     $schema = resourceConverter(new ComponentRegistry)->toSchema($collection)->schema;
 
-    expect($schema['type'])->toBe('array')
-        ->and($schema['items'])->toBe(['$ref' => '#/components/schemas/ArticleResource']);
+    expect($schema)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/ArticleResource']]],
+        'required' => ['data'],
+    ]);
+});
+
+it('omits the data wrapper when the document disables resource wrapping', function (): void {
+    $policy = new RepresentationPolicy(resourceWrap: RepresentationPolicy::WRAP_DISABLED);
+
+    $single = resourceConverter(new ComponentRegistry, $policy)->toSchema(new ClassT(ArticleResource::class))->schema;
+    expect($single)->toBe(['$ref' => '#/components/schemas/ArticleResource']);
+
+    $collection = new ClassT(ResourceReflector::ANONYMOUS_COLLECTION, [new ClassT(ArticleResource::class)]);
+    $array = resourceConverter(new ComponentRegistry, $policy)->toSchema($collection)->schema;
+    expect($array)->toBe(['type' => 'array', 'items' => ['$ref' => '#/components/schemas/ArticleResource']]);
+});
+
+it('honours a custom document wrap key over the resource default', function (): void {
+    $policy = new RepresentationPolicy(resourceWrap: 'records');
+    $response = resourceConverter(new ComponentRegistry, $policy)->toSchema(new ClassT(ArticleResource::class))->schema;
+
+    expect($response)->toBe([
+        'type' => 'object',
+        'properties' => ['records' => ['$ref' => '#/components/schemas/ArticleResource']],
+        'required' => ['records'],
+    ]);
 });
 
 it('maps a first-party JSON:API resource to a JSON:API document schema', function (): void {

@@ -49,6 +49,14 @@ interface SchemaContext
     public function engine(): TypeEngine;
 
     /**
+     * The recursion depth of the running conversion: 1 while a mapper converts the top-level type
+     * (a response/parameter root), deeper for every nested type it recurses into. A mapper whose
+     * output depends on whether the type is the document root — e.g. Laravel resource `data`
+     * wrapping, which applies only to the top-level resource, never a nested one — reads this.
+     */
+    public function depth(): int;
+
+    /**
      * Record that this conversion read one or more files whose contents affect the emitted schema
      * (a reflected Data/Model/Resource class, a `classMetadata` source file, an enum cast's backing
      * enum) so they join the route's fragment cache dependency manifest (design §10, "Fragment cache

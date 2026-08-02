@@ -199,6 +199,9 @@ final class RouteContext
     /** The document's representation policy (design §Representation policies), resolved once. */
     public function representation(): RepresentationPolicy
     {
-        return $this->representation ??= RepresentationPolicy::fromConfig($this->document->representation);
+        return $this->representation ??= RepresentationPolicy::fromConfig(
+            $this->document->representation,
+            $this->document->integration('api_resources')['wrap'] ?? null,
+        );
     }
 }

@@ -189,17 +189,26 @@
                         "producer": "inference",
                         "layer": "inference",
                         "fields": [
-                          "items",
+                          "properties",
+                          "required",
                           "type"
                         ],
                         "confidence": 0.9
                       }
                     ]
                   },
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ArticleResource"
-                  }
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArticleResource"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -279,13 +288,23 @@
                         "producer": "inference",
                         "layer": "inference",
                         "fields": [
-                          "$ref"
+                          "properties",
+                          "required",
+                          "type"
                         ],
                         "confidence": 0.9
                       }
                     ]
                   },
-                  "$ref": "#/components/schemas/ArticleResource"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ArticleResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -2371,7 +2390,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "7902c9972fd602dc8a43259ae6a42f239d6805b0011aca97cfd74193cdda89c1",
-      "contentHash": "dbdd25e2e25d0903c7515ae32940bdf0ffd6786458c34640f45ee4875578c2cd"
+      "contentHash": "9f812107db48088673c67b03caa6d365181258b7dc106ce1cfad961f3bf9541f"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -19,21 +19,32 @@ namespace Docuccino\Core\Extensions\Context;
  *   parameter, `style: deepObject, explode: true`) — how filter/field maps are expressed.
  * - `listStyle` (Query Builder): `comma` (default — a single comma-separated string parameter) |
  *   `array` (`style: form, explode: false`, `items` enum) — how `sort`/`include` lists are expressed.
+ * - `resourceWrap` (API Resources): the document-level override of Laravel's top-level resource
+ *   `data` wrapping (`integrations.api_resources.wrap`). `''` (default) defers to each resource's own
+ *   static `$wrap`; `'disabled'` unwraps everything (the escape hatch for a global
+ *   `JsonResource::withoutWrapping()`, which is not statically visible); any other value forces that
+ *   wrap key. Only the top-level resource is ever wrapped — nested resources stay unwrapped.
  */
 final readonly class RepresentationPolicy
 {
+    /** The `resourceWrap` sentinel meaning "no wrapping" (a global `withoutWrapping()` escape hatch). */
+    public const WRAP_DISABLED = 'disabled';
+
     public function __construct(
         public string $operationId = 'route-name',
         public string $enumNaming = 'none',
         public string $nullable = 'type-array',
         public string $filterStyle = 'bracketed',
         public string $listStyle = 'comma',
+        public string $resourceWrap = '',
     ) {}
 
     /**
      * @param  array<string, mixed>  $representation  the document's `representation` config
+     * @param  mixed  $resourceWrap  `integrations.api_resources.wrap`: `false`/`true` toggle,
+     *                               a string wrap key, or null/unset (defer to each resource)
      */
-    public static function fromConfig(array $representation): self
+    public static function fromConfig(array $representation, mixed $resourceWrap = null): self
     {
         $enums = $representation['enums'] ?? null;
         $enumNaming = is_array($enums) ? ($enums['naming'] ?? null) : null;
@@ -44,7 +55,23 @@ final readonly class RepresentationPolicy
             nullable: self::keyword($representation['nullable'] ?? null, 'type-array'),
             filterStyle: self::keyword($representation['filters'] ?? null, 'bracketed'),
             listStyle: self::keyword($representation['lists'] ?? null, 'comma'),
+            resourceWrap: self::normalizeWrap($resourceWrap),
         );
+    }
+
+    /**
+     * Normalise the `integrations.api_resources.wrap` config to the `resourceWrap` keyword:
+     * `false` → disabled, `true` → the Laravel default `data`, a non-empty string → that key,
+     * anything else (null/unset) → `''` (defer to each resource's static `$wrap`).
+     */
+    private static function normalizeWrap(mixed $wrap): string
+    {
+        return match (true) {
+            $wrap === false => self::WRAP_DISABLED,
+            $wrap === true => 'data',
+            is_string($wrap) && $wrap !== '' => $wrap,
+            default => '',
+        };
     }
 
     /** Whether filter/field maps are expressed as a single deep-object parameter. */
