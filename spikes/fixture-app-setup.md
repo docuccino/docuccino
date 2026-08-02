@@ -134,6 +134,12 @@ cp -R spikes/phase-4/fixture-src/app/. spikes/fixture-app/app/
   promoted properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine
   recovers precise property types by reflection. `spatie/laravel-data` is already required
   by the base install above. No routes/migrations/composer changes needed.
+- `app/Models/CatalogItem.php` — an Eloquent model declaring its columns as typed public
+  properties (`id: int`, `sku: string`, `is_active: bool`, `description: ?string`) plus an
+  `is_active` boolean `$casts` entry, so the real engine's `classMetadata()` recovers the
+  columns (and a cast-target `bool` type) through native reflection — the same path
+  `ModelSchema` consumes. Only ever reflected — never queried. No routes/migrations/composer
+  changes needed.
 
 ## Fixture source authored by Phase 4b wave 2 (inferred exception-handler tier)
 
