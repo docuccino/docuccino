@@ -46,15 +46,18 @@ it('recovers an Eloquent Collection generic for listUsers', function (): void {
         ->and($last['fqcn'])->toBe('App\\Models\\User');
 })->group('fixture');
 
-it('recovers the JsonResponse payload shape via the bundled stub', function (): void {
+it('recovers the JsonResponse payload shape and folded status via the bundled stub', function (): void {
     $returns = spikeReturns('jsonShape');
 
     expect($returns)->toHaveCount(1);
     $type = $returns[0]['type'];
+    // JsonResponse<arrayShape{...}, 200>: the payload shape plus the default folded status literal.
     expect($type['kind'])->toBe('class')
         ->and($type['fqcn'])->toBe('Illuminate\\Http\\JsonResponse')
-        ->and($type['typeArgs'])->toHaveCount(1)
-        ->and($type['typeArgs'][0]['kind'])->toBe('arrayShape');
+        ->and($type['typeArgs'])->toHaveCount(2)
+        ->and($type['typeArgs'][0]['kind'])->toBe('arrayShape')
+        ->and($type['typeArgs'][1]['kind'])->toBe('literal')
+        ->and($type['typeArgs'][1]['value'])->toBe(200);
 })->group('fixture');
 
 it('recovers an AnonymousResourceCollection for resourceCollection', function (): void {
