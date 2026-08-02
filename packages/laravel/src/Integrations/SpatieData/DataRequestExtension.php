@@ -8,9 +8,8 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ClassRef;
-use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\RecoveredRequest;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use ReflectionClass;
 use ReflectionMethod;
@@ -30,6 +29,7 @@ final class DataRequestExtension implements OperationExtension
     public function __construct(
         private readonly DataValidationRules $rules = new DataValidationRules,
         private readonly RuleOrdering $ordering = new RuleOrdering,
+        private readonly RecoveredRequest $request = new RecoveredRequest,
     ) {}
 
     public function phase(): OperationPhase
@@ -60,13 +60,7 @@ final class DataRequestExtension implements OperationExtension
             return;
         }
 
-        foreach ($result->diagnostics as $diagnostic) {
-            $context->components->addDiagnostic($diagnostic);
-        }
-
-        in_array($context->httpMethod(), ['get', 'head'], true)
-            ? $this->applyQueryParameters($operation, $context, $result)
-            : $this->applyRequestBody($operation, $context, $result);
+        $this->request->apply($operation, $context, $result, 'spatie-data');
     }
 
     /**
@@ -111,47 +105,5 @@ final class DataRequestExtension implements OperationExtension
         $file = (new ReflectionClass($fqcn))->getFileName();
 
         return $file === false ? null : $file;
-    }
-
-    private function applyRequestBody(OperationDraft $operation, RouteContext $context, ValidationSchema $result): void
-    {
-        $required = is_array($result->schema['required'] ?? null) && $result->schema['required'] !== [];
-
-        $body = ['content' => [$result->mediaType => ['schema' => $result->schema]]];
-        if ($required) {
-            $body = ['required' => true] + $body;
-        }
-
-        $operation->set('requestBody', $body, Contribution::integration('spatie-data', $context->actionSource()));
-    }
-
-    private function applyQueryParameters(OperationDraft $operation, RouteContext $context, ValidationSchema $result): void
-    {
-        $properties = $result->schema['properties'] ?? null;
-        if (! is_array($properties)) {
-            return;
-        }
-
-        $required = is_array($result->schema['required'] ?? null) ? $result->schema['required'] : [];
-        $contribution = Contribution::integration('spatie-data', $context->actionSource());
-
-        foreach ($properties as $name => $schema) {
-            if (! is_string($name) || ! is_array($schema)) {
-                continue;
-            }
-
-            $parameter = $operation->parameter('query', $name);
-            $parameter->setRequired(in_array($name, $required, true), $contribution);
-
-            $description = $schema['description'] ?? null;
-            if (is_string($description)) {
-                $parameter->setDescription($description, $contribution);
-                unset($schema['description']);
-            }
-
-            foreach ($schema as $keyword => $value) {
-                $parameter->schema()->set((string) $keyword, $value, $contribution);
-            }
-        }
     }
 }
