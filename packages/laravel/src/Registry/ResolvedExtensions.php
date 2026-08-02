@@ -26,6 +26,14 @@ use Throwable;
 final readonly class ResolvedExtensions
 {
     /**
+     * Operation extensions grouped by phase once, up front (order within each phase preserved), so a
+     * build that iterates phases per route does not re-filter the whole list on every phase.
+     *
+     * @var array<int, list<OperationExtension>> phase value → its extensions, sorted order preserved
+     */
+    private array $operationExtensionsByPhase;
+
+    /**
      * @param  list<RouteResolver>  $routeResolvers
      * @param  list<OperationExtension>  $operationExtensions  globally sorted; group by phase downstream
      * @param  list<TypeToSchema>  $typeToSchema
@@ -40,7 +48,13 @@ final readonly class ResolvedExtensions
         public array $exceptionToResponse = [],
         public array $documentTransformers = [],
         public array $ruleTransformers = [],
-    ) {}
+    ) {
+        $byPhase = [];
+        foreach ($operationExtensions as $extension) {
+            $byPhase[$extension->phase()->value][] = $extension;
+        }
+        $this->operationExtensionsByPhase = $byPhase;
+    }
 
     /**
      * The operation extensions declaring the given phase, in sorted order.
@@ -49,10 +63,7 @@ final readonly class ResolvedExtensions
      */
     public function operationExtensionsFor(OperationPhase $phase): array
     {
-        return array_values(array_filter(
-            $this->operationExtensions,
-            static fn (OperationExtension $extension): bool => $extension->phase() === $phase,
-        ));
+        return $this->operationExtensionsByPhase[$phase->value] ?? [];
     }
 
     /**
