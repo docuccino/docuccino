@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\Schema;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Identity\IdentityGenerator;
+use Docuccino\Core\Support\Json;
 
 /**
  * Accumulates the reusable schema/response components hoisted during a build, deduping
@@ -104,6 +105,34 @@ final class ComponentRegistry
     }
 
     /**
+     * A restorable snapshot of the whole registry, so a route that fails mid-pipeline after
+     * registering components can be rolled back — leaving no orphaned schemas/responses/diagnostics
+     * from a route that never made it into the document (design §5 isolated try/catch).
+     *
+     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+     */
+    public function snapshot(): array
+    {
+        return [
+            'schemas' => $this->schemas,
+            'schemaIds' => $this->schemaIds,
+            'responses' => $this->responses,
+            'diagnostics' => $this->diagnostics,
+        ];
+    }
+
+    /**
+     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     */
+    public function restore(array $snapshot): void
+    {
+        $this->schemas = $snapshot['schemas'];
+        $this->schemaIds = $snapshot['schemaIds'];
+        $this->responses = $snapshot['responses'];
+        $this->diagnostics = $snapshot['diagnostics'];
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public function schemas(): array
@@ -169,25 +198,6 @@ final class ComponentRegistry
      */
     private static function structurallyEqual(array $a, array $b): bool
     {
-        return self::stableEncode($a) === self::stableEncode($b);
-    }
-
-    private static function stableEncode(mixed $value): string
-    {
-        if (is_array($value)) {
-            $normalized = [];
-            $keys = array_keys($value);
-            sort($keys);
-            foreach ($keys as $key) {
-                $normalized[(string) $key] = self::stableEncode($value[$key]);
-            }
-            $encoded = json_encode($normalized);
-
-            return $encoded === false ? '' : $encoded;
-        }
-
-        $encoded = json_encode($value);
-
-        return $encoded === false ? '' : $encoded;
+        return Json::stable($a) === Json::stable($b);
     }
 }

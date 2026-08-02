@@ -60,8 +60,8 @@ final class DocumentGenerator
         $components = new ComponentRegistry;
         $bag = new DiagnosticBag;
 
-        $configHash = $this->configHash($document);
-        $extensionClasses = $resolved->classSignature();
+        $configHash = $document->hash();
+        $extensionClasses = $resolved->cacheSignature();
 
         $fragments = [];
         foreach ($this->descriptors($resolved, $document) as $descriptor) {
@@ -130,7 +130,7 @@ final class DocumentGenerator
         $path = $this->oasPath($descriptor->uri);
         $signature = $descriptor->signature();
 
-        $cacheKey = $this->cache->key($signature, $configHash, $extensionClasses);
+        $cacheKey = $this->cache->key($descriptor->cacheSignature(), $configHash, $extensionClasses);
         $cached = $this->cache->get($cacheKey);
         if ($cached !== null) {
             // Warm hit: restore the route's components without touching the type engine (design §10).
@@ -138,6 +138,10 @@ final class DocumentGenerator
 
             return $cached;
         }
+
+        // Snapshot the shared registry so a route that throws after registering components rolls
+        // back cleanly, leaving no orphaned schemas from a route that never entered the document.
+        $snapshot = $components->snapshot();
 
         try {
             $context = $this->contextBuilder->build(
@@ -151,54 +155,99 @@ final class DocumentGenerator
             );
 
             if ($context === null) {
+                $components->restore($snapshot);
+
                 return $this->onFailure($descriptor, $document, $documentId, $path, $method, 'action could not be reflected', $bag);
             }
-
-            $before = array_keys($components->schemas());
 
             $operation = new OperationDraft;
             $this->pipeline->run($operation, $context, $resolved);
             $diagnostics = $this->analysisDiagnostics($context, $signature);
             $this->assignIds($operation, $documentId, $method, $path);
 
-            [$deltaSchemas, $deltaSchemaIds] = $this->componentDelta($components, $before);
+            $frozen = $operation->freeze();
+            [$referencedSchemas, $referencedSchemaIds] = $this->componentClosure($frozen->toArray(), $components);
 
-            $fragment = new OperationFragment($path, $method, $operation->freeze(), $signature, $diagnostics, $deltaSchemas, $deltaSchemaIds);
+            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds);
             // Merge trace-derived dependency files (design §10 seam): integrations that recover facts
             // by tracing widen the cache key, so a deep chain invalidates when any traced file changes.
             $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
 
             return $fragment;
         } catch (Throwable $exception) {
+            $components->restore($snapshot);
+
             return $this->onFailure($descriptor, $document, $documentId, $path, $method, $exception->getMessage(), $bag);
         }
     }
 
     /**
-     * The schema components this route newly registered (its delta of the shared registry), so the
-     * fragment can carry — and later restore — exactly what it contributed.
+     * The transitive closure of the schema components this operation references (design §5 hoist /
+     * arch F7): every component reachable from a `$ref` in the operation, plus every component those
+     * components in turn reference. Carrying the full closure — not just the components this route
+     * happened to register first — makes each cached fragment self-sufficient: a warm hit restores
+     * everything it points at, so removing the route that first *owned* a shared component never
+     * leaves a surviving referencer with a dangling `$ref`.
      *
-     * @param  list<string>  $before  component names present before the route ran
+     * @param  array<string, mixed>  $operation
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>}
      */
-    private function componentDelta(ComponentRegistry $components, array $before): array
+    private function componentClosure(array $operation, ComponentRegistry $components): array
     {
-        $schemas = [];
-        $schemaIds = [];
+        $registry = $components->schemas();
         $ids = $components->schemaIds();
 
-        foreach ($components->schemas() as $name => $schema) {
-            if (in_array($name, $before, true)) {
+        $schemas = [];
+        $schemaIds = [];
+        $seen = [];
+        $queue = $this->schemaRefs($operation);
+
+        while ($queue !== []) {
+            $name = array_shift($queue);
+            if (isset($seen[$name]) || ! isset($registry[$name])) {
                 continue;
             }
+            $seen[$name] = true;
 
-            $schemas[$name] = $schema;
+            $schemas[$name] = $registry[$name];
             if (isset($ids[$name])) {
                 $schemaIds[$name] = $ids[$name];
+            }
+
+            foreach ($this->schemaRefs($registry[$name]) as $nested) {
+                if (! isset($seen[$nested])) {
+                    $queue[] = $nested;
+                }
             }
         }
 
         return [$schemas, $schemaIds];
+    }
+
+    /**
+     * The component-schema names a node references via `$ref` (`#/components/schemas/NAME`), scanned
+     * recursively.
+     *
+     * @param  array<array-key, mixed>  $node
+     * @return list<string>
+     */
+    private function schemaRefs(array $node): array
+    {
+        $refs = [];
+        foreach ($node as $key => $value) {
+            if ($key === '$ref' && is_string($value) && str_starts_with($value, '#/components/schemas/')) {
+                $refs[] = substr($value, strlen('#/components/schemas/'));
+
+                continue;
+            }
+            if (is_array($value)) {
+                foreach ($this->schemaRefs($value) as $ref) {
+                    $refs[] = $ref;
+                }
+            }
+        }
+
+        return $refs;
     }
 
     private function restoreComponents(OperationFragment $fragment, ComponentRegistry $components): void
@@ -206,32 +255,6 @@ final class DocumentGenerator
         foreach ($fragment->componentSchemas as $name => $schema) {
             $components->registerSchema($name, $schema, $fragment->componentSchemaIds[$name] ?? null);
         }
-    }
-
-    /**
-     * @return string a deterministic fingerprint of the document config (a fragment-cache key input)
-     */
-    private function configHash(DocumentConfig $document): string
-    {
-        $encoded = json_encode($this->normalize($document->raw));
-
-        return hash('sha256', $encoded === false ? $document->key : $encoded);
-    }
-
-    private function normalize(mixed $value): mixed
-    {
-        if (! is_array($value)) {
-            return is_object($value) ? $value::class : $value;
-        }
-
-        $keys = array_keys($value);
-        sort($keys);
-        $out = [];
-        foreach ($keys as $key) {
-            $out[(string) $key] = $this->normalize($value[$key]);
-        }
-
-        return $out;
     }
 
     private function onFailure(

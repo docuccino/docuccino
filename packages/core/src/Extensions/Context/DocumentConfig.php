@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Extensions\Context;
 
 use Docuccino\Core\Extensions\Contracts\TagMapper;
+use Docuccino\Core\Support\Json;
 
 /**
  * One document's resolved configuration (design §9). Framework-agnostic: the adapter builds
@@ -54,6 +55,19 @@ final readonly class DocumentConfig
     public function mapTag(string $tag): string
     {
         return $this->tagMapper?->map($tag) ?? $tag;
+    }
+
+    /**
+     * A deterministic fingerprint of this document's configuration — the single owner of the
+     * config-hash (a fragment-cache key input, design §10, and the document's `configHash`). Folds
+     * the whole raw config bag through the order-insensitive {@see Json::stable()} encoder so key
+     * order cannot perturb the hash; falls back to the document key when the bag cannot be encoded.
+     */
+    public function hash(): string
+    {
+        $stable = Json::stable($this->raw);
+
+        return hash('sha256', $stable === '' ? $this->key : $stable);
     }
 
     /**

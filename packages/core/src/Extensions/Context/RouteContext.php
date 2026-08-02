@@ -27,9 +27,10 @@ use Docuccino\Core\Provenance\SourcePathResolver;
  * the discovered route, its engine action reference, the collected attributes (method > class),
  * docblock prose, and the document being built. The inference handle is lazy — {@see analysis()}
  * calls the engine at most once per context and memoises, so extensions in different phases
- * share one analysis pass. {@see converter()} exposes the resolved type→schema chain over a
- * per-route {@see ComponentRegistry} — hoisted components are collected into the operation's
- * fragment after the pipeline runs.
+ * share one analysis pass. {@see converter()} exposes the resolved type→schema chain over the
+ * document-wide {@see ComponentRegistry} (shared across routes so cross-route `$ref`s stay
+ * consistent); the components a route newly registered are collected into its fragment — as a
+ * delta of that shared registry — after the pipeline runs.
  */
 final class RouteContext
 {
@@ -42,9 +43,10 @@ final class RouteContext
     private ?ValidationRulesToSchema $validation = null;
 
     /**
-     * @var list<string> dependency files reported by every {@see trace()} this context ran
+     * The out-of-band dependency-file contributions for this route (traces + integrations reading
+     * files the action analysis did not surface). Merged into {@see dependencyFiles()}.
      */
-    private array $traceDependencyFiles = [];
+    private RouteDependencies $dependencies;
 
     /**
      * @param  list<TypeToSchema>  $typeMappers  the resolved type→schema chain (document-wide)
@@ -70,7 +72,18 @@ final class RouteContext
         public readonly ?string $description = null,
         public readonly ComponentRegistry $components = new ComponentRegistry,
         public readonly ?SourcePathResolver $pathResolver = null,
-    ) {}
+    ) {
+        $this->dependencies = new RouteDependencies;
+    }
+
+    /**
+     * The dependency-contribution bag (design §10): extensions reading facts out-of-band register
+     * the FILES those facts came from here, so editing any of them invalidates the cached fragment.
+     */
+    public function dependencies(): RouteDependencies
+    {
+        return $this->dependencies;
+    }
 
     /** The action's inference result, computed once and memoised. */
     public function analysis(): ActionAnalysis
@@ -89,9 +102,7 @@ final class RouteContext
     {
         $report = $this->engine->trace($this->actionRef, $visitor);
 
-        foreach ($report->dependencyFiles as $file) {
-            $this->traceDependencyFiles[] = $file;
-        }
+        $this->dependencies->addFiles($report->dependencyFiles);
 
         return $report;
     }
@@ -104,9 +115,7 @@ final class RouteContext
      */
     public function recordDependencyFiles(array $files): void
     {
-        foreach ($files as $file) {
-            $this->traceDependencyFiles[] = $file;
-        }
+        $this->dependencies->addFiles($files);
     }
 
     /**
@@ -117,7 +126,7 @@ final class RouteContext
      */
     public function dependencyFiles(): array
     {
-        $files = array_values(array_unique([...$this->analysis()->dependencyFiles, ...$this->traceDependencyFiles]));
+        $files = array_values(array_unique([...$this->analysis()->dependencyFiles, ...$this->dependencies->files()]));
         sort($files);
 
         return $files;

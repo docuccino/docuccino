@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Pipeline;
 
+use Docuccino\Core\Extensions\Context\RouteDependencies;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use JsonException;
 
 /**
@@ -12,10 +14,12 @@ use JsonException;
  * stored dependency list. A hit therefore reconstructs the fragment without invoking the type
  * engine.
  *
- * key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖ doc configHash ‖ resolved extension FQCNs
- * ‖ route signature). The stored entry additionally records `sha256(each ActionAnalysis
- * dependency file)`; on lookup any changed/removed dependency invalidates the entry. (TraceReport
- * dependencies merge into the same list in Phase 4 — the {@see put()} signature is the seam.)
+ * key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖ doc configHash ‖ resolved extension
+ * signature (FQCNs + owning package versions) ‖ route cache-signature (method+URI+resolved
+ * action+normalised middleware)). The stored entry additionally records `sha256(each ActionAnalysis
+ * + out-of-band dependency file)`; on lookup any changed/removed dependency invalidates the entry.
+ * (TraceReport + {@see RouteDependencies} files merge into the
+ * same list — the {@see put()} signature is the seam.)
  *
  * Storage is a flat directory of `{key}.json` files written atomically (temp file + rename), with a
  * simple `enabled` off-switch.
@@ -36,16 +40,17 @@ final readonly class FragmentCache
     }
 
     /**
-     * @param  list<string>  $extensionFqcns  the resolved extension class-strings, in resolve order
+     * @param  string  $routeSignature  the route cache-signature ({@see RouteDescriptor::cacheSignature()})
+     * @param  list<string>  $extensionSignature  resolved extension class-strings paired with owning package versions
      */
-    public function key(string $routeSignature, string $configHash, array $extensionFqcns): string
+    public function key(string $routeSignature, string $configHash, array $extensionSignature): string
     {
         return hash('sha256', implode("\0", [
             $this->toolVersion,
             $this->specVersion,
             $this->identityVersion,
             $configHash,
-            implode(',', $extensionFqcns),
+            implode(',', $extensionSignature),
             $routeSignature,
         ]));
     }

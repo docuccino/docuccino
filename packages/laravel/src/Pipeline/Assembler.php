@@ -97,7 +97,7 @@ final class Assembler
         }
 
         $doc['x-docuccino'] = [
-            'document' => ['id' => $documentId, 'configHash' => $this->configHash($document)],
+            'document' => ['id' => $documentId, 'configHash' => $document->hash()],
             'generator' => ['name' => 'docuccino/laravel', 'version' => $generatorVersion, 'specVersion' => self::UIR_VERSION],
         ];
 
@@ -221,28 +221,5 @@ final class Assembler
         }
 
         return $draft->toArray();
-    }
-
-    private function configHash(DocumentConfig $document): string
-    {
-        $encoded = json_encode($this->normalize($document->raw));
-
-        return hash('sha256', $encoded === false ? $document->key : $encoded);
-    }
-
-    private function normalize(mixed $value): mixed
-    {
-        if (! is_array($value)) {
-            return is_object($value) ? get_class($value) : $value;
-        }
-
-        $keys = array_keys($value);
-        sort($keys);
-        $out = [];
-        foreach ($keys as $key) {
-            $out[(string) $key] = $this->normalize($value[$key]);
-        }
-
-        return $out;
     }
 }

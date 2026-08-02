@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Registry;
 
+use Composer\InstalledVersions;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -12,6 +13,8 @@ use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
+use ReflectionClass;
+use Throwable;
 
 /**
  * The extension set for one build, partitioned by contract and pre-sorted within each partition
@@ -69,5 +72,75 @@ final readonly class ResolvedExtensions
         sort($names);
 
         return $names;
+    }
+
+    /**
+     * The fragment-cache extension-signature (design §10): every resolved extension class paired
+     * with its owning composer package's installed version, so upgrading a package that changes an
+     * extension's behaviour invalidates every fragment even when the class list is unchanged. The
+     * version lookup is tolerant — an unresolvable package contributes an empty version rather than
+     * failing the build.
+     *
+     * @return list<string>
+     */
+    public function cacheSignature(): array
+    {
+        $signature = [];
+        foreach ($this->classSignature() as $class) {
+            $signature[] = $class.'@'.self::packageVersion($class);
+        }
+
+        return $signature;
+    }
+
+    /**
+     * The installed version of the composer package owning $class, or `''` when it cannot be
+     * determined (class has no file, no composer.json above it, or the package is not tracked).
+     */
+    private static function packageVersion(string $class): string
+    {
+        try {
+            if (! class_exists(InstalledVersions::class) || ! class_exists($class)) {
+                return '';
+            }
+
+            $reflection = new ReflectionClass($class);
+            $file = $reflection->getFileName();
+            if ($file === false) {
+                return '';
+            }
+
+            $name = self::composerNameFor($file);
+            if ($name === null) {
+                return '';
+            }
+
+            return InstalledVersions::getPrettyVersion($name) ?? '';
+        } catch (Throwable) {
+            return '';
+        }
+    }
+
+    /** Walk up from a class file to its nearest composer.json and read its package `name`. */
+    private static function composerNameFor(string $file): ?string
+    {
+        $directory = dirname($file);
+
+        while (true) {
+            $manifest = $directory.'/composer.json';
+            if (is_file($manifest)) {
+                $decoded = json_decode((string) @file_get_contents($manifest), true);
+                $name = is_array($decoded) ? ($decoded['name'] ?? null) : null;
+
+                return is_string($name) ? $name : null;
+            }
+
+            $parent = dirname($directory);
+            if ($parent === $directory) {
+                return null;
+            }
+
+            $directory = $parent;
+        }
     }
 }
