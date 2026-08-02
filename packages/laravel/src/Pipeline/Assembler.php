@@ -1,0 +1,228 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Pipeline;
+
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\DocumentContext;
+use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Identity\ContentHasher;
+use Docuccino\Core\Identity\IdentityGenerator;
+use Docuccino\Core\Overlay\OverlayApplier;
+use Docuccino\Core\Overlay\OverlayDocument;
+
+/**
+ * Merges operation fragments into a UIR document array (design §5): places operations under their
+ * path/method, hoists and identifies components, stamps document identity + generator metadata,
+ * applies overlays and document transformers, and computes the content hash. Duplicate operation
+ * identities (two routes claiming one `GET /x`) are error diagnostics, never silent overwrites.
+ */
+final class Assembler
+{
+    private const SCHEMA_URL = 'https://spec.docuccino.app/uir/1.0/schema.json';
+
+    private const UIR_VERSION = '1.0.0';
+
+    private const OPENAPI_VERSION = '3.2.0';
+
+    private const DIALECT = 'https://spec.openapis.org/oas/3.2/dialect/base';
+
+    public function __construct(
+        private readonly IdentityGenerator $identity = new IdentityGenerator,
+        private readonly ContentHasher $contentHasher = new ContentHasher,
+        private readonly OverlayApplier $overlays = new OverlayApplier,
+    ) {}
+
+    /**
+     * @param  list<OperationFragment>  $fragments
+     * @param  list<OverlayDocument>  $overlayDocuments
+     * @param  list<DocumentTransformer>  $transformers
+     */
+    public function assemble(
+        array $fragments,
+        DocumentConfig $document,
+        string $documentId,
+        ComponentRegistry $components,
+        array $overlayDocuments,
+        array $transformers,
+        string $generatorVersion,
+    ): AssemblyResult {
+        /** @var list<Diagnostic> $diagnostics */
+        $diagnostics = [];
+
+        $paths = $this->buildPaths($fragments, $diagnostics);
+        $componentSchemas = $this->buildComponents($components);
+
+        $doc = [
+            '$schema' => self::SCHEMA_URL,
+            'uir' => self::UIR_VERSION,
+            'openapi' => self::OPENAPI_VERSION,
+            'jsonSchemaDialect' => self::DIALECT,
+            'info' => $document->info,
+        ];
+
+        if ($document->servers !== []) {
+            $doc['servers'] = $document->servers;
+        }
+
+        $doc['paths'] = $paths;
+
+        if ($componentSchemas !== []) {
+            $doc['components'] = ['schemas' => $componentSchemas];
+        }
+
+        $doc['x-docuccino'] = [
+            'document' => ['id' => $documentId, 'configHash' => $this->configHash($document)],
+            'generator' => ['name' => 'docuccino/laravel', 'version' => $generatorVersion, 'specVersion' => self::UIR_VERSION],
+        ];
+
+        foreach ($components->diagnostics() as $diagnostic) {
+            $diagnostics[] = $diagnostic;
+        }
+
+        $doc = $this->applyOverlays($doc, $overlayDocuments, $diagnostics);
+        $doc = $this->applyTransformers($doc, $document, $documentId, $transformers);
+
+        $doc = $this->stampContentHash($doc);
+
+        return new AssemblyResult($doc, $diagnostics);
+    }
+
+    /**
+     * @param  array<string, mixed>  $doc
+     * @return array<string, mixed>
+     */
+    private function stampContentHash(array $doc): array
+    {
+        $extension = is_array($doc['x-docuccino'] ?? null) ? $doc['x-docuccino'] : [];
+        $meta = is_array($extension['document'] ?? null) ? $extension['document'] : [];
+
+        $meta['contentHash'] = $this->contentHasher->hash($doc);
+        $extension['document'] = $meta;
+        $doc['x-docuccino'] = $extension;
+
+        return $doc;
+    }
+
+    /**
+     * @param  list<OperationFragment>  $fragments
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildPaths(array $fragments, array &$diagnostics): array
+    {
+        $paths = [];
+        $seenIds = [];
+
+        foreach ($fragments as $fragment) {
+            $operationId = $fragment->operation->docuccino?->id;
+
+            if ($operationId !== null && isset($seenIds[$operationId])) {
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Error,
+                    code: 'identity.duplicate-operation',
+                    message: sprintf('Two routes resolve to the same operation identity (%s); one shadows the other.', $operationId),
+                    routeSignature: $fragment->routeSignature,
+                );
+            }
+            if ($operationId !== null) {
+                $seenIds[$operationId] = true;
+            }
+
+            $paths[$fragment->path][$fragment->method] = $fragment->operation->toArray();
+        }
+
+        return $paths;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildComponents(ComponentRegistry $components): array
+    {
+        $schemas = $components->schemas();
+        if ($schemas === []) {
+            return [];
+        }
+
+        $schemaIds = $components->schemaIds();
+
+        $out = [];
+        foreach ($schemas as $name => $schema) {
+            $id = isset($schemaIds[$name])
+                ? $this->identity->namedSchemaId($schemaIds[$name])
+                : $this->identity->inlineSchemaId($schema);
+
+            $out[$name] = ['x-docuccino' => ['id' => $id]] + $schema;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $doc
+     * @param  list<OverlayDocument>  $overlayDocuments
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, mixed>
+     */
+    private function applyOverlays(array $doc, array $overlayDocuments, array &$diagnostics): array
+    {
+        foreach ($overlayDocuments as $overlay) {
+            $result = $this->overlays->apply($doc, $overlay);
+            $doc = $result->document;
+            foreach ($result->diagnostics as $diagnostic) {
+                $diagnostics[] = $diagnostic;
+            }
+        }
+
+        return $doc;
+    }
+
+    /**
+     * @param  array<string, mixed>  $doc
+     * @param  list<DocumentTransformer>  $transformers
+     * @return array<string, mixed>
+     */
+    private function applyTransformers(array $doc, DocumentConfig $document, string $documentId, array $transformers): array
+    {
+        if ($transformers === []) {
+            return $doc;
+        }
+
+        $draft = new UirDocumentDraft($doc);
+        $context = new DocumentContext($document, $documentId);
+        foreach ($transformers as $transformer) {
+            $transformer->transform($draft, $context);
+        }
+
+        return $draft->toArray();
+    }
+
+    private function configHash(DocumentConfig $document): string
+    {
+        $encoded = json_encode($this->normalize($document->raw));
+
+        return hash('sha256', $encoded === false ? $document->key : $encoded);
+    }
+
+    private function normalize(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return is_object($value) ? get_class($value) : $value;
+        }
+
+        $keys = array_keys($value);
+        sort($keys);
+        $out = [];
+        foreach ($keys as $key) {
+            $out[(string) $key] = $this->normalize($value[$key]);
+        }
+
+        return $out;
+    }
+}

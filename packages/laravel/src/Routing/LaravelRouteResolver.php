@@ -1,0 +1,122 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Routing;
+
+use Docuccino\Attributes\ExcludeFromDocs;
+use Docuccino\Attributes\InDocs;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\RouteResolver;
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
+use Illuminate\Support\Str;
+
+/**
+ * The built-in {@see RouteResolver}: turns the Laravel router into {@see RouteDescriptor}s
+ * (design §Route discovery). Applies the document's include/exclude wildcard patterns and its
+ * optional closure filter, and honours the `#[ExcludeFromDocs]` and `#[InDocs]` attributes. Both
+ * controller and closure routes are supported.
+ */
+final class LaravelRouteResolver implements RouteResolver
+{
+    public function __construct(
+        private readonly Router $router,
+        private readonly RouteReflector $reflector = new RouteReflector,
+        private readonly AttributeCollector $attributes = new AttributeCollector,
+    ) {}
+
+    public function resolve(DocumentConfig $document): iterable
+    {
+        /** @var iterable<Route> $routes */
+        $routes = $this->router->getRoutes();
+
+        foreach ($routes as $route) {
+            $descriptor = $this->describe($route);
+
+            if ($this->shouldInclude($route, $descriptor, $document)) {
+                yield $descriptor;
+            }
+        }
+    }
+
+    private function describe(Route $route): RouteDescriptor
+    {
+        return new RouteDescriptor(
+            methods: self::strings($route->methods()),
+            uri: '/'.ltrim($route->uri(), '/'),
+            name: $route->getName(),
+            action: $route->getActionName(),
+            middleware: self::strings($route->gatherMiddleware()),
+        );
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $values
+     * @return list<string>
+     */
+    private static function strings(array $values): array
+    {
+        return array_values(array_filter($values, 'is_string'));
+    }
+
+    private function shouldInclude(Route $route, RouteDescriptor $descriptor, DocumentConfig $document): bool
+    {
+        if ($descriptor->primaryMethod() === 'head') {
+            return false;
+        }
+
+        $path = ltrim($descriptor->uri, '/');
+
+        if ($document->routeInclude !== [] && ! $this->matchesAny($path, $document->routeInclude)) {
+            return false;
+        }
+
+        if ($this->matchesAny($path, $document->routeExclude)) {
+            return false;
+        }
+
+        $filter = $document->routeFilter;
+        if (is_callable($filter) && $filter($descriptor) === false) {
+            return false;
+        }
+
+        return $this->passesAttributes($route, $document);
+    }
+
+    private function passesAttributes(Route $route, DocumentConfig $document): bool
+    {
+        $reflected = $this->reflector->forRoute($route);
+        if ($reflected === null) {
+            return true; // unreflectable actions still surface (as skeletons) downstream
+        }
+
+        $attributes = $this->attributes->collect($reflected);
+
+        if ($attributes->has(ExcludeFromDocs::class)) {
+            return false;
+        }
+
+        $inDocs = $attributes->first(InDocs::class);
+        if ($inDocs !== null && ! in_array($document->key, $inDocs->documents, true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<string>  $patterns
+     */
+    private function matchesAny(string $path, array $patterns): bool
+    {
+        foreach ($patterns as $pattern) {
+            if (Str::is($pattern, $path)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
