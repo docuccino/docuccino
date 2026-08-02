@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Extensions\Context;
 
 use Docuccino\Core\Extensions\Contracts\TagMapper;
+use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\Json;
 
 /**
@@ -112,20 +113,7 @@ final readonly class DocumentConfig
      */
     public function securitySchemes(): array
     {
-        $schemes = $this->security['schemes'] ?? null;
-        if (! is_array($schemes)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($schemes as $name => $scheme) {
-            if (is_string($name) && is_array($scheme)) {
-                /** @var array<string, mixed> $scheme */
-                $out[$name] = $scheme;
-            }
-        }
-
-        return $out;
+        return Hydrate::mapOfArrays($this->security['schemes'] ?? null);
     }
 
     /**
@@ -136,7 +124,7 @@ final readonly class DocumentConfig
      */
     public function documentSecurity(): ?array
     {
-        return self::requirement($this->security['document'] ?? null);
+        return Hydrate::listOfMaps($this->security['document'] ?? null);
     }
 
     /**
@@ -147,27 +135,7 @@ final readonly class DocumentConfig
      */
     public function defaultSecurity(): ?array
     {
-        return self::requirement($this->security['default'] ?? null);
-    }
-
-    /**
-     * @return list<array<string, mixed>>|null
-     */
-    private static function requirement(mixed $value): ?array
-    {
-        if (! is_array($value)) {
-            return null;
-        }
-
-        $out = [];
-        foreach ($value as $entry) {
-            if (is_array($entry)) {
-                /** @var array<string, mixed> $entry */
-                $out[] = $entry;
-            }
-        }
-
-        return $out;
+        return Hydrate::listOfMaps($this->security['default'] ?? null);
     }
 
     /**

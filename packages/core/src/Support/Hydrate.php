@@ -31,6 +31,62 @@ final class Hydrate
     }
 
     /**
+     * A mixed value coerced to a string-keyed map; non-arrays become an empty map.
+     * The guarded counterpart of {@see Arr::stringKeyed()} for the raw-config bags.
+     *
+     * @return array<string, mixed>
+     */
+    public static function map(mixed $value): array
+    {
+        return is_array($value) ? Arr::stringKeyed($value) : [];
+    }
+
+    /**
+     * A string→string map: keys coerced to strings, non-string values dropped.
+     *
+     * @return array<string, string>
+     */
+    public static function stringMap(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $key => $item) {
+            if (is_string($item)) {
+                $out[(string) $key] = $item;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A string-keyed map of raw sub-maps (name → object): entries with a
+     * non-string key or non-array value are dropped. Used for component schema
+     * and security-scheme maps.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public static function mapOfArrays(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $key => $item) {
+            if (is_string($key) && is_array($item)) {
+                /** @var array<string, mixed> $item */
+                $out[$key] = $item;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * String members of a list, in order; non-strings dropped.
      *
      * @return list<string>

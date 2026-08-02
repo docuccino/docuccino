@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Pipeline;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Document\Operation;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * The result of processing one route (design §5 / §10): the frozen operation, the OAS path it
@@ -64,68 +65,9 @@ final readonly class OperationFragment
             method: is_string($data['method'] ?? null) ? $data['method'] : 'get',
             operation: Operation::fromArray($operation),
             routeSignature: is_string($data['routeSignature'] ?? null) ? $data['routeSignature'] : '',
-            diagnostics: self::diagnostics($data['diagnostics'] ?? null),
-            componentSchemas: self::schemas($data['componentSchemas'] ?? null),
-            componentSchemaIds: self::stringMap($data['componentSchemaIds'] ?? null),
+            diagnostics: Hydrate::listOf($data['diagnostics'] ?? null, Diagnostic::fromArray(...)),
+            componentSchemas: Hydrate::mapOfArrays($data['componentSchemas'] ?? null),
+            componentSchemaIds: Hydrate::stringMap($data['componentSchemaIds'] ?? null),
         );
-    }
-
-    /**
-     * @return list<Diagnostic>
-     */
-    private static function diagnostics(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $entry) {
-            if (is_array($entry)) {
-                /** @var array<string, mixed> $entry */
-                $out[] = Diagnostic::fromArray($entry);
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return array<string, array<string, mixed>>
-     */
-    private static function schemas(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $name => $schema) {
-            if (is_string($name) && is_array($schema)) {
-                /** @var array<string, mixed> $schema */
-                $out[$name] = $schema;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function stringMap(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $name => $id) {
-            if (is_string($name) && is_string($id)) {
-                $out[$name] = $id;
-            }
-        }
-
-        return $out;
     }
 }

@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\InvalidOverlayException;
 use Docuccino\Core\Overlay\OverlayDocument;
+use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Symfony\Component\Yaml\Yaml;
 
@@ -50,7 +51,7 @@ final class DocumentBuilder
 
     public function config(string $key): DocumentConfig
     {
-        return $this->configs->make($key, $this->rawConfig($key), $this->onRouteError());
+        return $this->configs->make($key, Hydrate::map($this->documents()[$key] ?? null), $this->onRouteError());
     }
 
     /**
@@ -80,24 +81,6 @@ final class DocumentBuilder
         $documents = (array) config('docuccino.documents', []);
 
         return $documents;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function rawConfig(string $key): array
-    {
-        $raw = $this->documents()[$key] ?? [];
-        if (! is_array($raw)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($raw as $k => $v) {
-            $out[(string) $k] = $v;
-        }
-
-        return $out;
     }
 
     private function onRouteError(): string

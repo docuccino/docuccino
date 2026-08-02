@@ -30,27 +30,27 @@ final readonly class DocumentConfigFactory
      */
     public function make(string $key, array $config, string $onRouteError): DocumentConfig
     {
-        $routes = self::arr($config['routes'] ?? []);
-        $security = self::arr($config['security'] ?? []);
-        $tags = self::arr($config['tags'] ?? []);
+        $routes = Hydrate::map($config['routes'] ?? []);
+        $security = Hydrate::map($config['security'] ?? []);
+        $tags = Hydrate::map($config['tags'] ?? []);
 
         $closure = $routes['closure'] ?? null;
 
         return new DocumentConfig(
             key: $key,
-            info: $this->resolveInfo(self::arr($config['info'] ?? [])),
+            info: $this->resolveInfo(Hydrate::map($config['info'] ?? [])),
             servers: Hydrate::listOfMaps($config['servers'] ?? null) ?? [],
-            routeInclude: self::stringList($routes['include'] ?? []),
-            routeExclude: self::stringList($routes['exclude'] ?? []),
+            routeInclude: Hydrate::stringList($routes['include'] ?? []),
+            routeExclude: Hydrate::stringList($routes['exclude'] ?? []),
             routeFilter: $closure instanceof Closure ? $closure : null,
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
             errorResponses: is_string($config['error_responses'] ?? null) ? $config['error_responses'] : 'none',
-            overlays: self::stringList($config['overlays'] ?? []),
+            overlays: Hydrate::stringList($config['overlays'] ?? []),
             onRouteError: $onRouteError,
             security: $security,
             tags: $tags,
-            representation: self::arr($config['representation'] ?? []),
-            viewer: self::arr($config['viewer'] ?? []),
+            representation: Hydrate::map($config['representation'] ?? []),
+            viewer: Hydrate::map($config['viewer'] ?? []),
             versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
             tagMapper: $this->resolveTagMapper($tags),
             raw: $config,
@@ -73,28 +73,9 @@ final readonly class DocumentConfigFactory
             return $resolved instanceof TagMapper ? $resolved : null;
         }
 
-        $map = self::stringMap($tags['map'] ?? null);
+        $map = Hydrate::stringMap($tags['map'] ?? null);
 
         return $map === [] ? null : new PrefixTagMapper($map);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private static function stringMap(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $key => $item) {
-            if (is_string($item)) {
-                $out[(string) $key] = $item;
-            }
-        }
-
-        return $out;
     }
 
     /**
@@ -122,34 +103,5 @@ final readonly class DocumentConfigFactory
     private static function stringifyVersion(mixed $version): string
     {
         return is_string($version) ? $version : (is_scalar($version) ? (string) $version : '1.0.0');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function arr(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $key => $item) {
-            $out[(string) $key] = $item;
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function stringList(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        return array_values(array_filter($value, 'is_string'));
     }
 }
