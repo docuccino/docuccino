@@ -19,6 +19,7 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
+use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
 use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
@@ -77,6 +78,9 @@ final class DefaultExtensions
             // Passport → oauth2 scheme + per-operation scopes from scope:/scopes: middleware.
             ...(SanctumIntegration::installed() ? SanctumIntegration::extensions() : []),
             ...(PassportIntegration::installed() ? PassportIntegration::extensions() : []),
+            // spatie/laravel-permission: role:/permission:/role_or_permission: middleware →
+            // x-permissions extension member + a generated description line.
+            ...(PermissionIntegration::installed() ? PermissionIntegration::extensions() : []),
             ...DefaultTypeMappers::all(),
         ];
     }
