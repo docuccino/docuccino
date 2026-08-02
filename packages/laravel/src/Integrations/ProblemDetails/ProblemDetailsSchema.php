@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\ProblemDetails;
 
+use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
+
 /**
  * The RFC 9457 (`application/problem+json`) shapes the Problem Details preset hoists: the shared
  * `ProblemDetails` object every problem response builds on, plus the per-status reusable response
@@ -44,32 +46,38 @@ final class ProblemDetailsSchema
      * it hoists: its component name, HTTP status, human title, and an RFC 9457 example. `422`
      * additionally grafts the field-keyed `errors` map onto the shared schema.
      *
+     * Status, validation-flag and title (the RFC reason phrase) come from the shared
+     * {@see FrameworkExceptionTable} so this preset can never drift from the framework-errors tier;
+     * only the RFC 9457 presentation (component name + human detail) is local.
+     *
      * @return array<string, array{component: string, status: string, title: string, description: string, validation: bool}>
      */
     public static function table(): array
     {
-        return [
-            'Illuminate\\Validation\\ValidationException' => [
-                'component' => 'ProblemValidation', 'status' => '422', 'title' => 'Unprocessable Entity',
-                'description' => 'Validation failed', 'validation' => true,
-            ],
-            'Illuminate\\Auth\\AuthenticationException' => [
-                'component' => 'ProblemUnauthenticated', 'status' => '401', 'title' => 'Unauthorized',
-                'description' => 'Authentication is required', 'validation' => false,
-            ],
-            'Illuminate\\Auth\\Access\\AuthorizationException' => [
-                'component' => 'ProblemForbidden', 'status' => '403', 'title' => 'Forbidden',
-                'description' => 'This action is unauthorized', 'validation' => false,
-            ],
-            'Illuminate\\Database\\Eloquent\\ModelNotFoundException' => [
-                'component' => 'ProblemNotFound', 'status' => '404', 'title' => 'Not Found',
-                'description' => 'The resource was not found', 'validation' => false,
-            ],
-            'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException' => [
-                'component' => 'ProblemNotFound', 'status' => '404', 'title' => 'Not Found',
-                'description' => 'The resource was not found', 'validation' => false,
-            ],
+        $presentation = [
+            'Illuminate\\Validation\\ValidationException' => ['component' => 'ProblemValidation', 'description' => 'Validation failed'],
+            'Illuminate\\Auth\\AuthenticationException' => ['component' => 'ProblemUnauthenticated', 'description' => 'Authentication is required'],
+            'Illuminate\\Auth\\Access\\AuthorizationException' => ['component' => 'ProblemForbidden', 'description' => 'This action is unauthorized'],
+            'Illuminate\\Database\\Eloquent\\ModelNotFoundException' => ['component' => 'ProblemNotFound', 'description' => 'The resource was not found'],
+            'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException' => ['component' => 'ProblemNotFound', 'description' => 'The resource was not found'],
         ];
+
+        $table = [];
+        foreach ($presentation as $fqcn => $local) {
+            $facts = FrameworkExceptionTable::match($fqcn);
+            if ($facts === null) {
+                continue;
+            }
+            $table[$fqcn] = [
+                'component' => $local['component'],
+                'status' => $facts['status'],
+                'title' => FrameworkExceptionTable::reason($facts['status']),
+                'description' => $local['description'],
+                'validation' => $facts['validation'],
+            ];
+        }
+
+        return $table;
     }
 
     /**

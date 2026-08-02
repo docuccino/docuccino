@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
 use Docuccino\Attributes\Hidden as DocuccinoHidden;
-use Docuccino\Attributes\SchemaId;
-use Docuccino\Attributes\SchemaName;
 use Docuccino\Core\Support\Fqcn;
+use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
 use ReflectionClass;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
@@ -99,28 +98,13 @@ final class DataClassReflector
      */
     public function classFacts(string $fqcn): array
     {
-        if (! class_exists($fqcn)) {
-            return ['hidden' => [], 'schemaName' => null, 'schemaId' => null];
-        }
-
-        $reflection = new ReflectionClass($fqcn);
-
-        $hidden = [];
-        foreach ($reflection->getAttributes(DocuccinoHidden::class) as $attribute) {
-            $hidden = [...$hidden, ...$attribute->newInstance()->properties];
-        }
-
-        $schemaName = null;
-        foreach ($reflection->getAttributes(SchemaName::class) as $attribute) {
-            $schemaName = $attribute->newInstance()->name;
-        }
-
-        $schemaId = null;
-        foreach ($reflection->getAttributes(SchemaId::class) as $attribute) {
-            $schemaId = $attribute->newInstance()->id;
-        }
-
-        return ['hidden' => $hidden, 'schemaName' => $schemaName, 'schemaId' => $schemaId];
+        // Schema identity (name/id) and the class-level #[Hidden] deny-list are read through the shared
+        // SchemaIdentity helper, so a Data class honours them identically to a Resource or a model.
+        return [
+            'hidden' => SchemaIdentity::hidden($fqcn),
+            'schemaName' => SchemaIdentity::name($fqcn),
+            'schemaId' => SchemaIdentity::id($fqcn),
+        ];
     }
 
     /** Whether the named property is hidden from output (property-level spatie/Docuccino `#[Hidden]`). */

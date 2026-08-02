@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 
 /**
  * Tier 2 of the error-response chain (design §6): Laravel's stock JSON error shapes, keyed by the
@@ -26,31 +27,30 @@ use Docuccino\Core\Patch\Contribution;
 #[ExtensionOrder(priority: Priorities::LATE)]
 final class FrameworkErrorsExceptionToResponse implements ExceptionToResponse
 {
-    private const VALIDATION = 'Illuminate\\Validation\\ValidationException';
-
-    private const AUTHENTICATION = 'Illuminate\\Auth\\AuthenticationException';
-
-    private const AUTHORIZATION = 'Illuminate\\Auth\\Access\\AuthorizationException';
-
-    private const MODEL_NOT_FOUND = 'Illuminate\\Database\\Eloquent\\ModelNotFoundException';
-
-    private const NOT_FOUND_HTTP = 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException';
-
     /**
-     * The per-exception mapping table (design coverage standard: a dataset test drives EVERY entry).
-     * Maintained against Laravel's stock JSON rendering: base exception FQCN → `[status, shape]`.
+     * The per-exception mapping table (design coverage standard: a dataset test drives EVERY entry),
+     * built from the shared {@see FrameworkExceptionTable}: base exception FQCN → `[status, description
+     * (the shared RFC reason phrase), shape]`. The framework-JSON shapes (`{message}`, plus the 422
+     * `errors` graft) are this tier's presentation.
      *
      * @return array<string, array{status: string, description: string, shape: array<string, mixed>}>
      */
     public static function table(): array
     {
-        return [
-            self::VALIDATION => ['status' => '422', 'description' => 'Unprocessable Entity', 'shape' => self::validationShape()],
-            self::AUTHENTICATION => ['status' => '401', 'description' => 'Unauthenticated', 'shape' => self::messageShape()],
-            self::AUTHORIZATION => ['status' => '403', 'description' => 'Forbidden', 'shape' => self::messageShape()],
-            self::MODEL_NOT_FOUND => ['status' => '404', 'description' => 'Not Found', 'shape' => self::messageShape()],
-            self::NOT_FOUND_HTTP => ['status' => '404', 'description' => 'Not Found', 'shape' => self::messageShape()],
-        ];
+        $table = [];
+        foreach (FrameworkExceptionTable::exceptions() as $fqcn) {
+            $facts = FrameworkExceptionTable::match($fqcn);
+            if ($facts === null) {
+                continue;
+            }
+            $table[$fqcn] = [
+                'status' => $facts['status'],
+                'description' => FrameworkExceptionTable::reason($facts['status']),
+                'shape' => $facts['validation'] ? self::validationShape() : self::messageShape(),
+            ];
+        }
+
+        return $table;
     }
 
     public function supports(ThrownException $exception, RouteContext $context): bool
