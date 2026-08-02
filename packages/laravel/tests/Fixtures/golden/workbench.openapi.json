@@ -6,6 +6,108 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/article-resources": {
+      "get": {
+        "summary": "An anonymous resource collection → array of the item schema.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArticleResource"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/article-resources/{id}": {
+      "get": {
+        "summary": "A single API resource whose whenLoaded fields become optional.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleResource"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/articles": {
+      "post": {
+        "summary": "Spatie Data request (body from the Data class) + response, under a folded 201.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "author": {},
+                  "body": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "integer"
+                  },
+                  "internal": {
+                    "type": "integer"
+                  },
+                  "secret": {
+                    "type": "string"
+                  },
+                  "subtitle": {}
+                },
+                "required": [
+                  "id",
+                  "heading",
+                  "body",
+                  "secret",
+                  "internal",
+                  "author"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/broken": {
       "get": {
         "description": "Documentation could not be generated for this route."
@@ -80,8 +182,147 @@
         }
       }
     },
+    "/api/jsonapi-articles/{id}": {
+      "get": {
+        "summary": "A first-party JSON:API resource → JSON:API document + include/fields query params.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Sparse fieldsets per resource type (fields[TYPE]=field1,field2).",
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "description": "Comma-separated list of relationships to include as compound-document data.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleJsonApiResource"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-widgets/{id}": {
+      "get": {
+        "summary": "An Eloquent model → object schema from columns + casts + visible/hidden.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "A 204 No Content response (noContent()).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/ping": {
       "get": {}
+    },
+    "/api/reports": {
+      "post": {
+        "summary": "Distinct return paths carrying distinct statuses (200 + 202).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "accepted"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "/api/tickets": {
       "post": {
@@ -177,6 +418,152 @@
   },
   "components": {
     "schemas": {
+      "Article": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "subtitle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "headline",
+          "body"
+        ]
+      },
+      "ArticleJsonApiResource": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "body"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "links": {
+                "type": "object",
+                "properties": {
+                  "self": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "self"
+                ]
+              },
+              "relationships": {
+                "type": "object",
+                "properties": {
+                  "author": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "author"
+                ]
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "ArticleResource": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorResource"
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
+      "AuthorData": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
+      "AuthorResource": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
       "FormData": {
         "type": "object",
         "properties": {
@@ -196,6 +583,47 @@
         "required": [
           "id",
           "title"
+        ]
+      },
+      "Widget": {
+        "type": "object",
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {},
+          "id": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "meta": {
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "status",
+          "meta"
         ]
       },
       "WidgetData": {

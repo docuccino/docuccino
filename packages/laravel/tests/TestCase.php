@@ -9,6 +9,7 @@ use Illuminate\Routing\Router;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Workbench\App\Http\Controllers\BrokenController;
 use Workbench\App\Http\Controllers\FormController;
+use Workbench\App\Http\Controllers\IntegrationsController;
 use Workbench\App\Http\Controllers\SecretController;
 use Workbench\App\Http\Controllers\ValidationController;
 use Workbench\App\Http\Controllers\WidgetController;
@@ -47,5 +48,14 @@ abstract class TestCase extends Orchestra
         $router->get('api/secret', [SecretController::class, 'index']);
         $router->get('api/broken', [BrokenController::class, 'ghost']);
         $router->get('api/ping', static fn () => response()->json(['pong' => true]));
+
+        // Phase-4 integration routes (Spatie Data, API Resources, JSON:API, Eloquent, status codes).
+        $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);
+        $router->get('api/article-resources', [IntegrationsController::class, 'listArticleResources']);
+        $router->get('api/article-resources/{id}', [IntegrationsController::class, 'showArticleResource']);
+        $router->get('api/jsonapi-articles/{id}', [IntegrationsController::class, 'showJsonApiArticle']);
+        $router->get('api/model-widgets/{id}', [IntegrationsController::class, 'showWidget']);
+        $router->delete('api/model-widgets/{id}', [IntegrationsController::class, 'destroyWidget']);
+        $router->post('api/reports', [IntegrationsController::class, 'storeReport']);
     }
 }

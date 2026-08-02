@@ -18,6 +18,252 @@
     }
   ],
   "paths": {
+    "/api/article-resources": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:pj3f5u3bsgosue7f",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "An anonymous resource collection → array of the item schema.",
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:5f45ebiyukyncybf",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "items",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArticleResource"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/article-resources/{id}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:oheaebzqaffb7r2n",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A single API resource whose whenLoaded fields become optional.",
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:hpq64ex5ut6uiwse",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "required"
+                  ]
+                }
+              ]
+            },
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:fx6c2p3eqxakuxwd",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/ArticleResource"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/articles": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:kft2uwzeraont65y",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            },
+            {
+              "producer": "integration:spatie-data",
+              "layer": "integration",
+              "fields": [
+                "requestBody"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 24,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeArticle"
+              }
+            }
+          ]
+        },
+        "summary": "Spatie Data request (body from the Data class) + response, under a folded 201.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "author": {},
+                  "body": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "integer"
+                  },
+                  "internal": {
+                    "type": "integer"
+                  },
+                  "secret": {
+                    "type": "string"
+                  },
+                  "subtitle": {}
+                },
+                "required": [
+                  "id",
+                  "heading",
+                  "body",
+                  "secret",
+                  "internal",
+                  "author"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "x-docuccino": {
+              "id": "res:v1:ayfyb4jzt5wcp37r",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/broken": {
       "get": {
         "x-docuccino": {
@@ -259,10 +505,448 @@
         }
       }
     },
+    "/api/jsonapi-articles/{id}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:lgetbiduxanenllv",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A first-party JSON:API resource → JSON:API document + include/fields query params.",
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:ydkmgqwr3zqx7rhw",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "required"
+                  ]
+                }
+              ]
+            },
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          },
+          {
+            "x-docuccino": {
+              "id": "par:v1:sqmwgndqqnnx3npa",
+              "provenance": [
+                {
+                  "producer": "integration:api-resources",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "explode",
+                    "required",
+                    "style"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 42,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
+                  }
+                }
+              ]
+            },
+            "name": "fields",
+            "in": "query",
+            "description": "Sparse fieldsets per resource type (fields[TYPE]=field1,field2).",
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:api-resources",
+                    "layer": "integration",
+                    "fields": [
+                      "additionalProperties",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                      "line": 42,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
+                    }
+                  }
+                ]
+              },
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "x-docuccino": {
+              "id": "par:v1:ot5yyfyxvqv7h6hv",
+              "provenance": [
+                {
+                  "producer": "integration:api-resources",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 42,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
+                  }
+                }
+              ]
+            },
+            "name": "include",
+            "in": "query",
+            "description": "Comma-separated list of relationships to include as compound-document data.",
+            "required": false,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:api-resources",
+                    "layer": "integration",
+                    "fields": [
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                      "line": 42,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
+                    }
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:wpu5s5c3c2eg2bys",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/ArticleJsonApiResource"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-widgets/{id}": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:zx3p6im7rdsivbbo",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "An Eloquent model → object schema from columns + casts + visible/hidden.",
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:3s4ddl2cej56f5j2",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "required"
+                  ]
+                }
+              ]
+            },
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:sjyre6k3ezaoh732",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "x-docuccino": {
+          "id": "op:v1:rc5imvdks2iywnqa",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A 204 No Content response (noContent()).",
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:2l5fth4zhqdqeyf7",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "required"
+                  ]
+                }
+              ]
+            },
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "fallback",
+                    "layer": "fallback",
+                    "fields": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/ping": {
       "get": {
         "x-docuccino": {
           "id": "op:v1:3ubjyzefbdmfzez5"
+        }
+      }
+    },
+    "/api/reports": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:h33v5qpe2etbewq3",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "Distinct return paths carrying distinct statuses (200 + 202).",
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:5f6epy6tuiy5bb5t",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "x-docuccino": {
+              "id": "res:v1:iod26lpuzc6zn7dr",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "confidence": 1
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "accepted"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -528,6 +1212,167 @@
   },
   "components": {
     "schemas": {
+      "Article": {
+        "x-docuccino": {
+          "id": "sch:v1:rimzqk43cb4hshik"
+        },
+        "type": "object",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "subtitle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "headline",
+          "body"
+        ]
+      },
+      "ArticleJsonApiResource": {
+        "x-docuccino": {
+          "id": "sch:v1:gmikdcgiwhiromgj"
+        },
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "body"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "links": {
+                "type": "object",
+                "properties": {
+                  "self": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "self"
+                ]
+              },
+              "relationships": {
+                "type": "object",
+                "properties": {
+                  "author": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "author"
+                ]
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "ArticleResource": {
+        "x-docuccino": {
+          "id": "sch:v1:enlevzeqn7cjoivp"
+        },
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorResource"
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      },
+      "AuthorData": {
+        "x-docuccino": {
+          "id": "sch:v1:nvvcd64vvb5o4tui"
+        },
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
+      "AuthorResource": {
+        "x-docuccino": {
+          "id": "sch:v1:hbaqt4d6pcrt4sii"
+        },
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
       "FormData": {
         "x-docuccino": {
           "id": "sch:v1:6iocn62c7ru5zutw"
@@ -550,6 +1395,50 @@
         "required": [
           "id",
           "title"
+        ]
+      },
+      "Widget": {
+        "x-docuccino": {
+          "id": "sch:v1:p3wzi5d3ha5qvl3b"
+        },
+        "type": "object",
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {},
+          "id": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "meta": {
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "status",
+          "meta"
         ]
       },
       "WidgetData": {
@@ -609,7 +1498,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "212d02ded8e67f5fbe08dfb3182546d297dbacbada82273b678af739c8baeae1",
-      "contentHash": "e25ba6e7ba8fdf051bae7c5f121bc9bce87d9ad17ff9e815c230254999fafcb2"
+      "contentHash": "55c5d35df6c78b2cd9ee79539abdf97825223774c4b84cb7d7946653a80041ee"
     },
     "generator": {
       "name": "docuccino/laravel",
