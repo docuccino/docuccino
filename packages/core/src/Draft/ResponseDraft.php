@@ -53,6 +53,12 @@ final class ResponseDraft
         return $this->content[$mediaType] ??= new SchemaDraft;
     }
 
+    /** The first registered media type (in insertion order), or `''` when the response has none. */
+    public function primaryMediaType(): string
+    {
+        return array_key_first($this->content) ?? '';
+    }
+
     public function hasContent(string $mediaType): bool
     {
         return isset($this->content[$mediaType]);

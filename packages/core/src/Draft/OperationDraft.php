@@ -123,6 +123,27 @@ final class OperationDraft
         return $this;
     }
 
+    /**
+     * Assign identities to every child parameter and response draft (design §2). The response
+     * callback receives the response's primary media type (`''` when it has none, e.g. a `$ref`),
+     * and may return null to leave the response without an id.
+     *
+     * @param  callable(string $in, string $name): ?string  $parameterId
+     * @param  callable(string $status, string $primaryMediaType): ?string  $responseId
+     */
+    public function assignChildIds(callable $parameterId, callable $responseId): void
+    {
+        foreach ($this->parameters as $draft) {
+            $draft->assignId($parameterId($draft->in, $draft->name));
+        }
+
+        foreach ($this->responses as $status => $draft) {
+            // Numeric-string status keys (e.g. '200') are coerced to int array keys by PHP; the
+            // callback contract is string, so restore it.
+            $draft->assignId($responseId((string) $status, $draft->primaryMediaType()));
+        }
+    }
+
     public function freeze(): Operation
     {
         $resolved = $this->guard->resolved();

@@ -12,12 +12,12 @@ use ReflectionClass;
  * `before`/`after` become hard edges; among nodes with no remaining prerequisite the sort
  * picks by priority descending, then FQCN ascending, then original index — so the output bytes
  * never depend on registration order. A cycle raises {@see CyclicExtensionOrderException}.
- *
- * @template T of object
  */
 final class ExtensionSorter
 {
     /**
+     * @template T of object
+     *
      * @param  list<T>  $extensions
      * @return list<T>
      */
