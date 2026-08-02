@@ -35,6 +35,7 @@ final class RouteContextBuilder
         private readonly RouteReflector $reflector = new RouteReflector,
         private readonly AttributeCollector $attributes = new AttributeCollector,
         private readonly DocblockReader $docblocks = new DocblockReader,
+        private readonly ResolvedRouteIndex $index = new ResolvedRouteIndex,
     ) {}
 
     /**
@@ -52,12 +53,15 @@ final class RouteContextBuilder
         ComponentRegistry $components,
         ?string $method = null,
     ): ?RouteContext {
-        $route = $this->locate($descriptor);
+        // Fast path: reuse the Route + reflection the resolver already produced (O(1), reflected
+        // once). On a container miss the index is empty, so fall back to a lookup + fresh reflection.
+        $resolved = $this->index->get($descriptor);
+        $route = $resolved['route'] ?? $this->locate($descriptor);
         if ($route === null) {
             return null;
         }
 
-        $reflected = $this->reflector->forRoute($route);
+        $reflected = $resolved !== null ? $resolved['reflected'] : $this->reflector->forRoute($route);
         if ($reflected === null) {
             return null;
         }

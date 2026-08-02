@@ -25,6 +25,7 @@ final class LaravelRouteResolver implements RouteResolver
         private readonly Router $router,
         private readonly RouteReflector $reflector = new RouteReflector,
         private readonly AttributeCollector $attributes = new AttributeCollector,
+        private readonly ResolvedRouteIndex $index = new ResolvedRouteIndex,
     ) {}
 
     public function resolve(DocumentConfig $document): iterable
@@ -35,9 +36,19 @@ final class LaravelRouteResolver implements RouteResolver
         foreach ($routes as $route) {
             $descriptor = $this->describe($route);
 
-            if ($this->shouldInclude($route, $descriptor, $document)) {
-                yield $descriptor;
+            if (! $this->passesFilters($descriptor, $document)) {
+                continue;
             }
+
+            // Reflect once here; the builder reuses this via the shared index — no re-locate/reflect.
+            $reflected = $this->reflector->forRoute($route);
+            if (! $this->passesAttributes($reflected, $document)) {
+                continue;
+            }
+
+            $this->index->put($descriptor, $route, $reflected);
+
+            yield $descriptor;
         }
     }
 
@@ -61,7 +72,7 @@ final class LaravelRouteResolver implements RouteResolver
         return array_values(array_filter($values, 'is_string'));
     }
 
-    private function shouldInclude(Route $route, RouteDescriptor $descriptor, DocumentConfig $document): bool
+    private function passesFilters(RouteDescriptor $descriptor, DocumentConfig $document): bool
     {
         if ($descriptor->primaryMethod() === 'head') {
             return false;
@@ -78,16 +89,12 @@ final class LaravelRouteResolver implements RouteResolver
         }
 
         $filter = $document->routeFilter;
-        if (is_callable($filter) && $filter($descriptor) === false) {
-            return false;
-        }
 
-        return $this->passesAttributes($route, $document);
+        return ! (is_callable($filter) && $filter($descriptor) === false);
     }
 
-    private function passesAttributes(Route $route, DocumentConfig $document): bool
+    private function passesAttributes(?ReflectedAction $reflected, DocumentConfig $document): bool
     {
-        $reflected = $this->reflector->forRoute($route);
         if ($reflected === null) {
             return true; // unreflectable actions still surface (as skeletons) downstream
         }
