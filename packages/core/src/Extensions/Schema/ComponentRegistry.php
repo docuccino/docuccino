@@ -146,6 +146,15 @@ final class ComponentRegistry
         return $this->diagnostics;
     }
 
+    /**
+     * Record a diagnostic raised while building components (e.g. a validation rule no transformer
+     * handled). The assembler folds these into the document's diagnostic channel.
+     */
+    public function addDiagnostic(Diagnostic $diagnostic): void
+    {
+        $this->diagnostics[] = $diagnostic;
+    }
+
     private static function sanitize(string $name): string
     {
         $clean = preg_replace('/[^A-Za-z0-9_.-]/', '', $name);

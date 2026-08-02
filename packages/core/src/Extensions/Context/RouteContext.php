@@ -6,12 +6,18 @@ namespace Docuccino\Core\Extensions\Context;
 
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
+use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
+use Docuccino\Core\Extensions\Contracts\ValidationRulesToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
+use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceReport;
+use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Core\Provenance\SourcePathResolver;
@@ -33,9 +39,17 @@ final class RouteContext
 
     private ?RepresentationPolicy $representation = null;
 
+    private ?ValidationRulesToSchema $validation = null;
+
+    /**
+     * @var list<string> dependency files reported by every {@see trace()} this context ran
+     */
+    private array $traceDependencyFiles = [];
+
     /**
      * @param  list<TypeToSchema>  $typeMappers  the resolved type→schema chain (document-wide)
      * @param  list<ExceptionToResponse>  $exceptionMappers  the resolved exception→response chain
+     * @param  list<RuleTransformer>  $ruleTransformers  the resolved validation rule vocabulary chain
      * @param  list<string>  $pathParameters  route template parameter names, in template order
      * @param  list<string>  $optionalPathParameters  the subset declared optional (`{param?}`)
      * @param  array<string, string>  $routeBindings  path parameter name → bound model FQCN
@@ -48,6 +62,7 @@ final class RouteContext
         public readonly DocumentConfig $document,
         public readonly array $typeMappers = [],
         public readonly array $exceptionMappers = [],
+        public readonly array $ruleTransformers = [],
         public readonly array $pathParameters = [],
         public readonly array $optionalPathParameters = [],
         public readonly array $routeBindings = [],
@@ -61,6 +76,61 @@ final class RouteContext
     public function analysis(): ActionAnalysis
     {
         return $this->analysis ??= $this->engine->analyzeAction($this->actionRef);
+    }
+
+    /**
+     * Drive an interprocedural {@see TraceVisitor} walk from the action, recording the walk's
+     * transitive dependency files so they join the fragment cache key (design §10 — a chain traced
+     * N files deep must invalidate when any of those files change). Integrations that recover facts
+     * by tracing (validation rules, query builders) should go through this rather than the engine
+     * directly, so their dependencies are accounted for.
+     */
+    public function trace(TraceVisitor $visitor): TraceReport
+    {
+        $report = $this->engine->trace($this->actionRef, $visitor);
+
+        foreach ($report->dependencyFiles as $file) {
+            $this->traceDependencyFiles[] = $file;
+        }
+
+        return $report;
+    }
+
+    /**
+     * Record extra dependency files an integration read out-of-band (e.g. a FormRequest class it
+     * analysed separately) so they join the fragment cache key alongside the action's own.
+     *
+     * @param  list<string>  $files
+     */
+    public function recordDependencyFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            $this->traceDependencyFiles[] = $file;
+        }
+    }
+
+    /**
+     * Every file this route's analysis + traces read, deduped and sorted — the fragment cache key
+     * input the pipeline persists (design §10).
+     *
+     * @return list<string>
+     */
+    public function dependencyFiles(): array
+    {
+        $files = array_values(array_unique([...$this->analysis()->dependencyFiles, ...$this->traceDependencyFiles]));
+        sort($files);
+
+        return $files;
+    }
+
+    /**
+     * The validation rule → schema converter for this route: the core chain driver over the
+     * resolved rule-transformer vocabulary (Laravel's set plus any user transformers). Recovery
+     * integrations feed it a {@see RuleSet}.
+     */
+    public function validation(): ValidationRulesToSchema
+    {
+        return $this->validation ??= new DefaultValidationRulesToSchema($this->ruleTransformers);
     }
 
     /**
