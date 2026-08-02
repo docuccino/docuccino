@@ -65,10 +65,13 @@ final class DocumentGenerator
 
         $fragments = [];
         foreach ($this->descriptors($resolved, $document) as $descriptor) {
-            $fragment = $this->processRoute($descriptor, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
-            if ($fragment !== null) {
-                $fragments[] = $fragment;
-                $bag->addAll($fragment->diagnostics);
+            // A route registered for several verbs documents one operation per method (arch F8).
+            foreach ($descriptor->documentableMethods() as $method) {
+                $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
+                if ($fragment !== null) {
+                    $fragments[] = $fragment;
+                    $bag->addAll($fragment->diagnostics);
+                }
             }
         }
 
@@ -117,6 +120,7 @@ final class DocumentGenerator
      */
     private function processRoute(
         RouteDescriptor $descriptor,
+        string $method,
         DocumentConfig $document,
         string $documentId,
         TypeEngine $engine,
@@ -126,11 +130,14 @@ final class DocumentGenerator
         string $configHash,
         array $extensionClasses,
     ): ?OperationFragment {
-        $method = $descriptor->primaryMethod();
         $path = $this->oasPath($descriptor->uri);
-        $signature = $descriptor->signature();
+        // The human signature names the specific method being documented, so multi-method routes
+        // produce distinct per-method diagnostics.
+        $signature = strtoupper($method).' '.$descriptor->uri;
 
-        $cacheKey = $this->cache->key($descriptor->cacheSignature(), $configHash, $extensionClasses);
+        // Fold the documented method into the cache key so each method of a multi-method route keys
+        // to its own fragment (they differ: GET query vs POST body, distinct operation identities).
+        $cacheKey = $this->cache->key($descriptor->cacheSignature().'|'.$method, $configHash, $extensionClasses);
         $cached = $this->cache->get($cacheKey);
         if ($cached !== null) {
             // Warm hit: restore the route's components without touching the type engine (design §10).
@@ -152,6 +159,7 @@ final class DocumentGenerator
                 $resolved->exceptionToResponse,
                 $resolved->ruleTransformers,
                 $components,
+                $method,
             );
 
             if ($context === null) {
@@ -266,11 +274,13 @@ final class DocumentGenerator
         string $reason,
         DiagnosticBag $bag,
     ): ?OperationFragment {
+        $signature = strtoupper($method).' '.$descriptor->uri;
+
         $bag->add(new Diagnostic(
             severity: Severity::Error,
             code: 'route.build-failed',
-            message: sprintf('Failed to document %s: %s', $descriptor->signature(), $reason),
-            routeSignature: $descriptor->signature(),
+            message: sprintf('Failed to document %s: %s', $signature, $reason),
+            routeSignature: $signature,
             help: $document->onRouteError === 'omit' ? 'Route omitted from the document.' : 'A skeleton operation was emitted in its place.',
         ));
 
@@ -282,7 +292,7 @@ final class DocumentGenerator
         $operation->setDescription('Documentation could not be generated for this route.', Contribution::fallback());
         $this->assignIds($operation, $documentId, $method, $path);
 
-        return new OperationFragment($path, $method, $operation->freeze(), $descriptor->signature());
+        return new OperationFragment($path, $method, $operation->freeze(), $signature);
     }
 
     private function assignIds(OperationDraft $operation, string $documentId, string $method, string $path): void

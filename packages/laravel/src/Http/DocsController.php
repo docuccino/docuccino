@@ -13,6 +13,7 @@ use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Viewer\ScalarViewer;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The runtime viewer endpoints (design §Multiple documents / §5 serving): the Scalar HTML page,
@@ -43,11 +44,31 @@ final class DocsController
         $source = $config->viewer['source'] ?? 'generate';
         $json = match ($source) {
             'artifact' => $this->fromArtifact($config),
-            'cache' => $cache->get($document) ?? '',
-            default => (new OpenApi32Emitter)->emit($this->builder->build($document, $engine)->document),
+            'cache' => $cache->get($document) ?? $this->coldCacheFallback($document, $engine),
+            default => $this->generate($document, $engine),
         };
 
         return new Response($json, 200, ['Content-Type' => 'application/json']);
+    }
+
+    private function generate(string $document, TypeEngine $engine): string
+    {
+        return (new OpenApi32Emitter)->emit($this->builder->build($document, $engine)->document);
+    }
+
+    /**
+     * `viewer.source: cache` with a cold cache falls back to generating the spec rather than serving
+     * an empty document (arch F11), logging a warning so the missed `docuccino:cache` warm-up is
+     * surfaced instead of silently degrading.
+     */
+    private function coldCacheFallback(string $document, TypeEngine $engine): string
+    {
+        Log::warning(sprintf(
+            'Docuccino viewer "%s" is configured with source=cache but the cache is cold; generating on the fly. Run `docuccino:cache` to warm it.',
+            $document,
+        ));
+
+        return $this->generate($document, $engine);
     }
 
     public function asset(): Response

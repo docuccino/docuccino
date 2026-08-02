@@ -76,7 +76,7 @@ final class ValidationRequestExtension implements OperationExtension
 
     private function isReadVerb(RouteContext $context): bool
     {
-        return in_array($context->route->primaryMethod(), ['get', 'head'], true);
+        return in_array($context->httpMethod(), ['get', 'head'], true);
     }
 
     private function applyRequestBody(OperationDraft $operation, RouteContext $context, ValidationSchema $result): void

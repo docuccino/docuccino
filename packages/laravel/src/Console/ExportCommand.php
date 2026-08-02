@@ -45,6 +45,16 @@ final class ExportCommand extends Command
             return self::FAILURE;
         }
 
+        // A single --out path cannot receive more than one document — the later ones would clobber
+        // the earlier (arch F9). Require a specific document, or drop --out and use per-document
+        // export.path.
+        $out = $this->option('out');
+        if (is_string($out) && $out !== '' && ! is_string($only) && count($builder->documentKeys()) > 1) {
+            $this->error('--out cannot be used when exporting multiple documents; pass a document argument or configure per-document export.path.');
+
+            return self::FAILURE;
+        }
+
         $exit = self::SUCCESS;
 
         foreach ($builder->documentKeys() as $key) {

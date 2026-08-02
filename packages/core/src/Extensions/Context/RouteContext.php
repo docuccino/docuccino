@@ -72,8 +72,19 @@ final class RouteContext
         public readonly ?string $description = null,
         public readonly ComponentRegistry $components = new ComponentRegistry,
         public readonly ?SourcePathResolver $pathResolver = null,
+        public readonly ?string $documentedMethod = null,
     ) {
         $this->dependencies = new RouteDependencies;
+    }
+
+    /**
+     * The specific HTTP method this context documents (lower-case). A multi-method route builds one
+     * context per documentable method (arch F8), so extensions that branch on the verb — request
+     * body vs query parameters — must read THIS, not {@see RouteDescriptor::primaryMethod()}.
+     */
+    public function httpMethod(): string
+    {
+        return $this->documentedMethod ?? $this->route->primaryMethod();
     }
 
     /**

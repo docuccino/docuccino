@@ -46,6 +46,31 @@ final readonly class RouteDescriptor
         return strtolower($this->methods[0] ?? 'get');
     }
 
+    /**
+     * Every documentable HTTP method this route answers (lower-case, deduped, `HEAD` dropped): a
+     * route registered for several verbs (`Route::match(['put','patch'], …)`) documents ONE
+     * operation per method (arch F8), so `PUT|PATCH` yields two operations under the same path and
+     * `GET|POST` correctly documents a query operation and a body operation. Falls back to the
+     * primary method when nothing documentable remains.
+     *
+     * @return list<string>
+     */
+    public function documentableMethods(): array
+    {
+        $methods = [];
+        foreach ($this->methods as $method) {
+            if (strtoupper($method) === 'HEAD') {
+                continue;
+            }
+            $lower = strtolower($method);
+            if (! in_array($lower, $methods, true)) {
+                $methods[] = $lower;
+            }
+        }
+
+        return $methods === [] ? [$this->primaryMethod()] : $methods;
+    }
+
     /** A stable, human-readable signature for diagnostics: `GET /api/forms`. */
     public function signature(): string
     {

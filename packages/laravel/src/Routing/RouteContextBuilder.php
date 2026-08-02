@@ -48,6 +48,7 @@ final class RouteContextBuilder
         array $exceptionMappers,
         array $ruleTransformers,
         ComponentRegistry $components,
+        ?string $method = null,
     ): ?RouteContext {
         $route = $this->locate($descriptor);
         if ($route === null) {
@@ -79,6 +80,7 @@ final class RouteContextBuilder
             description: $prose['description'],
             components: $components,
             pathResolver: $this->pathResolver,
+            documentedMethod: $method ?? $descriptor->primaryMethod(),
         );
     }
 
