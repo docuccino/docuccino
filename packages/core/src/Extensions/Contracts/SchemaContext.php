@@ -34,6 +34,16 @@ interface SchemaContext
      */
     public function reference(string $name, array $schema, ?string $schemaId = null): array;
 
+    /**
+     * Reserve (and return) the final component name the registry will hoist a named schema under,
+     * before its body is built. The registry is the single owner of component naming and collision
+     * suffixing, so a mapper expanding a self-referential class can point the cycle-breaking `$ref`
+     * at the exact name the schema will land under — callers must never fabricate a component name
+     * (or a `#/components/schemas/…` ref) from a raw short name themselves. `$schemaId` is the
+     * component's identity (an FQCN); reserving the same identity twice returns the same name.
+     */
+    public function reserveComponentName(string $name, string $schemaId): string;
+
     /** The inference engine, for {@see TypeEngine::classMetadata()} class expansion. */
     public function engine(): TypeEngine;
 

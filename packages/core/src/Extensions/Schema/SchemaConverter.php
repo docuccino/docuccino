@@ -71,6 +71,11 @@ final class SchemaConverter implements SchemaContext
         return $this->components->reference($name, $schema, $schemaId);
     }
 
+    public function reserveComponentName(string $name, string $schemaId): string
+    {
+        return $this->components->reserveSchemaName($name, $schemaId);
+    }
+
     public function engine(): TypeEngine
     {
         return $this->typeEngine;

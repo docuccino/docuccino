@@ -108,6 +108,50 @@ it('hoists a class to a component and references it', function (): void {
     expect($registry->schemaIds()['FormData'])->toBe('App\\Data\\FormData');
 });
 
+it('breaks a self-reference cycle with a $ref to the same component', function (): void {
+    $engine = new StubTypeEngine(classes: [
+        'App\\Tree\\Node' => new ClassMetadata('App\\Tree\\Node', [
+            new PropertyMetadata('parent', new ClassT('App\\Tree\\Node')),
+            new PropertyMetadata('label', ScalarT::string()),
+        ]),
+    ]);
+
+    $registry = new ComponentRegistry;
+    $result = (new SchemaConverter(DefaultTypeMappers::all(), $engine, $registry))
+        ->toSchema(new ClassT('App\\Tree\\Node'));
+
+    expect($result->schema)->toBe(['$ref' => '#/components/schemas/Node'])
+        ->and($registry->schemas()['Node']['properties']['parent'])->toBe(['$ref' => '#/components/schemas/Node']);
+});
+
+it('points a self-reference at the suffixed name when the short name collides', function (): void {
+    // Two distinct classes short to "Node"; the second is self-referential. Its cycle-breaking
+    // $ref must target the suffixed component (Node_2) the registry hoists it under, not the
+    // first class's "Node" — the registry, not the mapper, owns component naming.
+    $engine = new StubTypeEngine(classes: [
+        'App\\A\\Node' => new ClassMetadata('App\\A\\Node', [
+            new PropertyMetadata('id', ScalarT::int()),
+        ]),
+        'App\\B\\Node' => new ClassMetadata('App\\B\\Node', [
+            new PropertyMetadata('parent', new ClassT('App\\B\\Node')),
+            new PropertyMetadata('label', ScalarT::string()),
+        ]),
+    ]);
+
+    $registry = new ComponentRegistry;
+    $converter = new SchemaConverter(DefaultTypeMappers::all(), $engine, $registry);
+
+    $converter->toSchema(new ClassT('App\\A\\Node'));
+    $second = $converter->toSchema(new ClassT('App\\B\\Node'));
+
+    expect($second->schema)->toBe(['$ref' => '#/components/schemas/Node_2'])
+        ->and($registry->schemas())->toHaveKeys(['Node', 'Node_2'])
+        ->and($registry->schemas()['Node_2']['properties']['parent'])->toBe(['$ref' => '#/components/schemas/Node_2'])
+        ->and($registry->schemaIds()['Node_2'])->toBe('App\\B\\Node')
+        ->and($registry->diagnostics())->toHaveCount(1)
+        ->and($registry->diagnostics()[0]->code)->toBe('components.name-collision');
+});
+
 it('degrades an unexpandable class to a bare object at low confidence', function (): void {
     $result = (new SchemaConverter(DefaultTypeMappers::all(), new StubTypeEngine, new ComponentRegistry))
         ->toSchema(new ClassT('App\\Unknown'));

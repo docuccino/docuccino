@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Support\Fqcn;
 
 /**
  * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`
@@ -26,7 +27,9 @@ use Docuccino\Core\Inference\DType\UnionT;
 final class ClassTypeToSchema implements TypeToSchema
 {
     /**
-     * @var array<string, true> FQCNs currently mid-expansion, for cycle breaking
+     * @var array<string, string> FQCN currently mid-expansion → its reserved component name,
+     *                            so a self-reference points its cycle-breaking `$ref` at the
+     *                            exact (possibly suffixed) name the registry will hoist it under
      */
     private array $expanding = [];
 
@@ -42,10 +45,11 @@ final class ClassTypeToSchema implements TypeToSchema
         }
 
         $fqcn = $type->fqcn;
-        $name = self::shortName($fqcn);
 
         if (isset($this->expanding[$fqcn])) {
-            return new SchemaResult(['$ref' => '#/components/schemas/'.$name], 0.9);
+            // Self-reference mid-expansion: point the cycle-breaking $ref at the name the registry
+            // reserved for this class up front (below), so a collision suffix is honoured here too.
+            return new SchemaResult(['$ref' => '#/components/schemas/'.$this->expanding[$fqcn]], 0.9);
         }
 
         $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
@@ -54,7 +58,10 @@ final class ClassTypeToSchema implements TypeToSchema
             return new SchemaResult(['type' => 'object'], 0.4);
         }
 
-        $this->expanding[$fqcn] = true;
+        // Reserve the final component name before expanding the body — the registry owns naming, so
+        // a self-reference discovered below resolves to the same (possibly suffixed) name.
+        $name = $context->reserveComponentName(Fqcn::short($fqcn), $fqcn);
+        $this->expanding[$fqcn] = $name;
 
         $properties = [];
         $required = [];
@@ -92,12 +99,5 @@ final class ClassTypeToSchema implements TypeToSchema
         }
 
         return false;
-    }
-
-    private static function shortName(string $fqcn): string
-    {
-        $pos = strrpos($fqcn, '\\');
-
-        return $pos === false ? $fqcn : substr($fqcn, $pos + 1);
     }
 }

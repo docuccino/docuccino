@@ -16,6 +16,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Support\Fqcn;
 use Docuccino\Laravel\Support\ConfinedPath;
 
 /**
@@ -116,10 +117,7 @@ final class AttributeOverridesExtension implements OperationExtension
             return $context->route->name;
         }
 
-        $position = strrpos($class, '\\');
-        $short = $position === false ? $class : substr($class, $position + 1);
-
-        return $short.'@'.$context->actionRef->method;
+        return Fqcn::short($class).'@'.$context->actionRef->method;
     }
 
     /**

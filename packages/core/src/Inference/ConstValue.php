@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Inference;
 
+use Docuccino\Core\Support\Fqcn;
+
 /**
  * A constant value recovered by {@see TypeScope::constantValueOf()}. Closed set:
  *
@@ -169,8 +171,7 @@ final readonly class ConstValue
         $class = $sep === false ? $factory : substr($factory, 0, $sep);
         $method = $sep === false ? null : substr($factory, $sep + 2);
 
-        $pos = strrpos($class, '\\');
-        $shortClass = $pos !== false ? substr($class, $pos + 1) : $class;
+        $shortClass = Fqcn::short($class);
 
         return $method === null ? $shortClass : $shortClass.'::'.$method;
     }

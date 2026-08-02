@@ -29,6 +29,14 @@ final class ComponentRegistry
     private array $schemaIds = [];
 
     /**
+     * Names reserved for a schema identity before its body is materialised, so a self-reference
+     * discovered mid-expansion resolves to the same (possibly suffixed) name.
+     *
+     * @var array<string, string> final name → schemaId
+     */
+    private array $reservedIds = [];
+
+    /**
      * @var array<string, array<string, mixed>>
      */
     private array $responses = [];
@@ -57,18 +65,30 @@ final class ComponentRegistry
      */
     public function registerSchema(string $name, array $schema, ?string $schemaId = null): string
     {
-        // A component with this exact identity (e.g. the same class FQCN) already exists —
-        // reuse it so one class hoists to one component regardless of how often it is referenced.
         if ($schemaId !== null) {
+            // A component with this exact identity (e.g. the same class FQCN) already exists —
+            // reuse it so one class hoists to one component regardless of how often it is referenced.
             $existing = array_search($schemaId, $this->schemaIds, true);
             if ($existing !== false) {
                 return (string) $existing;
+            }
+
+            // Materialise into the name reserved up front for this identity (a self-referential
+            // class whose cycle-breaking $ref was already handed out during expansion).
+            $reserved = array_search($schemaId, $this->reservedIds, true);
+            if ($reserved !== false) {
+                $reserved = (string) $reserved;
+                unset($this->reservedIds[$reserved]);
+                $this->schemas[$reserved] = $schema;
+                $this->schemaIds[$reserved] = $schemaId;
+
+                return $reserved;
             }
         }
 
         $name = self::sanitize($name);
 
-        if (! isset($this->schemas[$name])) {
+        if (! isset($this->schemas[$name]) && ! isset($this->reservedIds[$name])) {
             $this->schemas[$name] = $schema;
             if ($schemaId !== null) {
                 $this->schemaIds[$name] = $schemaId;
@@ -77,13 +97,16 @@ final class ComponentRegistry
             return $name;
         }
 
-        if (self::structurallyEqual($this->schemas[$name], $schema)) {
+        if (isset($this->schemas[$name]) && self::structurallyEqual($this->schemas[$name], $schema)) {
             return $name;
         }
 
         $suffixed = $name;
         $n = 1;
-        while (isset($this->schemas[$suffixed]) && ! self::structurallyEqual($this->schemas[$suffixed], $schema)) {
+        while (
+            (isset($this->schemas[$suffixed]) && ! self::structurallyEqual($this->schemas[$suffixed], $schema))
+            || isset($this->reservedIds[$suffixed])
+        ) {
             $n++;
             $suffixed = $name.'_'.$n;
         }
@@ -105,29 +128,75 @@ final class ComponentRegistry
     }
 
     /**
+     * Reserve (and return) the final component name for a schema identity before its body is built,
+     * so a self-reference discovered mid-expansion can point its `$ref` at the exact name — including
+     * any collision suffix — the schema will materialise under. The registry is the single owner of
+     * component naming: reserving the same identity twice returns the same name, and a reserved name
+     * occupies the namespace so a different identity is suffixed past it.
+     */
+    public function reserveSchemaName(string $name, string $schemaId): string
+    {
+        // Already materialised or reserved under this identity — reuse that name.
+        $existing = array_search($schemaId, $this->schemaIds, true);
+        if ($existing !== false) {
+            return (string) $existing;
+        }
+        $reserved = array_search($schemaId, $this->reservedIds, true);
+        if ($reserved !== false) {
+            return (string) $reserved;
+        }
+
+        $name = self::sanitize($name);
+        $final = $name;
+        $n = 1;
+        while (isset($this->schemas[$final]) || isset($this->reservedIds[$final])) {
+            $n++;
+            $final = $name.'_'.$n;
+        }
+
+        // A reserved schema is always its own component (it is being expanded because something
+        // references it), so a suffix here is a genuine collision — warn as the register path does.
+        if ($final !== $name) {
+            $this->diagnostics[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'components.name-collision',
+                message: sprintf('Two distinct schemas claimed component name "%s"; the second was hoisted as "%s".', $name, $final),
+                help: 'Disambiguate with #[SchemaName] on one of the source classes.',
+            );
+        }
+
+        $this->reservedIds[$final] = $schemaId;
+
+        return $final;
+    }
+
+    /**
      * A restorable snapshot of the whole registry, so a route that fails mid-pipeline after
      * registering components can be rolled back — leaving no orphaned schemas/responses/diagnostics
-     * from a route that never made it into the document (design §5 isolated try/catch).
+     * (or leaked name reservations) from a route that never made it into the document
+     * (design §5 isolated try/catch).
      *
-     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
      */
     public function snapshot(): array
     {
         return [
             'schemas' => $this->schemas,
             'schemaIds' => $this->schemaIds,
+            'reservedIds' => $this->reservedIds,
             'responses' => $this->responses,
             'diagnostics' => $this->diagnostics,
         ];
     }
 
     /**
-     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
      */
     public function restore(array $snapshot): void
     {
         $this->schemas = $snapshot['schemas'];
         $this->schemaIds = $snapshot['schemaIds'];
+        $this->reservedIds = $snapshot['reservedIds'];
         $this->responses = $snapshot['responses'];
         $this->diagnostics = $snapshot['diagnostics'];
     }
