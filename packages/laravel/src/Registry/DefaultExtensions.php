@@ -16,6 +16,7 @@ use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
+use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 
@@ -52,6 +53,9 @@ final class DefaultExtensions
             // Reflection-rich enum schemas (backing values, #[CaseDescription] → x-enumDescriptions);
             // ordered ahead of the core case-names-only mapper.
             EnumSchema::class,
+            // Conditional integrations (Telescope-style class_exists guard): registered only when the
+            // target package is installed, so docuccino/laravel never hard-requires it.
+            ...(SpatieDataIntegration::installed() ? SpatieDataIntegration::extensions() : []),
             ...DefaultTypeMappers::all(),
         ];
     }
