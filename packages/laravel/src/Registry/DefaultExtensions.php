@@ -14,6 +14,7 @@ use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
+use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
@@ -53,6 +54,9 @@ final class DefaultExtensions
             // Reflection-rich enum schemas (backing values, #[CaseDescription] → x-enumDescriptions);
             // ordered ahead of the core case-names-only mapper.
             EnumSchema::class,
+            // API Resources (always-on; illuminate/http ships everywhere) — JsonResource toArray
+            // shapes + Laravel 13 first-party JSON:API (added only when its class exists).
+            ...ApiResourcesIntegration::extensions(),
             // Conditional integrations (Telescope-style class_exists guard): registered only when the
             // target package is installed, so docuccino/laravel never hard-requires it.
             ...(SpatieDataIntegration::installed() ? SpatieDataIntegration::extensions() : []),
