@@ -73,6 +73,7 @@ final class RouteContext
         public readonly ComponentRegistry $components = new ComponentRegistry,
         public readonly ?SourcePathResolver $pathResolver = null,
         public readonly ?string $documentedMethod = null,
+        public readonly bool $allowsTrashedBindings = false,
     ) {
         $this->dependencies = new RouteDependencies;
     }

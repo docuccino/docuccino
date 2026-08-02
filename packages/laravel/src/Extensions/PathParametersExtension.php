@@ -17,10 +17,16 @@ use Docuccino\Core\Patch\Contribution;
  * A parameter bound to a model gets an integer schema (Laravel's default `id` route key); an
  * unbound segment is a required string. Attribute `#[PathParameter]` refines these later through
  * the higher attribute layer.
+ *
+ * When the route allows trashed bindings (`->withTrashed()`), each bound parameter is flagged: a note
+ * is appended to its description and a stable `x-docuccino.routeBinding.withTrashed` semantic fact is
+ * recorded, so consumers know a soft-deleted record resolves here.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class PathParametersExtension implements OperationExtension
 {
+    private const TRASHED_NOTE = 'Resolves soft-deleted (trashed) records as well as active ones.';
+
     public function phase(): OperationPhase
     {
         return OperationPhase::Parameters;
@@ -38,6 +44,11 @@ final class PathParametersExtension implements OperationExtension
 
             $parameter->setRequired(! in_array($name, $context->optionalPathParameters, true), $contribution);
             $parameter->schema()->set('type', $isBound ? 'integer' : 'string', $contribution);
+
+            if ($isBound && $context->allowsTrashedBindings) {
+                $parameter->setDescription(self::TRASHED_NOTE, $contribution);
+                $parameter->setDocuccinoFact('routeBinding', ['withTrashed' => true]);
+            }
         }
     }
 }

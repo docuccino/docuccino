@@ -116,6 +116,19 @@ it('drops a field written with the Remove sentinel while keeping siblings', func
     expect($operation->toArray())->not->toHaveKey('deprecated');
 });
 
+it('carries a parameter x-docuccino semantic fact through freeze alongside id/provenance', function (): void {
+    $draft = new OperationDraft;
+    $parameter = $draft->parameter('path', 'form');
+    $parameter->assignId('par:v1:bbbbbbbbbbbbbbbb');
+    $parameter->schema()->set('type', 'integer', Contribution::inference());
+    $parameter->setDocuccinoFact('routeBinding', ['withTrashed' => true]);
+
+    $frozen = $parameter->freeze()->toArray();
+
+    expect($frozen['x-docuccino']['id'])->toBe('par:v1:bbbbbbbbbbbbbbbb')
+        ->and($frozen['x-docuccino']['routeBinding'])->toBe(['withTrashed' => true]);
+});
+
 it('carries schema mock hints through freeze into x-docuccino.mock', function (): void {
     $schema = (new SchemaDraft)->assignMock(['faker' => 'numberBetween:1,100']);
     $schema->set('type', 'integer', Contribution::inference());

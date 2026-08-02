@@ -21,6 +21,15 @@ final class ParameterDraft
 
     private readonly SchemaDraft $schema;
 
+    /**
+     * Additive semantic facts an integration records under this parameter's `x-docuccino` (design
+     * §Representation policies — facts stay stable regardless of representation). Not contested
+     * fields, so they bypass the guard.
+     *
+     * @var array<string, mixed>
+     */
+    private array $facts = [];
+
     private ?string $id = null;
 
     public function __construct(
@@ -54,6 +63,12 @@ final class ParameterDraft
     public function schema(): SchemaDraft
     {
         return $this->schema;
+    }
+
+    /** Record an additive `x-docuccino` semantic fact on this parameter (e.g. a route-binding note). */
+    public function setDocuccinoFact(string $key, mixed $value): void
+    {
+        $this->facts[$key] = $value;
     }
 
     public function guard(): PatchGuard
@@ -95,7 +110,7 @@ final class ParameterDraft
         $schema = $this->schema->freeze();
         $schemaOrNull = $schema->toArray() === [] ? null : $schema;
 
-        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance(), rest: $this->facts);
 
         return new Parameter(
             name: $this->name,

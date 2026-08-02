@@ -87,6 +87,7 @@ final class RouteContextBuilder
             components: $components,
             pathResolver: $this->pathResolver,
             documentedMethod: $method ?? $descriptor->primaryMethod(),
+            allowsTrashedBindings: $route->allowsTrashedBindings(),
         );
     }
 
