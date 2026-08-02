@@ -112,7 +112,8 @@ return [
     'on_route_error' => 'skeleton', // 'skeleton' | 'omit'
 
     'cache' => [
-        'enabled' => false,
-        'store' => null,
+        'enabled' => false,   // OperationFragment cache (design §10): incremental builds, off by default
+        'store' => null,      // Laravel cache store for the runtime document cache (docuccino:cache)
+        // 'path' => null,    // fragment cache directory (defaults to storage_path('docuccino/fragments'))
     ],
 ];

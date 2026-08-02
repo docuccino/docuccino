@@ -46,4 +46,25 @@ final readonly class ResolvedExtensions
             static fn (OperationExtension $extension): bool => $extension->phase() === $phase,
         ));
     }
+
+    /**
+     * The deduped class-string list of every resolved extension, in a deterministic order — a
+     * fragment-cache key input (design §10): a changed extension set must invalidate every fragment.
+     *
+     * @return list<string>
+     */
+    public function classSignature(): array
+    {
+        $classes = [];
+        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers] as $partition) {
+            foreach ($partition as $extension) {
+                $classes[$extension::class] = true;
+            }
+        }
+
+        $names = array_keys($classes);
+        sort($names);
+
+        return $names;
+    }
 }

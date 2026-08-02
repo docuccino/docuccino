@@ -17,6 +17,7 @@ use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Runtime\DocumentCache;
@@ -85,6 +86,21 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(DocumentGenerator::class)
             ->needs('$generatorVersion')
             ->give(self::VERSION);
+
+        // The OperationFragment cache (design §10): filesystem, off by default.
+        $this->app->bind(FragmentCache::class, function (Application $app): FragmentCache {
+            /** @var array<string, mixed> $cache */
+            $cache = (array) config('docuccino.cache', []);
+            $path = is_string($cache['path'] ?? null) ? $cache['path'] : $app->storagePath('docuccino/fragments');
+
+            return new FragmentCache(
+                enabled: (bool) ($cache['enabled'] ?? false),
+                path: str_starts_with($path, '/') ? $path : $app->basePath($path),
+                toolVersion: self::VERSION,
+                specVersion: '1.0.0',
+                identityVersion: 'v1',
+            );
+        });
 
         $this->app->when(DocumentBuilder::class)
             ->needs('$basePath')

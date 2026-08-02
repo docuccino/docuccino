@@ -41,6 +41,7 @@ final class DocumentGenerator
         private readonly Assembler $assembler,
         private readonly Validator $validator,
         private readonly string $generatorVersion,
+        private readonly FragmentCache $cache = new FragmentCache(false, '', '', '', ''),
         private readonly IdentityGenerator $identity = new IdentityGenerator,
     ) {}
 
@@ -59,9 +60,12 @@ final class DocumentGenerator
         $components = new ComponentRegistry;
         $bag = new DiagnosticBag;
 
+        $configHash = $this->configHash($document);
+        $extensionClasses = $resolved->classSignature();
+
         $fragments = [];
         foreach ($this->descriptors($resolved, $document) as $descriptor) {
-            $fragment = $this->processRoute($descriptor, $document, $documentId, $engine, $resolved, $components, $bag);
+            $fragment = $this->processRoute($descriptor, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
             if ($fragment !== null) {
                 $fragments[] = $fragment;
                 $bag->addAll($fragment->diagnostics);
@@ -108,6 +112,9 @@ final class DocumentGenerator
         return array_values($descriptors);
     }
 
+    /**
+     * @param  list<string>  $extensionClasses
+     */
     private function processRoute(
         RouteDescriptor $descriptor,
         DocumentConfig $document,
@@ -116,10 +123,21 @@ final class DocumentGenerator
         ResolvedExtensions $resolved,
         ComponentRegistry $components,
         DiagnosticBag $bag,
+        string $configHash,
+        array $extensionClasses,
     ): ?OperationFragment {
         $method = $descriptor->primaryMethod();
         $path = $this->oasPath($descriptor->uri);
         $signature = $descriptor->signature();
+
+        $cacheKey = $this->cache->key($signature, $configHash, $extensionClasses);
+        $cached = $this->cache->get($cacheKey);
+        if ($cached !== null) {
+            // Warm hit: restore the route's components without touching the type engine (design §10).
+            $this->restoreComponents($cached, $components);
+
+            return $cached;
+        }
 
         try {
             $context = $this->contextBuilder->build(
@@ -135,15 +153,82 @@ final class DocumentGenerator
                 return $this->onFailure($descriptor, $document, $documentId, $path, $method, 'action could not be reflected', $bag);
             }
 
+            $before = array_keys($components->schemas());
+
             $operation = new OperationDraft;
             $this->pipeline->run($operation, $context, $resolved);
-            $this->collectAnalysisDiagnostics($context, $signature, $bag);
+            $diagnostics = $this->analysisDiagnostics($context, $signature);
             $this->assignIds($operation, $documentId, $method, $path);
 
-            return new OperationFragment($path, $method, $operation->freeze(), $signature);
+            [$deltaSchemas, $deltaSchemaIds] = $this->componentDelta($components, $before);
+
+            $fragment = new OperationFragment($path, $method, $operation->freeze(), $signature, $diagnostics, $deltaSchemas, $deltaSchemaIds);
+            $this->cache->put($cacheKey, $fragment, $context->analysis()->dependencyFiles);
+
+            return $fragment;
         } catch (Throwable $exception) {
             return $this->onFailure($descriptor, $document, $documentId, $path, $method, $exception->getMessage(), $bag);
         }
+    }
+
+    /**
+     * The schema components this route newly registered (its delta of the shared registry), so the
+     * fragment can carry — and later restore — exactly what it contributed.
+     *
+     * @param  list<string>  $before  component names present before the route ran
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>}
+     */
+    private function componentDelta(ComponentRegistry $components, array $before): array
+    {
+        $schemas = [];
+        $schemaIds = [];
+        $ids = $components->schemaIds();
+
+        foreach ($components->schemas() as $name => $schema) {
+            if (in_array($name, $before, true)) {
+                continue;
+            }
+
+            $schemas[$name] = $schema;
+            if (isset($ids[$name])) {
+                $schemaIds[$name] = $ids[$name];
+            }
+        }
+
+        return [$schemas, $schemaIds];
+    }
+
+    private function restoreComponents(OperationFragment $fragment, ComponentRegistry $components): void
+    {
+        foreach ($fragment->componentSchemas as $name => $schema) {
+            $components->registerSchema($name, $schema, $fragment->componentSchemaIds[$name] ?? null);
+        }
+    }
+
+    /**
+     * @return string a deterministic fingerprint of the document config (a fragment-cache key input)
+     */
+    private function configHash(DocumentConfig $document): string
+    {
+        $encoded = json_encode($this->normalize($document->raw));
+
+        return hash('sha256', $encoded === false ? $document->key : $encoded);
+    }
+
+    private function normalize(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return is_object($value) ? $value::class : $value;
+        }
+
+        $keys = array_keys($value);
+        sort($keys);
+        $out = [];
+        foreach ($keys as $key) {
+            $out[(string) $key] = $this->normalize($value[$key]);
+        }
+
+        return $out;
     }
 
     private function onFailure(
@@ -184,18 +269,28 @@ final class DocumentGenerator
         );
     }
 
-    private function collectAnalysisDiagnostics(RouteContext $context, string $signature, DiagnosticBag $bag): void
+    /**
+     * The route's analysis diagnostics, tagged with its signature — returned so they live on the
+     * fragment (and are therefore cached and replayed on a warm hit) rather than added straight to
+     * the document bag.
+     *
+     * @return list<Diagnostic>
+     */
+    private function analysisDiagnostics(RouteContext $context, string $signature): array
     {
+        $diagnostics = [];
         foreach ($context->analysis()->diagnostics as $diagnostic) {
-            $bag->add(new Diagnostic(
+            $diagnostics[] = new Diagnostic(
                 severity: $diagnostic->severity,
                 code: $diagnostic->code,
                 message: $diagnostic->message,
                 source: $diagnostic->source,
                 routeSignature: $diagnostic->routeSignature ?? $signature,
                 help: $diagnostic->help,
-            ));
+            );
         }
+
+        return $diagnostics;
     }
 
     private function oasPath(string $uri): string
