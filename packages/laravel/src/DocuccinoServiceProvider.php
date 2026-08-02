@@ -41,11 +41,13 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $package
             ->name('docuccino')
             ->hasConfigFile()
-            ->hasCommand(ExportCommand::class)
-            ->hasCommand(ValidateCommand::class)
-            ->hasCommand(DiffCommand::class)
-            ->hasCommand(CacheCommand::class)
-            ->hasCommand(ClearCommand::class);
+            ->hasCommands([
+                ExportCommand::class,
+                ValidateCommand::class,
+                DiffCommand::class,
+                CacheCommand::class,
+                ClearCommand::class,
+            ]);
     }
 
     public function packageRegistered(): void

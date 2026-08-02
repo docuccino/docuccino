@@ -31,10 +31,15 @@ use Throwable;
  * diagnostics. A broken route yields a skeleton (or is omitted) and an error diagnostic — never a
  * dead build.
  *
+ * Responsibility split: this is the pipeline itself; {@see DocumentBuilder} is the config-facade
+ * callers use to feed it (resolved config, overlays, config extensions).
+ *
  * @internal
  */
 final class DocumentGenerator
 {
+    private readonly FragmentCache $cache;
+
     public function __construct(
         private readonly ExtensionRegistry $registry,
         private readonly Container $container,
@@ -43,9 +48,11 @@ final class DocumentGenerator
         private readonly Assembler $assembler,
         private readonly Validator $validator,
         private readonly string $generatorVersion,
-        private readonly FragmentCache $cache = new FragmentCache(false, '', '', '', ''),
+        ?FragmentCache $cache = null,
         private readonly IdentityGenerator $identity = new IdentityGenerator,
-    ) {}
+    ) {
+        $this->cache = $cache ?? FragmentCache::disabled();
+    }
 
     /**
      * @param  list<class-string|object>  $configExtensions

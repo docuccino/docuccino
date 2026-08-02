@@ -23,6 +23,9 @@ use Symfony\Component\Yaml\Yaml;
  * warning diagnostic rather than a fatal), merges the config extensions, and runs the pipeline.
  * Centralising this keeps export/validate/diff/cache/viewer on one identical build path.
  *
+ * Responsibility split: this is the config-facade — it turns configuration + files into inputs and
+ * delegates the actual route→operation→assemble→validate pipeline to {@see DocumentGenerator}.
+ *
  * @internal
  */
 final class DocumentBuilder

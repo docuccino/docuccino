@@ -20,6 +20,19 @@ final class Hydrate
         return is_string($value) ? $value : null;
     }
 
+    /**
+     * A string value, coercing any other scalar (int/float/bool) to its string form, and falling
+     * back to `$default` for null/array/object. The shape every `info.version` / `uir` read uses.
+     */
+    public static function stringOr(mixed $value, string $default): string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        return is_scalar($value) ? (string) $value : $default;
+    }
+
     public static function boolOrNull(mixed $value): ?bool
     {
         return is_bool($value) ? $value : null;

@@ -12,6 +12,7 @@ use Docuccino\Core\Diff\Policy\PolicyVerdict;
 use Docuccino\Core\Diff\Policy\VersioningPolicies;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
@@ -170,9 +171,7 @@ final class DiffCommand extends Command
 
     private static function versionOf(UirDocument $document): string
     {
-        $version = $document->info['version'] ?? null;
-
-        return is_string($version) ? $version : (is_scalar($version) ? (string) $version : '');
+        return Hydrate::stringOr($document->info['version'] ?? null, '');
     }
 
     private function render(string $key, Changeset $changeset, ?PolicyVerdict $verdict): void

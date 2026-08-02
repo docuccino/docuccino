@@ -36,6 +36,12 @@ final readonly class FragmentCache
         private string $identityVersion,
     ) {}
 
+    /** A no-op cache: every lookup misses and nothing is stored (design §10, the off-by-default state). */
+    public static function disabled(): self
+    {
+        return new self(false, '', '', '', '');
+    }
+
     public function enabled(): bool
     {
         return $this->enabled;

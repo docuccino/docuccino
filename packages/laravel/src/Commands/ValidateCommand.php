@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Illuminate\Console\Command;
 
@@ -67,6 +68,6 @@ final class ValidateCommand extends Command
      */
     private function uirVersion(array $document): string
     {
-        return is_string($document['uir'] ?? null) ? $document['uir'] : '1.0.0';
+        return Hydrate::stringOr($document['uir'] ?? null, '1.0.0');
     }
 }

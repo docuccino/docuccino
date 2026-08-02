@@ -95,13 +95,8 @@ final readonly class DocumentConfigFactory
         }
 
         $info['title'] = is_string($info['title'] ?? null) ? $info['title'] : 'API Documentation';
-        $info['version'] = self::stringifyVersion($info['version'] ?? '1.0.0');
+        $info['version'] = Hydrate::stringOr($info['version'] ?? '1.0.0', '1.0.0');
 
         return $info;
-    }
-
-    private static function stringifyVersion(mixed $version): string
-    {
-        return is_string($version) ? $version : (is_scalar($version) ? (string) $version : '1.0.0');
     }
 }
