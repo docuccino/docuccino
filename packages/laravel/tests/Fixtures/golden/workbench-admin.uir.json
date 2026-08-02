@@ -106,11 +106,24 @@
           },
           "name": {
             "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            }
           }
         },
         "required": [
           "id",
-          "name"
+          "name",
+          "status"
         ]
       }
     }
@@ -119,7 +132,7 @@
     "document": {
       "id": "doc:admin",
       "configHash": "f7ea3a4314fc0a4ece2303d4e9a87bb93318ea2d6fd4c67951fa4bab3284a741",
-      "contentHash": "4be8306892f71dc06899650ae34390dfd7a2bcfb3767243b7a358978554df6e1"
+      "contentHash": "b7619d361e8f0bfca5a60572edae06a3d00f532f6d90f037029a23b5e75f4900"
     },
     "generator": {
       "name": "docuccino/laravel",

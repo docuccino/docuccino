@@ -10,6 +10,7 @@ use Orchestra\Testbench\TestCase as Orchestra;
 use Workbench\App\Http\Controllers\BrokenController;
 use Workbench\App\Http\Controllers\FormController;
 use Workbench\App\Http\Controllers\SecretController;
+use Workbench\App\Http\Controllers\ValidationController;
 use Workbench\App\Http\Controllers\WidgetController;
 
 /**
@@ -33,6 +34,7 @@ abstract class TestCase extends Orchestra
         $router->get('api/forms', [FormController::class, 'index']);
         $router->get('api/forms/{form}', [FormController::class, 'show']);
         $router->post('api/widgets', [WidgetController::class, 'store']);
+        $router->post('api/tickets', [ValidationController::class, 'store']);
         $router->get('api/secret', [SecretController::class, 'index']);
         $router->get('api/broken', [BrokenController::class, 'ghost']);
         $router->get('api/ping', static fn () => response()->json(['pong' => true]));

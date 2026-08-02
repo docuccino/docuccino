@@ -83,6 +83,65 @@
     "/api/ping": {
       "get": {}
     },
+    "/api/tickets": {
+      "post": {
+        "tags": [
+          "Widgets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "avatar": {
+                    "description": "An image file.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "binary"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "user"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "quantity",
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created widget.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/widgets": {
       "post": {
         "summary": "Create a widget.",
@@ -147,11 +206,24 @@
           },
           "name": {
             "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            }
           }
         },
         "required": [
           "id",
-          "name"
+          "name",
+          "status"
         ]
       }
     }

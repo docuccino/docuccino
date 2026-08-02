@@ -256,6 +256,134 @@
         }
       }
     },
+    "/api/tickets": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:nt42id4qd5knmk5n",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ValidationController.php",
+                "line": 21,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ValidationController::store"
+              }
+            },
+            {
+              "producer": "integration:validation",
+              "layer": "integration",
+              "fields": [
+                "requestBody"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/ValidationController.php",
+                "line": 21,
+                "symbol": "Workbench\\App\\Http\\Controllers\\ValidationController::store"
+              }
+            }
+          ]
+        },
+        "tags": [
+          "Widgets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "avatar": {
+                    "description": "An image file.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "binary"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "user"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "quantity",
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "x-docuccino": {
+              "id": "res:v1:2hqupafe2tq3kc5w",
+              "provenance": [
+                {
+                  "producer": "attribute",
+                  "layer": "attribute",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ValidationController.php",
+                    "line": 21,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\ValidationController::store"
+                  },
+                  "overrode": [
+                    {
+                      "field": "description",
+                      "value": "OK",
+                      "producer": "fallback"
+                    }
+                  ]
+                }
+              ]
+            },
+            "description": "The created widget.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "attribute",
+                        "layer": "attribute",
+                        "fields": [
+                          "$ref"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/ValidationController.php",
+                          "line": 21,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\ValidationController::store"
+                        }
+                      }
+                    ]
+                  },
+                  "$ref": "#/components/schemas/WidgetData"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/widgets": {
       "post": {
         "x-docuccino": {
@@ -425,11 +553,24 @@
           },
           "name": {
             "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "x-enumDescriptions": {
+              "draft": "Not yet visible to applicants.",
+              "published": "Live and accepting traffic."
+            }
           }
         },
         "required": [
           "id",
-          "name"
+          "name",
+          "status"
         ]
       }
     }
@@ -438,7 +579,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "a97d5ea2e68d1b05feb07773ba214c9cee7f8c7bc84b31616e0bfba55cc03571",
-      "contentHash": "fe0f4ece3e3bb0bab7362dca56359ca4afc6fb10147bc1dff08e570a32f7935a"
+      "contentHash": "be205fbaa0cede35f1f2961d133f77b5a599cb34f7b28cb01338a120dec6fbda"
     },
     "generator": {
       "name": "docuccino/laravel",
