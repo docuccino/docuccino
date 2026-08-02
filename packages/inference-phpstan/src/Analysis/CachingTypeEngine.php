@@ -6,6 +6,7 @@ namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\TraceReport;
@@ -44,6 +45,14 @@ final readonly class CachingTypeEngine implements TypeEngine
         $this->cache->putAction($action, $analysis, $this->fingerprint);
 
         return $analysis;
+    }
+
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        // Not cached at the engine level: the inferred-handler integration records the handler
+        // files it read into the route's dependency set, so the pipeline's OperationFragment cache
+        // (design §10) already invalidates the whole route when a handler changes.
+        return $this->inner->analyzeCallable($callable);
     }
 
     public function classMetadata(ClassRef $class): ClassMetadata

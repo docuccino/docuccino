@@ -14,15 +14,17 @@ declare(strict_types=1);
  * PSR-4 map for the docuccino packages under test.
  *
  * Usage:
- *   php engine-runner.php analyze        <controllerFile> <class> <method>
- *   php engine-runner.php trace-qb       <controllerFile> <class> <method>
- *   php engine-runner.php class-metadata <ignored>        <class>
+ *   php engine-runner.php analyze         <controllerFile> <class> <method>
+ *   php engine-runner.php trace-qb        <controllerFile> <class> <method>
+ *   php engine-runner.php class-metadata  <ignored>        <class>
+ *   php engine-runner.php analyze-callable <file> <class> <method> <line> <narrowParam> <narrowType>
  *
  * Emits `@@RESULT@@` followed by a single JSON line (so any incidental host
  * output before it is ignored by the caller).
  */
 
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
@@ -59,6 +61,9 @@ $mode = $argv[1] ?? '';
 $file = $argv[2] ?? '';
 $class = $argv[3] ?? '';
 $method = $argv[4] ?? '';
+$line = (int) ($argv[5] ?? 0);
+$narrowParam = ($argv[6] ?? '') === '' ? null : $argv[6];
+$narrowType = ($argv[7] ?? '') === '' ? null : $argv[7];
 
 $tmp = sys_get_temp_dir().'/docuccino-runner-'.getmypid();
 @mkdir($tmp, 0777, true);
@@ -72,6 +77,14 @@ $ref = new ActionRef($file, $class === '' ? null : $class, $method);
 
 $result = match ($mode) {
     'analyze' => $engine->analyzeAction($ref)->toArray(),
+    'analyze-callable' => $engine->analyzeCallable(new CallableRef(
+        $file,
+        $class === '' ? null : $class,
+        $method === '' ? null : $method,
+        $line,
+        $narrowParam,
+        $narrowType,
+    ))->toArray(),
     'class-metadata' => $engine->classMetadata(new ClassRef($class))->toArray(),
     'trace-qb' => (static function () use ($engine, $ref): array {
         $probe = new QueryBuilderProbe;

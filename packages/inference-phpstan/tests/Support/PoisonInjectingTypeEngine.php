@@ -6,6 +6,7 @@ namespace Docuccino\Inference\PhpStan\Tests\Support;
 
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\TraceReport;
@@ -32,6 +33,11 @@ final readonly class PoisonInjectingTypeEngine implements TypeEngine
         }
 
         return $this->inner->analyzeAction($action);
+    }
+
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        return $this->inner->analyzeCallable($callable);
     }
 
     public function classMetadata(ClassRef $class): ClassMetadata

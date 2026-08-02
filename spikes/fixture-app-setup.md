@@ -134,3 +134,24 @@ cp -R spikes/phase-4/fixture-src/app/. spikes/fixture-app/app/
   promoted properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine
   recovers precise property types by reflection. `spatie/laravel-data` is already required
   by the base install above. No routes/migrations/composer changes needed.
+
+## Fixture source authored by Phase 4b wave 2 (inferred exception-handler tier)
+
+Phase 4b's inferred-handler real-engine tests (`packages/inference-phpstan/tests/Integration/
+InferredHandlerTest.php`) analyse a Problem-Details-style catch-all renderer and per-exception
+render-callback closures through the actual engine (narrowed `render(Throwable $e)` analysis +
+closure-by-line). The canonical copies live at `spikes/phase-4b/fixture-src/`; copy them into the
+ignored app the same way:
+
+```bash
+cp -R spikes/phase-4b/fixture-src/app/. spikes/fixture-app/app/
+```
+
+- `app/Exceptions/ProblemRenderer.php` — a `render(Throwable $e): JsonResponse` with sequential
+  `if ($e instanceof …)` branches returning `response()->json($problem, $status)` per exception type
+  (422/401 + a 500 default), so narrowed analysis recovers one branch per thrown type.
+- `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
+  (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by file+line.
+
+No routes/migrations/composer changes needed (`App\Exceptions\OutOfStockException` from Spike C is
+reused).

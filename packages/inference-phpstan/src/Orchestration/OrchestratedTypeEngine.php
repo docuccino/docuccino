@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\UnknownT;
@@ -73,6 +74,13 @@ final class OrchestratedTypeEngine implements TypeEngine
     public function analyzeActions(iterable $actions): array
     {
         return $this->pool->analyze($actions);
+    }
+
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        // Stays in-process like trace()/classMetadata(): a one-off handler analysis per build does
+        // not amortise a worker round-trip, and it feeds the in-process pipeline directly.
+        return $this->inProcess()->analyzeCallable($callable);
     }
 
     public function classMetadata(ClassRef $class): ClassMetadata

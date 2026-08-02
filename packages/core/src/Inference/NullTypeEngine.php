@@ -22,6 +22,11 @@ final readonly class NullTypeEngine implements TypeEngine
         );
     }
 
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        return new ActionAnalysis(dependencyFiles: [$callable->file]);
+    }
+
     public function classMetadata(ClassRef $class): ClassMetadata
     {
         return new ClassMetadata($class->fqcn);

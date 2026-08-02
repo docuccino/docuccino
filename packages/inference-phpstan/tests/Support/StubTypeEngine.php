@@ -8,6 +8,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\UnknownT;
@@ -39,6 +40,15 @@ final readonly class StubTypeEngine implements TypeEngine
                 $action->symbol(),
             )],
             dependencyFiles: [$action->file],
+        );
+    }
+
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        return new ActionAnalysis(
+            returns: [new ReturnSite(new UnknownT('stub'), new SourceLocation($callable->file, $callable->line))],
+            diagnostics: [new Diagnostic(Severity::Info, 'stub.analysed', $callable->symbol())],
+            dependencyFiles: [$callable->file],
         );
     }
 

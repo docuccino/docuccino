@@ -19,6 +19,16 @@ interface TypeEngine
     /** Analyse every return path + escaping exception of an action. */
     public function analyzeAction(ActionRef $action): ActionAnalysis;
 
+    /**
+     * Analyse a non-action callable — an exception handler's `render()`, an exception's own
+     * `render()`/`toResponse()`, or a render-callback closure (design §6 inferred-handler tier).
+     * When the {@see CallableRef} carries a narrowing request, only the return path reachable when
+     * the named parameter is the narrowed exception type is harvested (source-order-first-match over
+     * PHPStan's `instanceof` narrowing), so a catch-all `render(Throwable $e)` yields one exception
+     * type's response per call. Total, like {@see analyzeAction()}.
+     */
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis;
+
     /** Expand a class's shape (properties, docblocks); lazy + memoised. */
     public function classMetadata(ClassRef $class): ClassMetadata;
 

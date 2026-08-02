@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Support;
 
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use RuntimeException;
 
@@ -68,9 +69,28 @@ final class FixtureRunner
     }
 
     /**
+     * The real engine's {@see ActionAnalysis} for a non-action callable —
+     * an exception handler `render()` method (pass `$class`+`$method`, optionally a narrowing
+     * `$param`+`$narrowType`) or a render-callback closure located by line (pass `$line`, empty
+     * `$class`/`$method`). Serialized.
+     *
      * @return array<string, mixed>
      */
-    private static function invoke(string $mode, string $file, string $class, string $method): array
+    public static function analyzeCallable(
+        string $relPath,
+        string $class,
+        string $method,
+        int $line = 0,
+        string $param = '',
+        string $narrowType = '',
+    ): array {
+        return self::invoke('analyze-callable', self::path($relPath), $class, $method, (string) $line, $param, $narrowType);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array
     {
         $command = implode(' ', array_map('escapeshellarg', [
             PHP_BINARY,
@@ -79,6 +99,7 @@ final class FixtureRunner
             $file,
             $class,
             $method,
+            ...$extra,
         ])).' 2>/dev/null';
 
         $output = shell_exec($command);

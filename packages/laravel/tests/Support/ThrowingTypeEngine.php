@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Tests\Support;
 
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\TraceReport;
@@ -32,6 +33,11 @@ final class ThrowingTypeEngine implements TypeEngine
         }
 
         return $this->delegate->analyzeAction($action);
+    }
+
+    public function analyzeCallable(CallableRef $callable): ActionAnalysis
+    {
+        return $this->delegate->analyzeCallable($callable);
     }
 
     public function classMetadata(ClassRef $class): ClassMetadata
