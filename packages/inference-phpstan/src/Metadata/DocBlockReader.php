@@ -68,23 +68,10 @@ final class DocBlockReader
      */
     public function read(?string $docComment): array
     {
-        $node = $this->stack->parseDocBlock($docComment);
-        if ($node === null) {
-            return ['summary' => null, 'description' => null];
-        }
-
-        $prose = '';
-        foreach ($node->children as $child) {
-            if ($child instanceof PhpDocTextNode) {
-                $text = trim($child->text);
-                if ($text !== '') {
-                    $prose = $text;
-                    break;
-                }
-            }
-        }
-
-        if ($prose === '') {
+        // Reuse summary()'s first-non-empty-prose scan rather than re-rolling it (the prose-extraction
+        // loop is written once).
+        $prose = $this->summary($docComment);
+        if ($prose === null) {
             return ['summary' => null, 'description' => null];
         }
 

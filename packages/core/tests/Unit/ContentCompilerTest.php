@@ -90,6 +90,40 @@ it('compiles a markdown tree with path-derived slugs, groups and frontmatter ove
     rmdir($dir);
 });
 
+it('clamps nav.type to page for unknown values (mapping-table degradation)', function (string $type, string $expected): void {
+    $dir = compilerDir();
+    file_put_contents($dir.'/getting-started/nav.md', "---\nnav:\n  type: $type\n---\n");
+
+    [$content] = (new ContentCompiler(sys_get_temp_dir()))->compile(configForDir($dir));
+
+    expect($content->pages[0]->navType)->toBe($expected);
+
+    unlink($dir.'/getting-started/nav.md');
+    rmdir($dir.'/getting-started');
+    rmdir($dir);
+})->with([
+    'page passes through' => ['page', 'page'],
+    'operation passes through' => ['operation', 'operation'],
+    'tag passes through' => ['tag', 'tag'],
+    'unknown clamps to page' => ['bogus', 'page'],
+]);
+
+it('degrades ill-typed nav.order and tags frontmatter (order → null, scalar tags → [])', function (): void {
+    $dir = compilerDir();
+    // order is a string (not an int) and tags is a scalar (not a list): both must degrade cleanly.
+    file_put_contents($dir.'/getting-started/bad.md', "---\nnav:\n  order: not-an-int\ntags: single\n---\n");
+
+    [$content] = (new ContentCompiler(sys_get_temp_dir()))->compile(configForDir($dir));
+    $page = $content->pages[0];
+
+    expect($page->order)->toBeNull()
+        ->and($page->tags)->toBe([]);
+
+    unlink($dir.'/getting-started/bad.md');
+    rmdir($dir.'/getting-started');
+    rmdir($dir);
+});
+
 it('reads nav type/ref/hidden overrides and a frontmatter slug/group', function (): void {
     $dir = compilerDir();
     file_put_contents($dir.'/getting-started/op.md', "---\nslug: custom/slug\nnav:\n  type: operation\n  ref: GET /api/forms\n  hidden: true\n  group: Custom Group\n---\n");

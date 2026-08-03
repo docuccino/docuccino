@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ArchiveArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ExplicitMethodAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\HandlelessAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\InheritedArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\PublishArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\SimpleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\WithAttributesAction;
@@ -22,6 +24,7 @@ it('recognises an action by its AsController/AsAction trait', function (string $
 })->with([
     'AsAction umbrella trait' => [PublishArticleAction::class, true],
     'AsController trait directly' => [ArchiveArticleAction::class, true],
+    'trait inherited via a parent class' => [InheritedArticleAction::class, true],
     'plain controller (no trait)' => [FormController::class, false],
 ]);
 
@@ -32,6 +35,9 @@ it('resolves the dispatched controller method across registration styles', funct
     'invokable action with only handle → handle' => [PublishArticleAction::class, '__invoke', 'handle'],
     'invokable minimal action → handle' => [SimpleAction::class, '__invoke', 'handle'],
     'explicit method registration is honoured verbatim' => [ArchiveArticleAction::class, 'handle', 'handle'],
+    'inherited-trait action resolves through the parent to handle' => [InheritedArticleAction::class, '__invoke', 'handle'],
+    // Neither asController nor handle → the invokable registration falls through to __invoke verbatim.
+    'action with neither asController nor handle falls back to the registered method' => [HandlelessAction::class, '__invoke', '__invoke'],
     'non-action invokable controller is unchanged' => [FormController::class, '__invoke', '__invoke'],
 ]);
 

@@ -41,6 +41,11 @@ function actionEngine(): StubTypeEngine
         PublishArticleAction::class.'::handle' => new ActionAnalysis(
             returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('id', ScalarT::int())]), $loc)],
         ),
+        // asController() carries a DISTINCT return shape from any handle(), so a 200 body of `archived`
+        // proves the analysis was redirected to asController — not merely its docblock summary (G1).
+        ArchiveArticleAction::class.'::asController' => new ActionAnalysis(
+            returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('archived', ScalarT::bool())]), $loc)],
+        ),
     ]);
 }
 
@@ -71,13 +76,23 @@ it('resolves an invokable action to handle(), documenting its summary, rules() b
 
     // authorize() became a 403.
     expect($operation['responses'])->toHaveKey('403');
+
+    // The resolved handle()'s RETURN analysis composed into a 200 body (analysis redirect, not just
+    // the docblock summary) — G1.
+    $ok = $operation['responses']['200']['content']['application/json']['schema']['properties'] ?? [];
+    expect($ok)->toHaveKey('id');
 });
 
 it('resolves an action defining asController() to that method over handle()', function (): void {
     $operation = actionOperation('put', 'api/archive', ArchiveArticleAction::class);
 
-    // The asController() docblock summary proves it won the precedence over handle().
+    // The asController() docblock summary proves it won the precedence over handle()...
     expect($operation['summary'])->toBe('Archive an article.');
+
+    // ...and its DISTINCT return shape composed into the 200 body, proving analysis (not just the
+    // docblock) was redirected to asController rather than handle (G1).
+    $ok = $operation['responses']['200']['content']['application/json']['schema']['properties'] ?? [];
+    expect($ok)->toHaveKey('archived');
 });
 
 it('adds no request body or 403 for a minimal action with neither rules() nor authorize()', function (): void {

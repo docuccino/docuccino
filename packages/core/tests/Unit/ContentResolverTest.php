@@ -133,6 +133,24 @@ it('leaves plain prose with no directives untouched and diagnostic-free', functi
     expect($rewritten)->toBe('Just prose, no colons.')->and($diagnostics)->toBe([]);
 });
 
+it('rewrites multiple directives in one body with independent per-directive outcomes (G5)', function (): void {
+    $index = DocumentIndex::build(contentIndexDoc());
+    $body = 'See ::operation{id="forms.index"} and ::schema{name="FormData"}; but ::schema{name="Nope"} is gone.';
+
+    [$rewritten, $diagnostics] = (new DirectiveResolver)->resolve($body, 'slug', 'slug.md', $index);
+
+    // The two resolvable directives each gained their ref; the broken one is left literal.
+    expect($rewritten)
+        ->toContain('::operation{id="forms.index" ref="op:v1:formsindex00000"}')
+        ->toContain('::schema{name="FormData" ref="sch:v1:formdata0000000"}')
+        ->toContain('::schema{name="Nope"} is gone.');
+
+    // Exactly one diagnostic — for the single broken directive.
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->code)->toBe('content.unresolved-directive')
+        ->and($diagnostics[0]->message)->toContain('Nope');
+});
+
 // ---- ContentResolver: nav ordering + edge cases --------------------------------------------------
 
 it('orders nav by explicit order, then title, then slug; groups by least child order then name', function (): void {
