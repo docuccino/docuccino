@@ -22,6 +22,7 @@ use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateIntegration;
+use Docuccino\Laravel\Integrations\LaravelActions\LaravelActionsIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsIntegration;
@@ -93,6 +94,9 @@ final class DefaultExtensions
             // spatie/laravel-json-api-paginate: the `jsonPaginate()` terminal → JSON:API
             // page[number]/page[size] (or page[cursor]) params, added only when the package exists.
             ...(JsonApiPaginateIntegration::installed() ? JsonApiPaginateIntegration::extensions() : []),
+            // lorisleiva/laravel-actions: action classes as controllers — rules() → request body,
+            // authorize() → 403. Route-method remap (asController/handle) lives in the route reflector.
+            ...(LaravelActionsIntegration::installed() ? LaravelActionsIntegration::extensions() : []),
             // Security auto-config (Telescope-style guards): Sanctum → bearer/cookie scheme;
             // Passport → oauth2 scheme + per-operation scopes from scope:/scopes: middleware.
             ...(SanctumIntegration::installed() ? SanctumIntegration::extensions() : []),

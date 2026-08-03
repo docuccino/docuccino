@@ -1,0 +1,103 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Integrations\LaravelActions;
+
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Contracts\OperationExtension;
+use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Inference\ThrowConfidence;
+use Docuccino\Core\Inference\ThrowDisposition;
+use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Patch\Contribution;
+use ReflectionClass;
+
+/**
+ * Documents the `403` an action's `authorize()` produces (Phase 5c). When a laravel-actions action
+ * defines `authorize()`, the package's controller decorator runs it during request validation and
+ * throws `Illuminate\Auth\Access\AuthorizationException` (403) when it returns false. That throw is
+ * raised by the framework's validation pipeline, not the analysed `handle()` body, so the engine's
+ * throw analysis never sees it — this extension reintroduces it by running a synthetic
+ * `AuthorizationException` through the SAME resolved exception→response chain the rest of the error
+ * responses use, so the 403 body matches the document's error style (framework defaults or the
+ * Problem Details preset). Skipped when `error_responses => 'none'`.
+ */
+final class ActionAuthorizeResponsesExtension implements OperationExtension
+{
+    private const AUTHORIZATION_EXCEPTION = 'Illuminate\\Auth\\Access\\AuthorizationException';
+
+    public function phase(): OperationPhase
+    {
+        return OperationPhase::Errors;
+    }
+
+    public function handle(OperationDraft $operation, RouteContext $context): void
+    {
+        if ($context->document->errorResponses === 'none' || ! $this->definesAuthorize($context)) {
+            return;
+        }
+
+        $throw = new ThrownException(
+            self::AUTHORIZATION_EXCEPTION,
+            403,
+            [],
+            ThrowConfidence::Certain,
+            ThrowDisposition::Signal,
+        );
+
+        foreach ($context->exceptionMappers as $mapper) {
+            if (! $mapper->supports($throw, $context)) {
+                continue;
+            }
+
+            $draft = $mapper->toResponse($throw, $context, $context->components);
+            if ($draft === null) {
+                continue;
+            }
+
+            $this->merge($operation, $draft, $mapper->producer());
+
+            return;
+        }
+    }
+
+    private function definesAuthorize(RouteContext $context): bool
+    {
+        $class = $context->actionRef->class;
+        if ($class === null || ! LaravelAction::isAction($class) || ! class_exists($class)) {
+            return false;
+        }
+
+        return (new ReflectionClass($class))->hasMethod('authorize');
+    }
+
+    private function merge(OperationDraft $operation, ResponseDraft $draft, string $producer): void
+    {
+        $frozen = $draft->freeze();
+        $response = $operation->response($draft->status);
+        $contribution = Contribution::forProducer($producer);
+
+        if ($frozen->ref !== null) {
+            $response->setRef($frozen->ref, $contribution);
+
+            return;
+        }
+
+        if ($frozen->description !== null) {
+            $response->setDescription($frozen->description, $contribution);
+        }
+
+        foreach ($frozen->content ?? [] as $mediaType => $media) {
+            $schema = is_array($media) && is_array($media['schema'] ?? null) ? $media['schema'] : [];
+            foreach ($schema as $keyword => $value) {
+                if ($keyword === 'x-docuccino') {
+                    continue;
+                }
+                $response->content((string) $mediaType)->set((string) $keyword, $value, $contribution);
+            }
+        }
+    }
+}

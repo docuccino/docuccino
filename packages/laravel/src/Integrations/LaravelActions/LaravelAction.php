@@ -1,0 +1,74 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Integrations\LaravelActions;
+
+use ReflectionClass;
+
+/**
+ * The one place that recognises a `lorisleiva/laravel-actions` action class and resolves which of its
+ * methods a route actually dispatches. An action used as a controller carries the package's
+ * `AsController` trait (directly, or via the umbrella `AsAction` trait which uses it). When such a
+ * class is registered as an invokable route, the package rewrites the dispatched method at runtime —
+ * `asController()` if defined, else `handle()`, else the trait's `__invoke()` forwarder (the package's
+ * `ControllerDecorator::getDefaultRouteMethod()`). Docuccino must do the same statically so
+ * reflection, inference, attributes and the docblock summary all target the real signature instead of
+ * the `__invoke(mixed ...$args)` forwarder.
+ *
+ * All checks are guarded by the trait's presence, so this is inert when the package is absent.
+ */
+final class LaravelAction
+{
+    public const CONTROLLER_TRAIT = 'Lorisleiva\\Actions\\Concerns\\AsController';
+
+    /** Whether an FQCN is a laravel-actions action used as a controller (carries the AsController trait). */
+    public static function isAction(string $fqcn): bool
+    {
+        if (! trait_exists(self::CONTROLLER_TRAIT) || ! class_exists($fqcn)) {
+            return false;
+        }
+
+        // Recursively collect the class's traits (its own + parents' + traits-used-by-traits, so the
+        // umbrella AsAction trait — which uses AsController — is seen) via PHP built-ins only.
+        $traits = [];
+        foreach (array_merge([$fqcn], class_parents($fqcn) ?: []) as $class) {
+            self::collectTraits($class, $traits);
+        }
+
+        return isset($traits[self::CONTROLLER_TRAIT]);
+    }
+
+    /**
+     * @param  array<string, string>  $acc
+     */
+    private static function collectTraits(string $class, array &$acc): void
+    {
+        foreach (class_uses($class) ?: [] as $trait) {
+            if (! isset($acc[$trait])) {
+                $acc[$trait] = $trait;
+                self::collectTraits($trait, $acc);
+            }
+        }
+    }
+
+    /**
+     * Resolve the method a route dispatches on an action. Only an invokable registration
+     * (`__invoke`, the trait's forwarder) is remapped — an explicit `[Action::class, 'method']`
+     * registration is honoured verbatim — mirroring the package's own `replaceRouteMethod()`.
+     */
+    public static function controllerMethod(string $fqcn, string $method): string
+    {
+        if ($method !== '__invoke' || ! self::isAction($fqcn) || ! class_exists($fqcn)) {
+            return $method;
+        }
+
+        $reflection = new ReflectionClass($fqcn);
+
+        if ($reflection->hasMethod('asController')) {
+            return 'asController';
+        }
+
+        return $reflection->hasMethod('handle') ? 'handle' : $method;
+    }
+}
