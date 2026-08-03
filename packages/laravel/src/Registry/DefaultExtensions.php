@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Registry;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
@@ -16,21 +17,10 @@ use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
-use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
-use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
-use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateIntegration;
-use Docuccino\Laravel\Integrations\LaravelActions\LaravelActionsIntegration;
-use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
-use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsIntegration;
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
-use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
-use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
-use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
-use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 
@@ -45,10 +35,21 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 final class DefaultExtensions
 {
     /**
+     * The built-in set gated for one document. Each integration's extensions are contributed only when
+     * its package is installed AND the document enables it ({@see IntegrationToggles}) — the per-document
+     * enable/disable seam. The gate preserves the built-in ordering: each spread sits in the same
+     * position its unconditional predecessor did, so a document that enables everything (the common
+     * case) resolves to byte-identical output.
+     *
      * @return list<class-string|object>
      */
-    public static function all(): array
+    public static function all(DocumentConfig $document): array
     {
+        $toggles = IntegrationToggles::descriptors();
+        $enabled = static fn (string $key): array => $toggles[$key]->installed() && $toggles[$key]->enabledFor($document)
+            ? $toggles[$key]->extensions()
+            : [];
+
         return [
             LaravelRouteResolver::class,
             PathParametersExtension::class,
@@ -74,36 +75,20 @@ final class DefaultExtensions
             // Reflection-rich enum schemas (backing values, #[CaseDescription] → x-enumDescriptions);
             // ordered ahead of the core case-names-only mapper.
             EnumSchema::class,
-            // API Resources (always-on; illuminate/http ships everywhere) — JsonResource toArray
-            // shapes + Laravel 13 first-party JSON:API (added only when its class exists).
-            ...ApiResourcesIntegration::extensions(),
-            // timacdonald/json-api (pre-13 JSON:API resources): same to*() surface as first-party,
-            // fed through the shared JSON:API document/params infra, added only when installed.
-            ...(TimacdonaldJsonApiIntegration::installed() ? TimacdonaldJsonApiIntegration::extensions() : []),
-            // Eloquent model schemas (always-on): columns from the engine refined by the model's
-            // visible/hidden/appends/casts + class-level #[Hidden].
-            ...EloquentIntegration::extensions(),
-            // Rate limiting (always-on): `throttle` middleware → 429 + Retry-After/X-RateLimit-* headers.
-            ...RateLimitIntegration::extensions(),
-            // Conditional integrations (Telescope-style class_exists guard): registered only when the
-            // target package is installed, so docuccino/laravel never hard-requires it.
-            ...(SpatieDataIntegration::installed() ? SpatieDataIntegration::extensions() : []),
-            // Spatie Query Builder (design §Phase 4 — the Scramble-Pro-beater): trace-recovered
-            // allowedFilters/Sorts/Includes/Fields + pagination, added only when the package exists.
-            ...(QueryBuilderIntegration::installed() ? QueryBuilderIntegration::extensions() : []),
-            // spatie/laravel-json-api-paginate: the `jsonPaginate()` terminal → JSON:API
-            // page[number]/page[size] (or page[cursor]) params, added only when the package exists.
-            ...(JsonApiPaginateIntegration::installed() ? JsonApiPaginateIntegration::extensions() : []),
-            // lorisleiva/laravel-actions: action classes as controllers — rules() → request body,
-            // authorize() → 403. Route-method remap (asController/handle) lives in the route reflector.
-            ...(LaravelActionsIntegration::installed() ? LaravelActionsIntegration::extensions() : []),
-            // Security auto-config (Telescope-style guards): Sanctum → bearer/cookie scheme;
-            // Passport → oauth2 scheme + per-operation scopes from scope:/scopes: middleware.
-            ...(SanctumIntegration::installed() ? SanctumIntegration::extensions() : []),
-            ...(PassportIntegration::installed() ? PassportIntegration::extensions() : []),
-            // spatie/laravel-permission: role:/permission:/role_or_permission: middleware →
-            // x-permissions extension member + a generated description line.
-            ...(PermissionIntegration::installed() ? PermissionIntegration::extensions() : []),
+            // Per-document, per-integration gate (installed AND enabled). Framework built-ins
+            // (api_resources/eloquent/rate_limit) are always installed; the package-backed integrations
+            // add their class_exists probe. Default-on except permission (opt-in — see IntegrationToggles).
+            ...$enabled('api_resources'),
+            ...$enabled('timacdonald_json_api'),
+            ...$enabled('eloquent'),
+            ...$enabled('rate_limit'),
+            ...$enabled('spatie_data'),
+            ...$enabled('query_builder'),
+            ...$enabled('json_api_paginate'),
+            ...$enabled('laravel_actions'),
+            ...$enabled('sanctum'),
+            ...$enabled('passport'),
+            ...$enabled('permission'),
             ...DefaultTypeMappers::all(),
             // Data-leakage lint (always-on core DocumentTransformer): warns on schema properties whose
             // names look sensitive (password/token/secret/…); diagnostics only, never mutates output.

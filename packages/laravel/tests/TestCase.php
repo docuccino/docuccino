@@ -41,6 +41,13 @@ abstract class TestCase extends Orchestra
     {
         $app['config']->set('app.key', 'base64:AckfSECXIvnK5r28GVIWUAxmbBSjTsmF0FYqwoDL18E=');
 
+        // The workbench documents authorization requirements (the api/moderated-forms route), so it
+        // opts the default document into the now-default-off spatie/laravel-permission integration
+        // explicitly. Setting it here (the fixture's document config) rather than in the shipped
+        // config preserves the opt-in default for real apps while the permission goldens stay
+        // byte-stable now that the integration is opt-in.
+        $app['config']->set('docuccino.documents.default.integrations.permission.enabled', true);
+
         // The morph map the /api/attachments discriminator resolves its aliases from (design §Phase 4).
         Relation::morphMap(['widget' => Widget::class, 'gadget' => Gadget::class], false);
     }

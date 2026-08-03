@@ -216,6 +216,18 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
   `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
+- **Per-document enable/disable (`integrations.<name>.enabled`)**: each integration bag carries an
+  `enabled` bool, resolved at **per-document extension-resolution time** (the late-bound registry
+  seam — `IntegrationToggles` gates `DefaultExtensions::all($document)`), orthogonal to `installed()`:
+  `installed()` stays "is the package present", `enabled` is "does THIS document want it"; an
+  integration contributes only when **installed AND enabled-for-this-document**. Because gating drops
+  the extension from the resolved set, its FQCN leaves the fragment-cache signature — flipping `enabled`
+  invalidates cached fragments for free. Defaults are per-integration: **on when installed, except
+  `permission` (default off)** — documenting permission names leaks the app's internal authorization
+  taxonomy into the public spec, so it is the first member of the **"sensitive-by-activation
+  integrations default off"** principle (Passport stays on: OAuth scopes are the public contract). An
+  installed-but-disabled integration emits one `integration.disabled` info diagnostic per document
+  (discoverability), never fired when the package is absent.
 - **Placement rule (Tom, 2026-08-02 — decides "core or adapter?" for every new piece):**
   **anything whose INPUT is the UIR document belongs in core; anything whose INPUT is
   Laravel code belongs in the adapter.** Recovery is adapter-side; representation and
@@ -338,13 +350,17 @@ return [
             'content' => ['dir' => 'resources/docs/api'],
             'overlays' => ['resources/docs/overlays/*.yaml'],
             'representation' => ['filters' => 'bracketed|deepObject', 'nullable' => …, 'enums' => …, 'operation_id' => …],
-            // Per-integration document-level knobs — one bag per integration, keyed by its directory
-            // name (kebab-cased); each integration reads ONLY its own bag (via DocumentConfig::integration()).
+            // Per-integration document-level knobs — one bag per integration, keyed by its config
+            // name (snake_case); each integration reads ONLY its own bag (via DocumentConfig::integration()).
+            // Every bag also accepts `enabled` (bool), resolved per-document at extension-resolution
+            // time: an integration contributes only when its package is installed AND the document
+            // enables it. Default on when installed, EXCEPT `permission` (default OFF — opt-in; see below).
             'integrations' => [
                 'api_resources' => ['wrap' => true],                      // top-level resource `data` wrapping (false | true | '<key>')
                 'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
                 'passport'      => ['url' => 'https://auth.example.com'], // oauth2 flow base URL (default app.url)
                 'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
+                'permission'    => ['enabled' => true],                   // opt in (default OFF): document role/permission requirements
             ],
             'export' => ['path' => '…', 'formats' => ['openapi-3.2']],
             'viewer' => ['driver' => 'scalar', 'route' => '/docs/api', 'gate' => 'viewApiDocs', 'source' => 'generate|artifact'],

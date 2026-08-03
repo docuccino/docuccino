@@ -187,16 +187,26 @@ own bag**, and all are optional.
     'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
     'passport'      => ['url' => 'https://auth.example.com'],      // oauth2 flow base URL
     'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
+    'permission'    => ['enabled' => true],                       // opt in — off by default
 ],
 ```
 
+Every bag also accepts **`enabled`** (`bool`). It is resolved per document: an integration
+contributes only when its package is installed **and** the document enables it. Every integration
+defaults **on** when its package is installed, **except `permission`**, which defaults **off** —
+documenting role and permission names would publish your application's internal authorization
+taxonomy, so it is explicit opt-in. When a package is installed but its integration is disabled, the
+build emits one `integration.disabled` info diagnostic per document, so the switch is discoverable.
+
 | Bag | Key | Default | Effect |
 | --- | --- | --- | --- |
+| _any_ | `enabled` | `true` (**`false` for `permission`**) | Turn the integration on/off for this document. Contributes only when the package is installed and this is `true`. |
 | `api_resources` | `wrap` | each resource's own `$wrap` | `false` never wraps (global `withoutWrapping()`); `true` → `'data'`; a string forces that key; omit → each resource's static `$wrap`. |
 | `sanctum` | `modes` | `['token','stateful']` | Which Sanctum schemes to expose. |
 | `sanctum` | `cookie` | `session.cookie` | Stateful cookie name. |
 | `passport` | `url` | `app.url` | oauth2 flow base URL. |
 | `query_builder` | `pagination_terminals` | `[]` | Extra method names that count as paginating terminals during the trace. |
+| `permission` | `enabled` | `false` | Opt in to document `role:`/`permission:` requirements (`x-permissions`). Off by default so authorization names are not published unintentionally. |
 
 ### `export`
 

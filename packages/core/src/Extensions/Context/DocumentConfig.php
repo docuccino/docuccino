@@ -73,6 +73,30 @@ final readonly class DocumentConfig
     }
 
     /**
+     * Whether the integration keyed by $name is enabled for this document (design §9). Reads the
+     * per-integration `integrations.<name>.enabled` switch, coercing a non-bool to $default and
+     * falling back to the per-integration $default when the key is absent — so an integration that
+     * ships default-on stays on unless a document opts out, and a sensitive-by-activation integration
+     * (permission) stays off unless a document opts in.
+     */
+    public function integrationEnabled(string $name, bool $default): bool
+    {
+        $value = $this->integration($name)['enabled'] ?? $default;
+
+        return is_bool($value) ? $value : $default;
+    }
+
+    /**
+     * Whether the document explicitly set `integrations.<name>.enabled` to a boolean (as opposed to
+     * leaving it to the per-integration default). Lets the discoverability diagnostic tell an
+     * opt-in-not-yet-taken (default-off, untouched) apart from a deliberate opt-out (`enabled => false`).
+     */
+    public function integrationEnabledExplicit(string $name): bool
+    {
+        return is_bool($this->integration($name)['enabled'] ?? null);
+    }
+
+    /**
      * A deterministic fingerprint of this document's configuration — the single owner of the
      * config-hash (a fragment-cache key input, design §10, and the document's `configHash`). Folds
      * the whole raw config bag through the order-insensitive {@see Json::stable()} encoder so key

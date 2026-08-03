@@ -75,12 +75,19 @@ return [
                 'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
                 // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
             ],
-            // Per-integration document-level knobs (design §9). Each key is an integration's directory
-            // name (kebab-cased); an integration reads only its own bag. All optional — omit the whole
+            // Per-integration document-level knobs (design §9). Each key is an integration's bag
+            // (snake_case); an integration reads only its own bag. All optional — omit the whole
             // `integrations` bag (as here) to use every documented default.
+            //
+            // Every integration bag accepts `'enabled' => bool`, resolved per-document at
+            // extension-resolution time: an integration contributes only when its package is installed
+            // AND the document enables it. Every integration defaults ON when installed, EXCEPT
+            // `permission` below. When a package is installed but its integration is disabled, the build
+            // emits one info diagnostic (`integration.disabled`) per document so the toggle is discoverable.
             //   'integrations' => [
             //       // API Resources: top-level resource `data`-wrapping (Laravel JsonResource::$wrap).
             //       'api_resources' => [
+            //           'enabled' => true, // (default) set false to omit JsonResource/JSON:API schemas
             //           'wrap' => true,   // false → never wrap (a global withoutWrapping()); true → 'data';
             //                             // a string → force that key; omit → each resource's own $wrap.
             //       ],
@@ -89,13 +96,20 @@ return [
             //           'modes'  => ['token', 'stateful'], // which schemes to expose (default: both)
             //           'cookie' => 'myapp_session',       // stateful cookie name (default: session.cookie)
             //       ],
-            //       // Passport auto-config (only when laravel/passport is installed):
+            //       // Passport auto-config (only when laravel/passport is installed). Stays default-on:
+            //       // OAuth scopes are the public contract, so documenting them leaks nothing internal.
             //       'passport' => [
             //           'url' => 'https://auth.example.com', // oauth2 flow base URL (default: app.url)
             //       ],
             //       // Query Builder pagination (only when spatie/laravel-query-builder is installed):
             //       'query_builder' => [
             //           'pagination_terminals' => ['paginateList'], // extra paginating method names
+            //       ],
+            //       // spatie/laravel-permission. Defaults OFF (explicit opt-in): documenting role /
+            //       // permission names would leak the app's internal authorization taxonomy into the
+            //       // public spec. Enable it only where publishing permission requirements is intended.
+            //       'permission' => [
+            //           'enabled' => true, // opt in to x-permissions + "Requires permission: …" lines
             //       ],
             //   ],
             'export' => [

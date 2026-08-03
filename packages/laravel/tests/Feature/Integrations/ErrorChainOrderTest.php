@@ -25,7 +25,7 @@ use Docuccino\Laravel\Registry\ExtensionRegistry;
  * order cannot perturb it.
  */
 it('resolves the exception mapper chain in the documented tier order', function (): void {
-    $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(), []);
+    $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(new DocumentConfig('default', [])), []);
 
     $order = array_map(static fn (object $mapper): string => $mapper::class, $resolved->exceptionToResponse);
 
@@ -38,7 +38,7 @@ it('resolves the exception mapper chain in the documented tier order', function 
 });
 
 it('cascades past the deferring inferred tier to the problem-details preset, skipping the framework tier', function (): void {
-    $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(), []);
+    $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(new DocumentConfig('default', [])), []);
 
     // A document that opted into the Problem Details preset, throwing a framework exception for which
     // no render callback is registered — so the inferred-handler tier has nothing to fold and defers.

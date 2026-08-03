@@ -28,6 +28,7 @@ use Docuccino\Core\Validation\Validator;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
+use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\Container;
@@ -76,10 +77,15 @@ final class DocumentGenerator
         array $configExtensions = [],
         array $overlays = [],
     ): GenerationResult {
-        $resolved = $this->registry->resolve($this->container, DefaultExtensions::all(), $configExtensions);
+        $resolved = $this->registry->resolve($this->container, DefaultExtensions::all($document), $configExtensions);
         $documentId = $this->identity->documentId($document->key);
         $components = new ComponentRegistry;
         $bag = new DiagnosticCollector;
+
+        // One info diagnostic per integration that is installed but this document disabled (default-off
+        // permission awaiting opt-in, or an explicit `enabled => false`) — the discoverability signal
+        // (design §4). Nothing fires for an integration whose package is absent.
+        $bag->addAll(IntegrationToggles::diagnostics($document));
 
         // Compile the narrative content tree (design §Narrative content layer): a document-level
         // input assembled fresh each build. It is deliberately KEPT OUT of the fragment cache key —
