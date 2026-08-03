@@ -27,8 +27,9 @@ See `docuccino/laravel` for the wired-up integration.
 
 ## Documentation
 
-Full docs and the UIR specification live in the main repository:
-<https://github.com/docuccino/docuccino>.
+Full documentation is at <https://docs.docuccino.app>; see
+[getting started](https://docs.docuccino.app/getting-started/) for how the engine is wired in and
+degrades to a `NullTypeEngine` on boot failure.
 
 ## License
 

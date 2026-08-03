@@ -35,8 +35,15 @@ Docuccino::extend(MyOperationExtension::class);
 
 ## Documentation
 
-Full docs and the UIR specification live in the main repository:
-<https://github.com/docuccino/docuccino>.
+Full documentation is at <https://docs.docuccino.app>:
+
+- [Getting started](https://docs.docuccino.app/getting-started/)
+- [Configuration reference](https://docs.docuccino.app/reference/configuration/)
+- [Commands](https://docs.docuccino.app/reference/commands/) ·
+  [Attributes](https://docs.docuccino.app/reference/attributes/)
+- [Integrations](https://docs.docuccino.app/integrations/)
+- [Writing an integration](https://docs.docuccino.app/guides/extension-authoring/) ·
+  [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
 
 ## License
 

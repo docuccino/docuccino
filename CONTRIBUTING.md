@@ -1,7 +1,7 @@
 # Contributing to Docuccino
 
-Thanks for your interest in Docuccino. This is an open-core project (MIT); a paid
-SaaS later consumes the UIR artifacts the open packages produce.
+Thanks for your interest in Docuccino. This is an open-core project (MIT); a paid SaaS later
+consumes the UIR artifacts the open packages produce.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -16,31 +16,106 @@ Signed-off-by: Your Name <you@example.com>
 
 Pull requests whose commits are not signed off will not be merged.
 
+## Conventional Commits
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), scoped to a
+package or area: `feat(laravel): …`, `fix(core): …`, `refactor(inference-phpstan): …`,
+`docs(website): …`, `chore(repo): …`. Do **not** add `Co-Authored-By` trailers.
+
 ## Repository layout
 
 This is a monorepo, subtree-split into individual packages on release:
 
-- `packages/core` — `docuccino/core`, framework-agnostic UIR model, canonicalizer,
-  identity, validator, emitters.
+- `packages/core` — `docuccino/core`, framework-agnostic UIR model, canonicalizer, identity,
+  validator, emitters, semantic diff, extension contracts.
 - `packages/attributes` — `docuccino/attributes`, dependency-free attribute classes.
-- `packages/laravel` — `docuccino/laravel`, Laravel adapter (Phase 3).
-- `packages/inference-phpstan` — `docuccino/inference-phpstan`, PHPStan inference (Phase 2).
+- `packages/inference-phpstan` — `docuccino/inference-phpstan`, PHPStan/Larastan inference behind
+  core's `TypeEngine`.
+- `packages/laravel` — `docuccino/laravel`, the Laravel adapter (provider, config, commands, viewer,
+  integrations).
 - `spec/` — the versioned UIR JSON Schemas (published to spec.docuccino.app).
+- `website/` — the Astro + Starlight docs site (a Node project, not a Composer package).
 
 ## Local development
 
 ```bash
 composer install
-composer test      # Pest
-composer analyse   # PHPStan (level max)
-composer lint      # Pint (dry-run)
+
+vendor/bin/pest                         # full suite (the `fixture` group auto-skips without the fixture app)
+vendor/bin/phpstan analyse --no-progress  # level max — NO baselines, no blanket ignores
+vendor/bin/pint --test                  # code style (drop --test to fix)
+composer validate --strict              # per package
 ```
 
-Everything must be green — tests, PHPStan at level max, and Pint — before a change
-is merged. `declare(strict_types=1)` is required in every PHP file.
+Everything must be **green on all checks, always** — Pest, PHPStan at level max, Pint, and
+`composer validate`. `declare(strict_types=1)` is required in every PHP file.
 
-## Conventions
+### The fixture app (real-engine tests)
 
-- Conventional Commits (`feat(core): …`, `fix(core): …`, `chore(repo): …`).
-- No timestamps or other non-deterministic values in emitted artifacts — determinism
-  is a hard, tested guarantee.
+The Laravel adapter's feature tests run against the workbench under `packages/laravel/workbench/`.
+The inference engine's real-analysis tests (the `fixture` group) run out-of-process against a
+provisioned Laravel + Larastan app at `spikes/fixture-app`, which is **gitignored** — recreate it
+per `spikes/fixture-app-setup.md` (or let CI's cached provisioning do it). Then:
+
+```bash
+vendor/bin/pest --group=fixture         # real-engine integration tests
+```
+
+Set `DOCUCCINO_REQUIRE_FIXTURE=1` to turn a missing/broken fixture app into a hard failure instead
+of a silent skip.
+
+## Determinism & the golden discipline
+
+**Determinism is a product feature:** byte-identical output for identical code — no timestamps, no
+absolute paths, no randomness in any emitted document. This is a hard, tested guarantee (CI asserts
+cold-vs-warm cache, 1-vs-8-worker, and re-run byte-diffs, plus a UIR→OAS round-trip losslessness
+test).
+
+Golden files under `packages/*/tests/Fixtures/golden/` are **byte-locked**. Never regenerate them
+casually:
+
+- A sanctioned regeneration is an **isolated commit** that explains exactly why the bytes changed.
+- Regenerate locally with `DOCUCCINO_UPDATE_GOLDEN=1`:
+  ```bash
+  DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --filter=<golden test>
+  ```
+- **CI guards that `DOCUCCINO_UPDATE_GOLDEN` is unset**, so a drifting document can never masquerade
+  as green.
+
+## Coverage standards
+
+Coverage protects the paths goldens never traverse. Summarised (full detail in
+[`docs/testing.md`](docs/testing.md)):
+
+- **Mapping / lookup tables** (rule maps, attribute maps, cast→format, `KnownThrowers`, enum naming)
+  are tested **dataset-driven over every entry**, plus the unknown-entry degradation contract. One
+  tested entry is not coverage. An unreachable entry is deleted, not tested.
+- **Stub / real splits.** `StubTypeEngine` tests prove pipeline mechanics; every integration's
+  recovery/parsing half also needs a real-path test (real reflection, or the real engine via the
+  `fixture` group). Ask of every test: which half does this prove, and where is the other half?
+- **Negative paths, exit codes, and degradation branches are coverage**, not extras.
+
+Run coverage locally (needs pcov):
+
+```bash
+vendor/bin/pest --coverage --exclude-group=fixture --min=<floor>   # line coverage
+vendor/bin/pest --type-coverage --exclude-group=fixture --min=100  # declared types
+```
+
+The enforced floors live in `.github/workflows/ci.yml` (the `coverage` job). The line floor is an
+**honest ratchet** — raised as coverage rises, never lowered without a note in `docs/plan.md`.
+
+## Writing an integration
+
+Built-in integrations live in `packages/laravel/src/Integrations/<Name>/` — self-contained, with one
+`<Name>Integration` registrar (a static `extensions()` list, plus a `class_exists`-guarded
+`installed()` for conditional ones), importing only the public extension surface. An arch test
+(`IntegrationsArchTest`) enforces this — they use the *same public API* a third party would. See the
+[extension authoring guide](https://docs.docuccino.app/guides/extension-authoring/) for the full
+template, the contracts, `#[ExtensionOrder]`, and the placement rule.
+
+## Docs site
+
+The site under `website/` builds with `npm run build` (from `website/`). Content is sourced from the
+actual code and design docs — keep the `<!-- Source of truth: … -->` comments accurate. See
+[`website/README.md`](website/README.md).

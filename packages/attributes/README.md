@@ -26,8 +26,9 @@ final class FormController
 
 ## Documentation
 
-Full docs and the UIR specification live in the main repository:
-<https://github.com/docuccino/docuccino>.
+Every attribute — with signatures and examples — is documented in the
+[attributes reference](https://docs.docuccino.app/reference/attributes/) at
+<https://docs.docuccino.app>.
 
 ## License
 

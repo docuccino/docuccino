@@ -24,8 +24,10 @@ $json = (new OpenApi32Emitter())->emit($uirDocument, new EmitOptions());
 
 ## Documentation
 
-Full docs and the UIR specification live in the main repository:
-<https://github.com/docuccino/docuccino>.
+Full documentation is at <https://docs.docuccino.app>. See especially the
+[UIR format overview](https://docs.docuccino.app/uir/) and
+[spec hosting](https://docs.docuccino.app/uir/hosting/); the versioned UIR JSON Schema is served at
+<https://spec.docuccino.app/uir/1.0/schema.json>.
 
 ## License
 
