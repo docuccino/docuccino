@@ -45,6 +45,9 @@ final class JsonApiParameters
         $include->schema()->set('type', 'string', $contribution);
 
         // Sparse fieldsets: fields[TYPE]=a,b — a deepObject of comma-separated strings keyed by type.
+        // On an endpoint that is BOTH a Spatie-QB list and a JSON:API resource, this `fields` param
+        // collides with QB's allowedFields `fields`: the pipeline merges parameters by (in + name), so
+        // one write shadows the other (later layer wins) with an info diagnostic — acceptable, no dedup.
         $fields = $operation->parameter('query', 'fields');
         $fields->setDescription('Sparse fieldsets per resource type (fields[TYPE]=field1,field2).', $contribution);
         $fields->setRequired(false, $contribution);

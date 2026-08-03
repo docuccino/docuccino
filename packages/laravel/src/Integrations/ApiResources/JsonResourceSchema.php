@@ -27,12 +27,17 @@ use Docuccino\Laravel\Integrations\Support\ResourceWrapping;
  * its `data` key per Laravel's `JsonResource::$wrap` semantics ({@see ResourceWrapping}); a **nested**
  * resource (a property of another resource) stays unwrapped so it can be `$ref`-shared.
  *
- * JSON:API resources are handled by {@see JsonApiResourceSchema}, which runs ahead of this mapper;
- * this mapper explicitly declines them.
+ * JSON:API resources — first-party ({@see JsonApiResourceSchema}) and timacdonald
+ * ({@see \Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema}) — run
+ * ahead of this mapper; this mapper explicitly declines BOTH families so a plain flat `toArray` shape
+ * is never emitted for a JSON:API resource even if extension ordering is perturbed.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class JsonResourceSchema implements TypeToSchema
 {
+    /** The pre-13 timacdonald JSON:API base — a JsonResource subclass, so exclude it symmetrically. */
+    private const TIMACDONALD_JSON_API_RESOURCE = 'TiMacDonald\\JsonApi\\JsonApiResource';
+
     public function __construct(
         private readonly ToArrayObject $toArray = new ToArrayObject,
         private readonly ComponentHoist $hoist = new ComponentHoist,
@@ -42,7 +47,11 @@ final class JsonResourceSchema implements TypeToSchema
     {
         return $type instanceof ClassT
             && ResourceReflector::isResource($type->fqcn)
-            && ! ResourceReflector::isJsonApiResource($type->fqcn);
+            && ! ResourceReflector::isJsonApiResource($type->fqcn)
+            // A timacdonald resource subclasses Illuminate's JsonResource but is a distinct JSON:API
+            // family with its own mapper; is_a returns false when the package (and thus the base) is
+            // absent, so this is a no-op there.
+            && ! is_a($type->fqcn, self::TIMACDONALD_JSON_API_RESOURCE, true);
     }
 
     public function toSchema(DType $type, SchemaContext $context): ?SchemaResult

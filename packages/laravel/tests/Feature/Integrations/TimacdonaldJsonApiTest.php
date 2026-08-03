@@ -71,6 +71,12 @@ it('maps a timacdonald JSON:API resource to a JSON:API document schema through t
         ->and($data['properties']['id'])->toBe(['type' => 'string']);
 });
 
+it('declines a timacdonald resource in the plain JsonResource mapper (symmetric exclusion)', function (): void {
+    // TimacdonaldArticleResource subclasses Illuminate's JsonResource, so without the symmetric
+    // exclusion the plain mapper would claim it and emit a flat toArray shape (N5).
+    expect((new JsonResourceSchema)->supports(new ClassT(TimacdonaldArticleResource::class)))->toBeFalse();
+});
+
 it('detects when a return type involves a timacdonald JSON:API document', function (): void {
     expect(TimacdonaldResourceReflector::involvesJsonApi(new ClassT(TimacdonaldArticleResource::class)))->toBeTrue()
         ->and(TimacdonaldResourceReflector::involvesJsonApi(new ClassT(JsonApiResourceCollection::class, [new ClassT(TimacdonaldArticleResource::class)])))->toBeTrue()
