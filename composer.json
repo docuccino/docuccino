@@ -42,7 +42,8 @@
         "spatie/laravel-json-api-paginate": "^2.0",
         "spatie/laravel-package-tools": "^1.16",
         "spatie/laravel-permission": "^6.0",
-        "spatie/laravel-query-builder": "^7.0"
+        "spatie/laravel-query-builder": "^7.0",
+        "timacdonald/json-api": "^1.0@beta"
     },
     "repositories": [
         {

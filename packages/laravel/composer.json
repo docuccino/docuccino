@@ -38,7 +38,8 @@
         "larastan/larastan": "^3.10",
         "pestphp/pest": "^4.0",
         "spatie/laravel-data": "^4.0",
-        "spatie/laravel-json-api-paginate": "^2.0"
+        "spatie/laravel-json-api-paginate": "^2.0",
+        "timacdonald/json-api": "^1.0@beta"
     },
     "autoload": {
         "psr-4": {

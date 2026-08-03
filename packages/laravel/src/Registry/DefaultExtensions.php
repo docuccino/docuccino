@@ -29,6 +29,7 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderIntegration;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitIntegration;
 use Docuccino\Laravel\Integrations\Sanctum\SanctumIntegration;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiIntegration;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 
@@ -75,6 +76,9 @@ final class DefaultExtensions
             // API Resources (always-on; illuminate/http ships everywhere) — JsonResource toArray
             // shapes + Laravel 13 first-party JSON:API (added only when its class exists).
             ...ApiResourcesIntegration::extensions(),
+            // timacdonald/json-api (pre-13 JSON:API resources): same to*() surface as first-party,
+            // fed through the shared JSON:API document/params infra, added only when installed.
+            ...(TimacdonaldJsonApiIntegration::installed() ? TimacdonaldJsonApiIntegration::extensions() : []),
             // Eloquent model schemas (always-on): columns from the engine refined by the model's
             // visible/hidden/appends/casts + class-level #[Hidden].
             ...EloquentIntegration::extensions(),

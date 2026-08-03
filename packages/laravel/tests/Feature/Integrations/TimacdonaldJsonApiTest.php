@@ -1,0 +1,101 @@
+<?php
+
+declare(strict_types=1);
+
+use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\ApiResources\JsonApiDocument;
+use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflector;
+use Docuccino\Laravel\Tests\Fixtures\TimacdonaldJsonApi\TimacdonaldArticleResource;
+use Illuminate\Routing\Router;
+use TiMacDonald\JsonApi\JsonApiResourceCollection;
+use Workbench\App\Http\Controllers\FormController;
+
+/**
+ * The timacdonald/json-api integration (Phase 5c): the pre-13 JSON:API resource package Laravel 13's
+ * first-party resources were upstreamed from. Its `to*()` surface is identical, so the shared
+ * JSON:API document + params infra produces the same output behind a different class guard. The
+ * document shape's self-reference cycle-break is proven once via the first-party ApiResources suite
+ * (same {@see JsonApiDocument} builder).
+ */
+function timacdonaldEngine(): StubTypeEngine
+{
+    $loc = new SourceLocation('');
+    $shape = static fn (array $fields): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT($fields), $loc)]);
+
+    return new StubTypeEngine(analyses: [
+        TimacdonaldArticleResource::class.'::toAttributes' => $shape([
+            new ArrayShapeField('title', ScalarT::string()),
+            new ArrayShapeField('body', ScalarT::string()),
+        ]),
+        TimacdonaldArticleResource::class.'::toRelationships' => $shape([
+            new ArrayShapeField('author', ScalarT::string()),
+        ]),
+        TimacdonaldArticleResource::class.'::toLinks' => $shape([
+            new ArrayShapeField('self', ScalarT::string()),
+        ]),
+    ]);
+}
+
+it('maps a timacdonald JSON:API resource to a JSON:API document schema through the shared builder', function (): void {
+    $components = new ComponentRegistry;
+    $converter = new SchemaConverter(
+        [new TimacdonaldJsonApiResourceSchema, new JsonResourceSchema, ...DefaultTypeMappers::all()],
+        timacdonaldEngine(),
+        $components,
+        new RepresentationPolicy,
+    );
+
+    $converter->toSchema(new ClassT(TimacdonaldArticleResource::class));
+
+    $document = $components->schemas()['TimacdonaldArticleResource'];
+    expect($document['required'])->toBe(['data']);
+
+    $data = $document['properties']['data'];
+    expect($data['required'])->toBe(['id', 'type'])
+        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'relationships', 'links'])
+        ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
+        ->and($data['properties']['id'])->toBe(['type' => 'string']);
+});
+
+it('detects when a return type involves a timacdonald JSON:API document', function (): void {
+    expect(TimacdonaldResourceReflector::involvesJsonApi(new ClassT(TimacdonaldArticleResource::class)))->toBeTrue()
+        ->and(TimacdonaldResourceReflector::involvesJsonApi(new ClassT(JsonApiResourceCollection::class, [new ClassT(TimacdonaldArticleResource::class)])))->toBeTrue()
+        ->and(TimacdonaldResourceReflector::involvesJsonApi(new ClassT('Illuminate\\Http\\Resources\\Json\\JsonResource')))->toBeFalse();
+});
+
+it('adds include + fields[type] params to an action returning a timacdonald resource', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/timacdonald-articles', [FormController::class, 'index']);
+
+    app()->instance(TypeEngine::class, new StubTypeEngine(analyses: [
+        'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(
+            returns: [new ReturnSite(new ClassT(TimacdonaldArticleResource::class), new SourceLocation(''))],
+        ),
+    ]));
+
+    $operation = generateDocument()->document->toArray()['paths']['/api/timacdonald-articles']['get'];
+
+    $byName = [];
+    foreach ($operation['parameters'] ?? [] as $parameter) {
+        $byName[$parameter['name']] = $parameter;
+    }
+
+    expect($byName)->toHaveKeys(['include', 'fields'])
+        ->and($byName['fields']['style'])->toBe('deepObject')
+        ->and($byName['include']['x-docuccino']['provenance'][0]['producer'])->toBe('integration:timacdonald-json-api');
+});
