@@ -41,7 +41,7 @@ This is a monorepo, subtree-split into individual packages on release:
 ```bash
 composer install
 
-vendor/bin/pest                         # full suite (the `fixture` group auto-skips without the fixture app)
+vendor/bin/pest --parallel              # full suite (the `fixture` group auto-skips without the fixture app)
 vendor/bin/phpstan analyse --no-progress  # level max — NO baselines, no blanket ignores
 vendor/bin/pint --test                  # code style (drop --test to fix)
 composer validate --strict              # per package
@@ -58,7 +58,7 @@ provisioned Laravel + Larastan app at `tests/fixture-app/app`, which is **gitign
 it per `tests/fixture-app/setup.md` (or let CI's cached provisioning do it). Then:
 
 ```bash
-vendor/bin/pest --group=fixture         # real-engine integration tests
+vendor/bin/pest --parallel --group=fixture   # real-engine integration tests
 ```
 
 Set `DOCUCCINO_REQUIRE_FIXTURE=1` to turn a missing/broken fixture app into a hard failure instead

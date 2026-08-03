@@ -72,8 +72,8 @@
         }
     },
     "scripts": {
-        "test": "pest",
-        "test:inference-fixture": "pest --group=fixture",
+        "test": "pest --parallel",
+        "test:inference-fixture": "pest --parallel --group=fixture",
         "analyse": "phpstan analyse --memory-limit=1G",
         "lint": "pint --test"
     }

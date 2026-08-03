@@ -66,11 +66,11 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
 
 ```bash
 composer install
-vendor/bin/pest                         # full suite (fixture group auto-skips w/o fixture app)
-vendor/bin/pest --group=fixture         # real-engine integration tests
+vendor/bin/pest --parallel              # full suite (fixture group auto-skips w/o fixture app)
+vendor/bin/pest --parallel --group=fixture   # real-engine integration tests
 vendor/bin/phpstan analyse --no-progress
 vendor/bin/pint --test                  # (drop --test to fix)
-vendor/bin/pest --coverage --exclude-group=fixture --min=78
+vendor/bin/pest --coverage --exclude-group=fixture --min=80
 DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --filter=<golden test>   # sanctioned regens only
 ```
 

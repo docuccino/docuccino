@@ -70,7 +70,7 @@ jobs:
         run: vendor/bin/phpstan analyse --no-progress
 
       - name: Pest (unit + non-fixture integration)
-        run: vendor/bin/pest --exclude-group=fixture
+        run: vendor/bin/pest --parallel --exclude-group=fixture
 
   coverage:
     name: Coverage gate (PHP 8.4)
@@ -147,4 +147,4 @@ jobs:
         # while executing zero fixture tests.
         env:
           DOCUCCINO_REQUIRE_FIXTURE: '1'
-        run: vendor/bin/pest --group=fixture
+        run: vendor/bin/pest --parallel --group=fixture
