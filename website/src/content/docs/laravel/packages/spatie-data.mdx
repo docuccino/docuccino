@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Activates automatically when [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) is installed.
 A `Data` class is documented from its properties and validation attributes — **statically**, without
 constructing it — and works in both directions: as a request body when it's an action parameter, and as
@@ -15,26 +17,49 @@ a reusable schema when it's returned.
 Type-hint a `Data` class as your action's parameter and Docuccino documents the request body from it,
 the same way it would from a Form Request's `rules()`:
 
-```php
-// app/Data/CreateInvoiceData.php
-class CreateInvoiceData extends Data
-{
-    public function __construct(
-        public int $customerId,
-        public string $currency,
-        public ?string $dueAt,
-        #[Hidden]
-        public ?string $internalNote,
-    ) {}
-}
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Data/CreateInvoiceData.php
+	class CreateInvoiceData extends Data
+	{
+	    public function __construct(
+	        public int $customerId,
+	        public string $currency,
+	        public ?string $dueAt,
+	        #[Hidden]
+	        public ?string $internalNote,
+	    ) {}
+	}
 
-```php
-// app/Http/Controllers/InvoiceController.php
-public function store(CreateInvoiceData $data): InvoiceResource { /* … */ }
-```
+	// app/Http/Controllers/InvoiceController.php
+	public function store(CreateInvoiceData $data): InvoiceResource { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"requestBody": {
+	  "required": true,
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "customerId": { "type": "integer" },
+	          "currency":   { "type": "string" },
+	          "dueAt":      { "type": "string" }
+	        },
+	        "required": ["customerId", "currency"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
-This documents a request body with `customerId`, `currency`, and `dueAt` — with `internalNote` dropped.
+The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped by `#[Hidden]`, and
+the nullable `dueAt` isn't required.
 
 ## Response schemas from Data returns
 

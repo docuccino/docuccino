@@ -5,12 +5,14 @@ sidebar:
   order: 4
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Error responses are one of the most tedious parts of API docs to maintain by hand. Docuccino
 documents them for you by reading how your application actually handles exceptions, and falls back
 to sensible defaults for the framework's built-in ones.
 
 For each exception an endpoint can throw, Docuccino resolves a response in this order — the first
-match wins, and your [attributes](/reference/attributes/#response) or config always override the
+match wins, and your [attributes](/laravel/reference/attributes/#response) or config always override the
 result:
 
 1. **Your exception handling** (inferred)
@@ -30,16 +32,38 @@ It analyzes each with the thrown type in mind, so even a single catch-all handle
 `instanceof` is documented correctly per exception. Status codes and response bodies are read
 directly from the code:
 
-```php
-// app/Exceptions/PaymentRequiredException.php
-public function render(Request $request): JsonResponse
-{
-    return response()->json([
-        'message' => 'Payment is required to continue.',
-        'invoice_id' => $this->invoiceId,
-    ], 402);
-}
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Exceptions/PaymentRequiredException.php
+	public function render(Request $request): JsonResponse
+	{
+	    return response()->json([
+	        'message' => 'Payment is required to continue.',
+	        'invoice_id' => $this->invoiceId,
+	    ], 402);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"402": {
+	  "description": "Payment Required",
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "message":    { "type": "string" },
+	          "invoice_id": { "type": "integer" }
+	        }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
 Throw this from an action and a `402` response with that body shape is documented — no annotation
 required. If a handler is too dynamic to read statically, Docuccino says so with a diagnostic

@@ -5,6 +5,8 @@ sidebar:
   order: 6
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Documents the `role:`, `permission:`, and `role_or_permission:` middleware from
 [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) — the authorization your routes
 require, surfaced in the spec.
@@ -39,11 +41,23 @@ Once enabled, a route's permission middleware is documented two ways:
 - a human-readable line appended to the operation's description — for example,
   *"Requires permission: invoices.view"*.
 
-```php
-// routes/api.php
-Route::get('/invoices', [InvoiceController::class, 'index'])
-    ->middleware('permission:invoices.view');
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// routes/api.php
+	Route::get('/invoices', [InvoiceController::class, 'index'])
+	    ->middleware('permission:invoices.view');
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"get": {
+	  "description": "Requires permission: invoices.view",
+	  "x-permissions": ["invoices.view"]
+	}
+	```
+	</TabItem>
+</Tabs>
 
 With the integration enabled, this documents the operation with `x-permissions: ['invoices.view']` and
 the matching description line.

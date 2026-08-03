@@ -5,6 +5,8 @@ sidebar:
   order: 10
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Activates automatically when [`timacdonald/json-api`](https://github.com/timacdonald/json-api) is
 installed. This is the package Laravel 13's first-party JSON:API resources were upstreamed from, so
 if you're on an earlier Laravel — or simply prefer the package — your resources are documented
@@ -23,29 +25,52 @@ from the same methods the framework's first-party resources expose:
 Endpoints returning one of these resources (or a collection of them) also gain the JSON:API
 `include` and `fields[TYPE]` query parameters.
 
-```php
-// app/Http/Resources/UserResource.php
-class UserResource extends JsonApiResource
-{
-    public function toAttributes(Request $request): array
-    {
-        return [
-            'name'  => $this->name,
-            'email' => $this->email,
-        ];
-    }
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Resources/UserResource.php
+	class UserResource extends JsonApiResource
+	{
+	    public function toAttributes(Request $request): array
+	    {
+	        return [
+	            'name'  => $this->name,
+	            'email' => $this->email,
+	        ];
+	    }
 
-    public function toRelationships(Request $request): array
-    {
-        return [
-            'team' => fn () => TeamResource::make($this->team),
-        ];
-    }
-}
-```
+	    public function toRelationships(Request $request): array
+	    {
+	        return [
+	            'team' => fn () => TeamResource::make($this->team),
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"UserResource": {
+	  "type": "object",
+	  "properties": {
+	    "id":   { "type": "string" },
+	    "type": { "type": "string" },
+	    "attributes": {
+	      "type": "object",
+	      "properties": {
+	        "name":  { "type": "string" },
+	        "email": { "type": "string" }
+	      }
+	    },
+	    "relationships": { "type": "object" }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
-This produces a `{ data: { id, type, attributes, relationships } }` document schema, hoisted into a
-reusable component, plus `include` and `fields[users]` query parameters on the endpoints that return
+The resource becomes a `{ data: { id, type, attributes, relationships } }` document schema, hoisted into
+a reusable component, plus `include` and `fields[users]` query parameters on the endpoints that return
 it.
 
 ## Which one runs

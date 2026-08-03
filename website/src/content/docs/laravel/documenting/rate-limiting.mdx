@@ -5,6 +5,8 @@ sidebar:
   order: 7
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Any route with Laravel's `throttle` middleware is documented with a `429 Too Many Requests` response
 and the accompanying `Retry-After` and `X-RateLimit-*` headers. This is on by default — no package or
 configuration required.
@@ -19,10 +21,26 @@ Docuccino reads the throttle configuration from the middleware:
 | `throttle:60` | 60 requests per minute. |
 | `throttle:api` (a named limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
 
-```php
-// routes/api.php
-Route::middleware('throttle:60,1')->get('/invoices', [InvoiceController::class, 'index']);
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// routes/api.php
+	Route::middleware('throttle:60,1')->get('/invoices', [InvoiceController::class, 'index']);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"429": {
+	  "description": "Too Many Requests",
+	  "headers": {
+	    "Retry-After":           { "schema": { "type": "integer", "example": 60 } },
+	    "X-RateLimit-Limit":     { "schema": { "type": "integer", "example": 60 } },
+	    "X-RateLimit-Remaining": { "schema": { "type": "integer" } }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
 ## Configuration
 

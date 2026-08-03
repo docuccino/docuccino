@@ -1,9 +1,11 @@
 ---
-title: JSON API Paginate
+title: Spatie JSON API Paginate
 description: Document spatie/laravel-json-api-paginate's page[number]/page[size] pagination parameters from jsonPaginate().
 sidebar:
   order: 9
 ---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 Activates automatically when
 [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) is
@@ -22,17 +24,29 @@ Query Builder chains — and adds the matching query parameters:
 - **`page[cursor]`** — instead of `page[number]`, when the package is configured for cursor
   pagination.
 
-```php
-// app/Http/Controllers/OrderController.php
-public function index(): AnonymousResourceCollection
-{
-    $orders = Order::query()
-        ->where('status', 'open')
-        ->jsonPaginate();
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/OrderController.php
+	public function index(): AnonymousResourceCollection
+	{
+	    $orders = Order::query()
+	        ->where('status', 'open')
+	        ->jsonPaginate();
 
-    return OrderResource::collection($orders);
-}
-```
+	    return OrderResource::collection($orders);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "page[number]", "in": "query", "required": false, "schema": { "type": "integer" } },
+	  { "name": "page[size]",   "in": "query", "required": false, "schema": { "type": "integer", "maximum": 30 } }
+	]
+	```
+	</TabItem>
+</Tabs>
 
 This documents `page[number]` and `page[size]` query parameters, alongside the paginated response.
 

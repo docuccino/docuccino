@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 These three always-on integrations produce the reusable component schemas your responses reference.
 
 ## API Resources
@@ -14,18 +16,39 @@ Docuccino documents any `JsonResource` from the shape of its `toArray()` method.
 they may be absent. A resource returned as `Resource::collection(...)` is documented as an array of
 that schema.
 
-```php
-// app/Http/Resources/InvoiceResource.php
-public function toArray(Request $request): array
-{
-    return [
-        'id' => $this->id,
-        'total' => $this->total,
-        'status' => $this->status,
-        'customer' => new CustomerResource($this->whenLoaded('customer')), // optional
-    ];
-}
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Resources/InvoiceResource.php
+	public function toArray(Request $request): array
+	{
+	    return [
+	        'id' => $this->id,
+	        'total' => $this->total,
+	        'status' => $this->status,
+	        'customer' => new CustomerResource($this->whenLoaded('customer')), // optional
+	    ];
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"InvoiceResource": {
+	  "type": "object",
+	  "properties": {
+	    "id":       { "type": "integer" },
+	    "total":    { "type": "number" },
+	    "status":   { "$ref": "#/components/schemas/InvoiceStatus" },
+	    "customer": { "anyOf": [ { "$ref": "#/components/schemas/CustomerResource" }, { "type": "null" } ] }
+	  },
+	  "required": ["id", "total", "status"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The conditional `customer` isn't in `required` — `whenLoaded` made it optional — and `status` points at
+the shared enum schema below.
 
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
 not, so they can be shared by reference. Control this with the `api_resources.wrap` option:
@@ -54,21 +77,38 @@ when every variant is registered in a morph map — so clients can tell the vari
 
 A backed enum is documented as an `enum` schema from its cases (integer- or string-typed to match
 its backing). Add per-case descriptions with
-[`#[CaseDescription]`](/reference/attributes/#casedescription):
+[`#[CaseDescription]`](/laravel/reference/attributes/#casedescription):
 
-```php
-enum InvoiceStatus: string
-{
-    #[CaseDescription('Created but not yet sent to the customer')]
-    case Draft = 'draft';
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	enum InvoiceStatus: string
+	{
+	    #[CaseDescription('Created but not yet sent to the customer')]
+	    case Draft = 'draft';
 
-    #[CaseDescription('Sent and awaiting payment')]
-    case Sent = 'sent';
+	    #[CaseDescription('Sent and awaiting payment')]
+	    case Sent = 'sent';
 
-    #[CaseDescription('Paid in full')]
-    case Paid = 'paid';
-}
-```
+	    #[CaseDescription('Paid in full')]
+	    case Paid = 'paid';
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"InvoiceStatus": {
+	  "type": "string",
+	  "enum": ["draft", "sent", "paid"],
+	  "x-enumDescriptions": {
+	    "draft": "Created but not yet sent to the customer",
+	    "sent":  "Sent and awaiting payment",
+	    "paid":  "Paid in full"
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
 Descriptions are emitted as `x-enumDescriptions`. To also emit codegen name hints
 (`x-enumNames` / `x-enum-varnames`), set `representation.enums.naming` in your config.

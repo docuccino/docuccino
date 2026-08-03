@@ -5,6 +5,8 @@ sidebar:
   order: 8
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Activates automatically when [`lorisleiva/laravel-actions`](https://laravelactions.com) is installed.
 When you register an action as a route, Docuccino documents it exactly as the package runs it — no
 annotations, no wrapper controller.
@@ -22,40 +24,64 @@ method, so everything is read from the real signature rather than the trait's ge
   style as the rest of your error responses (framework defaults, or the Problem Details preset).
 - **The response body** is inferred from the resolved method's return type, like any other endpoint.
 
-```php
-// app/Actions/PublishArticle.php
-class PublishArticle
-{
-    use AsController;
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Actions/PublishArticle.php
+	class PublishArticle
+	{
+	    use AsController;
 
-    public function rules(): array
-    {
-        return [
-            'title' => ['required', 'string', 'max:120'],
-            'body'  => ['required', 'string'],
-        ];
-    }
+	    public function rules(): array
+	    {
+	        return [
+	            'title' => ['required', 'string', 'max:120'],
+	            'body'  => ['required', 'string'],
+	        ];
+	    }
 
-    public function authorize(ActionRequest $request): bool
-    {
-        return $request->user()->can('publish', Article::class);
-    }
+	    public function authorize(ActionRequest $request): bool
+	    {
+	        return $request->user()->can('publish', Article::class);
+	    }
 
-    /** Publish a draft article. */
-    public function handle(): ArticleResource
-    {
-        // ...
-    }
-}
-```
+	    /** Publish a draft article. */
+	    public function handle(): ArticleResource
+	    {
+	        // ...
+	    }
+	}
 
-```php
-// routes/api.php
-Route::post('/articles', PublishArticle::class);
-```
+	// routes/api.php
+	Route::post('/articles', PublishArticle::class);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"post": {
+	  "summary": "Publish a draft article.",
+	  "requestBody": {
+	    "required": true,
+	    "content": { "application/json": { "schema": {
+	      "type": "object",
+	      "properties": {
+	        "title": { "type": "string", "maxLength": 120 },
+	        "body":  { "type": "string" }
+	      },
+	      "required": ["title", "body"]
+	    } } }
+	  },
+	  "responses": {
+	    "200": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ArticleResource" } } } },
+	    "403": { "description": "Forbidden" }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
-This documents a `POST /articles` operation with the summary "Publish a draft article.", a JSON
-request body with required `title` and `body`, an `ArticleResource` response, and a `403`.
+One class, no annotations — and the summary, the `title`/`body` body (with `max:120` as `maxLength`), the
+`ArticleResource` response, and the `403` from `authorize()` are all documented.
 
 ## How the dispatched method is resolved
 
@@ -71,5 +97,5 @@ If you register a specific method explicitly — `Route::post('/articles', [Publ
 ## Refining the output
 
 Everything here is inferred at the integration layer, so the usual
-[attributes](/reference/attributes/) still apply — add a `#[Group]`, an `#[Example]`, or an extra
+[attributes](/laravel/reference/attributes/) still apply — add a `#[Group]`, an `#[Example]`, or an extra
 `#[Response]` on the action method and it wins over the inferred values.

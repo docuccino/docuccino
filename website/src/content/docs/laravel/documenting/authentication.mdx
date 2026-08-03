@@ -5,6 +5,8 @@ sidebar:
   order: 6
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Docuccino detects how your routes are protected from their middleware and documents the appropriate
 security schemes and requirements. If you'd rather configure schemes yourself, declaring any
 `security.schemes` in your config takes over and these auto-configurations step aside. Routes marked
@@ -18,6 +20,33 @@ both of Sanctum's modes based on the middleware a route uses:
 - **Token** (`auth:sanctum`) → an HTTP bearer scheme.
 - **Stateful SPA** (`EnsureFrontendRequestsAreStateful`) → a cookie-based scheme, with the CSRF/XSRF
   handshake explained in prose.
+
+The middleware alone is enough — you write no security config:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// routes/api.php
+	Route::get('/invoices', [InvoiceController::class, 'index'])
+	    ->middleware('auth:sanctum');
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"components": {
+	  "securitySchemes": {
+	    "sanctumToken": { "type": "http", "scheme": "bearer" }
+	  }
+	}
+	```
+	```json
+	"security": [ { "sanctumToken": [] } ]
+	```
+	The scheme lands in `components`, and each protected operation carries the matching requirement.
+	</TabItem>
+</Tabs>
+
+Tune which schemes are exposed:
 
 ```php
 // config/docuccino.php → documents.default.integrations

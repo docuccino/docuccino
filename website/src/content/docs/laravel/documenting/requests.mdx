@@ -100,6 +100,26 @@ action — becomes the request body schema. Rules map to JSON Schema: presence t
 	}
 	```
 	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"requestBody": {
+	  "required": true,
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "customer_id": { "type": "integer" },
+	          "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"] },
+	          "due_at":      { "type": "string", "format": "date" }
+	        },
+	        "required": ["customer_id", "currency"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
 </Tabs>
 
 Either way documents a request body with `customer_id`, `currency` (as an enum), and `due_at`, with the
