@@ -67,7 +67,10 @@ final class ActionAuthorizeResponsesExtension implements OperationExtension
     private function definesAuthorize(RouteContext $context): bool
     {
         $class = $context->actionRef->class;
-        if ($class === null || ! LaravelAction::isAction($class) || ! class_exists($class)) {
+        // Only document the 403 when the package would actually run authorize() for the dispatched
+        // method: an explicitly-registered method or a WithAttributes action never validates at
+        // runtime, so no AuthorizationException is ever thrown from the validation pipeline there.
+        if ($class === null || ! LaravelAction::dispatchesValidation($class, $context->actionRef->method) || ! class_exists($class)) {
             return false;
         }
 

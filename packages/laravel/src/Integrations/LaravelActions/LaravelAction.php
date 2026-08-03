@@ -22,21 +22,53 @@ final class LaravelAction
 {
     public const CONTROLLER_TRAIT = 'Lorisleiva\\Actions\\Concerns\\AsController';
 
+    /** The trait that opts an action out of the package's automatic request validation. */
+    public const WITH_ATTRIBUTES_TRAIT = 'Lorisleiva\\Actions\\Concerns\\WithAttributes';
+
+    /** The methods the package treats as non-explicit (it remaps invokable routes onto these). */
+    private const DISPATCH_METHODS = ['asController', 'handle', '__invoke'];
+
     /** Whether an FQCN is a laravel-actions action used as a controller (carries the AsController trait). */
     public static function isAction(string $fqcn): bool
     {
-        if (! trait_exists(self::CONTROLLER_TRAIT) || ! class_exists($fqcn)) {
+        if (! trait_exists(self::CONTROLLER_TRAIT)) {
             return false;
         }
 
-        // Recursively collect the class's traits (its own + parents' + traits-used-by-traits, so the
-        // umbrella AsAction trait — which uses AsController — is seen) via PHP built-ins only.
+        return self::usesTrait($fqcn, self::CONTROLLER_TRAIT);
+    }
+
+    /**
+     * Whether the package's controller decorator would actually run this action's `rules()`/
+     * `authorize()` for the dispatched method — i.e. whether documenting them reflects runtime.
+     * Mirrors `ControllerDecorator::shouldValidateRequest()`: validation runs only for a non-explicit
+     * dispatched method (`asController`/`handle`/`__invoke`, so an explicitly-registered
+     * `[Action::class, 'store']` never validates) on an action that does NOT use the `WithAttributes`
+     * trait (which opts out of automatic request validation).
+     */
+    public static function dispatchesValidation(string $fqcn, string $method): bool
+    {
+        return self::isAction($fqcn)
+            && in_array($method, self::DISPATCH_METHODS, true)
+            && ! self::usesTrait($fqcn, self::WITH_ATTRIBUTES_TRAIT);
+    }
+
+    /**
+     * Whether $fqcn uses $trait, walking its own traits + parents' + traits-used-by-traits (so the
+     * umbrella `AsAction` trait — which uses `AsController` — is seen) via PHP built-ins only.
+     */
+    private static function usesTrait(string $fqcn, string $trait): bool
+    {
+        if (! class_exists($fqcn)) {
+            return false;
+        }
+
         $traits = [];
         foreach (array_merge([$fqcn], class_parents($fqcn) ?: []) as $class) {
             self::collectTraits($class, $traits);
         }
 
-        return isset($traits[self::CONTROLLER_TRAIT]);
+        return isset($traits[$trait]);
     }
 
     /**

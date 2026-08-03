@@ -12,8 +12,10 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ArchiveArticleAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ExplicitMethodAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\PublishArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\SimpleAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\WithAttributesAction;
 use Illuminate\Routing\Router;
 
 /**
@@ -42,7 +44,11 @@ function actionEngine(): StubTypeEngine
     ]);
 }
 
-function actionOperation(string $verb, string $path, string $action): array
+/**
+ * @param  string|array{0: class-string, 1: string}  $action
+ * @return array<string, mixed>
+ */
+function actionOperation(string $verb, string $path, string|array $action): array
 {
     /** @var Router $router */
     $router = app('router');
@@ -76,6 +82,25 @@ it('resolves an action defining asController() to that method over handle()', fu
 
 it('adds no request body or 403 for a minimal action with neither rules() nor authorize()', function (): void {
     $operation = actionOperation('get', 'api/simple', SimpleAction::class);
+
+    expect($operation)->not->toHaveKey('requestBody')
+        ->and($operation['responses'] ?? [])->not->toHaveKey('403');
+});
+
+it('documents no rules() body or authorize() 403 for an explicitly-registered method', function (): void {
+    // Registered as [ExplicitMethodAction::class, 'store']: the package never validates an explicit
+    // method, so despite the action defining rules() + authorize(), neither is documented.
+    $operation = actionOperation('post', 'api/explicit', [ExplicitMethodAction::class, 'store']);
+
+    expect($operation['summary'])->toBe('Store an article.')
+        ->and($operation)->not->toHaveKey('requestBody')
+        ->and($operation['responses'] ?? [])->not->toHaveKey('403');
+});
+
+it('documents no rules() body or authorize() 403 for a WithAttributes action', function (): void {
+    // The WithAttributes trait opts out of automatic request validation, so rules()/authorize() never
+    // run even though the invokable route dispatches through handle().
+    $operation = actionOperation('post', 'api/with-attributes', WithAttributesAction::class);
 
     expect($operation)->not->toHaveKey('requestBody')
         ->and($operation['responses'] ?? [])->not->toHaveKey('403');

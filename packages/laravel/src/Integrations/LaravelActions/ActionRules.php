@@ -26,7 +26,10 @@ final class ActionRules
     public function recover(RouteContext $context): ?RuleSet
     {
         $class = $context->actionRef->class;
-        if ($class === null || ! LaravelAction::isAction($class) || ! class_exists($class)) {
+        // Only recover rules() when the package would actually run it for the dispatched method:
+        // an explicitly-registered method or a WithAttributes action never validates at runtime, so
+        // documenting a request body from rules() there would describe an endpoint that does not exist.
+        if ($class === null || ! LaravelAction::dispatchesValidation($class, $context->actionRef->method) || ! class_exists($class)) {
             return null;
         }
 
