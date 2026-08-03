@@ -7,12 +7,10 @@ namespace Docuccino\Laravel\Integrations\JsonApiPaginate;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
-use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryParameterSpec;
 
 /**
  * Documents a `spatie/laravel-json-api-paginate` list endpoint (Phase 5c). It traces the action with
@@ -47,24 +45,11 @@ final class JsonApiPaginateParametersExtension implements OperationExtension
         $contribution = Contribution::integration('json-api-paginate', $context->actionSource());
 
         foreach ($this->builder->build($this->config, $visitor->facts) as $spec) {
-            $parameter = $operation->parameter('query', $spec->name);
-            $parameter->setRequired(false, $contribution);
-            $this->applySpec($parameter, $spec, $contribution);
+            $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
         if (! $this->config->recovered) {
             $this->reportDefaultConfig($context);
-        }
-    }
-
-    private function applySpec(ParameterDraft $parameter, QueryParameterSpec $spec, Contribution $contribution): void
-    {
-        if ($spec->description !== null) {
-            $parameter->setDescription($spec->description, $contribution);
-        }
-
-        foreach ($spec->schema as $keyword => $value) {
-            $parameter->schema()->set((string) $keyword, $value, $contribution);
         }
     }
 

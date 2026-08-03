@@ -7,7 +7,6 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
-use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
@@ -48,29 +47,10 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $contribution = Contribution::integration('query-builder', $context->actionSource());
 
         foreach ($this->builder->build($facts, $context->representation()) as $spec) {
-            $parameter = $operation->parameter('query', $spec->name);
-            $parameter->setRequired(false, $contribution);
-            $this->applySpec($parameter, $spec, $contribution);
+            $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
         $this->reportUnresolved($facts, $context);
-    }
-
-    private function applySpec(ParameterDraft $parameter, QueryParameterSpec $spec, Contribution $contribution): void
-    {
-        if ($spec->description !== null) {
-            $parameter->setDescription($spec->description, $contribution);
-        }
-        if ($spec->style !== null) {
-            $parameter->set('style', $spec->style, $contribution);
-        }
-        if ($spec->explode !== null) {
-            $parameter->set('explode', $spec->explode, $contribution);
-        }
-
-        foreach ($spec->schema as $keyword => $value) {
-            $parameter->schema()->set((string) $keyword, $value, $contribution);
-        }
     }
 
     private function reportUnresolved(QueryBuilderFacts $facts, RouteContext $context): void
