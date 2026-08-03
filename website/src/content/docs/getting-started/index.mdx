@@ -1,0 +1,95 @@
+---
+title: Installation
+description: Install Docuccino, publish its config, and understand what it adds to your Laravel app.
+sidebar:
+  order: 1
+---
+
+import { Steps, Card, CardGrid, FileTree, Aside } from '@astrojs/starlight/components';
+
+Docuccino generates OpenAPI documentation from the real shape of your Laravel application. You
+install one package; it reads your routes, controllers, requests, resources, and exception handling
+and produces an accurate document — with almost no annotation to start.
+
+## Requirements
+
+<CardGrid>
+	<Card title="PHP 8.3+" icon="php" />
+	<Card title="Laravel 12+" icon="laravel" />
+</CardGrid>
+
+Type inference is powered by static analysis and is on by default. If it can't start in your
+environment, Docuccino degrades gracefully — you still get documentation from your annotations and
+docblocks — but the richest results (inferred responses, detected query parameters, automatic error
+responses) come with inference running.
+
+## Install
+
+<Steps>
+
+1. Require the package with Composer:
+
+   ```bash
+   composer require docuccino/laravel
+   ```
+
+2. Publish the configuration file:
+
+   ```bash
+   php artisan vendor:publish --tag="docuccino-config"
+   ```
+
+   This writes `config/docuccino.php`. The defaults document every `api/*` route, export to
+   `docs/openapi.json`, and serve an interactive viewer at `/docs/api`.
+
+3. Generate your first document:
+
+   ```bash
+   php artisan docuccino:export
+   ```
+
+</Steps>
+
+That's it — open `docs/openapi.json`, or visit `/docs/api` in your browser (it's available in your
+local environment out of the box). The [next page](/getting-started/first-export/) walks through
+what happened and how to view and refine it.
+
+## What gets added
+
+Installing Docuccino wires up a few things for you:
+
+<CardGrid>
+	<Card title="Artisan commands" icon="seti:powershell">
+		`docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, and
+		`docuccino:clear`. See the [commands reference](/reference/commands/).
+	</Card>
+	<Card title="A built-in viewer" icon="laptop">
+		An interactive [Scalar](https://scalar.com) API reference at `/docs/api`, its spec at
+		`/docs/api.json`, served from your own app — no external CDN required.
+	</Card>
+	<Card title="Automatic integrations" icon="puzzle">
+		Support for Form Requests, API Resources, Eloquent models, enums, Spatie Data, Spatie Query
+		Builder, Sanctum, Passport, and more — each activates only when you use it.
+	</Card>
+	<Card title="Extension points" icon="setting">
+		Register your own logic from any service provider with `Docuccino::extend()`. Every official
+		integration is built with the same tools available to you.
+	</Card>
+</CardGrid>
+
+## Where things live
+
+<FileTree>
+
+- config/
+  - docuccino.php    the single config file — documents, routes, security, viewer
+- docs/
+  - openapi.json     your exported document (commit this)
+
+</FileTree>
+
+<Aside type="tip" title="Commit the output">
+Docuccino's output is deterministic — identical code always produces byte-for-byte identical
+output. Commit `docs/openapi.json` and you get clean, reviewable diffs on every change, plus the
+ability to gate CI with [`docuccino:diff`](/reference/commands/#docuccinodiff).
+</Aside>

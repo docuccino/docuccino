@@ -1,0 +1,73 @@
+---
+title: Docuccino
+description: A UIR-based API documentation generator for Laravel — deep type inference, deterministic output, semantic diffing, and a bundled Scalar viewer.
+template: splash
+hero:
+  tagline: Beautiful, accurate OpenAPI docs for Laravel — generated from the real shape of your code. Deep type inference, byte-for-byte deterministic output, and a semantic diff you can gate CI on.
+  image:
+    # Animated brand mark; the SVG carries its own prefers-reduced-motion guard.
+    file: ../../assets/hero.svg
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: Docuccino vs Scramble
+      link: /guides/vs-scramble/
+      icon: open-book
+    - text: View on GitHub
+      link: https://github.com/docuccino/docuccino
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Documentation from your code, not from annotations
+
+Point Docuccino at your routes and it reads your controllers, form requests, resources, DTOs,
+enums, and exception handling to produce an accurate OpenAPI 3.2 document — then serves it in a
+built-in interactive viewer. You add annotations only where you want to say something your code
+can't.
+
+Under the hood, Docuccino builds a **UIR** (Universal Intermediate Representation): an OpenAPI-shaped
+document that also carries a stable identity for every operation and schema, and a record of where
+each detail came from. That's what powers the deterministic output and the semantic diff.
+
+<CardGrid>
+	<Card title="Deep type inference" icon="magnifier">
+		Response and request shapes are inferred from your real types — array shapes, generics, and
+		conditional returns included. Your existing type hints and PHPStan extensions make your docs
+		better automatically.
+	</Card>
+	<Card title="Query parameters, for free" icon="puzzle">
+		Filters, sorts, includes, and pagination for list endpoints are detected from your code — even
+		when the query is built several method calls deep. No hand-written parameter lists to maintain.
+	</Card>
+	<Card title="Error responses, automatically" icon="warning">
+		Docuccino reads your actual exception handling — render callbacks, exception `render()`,
+		`Responsable::toResponse()` — so `422`, `404`, `403`, and your custom error shapes are
+		documented with zero configuration.
+	</Card>
+	<Card title="Deterministic output" icon="approve-check">
+		The same code always produces byte-for-byte identical output — no timestamps, no absolute
+		paths, no shuffling. Commit the file and your diffs stay clean, even across tool upgrades.
+	</Card>
+	<Card title="A diff you can gate CI on" icon="seti:git">
+		`docuccino:diff --enforce` compares two versions of your API and enforces a versioning policy.
+		Ship a breaking change without the right version bump and the build fails.
+	</Card>
+	<Card title="Ready for what's next" icon="rocket">
+		The UIR is a documented, JSON-Schema-defined format. It's designed to feed richer tooling —
+		changelogs, mock servers, and AI agent tool schemas — without re-deriving your API.
+	</Card>
+</CardGrid>
+
+## Start here
+
+<CardGrid>
+	<LinkCard title="Get started" href="/getting-started/" description="Install, publish config, and export your first document." />
+	<LinkCard title="Configuration reference" href="/reference/configuration/" description="Every option in config/docuccino.php." />
+	<LinkCard title="Docuccino vs Scramble" href="/guides/vs-scramble/" description="How the two compare, and how to move over." />
+	<LinkCard title="Attributes" href="/reference/attributes/" description="Fine-tune the output when you need to." />
+</CardGrid>

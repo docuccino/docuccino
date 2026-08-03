@@ -1,0 +1,52 @@
+---
+title: Integrations
+description: The built-in integrations that read your packages and conventions — and how they activate.
+sidebar:
+  order: 1
+---
+
+import { LinkCard, CardGrid, Aside } from '@astrojs/starlight/components';
+
+Integrations are how Docuccino understands the packages and conventions you already use. Each one
+reads a specific part of your app — Form Requests, API Resources, Eloquent models, query builders,
+authentication — and contributes the matching pieces of your documentation.
+
+You don't enable them. Each integration activates automatically when it's relevant: the Spatie Data
+support turns on when you have Spatie Data installed, the Passport support when you have Passport,
+and so on. Integrations that build on Laravel itself (Form Requests, resources, models, enums, rate
+limiting, error responses) are always available.
+
+<Aside title="Built with the tools you have">
+Every official integration is built using the same public extension API that's available to you.
+Nothing here is privileged — if an integration can read a package, so can one you write. See
+[Writing an integration](/guides/extension-authoring/).
+</Aside>
+
+## The built-in integrations
+
+<CardGrid>
+	<LinkCard title="Resources, models & enums" href="/integrations/schemas/" description="Reusable response schemas from JsonResource, Eloquent, and backed enums." />
+	<LinkCard title="Request bodies & validation" href="/integrations/requests/" description="Request bodies and query params from Form Requests, inline validation, and Spatie Data." />
+	<LinkCard title="Error responses" href="/integrations/error-responses/" description="4xx/5xx responses from your real exception handling, defaults, or the RFC 9457 preset." />
+	<LinkCard title="Query Builder" href="/integrations/query-builder/" description="Filters, sorts, includes, and pagination from Spatie Query Builder — at any call depth." />
+	<LinkCard title="Authentication & permissions" href="/integrations/security/" description="Security schemes from Sanctum and Passport; permission middleware." />
+	<LinkCard title="Rate limiting" href="/integrations/rate-limiting/" description="429 responses and rate-limit headers from throttle middleware." />
+</CardGrid>
+
+## How contributions combine
+
+Several sources can describe the same operation — an inferred type, an integration, a docblock, an
+attribute. Docuccino merges them with a clear order of precedence, and higher layers win field by
+field (an attribute can override one field of a response without discarding the rest):
+
+```
+inference  <  integration  <  docblock  <  attribute  <  overlay  <  config
+```
+
+So an integration's best guess is always something you can refine with a docblock or an
+[attribute](/reference/attributes/) — you're never fighting the tool.
+
+Every contribution is recorded with its source in the document's provenance (visible in the raw
+[UIR](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
+`integration:sanctum`. That's what lets tooling explain *why* a given detail is documented the way
+it is.

@@ -1,0 +1,134 @@
+---
+title: Your first export
+description: Generate an OpenAPI document, view it in the built-in viewer, and learn how to refine it.
+sidebar:
+  order: 2
+---
+
+import { Steps, Tabs, TabItem, Aside, Badge } from '@astrojs/starlight/components';
+
+With Docuccino installed and its config published, you can document your existing API without
+writing a single annotation. This page shows what `docuccino:export` produces, how to view it, and
+how to add detail as you go.
+
+## Export a document
+
+```bash
+php artisan docuccino:export
+```
+
+With no arguments this builds every configured document and writes each to its configured path. The
+default document writes `docs/openapi.json`. To choose a format or output path explicitly:
+
+<Tabs>
+	<TabItem label="OpenAPI 3.2 (default)">
+	```bash
+	php artisan docuccino:export --out=public/openapi.json
+	```
+	</TabItem>
+	<TabItem label="OpenAPI 3.1">
+	```bash
+	php artisan docuccino:export --format=openapi-3.1 --out=public/openapi.json
+	```
+	</TabItem>
+	<TabItem label="YAML">
+	```bash
+	php artisan docuccino:export --yaml --out=docs/openapi.yaml
+	```
+	</TabItem>
+	<TabItem label="Raw UIR">
+	```bash
+	php artisan docuccino:export --format=uir --out=docs/api.uir.json
+	```
+	</TabItem>
+</Tabs>
+
+See the [commands reference](/reference/commands/#docuccinoexport) for every flag.
+
+## What Docuccino read
+
+For each route that matches your document's filters, Docuccino inspects your code and assembles an
+operation. For a typical list endpoint like:
+
+```php
+// app/Http/Controllers/InvoiceController.php
+public function index(): AnonymousResourceCollection
+{
+    $invoices = QueryBuilder::for(Invoice::class)
+        ->allowedFilters(['status', 'customer_id'])
+        ->allowedSorts(['issued_at', 'total'])
+        ->paginate();
+
+    return InvoiceResource::collection($invoices);
+}
+```
+
+…it documents the `filter[status]`, `filter[customer_id]`, `sort`, `page`, and `per_page` query
+parameters, and a paginated `200` response whose items are the `InvoiceResource` schema — all from
+reading the code. Add a `StoreInvoiceRequest` to a `store()` action and its validation rules become
+the request body; throw `InvoiceNotFoundException` and a `404` appears.
+
+## View it
+
+The built-in viewer serves an interactive [Scalar](https://scalar.com) reference straight from your
+app. With the default config:
+
+| Route | Serves |
+| --- | --- |
+| `GET /docs/api` | The interactive API reference page. |
+| `GET /docs/api.json` | The generated OpenAPI document. |
+| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). |
+
+The viewer is available in your **local** environment automatically. To expose it elsewhere, set a
+gate and define it:
+
+<Steps>
+
+1. Name a gate ability in `config/docuccino.php`:
+
+   ```php
+   // documents.default.viewer.gate
+   'gate' => 'viewApiDocs',
+   ```
+
+2. Define it in a service provider:
+
+   ```php
+   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
+   ```
+
+</Steps>
+
+<Aside type="caution" title="In production, don't regenerate on every request">
+The default `viewer.source` of `generate` rebuilds the document per request — fine for local or
+gated use. For a public viewer, serve the committed file (`viewer.source: artifact`) or a warmed
+cache (`viewer.source: cache`, filled by `docuccino:cache`). See the
+[viewer configuration](/reference/configuration/#viewer).
+</Aside>
+
+## Gate CI on problems
+
+Docuccino reports diagnostics — an unreadable controller, a query it couldn't resolve — grouped by
+route. Turn them into a failing build:
+
+```bash
+php artisan docuccino:export --fail-on=warning
+```
+
+<Badge text="--fail-on=none" variant="default" /> never fails on severity (the default),
+<Badge text="--fail-on=warning" variant="caution" /> fails on warnings and errors, and
+<Badge text="--fail-on=error" variant="danger" /> fails only on errors. A single broken route yields
+a stub operation plus a diagnostic rather than a failed build, so one bad controller never blocks
+the rest of your docs.
+
+## Add detail as you go
+
+The base export is already useful. Refine it where it helps:
+
+- Reach for [attributes](/reference/attributes/) like `#[Group]`, `#[Response]`, and `#[Example]`
+  where you want to say something the code can't.
+- Turn on the [Problem Details preset](/integrations/error-responses/) for RFC 9457 errors.
+- Point `content.dir` at a folder of Markdown to add [narrative guides](/uir/#content-layer)
+  alongside the reference.
+- Commit the document and wire [`docuccino:diff --enforce`](/reference/commands/#docuccinodiff) into
+  CI to catch breaking changes.

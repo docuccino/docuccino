@@ -1,0 +1,143 @@
+---
+title: Docuccino vs Scramble
+description: An honest comparison with Scramble, and a practical guide to moving your annotations and config across.
+---
+
+import { Tabs, TabItem, Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
+
+[Scramble](https://scramble.dedoc.co) is an excellent, popular API documentation generator, and if
+it's working well for you, that's a great place to be. Docuccino shares its core idea —
+documentation generated from your code, not hand-written annotations — and takes it further in a few
+directions. This page compares the two fairly and shows how to move across if you decide to.
+
+<Aside type="note">
+Scramble's exact features and annotation names vary between versions and between the free package
+and Scramble Pro. Treat the Scramble column below as a guide and check it against the version you
+run. The Docuccino column is exact.
+</Aside>
+
+## At a glance
+
+| | Scramble | Docuccino |
+| --- | --- | --- |
+| Documentation from code | ✅ | ✅ |
+| OpenAPI version | 3.1 | 3.2 (with a 3.1 downlevel export) |
+| Interactive viewer | ✅ | ✅ (bundled Scalar) |
+| Deep query-builder inference | Pro, limited by call depth | ✅ at any call depth |
+| Error responses from your handler | partial | ✅ reads your real handling |
+| Deterministic, byte-stable output | — | ✅ |
+| Semantic diff + CI version gating | — | ✅ (`docuccino:diff --enforce`) |
+| Multiple documents | — | ✅ |
+| YAML export | — | ✅ |
+| A documented intermediate format | — | ✅ (the [UIR](/uir/)) |
+
+## What you can stop maintaining
+
+Because Docuccino infers more, a few things you may currently hand-maintain become automatic:
+
+<CardGrid>
+	<Card title="Query parameter lists" icon="puzzle">
+		Filters, sorts, includes, and pagination are detected from your query builders — even when the
+		query is assembled several method calls deep. No hand-written parameter annotations.
+	</Card>
+	<Card title="Custom error-response classes" icon="warning">
+		Docuccino reads your actual exception handling, so custom error shapes are documented from the
+		code that produces them — or with the built-in RFC 9457 preset via one config line.
+	</Card>
+	<Card title="Registration timing" icon="setting">
+		Register extensions from any service provider, in any order — Docuccino resolves them when it
+		builds, so nothing gets missed.
+	</Card>
+	<Card title="Spec drift" icon="approve-check">
+		Deterministic output plus a semantic diff means your committed spec stays honest, and breaking
+		changes are caught in CI.
+	</Card>
+</CardGrid>
+
+## Migrating your annotations
+
+Most annotations map across cleanly.
+
+| Scramble | Docuccino | Notes |
+| --- | --- | --- |
+| `#[QueryParameter]` | [`#[QueryParameter]`](/reference/attributes/#queryparameter) | Same idea; Docuccino fills the rest by inference. |
+| `#[BodyParameter]` | [`#[BodyParameter]`](/reference/attributes/#bodyparameter) | Patches one property of the inferred body. |
+| `#[PathParameter]` | [`#[PathParameter]`](/reference/attributes/#pathparameter) | Adds an OpenAPI `format`. |
+| `#[HeaderParameter]` | [`#[HeaderParameter]`](/reference/attributes/#headerparameter) | — |
+| `#[Group]` | [`#[Group]`](/reference/attributes/#group) | Tag assignment; repeatable. |
+| `#[Example]` / `@example` | [`#[Example]`](/reference/attributes/#example) | Adds named examples, summaries, and `externalValue`. |
+| Exclude a route / controller | [`#[ExcludeFromDocs]`](/reference/attributes/#excludefromdocs) | Method or class target. |
+| `@unauthenticated` | [`#[Unauthenticated]`](/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
+| `@response {status}` | [`#[Response]`](/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
+| Hidden fields / `$hidden` | [`#[Hidden]`](/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. |
+| Enum case descriptions | [`#[CaseDescription]`](/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
+
+Docuccino also adds attributes with no direct Scramble equivalent — `#[OperationId]`, `#[Internal]`,
+`#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`,
+`#[SchemaName]`, and more. See the full [attributes reference](/reference/attributes/).
+
+## Migrating your config
+
+Docuccino's config is organized around **documents** — each an independent output with its own
+routes, info, security, and viewer — so a few top-level Scramble settings move under
+`documents.default`.
+
+| Scramble (`config/scramble.php`) | Docuccino (`config/docuccino.php`) |
+| --- | --- |
+| `api_path: 'api'` | `documents.default.routes.include: ['api/*']` |
+| `api_domain` | `documents.default.routes.closure` (or an include glob) |
+| `export_path` | `documents.default.export.path` |
+| `info.version` / `info.description` | `documents.default.info.version` / `.description` |
+| `servers` | `documents.default.servers` |
+| `ui.title` | `documents.default.info.title` |
+| viewer / UI options | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
+| `enum_cases_description_strategy` | `documents.default.representation.enums.naming` + `#[CaseDescription]` |
+| `extensions` | `extensions`, or `Docuccino::extend()` |
+| security via config/callbacks | `documents.default.security` + the Sanctum/Passport integrations |
+| a single document | as many named `documents` as you need |
+
+See the [configuration reference](/reference/configuration/) for every option.
+
+## Migrating your extensions
+
+The extension model is similar in spirit; the contracts live in
+`Docuccino\Core\Extensions\Contracts`.
+
+| Scramble | Docuccino |
+| --- | --- |
+| Type-to-schema extension | `TypeToSchema` |
+| Operation extension | `OperationExtension` (phased) |
+| Exception-to-response extension | `ExceptionToResponse` |
+| "After document generated" callback | `DocumentTransformer` |
+| Custom validation-rule handling | `RuleTransformer` |
+
+The [Writing an integration](/guides/extension-authoring/) guide walks through building one
+end-to-end.
+
+## Honest limitations (today)
+
+Docuccino is young, and a few things Scramble users may rely on aren't here yet:
+
+- **Postman export** — planned; OpenAPI (JSON/YAML) and the UIR are available today.
+- **Rendering examples from factories / live response calls** — planned. Examples currently come
+  from inference and `#[Example]` / `@example`.
+- **`#[Webhook]` and `#[Mock]` attributes** — planned (webhooks already exist in the document
+  structure).
+- **Watch mode with live viewer refresh** — planned.
+
+## Running them side by side
+
+You don't have to switch in one go. Because Docuccino writes to its own configured path and serves
+its viewer on its own route, you can generate both specs during a transition and compare:
+
+```bash
+php artisan docuccino:export --out=docs/openapi.docuccino.json
+```
+
+Diff it against your existing Scramble output, adopt Docuccino where you're happy, and remove the
+Scramble annotations you no longer need as you go.
+
+<CardGrid>
+	<LinkCard title="Get started" href="/getting-started/" description="Install and export your first document." />
+	<LinkCard title="Attributes" href="/reference/attributes/" description="The full annotation surface." />
+</CardGrid>

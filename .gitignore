@@ -6,3 +6,8 @@
 .idea/
 .DS_Store
 /spikes/fixture-app/
+
+# Starlight docs site (website/) — build artefacts and deps. package-lock.json IS committed.
+/website/node_modules/
+/website/dist/
+/website/.astro/

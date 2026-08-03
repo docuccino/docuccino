@@ -1,0 +1,80 @@
+---
+title: Resources, models & enums
+description: How Docuccino turns API Resources, Eloquent models, and enums into reusable response schemas.
+sidebar:
+  order: 2
+---
+
+These three always-on integrations produce the reusable component schemas your responses reference.
+
+## API Resources
+
+Docuccino documents any `JsonResource` from the shape of its `toArray()` method. Conditional fields —
+`whenLoaded`, `when`, `whenNotNull`, `mergeWhen` — become **optional** properties, so clients know
+they may be absent. A resource returned as `Resource::collection(...)` is documented as an array of
+that schema.
+
+```php
+// app/Http/Resources/InvoiceResource.php
+public function toArray(Request $request): array
+{
+    return [
+        'id' => $this->id,
+        'total' => $this->total,
+        'status' => $this->status,
+        'customer' => new CustomerResource($this->whenLoaded('customer')), // optional
+    ];
+}
+```
+
+**Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
+not, so they can be shared by reference. Control this with the `api_resources.wrap` option:
+
+| `wrap` | Result |
+| --- | --- |
+| omit (default) | Each resource's own `$wrap` (`data` unless overridden). |
+| `false` | Never wrap. |
+| `true` | Wrap under `data`. |
+| `'result'` (any string) | Wrap under that key. |
+
+Laravel 13's first-party JSON:API resources are supported too, including the `include` and `fields`
+query parameters they accept.
+
+## Eloquent models
+
+When a model appears in your output, Docuccino documents it from its columns and casts, refined by
+the model's own conventions: `$hidden` and class-level `#[Hidden]` remove properties, `$visible`
+restricts to an allow-list, `$casts` set formats (dates become `date-time`, enum casts route through
+the enum schema), and `$appends` add accessor properties. Non-nullable columns are marked required.
+
+Polymorphic (`morphTo`) relations become a `oneOf` of the possible models, with a `discriminator`
+when every variant is registered in a morph map — so clients can tell the variants apart reliably.
+
+## Enums
+
+A backed enum is documented as an `enum` schema from its cases (integer- or string-typed to match
+its backing). Add per-case descriptions with
+[`#[CaseDescription]`](/reference/attributes/#casedescription):
+
+```php
+enum InvoiceStatus: string
+{
+    #[CaseDescription('Created but not yet sent to the customer')]
+    case Draft = 'draft';
+
+    #[CaseDescription('Sent and awaiting payment')]
+    case Sent = 'sent';
+
+    #[CaseDescription('Paid in full')]
+    case Paid = 'paid';
+}
+```
+
+Descriptions are emitted as `x-enumDescriptions`. To also emit codegen name hints
+(`x-enumNames` / `x-enum-varnames`), set `representation.enums.naming` in your config.
+
+## When it can't tell
+
+If a resource, model, or enum can't be fully resolved, Docuccino falls back to a permissive schema
+(for example a bare object) rather than failing, and records lower confidence. Annotations always
+take precedence, so you can pin anything the inference couldn't determine.

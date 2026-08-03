@@ -1,0 +1,80 @@
+---
+title: Error responses
+description: Document 4xx and 5xx responses automatically — from your real exception handling, framework defaults, or the RFC 9457 preset.
+sidebar:
+  order: 4
+---
+
+Error responses are one of the most tedious parts of API docs to maintain by hand. Docuccino
+documents them for you by reading how your application actually handles exceptions, and falls back
+to sensible defaults for the framework's built-in ones.
+
+For each exception an endpoint can throw, Docuccino resolves a response in this order — the first
+match wins, and your [attributes](/reference/attributes/#response) or config always override the
+result:
+
+1. **Your exception handling** (inferred)
+2. **The Problem Details preset** — when you opt in
+3. **Framework defaults**
+
+## Your exception handling (automatic)
+
+Docuccino reads your app's real error handling and documents the exact shape it produces. It
+understands:
+
+- `render` callbacks registered in `bootstrap/app.php` (`->withExceptions(...)`),
+- an exception's own `render()` method,
+- and `Responsable` exceptions' `toResponse()`.
+
+It analyzes each with the thrown type in mind, so even a single catch-all handler that branches on
+`instanceof` is documented correctly per exception. Status codes and response bodies are read
+directly from the code:
+
+```php
+// app/Exceptions/PaymentRequiredException.php
+public function render(Request $request): JsonResponse
+{
+    return response()->json([
+        'message' => 'Payment is required to continue.',
+        'invoice_id' => $this->invoiceId,
+    ], 402);
+}
+```
+
+Throw this from an action and a `402` response with that body shape is documented — no annotation
+required. If a handler is too dynamic to read statically, Docuccino says so with a diagnostic
+pointing at the exact expression, and moves on to the next source.
+
+## The Problem Details preset (opt-in)
+
+Prefer [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` responses? Turn
+on the preset:
+
+```php
+// config/docuccino.php → documents.default
+'error_responses' => 'problem-details',
+```
+
+Common framework exceptions — validation (`422`), authentication (`401`), authorization (`403`), and
+not-found (`404`) — become reusable `problem+json` responses built on a shared `ProblemDetails`
+schema (`type`, `title`, `status`, `detail`, `instance`), with the validation case adding a
+field-keyed `errors` map. Your own inferred handlers still win where they apply.
+
+## Framework defaults
+
+With `error_responses` set to `default` (the default), Docuccino documents Laravel's stock JSON
+error shapes for framework exceptions it recognizes — `422 {message, errors}` and
+`401`/`403`/`404 {message}` — using the standard HTTP reason phrases. Set `error_responses` to
+`none` to emit no error responses at all.
+
+## Configuration
+
+| Option | Values | Effect |
+| --- | --- | --- |
+| `error_responses` | `default` \| `problem-details` \| `none` | Which fallback strategy to use. Your inferred handlers take precedence regardless. |
+
+:::tip
+Because Docuccino reads your *actual* handling first, most apps get accurate error docs with no
+configuration — the preset and defaults are just there for the exceptions you haven't handled
+explicitly.
+:::

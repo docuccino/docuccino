@@ -1,0 +1,47 @@
+name: Website
+
+# The Starlight docs site (website/) is a Node project, wholly separate from the PHP packages.
+# This workflow is paths-filtered to website/** so it runs only when the docs actually change —
+# keeping it out of the PHP matrix in ci.yml (which always runs), and not spending CI on it for
+# backend-only PRs.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'spec/uir/**'
+      - '.github/workflows/website.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'spec/uir/**'
+      - '.github/workflows/website.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build docs site (Astro + Starlight)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `npm run build` runs the `prebuild` hook (scripts/sync-schema.mjs --check), which fails the
+      # build if website/public/uir/**/schema.json has drifted from the canonical spec/uir/** —
+      # so the published UIR schema can never silently go stale.
+      - name: Build (includes UIR schema sync check)
+        run: npm run build

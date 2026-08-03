@@ -1,0 +1,239 @@
+---
+title: Writing an integration
+description: Extend Docuccino with your own type mappers, operation logic, and error responses — using the same tools the built-in integrations use.
+---
+
+import { Steps, Tabs, TabItem, Card, CardGrid, Aside, FileTree, Badge } from '@astrojs/starlight/components';
+
+Docuccino is designed to be extended. When it doesn't know how to document something specific to
+your app — a custom value object, a bespoke response envelope, a house error format — you teach it
+with a small class.
+
+<Aside title="You have everything we used">
+Every official integration is built on the exact public API described here. There's no privileged
+back door: whatever the built-in Query Builder or Sanctum support can do, an extension you write can
+do too.
+</Aside>
+
+## How extensions work
+
+An extension is a small class that implements one **contract** (an interface) and is **registered
+once**. You register from any service provider — in `register()` or `boot()`, in any package — and
+Docuccino resolves everything the moment it starts a build. Register early, register late; it just
+works.
+
+```php
+use Docuccino\Laravel\Facades\Docuccino;
+
+Docuccino::extend(MoneyToSchema::class);
+```
+
+Extensions are resolved from Laravel's container, so you can constructor-inject anything you need.
+
+## Walkthrough: document a value object
+
+Say your API returns a `Money` value object and you want it documented as
+`{ amount: integer, currency: string }` wherever it appears. You'll write a **type-to-schema**
+mapper — the contract Docuccino uses to turn a PHP type into a JSON Schema.
+
+<Steps>
+
+1. **Implement the contract.** `supports()` claims the types you handle; `toSchema()` returns the
+   schema (or `null` to let another mapper try).
+
+   ```php
+   // app/Docs/MoneyToSchema.php
+   namespace App\Docs;
+
+   use Docuccino\Core\Extensions\Contracts\SchemaContext;
+   use Docuccino\Core\Extensions\Contracts\TypeToSchema;
+   use Docuccino\Core\Extensions\Schema\SchemaResult;
+   use Docuccino\Core\Inference\DType\ClassT;
+   use Docuccino\Core\Inference\DType\DType;
+
+   final class MoneyToSchema implements TypeToSchema
+   {
+       public function supports(DType $type): bool
+       {
+           return $type instanceof ClassT && $type->fqcn === \App\Support\Money::class;
+       }
+
+       public function toSchema(DType $type, SchemaContext $context): ?SchemaResult
+       {
+           if (! $type instanceof ClassT) {
+               return null; // not ours — defer to the next mapper
+           }
+
+           return new SchemaResult([
+               'type' => 'object',
+               'properties' => [
+                   'amount' => ['type' => 'integer', 'description' => 'Minor units, e.g. pennies'],
+                   'currency' => ['type' => 'string', 'example' => 'GBP'],
+               ],
+               'required' => ['amount', 'currency'],
+           ]);
+       }
+   }
+   ```
+
+2. **Register it** from a service provider:
+
+   <Tabs>
+   <TabItem label="From code">
+   ```php
+   // app/Providers/AppServiceProvider.php → boot()
+   use Docuccino\Laravel\Facades\Docuccino;
+
+   Docuccino::extend(\App\Docs\MoneyToSchema::class);
+   ```
+   </TabItem>
+   <TabItem label="From config">
+   ```php
+   // config/docuccino.php
+   'extensions' => [
+       \App\Docs\MoneyToSchema::class,
+   ],
+   ```
+   </TabItem>
+   </Tabs>
+
+3. **Export.** Anywhere a `Money` appears — a resource field, a DTO property, a response — it's now
+   documented with your schema.
+
+   ```bash
+   php artisan docuccino:export
+   ```
+
+</Steps>
+
+### Using the SchemaContext
+
+`toSchema()` receives a `SchemaContext` with everything you need to build a correct, cacheable
+schema:
+
+| Method | Use it to… |
+| --- | --- |
+| `convert(DType $type): array` | Convert a nested type through the full mapper chain (e.g. a property whose type is itself complex). |
+| `reference(string $name, array $schema, ?string $schemaId = null): array` | Hoist a named schema into `components.schemas` and get back a `{ "$ref": … }` — the correct way to make a reusable, shareable schema. |
+| `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect. |
+| `lowerConfidence(float $confidence): void` | Note that this conversion was a best guess. |
+| `diagnostic(Diagnostic $d): void` | Surface a problem (shown in CLI output, and able to fail CI). |
+| `engine()`, `depth()`, `representation()` | Access the type engine, the current nesting depth, and the document's representation policy. |
+
+For a reusable component, prefer `reference()` over inlining, and call `dependsOn()` so caching stays
+correct:
+
+```php
+$context->dependsOn((new \ReflectionClass($type->fqcn))->getFileName() ?: '');
+
+return new SchemaResult(
+    $context->reference('Money', [/* the schema above */], $type->fqcn),
+);
+```
+
+## Controlling order
+
+Mappers form a chain and the first match wins, so ordering matters when your mapper competes with a
+built-in. Annotate with `#[ExtensionOrder]` and reach for a named priority:
+
+```php
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
+
+#[ExtensionOrder(priority: Priorities::EARLY)]
+final class MoneyToSchema implements TypeToSchema { /* … */ }
+```
+
+| Priority | Value | When to use |
+| --- | --- | --- |
+| `Priorities::FIRST` | 1000 | Must run before everything. |
+| `Priorities::EARLY` | 100 | Intercept ahead of the built-ins. |
+| `Priorities::DEFAULT` | 0 | The normal case. |
+| `Priorities::LATE` | -100 | Fallback after the built-ins. |
+| `Priorities::LAST` | -1000 | Absolute last resort. |
+
+You can also require hard ordering relative to specific classes with `before:` and `after:`
+(`#[ExtensionOrder(before: [SomeMapper::class])]`). Because your `supports()` only claims your own
+types, running early is safe — everything else falls straight through to the built-ins.
+
+## The contracts
+
+Pick the contract that matches what you're teaching Docuccino. All live in
+`Docuccino\Core\Extensions\Contracts`.
+
+| Contract | Implement it to… | Key methods |
+| --- | --- | --- |
+| `TypeToSchema` | Turn a PHP type into a schema. | `supports(DType)`, `toSchema(DType, SchemaContext): ?SchemaResult` |
+| `OperationExtension` | Add or adjust parts of an operation (parameters, responses, security…). | `phase(): OperationPhase`, `handle(OperationDraft, RouteContext)` |
+| `ExceptionToResponse` | Document a response for a thrown exception. | `supports(...)`, `toResponse(...): ?ResponseDraft`, `producer(): string` |
+| `RuleTransformer` | Map a custom validation rule to schema keywords. | `supports(...)`, `apply(...)`, `handledRuleNames(): array` |
+| `DocumentTransformer` | Post-process the whole finished document. | `transform(UirDocumentDraft, DocumentContext)` |
+| `RouteResolver` | Contribute routes beyond Laravel's router. | `resolve(DocumentConfig): iterable` |
+| `TagMapper` | Customize how tags are named/grouped. | `map(string): string` |
+| `Viewer` | Replace the built-in Scalar viewer. | `render(ViewerContext)` |
+
+`OperationExtension`s run in phases, so you can act at the right moment:
+
+<Badge text="Parameters" /> → <Badge text="Request" /> → <Badge text="Responses" /> →
+<Badge text="Errors" /> → <Badge text="Security" /> → <Badge text="Overrides" /> →
+<Badge text="Finalize" />
+
+Every write you make to an `OperationDraft` is merged by precedence and recorded in provenance, so
+you never have to worry about clobbering another extension's contribution — higher layers win field
+by field, losers are recorded, not lost.
+
+## Packaging as a distributable integration
+
+To share your work as a Composer package, follow the same shape the built-in integrations use: one
+small entry-point class that lists your extensions and (optionally) checks whether its target
+package is installed.
+
+<FileTree>
+
+- src/
+  - Integrations/
+    - Stripe/
+      - StripeIntegration.php   entry point
+      - StripeToSchema.php
+      - StripeWebhookExtension.php
+
+</FileTree>
+
+```php
+namespace Acme\DocuccinoStripe;
+
+final class StripeIntegration
+{
+    // Optional: only activate when the target package is present.
+    public static function installed(?callable $probe = null): bool
+    {
+        $probe ??= static fn (string $class): bool => class_exists($class);
+
+        return $probe(\Stripe\StripeClient::class);
+    }
+
+    /** @return list<class-string> */
+    public static function extensions(): array
+    {
+        return [StripeToSchema::class, StripeWebhookExtension::class];
+    }
+}
+```
+
+Register it from your package's own service provider, guarded so it's inert when the target isn't
+installed:
+
+```php
+use Docuccino\Laravel\Facades\Docuccino;
+
+if (StripeIntegration::installed()) {
+    foreach (StripeIntegration::extensions() as $extension) {
+        Docuccino::extend($extension);
+    }
+}
+```
+
+<Aside type="tip">
+That's the whole pattern — a contract, a registration, and (for a package) a thin entry point. Start
+from a single `TypeToSchema` and grow from there.
+</Aside>

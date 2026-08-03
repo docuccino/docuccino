@@ -1,0 +1,20 @@
+{
+  "name": "docuccino-website",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "sync-schema": "node scripts/sync-schema.mjs",
+    "prebuild": "node scripts/sync-schema.mjs --check",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.41.6",
+    "astro": "7.0.2",
+    "sharp": "0.34.5"
+  }
+}
