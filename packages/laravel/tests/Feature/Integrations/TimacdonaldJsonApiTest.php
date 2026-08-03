@@ -41,9 +41,6 @@ function timacdonaldEngine(): StubTypeEngine
             new ArrayShapeField('title', ScalarT::string()),
             new ArrayShapeField('body', ScalarT::string()),
         ]),
-        TimacdonaldArticleResource::class.'::toRelationships' => $shape([
-            new ArrayShapeField('author', ScalarT::string()),
-        ]),
         TimacdonaldArticleResource::class.'::toLinks' => $shape([
             new ArrayShapeField('self', ScalarT::string()),
         ]),
@@ -65,8 +62,11 @@ it('maps a timacdonald JSON:API resource to a JSON:API document schema through t
     expect($document['required'])->toBe(['data']);
 
     $data = $document['properties']['data'];
+    // `relationships` is intentionally absent: closure-valued relationships analyse as CallableT, so the
+    // shared builder omits the member rather than emit a non-linkage shape (see JsonApiDocument docblock).
     expect($data['required'])->toBe(['id', 'type'])
-        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'relationships', 'links'])
+        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'links'])
+        ->and($data['properties'])->not->toHaveKey('relationships')
         ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
         ->and($data['properties']['id'])->toBe(['type' => 'string']);
 });

@@ -131,9 +131,8 @@ final class WorkbenchEngine
                     new ArrayShapeField('title', ScalarT::string()),
                     new ArrayShapeField('body', ScalarT::string()),
                 ]), $location)]),
-                self::JSONAPI_RESOURCE.'::toRelationships' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
-                    new ArrayShapeField('author', ScalarT::string()),
-                ]), $location)]),
+                // No `toRelationships` script: closure-valued relationships analyse as CallableT and the
+                // shared builder omits the member (see JsonApiDocument), so nothing reads it.
                 self::JSONAPI_RESOURCE.'::toLinks' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
                     new ArrayShapeField('self', ScalarT::string()),
                 ]), $location)]),

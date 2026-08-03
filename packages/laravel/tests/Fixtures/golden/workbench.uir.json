@@ -2167,17 +2167,6 @@
                   "self"
                 ]
               },
-              "relationships": {
-                "type": "object",
-                "properties": {
-                  "author": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "author"
-                ]
-              },
               "type": {
                 "type": "string"
               }
@@ -2374,7 +2363,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "2077120bce1a283b6c8e298e8ab264e2edb3508c16320adb992e75b55b17d0e2",
-      "contentHash": "e1586eebcfa6a2e6b3c0275d85bdaa6cd514502093adf6effd5e18dbfb6da850"
+      "contentHash": "ef1fb3b8d1ab6c03128ac55ebe1faad409787159d82e48affd94e54bb6aca86c"
     },
     "generator": {
       "name": "docuccino/laravel",

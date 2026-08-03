@@ -12,11 +12,20 @@ use Docuccino\Core\Inference\DType\ClassT;
 /**
  * The shared JSON:API resource-object document builder. A JSON:API resource — whether Laravel 13's
  * first-party `JsonApiResource` or the pre-13 `timacdonald/json-api` base it was upstreamed from —
- * exposes the same member surface (`toId`/`toType`/`toAttributes`/`toRelationships`/`toLinks`/
- * `toMeta`), so both integrations feed this one builder rather than duplicating the document shape.
- * It emits `{data: {id, type, attributes?, relationships?, links?, meta?}}`, analysing each `to*`
- * method into an object schema ({@see ToArrayObject}) and hoisting the resource to a reusable
- * component (including the self-reference cycle-break) via {@see ComponentHoist}.
+ * exposes the same member surface, so both integrations feed this one builder rather than
+ * duplicating the document shape. It emits `{data: {id, type, attributes?, links?, meta?}}`, hoisting
+ * the resource to a reusable component (including the self-reference cycle-break) via
+ * {@see ComponentHoist}.
+ *
+ * `id` and `type` are emitted as `string` unconditionally (the JSON:API contract), not analysed from
+ * `toId`/`toType`; `attributes`, `links` and `meta` ARE analysed from their `to*` methods into object
+ * schemas ({@see ToArrayObject}).
+ *
+ * `relationships` is deliberately OMITTED. Both packages express relationships as closures
+ * (`'author' => fn () => new AuthorResource(...)`), which the type engine reports as `CallableT` — a
+ * flat `toArray`-style analysis of `toRelationships` cannot produce JSON:API's `{data: {type, id}}`
+ * linkage object, so emitting it would document a shape the resource never yields. It is left out
+ * until the linkage object can be modelled from real relationship resolution.
  *
  * Each schema mapper holds its OWN instance (the hoist carries per-mapper recursion state), so there
  * is no shared mutable state between the first-party and timacdonald mappers.
@@ -24,13 +33,13 @@ use Docuccino\Core\Inference\DType\ClassT;
 final class JsonApiDocument
 {
     /**
-     * The JSON:API resource-object members and the resource method each is analysed from.
+     * The JSON:API resource-object members analysed from their `to*` methods (relationships omitted;
+     * see the class docblock).
      *
      * @var array<string, string>
      */
     private const MEMBERS = [
         'attributes' => 'toAttributes',
-        'relationships' => 'toRelationships',
         'links' => 'toLinks',
         'meta' => 'toMeta',
     ];

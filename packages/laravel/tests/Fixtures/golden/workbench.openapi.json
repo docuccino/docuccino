@@ -797,17 +797,6 @@
                   "self"
                 ]
               },
-              "relationships": {
-                "type": "object",
-                "properties": {
-                  "author": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "author"
-                ]
-              },
               "type": {
                 "type": "string"
               }

@@ -52,19 +52,16 @@ function apiResourceEngine(): StubTypeEngine
             new ArrayShapeField('title', ScalarT::string()),
             new ArrayShapeField('body', ScalarT::string()),
         ]),
-        ArticleJsonApiResource::class.'::toRelationships' => $shape([
-            new ArrayShapeField('author', ScalarT::string()),
-        ]),
         ArticleJsonApiResource::class.'::toLinks' => $shape([
             new ArrayShapeField('self', ScalarT::string()),
         ]),
-        // No toMeta analysis → the meta member is omitted.
+        // No toMeta analysis → the meta member is omitted. (relationships is never analysed — see the
+        // JsonApiDocument docblock — so no `::toRelationships` scripting is needed.)
+        // A member typing back to the comment resource itself — a self-reference the component-hoist
+        // cycle-break must resolve to a $ref rather than recurse into. Modelled through an analysed
+        // member (attributes) since relationships is omitted.
         CommentJsonApiResource::class.'::toAttributes' => $shape([
             new ArrayShapeField('body', ScalarT::string()),
-        ]),
-        // The replies relationship types back to the comment resource itself — a self-reference the
-        // component-hoist cycle-break must resolve to a $ref rather than recurse into.
-        CommentJsonApiResource::class.'::toRelationships' => $shape([
             new ArrayShapeField('replies', new ClassT(CommentJsonApiResource::class)),
         ]),
     ]);
@@ -146,8 +143,10 @@ it('maps a first-party JSON:API resource to a JSON:API document schema', functio
 
     $data = $document['properties']['data'];
     expect($data['required'])->toBe(['id', 'type'])
-        // id/type always present; attributes/relationships/links populated; meta omitted (no shape).
-        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'relationships', 'links'])
+        // id/type always present; attributes/links populated; relationships omitted (closures →
+        // CallableT, see JsonApiDocument); meta omitted (no shape).
+        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'links'])
+        ->and($data['properties'])->not->toHaveKey('relationships')
         ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
         ->and($data['properties']['id'])->toBe(['type' => 'string']);
 });
@@ -161,10 +160,10 @@ it('cycle-breaks a self-referential JSON:API resource via a $ref to its own comp
     expect($ref)->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
 
     $document = $components->schemas()['CommentJsonApiResource'];
-    $relationships = $document['properties']['data']['properties']['relationships'];
+    $attributes = $document['properties']['data']['properties']['attributes'];
 
-    // The self-referential `replies` relationship folds to a $ref back at the same component.
-    expect($relationships['properties']['replies'])->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
+    // The self-referential `replies` member folds to a $ref back at the same component.
+    expect($attributes['properties']['replies'])->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
 });
 
 it('detects when a return type involves JSON:API', function (): void {
