@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Docuccino\Core\Content;
 
 /**
- * The file-derived facts for one narrative page, produced by the adapter's markdown compiler and
- * handed to the core {@see ContentResolver}. This is the core/adapter contract: reading the
- * filesystem + frontmatter is the adapter's job (framework/IO input); assigning page ids, resolving
- * directives against the assembled document and building the nav tree is core's (document input).
+ * The compiled facts for one narrative page, produced by core's {@see ContentCompiler} (which reads
+ * the markdown tree + frontmatter) and handed to the core {@see ContentResolver}. Compilation, id
+ * assignment, directive resolution against the assembled document and nav-tree building all live in
+ * core — the adapter only supplies the content directory path.
  *
  * `navType` selects how the page appears in the nav tree: `page` (a link to itself), or `operation`
  * / `tag` (a reference node whose `navRef` resolves against the assembled document). `hidden` keeps

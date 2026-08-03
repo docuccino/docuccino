@@ -92,22 +92,24 @@ directory name (`packages/laravel/src/Integrations/<Dir>/`) kebab-cased — the 
 string, used identically whether the contribution is built via `Contribution::integration('<name>')`
 or an `ExceptionToResponse::producer()` returning `'integration:<name>'`. The full set:
 
-| Directory          | Producer `<name>`   |
-|--------------------|---------------------|
-| `SpatieData`       | `spatie-data`       |
-| `ApiResources`     | `api-resources`     |
-| `Eloquent`         | `eloquent`          |
-| `Enum`             | `enum`              |
-| `QueryBuilder`     | `query-builder`     |
-| `RateLimit`        | `rate-limit`        |
-| `Sanctum`          | `sanctum`           |
-| `Passport`         | `passport`          |
-| `Permission`       | `permission`        |
-| `ProblemDetails`   | `problem-details`   |
-| `FrameworkErrors`  | `framework-errors`  |
-| `InferredHandler`  | `inferred-handler`  |
-| `Validation`       | `validation`        |
-| `FormRequest`      | `form-request`      |
+| Directory            | Producer `<name>`      |
+|----------------------|------------------------|
+| `SpatieData`         | `spatie-data`          |
+| `ApiResources`       | `api-resources`        |
+| `TimacdonaldJsonApi` | `timacdonald-json-api` |
+| `JsonApiPaginate`    | `json-api-paginate`    |
+| `Eloquent`           | `eloquent`             |
+| `QueryBuilder`       | `query-builder`        |
+| `RateLimit`          | `rate-limit`           |
+| `Sanctum`            | `sanctum`              |
+| `Passport`           | `passport`             |
+| `Permission`         | `permission`           |
+| `ProblemDetails`     | `problem-details`      |
+| `FrameworkErrors`    | `framework-errors`     |
+| `InferredHandler`    | `inferred-handler`     |
+| `Validation`         | `validation`           |
+| `FormRequest`        | `form-request`         |
+| `LaravelActions`     | `laravel-actions`      |
 
 `Validation` is the always-on shared rule chain (it owns the rule vocabulary); `FormRequest`
 is the FormRequest request-body recovery extension — a distinct producer, so a body recovered

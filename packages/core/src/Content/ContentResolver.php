@@ -14,9 +14,10 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
 use Docuccino\Core\Provenance\Source;
 
 /**
- * Turns the adapter's {@see CompiledContent} into the resolved `x-docuccino.content` layer against
+ * Turns the compiled {@see CompiledContent} into the resolved `x-docuccino.content` layer against
  * an already-assembled document (design §Narrative content layer). This is the document-input half
- * of the content pipeline, so it lives in core: assigns each page its stable `page:` id, resolves
+ * of the content pipeline; like the compiler it lives in core: assigns each page its stable `page:`
+ * id, resolves
  * `::operation`/`::schema` directives in the body, builds the deterministic nav tree from the
  * folder-derived groups + frontmatter overrides, and validates operation/tag nav refs — every
  * broken reference surfacing as a diagnostic rather than a silent drop.

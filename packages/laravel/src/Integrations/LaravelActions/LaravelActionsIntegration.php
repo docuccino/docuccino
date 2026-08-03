@@ -6,7 +6,7 @@ namespace Docuccino\Laravel\Integrations\LaravelActions;
 
 /**
  * The single entry point for the `lorisleiva/laravel-actions` integration (Phase 5c). Registered
- * behind a `class_exists` guard on the package's `AsController` trait, so docuccino/laravel never
+ * behind a `trait_exists` guard on the package's `AsController` trait, so docuccino/laravel never
  * hard-requires it. The route-method remapping (an invokable action → its `asController()`/`handle()`
  * method) is applied earlier, in the route reflector via {@see LaravelAction}; these extensions then
  * document the resolved method's request (`rules()`) and its `authorize()` 403.
