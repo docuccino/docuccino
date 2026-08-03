@@ -135,10 +135,15 @@ jobs:
           cd fixture-app
           composer require --dev larastan/larastan --no-interaction --no-progress
           composer require spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
+          # Phase 5c integrations (spike-d real-engine tests):
+          composer require -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress
           cd ..
           cp -R spike-a/fixture-src/app/. fixture-app/app/
           cp -R spike-b/fixture-src/app/. fixture-app/app/
           cp -R spike-c/fixture-src/app/. fixture-app/app/
+          cp -R phase-4/fixture-src/app/. fixture-app/app/
+          cp -R phase-4b/fixture-src/app/. fixture-app/app/
+          cp -R spike-d/fixture-src/app/. fixture-app/app/
 
       - name: Install root dependencies (Pest)
         run: composer install --no-interaction --no-progress

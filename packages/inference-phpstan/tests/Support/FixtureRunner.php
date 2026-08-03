@@ -58,6 +58,17 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the REAL JsonApiPaginateTraceVisitor: returns whether it reached the
+     * `jsonPaginate()` terminal and the folded per-call-site overrides (`maxResults`/`defaultSize`).
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceJsonApiPaginate(string $controllerRelPath, string $class, string $method): array
+    {
+        return self::invoke('trace-json-api-paginate', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
      * The real engine's {@see ClassMetadata} for a class (its property
      * names + reflected types), serialized. The file argument is unused for this mode.
      *

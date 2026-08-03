@@ -164,3 +164,30 @@ cp -R spikes/phase-4b/fixture-src/app/. spikes/fixture-app/app/
 
 No routes/migrations/composer changes needed (`App\Exceptions\OutOfStockException` from Spike C is
 reused).
+
+## Fixture source authored by Phase 5c (JSON:API + laravel-actions real-engine tests)
+
+Phase 5c's real-engine tests (`packages/laravel/tests/Feature/Integrations/
+RealEngineIntegrationsTest.php`) prove the recovery half of the three Phase-5c integrations against
+the actual engine. They need the three target packages installed AND the canonical sources at
+`spikes/spike-d/fixture-src/`:
+
+```bash
+# from spikes/fixture-app
+composer require -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction
+# from spikes
+cp -R spikes/spike-d/fixture-src/app/. spikes/fixture-app/app/
+```
+
+- `app/Http/Resources/ArticleJsonApiResource.php` — a real `timacdonald/json-api` resource; the
+  engine analyses `toAttributes()` into `{title: string, body: string}`, the shape the shared JSON:API
+  document builder consumes.
+- `app/Http/Controllers/JsonApiPaginateController.php` — paginates through spatie's `jsonPaginate()`
+  macro inside a helper on a `where`-narrowed Eloquent builder, with two literal overrides
+  (`jsonPaginate(100, 25)`), so the real `JsonApiPaginateTraceVisitor` proves terminal recognition,
+  builder-receiver matching, and argument folding one call deep.
+- `app/Actions/PublishArticleAction.php` — a `lorisleiva/laravel-actions` action whose literal
+  `rules()` array the engine recovers into a constant shape, turned into a `RuleSet` by
+  `ShapeToRuleSet`.
+
+No routes/migrations needed (`App\Models\User` from Spike A is reused by the paginate controller).

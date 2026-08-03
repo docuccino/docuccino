@@ -30,6 +30,7 @@ use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/spikes/fixture-app';
@@ -43,6 +44,10 @@ spl_autoload_register(static function (string $class) use ($repoRoot): void {
         'Docuccino\\Core\\' => $repoRoot.'/packages/core/src/',
         'Docuccino\\Inference\\PhpStan\\Tests\\' => $repoRoot.'/packages/inference-phpstan/tests/',
         'Docuccino\\Inference\\PhpStan\\' => $repoRoot.'/packages/inference-phpstan/src/',
+        // The JSON:API-paginate trace visitor lives adapter-side but imports only core + php-parser
+        // (+ its own dep-free Facts), so it runs here to prove terminal/receiver matching on the real
+        // engine (spike-d / Phase 5c M2).
+        'Docuccino\\Laravel\\' => $repoRoot.'/packages/laravel/src/',
     ];
     foreach ($map as $prefix => $dir) {
         if (str_starts_with($class, $prefix)) {
@@ -98,6 +103,16 @@ $result = match ($mode) {
             'paginates' => $probe->paginates(),
             'perPage' => $probe->recoveredPerPage(),
             'outermost' => $probe->outermostTerminal()['terminal'] ?? null,
+        ];
+    })(),
+    'trace-json-api-paginate' => (static function () use ($engine, $ref): array {
+        $visitor = new JsonApiPaginateTraceVisitor;
+        $engine->trace($ref, $visitor);
+
+        return [
+            'paginates' => $visitor->facts->paginates,
+            'maxResults' => $visitor->facts->maxResultsOverride,
+            'defaultSize' => $visitor->facts->defaultSizeOverride,
         ];
     })(),
     default => ['error' => 'unknown mode: '.$mode],
