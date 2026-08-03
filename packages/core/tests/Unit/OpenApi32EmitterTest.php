@@ -9,39 +9,6 @@ use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Symfony\Component\Yaml\Yaml;
 
-/**
- * Recursively strips every `x-docuccino` member and the UIR-only top-level `$schema`/`uir`, so the
- * remainder is exactly what a lossless OAS 3.2 transcode must equal.
- *
- * @param  array<string, mixed>  $node
- * @return array<string, mixed>
- */
-function stripDocuccino(array $node): array
-{
-    unset($node['x-docuccino']);
-
-    $out = [];
-    foreach ($node as $key => $value) {
-        $key = (string) $key;
-        $out[$key] = str_starts_with($key, 'x-') ? $value : stripDocuccinoRecursive($value);
-    }
-
-    return $out;
-}
-
-function stripDocuccinoRecursive(mixed $value): mixed
-{
-    if (! is_array($value)) {
-        return $value;
-    }
-
-    if (array_is_list($value)) {
-        return array_map(stripDocuccinoRecursive(...), $value);
-    }
-
-    return stripDocuccino($value);
-}
-
 beforeEach(function (): void {
     $this->emitter = new OpenApi32Emitter;
 });
