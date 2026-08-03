@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Content;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\PathItem;
+use Docuccino\Core\Support\Hydrate;
 
 /**
  * Read-only lookup over an assembled UIR document array, built once and shared by directive
@@ -21,12 +24,14 @@ final readonly class DocumentIndex
      * @param  array<string, string>  $operationsBySignature  "METHOD /path" → stable op id
      * @param  array<string, string>  $schemasByName  component name → stable schema id
      * @param  array<string, true>  $tags  tag name → present
+     * @param  list<Diagnostic>  $diagnostics  build-time warnings (duplicate operationId)
      */
     private function __construct(
         private array $operationsById,
         private array $operationsBySignature,
         private array $schemasByName,
         private array $tags,
+        private array $diagnostics = [],
     ) {}
 
     /**
@@ -37,6 +42,8 @@ final readonly class DocumentIndex
         $operationsById = [];
         $operationsBySignature = [];
         $tags = [];
+        /** @var list<Diagnostic> $diagnostics */
+        $diagnostics = [];
 
         $paths = is_array($document['paths'] ?? null) ? $document['paths'] : [];
         foreach ($paths as $template => $item) {
@@ -59,10 +66,19 @@ final readonly class DocumentIndex
 
                 $operationId = $operation['operationId'] ?? null;
                 if (is_string($operationId) && $operationId !== '') {
+                    if (isset($operationsById[$operationId])) {
+                        // Last-wins is deterministic but arbitrary: a ::operation{id="…"} directive
+                        // would resolve to whichever operation came last in path iteration.
+                        $diagnostics[] = new Diagnostic(
+                            severity: Severity::Warning,
+                            code: 'content.duplicate-operation-id',
+                            message: sprintf('Duplicate operationId "%s"; a ::operation directive referencing it resolves to the last operation in path order.', $operationId),
+                        );
+                    }
                     $operationsById[$operationId] = $stableId;
                 }
 
-                foreach (self::stringList($operation['tags'] ?? null) as $tag) {
+                foreach (Hydrate::stringList($operation['tags'] ?? null) as $tag) {
                     $tags[$tag] = true;
                 }
             }
@@ -90,7 +106,18 @@ final readonly class DocumentIndex
             }
         }
 
-        return new self($operationsById, $operationsBySignature, $schemasByName, $tags);
+        return new self($operationsById, $operationsBySignature, $schemasByName, $tags, $diagnostics);
+    }
+
+    /**
+     * Build-time warnings surfaced by indexing (currently: duplicate operationId collisions). The
+     * caller (content resolution) drains these into the document diagnostics.
+     *
+     * @return list<Diagnostic>
+     */
+    public function diagnostics(): array
+    {
+        return $this->diagnostics;
     }
 
     /**
@@ -131,17 +158,5 @@ final readonly class DocumentIndex
         $id = is_array($extension) ? ($extension['id'] ?? null) : null;
 
         return is_string($id) && $id !== '' ? $id : null;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function stringList(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        return array_values(array_filter($value, 'is_string'));
     }
 }

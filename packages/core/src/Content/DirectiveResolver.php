@@ -92,9 +92,14 @@ final class DirectiveResolver
         Source $source,
         array &$diagnostics,
     ): string {
-        // Already resolved (idempotent): leave a ref-bearing directive untouched.
+        // A pre-existing ref (hand-written in source, or a stale committed one) is NOT trusted: it is
+        // stripped and re-derived from the selector below, so a ref pointing at an id that no longer
+        // exists is re-validated and surfaces as content.unresolved-directive rather than silently
+        // drifting. In the normal loop the source is ref-free, so this branch never runs there and the
+        // authored attributes pass through verbatim; a directive whose selector still resolves re-emits
+        // the identical ref (idempotent).
         if (isset($attrs['ref'])) {
-            return $original;
+            $attrsRaw = $this->stripRef($attrsRaw);
         }
 
         $reference = $attrs[$selector] ?? null;
@@ -139,6 +144,12 @@ final class DirectiveResolver
         );
 
         return $original;
+    }
+
+    /** Remove any `ref="..."` attribute from a raw attribute string so a fresh one can be appended. */
+    private function stripRef(string $attrsRaw): string
+    {
+        return trim((string) preg_replace('/\s*\bref="[^"]*"/', '', $attrsRaw));
     }
 
     /**

@@ -105,6 +105,19 @@ it('resolves and degrades directives', function (string $body, string $expected,
         '::operation{id="forms.index" ref="op:v1:formsindex00000"}',
         null, null,
     ],
+    // N3: a pre-existing ref is re-validated, not trusted — a stale one whose selector still resolves
+    // is corrected to the fresh id...
+    'stale ref is re-derived from its still-valid selector' => [
+        '::operation{id="forms.index" ref="op:v1:0000000000000000"}',
+        '::operation{id="forms.index" ref="op:v1:formsindex00000"}',
+        null, null,
+    ],
+    // ...and one whose selector no longer resolves surfaces as unresolved rather than drifting.
+    'stale ref on a now-missing selector is diagnosed' => [
+        '::operation{id="ghost.missing" ref="op:v1:formsindex00000"}',
+        '::operation{id="ghost.missing" ref="op:v1:formsindex00000"}',
+        'content.unresolved-directive', Severity::Error,
+    ],
     'a namespaced token is not a directive (guarded lookbehind)' => [
         'See foo::operation{id="forms.index"} inline.',
         'See foo::operation{id="forms.index"} inline.',
@@ -203,4 +216,26 @@ it('digests the content tree file-order-independently and edit-sensitively', fun
     expect($a->digest())->toBe($reordered->digest())
         ->and($a->digest())->not->toBe($edited->digest())
         ->and((new CompiledContent)->digest())->toBe('');
+});
+
+it('warns on a duplicate operationId in the document index (N4)', function (): void {
+    $index = DocumentIndex::build([
+        'paths' => [
+            '/api/a' => ['get' => ['operationId' => 'dup', 'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa']]],
+            '/api/b' => ['get' => ['operationId' => 'dup', 'x-docuccino' => ['id' => 'op:v1:bbbbbbbbbbbbbbbb']]],
+        ],
+    ]);
+
+    $diagnostics = $index->diagnostics();
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->code)->toBe('content.duplicate-operation-id')
+        ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
+        ->and($diagnostics[0]->message)->toContain('dup');
+
+    // Last-wins resolution is deterministic (b came last in path order).
+    expect($index->resolveOperation('dup'))->toBe('op:v1:bbbbbbbbbbbbbbbb');
+});
+
+it('emits no duplicate-operationId warning for distinct ids', function (): void {
+    expect(DocumentIndex::build(contentIndexDoc())->diagnostics())->toBe([]);
 });

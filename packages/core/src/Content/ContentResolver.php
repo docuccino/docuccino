@@ -42,8 +42,8 @@ final readonly class ContentResolver
         }
 
         $index = DocumentIndex::build($document);
-        /** @var list<Diagnostic> $diagnostics */
-        $diagnostics = [];
+        // Drain any build-time index warnings (duplicate operationId collisions) into the document.
+        $diagnostics = $index->diagnostics();
 
         $pages = [];
         $navByPage = [];

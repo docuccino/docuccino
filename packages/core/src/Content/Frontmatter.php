@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Content;
 
+use Docuccino\Core\Support\Arr;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -36,20 +37,6 @@ final class Frontmatter
             return [[], $matches[2]];
         }
 
-        return [is_array($parsed) ? self::stringKeyed($parsed) : [], $matches[2]];
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $value
-     * @return array<string, mixed>
-     */
-    private static function stringKeyed(array $value): array
-    {
-        $out = [];
-        foreach ($value as $key => $item) {
-            $out[(string) $key] = $item;
-        }
-
-        return $out;
+        return [is_array($parsed) ? Arr::stringKeyed($parsed) : [], $matches[2]];
     }
 }
