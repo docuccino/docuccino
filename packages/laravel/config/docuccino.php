@@ -58,8 +58,13 @@ return [
                 //       ['name' => 'Forms', 'description' => '…', 'weight' => 0],
                 //   ],
             ],
+            // Narrative content layer (design §Narrative content layer): point `dir` at a markdown
+            // tree (relative to the app base path, or absolute). Folders become default nav groups;
+            // frontmatter (title/slug/summary/tags + nav.{group,order,hidden,type,ref}) overrides.
+            // Compiled into x-docuccino.content (pages + nav) with ::operation / ::schema directives
+            // resolved against the document. null (default) compiles nothing.
             'content' => [
-                'dir' => null,                     // FUTURE (design §9 content.pages): not read yet.
+                'dir' => null,                     // e.g. 'resources/docs/api'
             ],
             'overlays' => [
                 // 'resources/docs/overlays/*.yaml',

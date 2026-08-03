@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Pipeline;
 
+use Docuccino\Core\Content\CompiledContent;
+use Docuccino\Core\Content\ContentResolver;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -38,6 +40,7 @@ final class Assembler
         private readonly IdentityGenerator $identity = new IdentityGenerator,
         private readonly ContentHasher $contentHasher = new ContentHasher,
         private readonly OverlayApplier $overlays = new OverlayApplier,
+        private readonly ContentResolver $content = new ContentResolver,
     ) {}
 
     /**
@@ -53,6 +56,7 @@ final class Assembler
         array $overlayDocuments,
         array $transformers,
         string $generatorVersion,
+        CompiledContent $content = new CompiledContent,
     ): AssemblyResult {
         /** @var list<Diagnostic> $diagnostics */
         $diagnostics = [];
@@ -119,9 +123,38 @@ final class Assembler
         $doc = $this->applyOverlays($doc, $overlayDocuments, $diagnostics);
         $doc = $this->applyTransformers($doc, $document, $documentId, $transformers, $diagnostics);
 
+        // Resolve the narrative content against the now-final document (directives and nav refs see
+        // any overlay/transformer changes). Injected before the content hash so pages/nav participate
+        // in it — a prose edit or nav move is a visible, non-breaking change.
+        $doc = $this->applyContent($doc, $content, $diagnostics);
+
         $doc = $this->stampContentHash($doc);
 
         return new AssemblyResult($doc, $diagnostics);
+    }
+
+    /**
+     * @param  array<string, mixed>  $doc
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, mixed>
+     */
+    private function applyContent(array $doc, CompiledContent $content, array &$diagnostics): array
+    {
+        [$resolved, $contentDiagnostics] = $this->content->resolve($content, $doc);
+        foreach ($contentDiagnostics as $diagnostic) {
+            $diagnostics[] = $diagnostic;
+        }
+
+        // An empty content tree leaves the document untouched — no empty `content` key.
+        if ($resolved->isEmpty()) {
+            return $doc;
+        }
+
+        $extension = is_array($doc['x-docuccino'] ?? null) ? $doc['x-docuccino'] : [];
+        $extension['content'] = $resolved->toArray();
+        $doc['x-docuccino'] = $extension;
+
+        return $doc;
     }
 
     /**

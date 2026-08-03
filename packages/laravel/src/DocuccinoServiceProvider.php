@@ -14,6 +14,7 @@ use Docuccino\Laravel\Commands\DiffCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Content\ContentCompiler;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;
@@ -113,6 +114,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         });
 
         $this->app->when(DocumentBuilder::class)
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
+
+        $this->app->when(ContentCompiler::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
 

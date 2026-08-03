@@ -17,6 +17,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Validation\Validator;
+use Docuccino\Laravel\Content\ContentCompiler;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -51,6 +52,7 @@ final class DocumentGenerator
         private readonly OperationPipeline $pipeline,
         private readonly Assembler $assembler,
         private readonly Validator $validator,
+        private readonly ContentCompiler $contentCompiler,
         private readonly string $generatorVersion,
         ?FragmentCache $cache = null,
         private readonly IdentityGenerator $identity = new IdentityGenerator,
@@ -73,11 +75,18 @@ final class DocumentGenerator
         $components = new ComponentRegistry;
         $bag = new DiagnosticBag;
 
+        // Compile the narrative content tree (design §Narrative content layer): a document-level
+        // input assembled fresh each build. Its digest joins the cache key (below) so a content-file
+        // edit invalidates; the pages/nav themselves are resolved against the assembled document.
+        [$content, $contentDiagnostics] = $this->contentCompiler->compile($document);
+        $bag->addAll($contentDiagnostics);
+
         // Booted-app facts the fragments depend on but that no route file reflects (design §10, A2):
         // the registered render-callback set (an added handler must re-document error tiers), the
         // polymorphic morph map (discriminators), and app.url (Passport oauth2 flow URLs). Folded into
-        // the document-level cache input because each is global — a change can affect any route.
-        $configHash = $document->hash().'|env:'.$this->environmentDigest();
+        // the document-level cache input because each is global — a change can affect any route. The
+        // content-tree digest joins it for the same reason (a document-level input, design §10).
+        $configHash = $document->hash().'|env:'.$this->environmentDigest().'|content:'.$content->digest();
         $extensionClasses = $resolved->cacheSignature();
 
         $fragments = [];
@@ -100,6 +109,7 @@ final class DocumentGenerator
             $overlays,
             $resolved->documentTransformers,
             $this->generatorVersion,
+            $content,
         );
         $bag->addAll($assembly->diagnostics);
 
