@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\LaravelActions;
 
 use Docuccino\Core\Draft\OperationDraft;
-use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
-use Docuccino\Core\Patch\Contribution;
 use ReflectionClass;
 
 /**
@@ -28,6 +27,10 @@ use ReflectionClass;
 final class ActionAuthorizeResponsesExtension implements OperationExtension
 {
     private const AUTHORIZATION_EXCEPTION = 'Illuminate\\Auth\\Access\\AuthorizationException';
+
+    public function __construct(
+        private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
+    ) {}
 
     public function phase(): OperationPhase
     {
@@ -58,7 +61,7 @@ final class ActionAuthorizeResponsesExtension implements OperationExtension
                 continue;
             }
 
-            $this->merge($operation, $draft, $mapper->producer());
+            $this->applier->apply($operation, $draft, $mapper->producer());
 
             return;
         }
@@ -75,32 +78,5 @@ final class ActionAuthorizeResponsesExtension implements OperationExtension
         }
 
         return (new ReflectionClass($class))->hasMethod('authorize');
-    }
-
-    private function merge(OperationDraft $operation, ResponseDraft $draft, string $producer): void
-    {
-        $frozen = $draft->freeze();
-        $response = $operation->response($draft->status);
-        $contribution = Contribution::forProducer($producer);
-
-        if ($frozen->ref !== null) {
-            $response->setRef($frozen->ref, $contribution);
-
-            return;
-        }
-
-        if ($frozen->description !== null) {
-            $response->setDescription($frozen->description, $contribution);
-        }
-
-        foreach ($frozen->content ?? [] as $mediaType => $media) {
-            $schema = is_array($media) && is_array($media['schema'] ?? null) ? $media['schema'] : [];
-            foreach ($schema as $keyword => $value) {
-                if ($keyword === 'x-docuccino') {
-                    continue;
-                }
-                $response->content((string) $mediaType)->set((string) $keyword, $value, $contribution);
-            }
-        }
     }
 }
