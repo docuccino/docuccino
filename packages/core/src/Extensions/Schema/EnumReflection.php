@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\Support;
+namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Attributes\CaseDescription;
+use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Inference\DType\EnumT;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
@@ -12,9 +13,12 @@ use ReflectionEnumUnitCase;
 use Throwable;
 
 /**
- * Reflection over a PHP enum for the integrations: the documentable case values (backing values for
- * a backed enum, case names otherwise) and any `#[CaseDescription]` prose keyed by that same value.
- * Totalising — a non-enum or reflection failure yields empty results rather than throwing.
+ * Reflection over a PHP enum for schema mappers: the documentable case values (backing values for a
+ * backed enum, case names otherwise) and any `#[CaseDescription]` prose keyed by that same value.
+ * Reflecting an enum + its Docuccino attributes is framework-neutral, so it lives in core beside the
+ * built-in {@see EnumSchema} mapper that drives it (the adapter's
+ * Eloquent model mapper reads it too, for enum-cast columns). Totalising — a non-enum or reflection
+ * failure yields empty results rather than throwing.
  */
 final class EnumReflection
 {

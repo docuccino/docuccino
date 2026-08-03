@@ -5,6 +5,8 @@ These attributes annotate controllers, actions and closure routes so the
 Docuccino pipeline can patch or add documentation. The package has no
 dependencies beyond PHP itself, so it is safe to require from library code that
 wants to expose Docuccino annotations without pulling in the full toolchain.
+`docuccino/core` requires it at runtime (core reflects these attributes off your
+classes and enums), so it is versioned in lockstep with the rest of Docuccino.
 
 ## Install
 

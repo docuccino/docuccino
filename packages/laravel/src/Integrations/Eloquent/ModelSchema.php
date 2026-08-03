@@ -8,6 +8,8 @@ use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Core\Extensions\Schema\ComponentHoist;
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
@@ -15,8 +17,6 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Laravel\Integrations\Support\ComponentHoist;
-use Docuccino\Laravel\Integrations\Support\EnumReflection;
 
 /**
  * Maps an Eloquent model to an object schema (superseding the core class mapper for models). Columns

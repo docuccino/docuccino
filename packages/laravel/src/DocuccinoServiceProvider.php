@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Docuccino\Laravel;
 
 use Docuccino\Core\Content\ContentCompiler;
+use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
 use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
+use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Commands\CacheCommand;
 use Docuccino\Laravel\Commands\ClearCommand;
@@ -18,13 +20,11 @@ use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
-use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
-use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
 use Docuccino\Laravel\Runtime\DocumentCache;
@@ -69,7 +69,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // the resolver falls back to a composer-root walk for files outside it (the workbench).
         $this->app->bind(
             SourcePathResolver::class,
-            fn (Application $app): SourcePathResolver => new LaravelSourcePathResolver($app->basePath()),
+            fn (Application $app): SourcePathResolver => new RootRelativeSourcePathResolver($app->basePath()),
         );
 
         $this->app->when(DocumentConfigFactory::class)

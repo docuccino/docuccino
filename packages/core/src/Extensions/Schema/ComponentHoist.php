@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\Support;
+namespace Docuccino\Core\Extensions\Schema;
 
+use Docuccino\Core\Extensions\BuiltIn\ClassTypeToSchema;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
-use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Support\Fqcn;
 
 /**
- * The component-hoisting skeleton every integration schema mapper that lifts a Laravel class
- * (a Data class, an API Resource, a JSON:API resource, an Eloquent model) to a reusable
- * `components.schemas` entry shares — mirroring core's built-in class → schema mapper:
+ * The shared component-hoisting skeleton for any schema mapper that lifts a class to a reusable
+ * `components.schemas` entry: core's built-in {@see ClassTypeToSchema}
+ * and the adapter's integration mappers (a spatie Data class, an API Resource, a JSON:API resource,
+ * an Eloquent model) all delegate the same three-step dance to it —
  *
  * 1. an expanding-map cycle-break: a self-reference discovered mid-expansion returns a `$ref` to
  *    the name reserved for the class rather than recursing into it (the guard against infinite

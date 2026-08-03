@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\Support;
+namespace Docuccino\Core\Extensions\Validation;
 
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
-use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Patch\Contribution;
 
 /**
- * Applies a recovered validation schema to an operation the one way both request-recovery routes
- * share (design §Phase 4). The FormRequest / inline-`validate()` path and the spatie-Data path
- * recover a rule set differently, but once converted through the shared chain they converge here:
- * diagnostics are drained, then body verbs (POST/PUT/PATCH) get a request body under the recovered
- * media type and read verbs (GET/HEAD) get query parameters. The only per-route difference is the
- * provenance producer, passed in.
+ * Applies a {@see ValidationSchema} to an operation the one way every request-schema source shares:
+ * diagnostics are drained, then body verbs (POST/PUT/PATCH) get a request body under the schema's
+ * media type and read verbs (GET/HEAD) get query parameters. Its input is a core value object
+ * (a ValidationSchema), not framework code — the HTTP verb → body-or-query decision is generic OAS
+ * assembly, so it lives in core; the adapter's recovery extensions (FormRequest/inline, spatie-Data,
+ * laravel-actions) each recover a rule set differently, then converge on this one applier, passing
+ * only the provenance producer that distinguishes them.
  */
 final class RecoveredRequest
 {

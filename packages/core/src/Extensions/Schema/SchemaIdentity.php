@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\Support;
+namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Attributes\Hidden;
 use Docuccino\Attributes\SchemaId;
@@ -11,9 +11,10 @@ use ReflectionClass;
 
 /**
  * Reads the Docuccino `#[SchemaName]` (component display name), `#[SchemaId]` (diff identity) and the
- * class-level `#[Hidden]` deny-list off a class — the reading every integration that hoists a class to
- * a component honours, so it stays identical whether the source is a Data class, an API Resource, or
- * an Eloquent model.
+ * class-level `#[Hidden]` deny-list off a class — the reading every schema mapper that hoists a class
+ * to a component honours, so it stays identical whether the source is core's built-in class mapper, a
+ * spatie Data class, an API Resource, or an Eloquent model. Reflecting Docuccino attributes off a
+ * class is framework-neutral, so it lives beside {@see ComponentHoist} in core.
  */
 final class SchemaIdentity
 {

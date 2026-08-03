@@ -2,23 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\Enum;
+namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
-use Docuccino\Laravel\Integrations\Support\EnumReflection;
 
 /**
- * A reflection-rich enum → schema mapper that supersedes the core case-names-only mapper (it runs
- * earlier in the chain). It documents a backed enum by its backing values (an integer schema for an
- * int-backed enum), attaches `#[CaseDescription]` prose as `x-enumDescriptions`, and honours the
- * `enums.naming` policy (`x-enumNames`/`x-enum-varnames`, off by default). A pure enum still lists
- * its case names, so it never regresses the core behaviour.
+ * A reflection-rich enum → schema mapper that supersedes the case-names-only {@see EnumTypeToSchema}
+ * (it runs earlier in the chain). It documents a backed enum by its backing values (an integer schema
+ * for an int-backed enum), attaches `#[CaseDescription]` prose as `x-enumDescriptions`, and honours
+ * the `enums.naming` policy (`x-enumNames`/`x-enum-varnames`, off by default). A pure enum still lists
+ * its case names, so it never regresses the plainer mapper. Reading `#[CaseDescription]` + the
+ * representation naming policy is framework-neutral, so this is a core built-in mapper.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class EnumSchema implements TypeToSchema

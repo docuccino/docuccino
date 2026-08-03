@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
+use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -16,21 +17,22 @@ use Docuccino\Core\Support\Fqcn;
 /**
  * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`
  * (design §5 component hoisting). Properties come from {@see TypeEngine::classMetadata()}; the
- * FQCN is passed through as the component's `schemaId` hint so the assembler can pin its diff
- * identity (`#[SchemaName]`/`#[SchemaId]` overrides land in the integration layer, Phase 4).
+ * component is named by the short class name and pinned by the FQCN as its `schemaId` diff
+ * identity. This is the framework-agnostic fallback class mapper — it does not read
+ * `#[SchemaName]`/`#[SchemaId]`; the integration mappers that supersede it (spatie Data, Eloquent,
+ * resources) resolve those attribute overrides, so it passes its name/id explicitly to suppress the
+ * shared skeleton's attribute fallback.
  *
- * A class the engine cannot expand degrades to a bare `{type: object}` at low confidence. A
- * self-referential class is cycle-broken via the `expanding` guard, which returns a `$ref` to
- * the component being built rather than recursing.
+ * The reserve → build → reference dance (and the self-reference cycle-break) is the shared
+ * {@see ComponentHoist} skeleton the integration mappers use; this mapper degrades an unexpandable
+ * class (no properties) to a bare `{type: object}` before reserving a name — nothing self-references
+ * a class with no body — mirroring the integration mappers' own degradation.
  */
 final class ClassTypeToSchema implements TypeToSchema
 {
-    /**
-     * @var array<string, string> FQCN currently mid-expansion → its reserved component name,
-     *                            so a self-reference points its cycle-breaking `$ref` at the
-     *                            exact (possibly suffixed) name the registry will hoist it under
-     */
-    private array $expanding = [];
+    public function __construct(
+        private readonly ComponentHoist $hoist = new ComponentHoist,
+    ) {}
 
     public function supports(DType $type): bool
     {
@@ -45,47 +47,38 @@ final class ClassTypeToSchema implements TypeToSchema
 
         $fqcn = $type->fqcn;
 
-        if (isset($this->expanding[$fqcn])) {
-            // Self-reference mid-expansion: point the cycle-breaking $ref at the name the registry
-            // reserved for this class up front (below), so a collision suffix is honoured here too.
-            return new SchemaResult(['$ref' => '#/components/schemas/'.$this->expanding[$fqcn]], 0.9);
-        }
+        return $this->hoist->hoist($context, $fqcn, function () use ($fqcn, $context): ?array {
+            $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
 
-        $metadata = $context->engine()->classMetadata(new ClassRef($fqcn));
+            // The class's reflected source is a fragment-cache dependency (design §10): editing the
+            // class (adding/retyping a property) must invalidate any warm fragment that referenced it.
+            $context->dependsOn(...$metadata->dependencyFiles);
 
-        // The class's reflected source is a fragment-cache dependency (design §10): editing the class
-        // (adding/retyping a property) must invalidate any warm fragment that referenced it.
-        $context->dependsOn(...$metadata->dependencyFiles);
-
-        if ($metadata->properties === []) {
-            return new SchemaResult(['type' => 'object'], 0.4);
-        }
-
-        // Reserve the final component name before expanding the body — the registry owns naming, so
-        // a self-reference discovered below resolves to the same (possibly suffixed) name.
-        $name = $context->reserveComponentName(Fqcn::short($fqcn), $fqcn);
-        $this->expanding[$fqcn] = $name;
-
-        $properties = [];
-        $required = [];
-        foreach ($metadata->properties as $property) {
-            $schema = $context->convert($property->type);
-            if ($property->summary !== null) {
-                $schema['description'] = $property->summary;
+            if ($metadata->properties === []) {
+                // Degrade to a bare object; returning null keeps the reserved name unused so it never
+                // reaches components.schemas (an unexpandable class has no body to self-reference).
+                return null;
             }
-            $properties[$property->name] = $schema;
-            if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
-                $required[] = $property->name;
+
+            $properties = [];
+            $required = [];
+            foreach ($metadata->properties as $property) {
+                $schema = $context->convert($property->type);
+                if ($property->summary !== null) {
+                    $schema['description'] = $property->summary;
+                }
+                $properties[$property->name] = $schema;
+                if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
+                    $required[] = $property->name;
+                }
             }
-        }
 
-        unset($this->expanding[$fqcn]);
+            $object = ['type' => 'object', 'properties' => $properties];
+            if ($required !== []) {
+                $object['required'] = $required;
+            }
 
-        $object = ['type' => 'object', 'properties' => $properties];
-        if ($required !== []) {
-            $object['required'] = $required;
-        }
-
-        return new SchemaResult($context->reference($name, $object, $fqcn), 0.9);
+            return $object;
+        }, Fqcn::short($fqcn), $fqcn);
     }
 }

@@ -8,7 +8,7 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Laravel\Integrations\Support\RecoveredRequest;
+use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 
 /**

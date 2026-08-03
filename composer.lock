@@ -427,17 +427,16 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "ba2a6886de4768f8d34dae281ac70e98b9836579"
+                "reference": "f4fb80d1eb88abd9458b17ce7fcccea9e1c0b5a2"
             },
             "require": {
+                "composer-runtime-api": "^2",
+                "docuccino/attributes": "self.version",
                 "nikic/php-parser": "^5",
                 "opis/json-schema": "^2.4",
                 "php": "^8.3",
                 "psr/container": "^1.1 || ^2.0",
                 "symfony/yaml": "^7.0"
-            },
-            "require-dev": {
-                "docuccino/attributes": "self.version"
             },
             "type": "library",
             "autoload": {
@@ -545,7 +544,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/laravel",
-                "reference": "67c9b376887e39f0b136c36b5d23d5323d20f70a"
+                "reference": "b2fb98aa1172dd3e615455f0d35064c6f11695a1"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -561,6 +560,7 @@
             },
             "require-dev": {
                 "larastan/larastan": "^3.10",
+                "lorisleiva/laravel-actions": "^2.0",
                 "orchestra/testbench": "^10.0",
                 "pestphp/pest": "^4.0",
                 "spatie/laravel-data": "^4.0",

@@ -202,8 +202,13 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
   works from any provider register()/boot(); config `extensions` merges at resolve time.
   No API returns the extension list before resolve — early snapshot is impossible.
 - Extensions are container-resolved (constructor DI). Core is framework-agnostic (no
-  illuminate/symfony-framework deps); its only runtime dependencies are `psr/container`,
-  `opis/json-schema`, `symfony/yaml` and `nikic/php-parser`.
+  illuminate/symfony-framework deps); its runtime dependencies are `psr/container`,
+  `opis/json-schema`, `symfony/yaml`, `nikic/php-parser` and — since core now reads Docuccino
+  attributes off reflected classes/enums (`SchemaIdentity`, `EnumReflection`, the attribute
+  overrides extension) — the dependency-free, lockstep-versioned `docuccino/attributes`. That tiny
+  attribute package is the one runtime dep core added to absorb the attribute-aware placement moves;
+  it is deliberately NOT the framework or the analysis engine (dependency direction stays
+  `attributes ← core ← inference-phpstan ← laravel`).
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
   `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
@@ -240,9 +245,50 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     laterally to `docuccino/inference-phpstan` instead (they import `PHPStan\PhpDocParser`, which
     core bans) — that package owns the phpdoc grammar and the shared parser stack, so the split
     docblock reader merged into its existing `Metadata\DocBlockReader`.
+  - Placement re-review follow-up (Tom, 2026-08-03 — after `docuccino/attributes` became a core
+    runtime dep, which lifted the gate on attribute-aware moves). Byte-neutral relocations, goldens
+    unchanged:
+    - Provenance: `Core\Provenance\RootRelativeSourcePathResolver` (was the adapter's
+      `LaravelSourcePathResolver`) — a pure composer.json-ancestor-walk implementing core's
+      `SourcePathResolver`, zero framework imports; any adapter constructs it with its own base path
+      (the Laravel provider still binds `base_path()`).
+    - Component hoisting: `Core\Extensions\Schema\ComponentHoist` (was
+      `Integrations\Support\ComponentHoist`) is now the single reserve→build→reference +
+      cycle-break skeleton — core's built-in `ClassTypeToSchema` was de-duplicated onto it (its
+      docblock had long admitted it mirrored ComponentHoist), and the integration mappers (spatie
+      Data, Eloquent, resources) keep calling it unchanged. `Core\Extensions\Schema\SchemaIdentity`
+      + `Core\Extensions\Schema\EnumReflection` moved with it (reflecting Docuccino attributes /
+      enum cases is framework-neutral); the enum mapper `Core\Extensions\BuiltIn\EnumSchema`
+      (reads `#[CaseDescription]` + the representation naming policy) moved to core beside the
+      plainer `EnumTypeToSchema` it supersedes — its registration/order is unchanged, so it is not
+      an installable integration (the docs matrix already listed it "built in — always on").
+    - Request assembly: `Core\Extensions\Validation\RecoveredRequest` (was
+      `Integrations\Support\RecoveredRequest`) applies a core `ValidationSchema` to an operation —
+      body for write verbs, query params for GET/HEAD — which is generic OAS assembly, not recovery;
+      the three adapter recovery extensions (FormRequest/inline, spatie-Data, laravel-actions) still
+      recover their rule sets adapter-side, then converge on this core applier.
+    - Overrides: `Core\Extensions\BuiltIn\AttributeOverridesExtension` (was
+      `Laravel\Extensions\AttributeOverridesExtension`) reads only Docuccino attributes + core
+      `ConfinedPath` (for `#[DescriptionFromFile]`); the provider keeps binding its `$basePath`.
   - Corollary: pure, stable core utilities that integrations legitimately need (e.g.
     `Core\Support\Fqcn`) get allow-listed in the arch test with justification — never
-    duplicated to dodge the boundary.
+    duplicated to dodge the boundary. Because these moves landed in already-allow-listed core
+    namespaces (`Extensions\Schema`, `Extensions\Validation`), no arch-test allow-list needed
+    widening.
+  - Deliberately NOT moved (placement classification recorded; each stays adapter-side for a
+    concrete reason):
+    - `Laravel\Engine\TypeEngineMode` stays — it is adapter *config vocabulary* (how the Laravel
+      adapter selects/tunes its inference engine), not framework-neutral machinery.
+    - `Laravel\Exceptions\DefaultExceptionToResponse` stays — a placeholder terminal in the
+      error-response chain; its placement is classified but the action is deferred until it grows a
+      real (framework-neutral) body worth relocating.
+    - The parameter/request-body/response attribute extensions
+      (`AttributeParametersExtension`, `AttributeRequestBodyExtension`, `AttributeResponsesExtension`)
+      stay — each depends on `docuccino/inference-phpstan`'s `TypeStringParser` (which imports
+      `PHPStan\PhpDocParser`, banned in core), and `Routing\AttributeCollector` stays because it
+      consumes the adapter's route-reflection `ReflectedAction`. This attribute-coupled category
+      awaits the pending decision on where the shared type-string grammar belongs; only the
+      genuinely-clean `AttributeOverridesExtension` moved now.
 
 ## 7. Precedence / patch semantics
 

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Registry;
 
+use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
-use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Extensions\AttributeRequestBodyExtension;
 use Docuccino\Laravel\Extensions\AttributeResponsesExtension;
@@ -17,7 +18,6 @@ use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
 use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentIntegration;
-use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;

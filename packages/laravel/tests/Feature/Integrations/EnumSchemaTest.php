@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\NullTypeEngine;
-use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
 

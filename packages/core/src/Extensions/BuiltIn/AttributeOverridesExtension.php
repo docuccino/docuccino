@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Extensions;
+namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Attributes\DeprecatedOperation;
 use Docuccino\Attributes\DescriptionFromFile;

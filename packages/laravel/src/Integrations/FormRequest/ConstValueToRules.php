@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\FormRequest;
 
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ConstValue;
-use Docuccino\Laravel\Integrations\Support\EnumReflection;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 
 /**

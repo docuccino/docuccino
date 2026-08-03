@@ -2,19 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Provenance;
-
-use Docuccino\Core\Provenance\SourcePathResolver;
+namespace Docuccino\Core\Provenance;
 
 /**
  * Turns an absolute source file path into a stable, project-root-relative one for provenance
- * `source.file` (design §4 — provenance, never identity). A file under the app's base path
+ * `source.file` (design §4 — provenance, never identity). A file under the supplied base path
  * relativises against it (the common case: `app/Http/Controllers/…`). A file *outside* base path —
- * the testbench workbench, path-repo packages — has no base to strip, so we walk up to the nearest
+ * a testbench workbench, path-repo packages — has no base to strip, so we walk up to the nearest
  * `composer.json` ancestor and relativise against that package root, keeping the path portable
  * regardless of where the repository is checked out (never an absolute, machine-specific path).
+ *
+ * The composer-ancestor walk is a pure, framework-neutral algorithm, so it lives in core: any
+ * adapter constructs it with its own project base path (the Laravel adapter binds `base_path()`).
  */
-final readonly class LaravelSourcePathResolver implements SourcePathResolver
+final readonly class RootRelativeSourcePathResolver implements SourcePathResolver
 {
     public function __construct(
         private string $basePath,

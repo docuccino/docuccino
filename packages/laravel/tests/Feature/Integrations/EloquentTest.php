@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Inference\ClassMetadata;
@@ -14,7 +15,6 @@ use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
-use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 

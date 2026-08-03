@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
 use Docuccino\Attributes\Hidden as DocuccinoHidden;
+use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Support\Fqcn;
-use Docuccino\Laravel\Integrations\Support\SchemaIdentity;
 use ReflectionClass;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
