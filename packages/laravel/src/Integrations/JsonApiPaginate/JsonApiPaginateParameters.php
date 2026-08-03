@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\JsonApiPaginate;
 
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
  * Turns a {@see JsonApiPaginateConfig} and the recovered {@see JsonApiPaginateFacts} into the JSON:API

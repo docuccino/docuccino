@@ -7,7 +7,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderFacts;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
  * The crown jewel (design §Phase 4 — the Scramble-Pro-beater), end-to-end on the REAL engine:

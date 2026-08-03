@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Laravel\Integrations\Support\JsonApiDocument;
 
 /**
  * Maps a Laravel 13 first-party JSON:API resource

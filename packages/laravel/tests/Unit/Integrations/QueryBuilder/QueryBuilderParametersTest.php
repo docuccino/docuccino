@@ -6,7 +6,7 @@ use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderFacts;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
  * Dataset coverage over the representation-policy expression of every recovered fact kind, in BOTH

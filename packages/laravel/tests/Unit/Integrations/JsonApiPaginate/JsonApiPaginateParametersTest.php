@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateFacts;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParameters;
-use Docuccino\Laravel\Integrations\QueryBuilder\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
  * The pure builder that turns a config + recovered facts into the JSON:API pagination query params.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
  * Turns recovered {@see QueryBuilderFacts} into query-parameter specs under a {@see

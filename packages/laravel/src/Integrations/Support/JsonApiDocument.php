@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\ApiResources;
+namespace Docuccino\Laravel\Integrations\Support;
 
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Laravel\Integrations\ApiResources\ToArrayObject;
 
 /**
  * The shared JSON:API resource-object document builder. A JSON:API resource — whether Laravel 13's

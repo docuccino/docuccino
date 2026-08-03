@@ -8,7 +8,7 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Laravel\Integrations\ApiResources\JsonApiParameters;
+use Docuccino\Laravel\Integrations\Support\JsonApiParameters;
 
 /**
  * Adds the JSON:API query parameters `timacdonald/json-api` resolves — `include` (compound documents)

@@ -11,7 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Laravel\Integrations\ApiResources\JsonApiDocument;
+use Docuccino\Laravel\Integrations\Support\JsonApiDocument;
 
 /**
  * Maps a `timacdonald/json-api` resource (`TiMacDonald\JsonApi\JsonApiResource`, guarded by

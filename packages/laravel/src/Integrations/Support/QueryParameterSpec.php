@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Integrations\QueryBuilder;
+namespace Docuccino\Laravel\Integrations\Support;
 
 use Docuccino\Core\Draft\ParameterDraft;
 use Docuccino\Core\Patch\Contribution;
