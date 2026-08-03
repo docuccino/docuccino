@@ -27,10 +27,10 @@ use Docuccino\Laravel\Integrations\Support\ResourceWrapping;
  * its `data` key per Laravel's `JsonResource::$wrap` semantics ({@see ResourceWrapping}); a **nested**
  * resource (a property of another resource) stays unwrapped so it can be `$ref`-shared.
  *
- * JSON:API resources — first-party ({@see JsonApiResourceSchema}) and timacdonald
- * ({@see \Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema}) — run
- * ahead of this mapper; this mapper explicitly declines BOTH families so a plain flat `toArray` shape
- * is never emitted for a JSON:API resource even if extension ordering is perturbed.
+ * JSON:API resources — first-party ({@see JsonApiResourceSchema}) and the timacdonald family (its own
+ * FIRST-priority mapper) — run ahead of this mapper; this mapper explicitly declines BOTH families so
+ * a plain flat `toArray` shape is never emitted for a JSON:API resource even if extension ordering is
+ * perturbed.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class JsonResourceSchema implements TypeToSchema
