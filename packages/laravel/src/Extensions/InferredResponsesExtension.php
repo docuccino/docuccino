@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Support\FrameworkClasses;
 
 /**
  * Infers the success response(s) from the action's return paths (design §5). Every return type is
@@ -37,8 +38,6 @@ use Docuccino\Core\Patch\Contribution;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class InferredResponsesExtension implements OperationExtension
 {
-    private const JSON_RESPONSE = 'Illuminate\\Http\\JsonResponse';
-
     private const DEFAULT_STATUS = '200';
 
     /** @var array<int, string> canonical reason phrases for the statuses this extension emits */
@@ -103,7 +102,7 @@ final class InferredResponsesExtension implements OperationExtension
             return [self::DEFAULT_STATUS, null, false];
         }
 
-        if ($type instanceof ClassT && $type->fqcn === self::JSON_RESPONSE) {
+        if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE) {
             $status = $this->foldStatus($type->typeArgs[1] ?? null);
             $payload = $type->typeArgs[0] ?? null;
 

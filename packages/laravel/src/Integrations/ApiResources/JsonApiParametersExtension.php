@@ -8,20 +8,16 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Core\Inference\DType\ClassT;
-use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Patch\Contribution;
 
 /**
  * Adds the JSON:API query parameters Laravel's `JsonApiRequest` resolves — `include` (compound
  * documents) and `fields[TYPE]` (sparse fieldsets) — to any operation whose action returns a
- * first-party JSON:API resource or collection ({@see ResourceReflector::involvesJsonApi()}). Guarded
- * (with {@see JsonApiResourceSchema}) behind `class_exists`, so it never registers on older Laravel.
+ * first-party JSON:API resource or collection ({@see ResourceReflector::involvesJsonApi()}), via the
+ * shared {@see JsonApiParameters} applier. Guarded (with {@see JsonApiResourceSchema}) behind
+ * `class_exists`, so it never registers on older Laravel.
  */
 final class JsonApiParametersExtension implements OperationExtension
 {
-    private const JSON_RESPONSE = 'Illuminate\\Http\\JsonResponse';
-
     public function phase(): OperationPhase
     {
         return OperationPhase::Parameters;
@@ -29,31 +25,6 @@ final class JsonApiParametersExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        if (! $this->returnsJsonApi($context)) {
-            return;
-        }
-
-        JsonApiParameters::apply($operation, Contribution::integration('api-resources', $context->actionSource()));
-    }
-
-    private function returnsJsonApi(RouteContext $context): bool
-    {
-        foreach ($context->analysis()->returns as $return) {
-            if (ResourceReflector::involvesJsonApi($this->unwrap($return->type))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** Unwrap a `JsonResponse<payload>` to its payload type; other types pass through. */
-    private function unwrap(DType $type): DType
-    {
-        if ($type instanceof ClassT && $type->fqcn === self::JSON_RESPONSE) {
-            return $type->typeArgs[0] ?? $type;
-        }
-
-        return $type;
+        JsonApiParameters::applyIf($operation, $context, ResourceReflector::involvesJsonApi(...), 'api-resources');
     }
 }

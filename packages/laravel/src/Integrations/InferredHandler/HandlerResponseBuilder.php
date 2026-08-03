@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Support\FrameworkClasses;
 
 /**
  * Turns a handler/closure analysis into an error response (design §6). Reads the recovered
@@ -22,8 +23,6 @@ use Docuccino\Core\Patch\Contribution;
  */
 final class HandlerResponseBuilder
 {
-    private const JSON_RESPONSE = 'Illuminate\\Http\\JsonResponse';
-
     private const REASONS = [
         '400' => 'Bad Request',
         '401' => 'Unauthenticated',
@@ -39,7 +38,7 @@ final class HandlerResponseBuilder
     {
         foreach ($analysis->returns as $return) {
             $type = $return->type;
-            if (! $type instanceof ClassT || $type->fqcn !== self::JSON_RESPONSE) {
+            if (! $type instanceof ClassT || $type->fqcn !== FrameworkClasses::JSON_RESPONSE) {
                 continue;
             }
 
