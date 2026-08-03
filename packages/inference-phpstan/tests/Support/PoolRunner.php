@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * Drives the {@see pool-runner.php} subprocess (parent orchestrator + K workers)
- * against `spikes/fixture-app/` and returns its result payload as a raw JSON
+ * against `tests/fixture-app/app/` and returns its result payload as a raw JSON
  * string — the byte-for-byte artifact the determinism invariants compare.
  */
 final class PoolRunner

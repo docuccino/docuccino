@@ -130,9 +130,9 @@ function ensureFixtureAvailable(bool $available): void
 
     if (getenv('DOCUCCINO_REQUIRE_FIXTURE') === '1') {
         throw new RuntimeException(
-            'Fixture app required (DOCUCCINO_REQUIRE_FIXTURE=1) but absent — provision per spikes/fixture-app-setup.md',
+            'Fixture app required (DOCUCCINO_REQUIRE_FIXTURE=1) but absent — provision per tests/fixture-app/setup.md',
         );
     }
 
-    test()->markTestSkipped('fixture app absent — recreate per spikes/fixture-app-setup.md');
+    test()->markTestSkipped('fixture app absent — recreate per tests/fixture-app/setup.md');
 }

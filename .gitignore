@@ -5,7 +5,7 @@
 .phpunit.result.cache
 .idea/
 .DS_Store
-/spikes/fixture-app/
+/tests/fixture-app/app/
 
 # Starlight docs site (website/) — build artefacts and deps. package-lock.json IS committed.
 /website/node_modules/

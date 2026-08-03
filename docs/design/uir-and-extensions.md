@@ -172,7 +172,8 @@ interface ExceptionToResponse {
 //      preserves response()->json shapes; statuses constant-folded). Catch-all
 //      render(Throwable) bodies analysed once per thrown exception type with the param
 //      NARROWED to that type — PHPStan's instanceof narrowing resolves the branches
-//      (the Eos ProblemDetailsRenderer pattern). Exception-class render() /
+//      (the common Problem-Details renderer pattern: a catch-all render() with
+//      per-type instanceof branches). Exception-class render() /
 //      Responsable::toResponse() analysed the same way. Too-dynamic body → defer (null)
 //      + diagnostic at the exact expression. Handler files join dependencyFiles.
 //   2. FrameworkDefaultsExceptionToResponse — Laravel's stock JSON shapes
@@ -186,7 +187,8 @@ interface VersioningPolicy { // diff enforcement: changeset severity vs info.ver
     // Built-ins: SemverPolicy (breaking → major bump required), DateVersionPolicy
     // (breaking → new date version), NoVersioningPolicy (breaking → fail/warn outright).
     // Per-document config; wired into docuccino:diff --enforce (nonzero exit for CI).
-    // Longitudinal governance (deprecation windows, history, cross-repo) = SaaS, not here.
+    // Longitudinal governance (deprecation windows, history, cross-repo) is out of scope
+    // for the open-source packages.
 }
 
 interface DocumentTransformer { public function transform(UirDocumentDraft $doc, DocumentContext $ctx): void; }
@@ -226,7 +228,8 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     core, even though some default heuristics table entries look Laravel-flavored
     (they're neutral strings); the adapter contributes only config plumbing/registration.
     `Core\Lint` is where future document-level rules (description coverage, naming)
-    accumulate — reusable by the reference CLI, other-language producers, and the SaaS.
+    accumulate — reusable by the reference CLI, other-language producers, and any
+    downstream consumer of the UIR.
   - Pipeline engine = core (`Core\Pipeline\{Assembler, FragmentCache, OperationPipeline,
     OperationFragment, GenerationResult, AssemblyResult}` + `Core\Extensions\ResolvedExtensions`):
     a second adapter inherits the whole assemble→overlay→transform→hash→validate spine and

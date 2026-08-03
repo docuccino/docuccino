@@ -29,7 +29,7 @@ use Docuccino\Inference\PhpStan\Orchestration\OrchestrationConfig;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 
 $repoRoot = dirname(__DIR__, 4);
-$app = $repoRoot.'/spikes/fixture-app';
+$app = $repoRoot.'/tests/fixture-app/app';
 
 require $app.'/vendor/autoload.php';
 

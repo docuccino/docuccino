@@ -1,8 +1,13 @@
 # Design: PHPStan/Larastan Embedding (docuccino/inference-phpstan)
 
-Status: approved (2026-08-01); load-bearing assumptions PROVEN by Spike A
-(`spikes/spike-a/FINDINGS.md`) — read it alongside this doc; where the spike found
-deviations, the spike wins.
+Status: approved (2026-08-01); load-bearing assumptions PROVEN in the Phase 0 spike —
+the PHPStan phar + Larastan were embedded programmatically against a provisioned
+Laravel 12 / Larastan fixture app (phpstan 2.2.7, larastan 3.10.0, php-parser 5.8.0,
+PHP 8.5.9) and answered "for a given controller method, the type of every return path"
+on every pass criterion. The one adapter method needing per-minor attention is the
+parser wiring, not any analysed signature (the internal-API signatures matched this
+design unchanged at 2.2.7). Where the spike found deviations, the spike wins; its
+findings are inlined below.
 
 ## 1. Verified ground truth
 
@@ -93,7 +98,8 @@ interface TypeScope {
 
 `PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
 
-**Trace contract refinements (Spike B, all-PASS — see spikes/spike-b/FINDINGS.md):**
+**Trace contract refinements (verified in the Phase 0 spike, all-PASS — the
+2-deep-helper-chain constant recovery + custom-terminal pagination case):**
 - Responsibility split: the visitor is pure semantics + harvesting (zero PHPStan imports);
   the ENGINE owns bounded depth, per-`class::method` memoization, cycle guard, callee
   resolution, per-file parser priming, deterministic ordering. `enterNode` returning `true`
@@ -127,7 +133,7 @@ else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason
 Translation is EAGER at query time (serializable across workers/cache); class expansion
 is LAZY via `classMetadata()` (memoized per class per run).
 
-## 6. Exception flow (3 layers) — CORRECTED per Spike C (8/8 PASS, see spikes/spike-c/FINDINGS.md)
+## 6. Exception flow (3 layers) — CORRECTED per the Phase 0 spike (8/8 fixture cases PASS)
 
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
    (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all

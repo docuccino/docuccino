@@ -23,7 +23,7 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\PoisonInjectingTypeEngine;
 
 $repoRoot = dirname(__DIR__, 4);
-$app = $repoRoot.'/spikes/fixture-app';
+$app = $repoRoot.'/tests/fixture-app/app';
 
 require $app.'/vendor/autoload.php';
 

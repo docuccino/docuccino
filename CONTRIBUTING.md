@@ -54,8 +54,8 @@ Everything must be **green on all checks, always** — Pest, PHPStan at level ma
 
 The Laravel adapter's feature tests run against the workbench under `packages/laravel/workbench/`.
 The inference engine's real-analysis tests (the `fixture` group) run out-of-process against a
-provisioned Laravel + Larastan app at `spikes/fixture-app`, which is **gitignored** — recreate it
-per `spikes/fixture-app-setup.md` (or let CI's cached provisioning do it). Then:
+provisioned Laravel + Larastan app at `tests/fixture-app/app`, which is **gitignored** — recreate
+it per `tests/fixture-app/setup.md` (or let CI's cached provisioning do it). Then:
 
 ```bash
 vendor/bin/pest --group=fixture         # real-engine integration tests

@@ -33,7 +33,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
-$app = $repoRoot.'/spikes/fixture-app';
+$app = $repoRoot.'/tests/fixture-app/app';
 
 require $app.'/vendor/autoload.php';
 

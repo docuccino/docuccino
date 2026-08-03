@@ -9,7 +9,7 @@ use Docuccino\Core\Inference\ClassMetadata;
 use RuntimeException;
 
 /**
- * Drives the {@see engine-runner.php} subprocess against `spikes/fixture-app/`
+ * Drives the {@see engine-runner.php} subprocess against `tests/fixture-app/app/`
  * and decodes its JSON result. Keeps the fixture app's Laravel/Larastan out of
  * the Pest process (avoiding a symfony/console version clash) and mirrors how
  * the engine really runs — inside the host app's own process.
@@ -18,7 +18,7 @@ final class FixtureRunner
 {
     public static function appRoot(): string
     {
-        return dirname(__DIR__, 4).'/spikes/fixture-app';
+        return dirname(__DIR__, 4).'/tests/fixture-app/app';
     }
 
     private static function runner(): string

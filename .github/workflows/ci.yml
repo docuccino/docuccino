@@ -121,29 +121,22 @@ jobs:
         id: fixture-cache
         uses: actions/cache@v4
         with:
-          path: spikes/fixture-app
+          path: tests/fixture-app/app
           # Re-provision only when the setup recipe or any fixture source changes.
-          key: docuccino-fixture-${{ hashFiles('spikes/fixture-app-setup.md', 'spikes/spike-*/fixture-src/**') }}
+          key: docuccino-fixture-${{ hashFiles('tests/fixture-app/setup.md', 'tests/fixture-app/src/**') }}
 
       - name: Provision fixture app
         if: steps.fixture-cache.outputs.cache-hit != 'true'
-        # Mirrors spikes/fixture-app-setup.md — keep the two in lockstep.
+        # Mirrors tests/fixture-app/setup.md — keep the two in lockstep.
         run: |
           set -euo pipefail
-          cd spikes
-          composer create-project laravel/laravel fixture-app "^12.0" --no-interaction --no-progress
-          cd fixture-app
-          composer require --dev larastan/larastan --no-interaction --no-progress
-          composer require spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
-          # Phase 5c integrations (spike-d real-engine tests):
-          composer require -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress
-          cd ..
-          cp -R spike-a/fixture-src/app/. fixture-app/app/
-          cp -R spike-b/fixture-src/app/. fixture-app/app/
-          cp -R spike-c/fixture-src/app/. fixture-app/app/
-          cp -R phase-4/fixture-src/app/. fixture-app/app/
-          cp -R phase-4b/fixture-src/app/. fixture-app/app/
-          cp -R spike-d/fixture-src/app/. fixture-app/app/
+          composer create-project laravel/laravel tests/fixture-app/app "^12.0" --no-interaction --no-progress
+          composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --no-interaction --no-progress
+          composer require --working-dir=tests/fixture-app/app spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
+          # Integration packages (JSON:API + laravel-actions real-engine tests):
+          composer require --working-dir=tests/fixture-app/app -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress
+          # Overlay the tracked fixture sources onto the install's app/ dir.
+          cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
 
       - name: Install root dependencies (Pest)
         run: composer install --no-interaction --no-progress

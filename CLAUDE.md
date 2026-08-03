@@ -38,9 +38,10 @@ packages/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan en
 packages/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
 spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).
-spikes/                      Phase-0 proof spikes (reference implementations; fixture app
-                             at spikes/fixture-app is gitignored — recreate per
-                             spikes/fixture-app-setup.md).
+tests/fixture-app/           the real-engine fixture app: tracked overlay sources in src/,
+                             recreate recipe in setup.md, and the provisioned Laravel +
+                             Larastan install in app/ (gitignored — recreate per
+                             tests/fixture-app/setup.md).
 ```
 
 ## Key conventions (details in the design docs)
@@ -75,7 +76,7 @@ DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --filter=<golden test>   # sanctioned 
 
 Laravel adapter feature tests run on orchestra/testbench with the workbench app under
 `packages/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
-`spikes/fixture-app`.
+`tests/fixture-app/app`.
 
 ## Project status
 
