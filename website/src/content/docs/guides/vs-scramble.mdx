@@ -31,6 +31,82 @@ run. The Docuccino column is exact.
 | YAML export | — | ✅ |
 | A documented intermediate format | — | ✅ (the [UIR](/uir/)) |
 
+## Feature support, side by side
+
+Both tools generate from your code, and there's a large, healthy overlap. The tables below break
+that down capability by capability. Scramble ships a free core and a paid **Scramble Pro** tier;
+they're split out so you can see exactly where each capability lives.
+
+<Aside type="note">
+`✓` means built-in support; `—` means not supported. Scramble's split between free and Pro, and
+its exact behavior, vary between versions — check these against the version you run. The Docuccino
+column is exact.
+</Aside>
+
+### Request &amp; validation
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| Validation rules → schema constraints | ✓ | ✓ | ✓ |
+| Form Requests &amp; inline `validate()` | ✓ | ✓ | ✓ |
+| Spatie Data objects | ✓ | — | ✓ |
+| Laravel Actions | — | — | ✓ |
+
+### Responses, models &amp; schemas
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| API Resources | ✓ | ✓ | ✓ |
+| Eloquent model schemas | ✓ | ✓ | ✓ |
+| Backed enums (+ case descriptions) | ✓ | ✓ | ✓ |
+| Pagination inference | ✓ | ✓ | ✓ |
+| First-party JSON:API resources (framework) | ✓ (free core) | — | ✓ (via the third-party `timacdonald/json-api` package) |
+| JSON API Paginate | — | — | ✓ |
+| Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
+
+### Query parameters
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| Spatie Query Builder parameters | ✓ | — | ✓ |
+| …resolved through helper methods, at any call depth | ✓ | — | — |
+
+Scramble Pro reads Spatie Query Builder too; Docuccino traces the builder wherever it's assembled,
+so a query composed several helper methods deep is still fully documented.
+
+### Authentication &amp; operations
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| Middleware-based auth detection | ✓ | ✓ | ✓ |
+| Sanctum dual-mode (token **and** stateful cookie) | ✓ | — | — |
+| Passport OAuth2 scopes, per operation | ✓ | — | — |
+| Permission / role requirements (`x-permissions`) | ✓ | — | — |
+| Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — | — |
+
+### Error responses
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| Framework error defaults (422 / 401 / 403 / 404) | ✓ | ✓ | ✓ |
+| Inferred exception handlers (your *real* error shapes) | ✓ | — | — |
+| RFC 9457 Problem Details preset | ✓ | — | — |
+
+Reading your actual exception handling — render callbacks, exception `render()` methods,
+`Responsable` exceptions — is something no other generator does today.
+
+### Output &amp; workflow
+
+| Capability | Docuccino | Scramble (free) | Scramble Pro |
+| --- | :---: | :---: | :---: |
+| Deterministic, byte-stable output | ✓ | — | — |
+| Committed spec artifact you can review in a PR | ✓ | — | — |
+| Semantic diff + `--enforce` CI version gate | ✓ | — | — |
+
+Where Scramble is ahead: **Laravel Actions** and **JSON API Paginate** have first-class Scramble
+Pro support and no Docuccino equivalent yet. See [Honest limitations](#honest-limitations-today) for
+the rest of what's still on the way.
+
 ## What you can stop maintaining
 
 Because Docuccino infers more, a few things you may currently hand-maintain become automatic:

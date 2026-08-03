@@ -1,37 +1,73 @@
 ---
-title: Integrations
-description: The built-in integrations that read your packages and conventions — and how they activate.
+title: Supported integrations
+description: Every built-in integration, what each one documents, what it needs, and how it activates.
 sidebar:
+  label: Overview
   order: 1
 ---
 
-import { LinkCard, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
 
 Integrations are how Docuccino understands the packages and conventions you already use. Each one
 reads a specific part of your app — Form Requests, API Resources, Eloquent models, query builders,
 authentication — and contributes the matching pieces of your documentation.
 
-You don't enable them. Each integration activates automatically when it's relevant: the Spatie Data
-support turns on when you have Spatie Data installed, the Passport support when you have Passport,
-and so on. Integrations that build on Laravel itself (Form Requests, resources, models, enums, rate
-limiting, error responses) are always available.
+You never switch them on. Each integration activates the moment it's relevant: the Spatie Data
+support the moment `spatie/laravel-data` is installed, the Passport support the moment Passport is,
+and so on. Anything that builds on Laravel itself — validation, Form Requests, resources, models,
+enums, error responses, rate limiting — is always available.
 
 <Aside title="Built with the tools you have">
-Every official integration is built using the same public extension API that's available to you.
-Nothing here is privileged — if an integration can read a package, so can one you write. See
+Every integration on this page is built using the same public extension API that's available to
+you — you have access to everything Docuccino used to build itself. Nothing here is privileged: if
+an integration can read a package, so can one you write. See
 [Writing an integration](/guides/extension-authoring/).
 </Aside>
 
-## The built-in integrations
+## The integration matrix
 
-<CardGrid>
-	<LinkCard title="Resources, models & enums" href="/integrations/schemas/" description="Reusable response schemas from JsonResource, Eloquent, and backed enums." />
-	<LinkCard title="Request bodies & validation" href="/integrations/requests/" description="Request bodies and query params from Form Requests, inline validation, and Spatie Data." />
-	<LinkCard title="Error responses" href="/integrations/error-responses/" description="4xx/5xx responses from your real exception handling, defaults, or the RFC 9457 preset." />
-	<LinkCard title="Query Builder" href="/integrations/query-builder/" description="Filters, sorts, includes, and pagination from Spatie Query Builder — at any call depth." />
-	<LinkCard title="Authentication & permissions" href="/integrations/security/" description="Security schemes from Sanctum and Passport; permission middleware." />
-	<LinkCard title="Rate limiting" href="/integrations/rate-limiting/" description="429 responses and rate-limit headers from throttle middleware." />
-</CardGrid>
+Each row links to its detailed page. "Requires" tells you what has to be installed for the
+integration to activate; "Config" links the knobs that tune it.
+
+### Request &amp; validation
+
+| Integration | What it documents | Requires | Config |
+| --- | --- | --- | --- |
+| [Validation rules](/integrations/requests/) | Laravel's validation DSL turned into schema constraints — types, formats, sizes, presence, and enumerations | Built in — always on | — |
+| [Form Requests &amp; inline `validate()`](/integrations/requests/) | Request bodies and query parameters from a Form Request's `rules()`, or an inline `$request->validate([...])` / `Validator::make(...)` | Built in — always on | — |
+| [Spatie Data](/integrations/requests/) | Data classes as reusable schemas, and request bodies from Data-typed action parameters | [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) | — |
+
+### Responses, models &amp; schemas
+
+| Integration | What it documents | Requires | Config |
+| --- | --- | --- | --- |
+| [API Resources](/integrations/schemas/) | Response schemas from `JsonResource` shapes — plus Laravel's first-party JSON:API resources | `JsonResource` built in; JSON:API auto-activates on Laravel 13 | [`integrations.api_resources.wrap`](/reference/configuration/#integrations) |
+| [Eloquent models](/integrations/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in — always on | — |
+| [Enums](/integrations/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and optional codegen name hints | Built in — always on | [`representation.enums.naming`](/reference/configuration/#representation) |
+
+### Error responses
+
+| Integration | What it documents | Requires | Config |
+| --- | --- | --- | --- |
+| [Inferred exception handlers](/integrations/error-responses/) | 4xx/5xx responses from your *real* error handling — render callbacks, exception `render()`, and `Responsable` exceptions | Built in — always on | [`error_responses`](/reference/configuration/#error_responses) |
+| [Problem Details preset](/integrations/error-responses/) | RFC 9457 `application/problem+json` error responses | Built in — opt-in | [`error_responses: 'problem-details'`](/reference/configuration/#error_responses) |
+| [Framework error defaults](/integrations/error-responses/) | Laravel's stock JSON error shapes — `{message, errors}` for 422, `{message}` for 401/403/404 | Built in — always on | [`error_responses`](/reference/configuration/#error_responses) |
+
+### Authentication &amp; operations
+
+| Integration | What it documents | Requires | Config |
+| --- | --- | --- | --- |
+| [Sanctum](/integrations/security/) | Bearer-token and stateful-cookie security schemes — both modes when a single route carries both | [`laravel/sanctum`](https://laravel.com/docs/sanctum) | [`integrations.sanctum`](/reference/configuration/#integrations) |
+| [Passport](/integrations/security/) | An OAuth2 security scheme with per-operation scopes read from `scope:` / `scopes:` middleware | [`laravel/passport`](https://laravel.com/docs/passport) | [`integrations.passport.url`](/reference/configuration/#integrations) |
+| [Permissions](/integrations/security/) | `role:` / `permission:` / `role_or_permission:` middleware as an `x-permissions` member and a description line | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | — |
+| [Rate limiting](/integrations/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in — always on | — |
+| [Query Builder](/integrations/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder at any call depth | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/reference/configuration/#integrations) |
+
+### Quality
+
+| Integration | What it documents | Requires | Config |
+| --- | --- | --- | --- |
+| [Data-leakage lint](/reference/configuration/#lint) | Warns when a schema property name looks sensitive (`password`, `token`, `secret`, `api_key`, …) before it ships — a diagnostic, never a mutation | Built in — always on | [`lint.leakage`](/reference/configuration/#lint) |
 
 ## How contributions combine
 
@@ -50,3 +86,8 @@ Every contribution is recorded with its source in the document's provenance (vis
 [UIR](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or
 `integration:sanctum`. That's what lets tooling explain *why* a given detail is documented the way
 it is.
+
+<CardGrid>
+	<LinkCard title="Write your own integration" href="/guides/extension-authoring/" description="Every integration above is built with tools you have. Build one for your own package end to end." />
+	<LinkCard title="Configuration reference" href="/reference/configuration/" description="Every config key, its default, and an example." />
+</CardGrid>
