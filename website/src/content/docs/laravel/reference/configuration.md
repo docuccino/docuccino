@@ -60,7 +60,8 @@ Markdown file. `version` is the value the [versioning policy](#versioning) evalu
 ],
 ```
 
-Emitted verbatim as OAS `servers`, including server variables.
+Emitted verbatim as OAS `servers`, including server variables. For a worked multitenant subdomain
+example (`{tenant}.example.com`), see [Deploying to production](/laravel/guides/production/#multitenant-base-urls).
 
 ### `routes`
 
@@ -109,8 +110,8 @@ Declaring any `schemes` here **defers** the auto-config security integrations (S
 ```
 
 Selects the error-response strategy. `default` documents Laravel's stock JSON error shapes;
-`problem-details` activates the [RFC 9457 preset](/integrations/error-responses/) (`application/problem+json`);
-`none` emits no error responses. In every case, an [inferred exception handler](/integrations/error-responses/)
+`problem-details` activates the [RFC 9457 preset](/laravel/documenting/errors/) (`application/problem+json`);
+`none` emits no error responses. In every case, an [inferred exception handler](/laravel/documenting/errors/)
 that recovers your app's real error shape wins ahead of this fallback.
 
 ### `tags`
@@ -174,7 +175,7 @@ from "API changed".
 | `filters` | `bracketed` \| `deepObject` | **FUTURE** — not read yet. Query filter style for the Query Builder integration. |
 | `nullable` | `type-array` \| `anyof` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
 | `operation_id` | `route-name` \| `controller-method` | `operationId` strategy. |
-| `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/integrations/schemas/#enums). |
+| `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/laravel/documenting/schemas/#enums). |
 
 ### `integrations`
 
@@ -251,7 +252,7 @@ chosen by the `--format` flag.
 
 Add this key to a document to choose the policy that `docuccino:diff --enforce` applies (default
 `none`). `semver` requires a major version bump for breaking changes; `date` requires a new date
-version; `none` never fails on versioning. See [`docuccino:diff`](/reference/commands/#docuccinodiff).
+version; `none` never fails on versioning. See [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 
 ## Extensions
 
@@ -260,7 +261,7 @@ version; `none` never fails on versioning. See [`docuccino:diff`](/reference/com
 ```
 
 Class-strings resolved from the container and merged with programmatic `Docuccino::extend()`
-registrations **at build time, never at boot**. See [extension authoring](/guides/extension-authoring/).
+registrations **at build time, never at boot**. See [extension authoring](/extending/extension-authoring/).
 
 ## Lint
 

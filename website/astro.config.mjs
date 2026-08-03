@@ -60,6 +60,15 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Guides',
+					items: [
+						{ label: 'How it works', slug: 'laravel/guides/how-it-works' },
+						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
+						{ label: 'Multiple documents', slug: 'laravel/guides/multiple-documents' },
+						{ label: 'The viewer', slug: 'laravel/guides/viewer' },
+					],
+				},
+				{
 					label: 'Reference',
 					items: [
 						{ label: 'Configuration reference', slug: 'laravel/reference/configuration' },

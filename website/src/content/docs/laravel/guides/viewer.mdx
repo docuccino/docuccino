@@ -1,0 +1,74 @@
+---
+title: The viewer
+description: The bundled Scalar API reference — its routes, access control, source modes, and options — served from your own app with no external CDN.
+sidebar:
+  order: 4
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Docuccino ships an interactive [Scalar](https://scalar.com) API reference and serves it straight from
+your Laravel app — no external service, no CDN required. It has a built-in try-it-out console, so
+readers can call your API from the docs.
+
+## Routes
+
+With the default `viewer.route` of `/docs/api`, three routes are registered per document:
+
+| Route | Serves |
+| --- | --- |
+| `GET /docs/api` | The interactive API reference page. |
+| `GET /docs/api.json` | The generated OpenAPI document. |
+| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). |
+
+Change the base path with `viewer.route`, or set it to `null` to disable the viewer for a document
+(export still works).
+
+## Access control
+
+The viewer is available automatically in your `local` environment. Anywhere else, it's closed until you
+name a gate:
+
+<Steps>
+
+1. Name a gate ability on the document:
+
+   ```php
+   // documents.default.viewer.gate
+   'gate' => 'viewApiDocs',
+   ```
+
+2. Define it in a service provider:
+
+   ```php
+   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
+   ```
+
+</Steps>
+
+The gate guards the HTML and `.json` routes; the static asset route is never gated. Set
+`viewer.middleware` to control the middleware stack — keep `throttle` when the spec endpoint is public,
+since generating it can be expensive.
+
+## Source modes
+
+`viewer.source` decides how the served document is produced:
+
+| `source` | Behavior |
+| --- | --- |
+| `generate` | Rebuilds the document on every request. Fine for local or gated use. |
+| `artifact` | Re-emits the committed `export.path` — no analysis at request time. |
+| `cache` | Serves the [`docuccino:cache`](/laravel/reference/commands/#docuccinocache)-warmed payload; falls back to `generate` on a cold cache. |
+
+For anything public or high-traffic, prefer `artifact` or `cache` — see
+[Deploying to production](/laravel/guides/production/).
+
+## Serving the asset
+
+By default the Scalar script is bundled and served from your own app, so the viewer works on locked-down
+networks with no outbound access. To load it from a CDN instead, set `viewer.cdn` to `true`.
+
+<Aside type="note">
+Only the bundled Scalar viewer ships today (`viewer.driver` is `scalar`). See the
+[viewer configuration](/laravel/reference/configuration/#viewer) for every key and its default.
+</Aside>

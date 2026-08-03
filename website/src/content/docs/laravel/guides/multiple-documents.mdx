@@ -1,0 +1,83 @@
+---
+title: Multiple documents
+description: Generate several independent API documents from one app — public vs admin, v1 vs v2 — each with its own routes, security, viewer, and export.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+One application often has more than one API: a public API and an admin API, or a `v1` you still support
+alongside a `v2`. Docuccino models each as an independent **document** — its own route filters, info,
+security, viewer, and export target — all in one config file.
+
+## Defining documents
+
+`documents` is a map. The published config ships one entry, `default`; add as many as you need. Each is
+a full, self-contained pipeline:
+
+```php
+// config/docuccino.php
+'documents' => [
+    'public' => [
+        'info'   => ['title' => 'Public API', 'version' => '2.0.0'],
+        'routes' => ['include' => ['api/*'], 'exclude' => ['api/admin/*']],
+        'viewer' => ['route' => '/docs/api'],
+        'export' => ['path' => 'docs/public.openapi.json'],
+    ],
+    'admin' => [
+        'info'   => ['title' => 'Admin API', 'version' => '1.4.0'],
+        'routes' => ['include' => ['api/admin/*']],
+        'viewer' => ['route' => '/docs/admin', 'gate' => 'viewAdminDocs'],
+        'export' => ['path' => 'docs/admin.openapi.json'],
+    ],
+],
+```
+
+Here the two documents split by route glob, expose their viewers on different routes (the admin one
+gated), and export to different files. The same pattern covers API versioning — a `v1` and a `v2`
+document over `api/v1/*` and `api/v2/*`, each with its own `info.version`.
+
+## Assigning routes to documents
+
+There are two ways to decide which routes land in a document, and you can combine them:
+
+<Tabs>
+	<TabItem label="By route glob">
+	```php
+	// Each document's own routes.include / routes.exclude globs
+	'routes' => ['include' => ['api/v2/*'], 'exclude' => []],
+	```
+	</TabItem>
+	<TabItem label="By attribute">
+	```php
+	// Pin a route (or a whole controller) to named documents, regardless of globs
+	use Docuccino\Attributes\InDocs;
+
+	#[InDocs('public', 'partner')]
+	public function webhook(Request $request): JsonResponse { /* … */ }
+	```
+	</TabItem>
+</Tabs>
+
+[`#[InDocs]`](/laravel/reference/attributes/#indocs) is handy when a single endpoint belongs in more
+than one document, or in a document its URL glob wouldn't otherwise catch.
+
+## Building them
+
+Every command takes an optional `{document}` argument. Omit it to run over **all** documents; pass a key
+to run one:
+
+```bash
+php artisan docuccino:export          # export every document
+php artisan docuccino:export admin    # export just the admin document
+```
+
+Per-document results aggregate — if any one document fails, the command fails. See the
+[commands reference](/laravel/reference/commands/) for the full behavior.
+
+<Aside title="Everything is per-document">
+Security schemes, the [viewer](/laravel/guides/viewer/) (route, gate, source), error-response strategy,
+and integration toggles are all set per document — so your public API can require OAuth while your admin
+API sits behind a gate, from the same codebase.
+</Aside>
