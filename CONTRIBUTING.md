@@ -99,7 +99,7 @@ Run coverage locally (needs pcov):
 
 ```bash
 vendor/bin/pest --coverage --exclude-group=fixture --min=<floor>   # line coverage
-vendor/bin/pest --type-coverage --exclude-group=fixture --min=100  # declared types
+vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G  # declared types
 ```
 
 The enforced floors live in `.github/workflows/ci.yml` (the `coverage` job). The line floor is an

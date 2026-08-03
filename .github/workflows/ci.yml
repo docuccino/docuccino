@@ -99,7 +99,7 @@ jobs:
         run: vendor/bin/pest --coverage --exclude-group=fixture --min=80
 
       - name: Pest type coverage
-        run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100
+        run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G
 
   fixture:
     name: Fixture suite (PHP 8.3)
