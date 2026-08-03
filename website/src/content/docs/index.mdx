@@ -9,7 +9,7 @@ hero:
     file: ../../assets/hero.svg
   actions:
     - text: Get started
-      link: /getting-started/
+      link: /laravel/getting-started/
       icon: right-arrow
       variant: primary
     - text: Docuccino vs Scramble
@@ -22,6 +22,7 @@ hero:
 ---
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import ApiReferenceEmbed from '../../components/ApiReferenceEmbed.astro';
 
 ## Documentation from your code, not from annotations
 
@@ -64,11 +65,28 @@ each detail came from. That's what powers the deterministic output and the seman
 	</Card>
 </CardGrid>
 
+## See it rendered
+
+This is Docuccino's own output for a small invoices API — the real OpenAPI it emits, in the bundled
+[Scalar viewer](/laravel/guides/viewer/). No screenshots: it's the live component, rendering a
+committed example spec.
+
+<ApiReferenceEmbed />
+
+## Choose your framework
+
+Docuccino documents Laravel applications today. The core — the UIR, the diff, the emitters — is
+framework-agnostic by design, so more adapters are on the way.
+
+<CardGrid>
+	<LinkCard title="Docuccino for Laravel" href="/laravel/getting-started/" description="Install the package, export your first document, and refine it. Start here." />
+</CardGrid>
+
 ## Start here
 
 <CardGrid>
-	<LinkCard title="Get started" href="/getting-started/" description="Install, publish config, and export your first document." />
-	<LinkCard title="Configuration reference" href="/reference/configuration/" description="Every option in config/docuccino.php." />
+	<LinkCard title="Get started" href="/laravel/getting-started/" description="Install, publish config, and export your first document." />
+	<LinkCard title="Configuration reference" href="/laravel/reference/configuration/" description="Every option in config/docuccino.php." />
 	<LinkCard title="Docuccino vs Scramble" href="/guides/vs-scramble/" description="How the two compare, and how to move over." />
-	<LinkCard title="Attributes" href="/reference/attributes/" description="Fine-tune the output when you need to." />
+	<LinkCard title="Attributes" href="/laravel/reference/attributes/" description="Fine-tune the output when you need to." />
 </CardGrid>

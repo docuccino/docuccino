@@ -1,0 +1,26 @@
+---
+// A live, bundled Scalar API reference. The library is imported from node_modules and bundled by
+// Vite at build time — nothing loads from a CDN. The spec is a same-origin static file committed
+// under public/example-openapi.json (a small, real Docuccino-shaped invoices API).
+---
+
+<div id="scalar-api-reference" class="scalar-embed" aria-label="Rendered example API reference"></div>
+
+<script>
+	import { createApiReference } from '@scalar/api-reference';
+	import '@scalar/api-reference/style.css';
+
+	createApiReference('#scalar-api-reference', {
+		url: '/example-openapi.json',
+		hideDownloadButton: false,
+	});
+</script>
+
+<style>
+	.scalar-embed {
+		min-height: 70vh;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+</style>
