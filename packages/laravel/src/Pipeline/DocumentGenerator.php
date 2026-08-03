@@ -82,17 +82,19 @@ final class DocumentGenerator
         $bag = new DiagnosticCollector;
 
         // Compile the narrative content tree (design §Narrative content layer): a document-level
-        // input assembled fresh each build. Its digest joins the cache key (below) so a content-file
-        // edit invalidates; the pages/nav themselves are resolved against the assembled document.
+        // input assembled fresh each build. It is deliberately KEPT OUT of the fragment cache key —
+        // operation fragments never read content, so a prose edit must not invalidate them (at Eos
+        // scale that would re-run out-of-process PHPStan across the whole route set for a typo fix).
+        // Content edits are picked up regardless: content flows into the always-fresh assembly step
+        // and into the document-level contentHash.
         [$content, $contentDiagnostics] = $this->contentCompiler->compile($document);
         $bag->addAll($contentDiagnostics);
 
         // Booted-app facts the fragments depend on but that no route file reflects (design §10, A2):
         // the registered render-callback set (an added handler must re-document error tiers), the
         // polymorphic morph map (discriminators), and app.url (Passport oauth2 flow URLs). Folded into
-        // the document-level cache input because each is global — a change can affect any route. The
-        // content-tree digest joins it for the same reason (a document-level input, design §10).
-        $configHash = $document->hash().'|env:'.$this->environmentDigest().'|content:'.$content->digest();
+        // the document-level cache input because each is global — a change can affect any fragment.
+        $configHash = $document->hash().'|env:'.$this->environmentDigest();
         $extensionClasses = $resolved->cacheSignature();
 
         $fragments = [];

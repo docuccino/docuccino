@@ -98,7 +98,7 @@ it('leaves the document unchanged for an empty content directory (no content key
     rmdir($empty);
 });
 
-it('folds the content-tree digest into the fragment cache key so a content edit invalidates', function (): void {
+it('keeps content out of the fragment cache key (a prose edit does not invalidate fragments; an env change does)', function (): void {
     bindStubEngine();
 
     // A private, editable copy of the content tree + a temp fragment cache.
@@ -112,13 +112,22 @@ it('folds the content-tree digest into the fragment cache key so a content edit 
 
     generateDocument(withContent(dir: $dir));
     $before = glob($cache.'/*') ?: [];
+    expect($before)->not->toBeEmpty();
 
-    // Editing a content file must change the digest → new fragment cache keys (fresh files).
+    // Editing a content file must NOT produce new fragment cache keys — operation fragments never
+    // read content, so the prose edit is a warm hit across every route (content is picked up by the
+    // always-fresh assembly step instead).
     file_put_contents($dir.'/index.md', "---\ntitle: Index\n---\nEdited body.\n");
     generateDocument(withContent(dir: $dir));
-    $after = glob($cache.'/*') ?: [];
+    $afterContentEdit = glob($cache.'/*') ?: [];
+    expect(count($afterContentEdit))->toBe(count($before));
 
-    expect(count($after))->toBeGreaterThan(count($before));
+    // A genuine document-level environment change (app.url feeds Passport oauth2 flow URLs) DOES
+    // change the env digest → new fragment cache keys (fresh files).
+    config()->set('app.url', 'https://changed.example');
+    generateDocument(withContent(dir: $dir));
+    $afterEnvChange = glob($cache.'/*') ?: [];
+    expect(count($afterEnvChange))->toBeGreaterThan(count($afterContentEdit));
 
     array_map('unlink', glob($cache.'/*') ?: []);
     @rmdir($cache);
