@@ -1,0 +1,204 @@
+---
+title: Docuccino vs Scribe
+description: An honest comparison with Scribe, where each tool is stronger, and a practical guide to migrating your annotations and config.
+---
+
+import { Tabs, TabItem, Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
+
+[Scribe](https://scribe.knuckles.wtf/laravel/) is a mature, well-loved documentation generator with
+a clear mission: *generate API documentation for humans*. It produces a polished HTML page with
+human-friendly prose, code samples in several languages, and an in-browser tester — and it's been
+doing it well across four Laravel major versions. If your priority is a beautiful hand-tunable HTML
+doc, Scribe is excellent.
+
+Docuccino takes a different path: it **infers** your API contract from your code with static analysis,
+emits an OpenAPI document as its primary artifact, and treats annotations as overrides rather than the
+source. This page compares the two fairly, credits Scribe plainly where it's stronger today, and shows
+how to move across if you decide to.
+
+<Aside type="note">
+Scribe's features and defaults vary between versions; this page targets Scribe v5 for Laravel. Treat
+the Scribe column as a guide and check it against the version you run. The Docuccino column is exact.
+</Aside>
+
+## Two philosophies
+
+The tools differ at the root, and it colors everything else:
+
+- **Annotate vs infer.** Scribe extracts route and validation basics automatically and asks you to
+  annotate the rest — responses, query parameters not covered by validation, field descriptions.
+  Docuccino inverts this: an embedded static-analysis engine infers the contract from your code
+  (resources, exception handlers, query builders at any depth, auth middleware), and attributes or
+  docblocks are *targeted overrides*.
+- **Executes your code vs never executes it.** Scribe's flagship response mechanism **runs** your
+  endpoints — inside a rolled-back transaction, with `.env.docs` isolation and before/after hooks — to
+  capture real payloads. Docuccino is purely static: no database, no side effects, no seed data — but
+  also no runtime-captured payloads.
+
+## At a glance
+
+| | Scribe | Docuccino |
+| --- | --- | --- |
+| Primary artifact | A human-first HTML page | An OpenAPI document (+ bundled viewer) |
+| OpenAPI export | Optional, **off by default**, 3.0.3, inline schemas (no reusable components) | Always on: 3.2 (+ 3.1 downlevel), reusable `components/schemas` |
+| Authoring model | Annotate + partial inference | Infer from code; attributes are overrides |
+| Executes your application code | Yes (response calls) | Never (static analysis) |
+| Query params from query builders | — | ✅ at any call depth |
+| Real example responses | ✅ (response calls + factories) | Planned; inferred / `#[Example]` today |
+| Postman collection | ✅ (on by default) | Planned |
+| Try-it-out console | ✅ (its own theme) | ✅ (bundled Scalar) |
+| Deterministic, byte-stable output | — | ✅ |
+| Semantic diff + CI version gate | — | ✅ (`docuccino:diff --enforce`) |
+| Custom HTML theming | ✅ (Blade templates) | — (Scalar, configurable not templated) |
+| Generated-UI localization | ✅ (Laravel lang files, build-time) | — |
+| YAML export | ✅ | ✅ |
+| Documented intermediate format | — (`.scribe` is internal) | ✅ (the [UIR](/uir/)) |
+
+## What you can stop writing
+
+Because Docuccino infers where Scribe asks you to annotate, a lot of Scribe's annotation surface simply
+disappears on migration:
+
+<CardGrid>
+	<Card title="Body & query parameters" icon="puzzle">
+		`@bodyParam` / `@queryParam` covered by your validation rules — and query parameters inferred
+		from Spatie Query Builder, which Scribe can't read at all.
+	</Card>
+	<Card title="Response fields & resources" icon="document">
+		`@responseField`, `@apiResource*` become typed, described fields straight from your API Resources,
+		Data objects, and model schemas.
+	</Card>
+	<Card title="URL parameters" icon="right-arrow">
+		`@urlParam` covered by route-model binding and primary-key types.
+	</Card>
+	<Card title="Auth markers" icon="approve-check">
+		`@authenticated` covered by middleware detection (Sanctum dual-mode, Passport scopes).
+	</Card>
+</CardGrid>
+
+## Migrating your annotations
+
+Most of Scribe's annotations either map directly or are deleted because Docuccino infers them. The
+biggest win is deletion.
+
+| Scribe (tag / attribute) | Docuccino | Notes |
+| --- | --- | --- |
+| Docblock title/description, `#[Endpoint]` | Kept as-is | Docblock summary/description are read natively. |
+| `@group` / `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Direct swap; repeatable; controller-level. |
+| `@subgroup` / `#[Subgroup]` | Flatten into `#[Group]` | No second-level grouping — OpenAPI tags are single-level. |
+| `@authenticated` / `#[Authenticated]` | **Delete** — inferred | From auth middleware (Sanctum, Passport). |
+| `@unauthenticated` / `#[Unauthenticated]` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred requirement. |
+| `@hideFromAPIDocumentation` | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Also `#[Internal]` and `#[InDocs]` for finer control. |
+| `@header` / `#[Header]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | Direct swap. |
+| `@urlParam` / `#[UrlParam]` | **Delete** — inferred; [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to add a format | Route-model binding gives the type. |
+| `@queryParam` / `#[QueryParam]` | **Delete** — inferred; [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) to add one | Query builders inferred at any depth. |
+| `@bodyParam` / `#[BodyParam]` | **Delete** — inferred; [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) patches one property | FormRequests, inline `validate()`, Spatie Data. |
+| Validation-rule comments (`// … Example: x`) | Kept; fixed examples via [`#[Example]`](/laravel/reference/attributes/#example) | Docuccino reads your rules too. |
+| `@response` / `#[Response]` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
+| `@responseField` / `#[ResponseField]` | **Delete** — inferred | Field descriptions come from the source property/docblock. |
+| `@apiResource*` / `#[ResponseFromApiResource]` | **Delete** — inferred | Resource + pagination inference, no factory needed. |
+| `@transformer*` (Fractal) | No Fractal integration | Would need a `TypeToSchema` extension — see [limitations](#where-scribe-is-stronger-today). |
+| `@responseFile` / `#[ResponseFromFile]` | Inline via `#[Response]` / `#[Example]` | No file-loading equivalent. |
+| `Example:` / `No-example` markers | [`#[Example]`](/laravel/reference/attributes/#example) / [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) | Named examples, summaries, `externalValue`. |
+| `examples.faker_seed` | **Delete** — unnecessary | Output is deterministic by construction. |
+| `groups.order` config | [`tags.definitions`](/laravel/reference/configuration/#tags) (weight-ordered) + `tags.map` | Tag objects are sorted by ascending `weight`, then name. |
+| `inheritedDocsOverrides()` | Not needed for route context | Path params, bindings, and controller-level attributes resolve against the concrete child route; use attributes or [overlays](/laravel/reference/configuration/#overlays) for anything an inherited method's body inference doesn't cover. |
+| Custom rule `docs()` method | `RuleTransformer` extension | Different mechanism, same job. |
+| `.scribe/**` hand-edits, `custom.*.yaml` | OpenAPI Overlays or attributes at source | Different philosophy — see below. |
+| Strategy plugin API | `OperationExtension`, `TypeToSchema`, `ExceptionToResponse`, `RuleTransformer`, `DocumentTransformer` | Register from any provider, any order. |
+| Deprecation (none in Scribe) | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Docuccino-only. |
+
+## Migrating your config
+
+Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
+
+| Scribe (`config/scribe.php`) | Docuccino (`config/docuccino.php`) |
+| --- | --- |
+| `routes.match.prefixes: ['api/*']` | `documents.default.routes.include: ['api/*']` |
+| `routes.match.domains` / `routes.exclude` | `documents.default.routes.closure` / `routes.exclude` |
+| `title` / `description` / `intro_text` | `documents.default.info.title` / `.description` |
+| `base_url` | `documents.default.servers` |
+| `auth.*` | `documents.default.security` + Sanctum/Passport integrations (inferred) |
+| `type: laravel`, `laravel.docs_url`, `laravel.middleware` | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
+| `--config scribe_admin` (multi-docs) | A second named entry under `documents` |
+| `postman` / `openapi` output toggles | OpenAPI is always emitted; `docuccino:export` picks the format |
+
+See the [configuration reference](/laravel/reference/configuration/) for every option.
+
+## Where Scribe is stronger today
+
+Docuccino is young, and Scribe genuinely does several things it doesn't. If you rely on these, weigh
+them carefully:
+
+- **Real captured responses.** Scribe invokes your endpoint (transaction-wrapped, `.env.docs`
+  isolated) and shows the genuine JSON your API returns — including anything computed at runtime that
+  static analysis can't see. Docuccino's examples are inferred or authored; **factory-driven and live
+  example rendering is planned, not shipped.**
+- **Factory-driven examples.** `@apiResourceModel states=… with=…` builds examples from your real
+  factories, with states, eager-loaded relations, and pivot data. Docuccino has no equivalent yet.
+- **Native Postman collection export**, on by default and linked in the docs UI. **Docuccino's Postman
+  emitter is a fast-follow, not in v1** — for now, import the OpenAPI file into Postman.
+- **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
+  integration; you'd write a `TypeToSchema` extension.
+- **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
+  languages, `intro.md` / `auth.md` prose sections. Docuccino's viewer is Scalar: configurable, but
+  not a template layer you own.
+- **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch to document anything, including
+  third-party package routes (Passport, Fortify) with no code access. In Docuccino that's an OpenAPI
+  Overlay or a `DocumentTransformer`.
+- **The `.scribe` hand-edit merge workflow** — patch any extracted fact in YAML and have it survive
+  regeneration. Docuccino keeps corrections in source (attributes) or standard OpenAPI Overlays.
+- **Localization of the generated UI** via Laravel lang files (build-time). Docuccino's viewer has no
+  UI-string localization.
+- **In-browser Try-It-Out with integrated Sanctum CSRF** (`try_it_out.use_csrf`). Docuccino has a
+  try-it console via the Scalar viewer, but it isn't wired into an auth-config block the same way.
+- **Maturity and community** — years of production use, four Laravel majors of docs, and deep
+  troubleshooting guides.
+
+<Aside type="tip">
+Where the two overlap, Docuccino leans on structure: OpenAPI 3.2 with real `components/schemas`,
+deterministic committed output, and a semantic diff you can gate CI on — versus Scribe's OpenAPI
+export, which is optional, off by default, 3.0.3, and inlines schemas with no reusable components.
+</Aside>
+
+## Running them side by side
+
+You don't have to switch in one go — the two write to different places, so run both during a
+transition:
+
+<Tabs>
+	<TabItem label="Keep Scribe, add Docuccino">
+	```bash
+	# Scribe stays untouched; generate Docuccino's document alongside it
+	php artisan docuccino:export --out=docs/openapi.docuccino.json
+	```
+	</TabItem>
+	<TabItem label="Compare the specs">
+	```bash
+	# Turn on Scribe's OpenAPI export (off by default) and diff directionally —
+	# expect Docuccino's to be richer (components/schemas, 3.2 vs 3.0.3)
+	php artisan scribe:generate
+	```
+	</TabItem>
+</Tabs>
+
+Then migrate incrementally, per controller or group:
+
+1. **Move config** — routes, info, `base_url` → `servers`, `auth.*` → security + Sanctum/Passport,
+   `docs_url`/`middleware` → the viewer, `--config` → a second document.
+2. **Delete inferred annotations** — `@bodyParam` / `@queryParam` / `@urlParam` / `@apiResource*` /
+   `@responseField` / `@authenticated`. Regenerate and `docuccino:diff` after each pass to confirm
+   nothing regressed — the diff is your safety net.
+3. **Translate the survivors** — `@group` → `#[Group]`, `@response` → `#[Response]`, `Example:` →
+   `#[Example]`, `@hideFromAPIDocumentation` → `#[ExcludeFromDocs]`.
+4. **Handle the hard parts** — response-call-derived examples (paste representative payloads into
+   `#[Response]` / `#[Example]`), `.scribe` hand-edits and `custom.*.yaml` (re-home as attributes or
+   Overlays), Fractal transformers (a `TypeToSchema` extension), custom Blade themes (not carried
+   over), Postman consumers (import the OpenAPI file for now).
+5. **Decommission Scribe** — remove `knuckleswtf/scribe`, `config/scribe.php`, the `.scribe/` folder,
+   published Scribe views, and any `lang/scribe.php`.
+
+<CardGrid>
+	<LinkCard title="Get started" href="/laravel/getting-started/" description="Install and export your first document." />
+	<LinkCard title="Attributes" href="/laravel/reference/attributes/" description="The full override surface." />
+</CardGrid>

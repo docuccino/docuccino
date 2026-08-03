@@ -12,9 +12,11 @@ examples that a reader can paste and run.
   detail adds value to the reader. Prefer outcome framing, e.g.:
   > "Every official integration is built with the same tools we expose to you — you have
   > access to everything we used to build Docuccino."
-- **Don't dog on Scramble across pages.** Competitive comparison lives in exactly ONE
-  well-crafted page — "Docuccino vs Scramble" — which is generous in tone and contains
-  the how-to-migrate material. Everywhere else, Docuccino stands on its own merits.
+- **Don't dog on competitors across pages.** Competitive content lives ONLY on dedicated
+  per-tool comparison pages (currently "Docuccino vs Scramble" and "Docuccino vs Scribe"),
+  each generous in tone and containing that tool's how-to-migrate material. The
+  concentration principle is unchanged — no competitor references anywhere outside those
+  pages. Everywhere else, Docuccino stands on its own merits.
 
 ## Content quality bar
 

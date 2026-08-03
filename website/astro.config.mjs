@@ -5,6 +5,11 @@ import starlight from '@astrojs/starlight';
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://docs.docuccino.app',
+	// The bundled Scalar viewer on the landing page is a large, intentional client chunk; lift the
+	// size-warning threshold so it doesn't flag on every build.
+	vite: {
+		build: { chunkSizeWarningLimit: 3000 },
+	},
 	integrations: [
 		starlight({
 			title: 'Docuccino',
@@ -82,7 +87,10 @@ export default defineConfig({
 				},
 				{
 					label: 'Comparisons',
-					items: [{ label: 'Docuccino vs Scramble', slug: 'guides/vs-scramble' }],
+					items: [
+						{ label: 'Docuccino vs Scramble', slug: 'guides/vs-scramble' },
+						{ label: 'Docuccino vs Scribe', slug: 'guides/vs-scribe' },
+					],
 				},
 				{
 					label: 'UIR spec',
