@@ -50,7 +50,7 @@ column is exact.
 | Validation rules → schema constraints | ✓ | ✓ | ✓ |
 | Form Requests &amp; inline `validate()` | ✓ | ✓ | ✓ |
 | Spatie Data objects | ✓ | — | ✓ |
-| Laravel Actions | — | — | ✓ |
+| Laravel Actions | ✓ | — | ✓ |
 
 ### Responses, models &amp; schemas
 
@@ -60,8 +60,8 @@ column is exact.
 | Eloquent model schemas | ✓ | ✓ | ✓ |
 | Backed enums (+ case descriptions) | ✓ | ✓ | ✓ |
 | Pagination inference | ✓ | ✓ | ✓ |
-| First-party JSON:API resources (framework) | ✓ (free core) | — | ✓ (via the third-party `timacdonald/json-api` package) |
-| JSON API Paginate | — | — | ✓ |
+| JSON:API resources (first-party **and** `timacdonald/json-api`) | ✓ | — | ✓ (via the third-party `timacdonald/json-api` package) |
+| JSON API Paginate | ✓ | — | ✓ |
 | Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
 
 ### Query parameters
@@ -103,9 +103,7 @@ Reading your actual exception handling — render callbacks, exception `render()
 | Committed spec artifact you can review in a PR | ✓ | — | — |
 | Semantic diff + `--enforce` CI version gate | ✓ | — | — |
 
-Where Scramble is ahead: **Laravel Actions** and **JSON API Paginate** have first-class Scramble
-Pro support and no Docuccino equivalent yet. See [Honest limitations](#honest-limitations-today) for
-the rest of what's still on the way.
+See [Honest limitations](#honest-limitations-today) for what's still on the roadmap.
 
 ## What you can stop maintaining
 

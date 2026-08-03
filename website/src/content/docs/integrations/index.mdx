@@ -36,12 +36,14 @@ integration to activate; "Config" links the knobs that tune it.
 | [Validation rules](/integrations/requests/) | Laravel's validation DSL turned into schema constraints — types, formats, sizes, presence, and enumerations | Built in — always on | — |
 | [Form Requests &amp; inline `validate()`](/integrations/requests/) | Request bodies and query parameters from a Form Request's `rules()`, or an inline `$request->validate([...])` / `Validator::make(...)` | Built in — always on | — |
 | [Spatie Data](/integrations/requests/) | Data classes as reusable schemas, and request bodies from Data-typed action parameters | [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) | — |
+| [Laravel Actions](/integrations/laravel-actions/) | Action classes as controllers — the resolved `handle()`/`asController()` signature, a request body from `rules()`, and a `403` from `authorize()` | [`lorisleiva/laravel-actions`](https://laravelactions.com) | — |
 
 ### Responses, models &amp; schemas
 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
 | [API Resources](/integrations/schemas/) | Response schemas from `JsonResource` shapes — plus Laravel's first-party JSON:API resources | `JsonResource` built in; JSON:API auto-activates on Laravel 13 | [`integrations.api_resources.wrap`](/reference/configuration/#integrations) |
+| [JSON:API resources (timacdonald)](/integrations/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | — |
 | [Eloquent models](/integrations/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in — always on | — |
 | [Enums](/integrations/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and optional codegen name hints | Built in — always on | [`representation.enums.naming`](/reference/configuration/#representation) |
 
@@ -62,6 +64,7 @@ integration to activate; "Config" links the knobs that tune it.
 | [Permissions](/integrations/security/) | `role:` / `permission:` / `role_or_permission:` middleware as an `x-permissions` member and a description line | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | — |
 | [Rate limiting](/integrations/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in — always on | — |
 | [Query Builder](/integrations/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder at any call depth | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/reference/configuration/#integrations) |
+| [JSON API Paginate](/integrations/json-api-paginate/) | JSON:API `page[number]` / `page[size]` (or `page[cursor]`) pagination parameters from `jsonPaginate()` | [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | — |
 
 ### Quality
 

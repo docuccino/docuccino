@@ -1,0 +1,47 @@
+---
+title: JSON API Paginate
+description: Document spatie/laravel-json-api-paginate's page[number]/page[size] pagination parameters from jsonPaginate().
+sidebar:
+  order: 9
+---
+
+Activates automatically when
+[`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) is
+installed. It documents the JSON:API-style pagination parameters your list endpoints accept when they
+paginate with `jsonPaginate()`.
+
+## What it documents
+
+Where Laravel's `paginate()` reads `page` and `per_page`, the package's `jsonPaginate()` reads the
+bracketed JSON:API form. Docuccino detects the terminal — at any call depth, the same way it traces
+Query Builder chains — and adds the matching query parameters:
+
+- **`page[number]`** — the page to return.
+- **`page[size]`** — items per page, defaulting to your configured `default_size` and capped at
+  `max_results`.
+- **`page[cursor]`** — instead of `page[number]`, when the package is configured for cursor
+  pagination.
+
+```php
+// app/Http/Controllers/OrderController.php
+public function index(): AnonymousResourceCollection
+{
+    $orders = Order::query()
+        ->where('status', 'open')
+        ->jsonPaginate();
+
+    return OrderResource::collection($orders);
+}
+```
+
+This documents `page[number]` and `page[size]` query parameters, alongside the paginated response.
+
+## Respecting your config
+
+The parameter names and sizes are read from the package's own config
+(`config/json-api-paginate.php`) — so if you've renamed `number_parameter`, `size_parameter`, or the
+`page` prefix, or set a custom `default_size` / `max_results`, the documented parameters match. A
+per-call `jsonPaginate($maxResults, $defaultSize)` override is picked up too.
+
+If the config can't be read, Docuccino documents the package defaults (`page[number]` / `page[size]`,
+size 30) and emits an informational diagnostic so you know to publish the config.
