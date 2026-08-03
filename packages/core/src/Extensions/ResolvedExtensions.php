@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Registry;
+namespace Docuccino\Core\Extensions;
 
 use Composer\InstalledVersions;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;

@@ -7,8 +7,8 @@ namespace Docuccino\Laravel\Config;
 use Closure;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Contracts\TagMapper;
+use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
-use Docuccino\Laravel\Support\ConfinedPath;
 use Docuccino\Laravel\Tags\PrefixTagMapper;
 use Illuminate\Contracts\Container\Container;
 

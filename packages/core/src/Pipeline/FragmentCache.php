@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Pipeline;
+namespace Docuccino\Core\Pipeline;
 
 use Docuccino\Core\Extensions\Context\RouteDependencies;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;

@@ -12,7 +12,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Laravel\Types\TypeStringParser;
+use Docuccino\Inference\PhpStan\Types\TypeStringParser;
 
 /**
  * Covers every branch of the phpdoc type-grammar → {@see DType} mapping the attribute layer relies on

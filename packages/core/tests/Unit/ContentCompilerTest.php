@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Content\ContentCompiler;
+use Docuccino\Core\Content\Frontmatter;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
-use Docuccino\Laravel\Content\ContentCompiler;
-use Docuccino\Laravel\Content\Frontmatter;
 
 /**
  * The adapter's filesystem/frontmatter half of the content pipeline: the frontmatter splitter and

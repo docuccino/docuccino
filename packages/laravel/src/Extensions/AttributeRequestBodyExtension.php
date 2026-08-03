@@ -10,7 +10,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Types\TypeStringParser;
+use Docuccino\Inference\PhpStan\Types\TypeStringParser;
 
 /**
  * Assembles a JSON request body from `#[BodyParameter]` attributes (design §Attribute set — each

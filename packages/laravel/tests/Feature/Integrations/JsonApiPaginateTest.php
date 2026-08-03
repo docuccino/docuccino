@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
-use Docuccino\Laravel\Pipeline\GenerationResult;
 use Docuccino\Laravel\Tests\Support\QbTraceScript;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\FormController;

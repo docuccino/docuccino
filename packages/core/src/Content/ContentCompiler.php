@@ -2,15 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Content;
+namespace Docuccino\Core\Content;
 
-use Docuccino\Core\Content\CompiledContent;
-use Docuccino\Core\Content\CompiledPage;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
-use Docuccino\Laravel\Support\ConfinedPath;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -18,8 +16,8 @@ use SplFileInfo;
 
 /**
  * Reads a document's `content.dir` markdown tree into a framework-neutral {@see CompiledContent}
- * (the adapter's filesystem-input half of the content pipeline; the core {@see
- * \Docuccino\Core\Content\ContentResolver} does the document-input half). Folders become default nav
+ * (the filesystem-input half of the content pipeline — a second adapter or the reference CLI
+ * compiles the identical tree; {@see ContentResolver} does the document-input half). Folders become default nav
  * groups; frontmatter (`title`, `slug`, `summary`, `tags`, and `nav.{group,order,hidden,type,ref}`)
  * overrides the derived values. Deterministic: files are read in sorted order and nothing time- or
  * machine-dependent enters a page (source paths are project-root-relative).

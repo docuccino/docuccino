@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Docuccino\Laravel\Support\ConfinedPath;
+use Docuccino\Core\Support\ConfinedPath;
 
 /**
  * Path confinement (security L2): a user/config/attribute-supplied relative path must resolve

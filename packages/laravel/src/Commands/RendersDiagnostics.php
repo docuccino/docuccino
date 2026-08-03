@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Laravel\Pipeline\DiagnosticBag;
+use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Illuminate\Console\Command;
 
 /**
  * Shared diagnostic rendering for the artisan commands: prints a document's diagnostics grouped
- * by route signature in the deterministic order the {@see DiagnosticBag}
+ * by route signature in the deterministic order the {@see DiagnosticCollector}
  * already imposes, so console output is byte-stable across runs.
  *
  * @mixin Command

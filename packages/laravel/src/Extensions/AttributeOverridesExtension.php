@@ -16,8 +16,8 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Fqcn;
-use Docuccino\Laravel\Support\ConfinedPath;
 
 /**
  * The overrides layer: docblock summary/description (docblock precedence), then the operation

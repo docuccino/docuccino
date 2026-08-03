@@ -220,6 +220,26 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     (they're neutral strings); the adapter contributes only config plumbing/registration.
     `Core\Lint` is where future document-level rules (description coverage, naming)
     accumulate — reusable by the reference CLI, other-language producers, and the SaaS.
+  - Pipeline engine = core (`Core\Pipeline\{Assembler, FragmentCache, OperationPipeline,
+    OperationFragment, GenerationResult, AssemblyResult}` + `Core\Extensions\ResolvedExtensions`):
+    a second adapter inherits the whole assemble→overlay→transform→hash→validate spine and
+    its fragment caching for free. `DocumentGenerator`/`DocumentBuilder` stay in the adapter —
+    the framework seam: route discovery, per-route context building, the booted-app environment
+    digest, and `config('docuccino.*')` loading are Laravel-code inputs, deliberately NOT moved.
+    The single framework-owned datum the engine emitted, the generator `name`, became an
+    `Assembler` constructor param the adapter binds to `docuccino/laravel` (byte-identical here;
+    a future adapter labels itself).
+  - Content subsystem = core (`Core\Content\{ContentCompiler, Frontmatter}` beside the resolver
+    and model already there): markdown-with-frontmatter is not Laravel code, and the reference
+    CLI / a second adapter compiles the identical tree. This retired the earlier "filesystem IO
+    belongs to the adapter" split — the placement rule keys on FRAMEWORK coupling, not IO-vs-pure,
+    and that split did not survive `FragmentCache` (also file IO) moving to core. The adapter keeps
+    only the `content.dir` config read + compiler invocation. `Core\Support\ConfinedPath` moved on
+    the same reasoning (a pure path-confinement utility, the strongest `Fqcn`-precedent candidate);
+    the framework-grammar readers `TypeStringParser` + the summary/description docblock split moved
+    laterally to `docuccino/inference-phpstan` instead (they import `PHPStan\PhpDocParser`, which
+    core bans) — that package owns the phpdoc grammar and the shared parser stack, so the split
+    docblock reader merged into its existing `Metadata\DocBlockReader`.
   - Corollary: pure, stable core utilities that integrations legitimately need (e.g.
     `Core\Support\Fqcn`) get allow-listed in the arch test with justification — never
     duplicated to dodge the boundary.

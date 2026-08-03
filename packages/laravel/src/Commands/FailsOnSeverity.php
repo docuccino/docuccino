@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Severity;
-use Docuccino\Laravel\Pipeline\GenerationResult;
+use Docuccino\Core\Pipeline\GenerationResult;
 use Illuminate\Console\Command;
 
 /**

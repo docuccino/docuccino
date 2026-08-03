@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionSorter;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Illuminate\Contracts\Container\Container;
 
 /**

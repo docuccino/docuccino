@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Support;
+namespace Docuccino\Core\Support;
 
 /**
  * Confines a user-supplied relative path to a base directory (security L2): `#[DescriptionFromFile]`

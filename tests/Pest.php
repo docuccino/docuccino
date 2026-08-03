@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
-use Docuccino\Laravel\Pipeline\GenerationResult;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
 

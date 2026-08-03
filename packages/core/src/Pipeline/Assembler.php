@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Pipeline;
+namespace Docuccino\Core\Pipeline;
 
 use Docuccino\Core\Content\CompiledContent;
 use Docuccino\Core\Content\ContentResolver;
@@ -37,6 +37,7 @@ final class Assembler
     private const DIALECT = 'https://spec.openapis.org/oas/3.2/dialect/base';
 
     public function __construct(
+        private readonly string $generatorName,
         private readonly IdentityGenerator $identity = new IdentityGenerator,
         private readonly ContentHasher $contentHasher = new ContentHasher,
         private readonly OverlayApplier $overlays = new OverlayApplier,
@@ -113,7 +114,7 @@ final class Assembler
 
         $doc['x-docuccino'] = [
             'document' => ['id' => $documentId, 'configHash' => $document->hash()],
-            'generator' => ['name' => 'docuccino/laravel', 'version' => $generatorVersion, 'specVersion' => self::UIR_VERSION],
+            'generator' => ['name' => $this->generatorName, 'version' => $generatorVersion, 'specVersion' => self::UIR_VERSION],
         ];
 
         foreach ($components->diagnostics() as $diagnostic) {

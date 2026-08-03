@@ -13,7 +13,7 @@ use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\SourcePathResolver;
-use Docuccino\Laravel\Docblock\DocblockReader;
+use Docuccino\Inference\PhpStan\Metadata\DocBlockReader;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
 use ReflectionNamedType;
@@ -34,7 +34,7 @@ final class RouteContextBuilder
         private readonly ?SourcePathResolver $pathResolver = null,
         private readonly RouteReflector $reflector = new RouteReflector,
         private readonly AttributeCollector $attributes = new AttributeCollector,
-        private readonly DocblockReader $docblocks = new DocblockReader,
+        private readonly DocBlockReader $docblocks = new DocBlockReader,
         private readonly ResolvedRouteIndex $index = new ResolvedRouteIndex,
     ) {}
 

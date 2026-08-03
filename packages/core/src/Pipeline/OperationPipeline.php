@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Laravel\Pipeline;
+namespace Docuccino\Core\Pipeline;
 
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Laravel\Registry\ResolvedExtensions;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 
 /**
  * Runs the phased operation extensions in order (design §5): every phase in

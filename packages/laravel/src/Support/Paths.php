@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Support;
 
+use Docuccino\Core\Support\ConfinedPath;
+
 /**
  * Resolves a configured or user-supplied filesystem path against the app base directory. Unlike
  * {@see ConfinedPath}, this does not confine the result — the export target, an overlay glob and a

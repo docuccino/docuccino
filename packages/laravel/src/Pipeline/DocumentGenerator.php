@@ -4,24 +4,30 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Pipeline;
 
+use Docuccino\Core\Content\ContentCompiler;
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Pipeline\Assembler;
+use Docuccino\Core\Pipeline\FragmentCache;
+use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Core\Pipeline\OperationFragment;
+use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Validation\Validator;
-use Docuccino\Laravel\Content\ContentCompiler;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
-use Docuccino\Laravel\Registry\ResolvedExtensions;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\Container;
@@ -73,7 +79,7 @@ final class DocumentGenerator
         $resolved = $this->registry->resolve($this->container, DefaultExtensions::all(), $configExtensions);
         $documentId = $this->identity->documentId($document->key);
         $components = new ComponentRegistry;
-        $bag = new DiagnosticBag;
+        $bag = new DiagnosticCollector;
 
         // Compile the narrative content tree (design §Narrative content layer): a document-level
         // input assembled fresh each build. Its digest joins the cache key (below) so a content-file
@@ -203,7 +209,7 @@ final class DocumentGenerator
         TypeEngine $engine,
         ResolvedExtensions $resolved,
         ComponentRegistry $components,
-        DiagnosticBag $bag,
+        DiagnosticCollector $bag,
         string $configHash,
         array $extensionClasses,
     ): ?OperationFragment {
@@ -378,7 +384,7 @@ final class DocumentGenerator
         string $path,
         string $method,
         string $reason,
-        DiagnosticBag $bag,
+        DiagnosticCollector $bag,
     ): ?OperationFragment {
         $signature = strtoupper($method).' '.$descriptor->uri;
 

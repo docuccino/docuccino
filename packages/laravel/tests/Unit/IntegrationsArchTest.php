@@ -43,6 +43,7 @@ arch('built-in integrations never reach into core internals or adapter wiring')
         'Docuccino\Core\Canonical',
         'Docuccino\Core\Overlay',
         'Docuccino\Core\Validation',
+        'Docuccino\Core\Pipeline',
         'Docuccino\Laravel\Pipeline',
         'Docuccino\Laravel\Registry',
         'Docuccino\Laravel\Routing',

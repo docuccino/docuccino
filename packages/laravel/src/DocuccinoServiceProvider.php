@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel;
 
+use Docuccino\Core\Content\ContentCompiler;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
+use Docuccino\Core\Pipeline\Assembler;
+use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Commands\CacheCommand;
 use Docuccino\Laravel\Commands\ClearCommand;
@@ -14,7 +17,6 @@ use Docuccino\Laravel\Commands\DiffCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Content\ContentCompiler;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;
@@ -22,7 +24,6 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
-use Docuccino\Laravel\Pipeline\FragmentCache;
 use Docuccino\Laravel\Provenance\LaravelSourcePathResolver;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
@@ -99,6 +100,12 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(DocumentGenerator::class)
             ->needs('$generatorVersion')
             ->give(self::VERSION);
+
+        // The pipeline engine lives in core; this adapter labels the emitted generator metadata as
+        // itself (a future/second adapter binds its own name — byte-identical for this one).
+        $this->app->when(Assembler::class)
+            ->needs('$generatorName')
+            ->give('docuccino/laravel');
 
         // The OperationFragment cache (design §10): filesystem, off by default.
         $this->app->bind(FragmentCache::class, function (Application $app): FragmentCache {

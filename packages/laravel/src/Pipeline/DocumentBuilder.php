@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Pipeline;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\InvalidOverlayException;
 use Docuccino\Core\Overlay\OverlayDocument;
+use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\TypeEngineMode;
@@ -169,7 +171,7 @@ final class DocumentBuilder
      */
     private function sort(array $diagnostics): array
     {
-        $bag = new DiagnosticBag;
+        $bag = new DiagnosticCollector;
         $bag->addAll($diagnostics);
 
         return $bag->sorted();

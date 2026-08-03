@@ -13,7 +13,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Types\TypeStringParser;
+use Docuccino\Inference\PhpStan\Types\TypeStringParser;
 
 /**
  * Applies the response attributes as the attribute layer: `#[Response]` (per status, with a
