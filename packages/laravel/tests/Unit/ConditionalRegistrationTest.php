@@ -6,6 +6,11 @@ use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiParametersExtension;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiResourceSchema;
 use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateIntegration;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
+use Docuccino\Laravel\Integrations\LaravelActions\ActionAuthorizeResponsesExtension;
+use Docuccino\Laravel\Integrations\LaravelActions\ActionValidationExtension;
+use Docuccino\Laravel\Integrations\LaravelActions\LaravelActionsIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\Permission\PermissionExtension;
@@ -17,6 +22,9 @@ use Docuccino\Laravel\Integrations\Sanctum\SanctumSecurityExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\SpatieDataIntegration;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiIntegration;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiParametersExtension;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema;
 
 /**
  * The false branch of every conditional (`class_exists`-guarded) integration: in the test environment
@@ -50,6 +58,9 @@ it('drops a conditional integration from the resolved set when its package is ab
     'laravel/sanctum' => [SanctumIntegration::class, [SanctumSecurityExtension::class]],
     'laravel/passport' => [PassportIntegration::class, [PassportSecurityExtension::class]],
     'spatie/laravel-permission' => [PermissionIntegration::class, [PermissionExtension::class]],
+    'spatie/laravel-json-api-paginate' => [JsonApiPaginateIntegration::class, [JsonApiPaginateParametersExtension::class]],
+    'timacdonald/json-api' => [TimacdonaldJsonApiIntegration::class, [TimacdonaldJsonApiResourceSchema::class, TimacdonaldJsonApiParametersExtension::class]],
+    'lorisleiva/laravel-actions' => [LaravelActionsIntegration::class, [ActionValidationExtension::class, ActionAuthorizeResponsesExtension::class]],
 ]);
 
 it('omits the JSON:API pieces on a Laravel without the first-party JsonApiResource class', function (): void {
