@@ -132,21 +132,21 @@ Most annotations map across cleanly.
 
 | Scramble | Docuccino | Notes |
 | --- | --- | --- |
-| `#[QueryParameter]` | [`#[QueryParameter]`](/reference/attributes/#queryparameter) | Same idea; Docuccino fills the rest by inference. |
-| `#[BodyParameter]` | [`#[BodyParameter]`](/reference/attributes/#bodyparameter) | Patches one property of the inferred body. |
-| `#[PathParameter]` | [`#[PathParameter]`](/reference/attributes/#pathparameter) | Adds an OpenAPI `format`. |
-| `#[HeaderParameter]` | [`#[HeaderParameter]`](/reference/attributes/#headerparameter) | — |
-| `#[Group]` | [`#[Group]`](/reference/attributes/#group) | Tag assignment; repeatable. |
-| `#[Example]` / `@example` | [`#[Example]`](/reference/attributes/#example) | Adds named examples, summaries, and `externalValue`. |
-| Exclude a route / controller | [`#[ExcludeFromDocs]`](/reference/attributes/#excludefromdocs) | Method or class target. |
-| `@unauthenticated` | [`#[Unauthenticated]`](/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
-| `@response {status}` | [`#[Response]`](/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
-| Hidden fields / `$hidden` | [`#[Hidden]`](/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. |
-| Enum case descriptions | [`#[CaseDescription]`](/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
+| `#[QueryParameter]` | [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) | Same idea; Docuccino fills the rest by inference. |
+| `#[BodyParameter]` | [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) | Patches one property of the inferred body. |
+| `#[PathParameter]` | [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) | Adds an OpenAPI `format`. |
+| `#[HeaderParameter]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | — |
+| `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Tag assignment; repeatable. |
+| `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | Adds named examples, summaries, and `externalValue`. |
+| Exclude a route / controller | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Method or class target. |
+| `@unauthenticated` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
+| `@response {status}` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
+| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. |
+| Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
 
 Docuccino also adds attributes with no direct Scramble equivalent — `#[OperationId]`, `#[Internal]`,
 `#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`,
-`#[SchemaName]`, and more. See the full [attributes reference](/reference/attributes/).
+`#[SchemaName]`, and more. See the full [attributes reference](/laravel/reference/attributes/).
 
 ## Migrating your config
 
@@ -168,7 +168,7 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 | security via config/callbacks | `documents.default.security` + the Sanctum/Passport integrations |
 | a single document | as many named `documents` as you need |
 
-See the [configuration reference](/reference/configuration/) for every option.
+See the [configuration reference](/laravel/reference/configuration/) for every option.
 
 ## Migrating your extensions
 
@@ -183,7 +183,7 @@ The extension model is similar in spirit; the contracts live in
 | "After document generated" callback | `DocumentTransformer` |
 | Custom validation-rule handling | `RuleTransformer` |
 
-The [Writing an integration](/guides/extension-authoring/) guide walks through building one
+The [Writing an integration](/extending/extension-authoring/) guide walks through building one
 end-to-end.
 
 ## Honest limitations (today)
@@ -210,6 +210,6 @@ Diff it against your existing Scramble output, adopt Docuccino where you're happ
 Scramble annotations you no longer need as you go.
 
 <CardGrid>
-	<LinkCard title="Get started" href="/getting-started/" description="Install and export your first document." />
-	<LinkCard title="Attributes" href="/reference/attributes/" description="The full annotation surface." />
+	<LinkCard title="Get started" href="/laravel/getting-started/" description="Install and export your first document." />
+	<LinkCard title="Attributes" href="/laravel/reference/attributes/" description="The full annotation surface." />
 </CardGrid>

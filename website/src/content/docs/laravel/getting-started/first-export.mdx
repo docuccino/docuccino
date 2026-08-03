@@ -43,7 +43,7 @@ default document writes `docs/openapi.json`. To choose a format or output path e
 	</TabItem>
 </Tabs>
 
-See the [commands reference](/reference/commands/#docuccinoexport) for every flag.
+See the [commands reference](/laravel/reference/commands/#docuccinoexport) for every flag.
 
 ## What Docuccino read
 
@@ -103,7 +103,7 @@ gate and define it:
 The default `viewer.source` of `generate` rebuilds the document per request — fine for local or
 gated use. For a public viewer, serve the committed file (`viewer.source: artifact`) or a warmed
 cache (`viewer.source: cache`, filled by `docuccino:cache`). See the
-[viewer configuration](/reference/configuration/#viewer).
+[viewer configuration](/laravel/reference/configuration/#viewer).
 </Aside>
 
 ## Gate CI on problems
@@ -125,10 +125,10 @@ the rest of your docs.
 
 The base export is already useful. Refine it where it helps:
 
-- Reach for [attributes](/reference/attributes/) like `#[Group]`, `#[Response]`, and `#[Example]`
+- Reach for [attributes](/laravel/reference/attributes/) like `#[Group]`, `#[Response]`, and `#[Example]`
   where you want to say something the code can't.
-- Turn on the [Problem Details preset](/integrations/error-responses/) for RFC 9457 errors.
+- Turn on the [Problem Details preset](/laravel/documenting/errors/) for RFC 9457 errors.
 - Point `content.dir` at a folder of Markdown to add [narrative guides](/uir/#content-layer)
   alongside the reference.
-- Commit the document and wire [`docuccino:diff --enforce`](/reference/commands/#docuccinodiff) into
+- Commit the document and wire [`docuccino:diff --enforce`](/laravel/reference/commands/#docuccinodiff) into
   CI to catch breaking changes.

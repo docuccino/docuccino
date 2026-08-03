@@ -51,7 +51,7 @@ responses) come with inference running.
 </Steps>
 
 That's it — open `docs/openapi.json`, or visit `/docs/api` in your browser (it's available in your
-local environment out of the box). The [next page](/getting-started/first-export/) walks through
+local environment out of the box). The [next page](/laravel/getting-started/first-export/) walks through
 what happened and how to view and refine it.
 
 ## What gets added
@@ -61,7 +61,7 @@ Installing Docuccino wires up a few things for you:
 <CardGrid>
 	<Card title="Artisan commands" icon="seti:powershell">
 		`docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, and
-		`docuccino:clear`. See the [commands reference](/reference/commands/).
+		`docuccino:clear`. See the [commands reference](/laravel/reference/commands/).
 	</Card>
 	<Card title="A built-in viewer" icon="laptop">
 		An interactive [Scalar](https://scalar.com) API reference at `/docs/api`, its spec at
@@ -91,5 +91,5 @@ Installing Docuccino wires up a few things for you:
 <Aside type="tip" title="Commit the output">
 Docuccino's output is deterministic — identical code always produces byte-for-byte identical
 output. Commit `docs/openapi.json` and you get clean, reviewable diffs on every change, plus the
-ability to gate CI with [`docuccino:diff`](/reference/commands/#docuccinodiff).
+ability to gate CI with [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 </Aside>

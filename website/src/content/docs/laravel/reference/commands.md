@@ -83,7 +83,7 @@ identities.
 | `old` (required) | path | The "old" side. Missing/unreadable/invalid-JSON → exit 1. |
 | `document` | configured key / `"default"` | Which document to generate as the "new" side. Unknown → exit 1. |
 | `--against` | git ref, e.g. `HEAD` / unset | Reads `old` via `git show <ref>:<old>` (so `old` must be repo-relative) instead of from disk. Refs/paths starting with `-` are rejected; git failure → exit 1. |
-| `--enforce` | flag / off | Enforce the document's [`versioning`](/reference/configuration/#versioning) policy; a violation exits non-zero. Without it, the diff is informational and exits 0 even with changes. |
+| `--enforce` | flag / off | Enforce the document's [`versioning`](/laravel/reference/configuration/#versioning) policy; a violation exits non-zero. Without it, the diff is informational and exits 0 even with changes. |
 | `--format` | `terminal` \| `json` / `terminal` | `terminal` renders a human changeset (+ a satisfied/violated policy line when enforced); `json` prints a machine payload. |
 
 ### `--enforce` and versioning policies
