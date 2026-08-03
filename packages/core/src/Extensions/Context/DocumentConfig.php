@@ -153,6 +153,19 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The configured narrative-content directory from `content.dir` (the markdown tree the content
+     * compiler reads), or null when unset. Framework-agnostic: may be relative (the adapter resolves
+     * and confines it against the app base path) or absolute.
+     */
+    public function contentDir(): ?string
+    {
+        $content = is_array($this->raw['content'] ?? null) ? $this->raw['content'] : [];
+        $dir = $content['dir'] ?? null;
+
+        return is_string($dir) && $dir !== '' ? $dir : null;
+    }
+
+    /**
      * The configured export target from `export.path` (the file the `docuccino:export` artifact is
      * written to and the viewer's `artifact` source reads back), defaulting to `docs/openapi.json`.
      * Framework-agnostic: may be relative — the adapter resolves it against the app base path.

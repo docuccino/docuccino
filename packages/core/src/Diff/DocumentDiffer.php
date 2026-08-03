@@ -442,21 +442,13 @@ final class DocumentDiffer
         $out = [];
 
         $content = $document->docuccino?->content;
-        $pages = is_array($content) ? ($content['pages'] ?? null) : null;
-
-        if (! is_array($pages)) {
+        if ($content === null) {
             return $out;
         }
 
-        foreach ($pages as $page) {
-            if (! is_array($page)) {
-                continue;
-            }
-
-            $stringKeyed = Arr::stringKeyed($page);
-            $id = $stringKeyed['id'] ?? null;
-            $slug = $stringKeyed['slug'] ?? null;
-            $key = is_string($id) ? $id : (is_string($slug) ? 'slug:'.$slug : 'page:'.count($out));
+        foreach ($content->pages as $page) {
+            $stringKeyed = $page->toArray();
+            $key = $page->id !== '' ? $page->id : ($page->slug !== '' ? 'slug:'.$page->slug : 'page:'.count($out));
             $out[$key] = $stringKeyed;
         }
 

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Document\Content\ContentExtension;
+use Docuccino\Core\Document\Content\Page;
 use Docuccino\Core\Document\DocumentExtension;
 use Docuccino\Core\Document\DocumentMeta;
 use Docuccino\Core\Document\Generator;
@@ -34,17 +36,18 @@ it('swaps the document extension while preserving every other member', function 
 
 it('swaps the DocumentMeta while preserving generator, content and diagnostics', function (): void {
     $generator = new Generator('docuccino/laravel', '1.2.3', '1.0.0');
+    $content = new ContentExtension(pages: [new Page(id: 'page:v1:ffffffffffffffff', slug: 'intro')]);
     $base = new DocumentExtension(
         document: new DocumentMeta(id: 'doc:default'),
         generator: $generator,
-        content: ['pages' => []],
+        content: $content,
     );
 
     $updated = $base->withDocument(new DocumentMeta(id: 'doc:renamed'));
 
     expect($updated->document?->id)->toBe('doc:renamed');
     expect($updated->generator)->toBe($generator);
-    expect($updated->content)->toBe(['pages' => []]);
+    expect($updated->content)->toBe($content);
 });
 
 it('sets the content hash on DocumentMeta without touching id or configHash', function (): void {

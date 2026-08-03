@@ -257,25 +257,40 @@
     },
     "content": {
       "type": "object",
+      "description": "The narrative content layer: the compiled `pages` registry and the `nav` tree consumers render the sidebar from. Participates in contentHash, so a prose edit or a nav move is a visible (non-breaking) changelog entry.",
       "x-canonicalOrder": ["pages", "nav"],
       "properties": {
         "pages": { "type": "array", "items": { "$ref": "#/$defs/page" } },
-        "nav": true
+        "nav": { "type": "array", "items": { "$ref": "#/$defs/navNode" } }
       },
       "additionalProperties": false
     },
     "page": {
       "type": "object",
-      "x-canonicalOrder": ["id", "slug", "title", "order", "tags", "content", "provenance"],
+      "x-canonicalOrder": ["id", "slug", "title", "summary", "order", "tags", "content", "provenance"],
       "required": ["id", "slug"],
       "properties": {
         "id": { "$ref": "#/$defs/pageId" },
         "slug": { "type": "string" },
         "title": { "type": "string" },
+        "summary": { "type": "string" },
         "order": { "type": "integer" },
         "tags": { "type": "array", "items": { "type": "string" } },
         "content": { "type": "string" },
         "provenance": { "type": "array", "items": { "$ref": "#/$defs/provenanceRecord" } }
+      },
+      "additionalProperties": false
+    },
+    "navNode": {
+      "type": "object",
+      "description": "One node of the compiled navigation tree. `group` nodes carry `children`; `page`/`operation` nodes reference a stable id via `ref` (a `page:`/`op:` id); `tag` nodes reference an OAS tag name. Broken operation/tag refs are diagnostics at assembly, never emitted silently.",
+      "x-canonicalOrder": ["type", "ref", "title", "children"],
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["group", "page", "operation", "tag"] },
+        "ref": { "type": "string" },
+        "title": { "type": "string" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/navNode" } }
       },
       "additionalProperties": false
     },

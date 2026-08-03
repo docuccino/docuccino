@@ -474,7 +474,7 @@ final class Canonicalizer
             ])),
             'content' => fn (mixed $v): mixed => $this->object($v, fn (array $content) => $this->build($content, [
                 'pages' => fn (mixed $p): mixed => $this->mapList($p, $this->canonicalizePage(...)),
-                'nav' => $this->canonicalizeGeneric(...),
+                'nav' => fn (mixed $n): mixed => $this->mapList($n, $this->canonicalizeNavNode(...)),
             ])),
             'diagnostics' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeDiagnostic(...)),
         ]));
@@ -535,10 +535,27 @@ final class Canonicalizer
             'id' => $this->keep(...),
             'slug' => $this->keep(...),
             'title' => $this->keep(...),
+            'summary' => $this->keep(...),
             'order' => $this->keep(...),
             'tags' => $this->canonicalizeStringList(...),
             'content' => $this->keep(...),
             'provenance' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeProvenanceRecord(...)),
+        ]));
+    }
+
+    /**
+     * A navigation-tree node (`x-docuccino.content.nav`): fixed member order, children recursed in
+     * declaration order (nav order is meaningful and already deterministic from the compiler).
+     *
+     * @return array<string, mixed>|stdClass
+     */
+    private function canonicalizeNavNode(mixed $node): array|stdClass
+    {
+        return $this->object($node, fn (array $navNode) => $this->build($navNode, [
+            'type' => $this->keep(...),
+            'ref' => $this->keep(...),
+            'title' => $this->keep(...),
+            'children' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeNavNode(...)),
         ]));
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Document;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Document\Content\ContentExtension;
 use Docuccino\Core\Support\Hydrate;
 
 /**
@@ -15,14 +16,13 @@ use Docuccino\Core\Support\Hydrate;
 final readonly class DocumentExtension
 {
     /**
-     * @param  array<string, mixed>|null  $content
      * @param  list<Diagnostic>  $diagnostics
      * @param  array<string, mixed>  $rest
      */
     public function __construct(
         public ?DocumentMeta $document = null,
         public ?Generator $generator = null,
-        public ?array $content = null,
+        public ?ContentExtension $content = null,
         public array $diagnostics = [],
         public array $rest = [],
     ) {}
@@ -38,11 +38,7 @@ final readonly class DocumentExtension
         $generator = Hydrate::objectOrNull($data['generator'] ?? null, Generator::fromArray(...));
         unset($data['generator']);
 
-        $content = null;
-        if (isset($data['content']) && is_array($data['content'])) {
-            /** @var array<string, mixed> $content */
-            $content = $data['content'];
-        }
+        $content = Hydrate::objectOrNull($data['content'] ?? null, ContentExtension::fromArray(...));
         unset($data['content']);
 
         $diagnostics = Hydrate::listOf($data['diagnostics'] ?? null, Diagnostic::fromArray(...));
@@ -73,7 +69,7 @@ final readonly class DocumentExtension
         }
 
         if ($this->content !== null) {
-            $out['content'] = $this->content;
+            $out['content'] = $this->content->toArray();
         }
 
         if ($this->diagnostics !== []) {
