@@ -32,19 +32,6 @@ function jsonPaginateOperation(string $chain): GenerationResult
     return generateDocument();
 }
 
-/**
- * @return array<string, array<string, mixed>>
- */
-function paramsByName(array $operation): array
-{
-    $byName = [];
-    foreach ($operation['parameters'] ?? [] as $parameter) {
-        $byName[$parameter['name']] = $parameter;
-    }
-
-    return $byName;
-}
-
 it('documents page[number]/page[size] for a jsonPaginate() terminal, with default config + an info diagnostic', function (): void {
     config()->set('json-api-paginate', []);
 

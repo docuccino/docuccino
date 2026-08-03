@@ -46,6 +46,22 @@ function generateDocument(?callable $mutateConfig = null): GenerationResult
 }
 
 /**
+ * Index an emitted operation's parameters by name (the shape every parameter-asserting feature test
+ * needs). Promoted here so suites don't couple to a peer test's file-level global.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function paramsByName(array $operation): array
+{
+    $byName = [];
+    foreach ($operation['parameters'] ?? [] as $parameter) {
+        $byName[$parameter['name']] = $parameter;
+    }
+
+    return $byName;
+}
+
+/**
  * @return array<string, mixed>
  */
 function loadFixture(string $name): array

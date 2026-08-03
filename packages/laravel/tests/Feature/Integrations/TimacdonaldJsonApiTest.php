@@ -96,10 +96,7 @@ it('adds include + fields[type] params to an action returning a timacdonald reso
 
     $operation = generateDocument()->document->toArray()['paths']['/api/timacdonald-articles']['get'];
 
-    $byName = [];
-    foreach ($operation['parameters'] ?? [] as $parameter) {
-        $byName[$parameter['name']] = $parameter;
-    }
+    $byName = paramsByName($operation);
 
     expect($byName)->toHaveKeys(['include', 'fields'])
         ->and($byName['fields']['style'])->toBe('deepObject')
