@@ -1,0 +1,136 @@
+---
+title: Requests
+description: Document path parameters, query parameters, request bodies, and file uploads — read statically from your routes and validation rules.
+sidebar:
+  order: 3
+---
+
+import { Card, CardGrid, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Docuccino documents everything an endpoint accepts — path parameters, query parameters, and request
+bodies — by reading your routes and validation rules **statically**. It never executes your rules or
+constructs your objects, so generating docs has no side effects.
+
+<CardGrid>
+	<Card title="Path parameters" icon="seti:default">From the route template and route-model bindings.</Card>
+	<Card title="Query parameters" icon="magnifier">From validation on read routes — and your query builders.</Card>
+	<Card title="Request bodies" icon="document">From Form Requests and inline validation.</Card>
+	<Card title="File uploads" icon="add-document">Flip the media type to `multipart/form-data` automatically.</Card>
+</CardGrid>
+
+## Path parameters
+
+Every `{param}` in a route's URI becomes a path parameter. Docuccino types it from the route itself:
+
+- A parameter bound to a model through **route-model binding** takes an `integer` schema — Laravel's
+  default `id` route key.
+- An **unbound** segment is a required `string`.
+- An optional segment (`{param?}`) is documented as optional.
+- A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
+  consumers know a trashed record can resolve there.
+
+```php
+// routes/api.php
+Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']); // {invoice} → integer id
+```
+
+When your route key isn't an integer `id` — a UUID or a slug from `getRouteKeyName()` — refine it with
+[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to set the type, an OpenAPI
+`format`, a description, or an example:
+
+```php
+#[PathParameter(name: 'invoice', type: 'string', format: 'uuid', description: 'Invoice public id')]
+public function show(Invoice $invoice): InvoiceResource { /* … */ }
+```
+
+## Query parameters
+
+Docuccino expresses validation by HTTP verb: **write** verbs (`POST`, `PUT`, `PATCH`) get a request
+body, while **read** verbs (`GET`) get query parameters. So the same validation rules that document a
+create endpoint's body document a list endpoint's query string.
+
+```php
+// A GET action that validates its input documents query parameters:
+public function index(Request $request): AnonymousResourceCollection
+{
+    $request->validate([
+        'status'   => ['nullable', 'in:draft,sent,paid'],
+        'per_page' => ['nullable', 'integer', 'max:100'],
+    ]);
+    // …
+}
+```
+
+List endpoints also get their filters, sorts, includes, and pagination inferred straight from
+[Spatie Query Builder](/laravel/packages/query-builder/) — no annotation needed. To add or patch one
+parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
+
+## Request bodies
+
+A Form Request's `rules()` — or an inline `$request->validate([...])` / `Validator::make(...)` in the
+action — becomes the request body schema. Rules map to JSON Schema: presence to `required`, types to
+`type`, `min`/`max`/`between`/`size` to length and range keywords, `in`/enum rules to `enum`, dates to
+`format`, and cross-field rules like `confirmed` are honored.
+
+<Tabs>
+	<TabItem label="Form Request">
+	```php
+	// app/Http/Requests/StoreInvoiceRequest.php
+	public function rules(): array
+	{
+	    return [
+	        'customer_id' => ['required', 'integer'],
+	        'currency'    => ['required', 'in:GBP,USD,EUR'],
+	        'due_at'      => ['nullable', 'date'],
+	    ];
+	}
+	```
+	</TabItem>
+	<TabItem label="Inline validate()">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	public function store(Request $request): InvoiceResource
+	{
+	    $request->validate([
+	        'customer_id' => ['required', 'integer'],
+	        'currency'    => ['required', 'in:GBP,USD,EUR'],
+	        'due_at'      => ['nullable', 'date'],
+	    ]);
+	    // …
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Either way documents a request body with `customer_id`, `currency` (as an enum), and `due_at`, with the
+right required fields and formats. To patch a single property of the inferred body — a description, an
+example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter).
+
+<Aside title="Data objects get their own page">
+Type-hint a [Spatie Data](/laravel/packages/spatie-data/) class as your action parameter and Docuccino
+documents the body from its properties and validation attributes instead. That, and Data classes as
+response schemas, live on the [Spatie Data](/laravel/packages/spatie-data/) page.
+</Aside>
+
+## File uploads
+
+Add a `file`, `image`, or `mimes` rule and the request media type becomes `multipart/form-data`
+automatically — the field is documented as a binary string, with the rest of the body carried alongside
+it:
+
+```php
+public function rules(): array
+{
+    return [
+        'invoice_id' => ['required', 'integer'],
+        'attachment' => ['required', 'file', 'mimes:pdf'], // → multipart/form-data
+    ];
+}
+```
+
+## When it can't tell
+
+If a rule set can't be resolved statically, Docuccino contributes what it can and leaves the rest to
+your annotations. A [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter),
+[`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), or a docblock always takes
+precedence over what's inferred — you're never fighting the tool.

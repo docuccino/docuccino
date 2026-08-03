@@ -1,0 +1,85 @@
+---
+title: Responses
+description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, and 204s.
+sidebar:
+  order: 4
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+Docuccino documents an endpoint's success responses from the way your action **returns** — its return
+type and return statements. You write the code you'd write anyway; the response shapes follow.
+
+<CardGrid>
+	<Card title="Return-type inference" icon="magnifier">A resource, model, or enum return becomes its schema.</Card>
+	<Card title="Status codes" icon="list-format">`response()->json($x, 201)` folds the payload under `201`.</Card>
+	<Card title="Empty responses" icon="approve-check">`response()->noContent()` documents a `204` with no body.</Card>
+	<Card title="Headers & overrides" icon="setting">Add headers and extra statuses with attributes.</Card>
+</CardGrid>
+
+## From your return type
+
+Whatever an action returns is documented as its `200` body. Docuccino resolves the concrete shape
+through the same inference that powers everything else:
+
+- an **API Resource** becomes its [resource schema](/laravel/documenting/schemas/#api-resources);
+- an **Eloquent model** becomes its [model schema](/laravel/documenting/schemas/#eloquent-models);
+- a **backed enum** becomes its [enum schema](/laravel/documenting/schemas/#enums);
+- a **resource collection** becomes an array of that schema, wrapped in a pagination envelope when the
+  query paginates.
+
+```php
+// app/Http/Controllers/InvoiceController.php
+public function show(Invoice $invoice): InvoiceResource
+{
+    return new InvoiceResource($invoice); // documented as a 200 with the InvoiceResource schema
+}
+```
+
+## Status codes and JsonResponse
+
+Return `response()->json($payload, $status)` and Docuccino folds the **payload** shape under the status
+you passed — the `JsonResponse` wrapper itself is never rendered as a generic object. Distinct return
+paths with distinct statuses become distinct responses on the same operation:
+
+```php
+public function store(StoreInvoiceRequest $request): JsonResponse
+{
+    $invoice = Invoice::create($request->validated());
+
+    return response()->json(new InvoiceResource($invoice), 201); // → 201 with the resource body
+}
+```
+
+A status computed at runtime (not a literal) falls back to `200`; pin it with
+[`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
+
+## Empty responses
+
+`response()->noContent()` is documented as a `204 No Content` with no response body. A bare `void` or
+`never` return (with no `JsonResponse` wrapper) documents nothing on its own — annotate it with
+`#[Response]` if it should appear.
+
+## Adding and refining responses
+
+Where the code can't say everything, attributes step in — field by field, so they patch inferred
+responses without discarding the rest:
+
+| Attribute | Use it to… |
+| --- | --- |
+| [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the description/type/media type of one — repeatable for several statuses. |
+| [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status. |
+| [`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) | Drop an auto-inferred response by status code. |
+
+```php
+#[Response(status: 200, type: InvoiceResource::class, description: 'The invoice')]
+#[Response(status: 404, description: 'Invoice not found')]
+#[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left', status: 200)]
+public function show(int $id): InvoiceResource { /* … */ }
+```
+
+<Aside title="Error responses have their own page">
+`4xx` and `5xx` responses are documented from your real exception handling — see
+[Error responses](/laravel/documenting/errors/). Example values come from inference and
+[`#[Example]`](/laravel/reference/attributes/#example).
+</Aside>

@@ -1,0 +1,79 @@
+---
+title: Spatie Data
+description: Document spatie/laravel-data classes as request bodies and reusable response schemas — honoring Hidden, Optional, Lazy, name mapping, and collections.
+sidebar:
+  order: 1
+---
+
+Activates automatically when [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) is installed.
+A `Data` class is documented from its properties and validation attributes — **statically**, without
+constructing it — and works in both directions: as a request body when it's an action parameter, and as
+a reusable schema when it's returned.
+
+## Request bodies from Data classes
+
+Type-hint a `Data` class as your action's parameter and Docuccino documents the request body from it,
+the same way it would from a Form Request's `rules()`:
+
+```php
+// app/Data/CreateInvoiceData.php
+class CreateInvoiceData extends Data
+{
+    public function __construct(
+        public int $customerId,
+        public string $currency,
+        public ?string $dueAt,
+        #[Hidden]
+        public ?string $internalNote,
+    ) {}
+}
+```
+
+```php
+// app/Http/Controllers/InvoiceController.php
+public function store(CreateInvoiceData $data): InvoiceResource { /* … */ }
+```
+
+This documents a request body with `customerId`, `currency`, and `dueAt` — with `internalNote` dropped.
+
+## Response schemas from Data returns
+
+Return a `Data` class (or a `DataCollection`) and it's documented as a **reusable component schema**,
+referenced everywhere it appears — so the same object is defined once and shared:
+
+```php
+public function show(Invoice $invoice): InvoiceData
+{
+    return InvoiceData::from($invoice); // → a reusable InvoiceData schema
+}
+```
+
+## Conventions Docuccino honors
+
+Docuccino respects Spatie Data's own attributes and conventions, so the documented schema matches the
+JSON your app actually produces and accepts:
+
+| Convention | Effect on the schema |
+| --- | --- |
+| `#[Hidden]` | Drops the property entirely. |
+| `Optional` / `Lazy` | Makes the property non-required. |
+| `#[MapName]` / `#[MapOutputName]` | Renames the property key to the mapped name. |
+| Nested `Data` | Recurses into a nested (referenced) schema. |
+| `DataCollection` | Becomes an array of the item schema. |
+| Paginated Data wrapper | Produces a shared pagination envelope schema. |
+
+Add examples with [`#[Example]`](/laravel/reference/attributes/#example) on a property, and pin
+anything inference can't determine with the usual [attributes](/laravel/reference/attributes/) — they
+always take precedence.
+
+## Configuration
+
+None required. Like every integration, the Data support accepts an `enabled` opt-out
+(`integrations.spatie_data.enabled => false`) if you ever want to turn it off for a document — see the
+[configuration reference](/laravel/reference/configuration/#integrations). It's a no-op when the package
+isn't installed.
+
+## When it can't tell
+
+If a property's type can't be resolved statically, Docuccino contributes what it can and records lower
+confidence rather than failing — then your annotations fill the gap.
