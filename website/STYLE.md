@@ -39,3 +39,26 @@ examples that a reader can paste and run.
   Laravel docs) and stay consistent.
 - Code examples use realistic domain names (invoices, orders, users) — not foo/bar,
   and not our workbench's internal fixtures.
+
+## Information architecture
+
+Conventions the site follows — keep them when adding pages:
+
+- **`laravel/` path scoping.** Framework-specific pages live under `laravel/`
+  (`getting-started`, `documenting`, `packages`, `guides`, `reference`); framework-agnostic
+  material stays top-level (`uir/`, `extending/extension-authoring`, the comparison pages).
+  The sidebar labels don't expose the path, so the reader experience is unchanged.
+- **Topic switcher deferred.** One plain sidebar today. When a second framework ships, add
+  `starlight-sidebar-topics` (Laravel / Symfony / UIR) — a config change; no URLs move.
+- **Package-named sidebar entries.** Per-package support pages are named as their ecosystems
+  are (Spatie Data, Spatie Query Builder, Laravel Actions…), grouped under "Package support",
+  so a reader scanning for their package finds it in seconds.
+- **Single-concern documenting pages.** Each page under `documenting/` covers exactly one
+  concern (requests, responses, schemas, errors, authentication, rate limiting) and is
+  complete enough to do that task without reading source.
+- **Code → generated-output is the standard proof.** Wherever a page shows PHP the reader
+  writes, pair it with a Tabs component: "Your code" beside a curated, trimmed "Generated
+  OpenAPI" excerpt derived from real emitter output. It's the product's core wow — keep
+  excerpts short and honest.
+- **Comparisons are per-tool pages only.** Competitive content lives solely on the
+  "Docuccino vs …" pages (see the competitive rule above).
