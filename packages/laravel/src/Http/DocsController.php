@@ -78,7 +78,18 @@ final class DocsController
         $path = dirname(__DIR__, 2).'/resources/js/scalar.standalone.js';
         $contents = @file_get_contents($path);
 
-        return new Response($contents === false ? '' : $contents, 200, ['Content-Type' => 'application/javascript']);
+        if ($contents === false) {
+            // Serving a blank viewer silently makes "the docs page is empty" undiagnosable; log it.
+            Log::warning(sprintf('Docuccino viewer asset could not be read at "%s"; serving an empty body.', $path));
+            $contents = '';
+        }
+
+        return new Response($contents, 200, [
+            'Content-Type' => 'application/javascript',
+            // The bundle is versioned by the package release (it only changes on upgrade), so it is
+            // safe to cache immutably and spares repeat 3.6 MB reads on every viewer load.
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+        ]);
     }
 
     private function config(string $document): DocumentConfig

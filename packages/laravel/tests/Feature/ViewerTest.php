@@ -68,6 +68,9 @@ it('serves the bundled Scalar asset WITHOUT the gate (it is a static, non-sensit
     $this->get('/docs/api/assets/scalar.js')
         ->assertOk()
         ->assertHeader('Content-Type', 'application/javascript')
+        // Versioned by the package release, so it is served with a long-lived immutable cache (N8).
+        // Symfony's header bag re-serialises Cache-Control directives in alphabetical order.
+        ->assertHeader('Cache-Control', 'immutable, max-age=31536000, public')
         ->assertSee('api-reference', false);
 });
 
