@@ -17,7 +17,7 @@ Docuccino reads the throttle configuration from the middleware:
 | --- | --- |
 | `throttle:60,1` | 60 requests per 1 minute. |
 | `throttle:60` | 60 requests per minute. |
-| `throttle:api` (a named limiter) | The limits registered for that limiter. |
+| `throttle:api` (a named limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
 
 ```php
 // routes/api.php
@@ -28,8 +28,9 @@ Route::middleware('throttle:60,1')->get('/invoices', [InvoiceController::class, 
 
 None.
 
-## When it can't tell
+## Named limiters
 
-If a named limiter's rate is defined in a closure that can't be read statically, the `429` response
-is still documented — just without the specific numbers — and Docuccino notes this with a
-diagnostic so you know whether it's a closure-defined limit or an unregistered limiter name.
+A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`
+— which Docuccino never executes. The `429` response and its headers are still documented, but the
+concrete numbers can't be recovered, so Docuccino emits an info diagnostic noting the limit came from a
+named limiter. Inline limits (`throttle:60,1`) carry their numbers straight through.

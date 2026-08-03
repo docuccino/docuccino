@@ -51,7 +51,8 @@ each detail came from. That's what powers the deterministic output and the seman
 	</Card>
 	<Card title="Deterministic output" icon="approve-check">
 		The same code always produces byte-for-byte identical output — no timestamps, no absolute
-		paths, no shuffling. Commit the file and your diffs stay clean, even across tool upgrades.
+		paths, no shuffling. Commit the file and your diffs stay clean; a tool upgrade moves at most a
+		single `generator` version line (and nothing at all in the OpenAPI export).
 	</Card>
 	<Card title="A diff you can gate CI on" icon="seti:git">
 		`docuccino:diff --enforce` compares two versions of your API and enforces a versioning policy.

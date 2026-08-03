@@ -350,7 +350,7 @@ public function __construct(
 )
 ```
 
-Attaches an example value — optionally named, summarised, or referenced by an `externalValue` URL.
+Attaches an example value — optionally named, summarized, or referenced by an `externalValue` URL.
 Repeatable for several named examples.
 
 ```php

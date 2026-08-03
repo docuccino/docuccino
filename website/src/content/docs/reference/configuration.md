@@ -25,7 +25,7 @@ return [
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `enabled` | `env('DOCUCCINO_ENABLED', true)` | Master switch. When `false`, every command except `docuccino:clear` aborts with a notice and exits non-zero. Lets you disable generation in an environment without removing config. |
+| `enabled` | `env('DOCUCCINO_ENABLED', true)` | Master switch. When `false`, every command except `docuccino:clear` aborts with a notice and exits non-zero, **and** the runtime viewer endpoints (`/docs/*`) are not registered at all. Lets you disable generation and serving in an environment without removing config. |
 | `on_route_error` | `'skeleton'` | Per-route failure behavior. `skeleton` emits a stub operation plus an error diagnostic (never a dead build); `omit` drops the route entirely. |
 
 ## Documents
@@ -179,7 +179,7 @@ from "API changed".
 ### `integrations`
 
 One bag per integration, keyed by the integration's config name; **each integration reads only its
-own bag**, and all are optional. Only four integrations read config today.
+own bag**, and all are optional.
 
 ```php
 'integrations' => [
@@ -215,7 +215,7 @@ chosen by the `--format` flag.
 
 ```php
 'viewer' => [
-    'driver' => 'scalar',   // FUTURE: selectable viewer driver; only Scalar ships today
+    'driver' => 'scalar',   // FUTURE: selectable viewer driver; only Scalar ships
     'route' => '/docs/api', // null disables the runtime endpoints for this document
     'gate' => null,         // Gate ability name; null = local environment only
     'middleware' => ['web', 'throttle:60,1'],
@@ -226,7 +226,7 @@ chosen by the `--format` flag.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `driver` | `'scalar'` | **FUTURE** — only the bundled Scalar viewer ships today. |
+| `driver` | `'scalar'` | **FUTURE** — only the bundled Scalar viewer ships. |
 | `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
 | `gate` | `null` | Gate ability guarding the HTML + `.json` routes. `null` = available only in the `local` environment. The static asset route is never gated. |
 | `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. |

@@ -27,7 +27,7 @@ run. The Docuccino column is exact.
 | Error responses from your handler | partial | ✅ reads your real handling |
 | Deterministic, byte-stable output | — | ✅ |
 | Semantic diff + CI version gating | — | ✅ (`docuccino:diff --enforce`) |
-| Multiple documents | — | ✅ |
+| Multiple documents | ✅ (`Scramble::registerApi()`) | ✅ (with per-document security, viewer, export and `#[InDocs]` pinning) |
 | YAML export | — | ✅ |
 | A documented intermediate format | — | ✅ (the [UIR](/uir/)) |
 
@@ -38,9 +38,7 @@ that down capability by capability. Scramble ships a free core and a paid **Scra
 they're split out so you can see exactly where each capability lives.
 
 <Aside type="note">
-`✓` means built-in support; `—` means not supported. Scramble's split between free and Pro, and
-its exact behavior, vary between versions — check these against the version you run. The Docuccino
-column is exact.
+`✓` means built-in support; `—` means not supported.
 </Aside>
 
 ### Request &amp; validation
@@ -93,7 +91,7 @@ so a query composed several helper methods deep is still fully documented.
 | RFC 9457 Problem Details preset | ✓ | — | — |
 
 Reading your actual exception handling — render callbacks, exception `render()` methods,
-`Responsable` exceptions — is something no other generator does today.
+`Responsable` exceptions — is something no other generator does.
 
 ### Output &amp; workflow
 
@@ -165,7 +163,7 @@ routes, info, security, and viewer — so a few top-level Scramble settings move
 | `servers` | `documents.default.servers` |
 | `ui.title` | `documents.default.info.title` |
 | viewer / UI options | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
-| `enum_cases_description_strategy` | `documents.default.representation.enums.naming` + `#[CaseDescription]` |
+| `enum_cases_description_strategy` | `#[CaseDescription]` (emitted automatically as `x-enumDescriptions`) |
 | `extensions` | `extensions`, or `Docuccino::extend()` |
 | security via config/callbacks | `documents.default.security` + the Sanctum/Passport integrations |
 | a single document | as many named `documents` as you need |

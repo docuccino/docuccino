@@ -36,13 +36,13 @@ class PublishArticle
         ];
     }
 
-    public function authorize(): bool
+    public function authorize(ActionRequest $request): bool
     {
-        return $this->user()->can('publish', Article::class);
+        return $request->user()->can('publish', Article::class);
     }
 
     /** Publish a draft article. */
-    public function handle(ArticleData $data): ArticleResource
+    public function handle(): ArticleResource
     {
         // ...
     }

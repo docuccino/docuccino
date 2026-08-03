@@ -45,9 +45,8 @@ grow without breaking older readers.
 
 ## Stable identities
 
-Every operation, parameter, named schema, response, and security scheme carries an
-`x-docuccino.id`. Identities are computed from meaning, never from file paths or line numbers, so
-they survive refactors:
+Every operation, parameter, named schema, and response carries an `x-docuccino.id`. Identities are
+computed from meaning, never from file paths or line numbers, so they survive refactors:
 
 | Kind | Built from | Survives | Changes when |
 | --- | --- | --- | --- |
@@ -71,8 +70,9 @@ fixed order of HTTP methods, 2-space indentation, and a trailing newline. The re
 		time.
 	</Card>
 	<Card title="Stable across upgrades" icon="rocket">
-		A content hash that excludes tool metadata means upgrading Docuccino doesn't churn your
-		committed document.
+		The content hash excludes tool metadata, so upgrading Docuccino moves only the `generator`
+		version line — the rest of the document is untouched (and the OpenAPI export, which drops that
+		metadata, is identical).
 	</Card>
 </CardGrid>
 

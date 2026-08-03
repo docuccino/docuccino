@@ -115,7 +115,8 @@ schema:
 | --- | --- |
 | `convert(DType $type): array` | Convert a nested type through the full mapper chain (e.g. a property whose type is itself complex). |
 | `reference(string $name, array $schema, ?string $schemaId = null): array` | Hoist a named schema into `components.schemas` and get back a `{ "$ref": … }` — the correct way to make a reusable, shareable schema. |
-| `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect. |
+| `reserveComponentName(string $name, string $schemaId): string` | Reserve the final component name (with collision suffixing) **before** building the body, so a self-referential schema can point its cycle-breaking `$ref` at the exact name. Never fabricate a component name or `#/components/schemas/…` ref yourself. |
+| `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect (an enum or model file too). |
 | `lowerConfidence(float $confidence): void` | Note that this conversion was a best guess. |
 | `diagnostic(Diagnostic $d): void` | Surface a problem (shown in CLI output, and able to fail CI). |
 | `engine()`, `depth()`, `representation()` | Access the type engine, the current nesting depth, and the document's representation policy. |
@@ -170,7 +171,11 @@ Pick the contract that matches what you're teaching Docuccino. All live in
 | `DocumentTransformer` | Post-process the whole finished document. | `transform(UirDocumentDraft, DocumentContext)` |
 | `RouteResolver` | Contribute routes beyond Laravel's router. | `resolve(DocumentConfig): iterable` |
 | `TagMapper` | Customize how tags are named/grouped. | `map(string): string` |
-| `Viewer` | Replace the built-in Scalar viewer. | `render(ViewerContext)` |
+
+A `TagMapper` is the one contract you don't register through `Docuccino::extend()` — you point a
+document at it per document with the `tags.mapper` config key (see the
+[configuration reference](/reference/configuration/)), so different documents can name tags
+differently.
 
 `OperationExtension`s run in phases, so you can act at the right moment:
 
