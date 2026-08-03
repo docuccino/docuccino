@@ -15,9 +15,21 @@ arch('built-in integrations consume only the public extension surface')
     ->expect('Docuccino\Laravel\Integrations')
     ->toOnlyUse([
         'Docuccino\Core\Extensions\Contracts',
-        'Docuccino\Core\Extensions\Validation',
+        // Schema + Validation are allow-listed at CLASS granularity, not namespace: both namespaces
+        // contain an @internal class (Schema\SchemaConverter, Validation\FieldNode) that the frozen
+        // extension-author surface must NOT silently expose. Adding a class here is a deliberate
+        // widening of the public surface — never add an @internal one.
+        'Docuccino\Core\Extensions\Schema\ComponentHoist',
+        'Docuccino\Core\Extensions\Schema\ComponentRegistry',
+        'Docuccino\Core\Extensions\Schema\EnumReflection',
+        'Docuccino\Core\Extensions\Schema\SchemaIdentity',
+        'Docuccino\Core\Extensions\Schema\SchemaResult',
+        'Docuccino\Core\Extensions\Validation\RecoveredRequest',
+        'Docuccino\Core\Extensions\Validation\ResponseDraftApplier',
+        'Docuccino\Core\Extensions\Validation\RuleSet',
+        'Docuccino\Core\Extensions\Validation\ValidationField',
+        'Docuccino\Core\Extensions\Validation\ValidationRule',
         'Docuccino\Core\Extensions\Context',
-        'Docuccino\Core\Extensions\Schema',
         'Docuccino\Core\Extensions\Ordering',
         'Docuccino\Core\Draft',
         'Docuccino\Core\Inference',
