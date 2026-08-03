@@ -18,6 +18,8 @@ use Docuccino\Laravel\Content\ContentCompiler;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Extensions\AttributeOverridesExtension;
 use Docuccino\Laravel\Http\DocsController;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Pipeline\FragmentCache;
@@ -145,6 +147,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             }
 
             return new SensitiveFieldLint($options);
+        });
+
+        // The json-api-paginate integration reads the package's own config for the (renamable)
+        // parameter names + sizes; an absent bag falls back to defaults + an info diagnostic.
+        $this->app->bind(JsonApiPaginateParametersExtension::class, static function (): JsonApiPaginateParametersExtension {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('json-api-paginate', []);
+
+            return new JsonApiPaginateParametersExtension(JsonApiPaginateConfig::fromArray($config));
         });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the

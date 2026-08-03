@@ -21,6 +21,7 @@ use Docuccino\Laravel\Integrations\Enum\EnumSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Permission\PermissionIntegration;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsIntegration;
@@ -85,6 +86,9 @@ final class DefaultExtensions
             // Spatie Query Builder (design §Phase 4 — the Scramble-Pro-beater): trace-recovered
             // allowedFilters/Sorts/Includes/Fields + pagination, added only when the package exists.
             ...(QueryBuilderIntegration::installed() ? QueryBuilderIntegration::extensions() : []),
+            // spatie/laravel-json-api-paginate: the `jsonPaginate()` terminal → JSON:API
+            // page[number]/page[size] (or page[cursor]) params, added only when the package exists.
+            ...(JsonApiPaginateIntegration::installed() ? JsonApiPaginateIntegration::extensions() : []),
             // Security auto-config (Telescope-style guards): Sanctum → bearer/cookie scheme;
             // Passport → oauth2 scheme + per-operation scopes from scope:/scopes: middleware.
             ...(SanctumIntegration::installed() ? SanctumIntegration::extensions() : []),
