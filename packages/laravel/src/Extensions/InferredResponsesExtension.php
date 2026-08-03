@@ -18,7 +18,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Support\FrameworkClasses;
+use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
 
 /**
  * Infers the success response(s) from the action's return paths (design §5). Every return type is

@@ -12,7 +12,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Support\FrameworkClasses;
+use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
 
 /**
  * Turns a handler/closure analysis into an error response (design §6). Reads the recovered
