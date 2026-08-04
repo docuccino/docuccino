@@ -1784,7 +1784,9 @@
                   "layer": "integration",
                   "fields": [
                     "description",
-                    "required"
+                    "explode",
+                    "required",
+                    "style"
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
@@ -1796,8 +1798,10 @@
             },
             "name": "filter[status]",
             "in": "query",
-            "description": "Exact-match filter",
+            "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
             "required": false,
+            "style": "form",
+            "explode": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -1805,6 +1809,7 @@
                     "producer": "integration:query-builder",
                     "layer": "integration",
                     "fields": [
+                      "items",
                       "type"
                     ],
                     "source": {
@@ -1815,7 +1820,19 @@
                   }
                 ]
               },
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "published",
+                  "archived"
+                ],
+                "x-enumDescriptions": {
+                  "draft": "Not yet visible to applicants.",
+                  "published": "Live and accepting traffic."
+                }
+              }
             }
           },
           {
@@ -2363,7 +2380,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "6f17355bae81d652f750f20437518e598da489c879f421262abc700602dc9069",
-      "contentHash": "1851eb6738f61e83fe6d3aa74ff167aa7e00e77e540b3ef71f98c64464d2ec1b"
+      "contentHash": "24ad8bb71a2151f1ac35f6404dc415276a19dab1fa9ed3a87667f906ee75cac4"
     },
     "generator": {
       "name": "docuccino/laravel",

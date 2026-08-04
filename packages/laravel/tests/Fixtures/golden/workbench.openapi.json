@@ -654,10 +654,24 @@
           {
             "name": "filter[status]",
             "in": "query",
-            "description": "Exact-match filter",
+            "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
             "required": false,
+            "style": "form",
+            "explode": false,
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "published",
+                  "archived"
+                ],
+                "x-enumDescriptions": {
+                  "draft": "Not yet visible to applicants.",
+                  "published": "Live and accepting traffic."
+                }
+              }
             }
           },
           {
