@@ -57,6 +57,17 @@ final class StubTraceScope implements TypeScope
             };
         }
 
+        // `Model::class` folds to its class-name string, as PHPStan does for the real engine — the QB
+        // subject-model recovery keys on it (the snippet must use the fully-qualified name, since the
+        // stub has no namespace-resolution scope).
+        if ($expr instanceof Node\Expr\ClassConstFetch
+            && $expr->class instanceof Node\Name
+            && $expr->name instanceof Node\Identifier
+            && strtolower($expr->name->toString()) === 'class'
+        ) {
+            return ConstValue::scalar(ltrim($expr->class->toString(), '\\'));
+        }
+
         if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name && $expr->name instanceof Node\Identifier) {
             $factory = $expr->class->toString().'::'.$expr->name->toString();
             $args = [];

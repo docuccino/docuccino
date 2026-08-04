@@ -80,7 +80,7 @@ final class WorkbenchEngine
                 // Scripts the Query Builder trace so the golden exercises the QB integration
                 // deterministically (the stub engine has no real trace) — mirrors the Spike-B chain.
                 'Workbench\\App\\Http\\Controllers\\WidgetQueryController::index' => QbTraceScript::forChain(
-                    "QueryBuilder::for(Form::class)->allowedFilters(['name', AllowedFilter::exact('status')])->allowedSorts(['name', 'created_at'])->defaultSort('name')->paginate(20)",
+                    "QueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name', AllowedFilter::exact('status')])->allowedSorts(['name', 'created_at'])->defaultSort('name')->paginate(20)",
                 ),
             ],
             analyses: [

@@ -121,6 +121,68 @@ it('records a diagnostic-bound unresolved entry for a non-constant filter, never
         ->and($facts->unresolved[0])->toContain('allowedFilters entry at test.php:');
 });
 
+it('recovers the subject model from for(Model::class)', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters(['name'])"
+    )->facts;
+
+    expect($facts->subjectModel)->toBe('App\\Models\\User');
+});
+
+it('leaves the subject model null when for() is not reached', function (): void {
+    // A bare allowedFilters chain with no for() origin in the snippet.
+    $facts = traceQbSnippet("\$builder->allowedFilters(['name'])")->facts;
+
+    expect($facts->subjectModel)->toBeNull();
+});
+
+it('recovers the internal column name from the second factory argument', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status', 'status_code')])"
+    )->facts;
+
+    expect($facts->filters[0]->name)->toBe('status')
+        ->and($facts->filters[0]->internal)->toBe('status_code')
+        ->and($facts->filters[0]->column())->toBe('status_code');
+});
+
+it('recovers a constant ->default() modifier and a ->nullable() modifier', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status')->default('published')->nullable()])"
+    )->facts;
+
+    $filter = $facts->filters[0];
+    expect($filter->name)->toBe('status')
+        ->and($filter->kind)->toBe('exact')
+        ->and($filter->hasDefault)->toBeTrue()
+        ->and($filter->default)->toBe('published')
+        ->and($filter->nullable)->toBeTrue();
+});
+
+it('degrades a non-constant ->default() to no default without dropping the entry', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::exact('status')->default(\$dynamic)])"
+    )->facts;
+
+    expect($facts->filters)->toHaveCount(1)
+        ->and($facts->filters[0]->name)->toBe('status')
+        ->and($facts->filters[0]->hasDefault)->toBeFalse()
+        ->and($facts->unresolved)->toBe([]);
+});
+
+it('attributes a comment directly above an allow-list entry as its description', function (): void {
+    $chain = "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([\n"
+        ."    // The lifecycle status of the record.\n"
+        ."    AllowedFilter::exact('status'),\n"
+        ."    AllowedFilter::partial('email'),\n"
+        .'])';
+
+    $facts = traceQbSnippet($chain)->facts;
+
+    expect($facts->filters[0]->comment)->toBe('The lifecycle status of the record.')
+        ->and($facts->filters[1]->comment)->toBeNull();
+});
+
 it('recovers a full chain built through a helper (all allow-lists + pagination together)', function (): void {
     $facts = traceQbSnippet(
         'QueryBuilder::for(User::class)'
