@@ -16,6 +16,13 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
  */
 final class QueryBuilderFacts
 {
+    /**
+     * The subject model FQCN recovered from `QueryBuilder::for(Article::class)` /
+     * `QueryBuilder::for(Article::query())`, or null when it could not be resolved (the exact-filter
+     * cast lookup then degrades gracefully — every filter stays a plain string, as before).
+     */
+    public ?string $subjectModel = null;
+
     /** @var list<QbEntry> */
     public array $filters = [];
 

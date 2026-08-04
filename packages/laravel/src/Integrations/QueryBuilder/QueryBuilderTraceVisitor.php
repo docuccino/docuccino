@@ -8,6 +8,8 @@ use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
+use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
+use PhpParser\Comment;
 use PhpParser\Node;
 
 /**
@@ -16,9 +18,14 @@ use PhpParser\Node;
  * off any `Spatie\QueryBuilder\QueryBuilder` receiver at any chain depth (the engine descends into
  * app-code helpers, so the `ListQueryBuilder::for()` two-deep pattern works):
  *
+ *   - the **subject model** off `QueryBuilder::for(Article::class)` (a `Model::class` const string) or
+ *     `QueryBuilder::for(Article::query())` (the receiver expression's model type) — the model whose
+ *     column casts type the exact filters;
  *   - `allowedFilters` / `allowedSorts` / `allowedIncludes` / `allowedFields` literals — strings and
  *     factory descriptors (`AllowedFilter::exact('status')`) folded at the AST level before PHPStan
- *     collapses them to a plain object type (the crux of Spike B);
+ *     collapses them to a plain object type (the crux of Spike B), including the **internal column**
+ *     (`AllowedFilter::exact('status', 'status_code')`), constant `->default(…)`/`->nullable()`
+ *     **chained modifiers**, and a line or block **comment directly above** the entry;
  *   - `defaultSort`/`defaultSorts` documented defaults;
  *   - paginating terminals (`paginate`/`simplePaginate`/`cursorPaginate` plus any configured custom
  *     terminal, e.g. Eos's `paginateList`) with the per-page folded from the OUTERMOST call site.
@@ -75,6 +82,14 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
             $this->visitMethodCall($node, $node->name->toString(), $scope);
         }
 
+        // `QueryBuilder::for(Model::class)` — the chain's origin: recover the subject model.
+        if ($node instanceof Node\Expr\StaticCall
+            && $node->name instanceof Node\Identifier
+            && $node->name->toString() === 'for'
+        ) {
+            $this->recoverSubject($node, $scope);
+        }
+
         // Descend into any app-code call so allow-lists built inside a helper are reached; the engine
         // declines vendor / magic / over-budget descent on its own (Spike B split).
         return $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\StaticCall;
@@ -96,27 +111,85 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         }
     }
 
+    /**
+     * Recover the subject model FQCN from a `QueryBuilder::for(…)` origin. The first `for()` reached
+     * wins (there is one per chain); an unresolvable subject leaves {@see QueryBuilderFacts::$subjectModel}
+     * null so every filter degrades to a plain string.
+     */
+    private function recoverSubject(Node\Expr\StaticCall $node, TypeScope $scope): void
+    {
+        if ($this->facts->subjectModel !== null) {
+            return;
+        }
+
+        $type = $scope->typeOf($node);
+        if (! ($type instanceof ClassT && is_a($type->fqcn, self::QUERY_BUILDER, true))) {
+            return;
+        }
+
+        $args = $node->getArgs();
+        if (! isset($args[0])) {
+            return;
+        }
+
+        $this->facts->subjectModel = $this->subjectFromArg($args[0]->value, $scope);
+    }
+
+    /**
+     * The model FQCN behind a `for(…)` argument: a `Model::class` const string, else the argument's
+     * own model type (`for($query)` / `for(Model::query())` → a builder/relation carrying the model
+     * as a generic arg, or the model itself).
+     */
+    private function subjectFromArg(Node\Expr $arg, TypeScope $scope): ?string
+    {
+        $const = $scope->constantValueOf($arg);
+        if ($const !== null && $const->isScalar() && is_string($const->scalar) && $const->scalar !== '') {
+            return $const->scalar;
+        }
+
+        $type = $scope->typeOf($arg);
+        if (! $type instanceof ClassT) {
+            return null;
+        }
+
+        if (EloquentModelReflector::isModel($type->fqcn)) {
+            return $type->fqcn;
+        }
+
+        foreach ($type->typeArgs as $typeArg) {
+            if ($typeArg instanceof ClassT && EloquentModelReflector::isModel($typeArg->fqcn)) {
+                return $typeArg->fqcn;
+            }
+        }
+
+        return null;
+    }
+
     private function harvest(Node\Expr\MethodCall $node, TypeScope $scope, string $bucket, string $defaultKind, string $method): void
     {
         foreach ($node->getArgs() as $arg) {
             $value = $arg->value;
             if ($value instanceof Node\Expr\Array_) {
                 foreach ($value->items as $item) {
-                    $this->collect($scope->constantValueOf($item->value), $bucket, $defaultKind, $method, $scope, $item->value);
+                    $this->collect($item->value, $item, $bucket, $defaultKind, $method, $scope);
                 }
 
                 continue;
             }
 
-            $this->collect($scope->constantValueOf($value), $bucket, $defaultKind, $method, $scope, $value);
+            $this->collect($value, null, $bucket, $defaultKind, $method, $scope);
         }
     }
 
     /**
-     * Fold one recovered constant into an allow-list entry, or record it unresolved.
+     * Fold one recovered allow-list expression into an entry (peeling constant `->default()`/
+     * `->nullable()` modifiers and attributing a leading comment), or record it unresolved.
      */
-    private function collect(?ConstValue $value, string $bucket, string $defaultKind, string $method, TypeScope $scope, Node\Expr $expr): void
+    private function collect(Node\Expr $expr, ?Node $itemNode, string $bucket, string $defaultKind, string $method, TypeScope $scope): void
     {
+        [$base, $hasDefault, $default, $nullable] = $this->peelModifiers($expr, $scope);
+
+        $value = $scope->constantValueOf($base);
         $entry = $value === null ? null : $this->entryFor($value, $defaultKind);
         if ($entry === null) {
             $location = $scope->location($expr);
@@ -124,6 +197,16 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
 
             return;
         }
+
+        $entry = new QbEntry(
+            $entry->name,
+            $entry->kind,
+            $entry->internal,
+            $hasDefault,
+            $default,
+            $nullable,
+            $itemNode !== null ? $this->leadingComment($itemNode) : null,
+        );
 
         if ($bucket === 'defaultSorts') {
             $this->facts->defaultSorts[] = $entry->name;
@@ -140,6 +223,65 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         };
     }
 
+    /**
+     * Peel recognised constant-foldable chained modifiers off the top of an allow-list expression,
+     * returning the base descriptor/scalar expression plus the folded modifier facts. Only
+     * `->default(<const>)` and `->nullable()` are recognised; an unrecognised or non-constant modifier
+     * stops the peel (the base still recovers — a recognised entry never degrades to unresolved noise
+     * over an unfoldable tail).
+     *
+     * @return array{0: Node\Expr, 1: bool, 2: string|int|float|bool|null, 3: bool}
+     */
+    private function peelModifiers(Node\Expr $expr, TypeScope $scope): array
+    {
+        $hasDefault = false;
+        $default = null;
+        $nullable = false;
+        $base = $expr;
+
+        while ($base instanceof Node\Expr\MethodCall && $base->name instanceof Node\Identifier) {
+            $modifier = $base->name->toString();
+
+            if ($modifier === 'nullable') {
+                $nullable = true;
+                $base = $base->var;
+
+                continue;
+            }
+
+            if ($modifier === 'default') {
+                $folded = $this->foldDefault($base, $scope);
+                if ($folded !== null) {
+                    [$hasDefault, $default] = [true, $folded[0]];
+                }
+                $base = $base->var;
+
+                continue;
+            }
+
+            break;
+        }
+
+        return [$base, $hasDefault, $default, $nullable];
+    }
+
+    /**
+     * Fold a `->default(<value>)` argument to a scalar, or null when it is absent / non-constant.
+     *
+     * @return array{0: string|int|float|bool|null}|null
+     */
+    private function foldDefault(Node\Expr\MethodCall $node, TypeScope $scope): ?array
+    {
+        $arg = $node->getArgs()[0] ?? null;
+        if ($arg === null) {
+            return null;
+        }
+
+        $value = $scope->constantValueOf($arg->value);
+
+        return $value !== null && $value->isScalar() ? [$value->scalar] : null;
+    }
+
     private function entryFor(ConstValue $value, string $defaultKind): ?QbEntry
     {
         if ($value->isScalar() && is_string($value->scalar)) {
@@ -149,11 +291,21 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         if ($value->isDescriptor()) {
             $name = $value->args[0] ?? null;
             if ($name instanceof ConstValue && $name->isScalar() && is_string($name->scalar)) {
-                return new QbEntry($name->scalar, self::factoryMethod((string) $value->factory));
+                return new QbEntry($name->scalar, self::factoryMethod((string) $value->factory), self::internalArg($value));
             }
         }
 
         return null;
+    }
+
+    /** The second factory argument as an internal column name, when it is a non-empty string. */
+    private static function internalArg(ConstValue $descriptor): ?string
+    {
+        $second = $descriptor->args[1] ?? null;
+
+        return $second instanceof ConstValue && $second->isScalar() && is_string($second->scalar) && $second->scalar !== ''
+            ? $second->scalar
+            : null;
     }
 
     private function recordTerminal(Node\Expr\MethodCall $node, string $name, TypeScope $scope): void
@@ -181,6 +333,54 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         $type = $scope->typeOf($receiver);
 
         return $type instanceof ClassT && is_a($type->fqcn, self::QUERY_BUILDER, true);
+    }
+
+    /**
+     * The first sentence(s) of a line or block comment directly above an allow-list entry (its end
+     * line immediately precedes the entry) — verbatim, no tag parsing. Returns null when no such
+     * comment attaches.
+     */
+    private function leadingComment(Node $item): ?string
+    {
+        $comments = $item->getComments();
+        if ($comments === []) {
+            return null;
+        }
+
+        $comment = $comments[count($comments) - 1];
+        if ($comment->getEndLine() !== $item->getStartLine() - 1) {
+            return null;
+        }
+
+        $text = self::stripCommentMarkers($comment);
+
+        return $text === '' ? null : self::firstSentence($text);
+    }
+
+    /** Strip line/block comment markers and collapse a comment body to a single line. */
+    private static function stripCommentMarkers(Comment $comment): string
+    {
+        // Drop block open/close delimiters, then per-line leading markers (`//`, `#`, `*`).
+        $text = preg_replace('~/\*\*?|\*/~', '', $comment->getText()) ?? $comment->getText();
+
+        $lines = array_map(
+            static fn (string $line): string => trim(preg_replace('~^\s*(//|#|\*)\s?~', '', $line) ?? $line),
+            preg_split('/\R/', $text) ?: [$text],
+        );
+
+        $collapsed = preg_replace('/\s+/', ' ', implode(' ', $lines)) ?? '';
+
+        return trim($collapsed);
+    }
+
+    /** The first sentence: up to and including the first sentence-terminating period, else the whole line. */
+    private static function firstSentence(string $text): string
+    {
+        if (preg_match('/^.*?[.!?](?=\s|$)/', $text, $matches) === 1) {
+            return trim($matches[0]);
+        }
+
+        return $text;
     }
 
     /** The `method` segment of a `Class::method` factory FQCN. */

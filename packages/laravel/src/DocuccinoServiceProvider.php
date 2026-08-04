@@ -23,6 +23,8 @@ use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -163,6 +165,16 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $config = (array) config('json-api-paginate', []);
 
             return new JsonApiPaginateParametersExtension(JsonApiPaginateConfig::fromArray($config));
+        });
+
+        // The query-builder integration reads the package's own config for the (renamable) request
+        // parameter names (filter/sort/include/fields); an absent bag falls back to defaults + an
+        // info diagnostic.
+        $this->app->bind(QueryBuilderParametersExtension::class, static function (): QueryBuilderParametersExtension {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('query-builder', []);
+
+            return new QueryBuilderParametersExtension(QueryBuilderConfig::fromArray($config));
         });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
