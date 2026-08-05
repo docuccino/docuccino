@@ -18,6 +18,10 @@ final class EloquentModelReflector
 {
     public const MODEL = 'Illuminate\\Database\\Eloquent\\Model';
 
+    public function __construct(
+        private readonly CastsMethodReader $castsMethod = new CastsMethodReader,
+    ) {}
+
     private const SOFT_DELETES = 'Illuminate\\Database\\Eloquent\\SoftDeletes';
 
     private const HAS_UUIDS = 'Illuminate\\Database\\Eloquent\\Concerns\\HasUuids';
@@ -49,11 +53,16 @@ final class EloquentModelReflector
 
         $traits = self::traits($fqcn);
 
+        // The cast map is the $casts property merged with the casts() method (Laravel 11+ default),
+        // the latter winning on a key conflict — mirroring HasAttributes::getCasts().
+        $file = $reflection->getFileName();
+        $casts = [...self::castMap($defaults['casts'] ?? []), ...$this->castsMethod->read($file === false ? null : $file)];
+
         return [
             'hidden' => self::stringList($defaults['hidden'] ?? []),
             'visible' => self::stringList($defaults['visible'] ?? []),
             'appends' => self::stringList($defaults['appends'] ?? []),
-            'casts' => self::castMap($defaults['casts'] ?? []),
+            'casts' => $casts,
             'classHidden' => $classHidden,
             'fillable' => self::stringList($defaults['fillable'] ?? []),
             'dates' => self::stringList($defaults['dates'] ?? []),

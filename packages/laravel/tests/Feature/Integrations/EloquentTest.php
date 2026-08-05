@@ -17,9 +17,11 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
+use Workbench\App\Enums\WidgetStatus;
 
 /**
  * The Eloquent model schema integration (Phase 4): columns (from the engine) refined by the model's
@@ -48,6 +50,13 @@ function eloquentEngine(): StubTypeEngine
         Vault::class => new ClassMetadata(Vault::class, [
             new PropertyMetadata('id', ScalarT::string()),
             new PropertyMetadata('label', ScalarT::string()),
+        ]),
+        Invoice::class => new ClassMetadata(Invoice::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('amount', ScalarT::int()),
+            new PropertyMetadata('issued_at', UnionT::of([ScalarT::string(), new NullT])),
+            new PropertyMetadata('meta', ScalarT::string()),
+            new PropertyMetadata('status', ScalarT::string()),
         ]),
     ]);
 }
@@ -113,6 +122,24 @@ it('reflects timestamps, soft-delete, and primary-key facts', function (): void 
     $widgetFacts = (new EloquentModelReflector)->facts(Widget::class);
     expect($widgetFacts['softDeletes'])->toBeFalse()
         ->and($widgetFacts['keySchema'])->toBe(['type' => 'integer']);
+});
+
+it('reads the casts() method (Laravel 11+) and applies its casts to columns', function (): void {
+    $facts = (new EloquentModelReflector)->facts(Invoice::class);
+
+    // The casts() method's literal return is recovered — string casts and the enum ::class cast.
+    expect($facts['casts'])->toBe([
+        'issued_at' => 'datetime',
+        'meta' => 'array',
+        'status' => WidgetStatus::class,
+    ]);
+
+    $invoice = modelSchema(new ClassT(Invoice::class))['Invoice'];
+
+    // The recovered casts refine the columns: datetime (nullable), array→object|array, enum values.
+    expect($invoice['properties']['issued_at'])->toBe(['type' => ['string', 'null'], 'format' => 'date-time'])
+        ->and($invoice['properties']['meta'])->toBe(['type' => ['array', 'object']])
+        ->and($invoice['properties']['status']['enum'])->toBe(['draft', 'published', 'archived']);
 });
 
 it('applies a $visible allow-list', function (): void {
