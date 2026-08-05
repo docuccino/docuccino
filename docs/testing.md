@@ -19,6 +19,17 @@ coverage locally and the ratchet policy for the CI gate.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
   branches). A green golden diff does not imply those paths ran.
+- **Fixture honesty (binding).** A **real-engine fixture** (anything the `fixture` group analyses,
+  or a fixture whose recovery half is proven against the real engine) MUST use the **idiomatic
+  target-package shape**: a magic-attribute Eloquent model documented with `@property` docblocks —
+  never typed public column properties; a resource with closure/conditional (`when*`) fields; a
+  FormRequest/action with `Rule::*` descriptors; a mapper/attribute used the way the package's own
+  docs show. **A fixture shaped to satisfy the analyzer proves nothing** — it hides the gap it was
+  meant to exercise (the CatalogItem/`whenLoaded`-free/no-`Rule::enum` masking the Wave-A audits
+  found). When an audit or test needs a shape the analyzer cannot yet handle, keep the fixture
+  idiomatic and **pin the degraded output + its diagnostic** (the honest current behaviour), rather
+  than reshaping the fixture until the analyzer looks like it succeeds. Stub-engine fixtures are for
+  mapper *mechanics* only and never substitute for a real-engine recovery proof.
 
 ## Running coverage locally
 

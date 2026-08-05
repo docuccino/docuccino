@@ -59,6 +59,10 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over
   EVERY entry + unknown-entry degradation; stub-engine tests prove mechanics only — the
   parsing/recovery half needs real-path tests (fixture group). Negative paths are coverage.
+- **Fixture honesty (binding)**: real-engine fixtures MUST use idiomatic target-package shapes
+  (magic-attribute `@property` models, conditional/closure resource fields, `Rule::*` descriptors);
+  a fixture shaped to satisfy the analyzer proves nothing — pin the degraded output + diagnostic
+  instead. See `docs/testing.md` §"Fixture honesty".
 - **Fragment cache soundness**: anything an extension reads that affects output must flow
   into `RouteContext::dependencies()` (files) or the descriptor cache inputs.
 
