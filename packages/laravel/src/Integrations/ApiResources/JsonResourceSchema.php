@@ -62,10 +62,12 @@ final class JsonResourceSchema implements TypeToSchema
 
         if (ResourceReflector::isAnonymousCollection($type->fqcn)) {
             $item = $type->typeArgs[0] ?? null;
-            $itemFqcn = $item instanceof ClassT ? $item->fqcn : null;
             $array = ['type' => 'array', 'items' => $item !== null ? $context->convert($item) : []];
 
-            return $this->wrapTopLevel(new SchemaResult($array, 0.9), $itemFqcn, $context);
+            // Laravel wraps a collection under the COLLECTION's $wrap (AnonymousResourceCollection →
+            // 'data'), not the item resource's redeclared $wrap — so resolve the key from the
+            // collection type, not its item.
+            return $this->wrapTopLevel(new SchemaResult($array, 0.9), $type->fqcn, $context);
         }
 
         $result = $this->hoist->hoist($context, $type->fqcn, fn (): ?array => $this->toArray->analyze($type->fqcn, 'toArray', $context));

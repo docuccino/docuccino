@@ -41,9 +41,8 @@ function timacdonaldEngine(): StubTypeEngine
             new ArrayShapeField('title', ScalarT::string()),
             new ArrayShapeField('body', ScalarT::string()),
         ]),
-        TimacdonaldArticleResource::class.'::toLinks' => $shape([
-            new ArrayShapeField('self', ScalarT::string()),
-        ]),
+        // toLinks is NOT analysed — it returns Link objects, so the document builder special-cases it
+        // from the fact that the resource overrides toLinks (see the links assertion below).
     ]);
 }
 
@@ -68,7 +67,17 @@ it('maps a timacdonald JSON:API resource to a JSON:API document schema through t
         ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'links'])
         ->and($data['properties'])->not->toHaveKey('relationships')
         ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
-        ->and($data['properties']['id'])->toBe(['type' => 'string']);
+        ->and($data['properties']['id'])->toBe(['type' => 'string'])
+        // links is an object of relation-keyed link objects ({href, meta?}), emitted because the
+        // resource overrides toLinks (the flat toArray analysis can't see the Link shape).
+        ->and($data['properties']['links'])->toBe([
+            'type' => 'object',
+            'additionalProperties' => [
+                'type' => 'object',
+                'properties' => ['href' => ['type' => 'string'], 'meta' => ['type' => 'object']],
+                'required' => ['href'],
+            ],
+        ]);
 });
 
 it('declines a timacdonald resource in the plain JsonResource mapper (symmetric exclusion)', function (): void {

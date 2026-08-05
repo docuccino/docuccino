@@ -18,7 +18,9 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
+use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflector;
 
 /**
  * Infers the success response(s) from the action's return paths (design §5). Every return type is
@@ -154,9 +156,48 @@ final class InferredResponsesExtension implements OperationExtension
         $source = $location !== null ? $context->sourceAt($location) : null;
         $contribution = Contribution::inference($source, $result->confidence);
 
+        $mediaType = self::mediaType($payloads);
         foreach ($result->schema as $keyword => $value) {
-            $response->content('application/json')->set($keyword, $value, $contribution);
+            $response->content($mediaType)->set($keyword, $value, $contribution);
         }
+    }
+
+    /**
+     * The response media type: JSON:API resources (either family, or a collection of them) serialise
+     * as `application/vnd.api+json`; everything else stays `application/json`. A mixed union falls
+     * back to `application/json`.
+     *
+     * @param  list<DType>  $payloads
+     */
+    private static function mediaType(array $payloads): string
+    {
+        foreach ($payloads as $payload) {
+            if (! self::isJsonApi($payload)) {
+                return 'application/json';
+            }
+        }
+
+        return $payloads === [] ? 'application/json' : 'application/vnd.api+json';
+    }
+
+    private static function isJsonApi(DType $type): bool
+    {
+        if (! $type instanceof ClassT) {
+            return false;
+        }
+
+        if (ResourceReflector::isJsonApiResource($type->fqcn) || TimacdonaldResourceReflector::isResource($type->fqcn)) {
+            return true;
+        }
+
+        if (! ResourceReflector::isAnonymousCollection($type->fqcn)) {
+            return false;
+        }
+
+        $item = $type->typeArgs[0] ?? null;
+
+        return $item instanceof ClassT
+            && (ResourceReflector::isJsonApiResource($item->fqcn) || TimacdonaldResourceReflector::isResource($item->fqcn));
     }
 
     /**

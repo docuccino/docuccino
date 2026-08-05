@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Tests\Fixtures\TimacdonaldJsonApi;
 
 use Illuminate\Http\Request;
 use TiMacDonald\JsonApi\JsonApiResource;
+use TiMacDonald\JsonApi\Link;
 
 /**
  * A `timacdonald/json-api` resource fixture. Only ever reflected; the per-member shapes
@@ -40,12 +41,12 @@ final class TimacdonaldArticleResource extends JsonApiResource
     }
 
     /**
-     * @return array<string, mixed>
+     * @return list<Link>
      */
     public function toLinks(Request $request): array
     {
         return [
-            'self' => "/articles/{$this->resource->id}",
+            Link::self("/articles/{$this->resource->id}"),
         ];
     }
 }
