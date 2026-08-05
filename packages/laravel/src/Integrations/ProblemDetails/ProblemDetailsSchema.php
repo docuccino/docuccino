@@ -88,27 +88,20 @@ final class ProblemDetailsSchema
      * @param  array<string, mixed>  $problemRef  the `{"$ref": …}` to the shared ProblemDetails schema
      * @return array<string, mixed>
      */
-    public static function response(array $entry, array $problemRef): array
+    public static function response(array $entry, array $problemRef, string $errorsShape = 'map'): array
     {
         $schema = $problemRef;
         $example = self::example($entry);
 
         if ($entry['validation']) {
+            $errors = $errorsShape === 'pointer-list' ? self::pointerListErrors() : self::mapErrors();
             $schema = [
                 'allOf' => [
                     $problemRef,
-                    [
-                        'type' => 'object',
-                        'properties' => [
-                            'errors' => [
-                                'type' => 'object',
-                                'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']],
-                            ],
-                        ],
-                    ],
+                    ['type' => 'object', 'properties' => ['errors' => $errors['schema']]],
                 ],
             ];
-            $example['errors'] = ['field' => ['The field is invalid.']];
+            $example['errors'] = $errors['example'];
         }
 
         return [
@@ -139,6 +132,47 @@ final class ProblemDetailsSchema
                     'example' => ['type' => 'about:blank', 'title' => 'Error', 'status' => $status],
                 ],
             ],
+        ];
+    }
+
+    /**
+     * The default 422 `errors` representation: a field-keyed map of message lists (`{field: [msg]}`),
+     * matching Laravel's stock validation JSON.
+     *
+     * @return array{schema: array<string, mixed>, example: array<string, mixed>}
+     */
+    private static function mapErrors(): array
+    {
+        return [
+            'schema' => [
+                'type' => 'object',
+                'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']],
+            ],
+            'example' => ['field' => ['The field is invalid.']],
+        ];
+    }
+
+    /**
+     * The `pointer-list` 422 `errors` representation: a list of `{detail, pointer}` objects, where
+     * `pointer` is a JSON Pointer to the offending member (RFC 9457 style).
+     *
+     * @return array{schema: array<string, mixed>, example: list<array<string, string>>}
+     */
+    private static function pointerListErrors(): array
+    {
+        return [
+            'schema' => [
+                'type' => 'array',
+                'items' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'detail' => ['type' => 'string'],
+                        'pointer' => ['type' => 'string'],
+                    ],
+                    'required' => ['detail', 'pointer'],
+                ],
+            ],
+            'example' => [['detail' => 'The field is invalid.', 'pointer' => '#/field']],
         ];
     }
 

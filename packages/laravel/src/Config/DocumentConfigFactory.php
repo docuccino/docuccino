@@ -36,6 +36,12 @@ final readonly class DocumentConfigFactory
 
         $closure = $routes['closure'] ?? null;
 
+        // `error_responses` is either a string preset ('default'|'problem-details'|'none') or a bag
+        // ['preset' => …, 'errors_shape' => 'map'|'pointer-list'] carrying the 422 errors representation.
+        $errorResponses = $config['error_responses'] ?? 'none';
+        $preset = is_array($errorResponses) ? ($errorResponses['preset'] ?? 'none') : $errorResponses;
+        $errorsShape = is_array($errorResponses) ? ($errorResponses['errors_shape'] ?? 'map') : 'map';
+
         return new DocumentConfig(
             key: $key,
             info: $this->resolveInfo(Hydrate::map($config['info'] ?? [])),
@@ -44,7 +50,8 @@ final readonly class DocumentConfigFactory
             routeExclude: Hydrate::stringList($routes['exclude'] ?? []),
             routeFilter: $closure instanceof Closure ? $closure : null,
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
-            errorResponses: is_string($config['error_responses'] ?? null) ? $config['error_responses'] : 'none',
+            errorResponses: is_string($preset) ? $preset : 'none',
+            errorsShape: $errorsShape === 'pointer-list' ? 'pointer-list' : 'map',
             overlays: Hydrate::stringList($config['overlays'] ?? []),
             onRouteError: $onRouteError,
             security: $security,

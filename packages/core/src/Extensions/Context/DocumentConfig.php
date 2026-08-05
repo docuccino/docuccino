@@ -41,6 +41,9 @@ final readonly class DocumentConfig
         public mixed $routeFilter = null,
         public ?string $authMiddleware = null,
         public string $errorResponses = 'none',
+        // How a 422 problem-details body models its `errors`: 'map' (field → messages, the default) or
+        // 'pointer-list' (a list of {detail, pointer} objects, RFC 9457 / JSON-Pointer style).
+        public string $errorsShape = 'map',
         public array $overlays = [],
         public string $onRouteError = 'skeleton',
         public array $security = [],

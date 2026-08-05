@@ -64,7 +64,7 @@ final class ProblemDetailsExceptionToResponse implements ExceptionToResponse
 
         $entry = $this->match($exception->exceptionFqcn);
         if ($entry !== null) {
-            $ref = $components->referenceResponse($entry['component'], ProblemDetailsSchema::response($entry, $problemRef));
+            $ref = $components->referenceResponse($entry['component'], ProblemDetailsSchema::response($entry, $problemRef, $context->document->errorsShape));
 
             return $this->refResponse($entry['status'], $ref);
         }

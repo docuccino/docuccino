@@ -47,8 +47,11 @@ return [
             ],
             // Error-response strategy: 'default' documents the framework-default JSON error shapes,
             // 'problem-details' the RFC 9457 (application/problem+json) preset, and 'none' emits no
-            // error responses at all.
-            'error_responses' => 'default', // 'default' | 'problem-details' | 'none'
+            // error responses at all. May also be a bag to choose the 422 `errors` representation:
+            //   'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+            // where errors_shape is 'map' (field → messages, the default) or 'pointer-list' (a list of
+            // {detail, pointer} JSON-Pointer objects).
+            'error_responses' => 'default', // 'default' | 'problem-details' | 'none' | ['preset' => …, 'errors_shape' => …]
             'tags' => [
                 // How an operation with no #[Group] is tagged: 'controller' (default — the controller's
                 // short name with a trailing "Controller" stripped, e.g. FormController → "Form", then

@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsSchema;
 
@@ -125,4 +126,35 @@ it('references one shared ProblemDetails schema from many operations through the
         ->and($document['components']['responses'])->toHaveKey('ProblemNotFound')
         ->and($document['components']['responses']['ProblemNotFound']['content'])
         ->toHaveKey('application/problem+json');
+});
+
+it('models the 422 errors as a field map by default and a JSON-pointer list on request', function (): void {
+    $entry = ProblemDetailsSchema::table()['Illuminate\\Validation\\ValidationException'];
+    $ref = ['$ref' => '#/components/schemas/'.ProblemDetailsSchema::SCHEMA_NAME];
+    $media = ProblemDetailsSchema::MEDIA_TYPE;
+
+    // Default 'map': field → message-list, matching Laravel's stock validation JSON.
+    $map = ProblemDetailsSchema::response($entry, $ref);
+    expect($map['content'][$media]['schema']['allOf'][1]['properties']['errors'])
+        ->toBe(['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]])
+        ->and($map['content'][$media]['example']['errors'])->toBe(['field' => ['The field is invalid.']]);
+
+    // 'pointer-list': an array of {detail, pointer} objects.
+    $list = ProblemDetailsSchema::response($entry, $ref, 'pointer-list');
+    $errors = $list['content'][$media]['schema']['allOf'][1]['properties']['errors'];
+    expect($errors['type'])->toBe('array')
+        ->and($errors['items']['properties'])->toHaveKeys(['detail', 'pointer'])
+        ->and($errors['items']['required'])->toBe(['detail', 'pointer'])
+        ->and($list['content'][$media]['example']['errors'])->toBe([['detail' => 'The field is invalid.', 'pointer' => '#/field']]);
+});
+
+it('parses the error_responses bag into a preset + errors shape', function (): void {
+    $bag = app(DocumentConfigFactory::class)->make('default', ['error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list']], 'skeleton');
+    expect($bag->errorResponses)->toBe('problem-details')
+        ->and($bag->errorsShape)->toBe('pointer-list');
+
+    // The string form keeps working and defaults the shape to 'map'.
+    $string = app(DocumentConfigFactory::class)->make('default', ['error_responses' => 'problem-details'], 'skeleton');
+    expect($string->errorResponses)->toBe('problem-details')
+        ->and($string->errorsShape)->toBe('map');
 });
