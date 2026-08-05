@@ -53,14 +53,21 @@ Once enabled, a route's permission middleware is documented two ways:
 	```json
 	"get": {
 	  "description": "Requires permission: invoices.view",
-	  "x-permissions": ["invoices.view"]
+	  "x-permissions": [
+	    { "type": "permission", "values": ["invoices.view"] }
+	  ]
 	}
 	```
 	</TabItem>
 </Tabs>
 
-With the integration enabled, this documents the operation with `x-permissions: ['invoices.view']` and
-the matching description line.
+With the integration enabled, this documents the operation with the structured `x-permissions` member
+and the matching description line.
+
+A pipe-separated list is **any-of** — the caller needs any one of the listed roles/permissions, not
+all of them — so the description says so explicitly. `permission:invoices.view|invoices.manage`
+becomes *"Requires any of these permissions: invoices.view, invoices.manage"*, and the `::using()`
+FQCN forms (`PermissionMiddleware::using(...)`) are recognised the same as the short aliases.
 
 ## Configuration
 

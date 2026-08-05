@@ -103,7 +103,7 @@ biggest win is deletion.
 | `examples.faker_seed` | **Delete** — unnecessary | Output is deterministic by construction. |
 | `groups.order` config | [`tags.definitions`](/laravel/reference/configuration/#tags) (weight-ordered) + `tags.map` | Tag objects are sorted by ascending `weight`, then name. |
 | `inheritedDocsOverrides()` | Not needed for route context | Path params, bindings, and controller-level attributes resolve against the concrete child route; use attributes or [overlays](/laravel/reference/configuration/#overlays) for anything an inherited method's body inference doesn't cover. |
-| Custom rule `docs()` method | `RuleTransformer` extension | Different mechanism, same job. |
+| Custom rule `docs()` method | Diagnosed, not yet documented | See [where Scribe is stronger](#where-scribe-is-stronger-today) — a `RuleTransformer` handles string rules, not rule *objects*. |
 | `.scribe/**` hand-edits, `custom.*.yaml` | OpenAPI Overlays or attributes at source | Different philosophy — see below. |
 | Strategy plugin API | `OperationExtension`, `TypeToSchema`, `ExceptionToResponse`, `RuleTransformer`, `DocumentTransformer` | Register from any provider, any order. |
 | Deprecation (none in Scribe) | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Docuccino-only. |
@@ -138,6 +138,12 @@ them carefully:
   factories, with states, eager-loaded relations, and pivot data. Docuccino has no equivalent yet.
 - **Native Postman collection export**, on by default and linked in the docs UI. **Docuccino's Postman
   emitter is a fast-follow, not in v1** — for now, import the OpenAPI file into Postman.
+- **Custom rule objects and closures.** Scribe documents a custom `Rule` object via its `docs()`
+  method. Docuccino's `RuleTransformer` extension point handles string-named rules (so it maps
+  Laravel's rule-DSL floor — currently around 30 named rules — and any string rule you teach it), but
+  a rule *object* or a closure rule is recovered as an object the analyzer can't read: Docuccino
+  **diagnoses** it (`validation.rule-unrecoverable`) so you know a field was skipped, but cannot yet
+  document its shape. Express such fields with string/array rules, `Rule::enum()`, or `Rule::in()`.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
 - **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
@@ -145,10 +151,10 @@ them carefully:
   not a template layer you own.
 - **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch to document anything, including
   third-party package routes (Passport, Fortify) with no code access. In Docuccino that's an OpenAPI
-  Overlay or a `DocumentTransformer` — see [customizing the output](/laravel/guides/customising-output/).
+  Overlay or a `DocumentTransformer` — see [customizing the output](/laravel/guides/customizing-output/).
 - **The `.scribe` hand-edit merge workflow** — patch any extracted fact in YAML and have it survive
   regeneration. Docuccino keeps corrections in source (attributes) or standard
-  [OpenAPI Overlays](/laravel/guides/customising-output/).
+  [OpenAPI Overlays](/laravel/guides/customizing-output/).
 - **Localization of the generated UI** via Laravel lang files (build-time). Docuccino's viewer has no
   UI-string localization.
 - **In-browser Try-It-Out with integrated Sanctum CSRF** (`try_it_out.use_csrf`). Docuccino has a

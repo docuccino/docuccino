@@ -134,19 +134,23 @@ response schemas, live on the [Spatie Data](/laravel/packages/spatie-data/) page
 
 ## File uploads
 
-Add a `file`, `image`, or `mimes` rule and the request media type becomes `multipart/form-data`
-automatically — the field is documented as a binary string, with the rest of the body carried alongside
-it:
+A `file` or `image` rule documents the field as a binary string; a `file`, `image`, `mimes`,
+`mimetypes`, or `extensions` rule also flips the request media type to `multipart/form-data`
+automatically, with the rest of the body carried alongside it:
 
 ```php
 public function rules(): array
 {
     return [
         'invoice_id' => ['required', 'integer'],
-        'attachment' => ['required', 'file', 'mimes:pdf'], // → multipart/form-data
+        'attachment' => ['required', 'file', 'mimes:pdf'], // → binary string, multipart/form-data
     ];
 }
 ```
+
+A file size bound (`max`, `min`, `size`, `between`) on a file field is in **kilobytes**, so it is
+documented as a description note (e.g. "Maximum file size: 2048 KB.") rather than a string-length
+keyword, which would be wrong.
 
 ## When it can't tell
 

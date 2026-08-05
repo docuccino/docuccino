@@ -154,7 +154,7 @@ resolved against the document; broken refs become diagnostics. `null` compiles n
 
 Globs of [OpenAPI Overlay 1.0](https://spec.openapis.org/overlay/v1.0.0.html) documents applied at
 assembly time as the `overlay(45)` precedence layer — a standards-based hand-edit layer that
-survives regeneration. See [Customizing the output](/laravel/guides/customising-output/) for worked
+survives regeneration. See [Customizing the output](/laravel/guides/customizing-output/) for worked
 examples.
 
 ### `representation`

@@ -18,8 +18,10 @@ Activates when [Laravel Sanctum](https://laravel.com/docs/sanctum) is installed.
 both of Sanctum's modes based on the middleware a route uses:
 
 - **Token** (`auth:sanctum`) → an HTTP bearer scheme.
-- **Stateful SPA** (`EnsureFrontendRequestsAreStateful`) → a cookie-based scheme, with the CSRF/XSRF
-  handshake explained in prose.
+- **Stateful SPA** (`EnsureFrontendRequestsAreStateful` **alongside an auth guard**) → a cookie-based
+  scheme, with the CSRF/XSRF handshake explained in prose. Because `statefulApi()` prepends that
+  middleware to the whole `api` group, the cookie scheme is documented only on routes that also carry
+  an auth guard — public routes (login, register) are left unsecured, not falsely cookie-protected.
 
 The middleware alone is enough — you write no security config:
 
@@ -59,9 +61,16 @@ Tune which schemes are exposed:
 ## Passport
 
 Activates when [Laravel Passport](https://laravel.com/docs/passport) is installed. Routes protected
-by `auth:api` (or `scope:` / `scopes:` middleware) are documented with an OAuth2 scheme, including the
-authorization-code, client-credentials, and password flows, and per-operation scopes read from the
-middleware.
+by `auth:api` (or `scope:` / `scopes:` middleware, including the `CheckScopes::using()` /
+`CheckForAnyScope::using()` FQCN forms) are documented with an OAuth2 scheme. The always-available
+authorization-code and client-credentials flows are emitted, plus the password and implicit flows
+**only when the app opted into them** (`Passport::enablePasswordGrant()` / `enableImplicitGrant()`) —
+so the docs never advertise a grant the server rejects. The flow scope map is your real scope
+catalogue from `Passport::tokensCan()`, and the endpoints honour `config('passport.path')`.
+
+Per-operation scopes are read from the middleware and modelled by their Laravel semantics:
+`scopes:` (`CheckScopes`) requires **all** listed scopes (one requirement), while `scope:`
+(`CheckForAnyScope`) requires **any one** of them, emitted as an OR-list of requirements.
 
 ```php
 // config/docuccino.php → documents.default.integrations
