@@ -203,10 +203,12 @@ it('recovers a real timacdonald JSON:API resource attributes shape and maps it t
     );
     $converter->toSchema(new ClassT(TimacdonaldArticleResource::class));
 
-    $data = $components->schemas()['TimacdonaldArticleResource']['properties']['data'];
-    expect($data['required'])->toBe(['id', 'type'])
-        ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
-        ->and($data['properties'])->not->toHaveKey('relationships');
+    // The hoisted component is the resource object itself (the `{data: …}` envelope is applied at the
+    // response root, not baked into the component — so a collection references the bare object).
+    $object = $components->schemas()['TimacdonaldArticleResource'];
+    expect($object['required'])->toBe(['id', 'type'])
+        ->and($object['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
+        ->and($object['properties'])->not->toHaveKey('relationships');
 })->group('fixture');
 
 it('recovers spatie jsonPaginate() through the real engine and maps it to page[number]/page[size]', function (): void {

@@ -55,22 +55,26 @@ it('maps a timacdonald JSON:API resource to a JSON:API document schema through t
         new RepresentationPolicy,
     );
 
-    $converter->toSchema(new ClassT(TimacdonaldArticleResource::class));
+    // The response root wraps the document envelope around a $ref to the hoisted resource object.
+    $response = $converter->toSchema(new ClassT(TimacdonaldArticleResource::class))->schema;
+    expect($response)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['$ref' => '#/components/schemas/TimacdonaldArticleResource']],
+        'required' => ['data'],
+    ]);
 
-    $document = $components->schemas()['TimacdonaldArticleResource'];
-    expect($document['required'])->toBe(['data']);
-
-    $data = $document['properties']['data'];
+    // The hoisted component is the resource object itself (no `{data: …}` envelope).
+    $object = $components->schemas()['TimacdonaldArticleResource'];
     // `relationships` is intentionally absent: closure-valued relationships analyse as CallableT, so the
     // shared builder omits the member rather than emit a non-linkage shape (see JsonApiDocument docblock).
-    expect($data['required'])->toBe(['id', 'type'])
-        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'links'])
-        ->and($data['properties'])->not->toHaveKey('relationships')
-        ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
-        ->and($data['properties']['id'])->toBe(['type' => 'string'])
+    expect($object['required'])->toBe(['id', 'type'])
+        ->and(array_keys($object['properties']))->toBe(['id', 'type', 'attributes', 'links'])
+        ->and($object['properties'])->not->toHaveKey('relationships')
+        ->and($object['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
+        ->and($object['properties']['id'])->toBe(['type' => 'string'])
         // links is an object of relation-keyed link objects ({href, meta?}), emitted because the
         // resource overrides toLinks (the flat toArray analysis can't see the Link shape).
-        ->and($data['properties']['links'])->toBe([
+        ->and($object['properties']['links'])->toBe([
             'type' => 'object',
             'additionalProperties' => [
                 'type' => 'object',
@@ -78,6 +82,26 @@ it('maps a timacdonald JSON:API resource to a JSON:API document schema through t
                 'required' => ['href'],
             ],
         ]);
+});
+
+it('documents a timacdonald JSON:API collection as a single-wrapped array of resource objects', function (): void {
+    $components = new ComponentRegistry;
+    $converter = new SchemaConverter(
+        [new TimacdonaldJsonApiResourceSchema, new JsonResourceSchema, ...DefaultTypeMappers::all()],
+        timacdonaldEngine(),
+        $components,
+        new RepresentationPolicy,
+    );
+
+    $collection = new ClassT(JsonApiResourceCollection::class, [new ClassT(TimacdonaldArticleResource::class)]);
+    $schema = $converter->toSchema($collection)->schema;
+
+    // {data: [resource-object]} — each item is the bare object $ref, not a nested {data: {…}} document.
+    expect($schema)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/TimacdonaldArticleResource']]],
+        'required' => ['data'],
+    ]);
 });
 
 it('declines a timacdonald resource in the plain JsonResource mapper (symmetric exclusion)', function (): void {

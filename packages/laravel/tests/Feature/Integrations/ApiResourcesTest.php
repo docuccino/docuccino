@@ -136,34 +136,62 @@ it('honours a custom document wrap key over the resource default', function (): 
 
 it('maps a first-party JSON:API resource to a JSON:API document schema', function (): void {
     $components = new ComponentRegistry;
-    resourceConverter($components)->toSchema(new ClassT(ArticleJsonApiResource::class));
+    // The response root (depth 1) wraps the document envelope around a $ref to the hoisted resource
+    // OBJECT component — the envelope is applied here, not baked into the component (so a collection
+    // can reference the bare object without double-wrapping).
+    $response = resourceConverter($components)->toSchema(new ClassT(ArticleJsonApiResource::class))->schema;
+    expect($response)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['$ref' => '#/components/schemas/ArticleJsonApiResource']],
+        'required' => ['data'],
+    ]);
 
-    $document = $components->schemas()['ArticleJsonApiResource'];
-    expect($document['required'])->toBe(['data']);
-
-    $data = $document['properties']['data'];
-    expect($data['required'])->toBe(['id', 'type'])
+    // The hoisted component is the resource object itself, not the `{data: …}` document.
+    $object = $components->schemas()['ArticleJsonApiResource'];
+    expect($object['required'])->toBe(['id', 'type'])
         // id/type always present; attributes/links populated; relationships omitted (closures →
         // CallableT, see JsonApiDocument); meta omitted (no shape).
-        ->and(array_keys($data['properties']))->toBe(['id', 'type', 'attributes', 'links'])
-        ->and($data['properties'])->not->toHaveKey('relationships')
-        ->and($data['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
-        ->and($data['properties']['id'])->toBe(['type' => 'string']);
+        ->and(array_keys($object['properties']))->toBe(['id', 'type', 'attributes', 'links'])
+        ->and($object['properties'])->not->toHaveKey('relationships')
+        ->and($object['properties']['attributes']['properties'])->toHaveKeys(['title', 'body'])
+        ->and($object['properties']['id'])->toBe(['type' => 'string']);
+});
+
+it('documents a JSON:API collection as a single-wrapped array of resource objects', function (): void {
+    $components = new ComponentRegistry;
+    $collection = new ClassT(ResourceReflector::ANONYMOUS_COLLECTION, [new ClassT(ArticleJsonApiResource::class)]);
+    $schema = resourceConverter($components)->toSchema($collection)->schema;
+
+    // {data: [resource-object]} — the item is the bare object $ref, NOT a nested {data: {…}} document
+    // (the double-wrap the old baked-in envelope produced).
+    expect($schema)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/ArticleJsonApiResource']]],
+        'required' => ['data'],
+    ]);
+
+    $object = $components->schemas()['ArticleJsonApiResource'];
+    expect($object['required'])->toBe(['id', 'type'])
+        ->and($object)->not->toHaveKey('properties.data');
 });
 
 it('cycle-breaks a self-referential JSON:API resource via a $ref to its own component', function (): void {
     $components = new ComponentRegistry;
-    $ref = resourceConverter($components)->toSchema(new ClassT(CommentJsonApiResource::class))->schema;
+    $response = resourceConverter($components)->toSchema(new ClassT(CommentJsonApiResource::class))->schema;
 
-    // The top-level conversion returns a $ref to the hoisted component (not an inlined document),
-    // and terminates — an un-broken cycle would recurse until the stack overflows.
-    expect($ref)->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
+    // The response root wraps the envelope around a $ref to the hoisted OBJECT component; the cycle
+    // terminates (an un-broken cycle would recurse until the stack overflows).
+    expect($response)->toBe([
+        'type' => 'object',
+        'properties' => ['data' => ['$ref' => '#/components/schemas/CommentJsonApiResource']],
+        'required' => ['data'],
+    ]);
 
-    $document = $components->schemas()['CommentJsonApiResource'];
-    $attributes = $document['properties']['data']['properties']['attributes'];
+    $object = $components->schemas()['CommentJsonApiResource'];
 
-    // The self-referential `replies` member folds to a $ref back at the same component.
-    expect($attributes['properties']['replies'])->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
+    // The self-referential `replies` member folds to a $ref back at the same object component.
+    expect($object['properties']['attributes']['properties']['replies'])
+        ->toBe(['$ref' => '#/components/schemas/CommentJsonApiResource']);
 });
 
 it('detects when a return type involves JSON:API', function (): void {

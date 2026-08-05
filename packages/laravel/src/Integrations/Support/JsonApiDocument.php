@@ -61,7 +61,11 @@ final class JsonApiDocument
 
     public function build(ClassT $type, SchemaContext $context): SchemaResult
     {
-        return $this->hoist->hoist($context, $type->fqcn, function () use ($type, $context): array {
+        // The hoisted component is the JSON:API resource OBJECT (`{id, type, attributes?, links?}`),
+        // NOT the `{data: …}` document envelope. That way a collection can reference the bare object
+        // per item and wrap the envelope once around the array, instead of the old double-wrapped
+        // `{data: [{data: {…}}]}`.
+        $object = $this->hoist->hoist($context, $type->fqcn, function () use ($type, $context): array {
             $data = [
                 'type' => 'object',
                 'properties' => [
@@ -72,9 +76,9 @@ final class JsonApiDocument
             ];
 
             foreach (self::MEMBERS as $member => $method) {
-                $object = $this->toArray->analyze($type->fqcn, $method, $context);
-                if ($object !== null && ($object['properties'] ?? []) !== []) {
-                    $data['properties'][$member] = $object;
+                $analyzed = $this->toArray->analyze($type->fqcn, $method, $context);
+                if ($analyzed !== null && ($analyzed['properties'] ?? []) !== []) {
+                    $data['properties'][$member] = $analyzed;
                 }
             }
 
@@ -83,12 +87,22 @@ final class JsonApiDocument
                 $data['properties']['links'] = $links;
             }
 
-            return [
-                'type' => 'object',
-                'properties' => ['data' => $data],
-                'required' => ['data'],
-            ];
+            return $data;
         });
+
+        // The document envelope wraps the resource object ONLY at the response root (depth 1). A
+        // resource reached as a collection item or a nested relationship stays the bare object, so
+        // its enclosing collection/resource applies the single `data` wrap (mirrors the depth-gating
+        // in JsonResourceSchema::wrapTopLevel).
+        if ($context->depth() !== 1) {
+            return $object;
+        }
+
+        return new SchemaResult([
+            'type' => 'object',
+            'properties' => ['data' => $object->schema],
+            'required' => ['data'],
+        ], $object->confidence);
     }
 
     /**
