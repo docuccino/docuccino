@@ -25,6 +25,8 @@ it('resolves every registrar guard + matcher FQCN string against the installed p
     // in any would make that form silently unrecognised (invisible to the golden suite).
     'Sanctum CheckAbilities matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckAbilities'],
     'Sanctum CheckForAnyAbility matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyAbility'],
+    'Sanctum legacy CheckScopes matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckScopes'],
+    'Sanctum legacy CheckForAnyScope matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyScope'],
     'Passport CheckScopes matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckScopes'],
     'Passport CheckForAnyScope matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckForAnyScope'],
     'Permission RoleMiddleware matcher' => ['Spatie\\Permission\\Middleware\\RoleMiddleware'],

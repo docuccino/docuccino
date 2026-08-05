@@ -33,6 +33,7 @@ final class SanctumIntegration
     {
         return [
             SanctumSecurityExtension::class,
+            SanctumAbilitiesExtension::class,
         ];
     }
 }

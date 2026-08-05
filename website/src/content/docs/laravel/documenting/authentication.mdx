@@ -58,6 +58,21 @@ Tune which schemes are exposed:
 ],
 ```
 
+### Token abilities
+
+Sanctum's `abilities:` (all-of) and `ability:` (any-of) middleware — and the deprecated
+`CheckScopes` / `CheckForAnyScope` class forms — describe which token abilities a route needs. Since
+the `sanctumToken` scheme is an HTTP bearer token, OpenAPI can't carry abilities as scopes, so
+Docuccino surfaces them as an `x-abilities` extension member and a "Requires token ability: …"
+description line. Abilities checked in the action body (`$request->user()->tokenCan(…)`) can be
+declared with [`#[Abilities]`](/laravel/reference/attributes/#abilities).
+
+```json
+"/api/posts": { "post": {
+  "x-abilities": [ { "match": "all", "abilities": ["posts:create", "posts:publish"] } ]
+} }
+```
+
 ## Passport
 
 Activates when [Laravel Passport](https://laravel.com/docs/passport) is installed. Routes protected
