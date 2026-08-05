@@ -10,6 +10,8 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
@@ -34,7 +36,8 @@ beforeEach(function (): void {
 });
 
 it('recovers an API resource toArray shape as a constant array shape', function (): void {
-    // The real engine analyses UserResource::toArray (@mixin User) into an array{id, name, email}.
+    // The real engine analyses UserResource::toArray (@mixin User) into an
+    // array{id, name, email, role, badge} — the last two are conditional fields.
     $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
         'app/Http/Resources/UserResource.php',
         'App\\Http\\Resources\\UserResource',
@@ -45,7 +48,39 @@ it('recovers an API resource toArray shape as a constant array shape', function 
     expect($type)->toBeInstanceOf(ArrayShapeT::class);
 
     $keys = array_map(static fn ($field): string => (string) $field->key, $type->fields);
-    expect($keys)->toBe(['id', 'name', 'email']);
+    expect($keys)->toBe(['id', 'name', 'email', 'role', 'badge']);
+})->group('fixture');
+
+it('types API resource conditional fields as T|MissingValue via the ConditionallyLoadsAttributes stub', function (): void {
+    // Without the stub, `when(...)`/`whenLoaded(...)` return `MissingValue|mixed`, which PHPStan
+    // collapses to `mixed` (audit api-resources #1) — the field would be required + permissive `{}`.
+    // The stub gives them `TValue|MissingValue`, so the real engine recovers the value type AND the
+    // MissingValue marker ToArrayObject strips to make the field optional.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Resources/UserResource.php',
+        'App\\Http\\Resources\\UserResource',
+        'toArray',
+    ));
+
+    $byKey = [];
+    foreach (($analysis->returns[0]->type->fields ?? []) as $field) {
+        $byKey[(string) $field->key] = $field->type;
+    }
+
+    $missing = 'Illuminate\\Http\\Resources\\MissingValue';
+    $hasMissing = static fn (DType $t): bool => $t instanceof UnionT
+        && array_filter($t->members, static fn (DType $m): bool => $m instanceof ClassT && $m->fqcn === $missing) !== [];
+    $literalValue = static fn (DType $t): array => array_values(array_map(
+        static fn (LiteralT $l) => $l->value,
+        array_filter(($t instanceof UnionT ? $t->members : [$t]), static fn (DType $m): bool => $m instanceof LiteralT),
+    ));
+
+    // `role` (value form) and `badge` (whenLoaded closure form) both carry the marker (→ optional)
+    // and the concrete recovered value type.
+    expect($hasMissing($byKey['role']))->toBeTrue()
+        ->and($literalValue($byKey['role']))->toBe(['member'])
+        ->and($hasMissing($byKey['badge']))->toBeTrue()
+        ->and($literalValue($byKey['badge']))->toBe(['gold']);
 })->group('fixture');
 
 it('recovers a magic-attribute Eloquent model column universe from @property docblocks via classMetadata', function (): void {

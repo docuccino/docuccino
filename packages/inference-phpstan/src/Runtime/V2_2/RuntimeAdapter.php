@@ -210,7 +210,10 @@ final class RuntimeAdapter implements RuntimeAdapterContract
             $includes .= "    - {$this->config->userNeon}\n";
         }
 
-        $stubFile = dirname(__DIR__, 3).'/stubs/JsonResponse.stub';
+        $stubFiles = '';
+        foreach ($this->stubFiles() as $stubFile) {
+            $stubFiles .= "        - {$stubFile}\n";
+        }
         $extensionClass = ResponseJsonReturnTypeExtension::class;
 
         $neon = <<<NEON
@@ -222,8 +225,7 @@ final class RuntimeAdapter implements RuntimeAdapterContract
                 tmpDir: {$this->config->tmpDir}
                 phpVersion: {$this->config->phpVersion}
                 stubFiles:
-                    - {$stubFile}
-
+            {$stubFiles}
             services:
                 -
                     class: {$extensionClass}
@@ -235,6 +237,25 @@ final class RuntimeAdapter implements RuntimeAdapterContract
         file_put_contents($generatedNeon, $neon);
 
         return $generatedNeon;
+    }
+
+    /**
+     * Every bundled `.stub` file (payload/status on JsonResponse, the API-resource conditional +
+     * collection typing …), sorted for a deterministic generated neon. Adding a stub to the `stubs/`
+     * directory registers it — no per-stub wiring here.
+     *
+     * @return list<string>
+     */
+    private function stubFiles(): array
+    {
+        $stubs = glob(dirname(__DIR__, 3).'/stubs/*.stub');
+        if ($stubs === false) {
+            return [];
+        }
+
+        sort($stubs);
+
+        return $stubs;
     }
 
     private function nodeScopeResolver(): NodeScopeResolver
