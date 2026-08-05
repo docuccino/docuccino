@@ -6,8 +6,10 @@ use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiParametersExtension;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiResourceSchema;
 use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
+use Docuccino\Laravel\Integrations\ApiResources\PaginatedResourceResponsesExtension;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateIntegration;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateResponsesExtension;
 use Docuccino\Laravel\Integrations\LaravelActions\ActionAuthorizeResponsesExtension;
 use Docuccino\Laravel\Integrations\LaravelActions\ActionValidationExtension;
 use Docuccino\Laravel\Integrations\LaravelActions\LaravelActionsIntegration;
@@ -58,7 +60,7 @@ it('drops a conditional integration from the resolved set when its package is ab
     'laravel/sanctum' => [SanctumIntegration::class, [SanctumSecurityExtension::class]],
     'laravel/passport' => [PassportIntegration::class, [PassportSecurityExtension::class]],
     'spatie/laravel-permission' => [PermissionIntegration::class, [PermissionExtension::class]],
-    'spatie/laravel-json-api-paginate' => [JsonApiPaginateIntegration::class, [JsonApiPaginateParametersExtension::class]],
+    'spatie/laravel-json-api-paginate' => [JsonApiPaginateIntegration::class, [JsonApiPaginateParametersExtension::class, JsonApiPaginateResponsesExtension::class]],
     'timacdonald/json-api' => [TimacdonaldJsonApiIntegration::class, [TimacdonaldJsonApiResourceSchema::class, TimacdonaldJsonApiParametersExtension::class]],
     'lorisleiva/laravel-actions' => [LaravelActionsIntegration::class, [ActionValidationExtension::class, ActionAuthorizeResponsesExtension::class]],
 ]);
@@ -67,10 +69,12 @@ it('omits the JSON:API pieces on a Laravel without the first-party JsonApiResour
     $absent = static fn (string $class): bool => false;
     $present = static fn (string $class): bool => true;
 
-    // Absent → only the always-on JsonResource mapper; JSON:API schema + params dropped.
-    expect(ApiResourcesIntegration::extensions($absent))->toBe([JsonResourceSchema::class]);
+    // Absent → the always-on JsonResource mapper + paginated-collection response extension; JSON:API
+    // schema + params dropped.
+    expect(ApiResourcesIntegration::extensions($absent))
+        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class]);
 
     // Present → the JSON:API mapper and parameters extension join the set.
     expect(ApiResourcesIntegration::extensions($present))
-        ->toBe([JsonResourceSchema::class, JsonApiResourceSchema::class, JsonApiParametersExtension::class]);
+        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class, JsonApiResourceSchema::class, JsonApiParametersExtension::class]);
 });

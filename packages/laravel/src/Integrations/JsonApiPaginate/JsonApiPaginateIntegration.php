@@ -35,6 +35,7 @@ final class JsonApiPaginateIntegration
     {
         return [
             JsonApiPaginateParametersExtension::class,
+            JsonApiPaginateResponsesExtension::class,
         ];
     }
 }

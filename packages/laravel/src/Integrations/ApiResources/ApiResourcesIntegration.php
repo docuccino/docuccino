@@ -24,7 +24,7 @@ final class ApiResourcesIntegration
     {
         $probe ??= static fn (string $class): bool => class_exists($class);
 
-        $extensions = [JsonResourceSchema::class];
+        $extensions = [JsonResourceSchema::class, PaginatedResourceResponsesExtension::class];
 
         if ($probe(ResourceReflector::JSON_API_RESOURCE)) {
             $extensions[] = JsonApiResourceSchema::class;

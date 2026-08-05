@@ -21,7 +21,7 @@ final class PaginationEnvelope
      * The length-aware paginator shape (`paginate()`): first/last/prev/next `links` and a `meta`
      * block with the full page counters (it knows the total, hence `last_page`/`total`).
      *
-     * @param  array<string, mixed>  $items
+     * @param  array<array-key, mixed>  $items
      * @return array<string, mixed>
      */
     public static function length(array $items): array
@@ -46,7 +46,7 @@ final class PaginationEnvelope
      * The simple paginator shape (`simplePaginate()`): it does NOT count the full result set, so
      * there is no `last` link and the `meta` block omits `last_page`/`total`.
      *
-     * @param  array<string, mixed>  $items
+     * @param  array<array-key, mixed>  $items
      * @return array<string, mixed>
      */
     public static function simple(array $items): array
@@ -68,7 +68,7 @@ final class PaginationEnvelope
      * The cursor paginator shape (`cursorPaginate()`): opaque `next_cursor`/`prev_cursor` tokens, no
      * page counters.
      *
-     * @param  array<string, mixed>  $items
+     * @param  array<array-key, mixed>  $items
      * @return array<string, mixed>
      */
     public static function cursor(array $items): array
@@ -87,7 +87,7 @@ final class PaginationEnvelope
     }
 
     /**
-     * @param  array<string, mixed>  $items
+     * @param  array<array-key, mixed>  $items
      * @param  array<string, array<string, mixed>>  $links
      * @param  array<string, array<string, mixed>>  $meta
      * @return array<string, mixed>

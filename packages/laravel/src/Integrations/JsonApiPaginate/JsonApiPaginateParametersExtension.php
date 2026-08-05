@@ -17,9 +17,9 @@ use Docuccino\Core\Patch\Contribution;
  * a {@see JsonApiPaginateTraceVisitor} (so the walk's dependency files join the fragment-cache key),
  * and when the chain reaches `jsonPaginate()` contributes the JSON:API `page[number]`/`page[size]`
  * (or `page[cursor]`/`page[size]`) query parameters, respecting the package's configured names and
- * sizes. The response envelope is unchanged: `jsonPaginate()` returns a standard paginator whose
- * `{data, links, meta}` shape the existing paginator response mapping already emits. Writes at the
- * integration layer, so docblocks/attributes still override.
+ * sizes. The response envelope is documented separately by {@see JsonApiPaginateResponsesExtension},
+ * which wraps a resource-collection body in the `{data, links, meta}` paginator envelope for the
+ * configured mode. Writes at the integration layer, so docblocks/attributes still override.
  */
 final class JsonApiPaginateParametersExtension implements OperationExtension
 {

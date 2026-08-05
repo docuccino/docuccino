@@ -23,6 +23,7 @@ use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateResponsesExtension;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
@@ -172,6 +173,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $config = (array) config('json-api-paginate', []);
 
             return new JsonApiPaginateParametersExtension(JsonApiPaginateConfig::fromArray($config));
+        });
+
+        // The json-api-paginate response envelope depends on the SAME config (its pagination mode
+        // decides length/simple/cursor), so it is wired from the live bag alongside the params side.
+        $this->app->bind(JsonApiPaginateResponsesExtension::class, static function (): JsonApiPaginateResponsesExtension {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('json-api-paginate', []);
+
+            return new JsonApiPaginateResponsesExtension(JsonApiPaginateConfig::fromArray($config));
         });
 
         // The query-builder integration reads the package's own config for the (renamable) request
