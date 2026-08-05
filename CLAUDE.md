@@ -71,8 +71,15 @@ vendor/bin/pest --parallel --group=fixture   # real-engine integration tests
 vendor/bin/phpstan analyse --no-progress
 vendor/bin/pint --test                  # (drop --test to fix)
 vendor/bin/pest --coverage --exclude-group=fixture --min=80
-DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --filter=<golden test>   # sanctioned regens only
+DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --parallel --filter=<golden test>   # sanctioned regens only
 ```
+
+**ALWAYS pass `--parallel` to pest — every invocation, including `--filter` and single-file
+runs** (full suite ~16s parallel vs ~65s serial; you will run it many times). Prefer the
+composer scripts (`composer test`, `composer test:inference-fixture`), which include it. Never
+define shared helper functions at test-file level — they break under Paratest process
+splitting; shared helpers live in `tests/Pest.php`. If a coverage/type-coverage run hangs
+(stale pcov state, rare), kill it and re-run fresh.
 
 Laravel adapter feature tests run on orchestra/testbench with the workbench app under
 `packages/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
