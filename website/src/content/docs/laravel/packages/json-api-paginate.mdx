@@ -48,7 +48,10 @@ Query Builder chains — and adds the matching query parameters:
 	</TabItem>
 </Tabs>
 
-This documents `page[number]` and `page[size]` query parameters, alongside the paginated response.
+This documents `page[number]` and `page[size]` query parameters. When the action returns a resource
+collection, the `200` body is also wrapped in the `{ data, links, meta }` paginator envelope for your
+configured mode — `use_cursor_pagination` emits the cursor shape (`page[cursor]`), `use_simple_pagination`
+the simple shape (no `total`/`last_page`), otherwise the length-aware shape.
 
 ## Respecting your config
 

@@ -85,7 +85,7 @@ JSON your app actually produces and accepts:
 | `#[MapName]` / `#[MapOutputName]` | Renames the property key to the mapped name. |
 | Nested `Data` | Recurses into a nested (referenced) schema. |
 | `DataCollection` | Becomes an array of the item schema. |
-| Paginated Data wrapper | Produces a shared pagination envelope schema. |
+| Paginated Data wrapper | Produces spatie's own paginator envelope — `links` as an array of `{ url, label, active }`, `meta` with the `*_page_url` members (distinct from Laravel's resource envelope). |
 
 Add examples with [`#[Example]`](/laravel/reference/attributes/#example) on a property, and pin
 anything inference can't determine with the usual [attributes](/laravel/reference/attributes/) — they

@@ -25,8 +25,9 @@ through the same inference that powers everything else:
 - an **API Resource** becomes its [resource schema](/laravel/documenting/schemas/#api-resources);
 - an **Eloquent model** becomes its [model schema](/laravel/documenting/schemas/#eloquent-models);
 - a **backed enum** becomes its [enum schema](/laravel/documenting/schemas/#enums);
-- a **resource collection** becomes an array of that schema, wrapped in a pagination envelope when the
-  query paginates.
+- a **resource collection** becomes an array of that schema, wrapped in the `{ data, links, meta }`
+  pagination envelope when the collection paginates — `paginate()` (length-aware), `simplePaginate()`
+  (no `total`/`last_page`), `cursorPaginate()`, or the package's `jsonPaginate()`.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -71,6 +72,11 @@ public function store(StoreInvoiceRequest $request): JsonResponse
 
 A status computed at runtime (not a literal) falls back to `200`; pin it with
 [`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
+
+Returning a resource wrapped directly around a freshly created model —
+`return new InvoiceResource(Invoice::create($request->validated()))` — is documented as `201 Created`
+automatically, matching Laravel's own `wasRecentlyCreated` status. (Only that direct form is detected;
+create into a variable first, or use `#[Response]`, when you need the code to be explicit.)
 
 ## Empty responses
 
