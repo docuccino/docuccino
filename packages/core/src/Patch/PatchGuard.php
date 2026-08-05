@@ -67,6 +67,12 @@ final class PatchGuard
         return isset($this->fields[$field]);
     }
 
+    /** The provenance `producer` of the currently-winning contribution for a field, or null if unset. */
+    public function producerFor(string $field): ?string
+    {
+        return ($this->fields[$field] ?? null)?->winner->producer;
+    }
+
     /**
      * The resolved field→value map, with {@see Remove} sentinels omitted.
      *

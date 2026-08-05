@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Support\AuthMiddlewareDetector;
 
 /**
  * The security layer (design §Auth detection). `#[Unauthenticated]` marks an operation explicitly
@@ -37,28 +38,8 @@ final class SecurityExtension implements OperationExtension
         }
 
         $requirement = $context->document->defaultSecurity();
-        if ($requirement !== null && $requirement !== [] && $this->hasAuthMiddleware($context)) {
+        if ($requirement !== null && $requirement !== [] && AuthMiddlewareDetector::matches($context)) {
             $operation->setSecurity($requirement, Contribution::integration('security'));
         }
-    }
-
-    /**
-     * True when any of the route's middleware matches the document's `auto_detect_middleware`
-     * wildcard (e.g. `auth*` matches `auth`, `auth:sanctum`).
-     */
-    private function hasAuthMiddleware(RouteContext $context): bool
-    {
-        $pattern = $context->document->authMiddleware;
-        if ($pattern === null || $pattern === '') {
-            return false;
-        }
-
-        foreach ($context->route->middleware as $middleware) {
-            if (fnmatch($pattern, $middleware)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

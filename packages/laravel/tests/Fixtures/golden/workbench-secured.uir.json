@@ -429,6 +429,25 @@
                 }
               }
             }
+          },
+          "422": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "$ref"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 26,
+                    "symbol": "implicit:validated-request"
+                  }
+                }
+              ]
+            },
+            "$ref": "#/components/responses/ProblemValidation"
           }
         }
       }
@@ -933,6 +952,99 @@
               ]
             },
             "$ref": "#/components/responses/ProblemNotFound"
+          }
+        }
+      }
+    },
+    "/api/guarded-forms": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:jmo3sbyplugoyui5",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/FormController.php",
+                "line": 23,
+                "symbol": "Workbench\\App\\Http\\Controllers\\FormController::index"
+              }
+            },
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "description",
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:mk7nambgqst2v4xz",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "inference",
+                        "layer": "inference",
+                        "fields": [
+                          "items",
+                          "type"
+                        ],
+                        "confidence": 0.9
+                      }
+                    ]
+                  },
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "$ref"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 23,
+                    "symbol": "implicit:can-middleware"
+                  }
+                }
+              ]
+            },
+            "$ref": "#/components/responses/ProblemForbidden"
           }
         }
       }
@@ -2194,6 +2306,25 @@
                 }
               }
             }
+          },
+          "422": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "integration:implicit-response",
+                  "layer": "integration",
+                  "fields": [
+                    "$ref"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/ValidationController.php",
+                    "line": 21,
+                    "symbol": "implicit:validated-request"
+                  }
+                }
+              ]
+            },
+            "$ref": "#/components/responses/ProblemValidation"
           }
         }
       }
@@ -2895,6 +3026,22 @@
       }
     },
     "responses": {
+      "ProblemForbidden": {
+        "description": "This action is unauthorized",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            },
+            "example": {
+              "type": "about:blank",
+              "title": "Forbidden",
+              "status": 403,
+              "detail": "This action is unauthorized."
+            }
+          }
+        }
+      },
       "ProblemNotFound": {
         "description": "The resource was not found",
         "content": {
@@ -2907,6 +3054,45 @@
               "title": "Not Found",
               "status": 404,
               "detail": "The resource was not found."
+            }
+          }
+        }
+      },
+      "ProblemValidation": {
+        "description": "Validation failed",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "example": {
+              "type": "about:blank",
+              "title": "Unprocessable Entity",
+              "status": 422,
+              "detail": "Validation failed.",
+              "errors": {
+                "field": [
+                  "The field is invalid."
+                ]
+              }
             }
           }
         }
@@ -2937,7 +3123,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "fc0eda9f1b4075df4adfa8082e71618b507cc29867a4d4a1b0db61f3518c0963",
-      "contentHash": "7f2cd9d576224ee8faf07fd4f4179e808acf16f3a3e31fe76888b35117b7db81"
+      "contentHash": "dd5e223eb360b7d7baa120b313dfbfe9d74df69d64bbbb532c55543760c3f708"
     },
     "generator": {
       "name": "docuccino/laravel",

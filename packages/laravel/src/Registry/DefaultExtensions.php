@@ -15,6 +15,7 @@ use Docuccino\Laravel\Extensions\AttributeRequestBodyExtension;
 use Docuccino\Laravel\Extensions\AttributeResponsesExtension;
 use Docuccino\Laravel\Extensions\AttributeSecurityExtension;
 use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
+use Docuccino\Laravel\Extensions\ImplicitResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
@@ -59,6 +60,7 @@ final class DefaultExtensions
             InferredResponsesExtension::class,
             AttributeResponsesExtension::class,
             ErrorResponsesExtension::class,
+            ImplicitResponsesExtension::class,
             SecurityExtension::class,
             AttributeSecurityExtension::class,
             AttributeOverridesExtension::class,

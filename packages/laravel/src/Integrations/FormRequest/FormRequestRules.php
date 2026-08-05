@@ -24,12 +24,7 @@ final class FormRequestRules
 
     public function recover(RouteContext $context): ?RuleSet
     {
-        $class = $context->actionRef->class;
-        if ($class === null) {
-            return null;
-        }
-
-        $formRequest = $this->formRequestParameter($class, $context->actionRef->method);
+        $formRequest = self::classFor($context);
         if ($formRequest === null) {
             return null;
         }
@@ -38,9 +33,25 @@ final class FormRequestRules
     }
 
     /**
+     * The FormRequest class type-hinted on the route's action, or null when none is — the shared
+     * lookup the rule recovery and the implicit-403 authorize signal both use.
+     *
      * @return class-string<LaravelFormRequest>|null
      */
-    private function formRequestParameter(string $controller, string $method): ?string
+    public static function classFor(RouteContext $context): ?string
+    {
+        $class = $context->actionRef->class;
+        if ($class === null) {
+            return null;
+        }
+
+        return self::formRequestParameter($class, $context->actionRef->method);
+    }
+
+    /**
+     * @return class-string<LaravelFormRequest>|null
+     */
+    private static function formRequestParameter(string $controller, string $method): ?string
     {
         try {
             $reflection = new ReflectionMethod($controller, $method);

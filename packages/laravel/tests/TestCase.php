@@ -69,6 +69,11 @@ abstract class TestCase extends Orchestra
         $router->get('api/rate-limited', [FormController::class, 'index'])->middleware('throttle:60,1');
         $router->get('api/moderated-forms', [FormController::class, 'index'])->middleware('permission:moderate forms,web');
         $router->get('api/archived-forms/{form}', [FormController::class, 'show'])->withTrashed();
+        // An authenticated + authorized route: exercises the implicit 401 (auth middleware) and
+        // implicit 403 (can: middleware) responses through the full pipeline into the golden. Uses the
+        // session `web` guard so no Sanctum/Passport security scheme is emitted into the default doc —
+        // the 401 response is independent of whether a scheme is configured (matching Scramble).
+        $router->get('api/guarded-forms', [FormController::class, 'index'])->middleware(['auth:web', 'can:view']);
 
         // Phase-4 integration routes (Spatie Data, API Resources, JSON:API, Eloquent, status codes).
         $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);

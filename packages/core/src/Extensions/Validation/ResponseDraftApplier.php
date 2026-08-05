@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\Validation;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Provenance\Source;
 
 /**
  * Applies a frozen {@see ResponseDraft} to an operation the one way every response-producing source
@@ -21,11 +22,11 @@ use Docuccino\Core\Patch\Contribution;
  */
 final class ResponseDraftApplier
 {
-    public function apply(OperationDraft $operation, ResponseDraft $draft, string $producer): void
+    public function apply(OperationDraft $operation, ResponseDraft $draft, string $producer, ?Source $source = null): void
     {
         $frozen = $draft->freeze();
         $response = $operation->response($draft->status);
-        $contribution = Contribution::forProducer($producer);
+        $contribution = Contribution::forProducer($producer, $source);
 
         // A mapper that references a shared response component (e.g. the Problem Details preset's
         // reusable `#/components/responses/Problem*`) freezes as a `$ref`; the operation's status entry
