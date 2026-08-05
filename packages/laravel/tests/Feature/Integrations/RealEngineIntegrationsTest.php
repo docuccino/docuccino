@@ -41,6 +41,20 @@ beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
 });
 
+it('recovers a constant status from a Data calculateResponseStatus() override', function (): void {
+    // The real engine's return-type inference over the overridden method yields a literal-int type —
+    // the recovery half DataResponseStatus reads to re-home a 201 response (gap 5).
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Data/CreatedThingData.php',
+        'App\\Data\\CreatedThingData',
+        'calculateResponseStatus',
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->toBeInstanceOf(LiteralT::class)
+        ->and($type->value)->toBe(201);
+})->group('fixture');
+
 it('recovers an API resource toArray shape as a constant array shape', function (): void {
     // The real engine analyses UserResource::toArray (@mixin User) into an
     // array{id, name, email, role, badge} — the last two are conditional fields.

@@ -21,6 +21,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
 use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
+use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
 use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
 use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflector;
 
@@ -47,6 +48,10 @@ use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflect
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class InferredResponsesExtension implements OperationExtension
 {
+    public function __construct(
+        private readonly DataResponseStatus $dataStatus = new DataResponseStatus,
+    ) {}
+
     private const DEFAULT_STATUS = '200';
 
     /** @var array<int, string> canonical reason phrases for the statuses this extension emits */
@@ -73,6 +78,16 @@ final class InferredResponsesExtension implements OperationExtension
             // A bare void/never return (no JsonResponse wrapper) documents nothing.
             if ($payload === null && ! $empty) {
                 continue;
+            }
+
+            // A Data class returned directly (Responsable) may override calculateResponseStatus() to
+            // 201/202/… — that replaces the inferred 200. A JsonResponse-wrapped payload keeps its own
+            // folded status ($type !== $payload there), so this only re-homes a bare Data return.
+            if ($status === self::DEFAULT_STATUS && $payload instanceof ClassT && $return->type === $payload) {
+                $override = $this->dataStatus->resolve($context, $payload->fqcn);
+                if ($override !== null) {
+                    $status = (string) $override;
+                }
             }
 
             $bucket = $byStatus[$status] ??= ['payloads' => [], 'location' => null, 'empty' => false];
