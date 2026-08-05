@@ -401,7 +401,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "application/json": {
+              "application/vnd.api+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ArticleJsonApiResource"
                 }
@@ -826,14 +826,20 @@
               },
               "links": {
                 "type": "object",
-                "properties": {
-                  "self": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "self"
-                ]
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "href": {
+                      "type": "string"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "href"
+                  ]
+                }
               },
               "type": {
                 "type": "string"

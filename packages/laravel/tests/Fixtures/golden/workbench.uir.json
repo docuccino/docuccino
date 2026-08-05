@@ -1058,7 +1058,7 @@
         "responses": {
           "200": {
             "x-docuccino": {
-              "id": "res:v1:zuwyvrmedroams4y",
+              "id": "res:v1:ybqamwolprbwtchq",
               "provenance": [
                 {
                   "producer": "fallback",
@@ -1071,7 +1071,7 @@
             },
             "description": "OK",
             "content": {
-              "application/json": {
+              "application/vnd.api+json": {
                 "schema": {
                   "x-docuccino": {
                     "provenance": [
@@ -2199,14 +2199,20 @@
               },
               "links": {
                 "type": "object",
-                "properties": {
-                  "self": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "self"
-                ]
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "href": {
+                      "type": "string"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "href"
+                  ]
+                }
               },
               "type": {
                 "type": "string"
@@ -2416,7 +2422,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "6f17355bae81d652f750f20437518e598da489c879f421262abc700602dc9069",
-      "contentHash": "4238417937153ba48b33cddca79e91d171f60821ccde85af919f7841eaafa50f"
+      "contentHash": "3e6ec97715a98544d75e01944fc4102f419c98023be082090e78300e1ef9934c"
     },
     "generator": {
       "name": "docuccino/laravel",
