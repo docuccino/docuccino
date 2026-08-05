@@ -15,9 +15,14 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
+use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\EnumT;
+use Docuccino\Core\Inference\ThrowConfidence;
+use Docuccino\Core\Inference\ThrowDisposition;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
 
 /**
@@ -44,7 +49,10 @@ final class QueryBuilderParametersExtension implements OperationExtension
         private readonly FilterColumnResolver $columns = new FilterColumnResolver,
         private readonly ScopeParameterResolver $scopes = new ScopeParameterResolver,
         private readonly CustomFilterReader $customFilters = new CustomFilterReader,
+        private readonly ResponseDraftApplier $errors = new ResponseDraftApplier,
     ) {}
+
+    private const INVALID_QUERY = 'Spatie\\QueryBuilder\\Exceptions\\InvalidQuery';
 
     public function phase(): OperationPhase
     {
@@ -73,6 +81,39 @@ final class QueryBuilderParametersExtension implements OperationExtension
 
         $this->reportUnresolved($facts, $context);
         $this->reportDefaultConfig($context);
+        $this->documentStrictModeError($operation, $context);
+    }
+
+    /**
+     * Under strict mode (the package default), an unknown filter/sort/include raises an
+     * `InvalidQuery` (HTTP 400). Document it on any QB operation by running a synthetic 400 through the
+     * resolved exception→response chain, so the body matches the document's error style. Skipped when
+     * strict mode is off or `error_responses => 'none'`.
+     */
+    private function documentStrictModeError(OperationDraft $operation, RouteContext $context): void
+    {
+        if (! $this->config->strict || $context->document->errorResponses === 'none') {
+            return;
+        }
+
+        $throw = new ThrownException(self::INVALID_QUERY, 400, [], ThrowConfidence::Certain, ThrowDisposition::Signal);
+        $source = $context->actionSource();
+        $source = $source === null ? null : new Source($source->file, $source->line, 'query-builder:strict-mode');
+
+        foreach ($context->exceptionMappers as $mapper) {
+            if (! $mapper->supports($throw, $context)) {
+                continue;
+            }
+
+            $draft = $mapper->toResponse($throw, $context, $context->components);
+            if ($draft === null) {
+                continue;
+            }
+
+            $this->errors->apply($operation, $draft, 'integration:query-builder', $source);
+
+            return;
+        }
     }
 
     /**

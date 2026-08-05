@@ -2782,7 +2782,28 @@
               "default": "name"
             }
           }
-        ]
+        ],
+        "responses": {
+          "400": {
+            "x-docuccino": {
+              "provenance": [
+                {
+                  "producer": "integration:query-builder",
+                  "layer": "integration",
+                  "fields": [
+                    "$ref"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
+                    "line": 24,
+                    "symbol": "query-builder:strict-mode"
+                  }
+                }
+              ]
+            },
+            "$ref": "#/components/responses/Problem400"
+          }
+        }
       }
     },
     "/api/widgets": {
@@ -3221,6 +3242,21 @@
       }
     },
     "responses": {
+      "Problem400": {
+        "description": "Error",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            },
+            "example": {
+              "type": "about:blank",
+              "title": "Error",
+              "status": 400
+            }
+          }
+        }
+      },
       "ProblemForbidden": {
         "description": "This action is unauthorized",
         "content": {
@@ -3318,7 +3354,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "7c74a6380ece26438dabac31117dce94a65fc6c76147f4c50069b9c98074faeb",
-      "contentHash": "7ab5d7528d6f53c4ac65eb819ac4f864abdde314bb829905979348e8591447d2"
+      "contentHash": "7c6910495546429b1100c898acfec16f84d9dd512ede90227b11e274e1d28b4b"
     },
     "generator": {
       "name": "docuccino/laravel",

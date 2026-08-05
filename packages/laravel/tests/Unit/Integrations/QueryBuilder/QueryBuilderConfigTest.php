@@ -62,6 +62,20 @@ it('treats a present-but-parameterless bag as recovered on defaults', function (
         ->and($config->filter)->toBe('filter');
 });
 
+it('is strict by default and only relaxes when every invalid-query exception is disabled', function (): void {
+    // Package default (no bag) and a bag with the exceptions enabled → strict, so a 400 is documented.
+    expect(QueryBuilderConfig::fromArray([])->strict)->toBeTrue()
+        ->and(QueryBuilderConfig::fromArray(['parameters' => ['filter' => 'f']])->strict)->toBeTrue()
+        // Disabling only one exception leaves strict on (the others still throw a 400).
+        ->and(QueryBuilderConfig::fromArray(['disable_invalid_filter_query_exception' => true])->strict)->toBeTrue()
+        // All three disabled → not strict, so no 400 is documented.
+        ->and(QueryBuilderConfig::fromArray([
+            'disable_invalid_filter_query_exception' => true,
+            'disable_invalid_sort_query_exception' => true,
+            'disable_invalid_includes_query_exception' => true,
+        ])->strict)->toBeFalse();
+});
+
 it('brackets filter and fields member keys under the effective parameter names', function (): void {
     $config = QueryBuilderConfig::fromArray(['parameters' => ['filter' => 'f', 'fields' => 'flds']]);
 

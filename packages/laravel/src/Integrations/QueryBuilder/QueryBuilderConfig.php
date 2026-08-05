@@ -22,6 +22,10 @@ final readonly class QueryBuilderConfig
         public string $fields = 'fields',
         public string $append = 'append',
         public bool $recovered = true,
+        // Strict mode: the package throws InvalidFilter/Sort/Includes query exceptions (HTTP 400) for
+        // an unknown filter/sort/include unless every `disable_*_exception` is set. On by default
+        // (spatie's defaults), so QB operations document a 400.
+        public bool $strict = true,
     ) {}
 
     /**
@@ -44,6 +48,11 @@ final readonly class QueryBuilderConfig
             include: self::string($parameters, 'include', 'include'),
             fields: self::string($parameters, 'fields', 'fields'),
             append: self::string($parameters, 'append', 'append'),
+            strict: ! (
+                ($config['disable_invalid_filter_query_exception'] ?? false) === true
+                && ($config['disable_invalid_sort_query_exception'] ?? false) === true
+                && ($config['disable_invalid_includes_query_exception'] ?? false) === true
+            ),
         );
     }
 

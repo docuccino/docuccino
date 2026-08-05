@@ -3005,7 +3005,58 @@
               "default": "name"
             }
           }
-        ]
+        ],
+        "responses": {
+          "400": {
+            "x-docuccino": {
+              "id": "res:v1:7zewfuo2r4z7g4ub",
+              "provenance": [
+                {
+                  "producer": "integration:query-builder",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
+                    "line": 24,
+                    "symbol": "query-builder:strict-mode"
+                  }
+                }
+              ]
+            },
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:query-builder",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
+                          "line": 24,
+                          "symbol": "query-builder:strict-mode"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/widgets": {
@@ -3422,7 +3473,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "2b7c6ecd2dad4010b035c15cbdb0486e00f595a0190defc15956c150b5a3411b",
-      "contentHash": "886227ab3cf58b0874608e47ed89cb9d7a80ef3f629201354664fcffcfe5b566"
+      "contentHash": "41de6c7b2f486925140bb2b431b1de72a33d50a046a3be5525c2bd785bfaf9b2"
     },
     "generator": {
       "name": "docuccino/laravel",
