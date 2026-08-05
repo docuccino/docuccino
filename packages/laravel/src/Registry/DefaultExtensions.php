@@ -13,6 +13,7 @@ use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Extensions\AttributeRequestBodyExtension;
 use Docuccino\Laravel\Extensions\AttributeResponsesExtension;
+use Docuccino\Laravel\Extensions\AttributeSecurityExtension;
 use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
@@ -59,6 +60,7 @@ final class DefaultExtensions
             AttributeResponsesExtension::class,
             ErrorResponsesExtension::class,
             SecurityExtension::class,
+            AttributeSecurityExtension::class,
             AttributeOverridesExtension::class,
             // Error-response chain (design §6, first supports() wins). Ordered by priority:
             // inferred handler = the app's REAL error shapes (FIRST), Problem Details preset (EARLY,

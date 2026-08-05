@@ -79,6 +79,46 @@ Per-operation scopes are read from the middleware and modelled by their Laravel 
 ],
 ```
 
+## Declaring security in code
+
+Middleware detection covers the common cases, but some requirements live where static analysis can't
+see them — a Gate or policy, or a `$request->user()?->tokenCan(…)` check in the action body. Declare
+those with attributes; they apply at the attribute precedence layer, so they win over anything
+inferred from middleware.
+
+- [`#[Security(scheme, scopes)]`](/laravel/reference/attributes/#security) names a requirement against
+  a registered scheme (from `security.schemes` config or an integration). It's repeatable — stack it
+  to model an OR-list where any one alternative satisfies the operation.
+- [`#[OptionallyAuthenticated]`](/laravel/reference/attributes/#optionallyauthenticated) marks an
+  endpoint usable anonymously **or** authenticated, emitting `security: [{}, …]` — the empty
+  requirement followed by whatever was declared or inferred.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// Either an OAuth2 token with reports.read, or an API key:
+	#[Security('oauth2', ['reports.read'])]
+	#[Security('apiKey')]
+	public function reports(): JsonResponse { /* … */ }
+
+	// Works signed-out; richer response when a token is present:
+	#[OptionallyAuthenticated]
+	public function feed(): JsonResponse { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"/api/reports": { "get": { "security": [
+	  { "oauth2": ["reports.read"] },
+	  { "apiKey": [] }
+	] } }
+	```
+	```json
+	"/api/feed": { "get": { "security": [ {}, { "sanctumToken": [] } ] } }
+	```
+	</TabItem>
+</Tabs>
+
 ## Authorization: roles & permissions
 
 Authenticating a request is one thing; *authorizing* it — the `role:` / `permission:` middleware from

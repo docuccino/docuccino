@@ -26,7 +26,7 @@ final readonly class Security
 
     /**
      * @param  string  $scheme  the security-scheme name this requirement references
-     * @param  list<string>  $scopes  the scopes/abilities required against that scheme (all-of)
+     * @param  array<array-key, string>  $scopes  the scopes/abilities required against that scheme (all-of)
      */
     public function __construct(
         public string $scheme,
