@@ -37,6 +37,27 @@ final class EloquentModelReflector
     }
 
     /**
+     * The route-key schema for a bound model, without the full {@see facts()} pass — the primary-key
+     * column schema a `{model}` path parameter resolves to (uuid/ulid/int + format). Reuses the same
+     * {@see keySchema()} the model mapper does (never duplicated), so a bound path param and the
+     * model's own key column can never disagree. A non-model / unreflectable FQCN degrades to the
+     * historical `integer` default. (A model overriding `getRouteKeyName()` to bind on a non-key column
+     * is out of scope — its PK schema is still the closest static answer.)
+     *
+     * @return array<string, mixed>
+     */
+    public static function keySchemaFor(string $fqcn): array
+    {
+        if (! self::isModel($fqcn) || ! class_exists($fqcn)) {
+            return ['type' => 'integer'];
+        }
+
+        $reflection = new ReflectionClass($fqcn);
+
+        return self::keySchema($reflection->getDefaultProperties(), self::traits($fqcn));
+    }
+
+    /**
      * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
      */
     public function facts(string $fqcn): array

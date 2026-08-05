@@ -11,12 +11,15 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 
 /**
  * Adds a path parameter for every `{param}` in the route template (design §Route-model binding).
- * A parameter bound to a model gets an integer schema (Laravel's default `id` route key); an
- * unbound segment is a required string. Attribute `#[PathParameter]` refines these later through
- * the higher attribute layer.
+ * A parameter bound to a model is typed from the model's ROUTE KEY — uuid/ulid/int with the matching
+ * format (Laravel's default `id` route key), resolved through {@see EloquentModelReflector::keySchemaFor()}
+ * so a `{model}` segment matches the model's real key rather than a hardcoded integer; an unbound
+ * segment is a required string. Attribute `#[PathParameter]` refines these later through the higher
+ * attribute layer.
  *
  * When the route allows trashed bindings (`->withTrashed()`), each bound parameter is flagged: a note
  * is appended to its description and a stable `x-docuccino.facts.routeBinding.withTrashed` semantic
@@ -43,7 +46,14 @@ final class PathParametersExtension implements OperationExtension
                 : Contribution::fallback();
 
             $parameter->setRequired(! in_array($name, $context->optionalPathParameters, true), $contribution);
-            $parameter->schema()->set('type', $isBound ? 'integer' : 'string', $contribution);
+
+            if ($isBound) {
+                foreach (EloquentModelReflector::keySchemaFor($context->routeBindings[$name]) as $keyword => $value) {
+                    $parameter->schema()->set((string) $keyword, $value, $contribution);
+                }
+            } else {
+                $parameter->schema()->set('type', 'string', $contribution);
+            }
 
             if ($isBound && $context->allowsTrashedBindings) {
                 $parameter->setDescription(self::TRASHED_NOTE, $contribution);

@@ -23,6 +23,7 @@ use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Boutique;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Coupon;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\CustomCaster;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
@@ -30,6 +31,7 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Post;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waybill;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Workbench\App\Enums\WidgetStatus;
 
@@ -149,6 +151,18 @@ it('synthesises timestamps + soft-delete columns and a uuid primary key', functi
         ->and($vault['properties']['deleted_at'])->toBe(['type' => ['string', 'null'], 'format' => 'date-time'])
         ->and($vault['required'])->toBe(['id', 'label', 'created_at', 'updated_at', 'deleted_at']);
 });
+
+it('resolves the route-key schema for a bound model across every key kind', function (string $fqcn, array $expected): void {
+    // The pure resolver a bound `{model}` path parameter uses (uuid/ulid/int/string), degrading to
+    // integer for a non-model or unreflectable FQCN.
+    expect(EloquentModelReflector::keySchemaFor($fqcn))->toBe($expected);
+})->with([
+    'HasUuids → string/uuid' => [Vault::class, ['type' => 'string', 'format' => 'uuid']],
+    'HasUlids → string/ulid' => [Waybill::class, ['type' => 'string', 'format' => 'ulid']],
+    'non-incrementing string key → plain string' => [Coupon::class, ['type' => 'string']],
+    'default incrementing key → integer' => [Widget::class, ['type' => 'integer']],
+    'a non-model FQCN degrades to integer' => ['Illuminate\\Http\\Request', ['type' => 'integer']],
+]);
 
 it('reflects timestamps, soft-delete, and primary-key facts', function (): void {
     $facts = (new EloquentModelReflector)->facts(Vault::class);
