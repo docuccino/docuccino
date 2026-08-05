@@ -23,6 +23,9 @@ use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
+use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
+use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
+use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
@@ -30,8 +33,11 @@ use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
 use Docuccino\Laravel\Runtime\DocumentCache;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Route;
+use Laravel\Passport\Passport;
+use Laravel\Passport\Scope;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -177,6 +183,16 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new QueryBuilderParametersExtension(QueryBuilderConfig::fromArray($config));
         });
 
+        // Passport's oauth2 scheme needs runtime facts (the scope catalogue + which grants were
+        // enabled) that live on the vendor class. The integration stays vendor-import-free (arch
+        // rule), so the provider — allowed to touch Passport — reads them here and injects them.
+        $this->app->bind(PassportSecurityExtension::class, function (Application $app): PassportSecurityExtension {
+            /** @var Repository $config */
+            $config = $app->make('config');
+
+            return new PassportSecurityExtension($config, self::passportRuntime());
+        });
+
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
         // NullTypeEngine; production builds it from config, degrading to null on boot failure.
         $this->app->bind(TypeEngine::class, static function (Application $app): TypeEngine {
@@ -185,6 +201,31 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
             return $app->make(TypeEngineFactory::class)->make($config);
         });
+    }
+
+    /**
+     * Read Passport's runtime facts for the oauth2 scheme (empty when Passport is not installed): the
+     * scope catalogue from `Passport::tokensCan()` and whether the password / implicit grants were
+     * enabled. Kept in the provider so the integration itself never imports the vendor class.
+     */
+    private static function passportRuntime(): PassportRuntime
+    {
+        if (! class_exists(PassportIntegration::PASSPORT)) {
+            return new PassportRuntime;
+        }
+
+        $scopes = [];
+        foreach (Passport::scopes() as $scope) {
+            if ($scope instanceof Scope) {
+                $scopes[$scope->id] = $scope->description;
+            }
+        }
+
+        return new PassportRuntime(
+            $scopes,
+            Passport::$passwordGrantEnabled === true,
+            Passport::$implicitGrantEnabled === true,
+        );
     }
 
     /**

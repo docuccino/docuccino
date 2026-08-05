@@ -23,6 +23,7 @@ final class PassportSecurityExtension implements OperationExtension
 {
     public function __construct(
         private readonly Repository $config,
+        private readonly PassportRuntime $runtime = new PassportRuntime,
         private readonly ScopeMiddlewareParser $scopes = new ScopeMiddlewareParser,
     ) {}
 
@@ -42,24 +43,31 @@ final class PassportSecurityExtension implements OperationExtension
         }
 
         $middleware = $context->route->middleware;
-        $scopes = $this->scopes->scopes($middleware);
+        $requirements = $this->scopes->parse($middleware);
 
-        if (! $this->protects($middleware, $scopes)) {
+        if (! $this->protects($middleware, $requirements)) {
             return;
         }
 
-        $name = $context->components->registerSecurityScheme('passport', OAuth2Scheme::passport($this->baseUrl($context)));
+        $scheme = OAuth2Scheme::passport(
+            $this->baseUrl($context),
+            $this->path(),
+            $this->scopeCatalogue($requirements),
+            $this->runtime->passwordGrant,
+            $this->runtime->implicitGrant,
+        );
 
-        $operation->setSecurity([[$name => $scopes]], Contribution::integration('passport', $context->actionSource()));
+        $name = $context->components->registerSecurityScheme('passport', $scheme);
+
+        $operation->setSecurity($requirements->toSecurity($name), Contribution::integration('passport', $context->actionSource()));
     }
 
     /**
      * @param  list<string>  $middleware
-     * @param  list<string>  $scopes
      */
-    private function protects(array $middleware, array $scopes): bool
+    private function protects(array $middleware, ScopeRequirements $requirements): bool
     {
-        if ($scopes !== []) {
+        if (! $requirements->isEmpty()) {
             return true;
         }
 
@@ -70,6 +78,34 @@ final class PassportSecurityExtension implements OperationExtension
         }
 
         return false;
+    }
+
+    /**
+     * The oauth2 flow scope map: the app's real Passport scope catalogue (`Passport::tokensCan()`),
+     * augmented with any scope this route references that the catalogue is missing (so the security
+     * requirement stays OAS-valid even in apps that never called `tokensCan()`). Missing scopes get
+     * their id as description — the honest floor when no catalogue entry exists.
+     *
+     * @return array<string, string>
+     */
+    private function scopeCatalogue(ScopeRequirements $requirements): array
+    {
+        $catalogue = $this->runtime->scopes;
+
+        foreach ($requirements->all() as $scope) {
+            if (! array_key_exists($scope, $catalogue)) {
+                $catalogue[$scope] = $scope;
+            }
+        }
+
+        return $catalogue;
+    }
+
+    private function path(): string
+    {
+        $path = $this->config->get('passport.path');
+
+        return is_string($path) && $path !== '' ? $path : 'oauth';
     }
 
     private function baseUrl(RouteContext $context): string

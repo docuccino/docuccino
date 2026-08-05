@@ -22,6 +22,9 @@ it('parses each permission middleware form', function (string $middleware, strin
     'permission with guard' => ['permission:publish articles,web', 'permission', ['publish articles'], 'web'],
     'role any-of pipe list' => ['role:manager|writer', 'role', ['manager', 'writer'], null],
     'permission any-of with guard' => ['permission:edit|publish,api', 'permission', ['edit', 'publish'], 'api'],
+    'RoleMiddleware ::using() FQCN' => ['Spatie\\Permission\\Middleware\\RoleMiddleware:admin', 'role', ['admin'], null],
+    'PermissionMiddleware ::using() FQCN with guard' => ['Spatie\\Permission\\Middleware\\PermissionMiddleware:edit articles,web', 'permission', ['edit articles'], 'web'],
+    'RoleOrPermissionMiddleware ::using() FQCN any-of' => ['Spatie\\Permission\\Middleware\\RoleOrPermissionMiddleware:editor|edit', 'role_or_permission', ['editor', 'edit'], null],
 ]);
 
 it('returns null for a non-permission middleware', function (string $middleware): void {
@@ -33,10 +36,12 @@ it('returns null for a non-permission middleware', function (string $middleware)
     'empty values' => ['permission:'],
 ]);
 
-it('describes each requirement type', function (): void {
+it('describes each requirement type, marking multi-value pipe lists as any-of', function (): void {
     $parser = new PermissionMiddlewareParser;
 
     expect($parser->parse('permission:edit articles')->describe())->toBe('Requires permission: edit articles')
-        ->and($parser->parse('role:admin|owner')->describe())->toBe('Requires role: admin, owner')
-        ->and($parser->parse('role_or_permission:editor')->describe())->toBe('Requires role or permission: editor');
+        ->and($parser->parse('role:admin|owner')->describe())->toBe('Requires any of these roles: admin, owner')
+        ->and($parser->parse('permission:edit|publish')->describe())->toBe('Requires any of these permissions: edit, publish')
+        ->and($parser->parse('role_or_permission:editor')->describe())->toBe('Requires role or permission: editor')
+        ->and($parser->parse('role_or_permission:editor|admin')->describe())->toBe('Requires any of these roles or permissions: editor, admin');
 });

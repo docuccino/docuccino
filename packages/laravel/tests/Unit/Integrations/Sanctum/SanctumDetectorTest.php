@@ -13,8 +13,16 @@ it('detects the active Sanctum modes across the detection combinations', functio
     'token only (auth:sanctum)' => [['auth:sanctum'], ['token']],
     'token only (bare sanctum alias)' => [['sanctum'], ['token']],
     'token only (multi-guard list)' => [['auth:web,sanctum'], ['token']],
+    'token only (abilities middleware)' => [['auth:sanctum', 'abilities:read'], ['token']],
+    'token only (ability short alias)' => [['ability:read'], ['token']],
+    'token only (CheckAbilities ::using FQCN)' => [['Laravel\\Sanctum\\Http\\Middleware\\CheckAbilities:read,write'], ['token']],
+    'token only (CheckForAnyAbility ::using FQCN)' => [['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyAbility:read'], ['token']],
     'stateful only (cookie SPA, web guard)' => [[STATEFUL, 'auth:web'], ['stateful']],
     'both modes (dual auth on one route)' => [['auth:sanctum', STATEFUL], ['token', 'stateful']],
+    // The false-positive guard: statefulApi() prepends the stateful middleware to the whole api
+    // group, so a PUBLIC route (no auth guard) carrying only that middleware must yield NO modes.
+    'public route (stateful middleware, no auth guard)' => [[STATEFUL], []],
+    'public route (stateful middleware + throttle, no auth)' => [[STATEFUL, 'throttle:60,1'], []],
     'neither (plain web auth)' => [['auth:web'], []],
     'neither (api guard, no sanctum)' => [['auth:api'], []],
 ]);

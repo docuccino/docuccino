@@ -20,7 +20,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
  * registered once into `components.securitySchemes` (carrying the auth-section prose consumers
  * render).
  *
- * Which modes a document exposes is per-document config (`security.sanctum.modes`), so audience
+ * Which modes a document exposes is per-document config (`integrations.sanctum.modes`), so audience
  * segmentation happens through documents (a `public` doc lists only `token`; an `internal` doc lists
  * both) — the effective set is the route's supported modes ∩ the document's allowed modes. Deferred
  * entirely when config already declares security schemes (explicit config wins), and skipped for

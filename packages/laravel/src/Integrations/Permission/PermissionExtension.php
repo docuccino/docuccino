@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Permission;
 
+use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -31,6 +32,12 @@ final class PermissionExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
+        // An operation opted out of auth documents no security requirement, so the permission line
+        // and x-permissions member would be inconsistent alongside `security: []` — skip it.
+        if ($context->attributes->has(Unauthenticated::class)) {
+            return;
+        }
+
         $requirements = $this->requirements($context);
         if ($requirements === []) {
             return;

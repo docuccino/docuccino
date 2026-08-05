@@ -21,4 +21,13 @@ it('resolves every registrar guard + matcher FQCN string against the installed p
     'Sanctum stateful middleware matcher' => [
         (new ReflectionClass(SanctumDetector::class))->getReflectionConstant('STATEFUL_MIDDLEWARE')->getValue(),
     ],
+    // The ::using() FQCN middleware forms the parsers/detector now match must resolve too — a typo
+    // in any would make that form silently unrecognised (invisible to the golden suite).
+    'Sanctum CheckAbilities matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckAbilities'],
+    'Sanctum CheckForAnyAbility matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyAbility'],
+    'Passport CheckScopes matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckScopes'],
+    'Passport CheckForAnyScope matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckForAnyScope'],
+    'Permission RoleMiddleware matcher' => ['Spatie\\Permission\\Middleware\\RoleMiddleware'],
+    'Permission PermissionMiddleware matcher' => ['Spatie\\Permission\\Middleware\\PermissionMiddleware'],
+    'Permission RoleOrPermissionMiddleware matcher' => ['Spatie\\Permission\\Middleware\\RoleOrPermissionMiddleware'],
 ]);

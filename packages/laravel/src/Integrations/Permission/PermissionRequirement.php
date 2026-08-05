@@ -34,14 +34,21 @@ final readonly class PermissionRequirement
         return $out;
     }
 
-    /** The human description line (e.g. "Requires permission: edit articles"). */
+    /**
+     * The human description line. A pipe list is any-of, so multi-value requirements say so
+     * explicitly ("Requires any of these permissions: …") rather than reading as a required set.
+     */
     public function describe(): string
     {
-        $label = match ($this->type) {
-            'role' => 'Requires role',
-            'role_or_permission' => 'Requires role or permission',
-            default => 'Requires permission',
+        [$singular, $plural] = match ($this->type) {
+            'role' => ['role', 'roles'],
+            'role_or_permission' => ['role or permission', 'roles or permissions'],
+            default => ['permission', 'permissions'],
         };
+
+        $label = count($this->values) > 1
+            ? 'Requires any of these '.$plural
+            : 'Requires '.$singular;
 
         return $label.': '.implode(', ', $this->values);
     }
