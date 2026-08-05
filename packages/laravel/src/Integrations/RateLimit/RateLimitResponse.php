@@ -24,11 +24,19 @@ final class RateLimitResponse
 
         if (! $limit->isNamed()) {
             $rateLimit['example'] = $limit->maxAttempts;
-            $retryAfter['example'] = ($limit->decayMinutes ?? 1) * 60;
+            $retryAfter['example'] = (int) round(($limit->decayMinutes ?? 1.0) * 60);
+        }
+
+        $description = 'Too Many Requests — the rate limit for this endpoint has been exceeded.';
+        if ($limit->guestMaxAttempts !== null) {
+            $description .= sprintf(
+                ' The documented limit applies to authenticated requests; unauthenticated requests are limited to %d per window.',
+                $limit->guestMaxAttempts,
+            );
         }
 
         return [
-            'description' => 'Too Many Requests — the rate limit for this endpoint has been exceeded.',
+            'description' => $description,
             'headers' => [
                 'Retry-After' => [
                     'description' => 'Seconds to wait before making another request.',
@@ -40,6 +48,10 @@ final class RateLimitResponse
                 ],
                 'X-RateLimit-Remaining' => [
                     'description' => 'The number of requests remaining in the current window.',
+                    'schema' => ['type' => 'integer'],
+                ],
+                'X-RateLimit-Reset' => [
+                    'description' => 'Unix timestamp (seconds, UTC) at which the current rate limit window resets.',
                     'schema' => ['type' => 'integer'],
                 ],
             ],

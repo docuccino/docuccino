@@ -36,9 +36,15 @@ final class RateLimitResponsesExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        $limit = $this->firstThrottle($context);
-        if ($limit === null) {
+        $limits = $this->throttles($context);
+        if ($limits === []) {
             return;
+        }
+
+        $limit = $limits[0];
+
+        if (count($limits) > 1) {
+            $this->reportMultiple($limits, $context);
         }
 
         if ($limit->isNamed()) {
@@ -67,16 +73,36 @@ final class RateLimitResponsesExtension implements OperationExtension
         }
     }
 
-    private function firstThrottle(RouteContext $context): ?ThrottleLimit
+    /**
+     * @return list<ThrottleLimit>
+     */
+    private function throttles(RouteContext $context): array
     {
+        $limits = [];
         foreach ($context->route->middleware as $middleware) {
             $limit = $this->parser->parse($middleware);
             if ($limit !== null) {
-                return $limit;
+                $limits[] = $limit;
             }
         }
 
-        return null;
+        return $limits;
+    }
+
+    /**
+     * @param  list<ThrottleLimit>  $limits
+     */
+    private function reportMultiple(array $limits, RouteContext $context): void
+    {
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'rate-limit.multiple-throttles',
+            message: sprintf(
+                'Route carries %d throttle middleware; a single 429 is documented from the first — the others are enforced independently but not separately represented.',
+                count($limits),
+            ),
+            routeSignature: $context->route->signature(),
+        ));
     }
 
     private function reportNamedLimiter(ThrottleLimit $limit, RouteContext $context): void

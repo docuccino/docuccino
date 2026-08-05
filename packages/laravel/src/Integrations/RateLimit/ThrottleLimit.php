@@ -15,8 +15,9 @@ final readonly class ThrottleLimit
 {
     public function __construct(
         public ?int $maxAttempts = null,
-        public ?int $decayMinutes = null,
+        public ?float $decayMinutes = null,
         public ?string $name = null,
+        public ?int $guestMaxAttempts = null,
     ) {}
 
     public function isNamed(): bool
