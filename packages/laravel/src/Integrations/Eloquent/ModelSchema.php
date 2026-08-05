@@ -114,6 +114,24 @@ final class ModelSchema implements TypeToSchema
                 }
             }
 
+            // Framework-synthesised columns Laravel injects at serialization time: created_at/updated_at
+            // (when the model uses timestamps) and deleted_at (when it soft-deletes). They are always
+            // present on a persisted model, so required — deleted_at is null unless the row is trashed.
+            foreach ($this->frameworkColumns($facts) as [$name, $schema]) {
+                if (isset($properties[$name]) || ! self::isColumnVisible($name, $facts['visible'], $hidden)) {
+                    continue;
+                }
+                $properties[$name] = $schema;
+                $required[] = $name;
+            }
+
+            // Primary-key format: HasUuids/HasUlids definitively make the key a string with a uuid/ulid
+            // format, overriding a stale inferred/docblock type on the key column.
+            $key = $facts['keyName'];
+            if (isset($properties[$key], $facts['keySchema']['format'])) {
+                $properties[$key] = $facts['keySchema'];
+            }
+
             // No source yielded a column: keep the empty-object behaviour but tell the author how to
             // document one, so an undocumented model never renders as a silent bare object.
             if ($properties === []) {
@@ -178,6 +196,31 @@ final class ModelSchema implements TypeToSchema
         }
 
         return $schema;
+    }
+
+    /**
+     * The framework-synthesised timestamp / soft-delete columns, as `[name, schema]` pairs.
+     * created_at/updated_at are non-null date-times (set on any persisted model); deleted_at is a
+     * nullable date-time (null unless the row is soft-deleted).
+     *
+     * @param  array{timestamps: bool, softDeletes: bool}  $facts
+     * @return list<array{0: string, 1: array<string, mixed>}>
+     */
+    private function frameworkColumns(array $facts): array
+    {
+        $dateTime = ['type' => 'string', 'format' => 'date-time'];
+        $nullableDateTime = ['type' => ['string', 'null'], 'format' => 'date-time'];
+
+        $columns = [];
+        if ($facts['timestamps']) {
+            $columns[] = ['created_at', $dateTime];
+            $columns[] = ['updated_at', $dateTime];
+        }
+        if ($facts['softDeletes']) {
+            $columns[] = ['deleted_at', $nullableDateTime];
+        }
+
+        return $columns;
     }
 
     /**

@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class Ledger extends Model
 {
+    /** Scoped to its floor sources — no timestamp columns to keep the floor-union test focused. */
+    public $timestamps = false;
+
     /**
      * @var list<string>
      */

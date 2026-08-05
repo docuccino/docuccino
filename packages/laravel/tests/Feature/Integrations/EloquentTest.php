@@ -18,6 +18,7 @@ use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 
 /**
@@ -44,6 +45,10 @@ function eloquentEngine(): StubTypeEngine
             new PropertyMetadata('name', ScalarT::string()),
             new PropertyMetadata('secret', ScalarT::string()),
         ]),
+        Vault::class => new ClassMetadata(Vault::class, [
+            new PropertyMetadata('id', ScalarT::string()),
+            new PropertyMetadata('label', ScalarT::string()),
+        ]),
     ]);
 }
 
@@ -64,9 +69,10 @@ function modelRegistry(ClassT $type): ComponentRegistry
 it('builds a model schema honouring hidden, appends, and casts', function (): void {
     $widget = modelSchema(new ClassT(Widget::class))['Widget'];
 
-    // password ($hidden) and token (class-level #[Hidden]) are dropped; display_name ($appends) added.
+    // password ($hidden) and token (class-level #[Hidden]) are dropped; display_name ($appends) added;
+    // updated_at is synthesised from the model's default timestamps (created_at is already a cast).
     expect(array_keys($widget['properties']))
-        ->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta', 'display_name']);
+        ->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta', 'updated_at', 'display_name']);
 
     // datetime cast → date-time format, widened to admit null on the nullable column; boolean cast
     // overrides the engine's string type; array cast admits a JSON object or array.
@@ -80,7 +86,33 @@ it('builds a model schema honouring hidden, appends, and casts', function (): vo
 
     // Every declared column is present in the payload, so all are required — a nullable column
     // (created_at) is required with a null-admitting type. The appended accessor stays optional.
-    expect($widget['required'])->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta']);
+    expect($widget['required'])->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta', 'updated_at']);
+});
+
+it('synthesises timestamps + soft-delete columns and a uuid primary key', function (): void {
+    $vault = modelSchema(new ClassT(Vault::class))['Vault'];
+
+    // HasUuids overrides the key column to a string uuid; timestamps + SoftDeletes inject the columns
+    // Laravel serialises for a persisted, soft-deletable model.
+    expect($vault['properties']['id'])->toBe(['type' => 'string', 'format' => 'uuid'])
+        ->and($vault['properties']['created_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($vault['properties']['updated_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($vault['properties']['deleted_at'])->toBe(['type' => ['string', 'null'], 'format' => 'date-time'])
+        ->and($vault['required'])->toBe(['id', 'label', 'created_at', 'updated_at', 'deleted_at']);
+});
+
+it('reflects timestamps, soft-delete, and primary-key facts', function (): void {
+    $facts = (new EloquentModelReflector)->facts(Vault::class);
+
+    expect($facts['timestamps'])->toBeTrue()
+        ->and($facts['softDeletes'])->toBeTrue()
+        ->and($facts['keyName'])->toBe('id')
+        ->and($facts['keySchema'])->toBe(['type' => 'string', 'format' => 'uuid']);
+
+    // A plain model has timestamps on by default but no soft-deletes and an integer key.
+    $widgetFacts = (new EloquentModelReflector)->facts(Widget::class);
+    expect($widgetFacts['softDeletes'])->toBeFalse()
+        ->and($widgetFacts['keySchema'])->toBe(['type' => 'integer']);
 });
 
 it('applies a $visible allow-list', function (): void {
