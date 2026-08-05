@@ -7,14 +7,12 @@ namespace Docuccino\Laravel\Integrations\Support;
 /**
  * The paginated envelopes `spatie/laravel-data` serialises around a page of Data items — distinct
  * from Laravel's own resource paginator envelope ({@see PaginationEnvelope}) and NOT interchangeable
- * with it (audit spatie-data gap 7):
+ * with it (audit spatie-data gap 7). Mirrors spatie's `TransformedDataCollectableResolver`:
  *
  * - `links` is an ARRAY of `{url, label, active}` objects (spatie's `linkCollection()`), not a
  *   `{first,last,prev,next}` object; the cursor variant emits an empty `links` array.
  * - `meta` carries the `*_page_url` members alongside the counters (length-aware) / cursor tokens.
  * - all three of `data`/`links`/`meta` are always emitted, so all three are required.
- *
- * @see \Spatie\LaravelData\Resolvers\TransformedDataCollectableResolver
  */
 final class SpatieDataEnvelope
 {
