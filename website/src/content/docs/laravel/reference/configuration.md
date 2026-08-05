@@ -140,8 +140,9 @@ that recovers your app's real error shape wins ahead of this fallback.
 Points at a markdown tree compiled into `x-docuccino.content` (pages + a compiled nav tree).
 Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` +
 `nav.{group,order,hidden,type,ref}`) overrides. `::operation{...}` / `::schema{...}` directives are
-resolved against the document; broken refs become diagnostics. `null` compiles nothing. See the
-[UIR content layer](/uir/#content-layer).
+resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
+[Guides, pages & prose](/laravel/guides/narrative-content/) for the full workflow, or the
+[UIR content layer](/uir/#content-layer) for how it lives in the raw document.
 
 ### `overlays`
 
@@ -153,7 +154,8 @@ resolved against the document; broken refs become diagnostics. `null` compiles n
 
 Globs of [OpenAPI Overlay 1.0](https://spec.openapis.org/overlay/v1.0.0.html) documents applied at
 assembly time as the `overlay(45)` precedence layer — a standards-based hand-edit layer that
-survives regeneration.
+survives regeneration. See [Customizing the output](/laravel/guides/customising-output/) for worked
+examples.
 
 ### `representation`
 

@@ -1,0 +1,166 @@
+---
+title: Guides, pages & prose
+description: Add hand-written guides, overviews, and tutorials alongside your generated reference — a folder of Markdown, live links to your operations, and prose that can't drift from your code.
+sidebar:
+  order: 5
+---
+
+import { FileTree, Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+A generated reference tells a reader *what* each endpoint does. It rarely tells them *where to start*,
+*how to authenticate*, or *how the pieces fit together*. Docuccino lets you write that narrative as
+plain Markdown, compile it into the same document as your reference, and link it directly to the
+operations and schemas it describes — with a guarantee those links can't silently rot.
+
+## Point Docuccino at a folder
+
+Set `content.dir` to a folder of Markdown files, relative to your application root:
+
+```php
+// config/docuccino.php — documents.default
+'content' => [
+    'dir' => 'resources/docs/api',
+],
+```
+
+Every `*.md` file under that folder becomes a page. The **folder structure becomes your navigation**:
+each subfolder is a nav group by default, and the file's location gives it a slug.
+
+<FileTree>
+- resources/docs/api/
+  - overview.md
+  - guides/
+    - authentication.md
+    - pagination.md
+  - webhooks/
+    - signing.md
+</FileTree>
+
+That tree compiles to two groups — *Guides* and *Webhooks* — plus a top-level *Overview* page, all
+without any configuration. Frontmatter (next section) overrides any of it when the defaults aren't
+what you want.
+
+<Aside title="Where it ends up">
+Pages and the navigation tree compile into the document's `x-docuccino.content` layer. The
+[bundled viewer](/laravel/guides/viewer/) renders them as a sidebar of guides beside your API
+reference.
+</Aside>
+
+## Frontmatter reference
+
+A leading `---` block sets a page's metadata. Every key is optional — omit the block entirely and
+Docuccino derives sensible defaults from the file's name and location.
+
+| Key | Type | Default | Behavior |
+| --- | --- | --- | --- |
+| `title` | string | File name, humanized | The page's display title. |
+| `slug` | string | Path under `content.dir`, without `.md` | The page's stable slug; its identity is derived from this, so keep it stable across renames. |
+| `summary` | string | *none* | A short description carried onto the page. |
+| `tags` | string[] | *none* | Freeform tags carried onto the page. |
+| `nav.group` | string | Parent folder name, humanized | The sidebar group the page sits under. |
+| `nav.order` | integer | *unordered (sorts after ordered pages, then by title)* | Explicit sort weight within its group. |
+| `nav.hidden` | boolean | `false` | Compile the page but leave it out of the navigation tree. |
+| `nav.type` | `page` \| `operation` \| `tag` | `page` | Whether the nav entry links to this page, or references an operation or a tag. |
+| `nav.ref` | string | *none* | For `type: operation` or `tag`, the target — an operationId or `METHOD /path`, or a tag name. |
+
+A typical page:
+
+```markdown
+---
+title: Authenticating requests
+summary: How to obtain and send a bearer token.
+nav:
+  group: Guides
+  order: 1
+---
+
+Every request to a protected endpoint carries a bearer token…
+```
+
+Setting `nav.type: operation` with a `nav.ref` turns a nav entry into a link straight to an operation
+in your reference — handy for surfacing a key endpoint in the sidebar. A `ref` that doesn't resolve
+becomes a build diagnostic rather than a dead link.
+
+## Linking to your API
+
+Inside a page, reference an operation or schema with a directive. Docuccino resolves it against the
+assembled document **at build time**:
+
+```markdown
+Paginated results come back from ::operation{id="invoices.index"}, each item shaped like
+::schema{name="InvoiceData"}.
+```
+
+- `::operation{id="…"}` takes an operationId, or a `METHOD /path` signature.
+- `::schema{name="…"}` takes a component schema name.
+
+When the build runs, each directive is checked against the real document. A directive that resolves
+gets the operation or schema's stable UIR identity appended as a `ref`, so a consumer can link to it
+without re-resolving:
+
+```markdown
+::operation{id="invoices.index" ref="op:v1:mfz3q8k2w9r7t1ua"}
+```
+
+A directive that points at something that **doesn't exist** becomes an error diagnostic — the page is
+left untouched, and your build can fail on it. This is the whole point: your guides can't quietly
+drift away from the API they describe. Rename an endpoint and forget to update the guide, and the
+next build tells you. (An unknown directive name — anything other than `::operation` or `::schema` —
+passes through untouched with a warning, so third-party directives are safe.)
+
+## Symbol-anchored prose with `#[DescriptionFromFile]`
+
+There's a second way to bring Markdown into your docs, for a different job. When the prose belongs to
+*one specific symbol* — a controller action, or a Data class — attach it at the source with
+[`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile):
+
+```php
+use Docuccino\Attributes\DescriptionFromFile;
+
+#[DescriptionFromFile('resources/docs/invoices/index.md')]
+public function index(): AnonymousResourceCollection { /* … */ }
+```
+
+The file's contents become that operation's `description`, right where the endpoint appears in the
+reference. The path is resolved within your application root, and the file's content is hashed into
+the operation's cache key, so editing the Markdown correctly invalidates just that fragment.
+
+<Aside type="tip" title="Which one do I want?">
+Use **`#[DescriptionFromFile]`** when the prose *is* the description of a single operation or schema —
+it lives inline in the reference. Use the **content directory** for standalone material that stands
+apart from any one endpoint: an overview, an authentication guide, a getting-started tutorial, with
+its own place in the navigation.
+</Aside>
+
+## What each format keeps
+
+The content layer is a first-class part of the UIR, but it's a UIR feature — plain OpenAPI has
+nowhere to put a page tree. What survives an export depends on the format:
+
+| Format | Guide pages & nav tree | Descriptions in standard fields |
+| --- | --- | --- |
+| **UIR** (`--format=uir`) | Kept in full under `x-docuccino.content` | Kept |
+| **OpenAPI 3.2 / 3.1** | Dropped — no home in the OpenAPI object | Kept (they're standard OAS fields) |
+
+In other words: your standalone guide pages and the navigation tree live in the UIR. Exporting to
+OpenAPI drops them, because there's no standard place for them to go. Descriptions that sit in
+ordinary OpenAPI fields — `info.description`, tag descriptions, and per-operation descriptions
+(including ones set with `#[DescriptionFromFile]`) — survive, because they were standard fields all
+along.
+
+Rendering the guide pages and their multi-page navigation is a job for a UIR consumer: the
+[bundled viewer](/laravel/guides/viewer/) does it, and so can any tool that reads the UIR. Point plain
+OpenAPI tooling at the exported spec and you'll get the reference, rich descriptions and all, but not
+the standalone guides.
+
+<Aside title="Prose changes are visible changes">
+Because the content layer participates in the document's `contentHash`, editing a guide or moving a
+nav entry shows up in [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) — as a
+non-breaking change. Your narrative is versioned alongside your API, not off to one side.
+</Aside>
+
+<CardGrid>
+	<LinkCard title="Content configuration" href="/laravel/reference/configuration/#content" description="The content.dir key and how the tree is compiled." />
+	<LinkCard title="The UIR content layer" href="/uir/#content-layer" description="How pages, nav, and identities live in the raw document." />
+	<LinkCard title="Customizing the output" href="/laravel/guides/customising-output/" description="Correct or extend the generated reference the pages sit beside." />
+</CardGrid>

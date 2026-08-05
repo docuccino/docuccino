@@ -145,9 +145,10 @@ them carefully:
   not a template layer you own.
 - **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch to document anything, including
   third-party package routes (Passport, Fortify) with no code access. In Docuccino that's an OpenAPI
-  Overlay or a `DocumentTransformer`.
+  Overlay or a `DocumentTransformer` — see [customizing the output](/laravel/guides/customising-output/).
 - **The `.scribe` hand-edit merge workflow** — patch any extracted fact in YAML and have it survive
-  regeneration. Docuccino keeps corrections in source (attributes) or standard OpenAPI Overlays.
+  regeneration. Docuccino keeps corrections in source (attributes) or standard
+  [OpenAPI Overlays](/laravel/guides/customising-output/).
 - **Localization of the generated UI** via Laravel lang files (build-time). Docuccino's viewer has no
   UI-string localization.
 - **In-browser Try-It-Out with integrated Sanctum CSRF** (`try_it_out.use_csrf`). Docuccino has a

@@ -1,0 +1,260 @@
+---
+title: Customizing the generated documentation
+description: When inference isn't quite right, choose the right tool — an attribute at the source, a standards-based OpenAPI Overlay, or a document-wide policy — and apply it with worked examples.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Docuccino documents your API by reading your code, and most of the time that's all you need. When a
+detail comes out wrong, thin, or in the wrong place, you have three ways to correct it. The trick is
+picking the right one — the closer a correction lives to the code, the more it survives change.
+
+## Which tool for which change
+
+Start from two questions: *is the detail wrong or just missing*, and *do you own the code it comes
+from?*
+
+| The detail is… | You own the code? | Reach for |
+| --- | --- | --- |
+| A fact about one operation that inference got wrong, or left thinner than you'd like | Yes | An [attribute or docblock](/laravel/reference/attributes/) at the source |
+| On a route you can't edit — a vendor or third-party package route — or a batch of spec-side tweaks you'd rather keep out of the code | No | An **OpenAPI Overlay** |
+| A rule that should hold across a whole document — naming, wrapping, a synthesized section | Either | [Config](/laravel/reference/configuration/), a representation policy, or a `DocumentTransformer` |
+
+The rest of this guide is about the middle row — Overlays — with a note at the end on when to step
+up to a document-wide transformer.
+
+<Aside type="tip" title="Prefer the source when you can">
+An attribute or docblock lives next to the code it describes, so it's reviewed in the same pull
+request and can never point at a route that no longer exists. Reach for an Overlay when the source
+is out of reach, or when a change is genuinely about the *document* rather than the code.
+</Aside>
+
+## OpenAPI Overlays in practice
+
+An [OpenAPI Overlay 1.0](https://spec.openapis.org/overlay/v1.0.0.html) document is a small, standard
+YAML file that lists targeted edits to apply to a specification. Docuccino applies your overlays as
+part of every build, so the corrections survive regeneration without ever touching the generated
+document by hand.
+
+### Anatomy of an overlay
+
+```yaml
+# resources/docs/overlays/invoicing.yaml
+overlay: 1.0.0
+info:
+  title: Invoicing API corrections
+  version: 1.0.0
+actions:
+  - target: "$.paths['/api/v1/invoices'].get.summary"
+    update: List paginated invoices
+  - target: "$.paths['/api/v1/invoices'].get.parameters[?(@.name=='internal_cursor')]"
+    remove: true
+```
+
+Every overlay has an `overlay: 1.0.0` version line, an `info` block, and an ordered list of
+`actions`. Each action carries a `target` — a JSONPath expression selecting the node to change — and
+exactly one operation:
+
+- **`update`** merges an object into the target (deep, with the overlay winning field by field), or
+  replaces a scalar or array outright.
+- **`remove`** deletes the targeted node.
+
+An action that declares both, or neither, is rejected with a diagnostic rather than guessed at.
+
+### Where overlays live
+
+Point the document's `overlays` config at one or more globs. Files are applied in glob order, and the
+actions inside each file in the order written:
+
+```php
+// config/docuccino.php — documents.default
+'overlays' => [
+    'resources/docs/overlays/*.yaml',
+],
+```
+
+### When they apply — and what wins
+
+Overlays are applied at **assembly time**, once your operations have been built, as the `overlay(45)`
+layer in Docuccino's precedence chain:
+
+```
+inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45) < config(50)
+```
+
+So an overlay **beats** anything inferred, integrated, or written as a docblock or attribute — and
+**loses** only to explicit config. Because merging is field-by-field, an overlay can rewrite one
+field of an operation without discarding the rest of it.
+
+Every value an overlay changes is recorded in that node's provenance with `producer: overlay`, and
+the value it replaced is captured under `overrode` — so the raw [UIR](/uir/#provenance) always
+answers "why is it documented this way?", even for a hand-applied correction.
+
+### The target selector
+
+Docuccino resolves a documented, predictable subset of JSONPath — enough to address any node in a
+real specification, with no ambiguous matches:
+
+| Selector | Example | Matches |
+| --- | --- | --- |
+| Root | `$` | The document root. |
+| Dot member | `$.info.title` | A named object member. |
+| Bracket member | `$.paths['/api/v1/invoices']` | A member whose key needs quoting (slashes, dots). |
+| Array index | `…parameters[0]` | An array element by position. |
+| Equality filter | `…parameters[?(@.name=='status')]` | List elements where a string field equals a value. |
+
+Anything outside this subset — wildcards (`*`), recursive descent (`..`), array slices (`[1:3]`),
+unions, or any comparison other than `==` — raises an error diagnostic rather than matching silently.
+A target that matches nothing raises a warning, never a silent no-op.
+
+## Worked examples
+
+### Patch an operation you can't edit
+
+A billing package ships its own `/oauth/token` route. You can't annotate its controller, but you can
+give it a real summary and a usable example:
+
+<Tabs>
+	<TabItem label="Overlay">
+	```yaml
+	overlay: 1.0.0
+	info:
+	  title: Auth route polish
+	  version: 1.0.0
+	actions:
+	  - target: "$.paths['/oauth/token'].post"
+	    update:
+	      summary: Exchange credentials for an access token
+	      description: |
+	        Issues a bearer token for the client-credentials and password grants.
+	  - target: "$.paths['/oauth/token'].post.responses['200'].content['application/json'].example"
+	    update:
+	      access_token: "eyJ0eXAiOiJKV1Qi…"
+	      token_type: Bearer
+	      expires_in: 3600
+	```
+	</TabItem>
+	<TabItem label="Result">
+	```json
+	"/oauth/token": {
+	  "post": {
+	    "summary": "Exchange credentials for an access token",
+	    "description": "Issues a bearer token for the client-credentials and password grants.\n",
+	    "responses": {
+	      "200": {
+	        "content": {
+	          "application/json": {
+	            "example": {
+	              "access_token": "eyJ0eXAiOiJKV1Qi…",
+	              "token_type": "Bearer",
+	              "expires_in": 3600
+	            }
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Each `update` merges onto a node that already exists in the document, so the operation's inferred
+parameters and other responses are left untouched.
+
+### Document a third-party package route end to end
+
+Sometimes a package registers a route that Docuccino never sees — it isn't in your route table under
+a filter you export, or it's served outside the framework router. You can add the whole path with an
+overlay, with one rule to keep in mind: **you merge onto the parent that exists, not onto the key
+that's missing.**
+
+`$.paths` is always present, so target it and merge in the new path item. Targeting
+`$.paths['/oauth/tokens']` directly while it's absent would match nothing (a warning), because
+Overlay 1.0 only edits nodes that already exist:
+
+<Tabs>
+	<TabItem label="Overlay">
+	```yaml
+	overlay: 1.0.0
+	info:
+	  title: Passport token management
+	  version: 1.0.0
+	actions:
+	  - target: "$.paths"
+	    update:
+	      /oauth/tokens:
+	        get:
+	          summary: List the authenticated user's access tokens
+	          tags: [OAuth]
+	          responses:
+	            '200':
+	              description: The personal access tokens belonging to the current user.
+	```
+	</TabItem>
+	<TabItem label="Result">
+	```json
+	"/oauth/tokens": {
+	  "get": {
+	    "summary": "List the authenticated user's access tokens",
+	    "tags": ["OAuth"],
+	    "responses": {
+	      "200": {
+	        "description": "The personal access tokens belonging to the current user."
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The merged path item is hand-authored: there's no inference behind it, and the overlay provenance
+records it against the `paths` node. It's a first-class part of the document and validates like any
+other path, so keep it small and factual — you're describing a contract by hand rather than deriving
+it. For one or two routes this is the simplest tool. If you find yourself synthesizing many
+operations, or want them assembled with the same machinery as your real routes, step up to a
+[`DocumentTransformer`](#document-wide-changes).
+
+### Remove something internal from the published spec
+
+Inference documents what it finds, including the odd parameter or property you'd rather not publish.
+Prune them with `remove`:
+
+```yaml
+overlay: 1.0.0
+info:
+  title: Trim internals
+  version: 1.0.0
+actions:
+  - target: "$.paths['/api/v1/invoices'].get.parameters[?(@.name=='debug_trace')]"
+    remove: true
+  - target: "$.components.schemas.Invoice.properties.internal_ledger_ref"
+    remove: true
+```
+
+Removing an array element re-indexes the array to a clean list, so a filtered-out parameter never
+leaves a gap. For recurring, name-based hygiene across a whole document, the
+[leakage lint](/laravel/reference/configuration/#lint) is a better fit — it flags sensitive-looking
+properties everywhere they appear, rather than one target at a time.
+
+## Document-wide changes
+
+An overlay targets specific nodes. When a change is really a *policy* — it should apply to every
+operation, or synthesize structure programmatically — reach past overlays:
+
+- **Config and representation policies** cover the common cases declaratively: operation-id style,
+  filter naming, nullable style, tag mapping, error-response strategy. See the
+  [configuration reference](/laravel/reference/configuration/#representation).
+- **A `DocumentTransformer`** is a whole-document post-processor that runs after assembly and
+  overlays. It's the right tool when you need to touch many operations at once, or build structure
+  from data (for example, generating a set of routes from a manifest). Every official integration is
+  built with the same extension points — see [writing an integration](/extending/extension-authoring/).
+
+<CardGrid>
+	<LinkCard title="How contributions combine" href="/laravel/documenting/#how-contributions-combine" description="The full precedence chain and how higher layers win field by field." />
+	<LinkCard title="Overlays configuration" href="/laravel/reference/configuration/#overlays" description="The overlays glob and how it's resolved." />
+	<LinkCard title="Coming from Scribe?" href="/guides/vs-scribe/" description="Where .scribe hand-edits and custom.*.yaml map onto attributes and Overlays." />
+</CardGrid>

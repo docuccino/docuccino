@@ -70,6 +70,8 @@ export default defineConfig({
 						{ label: 'How it works', slug: 'laravel/guides/how-it-works' },
 						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
 						{ label: 'Multiple documents', slug: 'laravel/guides/multiple-documents' },
+						{ label: 'Customizing the output', slug: 'laravel/guides/customising-output' },
+						{ label: 'Guides, pages & prose', slug: 'laravel/guides/narrative-content' },
 						{ label: 'The viewer', slug: 'laravel/guides/viewer' },
 					],
 				},
