@@ -139,11 +139,14 @@ them carefully:
 - **Native Postman collection export**, on by default and linked in the docs UI. **Docuccino's Postman
   emitter is a fast-follow, not in v1** — for now, import the OpenAPI file into Postman.
 - **Custom rule objects and closures.** Scribe documents a custom `Rule` object via its `docs()`
-  method. Docuccino's `RuleTransformer` extension point handles string-named rules (so it maps
-  Laravel's rule-DSL floor — currently around 30 named rules — and any string rule you teach it), but
-  a rule *object* or a closure rule is recovered as an object the analyzer can't read: Docuccino
-  **diagnoses** it (`validation.rule-unrecoverable`) so you know a field was skipped, but cannot yet
-  document its shape. Express such fields with string/array rules, `Rule::enum()`, or `Rule::in()`.
+  method. Docuccino's `RuleTransformer` extension point handles string-named rules — it now maps the
+  whole Laravel rule-DSL floor (over 70 named rules, covering Scribe's entire documented validation
+  list and then some: patterns for `alpha`/`starts_with`/`digits`, `const` for `accepted`/`declined`,
+  date-comparison and numeric-bound constraints, `not_in`, `distinct`, and more) plus any string rule
+  you teach it. But a rule *object* or a closure rule is recovered as an object the analyzer can't
+  read: Docuccino **diagnoses** it (`validation.rule-unrecoverable`) so you know a field was skipped,
+  but cannot yet document its shape. Express such fields with string/array rules, `Rule::enum()`
+  (including `->only()` / `->except()`), or `Rule::in()`.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
 - **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request

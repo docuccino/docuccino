@@ -124,6 +124,59 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     // FileRuleTransformer — binary string schema (multipart switch asserted separately).
     'file' => [[['file']], ['format' => 'binary', 'type' => 'string']],
     'image' => [[['image']], ['description' => 'An image file.', 'format' => 'binary', 'type' => 'string']],
+
+    // AlphaRuleTransformer — canonical ECMA-262 character-class patterns (Scribe-parity block).
+    'alpha' => [[['alpha']], ['pattern' => '^[a-zA-Z]+$', 'type' => 'string']],
+    'alpha_num' => [[['alpha_num']], ['pattern' => '^[a-zA-Z0-9]+$', 'type' => 'string']],
+    'alpha_dash' => [[['alpha_dash']], ['pattern' => '^[a-zA-Z0-9_-]+$', 'type' => 'string']],
+
+    // AffixRuleTransformer — single value → anchored pattern (literal regex-escaped); multi → description.
+    'starts_with (single → pattern)' => [[['starts_with', ['abc']]], ['pattern' => '^abc', 'type' => 'string']],
+    'ends_with (single → pattern, escaped)' => [[['ends_with', ['.png']]], ['pattern' => '\\.png$', 'type' => 'string']],
+    'starts_with (multi → description)' => [[['starts_with', ['a', 'b']]], ['description' => 'Must start with one of: a, b.', 'type' => 'string']],
+    'ends_with (multi → description)' => [[['ends_with', ['x', 'y']]], ['description' => 'Must end with one of: x, y.', 'type' => 'string']],
+
+    // DigitsRuleTransformer — a digit COUNT is a string pattern (leading zeros preserved), never an int.
+    'digits' => [[['digits', ['5']]], ['pattern' => '^\\d{5}$', 'type' => 'string']],
+    'digits_between' => [[['digits_between', ['2', '5']]], ['pattern' => '^\\d{2,5}$', 'type' => 'string']],
+    'max_digits' => [[['max_digits', ['4']]], ['pattern' => '^\\d{1,4}$', 'type' => 'string']],
+    'min_digits' => [[['min_digits', ['2']]], ['pattern' => '^\\d{2,}$', 'type' => 'string']],
+
+    // JsonRuleTransformer — a string carrying a JSON document.
+    'json' => [[['json']], ['contentMediaType' => 'application/json', 'type' => 'string']],
+
+    // TimezoneRuleTransformer — no JSON-Schema format exists; documented as a described string.
+    'timezone' => [[['timezone']], ['description' => 'Must be a valid timezone identifier.', 'type' => 'string']],
+
+    // DateComparisonRuleTransformer — description + format when the target is a parseable date.
+    'before' => [[['before', ['2024-01-01']]], ['description' => 'Must be a date before 2024-01-01.', 'format' => 'date', 'type' => 'string']],
+    'before_or_equal' => [[['before_or_equal', ['2024-01-01']]], ['description' => 'Must be a date on or before 2024-01-01.', 'format' => 'date', 'type' => 'string']],
+    'after' => [[['after', ['2024-01-01']]], ['description' => 'Must be a date after 2024-01-01.', 'format' => 'date', 'type' => 'string']],
+    'after_or_equal (date-time target)' => [[['after_or_equal', ['2024-01-01 09:00:00']]], ['description' => 'Must be a date on or after 2024-01-01 09:00:00.', 'format' => 'date-time', 'type' => 'string']],
+
+    // BooleanConstRuleTransformer — accepted/declined fix a boolean const; the _if forms add a condition.
+    'accepted' => [[['accepted']], ['const' => true, 'type' => 'boolean']],
+    'declined' => [[['declined']], ['const' => false, 'type' => 'boolean']],
+    'accepted_if' => [[['accepted_if', ['terms', 'yes']]], ['const' => true, 'description' => 'Must be accepted when terms is yes.', 'type' => 'boolean']],
+    'declined_if' => [[['declined_if', ['spam', '1']]], ['const' => false, 'description' => 'Must be declined when spam is 1.', 'type' => 'boolean']],
+
+    // NotInRuleTransformer — the mirror of `in`: not: {enum}. Numeric-set inference like ChoiceRuleTransformer.
+    'not_in (string set)' => [[['not_in', ['draft', 'deleted']]], ['not' => ['enum' => ['draft', 'deleted']], 'type' => 'string']],
+    'not_in (numeric set)' => [[['not_in', ['1', '2']]], ['not' => ['enum' => [1, 2]], 'type' => 'integer']],
+
+    // NumericRuleTransformer — decimal note, multipleOf, and the numeric-literal comparison bounds.
+    'decimal (fixed)' => [[['decimal', ['2']]], ['description' => 'Must have 2 decimal places.', 'type' => 'number']],
+    'decimal (range)' => [[['decimal', ['2', '4']]], ['description' => 'Must have between 2 and 4 decimal places.', 'type' => 'number']],
+    'multiple_of' => [[['multiple_of', ['5']]], ['multipleOf' => 5, 'type' => 'number']],
+    'multiple_of (float)' => [[['multiple_of', ['0.5']]], ['multipleOf' => 0.5, 'type' => 'number']],
+    'gt (numeric literal)' => [[['gt', ['0']]], ['exclusiveMinimum' => 0, 'type' => 'number']],
+    'gte (numeric literal)' => [[['gte', ['1']]], ['minimum' => 1, 'type' => 'number']],
+    'lt (numeric literal)' => [[['lt', ['100']]], ['exclusiveMaximum' => 100, 'type' => 'number']],
+    'lte (numeric literal)' => [[['lte', ['99']]], ['maximum' => 99, 'type' => 'number']],
+
+    // ArrayShapeRuleTransformer — list → array; distinct → uniqueItems.
+    'list' => [[['list']], ['type' => 'array']],
+    'distinct' => [[['distinct']], ['type' => 'array', 'uniqueItems' => true]],
 ]);
 
 it('normalises regex delimiters to a bare ECMA-262 pattern across delimiter styles', function (string $raw, string $expected): void {
@@ -304,9 +357,22 @@ it('routes every declared rule name to exactly one transformer', function (strin
 })->with(handledRuleNameRows());
 
 it('raises an info diagnostic for a rule no transformer handles', function (): void {
-    $result = convertLaravelRules(['token' => 'string|starts_with:abc']);
+    // `mac_address` has no transformer (still outside the mapped vocabulary), so the field stays
+    // permissive and the unhandled contract holds.
+    $result = convertLaravelRules(['token' => 'string|mac_address']);
 
     expect($result->schema['properties']['token'])->toBe(['type' => 'string'])
         ->and($result->diagnostics)->toHaveCount(1)
         ->and($result->diagnostics[0]->code)->toBe('validation.rule-unhandled');
+});
+
+it('describes the field-reference forms of date-comparison and numeric-comparison rules', function (): void {
+    // A field-reference comparison target is a runtime relationship: the numeric bound must NOT be
+    // emitted (it is not a literal) and no `format` is claimed for a non-date target — both degrade to
+    // an honest description alongside the field's own type.
+    $afterField = convertFieldRules([['string'], ['after', ['start_date']]])->schema['properties']['f'];
+    expect($afterField)->toBe(['type' => 'string', 'description' => 'Must be a date after start_date.']);
+
+    $gtField = convertFieldRules([['integer'], ['gt', ['minimum_qty']]])->schema['properties']['f'];
+    expect($gtField)->toBe(['type' => 'integer', 'description' => 'Must be greater than minimum_qty.']);
 });

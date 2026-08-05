@@ -66,8 +66,10 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'DigitsBetween' => ['digitsBetween', 'digits_between:1,5'],
     'StartsWith' => ['startsWith', 'starts_with:a'],
     'EndsWith' => ['endsWith', 'ends_with:z'],
-    // Unsupported: not in the map → snake-cased short name, so the chain treats it as an unknown rule.
-    'Accepted (unsupported)' => ['accepted', 'accepted'],
+    // Not in the reflector's map → snake-cased short name; recovery is independent of whether a
+    // transformer then handles the token (the chain now maps `accepted` → const, but the token
+    // recovery under test here is unchanged).
+    'Accepted (not in the reflector map)' => ['accepted', 'accepted'],
 ]);
 
 it('drives the supported tokens through the shared chain to the expected schema', function (): void {
@@ -99,15 +101,15 @@ it('drives the supported tokens through the shared chain to the expected schema'
 });
 
 it('degrades an unsupported spatie validation attribute like an unknown string rule', function (): void {
-    // `accepted` has no transformer → the field stays permissive and an info diagnostic names it,
-    // identical to the unknown-string-rule contract (ValidationVocabularyTest).
-    $result = buildValidatedSchema([new PropertyMetadata('accepted', ScalarT::bool())]);
+    // `active_url` has no transformer → the field stays a plain typed property and an info diagnostic
+    // names it, identical to the unknown-string-rule contract (ValidationVocabularyTest).
+    $result = buildValidatedSchema([new PropertyMetadata('activeUrl', ScalarT::string())]);
 
-    expect($result->schema['properties']['accepted'])->toBe(['type' => 'boolean']);
+    expect($result->schema['properties']['activeUrl'])->toBe(['type' => 'string']);
 
     $unhandled = array_values(array_filter(
         $result->diagnostics,
-        static fn ($d): bool => $d->code === 'validation.rule-unhandled' && str_contains($d->message, '"accepted"'),
+        static fn ($d): bool => $d->code === 'validation.rule-unhandled' && str_contains($d->message, '"active_url"'),
     ));
     expect($unhandled)->toHaveCount(1);
 });
