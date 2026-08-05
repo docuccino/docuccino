@@ -106,7 +106,11 @@ final class DataSchema implements TypeToSchema
                 $key = $this->reflector->outputName($fqcn, $property->name);
                 $properties[$key] = $schema;
 
-                if (! $this->reflector->isPropertyOptional($fqcn, $property->name) && ! ($clean instanceof UnionT && $clean->containsNull())) {
+                // A Data property spatie always emits is required even when nullable: the key is on
+                // the wire carrying `null`, so nullability lives in the VALUE's type union, not in
+                // presence. Only an `Optional`/`Lazy` marker (stripped above) makes it non-required
+                // (cross-mapper required-vs-nullable convention — matches ModelSchema/ToArrayObject).
+                if (! $this->reflector->isPropertyOptional($fqcn, $property->name)) {
                     $required[] = $key;
                 }
             }

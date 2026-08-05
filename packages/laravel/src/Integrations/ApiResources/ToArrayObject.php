@@ -76,7 +76,12 @@ final class ToArrayObject
 
             $properties[$key] = $context->convert($type);
 
-            if (! $field->optional && ! $conditional && ! ($type instanceof UnionT && $type->containsNull())) {
+            // A field the toArray shape always emits is required, even when its value is nullable:
+            // the key is on the wire carrying `null`, so nullability is a property of the VALUE (the
+            // schema's type union), never of presence. Only a `?key` shape marker or a stripped
+            // `MissingValue` (a `when*` conditional) makes the property optional (cross-mapper
+            // required-vs-nullable convention — matches ModelSchema/DataSchema).
+            if (! $field->optional && ! $conditional) {
                 $required[] = $key;
             }
         }

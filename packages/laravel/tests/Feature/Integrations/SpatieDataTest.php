@@ -67,8 +67,10 @@ it('hoists a Data class to a component honouring #[SchemaName]/#[SchemaId], hidd
     // secret (spatie #[Hidden]) and internal (class-level Docuccino #[Hidden]) are dropped; title is
     // renamed to its #[MapName] output key.
     expect(array_keys($article['properties']))->toBe(['id', 'headline', 'body', 'subtitle', 'author']);
-    // Optional (subtitle) and nullable (author) are non-required; the marker is stripped from subtitle.
-    expect($article['required'])->toBe(['id', 'headline', 'body'])
+    // Only the Optional-marked subtitle is non-required (marker stripped). A nullable-but-always-
+    // emitted property (author) stays required under the cross-mapper required-vs-nullable convention
+    // (Wave C item 8): the key is on the wire carrying null.
+    expect($article['required'])->toBe(['id', 'headline', 'body', 'author'])
         ->and($article['properties']['subtitle'])->toBe(['type' => 'string'])
         // author is nullable AuthorData → an anyOf referencing the hoisted component + null.
         ->and($article['properties']['author']['anyOf'][0]['$ref'] ?? null)->toBe('#/components/schemas/AuthorData');

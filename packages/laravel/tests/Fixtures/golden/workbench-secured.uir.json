@@ -2129,7 +2129,8 @@
         "required": [
           "id",
           "headline",
-          "body"
+          "body",
+          "author"
         ]
       },
       "ArticleJsonApiResource": {
@@ -2440,7 +2441,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "fc0eda9f1b4075df4adfa8082e71618b507cc29867a4d4a1b0db61f3518c0963",
-      "contentHash": "cb45f07b48e624ddb5da58091fefa156d54ebd54edb7f553026c3a5a1fa6f3a9"
+      "contentHash": "bd6c8bd1224f40e27e9bfd98a2715e492870ce48558e5d493b870fe70d944924"
     },
     "generator": {
       "name": "docuccino/laravel",

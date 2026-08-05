@@ -805,7 +805,8 @@
         "required": [
           "id",
           "headline",
-          "body"
+          "body",
+          "author"
         ]
       },
       "ArticleJsonApiResource": {
