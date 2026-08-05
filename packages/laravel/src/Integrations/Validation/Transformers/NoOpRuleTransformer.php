@@ -15,7 +15,9 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
  * spurious `validation.rule-unhandled` info diagnostic. `bail` (stop on first failure), the `exclude`
  * family (drops the field from validated output — it does not describe the accepted input) and
  * `current_password` (a runtime credential check, not a shape constraint) genuinely add nothing to
- * the documented request shape.
+ * the documented request shape. `prohibited`/`prohibits` are presence-NEGATIONS — the field (or the
+ * fields it names) must be absent — so they describe no sendable shape either; the field simply
+ * stays optional (its default), which is the honest documented contract for a field you must not send.
  */
 final class NoOpRuleTransformer implements RuleTransformer
 {
@@ -27,6 +29,8 @@ final class NoOpRuleTransformer implements RuleTransformer
         'exclude_with',
         'exclude_without',
         'current_password',
+        'prohibited',
+        'prohibits',
     ];
 
     public function supports(ValidationRule $rule): bool

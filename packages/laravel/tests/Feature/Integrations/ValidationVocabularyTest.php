@@ -177,6 +177,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     // ArrayShapeRuleTransformer — list → array; distinct → uniqueItems.
     'list' => [[['list']], ['type' => 'array']],
     'distinct' => [[['distinct']], ['type' => 'array', 'uniqueItems' => true]],
+
+    // FileRuleTransformer — dimensions has no OpenAPI keyword, so the constraint list is a note
+    // (multipart switch asserted separately).
+    'dimensions' => [[['dimensions', ['min_width=100', 'min_height=200']]], ['description' => 'Image dimensions: min_width=100, min_height=200.']],
 ]);
 
 it('normalises regex delimiters to a bare ECMA-262 pattern across delimiter styles', function (string $raw, string $expected): void {
@@ -242,6 +246,28 @@ it('switches to multipart on mimes/mimetypes/extensions but adds nothing else', 
     $bare = convertFieldRules([['mimes', ['pdf', 'doc']]]);
     expect($bare->mediaType)->toBe('multipart/form-data')
         ->and($bare->schema['properties']['f'])->toBe([]);
+});
+
+it('flips multipart on dimensions and notes the constraints, and consumes prohibited rules', function (): void {
+    // `dimensions` implies an uploaded image: multipart, plus a description note (no wrong keyword).
+    // Alongside `image` it appends to the image note rather than clobbering it.
+    $dimensions = convertFieldRules([['image'], ['dimensions', ['min_width=100', 'max_width=1000']]]);
+    expect($dimensions->mediaType)->toBe('multipart/form-data')
+        ->and($dimensions->schema['properties']['f']['description'])->toContain('Image dimensions: min_width=100, max_width=1000.')
+        ->and($dimensions->diagnostics)->toBe([]);
+
+    // Bare `dimensions` with no params still flips multipart but adds no note.
+    $bare = convertFieldRules([['dimensions']]);
+    expect($bare->mediaType)->toBe('multipart/form-data')
+        ->and($bare->schema['properties']['f'])->toBe([]);
+
+    // `prohibited`/`prohibits` are presence-negations: consumed with no schema effect, field optional.
+    foreach (['prohibited', 'prohibits'] as $rule) {
+        $result = convertFieldRules([['string'], [$rule]]);
+        expect($result->schema['properties']['f'])->toBe(['type' => 'string'])
+            ->and($result->schema)->not->toHaveKey('required')
+            ->and($result->diagnostics)->toBe([]);
+    }
 });
 
 it('consumes known no-op rules without a diagnostic or schema effect', function (): void {

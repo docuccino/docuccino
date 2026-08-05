@@ -17,6 +17,11 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
  * too — but they contribute nothing else to the field schema (the binary type comes from an
  * accompanying `file`/`image` rule, which these almost always carry). Handling them here also stops
  * them raising a spurious unhandled-rule diagnostic.
+ *
+ * `dimensions` (image width/height constraints) likewise implies an uploaded image, so it flips
+ * multipart; OpenAPI has no keyword for pixel dimensions, so the constraint list becomes a
+ * description note rather than a wrong schema claim (the binary type comes from the accompanying
+ * `image` rule).
  */
 final class FileRuleTransformer implements RuleTransformer
 {
@@ -29,12 +34,22 @@ final class FileRuleTransformer implements RuleTransformer
 
     public function handledRuleNames(): array
     {
-        return ['file', 'image', ...self::MULTIPART_ONLY];
+        return ['file', 'image', 'dimensions', ...self::MULTIPART_ONLY];
     }
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
         $field->markMultipart();
+
+        if ($rule->name === 'dimensions') {
+            if ($rule->parameters !== []) {
+                $note = 'Image dimensions: '.implode(', ', $rule->parameters).'.';
+                $existing = $field->get('description');
+                $field->set('description', is_string($existing) && $existing !== '' ? $existing.' '.$note : $note);
+            }
+
+            return;
+        }
 
         if (in_array($rule->name, self::MULTIPART_ONLY, true)) {
             return;
