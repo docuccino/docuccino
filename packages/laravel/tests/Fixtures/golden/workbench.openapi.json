@@ -972,6 +972,10 @@
               "draft": "Not yet visible to applicants.",
               "published": "Live and accepting traffic."
             }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -980,7 +984,8 @@
           "created_at",
           "is_active",
           "status",
-          "meta"
+          "meta",
+          "updated_at"
         ]
       },
       "WidgetData": {

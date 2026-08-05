@@ -2341,6 +2341,10 @@
               "draft": "Not yet visible to applicants.",
               "published": "Live and accepting traffic."
             }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -2349,7 +2353,8 @@
           "created_at",
           "is_active",
           "status",
-          "meta"
+          "meta",
+          "updated_at"
         ]
       },
       "WidgetData": {
@@ -2427,7 +2432,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "fc0eda9f1b4075df4adfa8082e71618b507cc29867a4d4a1b0db61f3518c0963",
-      "contentHash": "533daf765f733afc14eeafbfd7339720416911fc133002c55e33e757e83ade50"
+      "contentHash": "782354255524fc77d298b9d6e3c44130501f870d0818ebbe568650c48371ffaa"
     },
     "generator": {
       "name": "docuccino/laravel",
