@@ -39,6 +39,7 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
+use Docuccino\Laravel\Integrations\QueryBuilder\ScopeParameterResolver;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimiterLimitVisitor;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 
@@ -125,10 +126,17 @@ $result = match ($mode) {
         $facts = $visitor->facts;
 
         $resolver = new FilterColumnResolver;
-        $filters = array_map(static function (QbEntry $filter) use ($resolver, $facts): array {
-            $column = $filter->kind === 'exact' && $facts->subjectModel !== null
-                ? $resolver->resolve($facts->subjectModel, $filter->column())
-                : null;
+        $scopes = new ScopeParameterResolver;
+        $filters = array_map(static function (QbEntry $filter) use ($resolver, $scopes, $facts): array {
+            $model = $facts->subjectModel;
+            // Mirror the extension's per-kind typing: a resolved column (exact/callback) off the model
+            // cast, a scope value parameter off its scope method — proving both against the real engine.
+            $column = match (true) {
+                $model === null => null,
+                $filter->kind === 'scope' => $scopes->resolve($model, $filter->name),
+                in_array($filter->kind, ['exact', 'callback'], true) && $filter->typeColumn !== null => $resolver->resolve($model, $filter->typeColumn),
+                default => null,
+            };
 
             return [
                 'name' => $filter->name,

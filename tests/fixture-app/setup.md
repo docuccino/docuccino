@@ -101,11 +101,18 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 
 - `app/Enums/ListingStatus.php` — a backed enum (`open`/`closed`/`draft`) with
   `#[CaseDescription]`s on two cases, so recovery yields backing values + `x-enumDescriptions`.
-- `app/Models/Listing.php` — an Eloquent model casting its `status` column to `ListingStatus`,
-  so `AllowedFilter::exact('status')` types from the model's own `$casts` (native reflection).
+- `app/Models/Listing.php` — an Eloquent model casting its `status` column to `ListingStatus` and
+  its `active` column to `boolean`, with a `scopeStatus(Builder, ListingStatus)` local scope. So
+  `AllowedFilter::exact('status')` types from `$casts`, `AllowedFilter::scope('status')` types from
+  the scope's value parameter, and a `callback` filtering on `active` types from the boolean cast.
 - `app/Http/Controllers/ListingQueryController.php` — `index()` builds
   `QueryBuilder::for(Listing::class)->allowedFilters(['title', AllowedFilter::exact('status')])->paginate(20)`,
   the target of the `trace-qb-enrich` runner mode (subject-model recovery + enum-cast typing).
+- `app/Http/Controllers/ListingFilterKindsController.php` — `index()` builds
+  `QueryBuilder::for(Listing::class)->allowedFilters([AllowedFilter::scope('status'),
+  AllowedFilter::callback('active', fn ($q, $v) => $q->where('active', $v))])->paginate(20)`, the
+  round-2 proof that scope value-parameter typing and callback closure column recovery work through
+  the real engine (`trace-qb-enrich`).
 
 ### Exception-flow analysis
 

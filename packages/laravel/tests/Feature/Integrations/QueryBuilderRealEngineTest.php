@@ -134,3 +134,33 @@ it('recovers a subject model and types an enum-cast exact filter through the rea
     // The non-exact plain filter is not cast-typed (stays a string).
     expect($byName['title']['columnKind'])->toBeNull();
 })->group('fixture');
+
+it('types a scope filter off its enum value parameter and a callback filter off its where column, on the real engine', function (): void {
+    // The REAL trace recovers Listing as the subject; ScopeParameterResolver reflects
+    // scopeStatus(Builder, ListingStatus) → the enum's values + case descriptions, and the callback
+    // closure's `where('active', $value)` column types off the model's boolean cast — round-2 kinds.
+    $harvest = FixtureRunner::traceQbEnrich(
+        'app/Http/Controllers/ListingFilterKindsController.php',
+        'App\\Http\\Controllers\\ListingFilterKindsController',
+        'index',
+    );
+
+    expect($harvest['subjectModel'])->toBe('App\\Models\\Listing');
+
+    $byName = [];
+    foreach ($harvest['filters'] as $filter) {
+        $byName[$filter['name']] = $filter;
+    }
+
+    // Scope value parameter (backed enum) → the enum's backing values + case descriptions.
+    expect($byName['status']['kind'])->toBe('scope')
+        ->and($byName['status']['columnKind'])->toBe('enum')
+        ->and($byName['status']['enum'])->toBe('App\\Enums\\ListingStatus')
+        ->and($byName['status']['values'])->toBe(['open', 'closed', 'draft'])
+        ->and($byName['status']['dependencyBasenames'])->toContain('ListingStatus.php');
+
+    // Callback closure `where('active', $value)` → the model's boolean cast.
+    expect($byName['active']['kind'])->toBe('callback')
+        ->and($byName['active']['columnKind'])->toBe('scalar')
+        ->and($byName['active']['scalarSchema'])->toBe(['type' => 'boolean']);
+})->group('fixture');
