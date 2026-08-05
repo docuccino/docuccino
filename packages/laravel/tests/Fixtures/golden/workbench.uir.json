@@ -175,6 +175,18 @@
           "id": "op:v1:3dlow6hkmw23fngd",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 32,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listArticleResources"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -184,6 +196,9 @@
           ]
         },
         "summary": "An anonymous resource collection → array of the item schema.",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "x-docuccino": {
@@ -241,6 +256,18 @@
           "id": "op:v1:i4p7f5urgwucug5e",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 38,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showArticleResource"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -250,6 +277,9 @@
           ]
         },
         "summary": "A single API resource whose whenLoaded fields become optional.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -337,6 +367,18 @@
           "id": "op:v1:kq63zfo4lcbme7q4",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 26,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeArticle"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -358,6 +400,9 @@
           ]
         },
         "summary": "Spatie Data request (body from the Data class) + response, under a folded 201.",
+        "tags": [
+          "Integrations"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -521,6 +566,18 @@
           "id": "op:v1:fx3nr5khwwr2u43w",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 86,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showAttachment"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -530,6 +587,9 @@
           ]
         },
         "summary": "A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -639,6 +699,18 @@
           "id": "op:v1:3imugcd3czwkfb5r",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 92,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::checkout"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -648,6 +720,9 @@
           ]
         },
         "summary": "Throws a renderable exception whose render() defines a 402 — documented by the inferred tier.",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "x-docuccino": {
@@ -754,6 +829,18 @@
           "id": "op:v1:6mr26ud4xrn6myak",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 56,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeCreatedArticle"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -763,6 +850,9 @@
           ]
         },
         "summary": "A resource wrapping a fresh Model::create() → a 201 Created response (Wave C item 4).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "201": {
             "x-docuccino": {
@@ -1234,6 +1324,18 @@
           "id": "op:v1:te6tu5h523g2xejg",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 50,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -1243,6 +1345,9 @@
           ]
         },
         "summary": "A jsonPaginate() resource collection → page[...] params + the paginator envelope (Wave C item 2).",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -1495,6 +1600,18 @@
           "id": "op:v1:q3dijmj5nz2mcwlh",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 62,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -1504,6 +1621,9 @@
           ]
         },
         "summary": "A first-party JSON:API resource → JSON:API document + include/fields query params.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -1685,6 +1805,18 @@
           "id": "op:v1:m4aki5bqegdvik25",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 68,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showWidget"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -1694,6 +1826,9 @@
           ]
         },
         "summary": "An Eloquent model → object schema from columns + casts + visible/hidden.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -1769,6 +1904,18 @@
           "id": "op:v1:bjryn3keddrsmaor",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 74,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::destroyWidget"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -1778,6 +1925,9 @@
           ]
         },
         "summary": "A 204 No Content response (noContent()).",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -1937,6 +2087,18 @@
           "id": "op:v1:vpm7j57vigntsl3q",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 44,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listPaginatedArticles"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -1946,6 +2108,9 @@
           ]
         },
         "summary": "A paginated resource collection → the length-aware {data, links, meta} envelope (Wave C item 1).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "x-docuccino": {
@@ -2259,6 +2424,18 @@
           "id": "op:v1:t7oawz3ogndx4sdm",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                "line": 80,
+                "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeReport"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -2268,6 +2445,9 @@
           ]
         },
         "summary": "Distinct return paths carrying distinct statuses (200 + 202).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "x-docuccino": {
@@ -2558,6 +2738,18 @@
           "id": "op:v1:47mcuhr4zhbssiz4",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
+                "line": 24,
+                "symbol": "Workbench\\App\\Http\\Controllers\\WidgetQueryController::index"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -2567,6 +2759,9 @@
           ]
         },
         "summary": "List forms, filterable and sortable via the query string.",
+        "tags": [
+          "WidgetQuery"
+        ],
         "parameters": [
           {
             "x-docuccino": {
@@ -3226,8 +3421,8 @@
   "x-docuccino": {
     "document": {
       "id": "doc:default",
-      "configHash": "6f17355bae81d652f750f20437518e598da489c879f421262abc700602dc9069",
-      "contentHash": "bea80530bb0ca7c010718a8d23148a7e550fe8e4e8b044d0a59d7263c8fb025b"
+      "configHash": "c87b6681a7debe3a50a423140f702bb953f18ce5967d5ba05d512497ab4535d6",
+      "contentHash": "7231e888b8315c11300ca737bafd4ad59b96bc45a038a0bf4b2739b9cbf4d1aa"
     },
     "generator": {
       "name": "docuccino/laravel",

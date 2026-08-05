@@ -133,6 +133,30 @@ final class AttributeOverridesExtension implements OperationExtension
             }
         }
 
-        return $tags;
+        if ($tags !== []) {
+            return $tags;
+        }
+
+        // No #[Group]: fall back to a raw default tag from the controller short name (config-keyed
+        // `tags.default_strategy`, default `controller`), then run it through `tags.map` like any raw
+        // tag — so an untagged API still groups by controller and the map can remap it.
+        $default = $this->defaultTag($context);
+
+        return $default === null ? [] : [$context->document->mapTag($default)];
+    }
+
+    /**
+     * The controller's short name with a trailing `Controller` stripped (`FormController` → `Form`),
+     * or null for a closure route / the `none` strategy.
+     */
+    private function defaultTag(RouteContext $context): ?string
+    {
+        if ($context->document->tagDefaultStrategy() !== 'controller' || $context->actionRef->class === null) {
+            return null;
+        }
+
+        $short = preg_replace('/Controller$/', '', Fqcn::short($context->actionRef->class));
+
+        return $short === null || $short === '' ? null : $short;
     }
 }

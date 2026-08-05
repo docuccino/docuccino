@@ -46,6 +46,35 @@ it('maps operation tags through the configured map and emits sorted document-lev
         ->and($document['tags'][0]['description'])->toBe('Manage forms');
 });
 
+it('derives a default tag from the controller short name when there is no #[Group]', function (): void {
+    // IntegrationsController carries no #[Group]; the default strategy tags its operations by the
+    // controller short name with the "Controller" suffix stripped.
+    $document = generateWithConfig(static fn (array $raw): array => $raw);
+
+    expect($document['paths']['/api/article-resources']['get']['tags'])->toBe(['Integrations']);
+});
+
+it('runs the default controller tag through tags.map', function (): void {
+    $document = generateWithConfig(function (array $raw): array {
+        $raw['tags']['map'] = ['Integrations' => 'Content'];
+
+        return $raw;
+    });
+
+    expect($document['paths']['/api/article-resources']['get']['tags'])->toBe(['Content']);
+});
+
+it('emits no default tag under the none strategy but keeps explicit #[Group] tags', function (): void {
+    $document = generateWithConfig(function (array $raw): array {
+        $raw['tags']['default_strategy'] = 'none';
+
+        return $raw;
+    });
+
+    expect($document['paths']['/api/article-resources']['get'])->not->toHaveKey('tags')
+        ->and($document['paths']['/api/forms']['get']['tags'])->toBe(['Forms']);
+});
+
 it('resolves a custom tags.mapper class-string from the container', function (): void {
     $document = generateWithConfig(function (array $raw): array {
         $raw['tags']['mapper'] = UppercaseTagMapper::class;

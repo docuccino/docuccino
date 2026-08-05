@@ -58,6 +58,9 @@
     "/api/article-resources": {
       "get": {
         "summary": "An anonymous resource collection → array of the item schema.",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -86,6 +89,9 @@
     "/api/article-resources/{id}": {
       "get": {
         "summary": "A single API resource whose whenLoaded fields become optional.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -121,6 +127,9 @@
     "/api/articles": {
       "post": {
         "summary": "Spatie Data request (body from the Data class) + response, under a folded 201.",
+        "tags": [
+          "Integrations"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -222,6 +231,9 @@
     "/api/attachments/{id}": {
       "get": {
         "summary": "A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -268,6 +280,9 @@
     "/api/checkout": {
       "post": {
         "summary": "Throws a renderable exception whose render() defines a 402 — documented by the inferred tier.",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -320,6 +335,9 @@
     "/api/created-articles": {
       "post": {
         "summary": "A resource wrapping a fresh Model::create() → a 201 Created response (Wave C item 4).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "201": {
             "description": "Created",
@@ -477,6 +495,9 @@
     "/api/json-paginated-articles": {
       "get": {
         "summary": "A jsonPaginate() resource collection → page[...] params + the paginator envelope (Wave C item 2).",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "page[number]",
@@ -596,6 +617,9 @@
     "/api/jsonapi-articles/{id}": {
       "get": {
         "summary": "A first-party JSON:API resource → JSON:API document + include/fields query params.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -654,6 +678,9 @@
     "/api/model-widgets/{id}": {
       "get": {
         "summary": "An Eloquent model → object schema from columns + casts + visible/hidden.",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -679,6 +706,9 @@
       },
       "delete": {
         "summary": "A 204 No Content response (noContent()).",
+        "tags": [
+          "Integrations"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -732,6 +762,9 @@
     "/api/paginated-articles": {
       "get": {
         "summary": "A paginated resource collection → the length-aware {data, links, meta} envelope (Wave C item 1).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -896,6 +929,9 @@
     "/api/reports": {
       "post": {
         "summary": "Distinct return paths carrying distinct statuses (200 + 202).",
+        "tags": [
+          "Integrations"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1027,6 +1063,9 @@
     "/api/widget-query": {
       "get": {
         "summary": "List forms, filterable and sortable via the query string.",
+        "tags": [
+          "WidgetQuery"
+        ],
         "parameters": [
           {
             "name": "filter[name]",

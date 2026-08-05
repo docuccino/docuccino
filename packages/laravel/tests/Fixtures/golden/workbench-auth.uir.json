@@ -17,7 +17,8 @@
               "producer": "attribute",
               "layer": "attribute",
               "fields": [
-                "security"
+                "security",
+                "tags"
               ],
               "source": {
                 "file": "workbench/app/Http/Controllers/AuthAttributesController.php",
@@ -46,6 +47,9 @@
           ]
         },
         "summary": "Public feed: works signed-out, richer when a bearer token is present.",
+        "tags": [
+          "AuthAttributes"
+        ],
         "security": [
           {},
           {
@@ -245,6 +249,18 @@
           "id": "op:v1:hphfbzuavwpyqrbc",
           "provenance": [
             {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "workbench/app/Http/Controllers/AuthAttributesController.php",
+                "line": 42,
+                "symbol": "Workbench\\App\\Http\\Controllers\\AuthAttributesController::publish"
+              }
+            },
+            {
               "producer": "docblock",
               "layer": "docblock",
               "fields": [
@@ -280,6 +296,9 @@
         },
         "summary": "Publish: the ability is checked in the body via `$request->user()->tokenCan('posts:publish')`.",
         "description": "Requires token ability: posts:publish",
+        "tags": [
+          "AuthAttributes"
+        ],
         "security": [
           {
             "sanctumToken": []
@@ -476,7 +495,7 @@
     "document": {
       "id": "doc:wave-d-auth",
       "configHash": "81842f28f791d3ec2c7a773b82a0fac282d809be78cc8b9185fad89d36030086",
-      "contentHash": "11770fbe340d616adcf089e9b962812a16c5f5e64ec07667e68d70f8dedbd5c4"
+      "contentHash": "5a8044999b8fdc5af186a13fa27bcb0d5080ffa5c79f8bb887f45ded0ea6c6a8"
     },
     "generator": {
       "name": "docuccino/laravel",

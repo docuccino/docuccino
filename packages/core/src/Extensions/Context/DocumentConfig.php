@@ -59,6 +59,18 @@ final readonly class DocumentConfig
     }
 
     /**
+     * How an operation with no `#[Group]` gets its default tag: `controller` (the controller's short
+     * name, `Controller` suffix stripped, then run through `tags.map`) or `none` (no default tag).
+     * Defaults to `controller` so an untagged API still groups sensibly (`tags.map` can then remap).
+     */
+    public function tagDefaultStrategy(): string
+    {
+        $strategy = $this->tags['default_strategy'] ?? 'controller';
+
+        return $strategy === 'none' ? 'none' : 'controller';
+    }
+
+    /**
      * The per-integration config sub-bag `integrations.<name>` (design §9), or `[]` when absent —
      * the single home for an integration's document-level knobs (Sanctum modes/cookie, Passport
      * url, Query Builder pagination terminals, API-resources wrapping …).

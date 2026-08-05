@@ -50,6 +50,10 @@ return [
             // error responses at all.
             'error_responses' => 'default', // 'default' | 'problem-details' | 'none'
             'tags' => [
+                // How an operation with no #[Group] is tagged: 'controller' (default — the controller's
+                // short name with a trailing "Controller" stripped, e.g. FormController → "Form", then
+                // run through `map` below) or 'none' (untagged). A closure route is never auto-tagged.
+                'default_strategy' => 'controller', // 'controller' | 'none'
                 // Raw tag => display tag. An exact match wins, else the first prefix the tag starts with.
                 'map' => [],
                 // Optional keys (omitted here to keep the default config minimal):
