@@ -37,6 +37,7 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
+use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/tests/fixture-app/app';
@@ -168,6 +169,18 @@ $result = match ($mode) {
             'maxResults' => $visitor->facts->maxResultsOverride,
             'defaultSize' => $visitor->facts->defaultSizeOverride,
         ];
+    })(),
+    'trace-pagination-terminal' => (static function () use ($engine, $ref): array {
+        // The resource paginating terminals — proves the shared visitor detects paginate/
+        // simplePaginate/cursorPaginate on a real builder receiver at chain depth (Wave C item 1).
+        $visitor = new PaginationTerminalVisitor([
+            'paginate' => 'length',
+            'simplePaginate' => 'simple',
+            'cursorPaginate' => 'cursor',
+        ]);
+        $engine->trace($ref, $visitor);
+
+        return ['paginates' => $visitor->paginates, 'kind' => $visitor->kind];
     })(),
     default => ['error' => 'unknown mode: '.$mode],
 };

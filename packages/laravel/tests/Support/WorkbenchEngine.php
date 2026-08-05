@@ -82,6 +82,19 @@ final class WorkbenchEngine
                 'Workbench\\App\\Http\\Controllers\\WidgetQueryController::index' => QbTraceScript::forChain(
                     "QueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name', AllowedFilter::exact('status')])->allowedSorts(['name', 'created_at'])->defaultSort('name')->paginate(20)",
                 ),
+                // A paginated resource collection: the chain reaches paginate() on a plain Eloquent
+                // builder (typed as such so the Query-Builder visitor, which needs a Spatie QueryBuilder
+                // receiver, ignores it) — the resource pagination extension wraps the length envelope.
+                self::CONTROLLER.'listPaginatedArticles' => QbTraceScript::forChain(
+                    '$q->paginate(15)',
+                    'Illuminate\\Database\\Eloquent\\Builder',
+                ),
+                // A jsonPaginate() collection: json-api-paginate documents its page[...] params AND
+                // (the response side) the paginator envelope for the configured mode.
+                self::CONTROLLER.'listJsonPaginatedArticles' => QbTraceScript::forChain(
+                    '$q->jsonPaginate()',
+                    'Illuminate\\Database\\Eloquent\\Builder',
+                ),
             ],
             analyses: [
                 'Workbench\\App\\Http\\Requests\\StoreWidgetRequest::rules' => new ActionAnalysis(
@@ -111,6 +124,15 @@ final class WorkbenchEngine
                 ),
                 self::CONTROLLER.'showArticleResource' => new ActionAnalysis(
                     returns: [new ReturnSite(new ClassT(self::ARTICLE_RESOURCE), $location)],
+                ),
+                // Paginated + jsonPaginate resource collections — the return type is the same
+                // AnonymousResourceCollection<ArticleResource>; the paginator envelope comes from the
+                // scripted trace, not the type (Wave C items 1 + 2).
+                self::CONTROLLER.'listPaginatedArticles' => new ActionAnalysis(
+                    returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
+                ),
+                self::CONTROLLER.'listJsonPaginatedArticles' => new ActionAnalysis(
+                    returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
                 ),
                 self::ARTICLE_RESOURCE.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
                     new ArrayShapeField('id', ScalarT::int()),

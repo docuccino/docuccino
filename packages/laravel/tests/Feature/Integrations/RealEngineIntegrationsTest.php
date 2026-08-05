@@ -249,6 +249,24 @@ it('recovers merge()/mergeWhen() as MergeValue<array{…}> and splices the keys 
         ->and($object['required'])->toBe(['id', 'name', 'email']);
 })->group('fixture');
 
+it('recovers the resource-collection paginating terminal + kind through the real engine', function (string $method, string $kind): void {
+    // The static return type is AnonymousResourceCollection<UserResource> for every mode; only the
+    // call-graph terminal distinguishes them. The REAL PaginationTerminalVisitor must find the
+    // paginate/simplePaginate/cursorPaginate terminal on the Eloquent builder receiver (Wave C item 1).
+    $trace = FixtureRunner::tracePaginationTerminal(
+        'app/Http/Controllers/UserPageController.php',
+        'App\\Http\\Controllers\\UserPageController',
+        $method,
+    );
+
+    expect($trace['paginates'])->toBeTrue()
+        ->and($trace['kind'])->toBe($kind);
+})->with([
+    'paginate → length' => ['lengthAware', 'length'],
+    'simplePaginate → simple' => ['simple', 'simple'],
+    'cursorPaginate → cursor' => ['cursor', 'cursor'],
+])->group('fixture');
+
 // ---------------------------------------------------------------------------------------------------
 // Phase 5c integrations — the recovery half proven against the REAL engine (M2 / binding coverage).
 // ---------------------------------------------------------------------------------------------------

@@ -913,6 +913,267 @@
         }
       }
     },
+    "/api/json-paginated-articles": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:te6tu5h523g2xejg",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A jsonPaginate() resource collection → page[...] params + the paginator envelope (Wave C item 2).",
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:2czlrneqkiojvyxv",
+              "provenance": [
+                {
+                  "producer": "integration:json-api-paginate",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 50,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+                  }
+                }
+              ]
+            },
+            "name": "page[number]",
+            "in": "query",
+            "description": "Page number.",
+            "required": false,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:json-api-paginate",
+                    "layer": "integration",
+                    "fields": [
+                      "default",
+                      "minimum",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                      "line": 50,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+                    }
+                  }
+                ]
+              },
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          },
+          {
+            "x-docuccino": {
+              "id": "par:v1:3dta46d3afapmogj",
+              "provenance": [
+                {
+                  "producer": "integration:json-api-paginate",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 50,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+                  }
+                }
+              ]
+            },
+            "name": "page[size]",
+            "in": "query",
+            "description": "Number of results per page.",
+            "required": false,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:json-api-paginate",
+                    "layer": "integration",
+                    "fields": [
+                      "default",
+                      "maximum",
+                      "minimum",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                      "line": 50,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+                    }
+                  }
+                ]
+              },
+              "type": "integer",
+              "default": 30,
+              "maximum": 30,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:udqmuwmfho4xe4dg",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:json-api-paginate",
+                        "layer": "integration",
+                        "fields": [
+                          "items",
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 50,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listJsonPaginatedArticles"
+                        },
+                        "overrode": [
+                          {
+                            "field": "type",
+                            "value": "object",
+                            "producer": "inference"
+                          },
+                          {
+                            "field": "properties",
+                            "value": {
+                              "data": {
+                                "items": {
+                                  "$ref": "#/components/schemas/ArticleResource"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "producer": "inference"
+                          },
+                          {
+                            "field": "required",
+                            "value": [
+                              "data"
+                            ],
+                            "producer": "inference"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArticleResource"
+                      }
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "first": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "last": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "prev": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "current_page": {
+                          "type": "integer"
+                        },
+                        "from": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "last_page": {
+                          "type": "integer"
+                        },
+                        "path": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "per_page": {
+                          "type": "integer"
+                        },
+                        "to": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jsonapi-articles/{id}": {
       "get": {
         "x-docuccino": {
@@ -975,7 +1236,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                    "line": 44,
+                    "line": 56,
                     "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                   }
                 }
@@ -999,7 +1260,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                      "line": 44,
+                      "line": 56,
                       "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                     }
                   }
@@ -1024,7 +1285,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                    "line": 44,
+                    "line": 56,
                     "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                   }
                 }
@@ -1045,7 +1306,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                      "line": 44,
+                      "line": 56,
                       "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                     }
                   }
@@ -1353,6 +1614,169 @@
             "guard": "web"
           }
         ]
+      }
+    },
+    "/api/paginated-articles": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:vpm7j57vigntsl3q",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A paginated resource collection → the length-aware {data, links, meta} envelope (Wave C item 1).",
+        "responses": {
+          "200": {
+            "x-docuccino": {
+              "id": "res:v1:ivfey326tjgnaf5f",
+              "provenance": [
+                {
+                  "producer": "fallback",
+                  "layer": "fallback",
+                  "fields": [
+                    "description"
+                  ]
+                }
+              ]
+            },
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:api-resources",
+                        "layer": "integration",
+                        "fields": [
+                          "items",
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 44,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listPaginatedArticles"
+                        },
+                        "overrode": [
+                          {
+                            "field": "type",
+                            "value": "object",
+                            "producer": "inference"
+                          },
+                          {
+                            "field": "properties",
+                            "value": {
+                              "data": {
+                                "items": {
+                                  "$ref": "#/components/schemas/ArticleResource"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "producer": "inference"
+                          },
+                          {
+                            "field": "required",
+                            "value": [
+                              "data"
+                            ],
+                            "producer": "inference"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArticleResource"
+                      }
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "first": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "last": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "prev": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "current_page": {
+                          "type": "integer"
+                        },
+                        "from": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "last_page": {
+                          "type": "integer"
+                        },
+                        "path": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "per_page": {
+                          "type": "integer"
+                        },
+                        "to": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "links",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/ping": {
@@ -2425,7 +2849,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "6f17355bae81d652f750f20437518e598da489c879f421262abc700602dc9069",
-      "contentHash": "2ef3145954c1a0c39cb8d524dab1f6e8efc33439999aa4620b8feab11273d0e6"
+      "contentHash": "4ea636908dc1649eaf9d1c01e9f1beefecda1175894349925da19b283a49a22c"
     },
     "generator": {
       "name": "docuccino/laravel",

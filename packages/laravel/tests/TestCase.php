@@ -73,6 +73,8 @@ abstract class TestCase extends Orchestra
         // Phase-4 integration routes (Spatie Data, API Resources, JSON:API, Eloquent, status codes).
         $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);
         $router->get('api/article-resources', [IntegrationsController::class, 'listArticleResources']);
+        $router->get('api/paginated-articles', [IntegrationsController::class, 'listPaginatedArticles']);
+        $router->get('api/json-paginated-articles', [IntegrationsController::class, 'listJsonPaginatedArticles']);
         $router->get('api/article-resources/{id}', [IntegrationsController::class, 'showArticleResource']);
         $router->get('api/jsonapi-articles/{id}', [IntegrationsController::class, 'showJsonApiArticle']);
         $router->get('api/model-widgets/{id}', [IntegrationsController::class, 'showWidget']);

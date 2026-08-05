@@ -93,6 +93,17 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the REAL PaginationTerminalVisitor over the resource paginating terminals:
+     * returns whether it reached a `paginate`/`simplePaginate`/`cursorPaginate` terminal and its kind.
+     *
+     * @return array<string, mixed>
+     */
+    public static function tracePaginationTerminal(string $controllerRelPath, string $class, string $method): array
+    {
+        return self::invoke('trace-pagination-terminal', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
      * The real engine's {@see ClassMetadata} for a class (its property
      * names + reflected types), serialized. The file argument is unused for this mode.
      *

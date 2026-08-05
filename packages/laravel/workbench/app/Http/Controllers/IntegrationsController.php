@@ -40,6 +40,18 @@ final class IntegrationsController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /** A paginated resource collection → the length-aware {data, links, meta} envelope (Wave C item 1). */
+    public function listPaginatedArticles(): AnonymousResourceCollection
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /** A jsonPaginate() resource collection → page[...] params + the paginator envelope (Wave C item 2). */
+    public function listJsonPaginatedArticles(): AnonymousResourceCollection
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A first-party JSON:API resource → JSON:API document + include/fields query params. */
     public function showJsonApiArticle(string $id): ArticleJsonApiResource
     {
