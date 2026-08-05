@@ -13,6 +13,8 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ArchiveArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ExplicitMethodAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\HtmlResponseAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\JsonResponseAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\PublishArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\SimpleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\WithAttributesAction;
@@ -45,6 +47,23 @@ function actionEngine(): StubTypeEngine
         // proves the analysis was redirected to asController — not merely its docblock summary (G1).
         ArchiveArticleAction::class.'::asController' => new ActionAnalysis(
             returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('archived', ScalarT::bool())]), $loc)],
+        ),
+        // handle() and jsonResponse() carry DISTINCT shapes: a 200 body of `{data, meta}` proves the
+        // success analysis was redirected to jsonResponse — the decorator's real JSON wire shape — not
+        // handle()'s bare `{id}`.
+        JsonResponseAction::class.'::handle' => new ActionAnalysis(
+            returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('id', ScalarT::int())]), $loc)],
+        ),
+        JsonResponseAction::class.'::jsonResponse' => new ActionAnalysis(
+            returns: [new ReturnSite(new ArrayShapeT([
+                new ArrayShapeField('data', new ArrayShapeT([new ArrayShapeField('id', ScalarT::int())])),
+                new ArrayShapeField('meta', new ArrayShapeT([new ArrayShapeField('published', ScalarT::bool())])),
+            ]), $loc)],
+        ),
+        // htmlResponse action: handle() drives the JSON body (no jsonResponse redirect); the text/html
+        // note is additive.
+        HtmlResponseAction::class.'::handle' => new ActionAnalysis(
+            returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('id', ScalarT::int())]), $loc)],
         ),
     ]);
 }
@@ -119,4 +138,35 @@ it('documents no rules() body or authorize() 403 for a WithAttributes action', f
 
     expect($operation)->not->toHaveKey('requestBody')
         ->and($operation['responses'] ?? [])->not->toHaveKey('403');
+});
+
+it('builds the 200 body from jsonResponse() when the action defines it, not from handle()', function (): void {
+    // The package's controller decorator returns jsonResponse($result) for JSON clients, so its
+    // `{data, meta}` return — not handle()'s bare `{id}` — is the real wire shape.
+    $operation = actionOperation('post', 'api/publish-json', JsonResponseAction::class);
+
+    $schema = $operation['responses']['200']['content']['application/json']['schema'] ?? [];
+    expect($schema['properties'] ?? [])->toHaveKeys(['data', 'meta'])
+        ->and($schema['properties'] ?? [])->not->toHaveKey('id');
+});
+
+it('builds the 200 body from the resolved method when the action defines no jsonResponse() (unchanged)', function (): void {
+    // Negative case (binding): SimpleAction has no jsonResponse()/htmlResponse(), so the success body
+    // stays exactly the dispatched handle()'s analysis — the pre-existing behaviour is untouched.
+    $operation = actionOperation('post', 'api/publish', PublishArticleAction::class);
+
+    $schema = $operation['responses']['200']['content']['application/json']['schema'] ?? [];
+    expect($schema['properties'] ?? [])->toHaveKey('id')
+        ->and($operation['responses']['200']['content'] ?? [])->not->toHaveKey('text/html');
+});
+
+it('records a text/html success representation when the action defines htmlResponse()', function (): void {
+    // htmlResponse() serves non-JSON clients: the endpoint additionally returns text/html. It is noted
+    // as a string content type (not a JSON-typed body); the JSON body still comes from handle().
+    $operation = actionOperation('get', 'api/show-html', HtmlResponseAction::class);
+
+    $content = $operation['responses']['200']['content'] ?? [];
+    expect($content)->toHaveKeys(['application/json', 'text/html'])
+        ->and($content['text/html']['schema']['type'] ?? null)->toBe('string')
+        ->and($content['application/json']['schema']['properties'] ?? [])->toHaveKey('id');
 });

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\LaravelActions;
 
+use Docuccino\Core\Inference\ActionRef;
 use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * The one place that recognises a `lorisleiva/laravel-actions` action class and resolves which of its
@@ -102,5 +104,45 @@ final class LaravelAction
         }
 
         return $reflection->hasMethod('handle') ? 'handle' : $method;
+    }
+
+    /**
+     * The method whose RETURN TYPE is the true 200 wire shape for a JSON client. The package's
+     * controller decorator, when the action defines `jsonResponse()` and the client expects JSON,
+     * returns `jsonResponse($response, $request)` instead of the dispatched method's value
+     * (`ControllerDecorator::__invoke()`). Docuccino documents the JSON path, so the success body must
+     * be analysed from `jsonResponse()` — not from the resolved `handle()`/`asController()` whose value
+     * the decorator has already transformed. Returns an {@see ActionRef} pointing at `jsonResponse()`
+     * when the action defines it, else null (leave the dispatched method's return analysis in place).
+     *
+     * This mirrors {@see controllerMethod()} — reflection-time knowledge of how the route really
+     * responds — so it is applied regardless of whether the route dispatches invokably or through an
+     * explicitly-registered method (the decorator wraps both).
+     */
+    public static function responseAnalysisRef(ActionRef $dispatched): ?ActionRef
+    {
+        $class = $dispatched->class;
+        if ($class === null || ! self::isAction($class) || ! method_exists($class, 'jsonResponse')) {
+            return null;
+        }
+
+        $method = new ReflectionMethod($class, 'jsonResponse');
+
+        return new ActionRef(
+            file: (string) $method->getFileName(),
+            class: $class,
+            method: 'jsonResponse',
+            line: (int) $method->getStartLine(),
+        );
+    }
+
+    /**
+     * Whether the action defines `htmlResponse()` — the decorator returns its value for non-JSON
+     * clients (`ControllerDecorator::__invoke()`), so the endpoint additionally serves `text/html`.
+     * Docuccino records that as a content-type note rather than trying to type an HTML body as JSON.
+     */
+    public static function definesHtmlResponse(?string $fqcn): bool
+    {
+        return $fqcn !== null && self::isAction($fqcn) && method_exists($fqcn, 'htmlResponse');
     }
 }

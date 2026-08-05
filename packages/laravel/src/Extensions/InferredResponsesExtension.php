@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
@@ -19,6 +20,7 @@ use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
+use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
 use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
 use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflector;
 
@@ -36,6 +38,11 @@ use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflect
  * The folded status is read from the second type arg when it is a constant `int` literal; a dynamic
  * status (non-literal) falls back to the default `200`. Bare `void`/`never` returns (no
  * `JsonResponse` wrapper) contribute nothing.
+ *
+ * One integration-aware redirect: a `lorisleiva/laravel-actions` action that defines `jsonResponse()`
+ * has its success body analysed from THAT method's return type, not the dispatched
+ * `handle()`/`asController()` — the package's controller decorator transforms the dispatched value
+ * through `jsonResponse()` for JSON clients, so it is the real wire shape ({@see LaravelAction::responseAnalysisRef()}).
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class InferredResponsesExtension implements OperationExtension
@@ -60,7 +67,7 @@ final class InferredResponsesExtension implements OperationExtension
         /** @var array<string, array{payloads: list<DType>, location: ?SourceLocation, empty: bool}> $byStatus */
         $byStatus = [];
 
-        foreach ($context->analysis()->returns as $return) {
+        foreach ($this->responseAnalysis($context)->returns as $return) {
             [$status, $payload, $empty] = $this->unwrap($return->type);
 
             // A bare void/never return (no JsonResponse wrapper) documents nothing.
@@ -89,6 +96,27 @@ final class InferredResponsesExtension implements OperationExtension
             // the string the draft API and reason table expect.
             $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location']);
         }
+    }
+
+    /**
+     * The analysis whose return sites define the success body. Normally the dispatched action's own
+     * ({@see RouteContext::analysis()}); for a laravel-actions action defining `jsonResponse()` it is
+     * that method's analysis instead (the transformed JSON wire shape). Analysing `jsonResponse()`
+     * directly — rather than layering an override on top of the dispatched-method body — keeps a single
+     * source for the 200 schema, so no stale keywords from the untransformed body can leak. Its
+     * dependency files are recorded so editing `jsonResponse()` still invalidates the cached fragment.
+     */
+    private function responseAnalysis(RouteContext $context): ActionAnalysis
+    {
+        $responseRef = LaravelAction::responseAnalysisRef($context->actionRef);
+        if ($responseRef === null) {
+            return $context->analysis();
+        }
+
+        $analysis = $context->engine->analyzeAction($responseRef);
+        $context->recordDependencyFiles($analysis->dependencyFiles);
+
+        return $analysis;
     }
 
     /**

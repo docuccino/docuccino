@@ -9,7 +9,10 @@ namespace Docuccino\Laravel\Integrations\LaravelActions;
  * behind a `trait_exists` guard on the package's `AsController` trait, so docuccino/laravel never
  * hard-requires it. The route-method remapping (an invokable action → its `asController()`/`handle()`
  * method) is applied earlier, in the route reflector via {@see LaravelAction}; these extensions then
- * document the resolved method's request (`rules()`) and its `authorize()` 403.
+ * document the resolved method's request (`rules()`) and its `authorize()` 403, plus the `text/html`
+ * representation of an action defining `htmlResponse()`. The `jsonResponse()` success-body redirect is
+ * applied in the adapter's inferred-responses extension via {@see LaravelAction::responseAnalysisRef()}
+ * (single-source, so no stale untransformed keywords leak).
  */
 final class LaravelActionsIntegration
 {
@@ -34,6 +37,7 @@ final class LaravelActionsIntegration
         return [
             ActionValidationExtension::class,
             ActionAuthorizeResponsesExtension::class,
+            ActionHtmlResponseExtension::class,
         ];
     }
 }

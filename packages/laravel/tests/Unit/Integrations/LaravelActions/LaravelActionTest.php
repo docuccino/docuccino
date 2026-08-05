@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ArchiveArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ExplicitMethodAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\HandlelessAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\HtmlResponseAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\InheritedArticleAction;
+use Docuccino\Laravel\Tests\Fixtures\LaravelActions\JsonResponseAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\PublishArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\SimpleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\WithAttributesAction;
@@ -54,4 +57,35 @@ it('reports whether the package would validate the dispatched method (rules()/au
     'WithAttributes action via handle' => [WithAttributesAction::class, 'handle', false],
     // A non-action class is never gated on.
     'non-action controller' => [FormController::class, '__invoke', false],
+]);
+
+it('redirects the success-body analysis to jsonResponse() only when the action defines it', function (string $class, ?string $expectedMethod): void {
+    $ref = LaravelAction::responseAnalysisRef(new ActionRef('', $class, 'handle'));
+
+    if ($expectedMethod === null) {
+        expect($ref)->toBeNull();
+
+        return;
+    }
+
+    expect($ref)->not->toBeNull()
+        ->and($ref->class)->toBe($class)
+        ->and($ref->method)->toBe($expectedMethod)
+        ->and($ref->file)->not->toBe('')
+        ->and($ref->line)->toBeGreaterThan(0);
+})->with([
+    'action defining jsonResponse → redirected' => [JsonResponseAction::class, 'jsonResponse'],
+    'action without jsonResponse → no redirect' => [PublishArticleAction::class, null],
+    'htmlResponse-only action → no jsonResponse redirect' => [HtmlResponseAction::class, null],
+    'non-action controller → no redirect' => [FormController::class, null],
+]);
+
+it('detects an htmlResponse() action', function (?string $class, bool $expected): void {
+    expect(LaravelAction::definesHtmlResponse($class))->toBe($expected);
+})->with([
+    'action defining htmlResponse' => [HtmlResponseAction::class, true],
+    'action without htmlResponse' => [PublishArticleAction::class, false],
+    'jsonResponse-only action' => [JsonResponseAction::class, false],
+    'non-action controller' => [FormController::class, false],
+    'null class (closure route)' => [null, false],
 ]);

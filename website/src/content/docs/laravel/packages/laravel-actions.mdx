@@ -22,7 +22,9 @@ method, so everything is read from the real signature rather than the trait's ge
   through the same validation pipeline Form Requests use.
 - **A `403` response** is documented whenever the action defines `authorize()`, rendered in the same
   style as the rest of your error responses (framework defaults, or the Problem Details preset).
-- **The response body** is inferred from the resolved method's return type, like any other endpoint.
+- **The response body** is inferred from the resolved method's return type — or, when the action
+  defines a `jsonResponse()` transformer, from *that* method's return type (see below), because that
+  is what a JSON client actually receives.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -93,6 +95,55 @@ The method Docuccino reads matches the package's own precedence:
 
 If you register a specific method explicitly — `Route::post('/articles', [PublishArticle::class, 'handle'])`
 — that method is honored as-is.
+
+## Response transformers: `jsonResponse()` and `htmlResponse()`
+
+Actions can shape their response per content type. When the client asks for JSON, the package hands
+`handle()`'s value to `jsonResponse($result, $request)` and returns *that* — so `jsonResponse()`'s
+return type, not `handle()`'s, is the real 200 body. Docuccino documents the transformed shape:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	class PublishArticle
+	{
+	    use AsController;
+
+	    public function handle(): Article
+	    {
+	        return Article::create(/* ... */);
+	    }
+
+	    /** Wrap the model in a JSON:API-style envelope for JSON clients. */
+	    public function jsonResponse(Article $article): array
+	    {
+	        return ['data' => new ArticleResource($article)];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"responses": {
+	  "200": { "content": { "application/json": { "schema": {
+	    "type": "object",
+	    "properties": { "data": { "$ref": "#/components/schemas/ArticleResource" } }
+	  } } } }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The `200` body is the `{ data }` envelope from `jsonResponse()` — the `Article` that `handle()` returns
+is what the transformer wrapped, so it never appears on its own.
+
+An action that defines `htmlResponse()` serves HTML to browser clients. Docuccino records that as a
+`text/html` representation on the success response — a content-type note alongside the JSON body,
+rather than an attempt to type rendered HTML as a JSON schema. An action can define both: the JSON
+body comes from `jsonResponse()`, and `text/html` is listed too.
+
+This mapping applies however the route is registered (invokable or an explicit method) — the package
+wraps every dispatch, so the transformer always runs.
 
 ## Refining the output
 

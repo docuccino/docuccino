@@ -421,6 +421,34 @@ it('recovers a real laravel-actions rules() array end-to-end into a RuleSet', fu
         ->and($ruleNames('body'))->toBe(['required', 'string']);
 })->group('fixture');
 
+it('recovers a laravel-actions jsonResponse() envelope distinct from handle() through the real engine', function (): void {
+    // The decorator returns jsonResponse($result) for JSON clients, so ITS return type is the 200 wire
+    // shape. The engine analyses jsonResponse() into the `{data, meta}` envelope — distinct from
+    // handle()'s bare `{id}` — which InferredResponsesExtension selects via responseAnalysisRef().
+    $jsonResponse = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Actions/PublishArticleAction.php',
+        'App\\Actions\\PublishArticleAction',
+        'jsonResponse',
+    ));
+    $envelope = $jsonResponse->returns[0]->type ?? null;
+    expect($envelope)->toBeInstanceOf(ArrayShapeT::class);
+    $envelopeKeys = array_map(static fn ($field): string => (string) $field->key, $envelope->fields);
+    expect($envelopeKeys)->toBe(['data', 'meta']);
+
+    // handle()'s own shape is the bare `{id}` the decorator has already wrapped away — proving the
+    // redirect selects a genuinely different (transformed) wire shape, not the same one.
+    $handle = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Actions/PublishArticleAction.php',
+        'App\\Actions\\PublishArticleAction',
+        'handle',
+    ));
+    $handleShape = $handle->returns[0]->type ?? null;
+    expect($handleShape)->toBeInstanceOf(ArrayShapeT::class);
+    $handleKeys = array_map(static fn ($field): string => (string) $field->key, $handleShape->fields);
+    expect($handleKeys)->toBe(['id'])
+        ->and($envelopeKeys)->not->toBe($handleKeys);
+})->group('fixture');
+
 // ---------------------------------------------------------------------------------------------------
 // Wave D — Eloquent accessor / custom-cast / $with recovery, proven against the REAL engine.
 // ---------------------------------------------------------------------------------------------------
