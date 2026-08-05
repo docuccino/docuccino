@@ -75,9 +75,12 @@ declared with [`#[Abilities]`](/laravel/reference/attributes/#abilities).
 
 ## Passport
 
-Activates when [Laravel Passport](https://laravel.com/docs/passport) is installed. Routes protected
-by `auth:api` (or `scope:` / `scopes:` middleware, including the `CheckScopes::using()` /
-`CheckForAnyScope::using()` FQCN forms) are documented with an OAuth2 scheme. The always-available
+Activates when [Laravel Passport](https://laravel.com/docs/passport) is installed. A route is
+documented with the OAuth2 scheme when it carries `scope:` / `scopes:` or client-credentials
+middleware, **or** when one of its `auth:<guard>` middleware resolves to a `passport`-**driver**
+guard. Detection is driver-based, from `config('auth.guards')` — so a custom-named guard
+(`auth:partner` on the passport driver) is recognised, a guard on a `token`/`sanctum` driver is not
+mistaken for Passport, and multi-guard lists (`auth:web,api`) work. The always-available
 authorization-code and client-credentials flows are emitted, plus the password and implicit flows
 **only when the app opted into them** (`Passport::enablePasswordGrant()` / `enableImplicitGrant()`) —
 so the docs never advertise a grant the server rejects. The flow scope map is your real scope
@@ -85,7 +88,10 @@ catalogue from `Passport::tokensCan()`, and the endpoints honour `config('passpo
 
 Per-operation scopes are read from the middleware and modelled by their Laravel semantics:
 `scopes:` (`CheckScopes`) requires **all** listed scopes (one requirement), while `scope:`
-(`CheckForAnyScope`) requires **any one** of them, emitted as an OR-list of requirements.
+(`CheckForAnyScope`) requires **any one** of them, emitted as an OR-list of requirements. The same
+applies to machine-to-machine routes: `client` / `CheckClientCredentials` (all-of) and
+`CheckClientCredentialsForAnyScope` (any-of) are documented against the client-credentials flow, and
+a bare `client` with no scope is still marked protected.
 
 ```php
 // config/docuccino.php → documents.default.integrations

@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 
 /**
@@ -78,7 +79,11 @@ final class SanctumSecurityExtension implements OperationExtension
     private function effectiveModes(RouteContext $context): array
     {
         $allowed = $this->allowedModes($context);
-        $supported = $this->detector->supportedModes($context->route->middleware);
+        $supported = $this->detector->supportedModes(
+            $context->route->middleware,
+            AuthGuardDrivers::map($this->config?->get('auth.guards')),
+            $this->defaultGuard(),
+        );
 
         return array_values(array_filter($supported, static fn (string $mode): bool => in_array($mode, $allowed, true)));
     }
@@ -116,5 +121,15 @@ final class SanctumSecurityExtension implements OperationExtension
         $sessionCookie = $this->config?->get('session.cookie');
 
         return is_string($sessionCookie) && $sessionCookie !== '' ? $sessionCookie : 'laravel_session';
+    }
+
+    /**
+     * The app's default auth guard (`config('auth.defaults.guard')`), for resolving bare `auth`.
+     */
+    private function defaultGuard(): string
+    {
+        $guard = $this->config?->get('auth.defaults.guard');
+
+        return is_string($guard) && $guard !== '' ? $guard : 'web';
     }
 }

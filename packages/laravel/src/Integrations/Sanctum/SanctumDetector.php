@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Sanctum;
 
+use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
+
 /**
  * Decides, from a route's gathered middleware, which Sanctum auth modes protect the operation
- * (design §Phase 4 — Sanctum auto-config). Two independent signals: the `auth:sanctum` guard (or the
- * bare `sanctum` alias, or an `abilities:`/`ability:` ability middleware) enables TOKEN mode; the
- * stateful-frontend middleware (registered app-wide by `statefulApi()`) enables STATEFUL/cookie mode
- * — but only alongside an actual auth guard, since `statefulApi()` prepends the stateful middleware
- * to the WHOLE api group, so its bare presence on a public route (login, register) must NOT document
- * a cookie requirement. A dual-auth app exhibits both signals on the same route, so this returns the
- * SET of active modes rather than a single choice. Pure so the map is dataset-tested.
+ * (design §Phase 4 — Sanctum auto-config). TOKEN mode is signalled by the `auth:sanctum` guard, the
+ * bare `sanctum` alias, an `abilities:`/`ability:` ability middleware, OR any `auth:<guard>` whose
+ * configured driver is `sanctum` (auth audit #8 — so a custom sanctum-driver guard like `auth:mobile`
+ * is recognised). The stateful-frontend middleware (registered app-wide by `statefulApi()`) enables
+ * STATEFUL/cookie mode — but only alongside an actual auth guard, since `statefulApi()` prepends the
+ * stateful middleware to the WHOLE api group, so its bare presence on a public route (login, register)
+ * must NOT document a cookie requirement. A dual-auth app exhibits both signals on the same route, so
+ * this returns the SET of active modes rather than a single choice. The guard→driver map is resolved
+ * in the extension and passed in, so this stays pure and dataset-tested.
  */
 final class SanctumDetector
 {
@@ -30,17 +34,18 @@ final class SanctumDetector
      * The modes the route itself supports, in a stable order (token before stateful).
      *
      * @param  list<string>  $middleware
+     * @param  array<string, string>  $guardDrivers  guard name → driver, from `config('auth.guards')`
      * @return list<string>
      */
-    public function supportedModes(array $middleware): array
+    public function supportedModes(array $middleware, array $guardDrivers = [], string $defaultGuard = 'web'): array
     {
         $modes = [];
-        if ($this->hasTokenGuard($middleware)) {
+        if ($this->hasTokenGuard($middleware, $guardDrivers, $defaultGuard)) {
             $modes[] = self::TOKEN;
         }
         // Stateful mode is only real when an auth guard also protects the route — otherwise the
         // group-prepended stateful middleware would falsely secure every public api-group route.
-        if (in_array(self::STATEFUL_MIDDLEWARE, $middleware, true) && $this->hasAuthMiddleware($middleware)) {
+        if (in_array(self::STATEFUL_MIDDLEWARE, $middleware, true) && $this->hasAuthMiddleware($middleware, $guardDrivers, $defaultGuard)) {
             $modes[] = self::STATEFUL;
         }
 
@@ -49,8 +54,9 @@ final class SanctumDetector
 
     /**
      * @param  list<string>  $middleware
+     * @param  array<string, string>  $guardDrivers
      */
-    private function hasTokenGuard(array $middleware): bool
+    private function hasTokenGuard(array $middleware, array $guardDrivers, string $defaultGuard): bool
     {
         foreach ($middleware as $entry) {
             if ($entry === 'sanctum') {
@@ -68,17 +74,19 @@ final class SanctumDetector
             }
         }
 
-        return false;
+        // A custom-named guard whose configured driver is `sanctum` (e.g. `auth:mobile`).
+        return in_array('sanctum', AuthGuardDrivers::driversFor($middleware, $guardDrivers, $defaultGuard), true);
     }
 
     /**
      * Whether the route carries any authentication guard middleware (the gate for stateful mode).
      *
      * @param  list<string>  $middleware
+     * @param  array<string, string>  $guardDrivers
      */
-    private function hasAuthMiddleware(array $middleware): bool
+    private function hasAuthMiddleware(array $middleware, array $guardDrivers, string $defaultGuard): bool
     {
-        if ($this->hasTokenGuard($middleware)) {
+        if ($this->hasTokenGuard($middleware, $guardDrivers, $defaultGuard)) {
             return true;
         }
 

@@ -18,8 +18,25 @@ it('splits scope middleware into all-of and any-of across every form', function 
     'spaces trimmed' => [['scopes:read, write'], ['read', 'write'], []],
     'CheckScopes ::using() FQCN is all-of' => [['Laravel\\Passport\\Http\\Middleware\\CheckScopes:read,write'], ['read', 'write'], []],
     'CheckForAnyScope ::using() FQCN is any-of' => [['Laravel\\Passport\\Http\\Middleware\\CheckForAnyScope:read,write'], [], ['read', 'write']],
+    'client: alias is all-of' => [['client:read,write'], ['read', 'write'], []],
+    'CheckClientCredentials FQCN is all-of' => [['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentials:read,write'], ['read', 'write'], []],
+    'CheckClientCredentialsForAnyScope FQCN is any-of' => [['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentialsForAnyScope:read,write'], [], ['read', 'write']],
     'no scope middleware' => [['auth:api'], [], []],
     'scope-like prefix ignored' => [['scoped:read'], [], []],
+    'bare client alias carries no scopes' => [['client'], [], []],
+]);
+
+it('detects client-credentials middleware even without scopes', function (array $middleware, bool $expected): void {
+    expect((new ScopeMiddlewareParser)->hasClientCredentials($middleware))->toBe($expected);
+})->with([
+    'bare client alias' => [['client'], true],
+    'client alias with scope' => [['client:read'], true],
+    'CheckClientCredentials FQCN, no params' => [['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentials'], true],
+    'CheckClientCredentials FQCN with scope' => [['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentials:read'], true],
+    'CheckClientCredentialsForAnyScope FQCN' => [['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentialsForAnyScope:read'], true],
+    'scope middleware is not client-credentials' => [['scopes:read'], false],
+    'client-like alias ignored' => [['clientele:read'], false],
+    'no middleware' => [['auth:api'], false],
 ]);
 
 it('models all-of as a single requirement and any-of as an OR-list', function (): void {

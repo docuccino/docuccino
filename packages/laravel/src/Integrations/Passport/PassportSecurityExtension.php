@@ -10,14 +10,19 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
 use Illuminate\Contracts\Config\Repository;
 
 /**
  * Auto-configures Passport OAuth2 security (design §Phase 4 — Passport auto-config): on a route
- * Passport protects (`auth:api`/`auth:passport`, or any `scope:`/`scopes:` middleware) it registers
- * the `oauth2` scheme and sets the operation's `security` requirement, with the per-operation scopes
- * recovered from the scope middleware. Deferred when config already declares security schemes, and
- * skipped for `#[Unauthenticated]`. Class_exists-guarded on `Laravel\Passport\Passport`.
+ * Passport protects it registers the `oauth2` scheme and sets the operation's `security` requirement,
+ * with the per-operation scopes recovered from the scope middleware. A route counts as
+ * Passport-protected when it carries `scope:`/`scopes:` or client-credentials middleware, OR when any
+ * `auth:<guard>` (bare `auth` → the default guard) resolves to a `passport`-DRIVER guard via
+ * `config('auth.guards')` (auth audit #8 — so a custom passport-driver guard is recognised, an `api`
+ * guard on a token driver is not, and multi-guard lists work). Deferred when config already declares
+ * security schemes, and skipped for `#[Unauthenticated]`. Class_exists-guarded on
+ * `Laravel\Passport\Passport`.
  */
 final class PassportSecurityExtension implements OperationExtension
 {
@@ -67,17 +72,34 @@ final class PassportSecurityExtension implements OperationExtension
      */
     private function protects(array $middleware, ScopeRequirements $requirements): bool
     {
+        // Scope or client-credentials scopes recovered → Passport-protected (driver-independent).
         if (! $requirements->isEmpty()) {
             return true;
         }
 
-        foreach ($middleware as $entry) {
-            if ($entry === 'auth:api' || $entry === 'auth:passport') {
-                return true;
-            }
+        // Bare `client` / parameter-less client-credentials FQCN protect without naming a scope.
+        if ($this->scopes->hasClientCredentials($middleware)) {
+            return true;
         }
 
-        return false;
+        // A guard whose configured driver is `passport` (any name; multi-guard lists included).
+        $drivers = AuthGuardDrivers::driversFor(
+            $middleware,
+            AuthGuardDrivers::map($this->config->get('auth.guards')),
+            $this->defaultGuard(),
+        );
+
+        return in_array('passport', $drivers, true);
+    }
+
+    /**
+     * The app's default auth guard (`config('auth.defaults.guard')`), for resolving bare `auth`.
+     */
+    private function defaultGuard(): string
+    {
+        $guard = $this->config->get('auth.defaults.guard');
+
+        return is_string($guard) && $guard !== '' ? $guard : 'web';
     }
 
     /**

@@ -29,6 +29,8 @@ it('resolves every registrar guard + matcher FQCN string against the installed p
     'Sanctum legacy CheckForAnyScope matcher' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyScope'],
     'Passport CheckScopes matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckScopes'],
     'Passport CheckForAnyScope matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckForAnyScope'],
+    'Passport CheckClientCredentials matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentials'],
+    'Passport CheckClientCredentialsForAnyScope matcher' => ['Laravel\\Passport\\Http\\Middleware\\CheckClientCredentialsForAnyScope'],
     'Permission RoleMiddleware matcher' => ['Spatie\\Permission\\Middleware\\RoleMiddleware'],
     'Permission PermissionMiddleware matcher' => ['Spatie\\Permission\\Middleware\\PermissionMiddleware'],
     'Permission RoleOrPermissionMiddleware matcher' => ['Spatie\\Permission\\Middleware\\RoleOrPermissionMiddleware'],
