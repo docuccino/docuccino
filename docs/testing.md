@@ -89,6 +89,7 @@ tests, lifting overall coverage:
 |---------------------|--------------------|
 | **Overall (baseline, hardening task)** | **79.45%** |
 | **Overall (Phase 4b wave 1)**          | **81.1%**  |
+| **Overall (QB filter-kind round 2)**   | **83.8%**  |
 
 `inference-phpstan` (~41%) is mostly proven out-of-process (see above); `attributes`
 is dep-free attribute classes not in the coverage `<source>` set.
@@ -101,7 +102,7 @@ coverage `<source>` set.
 - The gate lives in `.github/workflows/ci.yml` as a dedicated **coverage** job:
   `pest --coverage --exclude-group=fixture --min=<N>` with **pcov** via `setup-php`.
 - `<N>` is an **honest floor** — the measured overall minus a small buffer, never an
-  aspiration. Current floor: **`--min=78`** (measured 79.45%).
+  aspiration. Current floor: **`--min=83`** (measured 83.8%).
 - **Type coverage** is enforced separately: `pest --type-coverage --min=100` (the src set
   is PHPStan level-max, which already implies near-total declared types).
 - **Ratchet policy:**
