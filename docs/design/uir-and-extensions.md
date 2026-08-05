@@ -325,6 +325,27 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     - **A leading comment is an integration-layer description (precedence 20)** — below docblock (30)
       and `#[QueryParameter]` (40), so authored descriptions still win; recovered purely from the
       array-item node's attached comment, first sentence verbatim, no tag parsing.
+  - Query Builder filter-kind breadth (Tom, 2026-08-05 — round 2). Type recovery generalised beyond
+    `exact` to every kind, on the principle **the semantic fact is policy-independent, and now the
+    kind-specific fact is too**: `scope` reflects the model scope method's value parameter (native or
+    backed enum) via `ScopeParameterResolver`; `callback`/`custom __invoke` recover the column of a
+    single `$q->where(COL, $value)` via the shared `WhereColumnAnalyzer` (AST-only — the closure-by-
+    line engine trace feeds *return* expressions, so an inline callback's expression-statement body is
+    read from its node directly, and a custom class's body is parsed like `AccessorReader`); a static
+    (`EQUAL`/`DYNAMIC`) `operator` types off the internal column, a non-static one stays a string;
+    `trashed` is a fixed `with`/`only` enum. Only `exact` uses the `whereIn` array; every other kind is
+    a single-value comparison, so its enum is one scalar value. A `partial`/bare-string filter over an
+    enum column is never enum-typed (a substring match isn't an enum member) — it earns an info
+    `query-builder.partial-on-enum` nudge toward `exact`. A `#[QueryParameter]` on a custom filter
+    **class** overrides its body inference at the integration layer (its `name` ignored — the parameter
+    name is the `AllowedFilter` name), so a route-level attribute (layer 40) still wins.
+  - deepObject / bracketed attribute parity (same wave). `#[QueryParameter('filter[status]')]` patches
+    the flat `filter[status]` parameter under the bracketed policy and the `status` property of the
+    `filter` deepObject container under the deepObject policy — same attribute, mirrored behaviour
+    (patch an existing member, create a missing one). Enabled by emitting deepObject `properties` as
+    nested schema drafts (per-property PatchGuard provenance, so the override is recorded with the
+    integration value kept in `overrode`). The QB integration runs at `Priorities::EARLY` so its
+    container exists before the attribute layer patches into it.
 
 ## 7. Precedence / patch semantics
 

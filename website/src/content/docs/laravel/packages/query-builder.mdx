@@ -137,10 +137,38 @@ Other casts map to their natural scalar type:
 | A backed enum | `type: array` of the backing values (above) |
 | Anything else (custom casters, `decimal`, no cast) | `type: string` |
 
-Only **exact** filters on the subject model's own columns are typed. Scope, callback, custom,
-operator, trashed, and dotted relation-path filters (`customer.name`) stay strings — Docuccino never
-guesses. If it can't resolve the subject model, every filter falls back to a string, exactly as
-before.
+If Docuccino can't resolve the subject model, every filter falls back to a string, exactly as before.
+
+### What each filter kind infers
+
+Type information isn't limited to exact filters — every kind carries a fact Docuccino can recover, and
+it reads only what the kind actually exposes:
+
+| Filter kind | What's inferred | How to override |
+| --- | --- | --- |
+| `exact('status')` | The column's cast. A backed enum becomes a comma `whereIn` array of its values. | Comment, docblock, or `#[QueryParameter]`. |
+| `scope('popular')` | The `scopePopular` scope's **value parameter** type — a native scalar, or a backed enum (values + descriptions). | Type the scope parameter; or `#[QueryParameter]`. |
+| `callback('active', fn)` | The column of a single `$query->where('active', $value)` in the closure, then that column's cast. | Comment above the entry, or `#[QueryParameter]`. |
+| `custom('flag', new F)` | A `#[QueryParameter]` on the filter class `F`, else the column of a single `where` in `F::__invoke`. | See [custom filter classes](#custom-filter-classes). |
+| `operator('score', FilterOperator::EQUAL)` | The internal column's cast — equality operators (`EQUAL`, `DYNAMIC`) only. | `#[QueryParameter]`. |
+| `trashed()` | A fixed `with` / `only` enum, with the omitted-value default explained. | — |
+
+A single-value comparison (scope, callback, operator) documents an enum as one value; only `exact`
+uses the comma `whereIn` array. Anything Docuccino can't reduce to one column or a known type — a
+non-equality operator (`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path
+(`customer.name`) — stays a plain string. It never guesses.
+
+### Partial filters over an enum column
+
+A `partial` filter (and a bare-string filter, which is partial by default) matches a **substring**, not
+an enum member — so Docuccino keeps it a string rather than pretending its values are the enum's. When
+the column is enum-cast it emits an info diagnostic (`query-builder.partial-on-enum`) suggesting
+`AllowedFilter::exact` if you'd rather document the exact values:
+
+```php
+AllowedFilter::partial('status'); // substring match → stays a string, plus an info nudge
+AllowedFilter::exact('status');   // documents the enum's values instead
+```
 
 ### Internal column names
 
@@ -192,6 +220,49 @@ Chained modifiers are recovered too:
 AllowedFilter::exact('status')->default('sent')->nullable();
 ```
 
+### Custom filter classes
+
+For a `custom` filter, Docuccino reads the column from a single `$query->where(...)` in the class's
+`__invoke` — just like a callback. When the body is more involved, document the parameter with a
+`#[QueryParameter]` **on the filter class itself**. Its `name` argument is ignored in this position
+(the parameter's name is the one you gave `AllowedFilter::custom`); `type`, `description`, `example`,
+and `default` are applied to the filter's parameter:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Filters/PopularityFilter.php
+	#[QueryParameter(name: 'ignored', type: 'int', description: 'Minimum popularity score.', example: 42)]
+	final class PopularityFilter implements Filter
+	{
+	    public function __invoke(Builder $query, mixed $value, string $property): void
+	    {
+	        $query->whereRaw('popularity(created_at) >= ?', [$value]);
+	    }
+	}
+
+	// app/Http/Controllers/InvoiceController.php
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([AllowedFilter::custom('popular', new PopularityFilter)]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{
+	  "name": "filter[popular]",
+	  "in": "query",
+	  "required": false,
+	  "description": "Minimum popularity score.",
+	  "example": 42,
+	  "schema": { "type": "integer" }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The class attribute is an override of inference, not the last word: a `#[QueryParameter('filter[popular]')]`
+on the controller action still wins over it, so a caller can refine a shared filter per endpoint.
+
 ## Configuration
 
 ### Custom pagination terminals
@@ -229,9 +300,14 @@ public function index() { /* … */ }
 
 Values you set with attributes or docblocks always take precedence over what's inferred.
 
-:::note[Per-filter patching needs the bracketed style]
-Addressing a single filter by name (`filter[status]`) works with the default bracketed parameters.
-If you switch the document to the `deepObject` representation, all filters collapse into one `filter`
-object parameter — there's no `filter[status]` to target, so patch the whole `filter` parameter
-instead.
-:::
+Addressing a single filter by name works the same in **both** representations. Under the default
+bracketed style, `#[QueryParameter('filter[status]')]` patches the flat `filter[status]` parameter;
+under the `deepObject` style — where filters collapse into one `filter` object parameter —
+the very same attribute patches that object's `status` property instead. You write it once and it
+lands correctly whichever representation the document uses:
+
+```php
+// Patches filter[status] (bracketed) OR the filter object's `status` property (deepObject).
+#[QueryParameter('filter[status]', type: 'string', description: 'Only active invoices.', required: true)]
+public function index() { /* … */ }
+```

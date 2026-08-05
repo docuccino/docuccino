@@ -83,6 +83,12 @@ public function __construct(
 public function index(): AnonymousResourceCollection { /* … */ }
 ```
 
+A bracketed `name` (`filter[status]`) patches a flat `filter[status]` parameter, or — when the
+document uses the `deepObject` filter style — the `status` property of the `filter` object parameter.
+The same attribute works in either representation. Placed on a **Spatie Query Builder custom filter
+class**, `#[QueryParameter]` documents that filter (its `name` is ignored — the name comes from
+`AllowedFilter::custom`); see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
+
 ### `#[PathParameter]`
 
 ```php
