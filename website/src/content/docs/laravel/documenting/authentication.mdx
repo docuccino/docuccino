@@ -159,3 +159,10 @@ names expose your internal authorization taxonomy. See
 Each integration is a no-op when its package isn't installed, or when a route has no matching
 middleware. Sanctum and Passport stay on by default — token schemes and OAuth scopes *are* the public
 contract, so they leak nothing internal.
+
+## Implicit `401`
+
+When a route sits behind authentication middleware (matching `security.auto_detect_middleware`),
+Docuccino also documents the `401` response an unauthenticated request receives — no annotation
+needed. Mark a route [`#[Unauthenticated]`](/laravel/reference/attributes/) to opt out. See
+[implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

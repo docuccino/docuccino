@@ -181,6 +181,32 @@ interface ExceptionToResponse {
 //   3. Presets (problem-details) + user extensions; attributes/config override anything.
 
 interface ExampleProvider { /* chain: static/@example/#[Example] (v1) → factory render / response-calls (v1.1) */ }
+```
+
+**Implicit responses (Eos pre-flight).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
+the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
+throws. `ImplicitResponsesExtension` (adapter, Errors phase, `Priorities::LATE`) synthesizes those from
+statically-visible signals and runs each through the SAME resolved exception→response chain, so the
+body matches the document's error style:
+
+| Status | Signal | Synthesized exception |
+|---|---|---|
+| 401 | auth middleware matches `security.auto_detect_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
+| 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
+| 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
+| 403 | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException` |
+
+Precedence & dedup: it writes at the integration layer and runs LATE, so a status the action ALSO
+throws explicitly (already applied by `ErrorResponsesExtension`) owns its status-keyed response and the
+synthesis is shadowed by PatchGuard — never a double response. Overridable by docblock/attribute/overlay;
+each status honours `#[IgnoreResponse]`; skipped under `error_responses => 'none'`. Provenance names the
+signal (producer `integration:implicit-response`, source symbol `implicit:<signal>`). **Placement:** the
+input is Laravel middleware/bindings/recovered-request, so the synthesis is adapter-side; the body still
+comes from the framework-neutral chain. **Deliberate non-goals:** CSRF 419, maintenance 503, and
+arbitrary custom-middleware throw-analysis are not synthesized (a middleware name carries no reliable
+status contract); 429 stays the rate-limit integration's.
+
+```php
 
 interface VersioningPolicy { // diff enforcement: changeset severity vs info.version delta
     public function evaluate(Changeset $changes, string $oldVersion, string $newVersion): PolicyVerdict;

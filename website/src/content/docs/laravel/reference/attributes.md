@@ -182,6 +182,27 @@ class User extends Model {}
 public string $internalToken;
 ```
 
+`#[Hidden]` affects the **output** schema only. A property that is hidden from responses but still
+accepted in the request is intentional (and the data-leakage lint surfaces it) — to drop a property
+from the documented **request** body, use `#[HiddenFromRequest]` below.
+
+### `#[HiddenFromRequest]`
+
+Targets `PROPERTY`.
+
+```php
+public function __construct() // no arguments
+```
+
+Excludes a request-DTO / FormRequest property from the documented request body, without touching the
+response schema — the request-side counterpart to `#[Hidden]` (for a server-populated value, or a
+Scramble request-`#[Hidden]` field being migrated).
+
+```php
+#[HiddenFromRequest]
+public string $capturedIp;
+```
+
 ### `#[ExcludeFromDocs]`
 
 Targets `CLASS | METHOD | FUNCTION`. Marker (no constructor). Excludes a route — or every route on

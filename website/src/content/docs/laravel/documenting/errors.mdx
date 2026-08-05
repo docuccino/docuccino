@@ -91,11 +91,36 @@ error shapes for framework exceptions it recognizes — `422 {message, errors}` 
 `401`/`403`/`404 {message}` — using the standard HTTP reason phrases. Set `error_responses` to
 `none` to emit no error responses at all.
 
+## Implicit responses (middleware, bindings & validation)
+
+Some error responses never appear as a `throw` in your action — the framework produces them from
+middleware or while resolving the request. Docuccino synthesizes these from statically-visible
+signals and runs each through the same resolution above, so the body matches your chosen style
+(framework defaults or the Problem Details preset):
+
+| Status | When it's added | How to opt out |
+| --- | --- | --- |
+| `401` | The route has authentication middleware (matching `security.auto_detect_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/) — or `#[IgnoreResponse(401)]`. |
+| `422` | A validated request body was recovered (Spatie Data, a FormRequest, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
+| `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
+| `403` | The route has `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
+
+If your action *also* throws one of these explicitly, the two merge into a single response for that
+status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
+integration. Set `error_responses` to `none` to turn all of this off.
+
+:::note
+CSRF (`419`), maintenance mode (`503`), and exceptions thrown from arbitrary custom middleware are
+deliberately not inferred — a middleware's name doesn't tell Docuccino what status it produces.
+Declare those with a [`#[Response]`](/laravel/reference/attributes/#response) attribute.
+:::
+
 ## Configuration
 
 | Option | Values | Effect |
 | --- | --- | --- |
 | `error_responses` | `default` \| `problem-details` \| `none` | Which fallback strategy to use. Your inferred handlers take precedence regardless. |
+| `error_responses.errors_shape` | `map` \| `pointer-list` | The Problem Details `422` `errors` shape: a field-keyed map of messages (default), or a list of `{detail, pointer}` JSON-Pointer objects. Pass `error_responses` as `['preset' => 'problem-details', 'errors_shape' => 'pointer-list']`. |
 
 :::tip
 Because Docuccino reads your *actual* handling first, most apps get accurate error docs with no

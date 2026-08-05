@@ -158,3 +158,9 @@ If a rule set can't be resolved statically, Docuccino contributes what it can an
 your annotations. A [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter),
 [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), or a docblock always takes
 precedence over what's inferred — you're never fighting the tool.
+
+## Implicit `422`
+
+Because Docuccino recovers your request's validation rules, it also documents the `422` validation
+error that request produces — so a validated write endpoint carries its `422` automatically. See
+[implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

@@ -107,17 +107,27 @@ Declaring any `schemes` here **defers** the auto-config security integrations (S
 
 ```php
 'error_responses' => 'default', // 'default' | 'problem-details' | 'none'
+
+// Or a bag, to also choose the Problem Details 422 `errors` shape:
+'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
 ```
 
 Selects the error-response strategy. `default` documents Laravel's stock JSON error shapes;
 `problem-details` activates the [RFC 9457 preset](/laravel/documenting/errors/) (`application/problem+json`);
 `none` emits no error responses. In every case, an [inferred exception handler](/laravel/documenting/errors/)
-that recovers your app's real error shape wins ahead of this fallback.
+that recovers your app's real error shape wins ahead of this fallback. The strategy also governs the
+[implicit 401/422/404/403 responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation)
+(none of them are emitted under `none`).
+
+`errors_shape` (only meaningful with the Problem Details preset) chooses how the `422` body models
+`errors`: `map` (a field-keyed map of message lists, the default) or `pointer-list` (a list of
+`{detail, pointer}` JSON-Pointer objects).
 
 ### `tags`
 
 ```php
 'tags' => [
+    'default_strategy' => 'controller', // 'controller' | 'none'
     'map' => [],
     // 'mapper' => Custom::class,   // container-resolved TagMapper; default PrefixTagMapper over `map`.
     // 'definitions' => [           // OAS top-level `tags`, sorted by weight then name:
@@ -126,6 +136,9 @@ that recovers your app's real error shape wins ahead of this fallback.
 ],
 ```
 
+`default_strategy` tags an operation that has no `#[Group]`: `controller` (the default — the
+controller's short name with a trailing `Controller` stripped, e.g. `FormController` → `Form`, then
+run through `map`) or `none` (leave it untagged). Closure routes are never auto-tagged.
 `map` is a raw-tag → display-tag table (exact match wins, else the first matching prefix).
 `mapper` swaps in a custom `TagMapper`. `definitions` supplies OAS top-level tag objects.
 

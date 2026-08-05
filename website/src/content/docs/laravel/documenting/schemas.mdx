@@ -151,3 +151,12 @@ Descriptions are emitted as `x-enumDescriptions`. To also emit codegen name hint
 If a resource, model, or enum can't be fully resolved, Docuccino falls back to a permissive schema
 (for example a bare object) rather than failing, and records lower confidence. Annotations always
 take precedence, so you can pin anything the inference couldn't determine.
+
+## Route-model binding
+
+When a route binds a model to a path parameter (`Route::get('/invoices/{invoice}', …)` with an
+`Invoice $invoice` action argument), Docuccino types that path parameter from the model's route key —
+a `uuid`/`ulid`-string for `HasUuids`/`HasUlids` models, an integer otherwise — instead of assuming
+`integer`. It also documents the implicit `404` the binding produces when the record is missing (one
+`404` per operation). See
+[implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).
