@@ -1079,13 +1079,23 @@
                         "producer": "inference",
                         "layer": "inference",
                         "fields": [
-                          "$ref"
+                          "properties",
+                          "required",
+                          "type"
                         ],
                         "confidence": 0.9
                       }
                     ]
                   },
-                  "$ref": "#/components/schemas/ArticleJsonApiResource"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ArticleJsonApiResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -2176,56 +2186,48 @@
         },
         "type": "object",
         "properties": {
-          "data": {
+          "attributes": {
             "type": "object",
             "properties": {
-              "attributes": {
-                "type": "object",
-                "properties": {
-                  "body": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "title",
-                  "body"
-                ]
-              },
-              "id": {
+              "body": {
                 "type": "string"
               },
-              "links": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "properties": {
-                    "href": {
-                      "type": "string"
-                    },
-                    "meta": {
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "href"
-                  ]
-                }
-              },
-              "type": {
+              "title": {
                 "type": "string"
               }
             },
             "required": [
-              "id",
-              "type"
+              "title",
+              "body"
             ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "href": {
+                  "type": "string"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "href"
+              ]
+            }
+          },
+          "type": {
+            "type": "string"
           }
         },
         "required": [
-          "data"
+          "id",
+          "type"
         ]
       },
       "ArticleResource": {
@@ -2422,7 +2424,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "c8562caa03cf188e4749c5a22400ed5b4306b8c5ee869dedce4d8470aafd38a4",
-      "contentHash": "bac41a80d612a3bb760bdca19735fbd695b1e1f653d6c6aaccf15e0f81035e73"
+      "contentHash": "148d7dd8b323dccf7db075a0df945e3819a263563a4e8633ca5c1739406c5821"
     },
     "generator": {
       "name": "docuccino/laravel",

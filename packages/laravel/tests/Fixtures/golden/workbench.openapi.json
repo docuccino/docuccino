@@ -403,7 +403,15 @@
             "content": {
               "application/vnd.api+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArticleJsonApiResource"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ArticleJsonApiResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
                 }
               }
             }
@@ -803,56 +811,48 @@
       "ArticleJsonApiResource": {
         "type": "object",
         "properties": {
-          "data": {
+          "attributes": {
             "type": "object",
             "properties": {
-              "attributes": {
-                "type": "object",
-                "properties": {
-                  "body": {
-                    "type": "string"
-                  },
-                  "title": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "title",
-                  "body"
-                ]
-              },
-              "id": {
+              "body": {
                 "type": "string"
               },
-              "links": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "properties": {
-                    "href": {
-                      "type": "string"
-                    },
-                    "meta": {
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "href"
-                  ]
-                }
-              },
-              "type": {
+              "title": {
                 "type": "string"
               }
             },
             "required": [
-              "id",
-              "type"
+              "title",
+              "body"
             ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "href": {
+                  "type": "string"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "href"
+              ]
+            }
+          },
+          "type": {
+            "type": "string"
           }
         },
         "required": [
-          "data"
+          "id",
+          "type"
         ]
       },
       "ArticleResource": {
