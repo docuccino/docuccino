@@ -101,6 +101,53 @@ it('applies the merge rules per key', function (array $siteAType, array $siteBTy
     ],
 ]);
 
+it('splices a merge() MergeValue array shape into the parent (item 5)', function (): void {
+    $mergeShape = new ArrayShapeT([
+        new ArrayShapeField('a', ScalarT::string()),
+        new ArrayShapeField('b', ScalarT::int()),
+    ]);
+    $site = new ArrayShapeT([
+        new ArrayShapeField('id', ScalarT::int()),
+        // merge() sits at an int key with a MergeValue<array{a,b}> value.
+        new ArrayShapeField(0, new ClassT('Illuminate\\Http\\Resources\\MergeValue', [$mergeShape])),
+    ]);
+
+    $component = mergeComponent([$site]);
+
+    // The merged keys splice in beside id (no numeric "0" property); an unconditional merge keeps them
+    // required.
+    expect(array_keys($component['properties']))->toBe(['id', 'a', 'b'])
+        ->and($component['properties'])->not->toHaveKey('0')
+        ->and($component['required'])->toBe(['id', 'a', 'b']);
+});
+
+it('makes mergeWhen() spliced keys optional (item 5)', function () use ($missing): void {
+    $mergeShape = new ArrayShapeT([new ArrayShapeField('a', ScalarT::string())]);
+    $site = new ArrayShapeT([
+        new ArrayShapeField('id', ScalarT::int()),
+        // mergeWhen() is MergeValue<array{a}>|MissingValue when the condition may be falsy.
+        new ArrayShapeField(0, UnionT::of([new ClassT('Illuminate\\Http\\Resources\\MergeValue', [$mergeShape]), $missing])),
+    ]);
+
+    $component = mergeComponent([$site]);
+
+    expect(array_keys($component['properties']))->toBe(['id', 'a'])
+        ->and($component['required'])->toBe(['id']);
+});
+
+it('skips an unshaped MergeValue rather than emitting a numeric key (item 5)', function (): void {
+    $site = new ArrayShapeT([
+        new ArrayShapeField('id', ScalarT::int()),
+        // attributes()/dynamic value → MergeValue with no recoverable constant shape.
+        new ArrayShapeField(0, new ClassT('Illuminate\\Http\\Resources\\MergeValue')),
+    ]);
+
+    $component = mergeComponent([$site]);
+
+    expect(array_keys($component['properties']))->toBe(['id'])
+        ->and($component['properties'])->not->toHaveKey('0');
+});
+
 it('recurses the conditional-strip through a nested object shape (item 7)', function () use ($missing): void {
     $nested = new ArrayShapeT([
         new ArrayShapeField('count', ScalarT::int()),

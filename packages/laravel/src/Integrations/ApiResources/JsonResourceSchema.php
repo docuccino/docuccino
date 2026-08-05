@@ -18,7 +18,8 @@ use Docuccino\Laravel\Integrations\Support\ResourceWrapping;
  * Maps a Laravel API Resource to a schema (superseding the core class mapper for resource types).
  *
  * - A single `JsonResource` hoists to a component built from its analysed `toArray` shape
- *   ({@see ToArrayObject}) — `whenLoaded`/`when`/`whenNotNull`/`mergeWhen` fields become optional —
+ *   ({@see ToArrayObject}) — `whenLoaded`/`when`/`whenNotNull` fields become optional and
+ *   `merge`/`mergeWhen` values splice their keys into the parent (optional under `mergeWhen`) —
  *   named by `#[SchemaName]` (else short class name) and pinned by `#[SchemaId]` (else the FQCN).
  * - An anonymous resource collection (`Resource::collection(...)`) renders as an array of its item
  *   schema.

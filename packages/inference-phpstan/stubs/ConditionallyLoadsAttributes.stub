@@ -148,4 +148,62 @@ trait ConditionallyLoadsAttributes
      * @return TValue|TDefault
      */
     protected function whenPivotLoadedAs($accessor, $table, $value, $default = new MissingValue) {}
+
+    /**
+     * The merge family splices its array VALUE's keys into the parent `toArray` shape. Templating the
+     * value as `MergeValue<TValue>` carries the merged array shape through the engine so
+     * `ToArrayObject` can splice the constant keys (rather than documenting a bogus numeric `"0"`
+     * property or losing them in `mixed`). `mergeWhen`/`mergeUnless` additionally union in the
+     * `MissingValue` default when the condition is falsy → the spliced keys become optional.
+     *
+     * @template TValue of array<string, mixed>
+     *
+     * @param  TValue  $value
+     * @return MergeValue<TValue>
+     */
+    public function merge($value) {}
+
+    /**
+     * @template TValue of array<string, mixed>
+     * @template TDefault
+     *
+     * @param  bool  $condition
+     * @param  TValue  $value
+     * @param  TDefault  $default
+     * @return MergeValue<TValue>|TDefault
+     */
+    public function mergeWhen($condition, $value, $default = new MissingValue) {}
+
+    /**
+     * @template TValue of array<string, mixed>
+     * @template TDefault
+     *
+     * @param  bool  $condition
+     * @param  TValue  $value
+     * @param  TDefault  $default
+     * @return MergeValue<TValue>|TDefault
+     */
+    public function mergeUnless($condition, $value, $default = new MissingValue) {}
+
+    /**
+     * `attributes()` merges a subset of the model's attributes; the value shape is not statically a
+     * constant array, so it recovers as an unshaped `MergeValue` — recognised (not a numeric `"0"`
+     * property) but degraded on splice.
+     *
+     * @param  array<int, string>  $attributes
+     * @return MergeValue<array<string, mixed>>
+     */
+    public function attributes($attributes) {}
+}
+
+/**
+ * Docuccino stub: make `MergeValue` generic over its merged array shape so `merge()`/`mergeWhen()`
+ * carry the spliced keys through the engine ({@see ToArrayObject} reads `typeArgs[0]`).
+ *
+ * @template TValue of array<string, mixed>
+ */
+class MergeValue
+{
+    /** @var TValue */
+    public $data;
 }

@@ -19,13 +19,20 @@ use Throwable;
  * {@see ArrayShapeT} (the value types are Larastan-informed — `$this->column` resolves through the
  * resource's model `@mixin`), and each field is converted through the chain.
  *
- * Conditional fields (`whenLoaded`/`when`/`whenNotNull`/`mergeWhen`) return an
+ * Conditional fields (`whenLoaded`/`when`/`whenNotNull`) return an
  * `Illuminate\Http\Resources\MissingValue` at runtime, so the engine types the value as
  * `T|MissingValue`: the marker makes the property optional and is stripped, folding the wrapped `T`
  * when recoverable (else the property degrades to permissive `{}` + optional).
+ *
+ * `merge`/`mergeWhen`/`mergeUnless` values are `MergeValue<array{…}>` (via the stub): their array
+ * keys are SPLICED into the parent shape rather than nested under a numeric key — optional when the
+ * merge was conditional. Several return sites are unioned and nested object shapes recurse this same
+ * conditional-aware handling (Wave C items 5–7).
  */
 final class ToArrayObject
 {
+    private const MERGE_VALUE = 'Illuminate\\Http\\Resources\\MergeValue';
+
     /**
      * Build the object schema for `$fqcn::$method`, or null when the method has no analysable array
      * shape (so the caller can degrade to a bare `{type: object}`).
@@ -129,6 +136,29 @@ final class ToArrayObject
         foreach ($shape->fields as $field) {
             [$type, $conditional] = self::stripMissing($field->type);
 
+            // A `merge()`/`mergeWhen()` value is a MergeValue whose array shape splices into the parent
+            // — its keys become the parent's, not a nested `"0"` property. A falsy mergeWhen unions in
+            // MissingValue (stripped above → $conditional), which makes every spliced key optional.
+            $inner = self::mergeValueShape($type);
+            if ($inner !== null) {
+                foreach ($this->siteFields($inner, $context) as $key => $spliced) {
+                    $fields[$key] = [
+                        'schema' => $spliced['schema'],
+                        'optional' => $spliced['optional'] || $conditional,
+                    ];
+                }
+
+                continue;
+            }
+
+            // An unshaped MergeValue (e.g. attributes(), or a dynamic value) cannot be spliced; skip it
+            // rather than emit a bogus numeric key, and record the imprecision.
+            if ($type instanceof ClassT && is_a($type->fqcn, self::MERGE_VALUE, true)) {
+                $context->lowerConfidence(0.8);
+
+                continue;
+            }
+
             $fields[(string) $field->key] = [
                 'schema' => $this->convertValue($type, $context),
                 'optional' => $field->optional || $conditional,
@@ -136,6 +166,21 @@ final class ToArrayObject
         }
 
         return $fields;
+    }
+
+    /**
+     * The spliceable inner array shape of a `MergeValue<array{…}>` field value, or null when the type
+     * is not a MergeValue carrying a constant (non-list) array shape.
+     */
+    private static function mergeValueShape(DType $type): ?ArrayShapeT
+    {
+        if (! ($type instanceof ClassT && is_a($type->fqcn, self::MERGE_VALUE, true))) {
+            return null;
+        }
+
+        $inner = $type->typeArgs[0] ?? null;
+
+        return $inner instanceof ArrayShapeT && ! $inner->isList ? $inner : null;
     }
 
     /**

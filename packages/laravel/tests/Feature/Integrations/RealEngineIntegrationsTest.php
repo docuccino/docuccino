@@ -213,6 +213,42 @@ it('merges multiple toArray return sites and recurses nested conditionals throug
         ->and($object['properties']['meta']['properties'])->toHaveKey('role');
 })->group('fixture');
 
+it('recovers merge()/mergeWhen() as MergeValue<array{…}> and splices the keys through the real engine', function (): void {
+    // With the merge stub the real engine types `merge([...])` as MergeValue<array{name,email}> and
+    // `mergeWhen($c, [...])` as MergeValue<array{role}>|MissingValue — the recovery half of Wave C
+    // item 5 (not just the splice mechanics).
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Resources/DashboardResource.php',
+        'App\\Http\\Resources\\DashboardResource',
+        'toArray',
+    ));
+
+    $shape = $analysis->returns[0]->type ?? null;
+    expect($shape)->toBeInstanceOf(ArrayShapeT::class);
+
+    // At least one field is a MergeValue (the int-keyed merge entries), proving the stub threaded the
+    // generic through the engine rather than collapsing to mixed.
+    $mergeValue = 'Illuminate\\Http\\Resources\\MergeValue';
+    $carriesMerge = static function (DType $t) use ($mergeValue): bool {
+        $members = $t instanceof UnionT ? $t->members : [$t];
+
+        return array_filter($members, static fn (DType $m): bool => $m instanceof ClassT && is_a($m->fqcn, $mergeValue, true)) !== [];
+    };
+    expect(array_filter($shape->fields, static fn ($f): bool => $carriesMerge($f->type)))->not->toBeEmpty();
+
+    // Drive the REAL-recovered shape through the mapper (keyed onto a loadable fixture) and assert the
+    // splice: merged keys sit beside id, unconditional merge keys required, mergeWhen key optional.
+    $engine = new StubTypeEngine(analyses: [MultiShapeResource::class.'::toArray' => $analysis]);
+    $components = new ComponentRegistry;
+    $converter = new SchemaConverter([new JsonResourceSchema, ...DefaultTypeMappers::all()], $engine, $components);
+    $converter->toSchema(new ClassT(MultiShapeResource::class));
+
+    $object = $components->schemas()['MultiShapeResource'];
+    expect(array_keys($object['properties']))->toBe(['id', 'name', 'email', 'role'])
+        ->and($object['properties'])->not->toHaveKey('0')
+        ->and($object['required'])->toBe(['id', 'name', 'email']);
+})->group('fixture');
+
 // ---------------------------------------------------------------------------------------------------
 // Phase 5c integrations — the recovery half proven against the REAL engine (M2 / binding coverage).
 // ---------------------------------------------------------------------------------------------------
