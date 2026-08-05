@@ -18,6 +18,7 @@ use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountStatus;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\PinnedRuleData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ProfileResource;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RequestExclusionData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\TagData;
@@ -89,6 +90,15 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->dataCollectionOf(AccountData::class, 'tags'))->toBe(TagData::class)
         ->and($reflector->validationTokens(AccountData::class, 'code'))->toBe(['max:5'])
         ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe(['in:active,suspended']);
+});
+
+it('silently drops an object-valued #[Rule(new …)] but recovers the string form', function (): void {
+    $reflector = new DataClassReflector;
+
+    // The custom rule OBJECT cannot be recovered statically → no tokens (the field keeps its type).
+    expect($reflector->validationTokens(PinnedRuleData::class, 'label'))->toBe([])
+        // The string escape-hatch form still lands.
+        ->and($reflector->validationTokens(PinnedRuleData::class, 'code'))->toBe(['max:5']);
 });
 
 it('documents a WithCast DateTimeInterfaceCast format:U property as an integer timestamp', function (): void {

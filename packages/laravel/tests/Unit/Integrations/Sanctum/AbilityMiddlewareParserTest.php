@@ -27,6 +27,10 @@ it('parses each ability-middleware form into a match-typed requirement', functio
     'abilities: single' => ['abilities:publish', AbilityRequirement::ALL, ['publish']],
     'ability: single' => ['ability:publish', AbilityRequirement::ANY, ['publish']],
     'spaces trimmed, empties dropped' => ['abilities:read, , write', AbilityRequirement::ALL, ['read', 'write']],
+    // A colon INSIDE the ability name survives: only the leading prefix is stripped, then the remainder
+    // is split on commas — so `abilities:mail:read` is the single ability `mail:read`.
+    'colon-bearing ability name preserved' => ['abilities:mail:read', AbilityRequirement::ALL, ['mail:read']],
+    'multiple colon-bearing abilities' => ['abilities:mail:read,mail:write', AbilityRequirement::ALL, ['mail:read', 'mail:write']],
     'CheckAbilities FQCN is all-of' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckAbilities:read,write', AbilityRequirement::ALL, ['read', 'write']],
     'CheckForAnyAbility FQCN is any-of' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckForAnyAbility:read', AbilityRequirement::ANY, ['read']],
     'legacy CheckScopes FQCN is all-of' => ['Laravel\\Sanctum\\Http\\Middleware\\CheckScopes:read,write', AbilityRequirement::ALL, ['read', 'write']],

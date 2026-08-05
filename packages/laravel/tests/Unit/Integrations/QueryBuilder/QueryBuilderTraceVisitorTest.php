@@ -262,3 +262,18 @@ it('recovers a full chain built through a helper (all allow-lists + pagination t
         ->and($facts->fields)->toHaveCount(1)
         ->and($facts->paginates)->toBeTrue();
 });
+
+it('pins the Tier-B degradations: spread method-call arg is unresolved, factory wrapper recovers name only', function (): void {
+    // (a) `->allowedFilters(...$this->allowedFilters())` — a spread of a method call cannot be folded
+    // (the method body is not traced across the engine-scope boundary), so it degrades to an
+    // unresolved entry rather than silently vanishing. (Deferred: folding const-array method returns.)
+    $splat = traceQbSnippet('ListQueryBuilder::for(User::class)->allowedFilters(...$this->allowedFilters())')->facts;
+    expect($splat->filters)->toBe([])
+        ->and($splat->unresolved)->not->toBe([]);
+
+    // (b) a `ListFilters`-style factory wrapper folds to a descriptor: the parameter NAME recovers, but
+    // the kind is the raw factory method (`enum`) — NOT peeled to the underlying AllowedFilter, so it
+    // is not enum-typed. QueryBuilderParameters renders an unknown kind as a generic filter.
+    $factory = traceQbSnippet("ListQueryBuilder::for(User::class)->allowedFilters([ListFilters::enum('status')])")->facts;
+    expect(entryPairs($factory->filters))->toBe([['status', 'enum']]);
+});
