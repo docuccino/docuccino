@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -49,8 +51,10 @@ final class DataRequestExtension implements OperationExtension
             $context->recordDependencyFiles([$file]);
         }
 
+        $this->reportUnrecognisedMappers($fqcn, $context);
+
         $metadata = $context->engine->classMetadata(new ClassRef($fqcn));
-        $ruleSet = $this->rules->build($fqcn, $metadata);
+        $ruleSet = $this->rules->build($fqcn, $metadata, $context->engine);
         if ($ruleSet->isEmpty()) {
             return;
         }
@@ -94,6 +98,18 @@ final class DataRequestExtension implements OperationExtension
         }
 
         return null;
+    }
+
+    private function reportUnrecognisedMappers(string $fqcn, RouteContext $context): void
+    {
+        foreach ($this->rules->reflector()->unrecognisedMappers($fqcn) as $mapper) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Info,
+                code: 'spatie-data.unknown-mapper',
+                message: sprintf('Data class %s uses an unrecognised name mapper %s; its property names are documented unmapped.', $fqcn, $mapper),
+                routeSignature: $context->route->signature(),
+            ));
+        }
     }
 
     private function classFile(string $fqcn): ?string

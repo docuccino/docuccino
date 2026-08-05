@@ -127,7 +127,7 @@ it('makes a #[Nullable] property null-admitting', function (): void {
 function buildValidatedSchema(array $properties): ValidationSchema
 {
     $metadata = new ClassMetadata(ValidatedData::class, $properties);
-    $ruleSet = (new DataValidationRules)->build(ValidatedData::class, $metadata);
+    $ruleSet = (new DataValidationRules)->build(ValidatedData::class, $metadata, new NullTypeEngine);
     $ordered = (new RuleOrdering)->order($ruleSet);
 
     $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);

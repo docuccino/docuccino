@@ -90,8 +90,9 @@ it('renders a paginated DataCollection as the length-aware envelope', function (
 });
 
 it('recovers request rules from Data properties + spatie validation attributes', function (): void {
-    $metadata = spatieDataEngine()->classMetadata(new ClassRef(ArticleData::class));
-    $ruleSet = (new DataValidationRules)->build(ArticleData::class, $metadata);
+    $engine = spatieDataEngine();
+    $metadata = $engine->classMetadata(new ClassRef(ArticleData::class));
+    $ruleSet = (new DataValidationRules)->build(ArticleData::class, $metadata, $engine);
 
     $names = static fn (string $field): array => array_map(
         static fn ($rule): string => $rule->name,

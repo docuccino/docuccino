@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
 use Docuccino\Attributes\Hidden as DocuccinoHidden;
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Support\Fqcn;
+use Illuminate\Support\Str;
 use ReflectionClass;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
@@ -24,6 +26,13 @@ use ReflectionUnionType;
 final class DataClassReflector
 {
     public const DATA = 'Spatie\\LaravelData\\Data';
+
+    /**
+     * The interface every Data-like object implements — `Data`, the output-only `Resource`, and the
+     * input-only `Dto` (none of which extend one another). The schema/request trigger tests it so all
+     * three recommended base classes are recognised, not just `Data`.
+     */
+    public const BASE_DATA = 'Spatie\\LaravelData\\Contracts\\BaseData';
 
     public const DATA_COLLECTION = 'Spatie\\LaravelData\\DataCollection';
 
@@ -44,6 +53,31 @@ final class DataClassReflector
     private const MAP_INPUT_NAME = 'Spatie\\LaravelData\\Attributes\\MapInputName';
 
     private const MAP_NAME = 'Spatie\\LaravelData\\Attributes\\MapName';
+
+    private const COMPUTED = 'Spatie\\LaravelData\\Attributes\\Computed';
+
+    private const WITHOUT_VALIDATION = 'Spatie\\LaravelData\\Attributes\\WithoutValidation';
+
+    private const DATA_COLLECTION_OF = 'Spatie\\LaravelData\\Attributes\\DataCollectionOf';
+
+    private const RULE_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Rule';
+
+    private const ENUM_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Enum';
+
+    /**
+     * spatie's built-in name mappers → the string transform each applies to a property name. A mapper
+     * CLASS given to `#[MapName(SnakeCaseMapper::class)]` renames EVERY property by this transform;
+     * mapping them here is what stops the mapper's FQCN leaking as the documented JSON key.
+     *
+     * @var array<string, string>
+     */
+    private const MAPPERS = [
+        'Spatie\\LaravelData\\Mappers\\SnakeCaseMapper' => 'snake',
+        'Spatie\\LaravelData\\Mappers\\CamelCaseMapper' => 'camel',
+        'Spatie\\LaravelData\\Mappers\\StudlyCaseMapper' => 'studly',
+        'Spatie\\LaravelData\\Mappers\\LowerCaseMapper' => 'lower',
+        'Spatie\\LaravelData\\Mappers\\UpperCaseMapper' => 'upper',
+    ];
 
     private const PAGINATED_COLLECTION = 'Spatie\\LaravelData\\PaginatedDataCollection';
 
@@ -78,16 +112,27 @@ final class DataClassReflector
         'max_digits', 'min_digits', 'digits_between', 'starts_with', 'ends_with',
     ];
 
-    /** Whether an FQCN is a concrete spatie Data class (the schema mapper's trigger). */
+    /**
+     * Whether an FQCN is a concrete spatie Data-like class (the schema mapper's trigger): any
+     * implementor of `BaseData` — `Data`, `Resource`, `Dto` — that is not itself a collectable.
+     */
     public static function isData(string $fqcn): bool
     {
-        return $fqcn !== self::DATA && is_a($fqcn, self::DATA, true);
+        return $fqcn !== self::DATA
+            && is_a($fqcn, self::BASE_DATA, true)
+            && ! is_a($fqcn, self::BASE_COLLECTABLE, true);
     }
 
     /** Whether an FQCN is any spatie collectable (plain or paginated) — rendered as array/envelope. */
     public static function isDataCollection(string $fqcn): bool
     {
         return is_a($fqcn, self::BASE_COLLECTABLE, true);
+    }
+
+    /** Whether an FQCN is a `DateTimeInterface` (spatie serialises these to a formatted string). */
+    public static function isDateTime(string $fqcn): bool
+    {
+        return is_a($fqcn, \DateTimeInterface::class, true);
     }
 
     /**
@@ -174,6 +219,29 @@ final class DataClassReflector
                 continue;
             }
 
+            // `#[Rule('max:10|min:1')]` / `#[Rule(['max:10', 'min:1'])]` is spatie's escape hatch: its
+            // arguments ARE Laravel rule strings, so hand them straight to the shared parser instead
+            // of degrading to a garbage `rule:...` token.
+            if ($name === self::RULE_ATTRIBUTE) {
+                foreach ($this->ruleAttributeTokens($attribute->getArguments()) as $token) {
+                    $tokens[] = $token;
+                }
+
+                continue;
+            }
+
+            // `#[Enum(Status::class)]` names a backed enum; expand it to its backing VALUES as an
+            // `in:` rule (reusing the enum machinery) rather than the enum class name as the sole
+            // allowed value.
+            if ($name === self::ENUM_ATTRIBUTE) {
+                $token = $this->enumAttributeToken($attribute->getArguments());
+                if ($token !== null) {
+                    $tokens[] = $token;
+                }
+
+                continue;
+            }
+
             $short = Fqcn::short($name);
             $mapped = self::RULE_MAP[$short] ?? null;
             // A mapped attribute becomes its Laravel rule; an unmapped one degrades to the snake-cased
@@ -188,6 +256,161 @@ final class DataClassReflector
         }
 
         return $tokens;
+    }
+
+    /**
+     * The rule tokens carried by a `#[Rule(...)]` attribute: each scalar argument (and each item of an
+     * array argument) is a Laravel rule string.
+     *
+     * @param  array<array-key, mixed>  $arguments
+     * @return list<string>
+     */
+    private function ruleAttributeTokens(array $arguments): array
+    {
+        $out = [];
+        array_walk_recursive($arguments, static function (mixed $value) use (&$out): void {
+            if (is_string($value) && trim($value) !== '') {
+                $out[] = trim($value);
+            }
+        });
+
+        return $out;
+    }
+
+    /**
+     * `in:v1,v2` from a `#[Enum(Status::class)]` attribute's enum backing values, or null when the
+     * class argument is missing / not a resolvable enum.
+     *
+     * @param  array<array-key, mixed>  $arguments
+     */
+    private function enumAttributeToken(array $arguments): ?string
+    {
+        $class = null;
+        array_walk_recursive($arguments, static function (mixed $value) use (&$class): void {
+            if ($class === null && is_string($value) && $value !== '') {
+                $class = ltrim($value, '\\');
+            }
+        });
+
+        if ($class === null) {
+            return null;
+        }
+
+        $values = array_map(strval(...), EnumReflection::values($class));
+
+        return $values === [] ? null : 'in:'.implode(',', $values);
+    }
+
+    /**
+     * Whether the property is excluded from the request shape: a spatie `#[Computed]` (server-derived,
+     * output-only) or `#[WithoutValidation]` property is never a validated request field.
+     */
+    public function isExcludedFromRequest(string $fqcn, string $property): bool
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return false;
+        }
+
+        return $reflection->getAttributes(self::COMPUTED) !== []
+            || $reflection->getAttributes(self::WITHOUT_VALIDATION) !== [];
+    }
+
+    /**
+     * The property's constructor default: `['hasDefault' => bool, 'value' => mixed]`. A defaulted
+     * property is optional (absent-from-required) and its value is a documentable schema default.
+     * Read from the constructor signature by reflection — nothing is instantiated.
+     *
+     * @return array{hasDefault: bool, value: mixed}
+     */
+    public function propertyDefault(string $fqcn, string $property): array
+    {
+        if (! class_exists($fqcn)) {
+            return ['hasDefault' => false, 'value' => null];
+        }
+
+        $constructor = (new ReflectionClass($fqcn))->getConstructor();
+        if ($constructor === null) {
+            return ['hasDefault' => false, 'value' => null];
+        }
+
+        foreach ($constructor->getParameters() as $parameter) {
+            if ($parameter->getName() === $property && $parameter->isDefaultValueAvailable()) {
+                $value = $parameter->getDefaultValue();
+
+                return ['hasDefault' => is_scalar($value) || $value === null, 'value' => $value];
+            }
+        }
+
+        return ['hasDefault' => false, 'value' => null];
+    }
+
+    /** The item Data class named by a property's `#[DataCollectionOf(X::class)]`, or null. */
+    public function dataCollectionOf(string $fqcn, string $property): ?string
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return null;
+        }
+
+        $attributes = $reflection->getAttributes(self::DATA_COLLECTION_OF);
+        if ($attributes === []) {
+            return null;
+        }
+
+        foreach ($attributes[0]->getArguments() as $argument) {
+            if (is_string($argument) && $argument !== '') {
+                return ltrim($argument, '\\');
+            }
+        }
+
+        return null;
+    }
+
+    /** Whether a property carries a spatie `#[Prohibited]` attribute (documented as never-sendable). */
+    public function isProhibited(string $fqcn, string $property): bool
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return false;
+        }
+
+        return $reflection->getAttributes(self::VALIDATION_NS.'Prohibited') !== [];
+    }
+
+    /**
+     * The FQCNs of mapper classes used on the class or its properties that are NOT recognised built-in
+     * spatie mappers — the caller emits a diagnostic so an unknown mapper never silently mis-keys the
+     * schema (it falls back to the property name).
+     *
+     * @return list<string>
+     */
+    public function unrecognisedMappers(string $fqcn): array
+    {
+        if (! class_exists($fqcn)) {
+            return [];
+        }
+
+        $reflection = new ReflectionClass($fqcn);
+        $found = [];
+
+        $candidates = $reflection->getAttributes();
+        foreach ($reflection->getProperties() as $property) {
+            $candidates = [...$candidates, ...$property->getAttributes()];
+        }
+
+        foreach ($candidates as $attribute) {
+            if (! in_array($attribute->getName(), [self::MAP_NAME, self::MAP_INPUT_NAME, self::MAP_OUTPUT_NAME], true)) {
+                continue;
+            }
+            foreach ($attribute->getArguments() as $argument) {
+                if (is_string($argument) && ! isset(self::MAPPERS[$argument]) && class_exists($argument) && ! in_array($argument, $found, true)) {
+                    $found[] = $argument;
+                }
+            }
+        }
+
+        return $found;
     }
 
     /** CamelCase attribute short name → snake_case rule name (`StartsWith` → `starts_with`). */
@@ -260,24 +483,81 @@ final class DataClassReflector
             return null;
         }
 
-        // The directional map (MapInputName/MapOutputName) wins over the symmetric MapName.
-        foreach ([$directional, self::MAP_NAME] as $attributeClass) {
-            $attributes = $reflection->getAttributes($attributeClass);
-            if ($attributes === []) {
-                continue;
-            }
+        // Precedence: a property-level map (directional beats symmetric MapName) wins over a
+        // class-level map (which renames every property, commonly via a mapper class).
+        $class = $reflection->getDeclaringClass();
+        $sources = [
+            $reflection->getAttributes($directional),
+            $reflection->getAttributes(self::MAP_NAME),
+            $class->getAttributes($directional),
+            $class->getAttributes(self::MAP_NAME),
+        ];
 
-            $instance = $attributes[0]->newInstance();
-            $value = $directional === self::MAP_OUTPUT_NAME
-                ? ($instance->output ?? null)
-                : ($instance->input ?? null);
-
-            if (is_string($value)) {
-                return $value;
+        foreach ($sources as $attributes) {
+            $resolved = $this->resolveMapped($this->mapValue($attributes, $directional), $property);
+            if ($resolved !== null) {
+                return $resolved;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The raw input/output value of the first map attribute (a literal name or a mapper-class FQCN),
+     * or null when there is none.
+     *
+     * @param  list<\ReflectionAttribute<object>>  $attributes
+     */
+    private function mapValue(array $attributes, string $directional): ?string
+    {
+        if ($attributes === []) {
+            return null;
+        }
+
+        $instance = $attributes[0]->newInstance();
+        $value = $directional === self::MAP_OUTPUT_NAME
+            ? ($instance->output ?? null)
+            : ($instance->input ?? null);
+
+        return is_string($value) ? $value : (is_int($value) ? (string) $value : null);
+    }
+
+    /**
+     * Resolve a map value into the documented key: a known mapper class renames the property by its
+     * transform; an UNKNOWN mapper class yields null (the caller falls back to the property name —
+     * never the FQCN); anything else is a literal key.
+     */
+    private function resolveMapped(?string $value, string $property): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $mapped = self::mapWithMapper($value, $property);
+        if ($mapped !== null) {
+            return $mapped;
+        }
+
+        // An unrecognised mapper class must not leak its FQCN as the key; fall back to the property
+        // name (the caller surfaces a diagnostic via unrecognisedMappers()).
+        return class_exists($value) ? null : $value;
+    }
+
+    /**
+     * Apply a spatie built-in name mapper (by FQCN) to a property name, or null when the FQCN is not
+     * a recognised mapper. Public so the mapper table is dataset-testable over every entry.
+     */
+    public static function mapWithMapper(string $mapperClass, string $property): ?string
+    {
+        return match (self::MAPPERS[$mapperClass] ?? null) {
+            'snake' => Str::snake($property),
+            'camel' => Str::camel($property),
+            'studly' => Str::studly($property),
+            'lower' => Str::lower($property),
+            'upper' => Str::upper($property),
+            default => null,
+        };
     }
 
     private function property(string $fqcn, string $property): ?ReflectionProperty

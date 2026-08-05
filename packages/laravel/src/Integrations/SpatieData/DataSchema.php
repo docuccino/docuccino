@@ -37,9 +37,14 @@ use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DataSchema implements TypeToSchema
 {
+    /**
+     * @param  string  $dateFormat  the app's `data.date_format` (a PHP date() format), used to decide
+     *                              a `DateTimeInterface` property's OAS `format` (date vs date-time)
+     */
     public function __construct(
         private readonly DataClassReflector $reflector = new DataClassReflector,
         private readonly ComponentHoist $hoist = new ComponentHoist,
+        private readonly string $dateFormat = 'Y-m-d\TH:i:sP',
     ) {}
 
     public function supports(DType $type): bool
@@ -86,12 +91,16 @@ final class DataSchema implements TypeToSchema
                 }
 
                 $clean = self::stripMarkers($property->type);
-                $schema = $context->convert($clean);
+                $schema = $this->propertySchema($fqcn, $property->name, $clean, $context);
                 if ($property->summary !== null) {
                     $schema['description'] = $property->summary;
                 }
                 if ($property->example !== null) {
                     $schema['example'] = $property->example;
+                }
+                $default = $this->reflector->propertyDefault($fqcn, $property->name);
+                if ($default['hasDefault'] && $default['value'] !== null) {
+                    $schema['default'] = $default['value'];
                 }
 
                 $key = $this->reflector->outputName($fqcn, $property->name);
@@ -111,6 +120,51 @@ final class DataSchema implements TypeToSchema
         }, $facts['schemaName'], $facts['schemaId']);
     }
 
+    /**
+     * The schema fragment for one property, special-casing the two shapes the generic class mapper
+     * gets wrong: a `#[DataCollectionOf(X)]` collection (→ array of X) and a `DateTimeInterface`
+     * property (→ a formatted string, not a bare object).
+     *
+     * @return array<string, mixed>
+     */
+    private function propertySchema(string $fqcn, string $property, DType $clean, SchemaContext $context): array
+    {
+        $item = $this->reflector->dataCollectionOf($fqcn, $property);
+        if ($item !== null) {
+            return ['type' => 'array', 'items' => $context->convert(new ClassT($item))];
+        }
+
+        if ($this->isDateTime($clean)) {
+            return ['type' => 'string', 'format' => $this->dateFormatToOas()];
+        }
+
+        return $context->convert($clean);
+    }
+
+    /** Whether the (marker-stripped) type is, or unions in, a `DateTimeInterface`. */
+    private function isDateTime(DType $clean): bool
+    {
+        if ($clean instanceof ClassT) {
+            return DataClassReflector::isDateTime($clean->fqcn);
+        }
+
+        if ($clean instanceof UnionT) {
+            foreach ($clean->members as $member) {
+                if ($member instanceof ClassT && DataClassReflector::isDateTime($member->fqcn)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** date-only `data.date_format` → `date`; a format bearing time/zone tokens → `date-time`. */
+    private function dateFormatToOas(): string
+    {
+        return preg_match('/[GHhisuveTPOaA]/', $this->dateFormat) === 1 ? 'date-time' : 'date';
+    }
+
     private function collection(ClassT $type, SchemaContext $context): SchemaResult
     {
         $item = $type->typeArgs[0] ?? null;
@@ -126,7 +180,7 @@ final class DataSchema implements TypeToSchema
     }
 
     /** Drop spatie `Optional`/`Lazy` markers from a union so only the real type is rendered. */
-    private static function stripMarkers(DType $type): DType
+    public static function stripMarkers(DType $type): DType
     {
         if (! $type instanceof UnionT) {
             return $type;

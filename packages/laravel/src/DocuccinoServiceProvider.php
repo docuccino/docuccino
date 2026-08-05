@@ -28,6 +28,7 @@ use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
+use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -191,6 +192,14 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $config = $app->make('config');
 
             return new PassportSecurityExtension($config, self::passportRuntime());
+        });
+
+        // The spatie-data schema mapper reads the app's data.date_format so a DateTimeInterface
+        // property documents the right string format (date vs date-time).
+        $this->app->bind(DataSchema::class, static function (): DataSchema {
+            $format = config('data.date_format');
+
+            return new DataSchema(dateFormat: is_string($format) && $format !== '' ? $format : 'Y-m-d\TH:i:sP');
         });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
