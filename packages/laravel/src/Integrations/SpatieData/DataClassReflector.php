@@ -8,6 +8,7 @@ use Docuccino\Attributes\Hidden as DocuccinoHidden;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Support\Fqcn;
+use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Illuminate\Support\Str;
 use ReflectionClass;
 use ReflectionIntersectionType;
@@ -26,6 +27,38 @@ use ReflectionUnionType;
 final class DataClassReflector
 {
     public const DATA = 'Spatie\\LaravelData\\Data';
+
+    /** The vendor namespace prefix — a method declared under it is spatie's own, not a user override. */
+    private const SPATIE_NS = 'Spatie\\LaravelData\\';
+
+    /**
+     * The `spatie/laravel-data` request query-string partial parameter → the static allow-list method
+     * that opts a Data class into it (`ResponsableData`). A user OVERRIDE of one of these (declared
+     * off the vendor namespace) makes the corresponding `?include=`/`?exclude=`/`?only=`/`?except=`
+     * query parameter live on the response (docs: lazy-properties / partials). The base returns `[]`
+     * (nothing allowed), so an un-overridden method is inert — only an override is documented.
+     *
+     * @var array<string, string>
+     */
+    private const REQUEST_PARTIAL_METHODS = [
+        'include' => 'allowedRequestIncludes',
+        'exclude' => 'allowedRequestExcludes',
+        'only' => 'allowedRequestOnly',
+        'except' => 'allowedRequestExcept',
+    ];
+
+    /**
+     * The global default name-mapping strategy (`config('data.name_mapping_strategy.{input,output}')`)
+     * as built-in mapper FQCNs, injected by the service provider (the integration stays
+     * vendor-import-free, mirroring {@see PassportRuntime}).
+     * A whole-class default (commonly `SnakeCaseMapper::class`) renames EVERY property key that carries
+     * no explicit `#[MapName]`/`#[MapInputName]`/`#[MapOutputName]` — spatie's `NameMappersResolver`
+     * falls back to it precisely when no map attribute governs the property.
+     */
+    public function __construct(
+        private readonly ?string $globalInputMapper = null,
+        private readonly ?string $globalOutputMapper = null,
+    ) {}
 
     /**
      * The interface every Data-like object implements — `Data`, the output-only `Resource`, and the
@@ -467,16 +500,16 @@ final class DataClassReflector
     /** The OUTPUT key for a property, honouring `#[MapOutputName]` / `#[MapName]` (else the name). */
     public function outputName(string $fqcn, string $property): string
     {
-        return $this->mappedName($fqcn, $property, self::MAP_OUTPUT_NAME) ?? $property;
+        return $this->mappedName($fqcn, $property, self::MAP_OUTPUT_NAME, $this->globalOutputMapper) ?? $property;
     }
 
     /** The INPUT key for a property, honouring `#[MapInputName]` / `#[MapName]` (else the name). */
     public function inputName(string $fqcn, string $property): string
     {
-        return $this->mappedName($fqcn, $property, self::MAP_INPUT_NAME) ?? $property;
+        return $this->mappedName($fqcn, $property, self::MAP_INPUT_NAME, $this->globalInputMapper) ?? $property;
     }
 
-    private function mappedName(string $fqcn, string $property, string $directional): ?string
+    private function mappedName(string $fqcn, string $property, string $directional, ?string $globalMapper): ?string
     {
         $reflection = $this->property($fqcn, $property);
         if ($reflection === null) {
@@ -493,14 +526,53 @@ final class DataClassReflector
             $class->getAttributes(self::MAP_NAME),
         ];
 
+        $anyMapAttribute = false;
         foreach ($sources as $attributes) {
+            if ($attributes !== []) {
+                $anyMapAttribute = true;
+            }
             $resolved = $this->resolveMapped($this->mapValue($attributes, $directional), $property);
             if ($resolved !== null) {
                 return $resolved;
             }
         }
 
+        // Global default strategy applies ONLY when no map attribute governs the property (spatie's
+        // NameMappersResolver falls back to config only in the no-attribute branch); an unrecognised
+        // global mapper class yields null → the property name (the honest floor, no FQCN leak).
+        if (! $anyMapAttribute && $globalMapper !== null) {
+            return self::mapWithMapper($globalMapper, $property);
+        }
+
         return null;
+    }
+
+    /**
+     * The request query-string partial parameters (`include`/`exclude`/`only`/`except`) a Data class
+     * opts into by OVERRIDING the matching `allowedRequest*()` static method (declared off the vendor
+     * namespace). Detection is reflection-only — the field allow-list itself is never enumerated (that
+     * would need to run the method), so the parameter is documented as a free comma-list string.
+     *
+     * @return list<string>
+     */
+    public function requestPartials(string $fqcn): array
+    {
+        if (! class_exists($fqcn)) {
+            return [];
+        }
+
+        $reflection = new ReflectionClass($fqcn);
+        $params = [];
+        foreach (self::REQUEST_PARTIAL_METHODS as $param => $method) {
+            if (! $reflection->hasMethod($method)) {
+                continue;
+            }
+            if (! str_starts_with($reflection->getMethod($method)->getDeclaringClass()->getName(), self::SPATIE_NS)) {
+                $params[] = $param;
+            }
+        }
+
+        return $params;
     }
 
     /**

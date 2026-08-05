@@ -7,10 +7,12 @@ namespace Docuccino\Laravel\Integrations\SpatieData;
 /**
  * The single entry point for the `spatie/laravel-data` integration (the documented template for a
  * conditional integration): it lists the extensions the integration contributes — the {@see DataSchema}
- * type mapper (Data classes → hoisted component schemas) and the {@see DataRequestExtension}
- * (Data action params → request body/query). The service provider spreads these into the default set
- * only when `Spatie\LaravelData\Data` exists (`class_exists` guard), so docuccino/laravel never
- * hard-requires the package.
+ * type mapper (Data classes → hoisted component schemas, response wrapping), the {@see DataRequestExtension}
+ * (Data action params → request body/query, incl. a static `rules()` override), and the
+ * {@see DataPartialsExtension} (`include`/`exclude`/`only`/`except` query params for a Data return that
+ * opts into them). The service provider spreads these into the default set only when
+ * `Spatie\LaravelData\Data` exists (`class_exists` guard), so docuccino/laravel never hard-requires the
+ * package.
  */
 final class SpatieDataIntegration
 {
@@ -35,6 +37,7 @@ final class SpatieDataIntegration
         return [
             DataSchema::class,
             DataRequestExtension::class,
+            DataPartialsExtension::class,
         ];
     }
 }

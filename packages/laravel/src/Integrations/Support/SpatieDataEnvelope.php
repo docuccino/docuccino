@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Support;
 
+use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
+
 /**
  * The paginated envelopes `spatie/laravel-data` serialises around a page of Data items — distinct
  * from Laravel's own resource paginator envelope ({@see PaginationEnvelope}) and NOT interchangeable
@@ -12,7 +14,10 @@ namespace Docuccino\Laravel\Integrations\Support;
  * - `links` is an ARRAY of `{url, label, active}` objects (spatie's `linkCollection()`), not a
  *   `{first,last,prev,next}` object; the cursor variant emits an empty `links` array.
  * - `meta` carries the `*_page_url` members alongside the counters (length-aware) / cursor tokens.
- * - all three of `data`/`links`/`meta` are always emitted, so all three are required.
+ * - all three of the items key / `links` / `meta` are always emitted, so all three are required.
+ *
+ * A paginated collection is ALWAYS wrapped: the items key is the wrap key (`config('data.wrap')`,
+ * default `'data'`) — {@see DataSchema} passes it in.
  */
 final class SpatieDataEnvelope
 {
@@ -22,9 +27,9 @@ final class SpatieDataEnvelope
      * @param  array<string, mixed>  $items
      * @return array<string, mixed>
      */
-    public static function length(array $items): array
+    public static function length(array $items, string $dataKey = 'data'): array
     {
-        return self::wrap($items, [
+        return self::wrap($items, $dataKey, [
             'meta' => self::object([
                 'current_page' => ['type' => 'integer'],
                 'first_page_url' => self::nullableString(),
@@ -48,9 +53,9 @@ final class SpatieDataEnvelope
      * @param  array<string, mixed>  $items
      * @return array<string, mixed>
      */
-    public static function cursor(array $items): array
+    public static function cursor(array $items, string $dataKey = 'data'): array
     {
-        return self::wrap($items, [
+        return self::wrap($items, $dataKey, [
             'meta' => self::object([
                 'path' => self::nullableString(),
                 'per_page' => ['type' => 'integer'],
@@ -63,19 +68,19 @@ final class SpatieDataEnvelope
     }
 
     /**
-     * `data` (the page of items) + spatie's `links` array-of-objects + the given `meta` block; all
-     * three keys are always serialised, so all three are required.
+     * The items key (the page of items) + spatie's `links` array-of-objects + the given `meta` block;
+     * all three keys are always serialised, so all three are required.
      *
      * @param  array<string, mixed>  $items
      * @param  array<string, array<string, mixed>>  $extra
      * @return array<string, mixed>
      */
-    private static function wrap(array $items, array $extra): array
+    private static function wrap(array $items, string $dataKey, array $extra): array
     {
         return [
             'type' => 'object',
             'properties' => [
-                'data' => ['type' => 'array', 'items' => $items],
+                $dataKey => ['type' => 'array', 'items' => $items],
                 'links' => [
                     'type' => 'array',
                     'items' => self::object([
@@ -85,7 +90,7 @@ final class SpatieDataEnvelope
                     ]),
                 ],
             ] + $extra,
-            'required' => ['data', 'links', 'meta'],
+            'required' => [$dataKey, 'links', 'meta'],
         ];
     }
 

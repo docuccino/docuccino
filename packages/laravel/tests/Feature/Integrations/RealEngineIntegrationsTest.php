@@ -6,6 +6,8 @@ use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -15,6 +17,8 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
@@ -22,6 +26,7 @@ use Docuccino\Laravel\Integrations\FormRequest\ShapeToRuleSet;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateFacts;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParameters;
+use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema;
 use Docuccino\Laravel\Tests\Fixtures\ApiResources\MultiShapeResource;
 use Docuccino\Laravel\Tests\Fixtures\TimacdonaldJsonApi\TimacdonaldArticleResource;
@@ -472,6 +477,52 @@ it('recovers a custom CastsAttributes caster get() return type through the real 
     $type = $analysis->returns[0]->type ?? null;
     expect($type)->not->toBeNull()
         ->and($type->canonicalKey())->toBe(ScalarT::float()->canonicalKey());
+})->group('fixture');
+
+it('recovers a spatie Data static rules() override through the real engine and merges it over inference', function (): void {
+    // App\Data\PublishListingData defines a STATIC rules() (spatie's override, docs: validation/manual-
+    // rules) mixing a pipe-string rule with a Rule::enum descriptor — read through the SAME literal +
+    // descriptor engine analysis the FormRequest path uses (RulesMethodVisitor), off a static method.
+    $trace = FixtureRunner::traceRules(
+        'app/Data/PublishListingData.php',
+        'App\\Data\\PublishListingData',
+        'rules',
+    );
+
+    expect(array_keys($trace['fields']))->toBe(['title', 'status'])
+        ->and($trace['unrecoverable'])->toBe([]);
+
+    $titleRules = array_map(static fn (array $r): string => $r['name'], $trace['fields']['title']);
+    expect($titleRules)->toBe(['required', 'string', 'max']);
+
+    $statusByName = [];
+    foreach ($trace['fields']['status'] as $rule) {
+        $statusByName[$rule['name']] = $rule;
+    }
+    expect(array_keys($statusByName))->toBe(['required', 'enum'])
+        ->and($statusByName['enum']['parameters'])->toBe(['open', 'closed', 'draft'])
+        ->and($statusByName['enum']['note'])->toBe('App\\Enums\\ListingStatus');
+
+    // Drive the REAL-recovered override through DataValidationRules::build(): it WINS per field over the
+    // property-type inference (both properties are plain `string`, which alone would infer required|
+    // string) — spatie's DataValidationRulesResolver `add` (override) semantics.
+    $override = new RuleSet(array_map(
+        static fn (array $rules): array => array_map(
+            static fn (array $r): ValidationRule => new ValidationRule($r['name'], $r['parameters'], $r['note'] ?? null),
+            $rules,
+        ),
+        $trace['fields'],
+    ));
+
+    $metadata = new ClassMetadata('App\\Data\\PublishListingData', [
+        new PropertyMetadata('title', ScalarT::string()),
+        new PropertyMetadata('status', ScalarT::string()),
+    ]);
+    $ruleSet = (new DataValidationRules)->build('App\\Data\\PublishListingData', $metadata, new NullTypeEngine, $override);
+
+    // status now carries the override's enum descriptor (the bare `string` inference is replaced).
+    expect(array_map(static fn (ValidationRule $r): string => $r->name, $ruleSet->fields['status']))->toBe(['required', 'enum'])
+        ->and(array_map(static fn (ValidationRule $r): string => $r->name, $ruleSet->fields['title']))->toBe(['required', 'string', 'max']);
 })->group('fixture');
 
 it('resolves a $with relation\'s related model through the real engine', function (): void {

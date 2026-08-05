@@ -29,7 +29,9 @@ use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
+use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
+use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
@@ -204,12 +206,27 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new PassportSecurityExtension($config, self::passportRuntime());
         });
 
-        // The spatie-data schema mapper reads the app's data.date_format so a DateTimeInterface
-        // property documents the right string format (date vs date-time).
-        $this->app->bind(DataSchema::class, static function (): DataSchema {
+        // The spatie-data integration reads the package's own global config — none of which the
+        // integration may import (the vendor-import-free arch rule): the name-mapping strategy (a
+        // whole-class default rename), the response wrap key, and the date format. The provider is the
+        // one place allowed to touch it, so it reads the values here and injects them (mirroring the
+        // Passport runtime facts). A single configured reflector is shared by every spatie-data
+        // extension via the container.
+        $this->app->bind(DataClassReflector::class, static function (): DataClassReflector {
+            return new DataClassReflector(
+                globalInputMapper: self::stringConfig('data.name_mapping_strategy.input'),
+                globalOutputMapper: self::stringConfig('data.name_mapping_strategy.output'),
+            );
+        });
+
+        $this->app->bind(DataSchema::class, function (Application $app): DataSchema {
             $format = config('data.date_format');
 
-            return new DataSchema(dateFormat: is_string($format) && $format !== '' ? $format : 'Y-m-d\TH:i:sP');
+            return new DataSchema(
+                reflector: $app->make(DataClassReflector::class),
+                dateFormat: is_string($format) && $format !== '' ? $format : 'Y-m-d\TH:i:sP',
+                wrap: new WrapResolver(self::stringConfig('data.wrap')),
+            );
         });
 
         // The engine is resolved from the container so tests (and users) can swap in a stub or the
@@ -220,6 +237,14 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
             return $app->make(TypeEngineFactory::class)->make($config);
         });
+    }
+
+    /** A non-empty string config value (a mapper FQCN / wrap key), or null when unset/blank. */
+    private static function stringConfig(string $key): ?string
+    {
+        $value = config($key);
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**

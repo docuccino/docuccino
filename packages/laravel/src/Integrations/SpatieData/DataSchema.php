@@ -35,6 +35,12 @@ use Docuccino\Laravel\Integrations\Support\SpatieDataEnvelope;
  * (`PaginatedDataCollection`/`CursorPaginatedDataCollection`) render spatie's OWN paginator envelope
  * ({@see SpatieDataEnvelope}) — `links` as an array of `{url,label,active}`, meta with the `*_page_url`
  * members — which diverges from Laravel's resource envelope.
+ *
+ * At the RESPONSE ROOT (`{@see SchemaContext::depth()}` === 1) a wrap key ({@see WrapResolver} —
+ * class `defaultWrap()` else global `config('data.wrap')`) nests the payload under that key
+ * (`{ data: <schema> }`); a nested Data property is never wrapped so its shared `$ref` stays wrap-free.
+ * A paginated collection is always wrapped, so its envelope items key IS the wrap key — never an
+ * extra outer wrap (spatie's `PaginatedCollectionIsAlwaysWrapped`).
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DataSchema implements TypeToSchema
@@ -47,6 +53,7 @@ final class DataSchema implements TypeToSchema
         private readonly DataClassReflector $reflector = new DataClassReflector,
         private readonly ComponentHoist $hoist = new ComponentHoist,
         private readonly string $dateFormat = 'Y-m-d\TH:i:sP',
+        private readonly WrapResolver $wrap = new WrapResolver,
     ) {}
 
     public function supports(DType $type): bool
@@ -65,7 +72,29 @@ final class DataSchema implements TypeToSchema
             return $this->collection($type, $context);
         }
 
-        return $this->object($type, $context);
+        return $this->wrapRoot($this->object($type, $context), $type->fqcn, $context);
+    }
+
+    /**
+     * Wrap a top-level Data object under its wrap key ({@see WrapResolver}); a nested object
+     * ({@see SchemaContext::depth()} > 1) or an unwrapped document is returned unchanged.
+     */
+    private function wrapRoot(SchemaResult $result, string $fqcn, SchemaContext $context): SchemaResult
+    {
+        if ($context->depth() !== 1) {
+            return $result;
+        }
+
+        $key = $this->wrap->key($fqcn);
+        if ($key === null) {
+            return $result;
+        }
+
+        return new SchemaResult([
+            'type' => 'object',
+            'properties' => [$key => $result->schema],
+            'required' => [$key],
+        ], $result->confidence);
     }
 
     private function object(ClassT $type, SchemaContext $context): SchemaResult
@@ -176,11 +205,25 @@ final class DataSchema implements TypeToSchema
         $item = $type->typeArgs[0] ?? null;
         $items = $item !== null ? $context->convert($item) : [];
 
-        $schema = match ($this->reflector->collectionKind($type->fqcn)) {
-            'length' => SpatieDataEnvelope::length($items),
-            'cursor' => SpatieDataEnvelope::cursor($items),
-            default => ['type' => 'array', 'items' => $items],
-        };
+        // A paginated collection is ALWAYS wrapped: the items key IS the wrap key (global ?? 'data'),
+        // and the {items,links,meta} envelope is never additionally nested under an outer wrap.
+        $kind = $this->reflector->collectionKind($type->fqcn);
+        if ($kind === 'length' || $kind === 'cursor') {
+            $dataKey = $this->wrap->key(null) ?? 'data';
+            $schema = $kind === 'length'
+                ? SpatieDataEnvelope::length($items, $dataKey)
+                : SpatieDataEnvelope::cursor($items, $dataKey);
+
+            return new SchemaResult($schema, 0.9);
+        }
+
+        // A plain DataCollection is a bare array of items, wrapped under the global key only at the
+        // response root (a nested collection property stays a bare array).
+        $schema = ['type' => 'array', 'items' => $items];
+        $key = $context->depth() === 1 ? $this->wrap->key(null) : null;
+        if ($key !== null) {
+            $schema = ['type' => 'object', 'properties' => [$key => $schema], 'required' => [$key]];
+        }
 
         return new SchemaResult($schema, 0.9);
     }

@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Core\Inference\ClassRef;
+use Docuccino\Laravel\Integrations\FormRequest\RulesFromClass;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use ReflectionClass;
 use ReflectionMethod;
@@ -32,6 +33,7 @@ final class DataRequestExtension implements OperationExtension
         private readonly DataValidationRules $rules = new DataValidationRules,
         private readonly RuleOrdering $ordering = new RuleOrdering,
         private readonly RecoveredRequest $request = new RecoveredRequest,
+        private readonly RulesFromClass $rulesOverride = new RulesFromClass,
     ) {}
 
     public function phase(): OperationPhase
@@ -53,8 +55,12 @@ final class DataRequestExtension implements OperationExtension
 
         $this->reportUnrecognisedMappers($fqcn, $context);
 
+        // A static rules() override (read via the shared literal+descriptor engine analysis) wins per
+        // field over the property-inferred rules — spatie's DataValidationRulesResolver override.
+        $overrides = $this->rulesOverride->analyse($context, $fqcn);
+
         $metadata = $context->engine->classMetadata(new ClassRef($fqcn));
-        $ruleSet = $this->rules->build($fqcn, $metadata, $context->engine);
+        $ruleSet = $this->rules->build($fqcn, $metadata, $context->engine, $overrides);
         if ($ruleSet->isEmpty()) {
             return;
         }

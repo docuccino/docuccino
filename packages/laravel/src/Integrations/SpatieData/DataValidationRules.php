@@ -19,6 +19,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Integrations\FormRequest\RulesFromClass;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 
 /**
@@ -31,6 +32,11 @@ use Docuccino\Laravel\Integrations\Support\RuleParsing;
  * ({@see DataClassReflector::validationTokens()}). Nested Data / Data-collection properties recurse
  * into dotted `author.name` / `items.*.title` rules. The input key honours `#[MapInputName]`/`#[MapName]`
  * (incl. mapper classes). `#[Computed]`/`#[WithoutValidation]` properties are excluded.
+ *
+ * A static `rules()` override on the Data class WINS per field over the inferred rules (spatie's
+ * `DataValidationRulesResolver` `add`s the override at the field key, replacing the inferred set); it
+ * is read via the engine's literal + descriptor analysis ({@see RulesFromClass})
+ * and passed to {@see build()} by {@see DataRequestExtension}.
  */
 final class DataValidationRules
 {
@@ -44,9 +50,20 @@ final class DataValidationRules
         return $this->reflector;
     }
 
-    public function build(string $fqcn, ClassMetadata $metadata, TypeEngine $engine): RuleSet
+    public function build(string $fqcn, ClassMetadata $metadata, TypeEngine $engine, ?RuleSet $overrides = null): RuleSet
     {
-        return new RuleSet($this->fieldsFor($fqcn, $metadata, $engine, '', [$fqcn]));
+        $fields = $this->fieldsFor($fqcn, $metadata, $engine, '', [$fqcn]);
+
+        // A static rules() override replaces the inferred rules per field (spatie's default `add`
+        // semantics, not merge) and may declare fields no property inferred — both are honoured by
+        // overwriting/appending at the override's key.
+        if ($overrides !== null) {
+            foreach ($overrides->fields as $field => $rules) {
+                $fields[$field] = $rules;
+            }
+        }
+
+        return new RuleSet($fields);
     }
 
     /**
