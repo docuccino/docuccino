@@ -128,6 +128,49 @@ it('recovers a real Data class shape via classMetadata (property types, not a st
         ->and(array_filter($subtitle->members, static fn ($m): bool => $m instanceof NullT))->not->toBeEmpty();
 })->group('fixture');
 
+it('threads the item resource type through Resource::collection() via the collection stub', function (): void {
+    // Framework docblocks `collection()` as a bare AnonymousResourceCollection (no generic), so the
+    // item type was lost and the mapper emitted `items: []` (audit api-resources #2). The
+    // JsonResourceCollection stub makes AnonymousResourceCollection generic and returns
+    // `AnonymousResourceCollection<static>`, so `UserResource::collection(User::all())` recovers the
+    // concrete item resource in typeArgs — what JsonResourceSchema reads to type the array items.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/SpikeController.php',
+        'App\\Http\\Controllers\\SpikeController',
+        'resourceCollection',
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and($type->fqcn)->toBe('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection')
+        ->and($type->typeArgs[0] ?? null)->toBeInstanceOf(ClassT::class)
+        ->and($type->typeArgs[0]->fqcn)->toBe('App\\Http\\Resources\\UserResource');
+})->group('fixture');
+
+it('types $model->toResource(Class) and $collection->toResourceCollection(Class) via the stubs', function (): void {
+    // toResource(UserResource::class) recovers the named resource (not a bare JsonResource).
+    $resource = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/SpikeController.php',
+        'App\\Http\\Controllers\\SpikeController',
+        'modelToResource',
+    ));
+    $resourceType = $resource->returns[0]->type ?? null;
+    expect($resourceType)->toBeInstanceOf(ClassT::class)
+        ->and($resourceType->fqcn)->toBe('App\\Http\\Resources\\UserResource');
+
+    // toResourceCollection(UserResource::class) recovers AnonymousResourceCollection<UserResource>.
+    $collection = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Controllers/SpikeController.php',
+        'App\\Http\\Controllers\\SpikeController',
+        'collectionToResourceCollection',
+    ));
+    $collectionType = $collection->returns[0]->type ?? null;
+    expect($collectionType)->toBeInstanceOf(ClassT::class)
+        ->and($collectionType->fqcn)->toBe('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection')
+        ->and($collectionType->typeArgs[0] ?? null)->toBeInstanceOf(ClassT::class)
+        ->and($collectionType->typeArgs[0]->fqcn)->toBe('App\\Http\\Resources\\UserResource');
+})->group('fixture');
+
 // ---------------------------------------------------------------------------------------------------
 // Phase 5c integrations — the recovery half proven against the REAL engine (M2 / binding coverage).
 // ---------------------------------------------------------------------------------------------------

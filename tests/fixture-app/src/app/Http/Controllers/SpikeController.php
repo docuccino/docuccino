@@ -9,6 +9,8 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 
 class SpikeController extends Controller
 {
@@ -60,5 +62,24 @@ class SpikeController extends Controller
         }
 
         return new UserResource(User::query()->firstOrFail());
+    }
+
+    /**
+     * `$model->toResource(UserResource::class)` — with the TransformsToResource stub the return
+     * recovers as the named UserResource (not a bare JsonResource).
+     */
+    public function modelToResource(): JsonResource
+    {
+        return User::query()->firstOrFail()->toResource(UserResource::class);
+    }
+
+    /**
+     * `$collection->toResourceCollection(UserResource::class)` — with the
+     * TransformsToResourceCollection stub the return recovers as
+     * AnonymousResourceCollection<UserResource>.
+     */
+    public function collectionToResourceCollection(): ResourceCollection
+    {
+        return User::all()->toResourceCollection(UserResource::class);
     }
 }
