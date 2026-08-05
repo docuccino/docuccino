@@ -29,8 +29,13 @@ use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\Tracer;
+use Docuccino\Inference\PhpStan\Trace\TypeScopeImpl;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
+use PhpParser\Node;
 use PhpParser\Node\Expr\Variable;
+use PHPStan\Analyser\Scope;
+use PHPStan\Node\ClosureReturnStatementsNode;
+use PHPStan\Node\InArrowFunctionNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Node\ReturnStatementsNode;
 use Throwable;
@@ -354,6 +359,13 @@ final class PhpStanTypeEngine implements TypeEngine
     public function trace(ActionRef $action, TraceVisitor $visitor): TraceReport
     {
         if ($action->class === null) {
+            // A closure located by line (not a class method): its returns ARE the harvest — a named
+            // rate limiter's `RateLimiter::for` closure folded to a concrete limit. Walked in place,
+            // never interprocedurally: a limiter that delegates its limit to a helper does not fold.
+            if ($action->method === '{closure}') {
+                $this->traceClosure($action, $visitor);
+            }
+
             return new TraceReport([$action->file]);
         }
 
@@ -375,6 +387,54 @@ final class PhpStanTypeEngine implements TypeEngine
         }
 
         return new TraceReport($tracer->visitedFiles());
+    }
+
+    /**
+     * Hand a closure's return expressions to the visitor, each with the flow-refined scope in effect
+     * at that return — so it constant-folds them exactly as it would inside a method walk. The
+     * closure is located by start line (from `ReflectionFunction`) and both shapes are reached, so an
+     * idiomatic `fn ($r) => Limit::…` arrow limiter folds, not only a `function () { return …; }` one:
+     *
+     *   - a full closure (`ClosureReturnStatementsNode`) — every explicit return with its scope, and
+     *     `isAlwaysTerminating()` telling a conditional (fall-through) body apart from an unconditional
+     *     one so a limiter that does not always return is left unrecovered;
+     *   - an arrow function (`InArrowFunctionNode`) — its single implicit return of the body.
+     *
+     * The visitor is driven INSIDE the pass, on the live scope: an arrow function's scope is a lazy
+     * fiber scope that cannot type expressions once the pass has ended, so nothing may be deferred.
+     * Best-effort — any failure leaves the visitor with whatever it already harvested.
+     */
+    private function traceClosure(ActionRef $action, TraceVisitor $visitor): void
+    {
+        try {
+            $this->adapter->processFile($action->file, function (Node $node, Scope $scope) use ($action, $visitor): void {
+                // @phpstan-ignore phpstanApi.instanceofAssumption
+                if ($node instanceof ClosureReturnStatementsNode
+                    && $node->getClosureExpr()->getStartLine() === $action->line
+                ) {
+                    if (! $node->getStatementResult()->isAlwaysTerminating()) {
+                        return; // can fall through ⇒ conditional; nothing safe to fold
+                    }
+                    foreach ($node->getReturnStatements() as $statement) {
+                        $expr = $statement->getReturnNode()->expr;
+                        if ($expr !== null) {
+                            $visitor->enterNode($expr, new TypeScopeImpl($statement->getScope(), $this->translator));
+                        }
+                    }
+
+                    return;
+                }
+
+                // @phpstan-ignore phpstanApi.instanceofAssumption
+                if ($node instanceof InArrowFunctionNode
+                    && $node->getOriginalNode()->getStartLine() === $action->line
+                ) {
+                    $visitor->enterNode($node->getOriginalNode()->expr, new TypeScopeImpl($scope, $this->translator));
+                }
+            });
+        } catch (Throwable) {
+            // Trace is best-effort; the visitor keeps whatever it harvested.
+        }
     }
 
     private function makeThrowAnalyzer(): ThrowAnalyzer
