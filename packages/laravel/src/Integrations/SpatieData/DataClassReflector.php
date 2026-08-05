@@ -91,6 +91,8 @@ final class DataClassReflector
 
     private const WITHOUT_VALIDATION = 'Spatie\\LaravelData\\Attributes\\WithoutValidation';
 
+    private const FROM_ROUTE_PARAMETER = 'Spatie\\LaravelData\\Attributes\\FromRouteParameter';
+
     private const DATA_COLLECTION_OF = 'Spatie\\LaravelData\\Attributes\\DataCollectionOf';
 
     private const RULE_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Rule';
@@ -335,8 +337,15 @@ final class DataClassReflector
     }
 
     /**
-     * Whether the property is excluded from the request shape: a spatie `#[Computed]` (server-derived,
-     * output-only) or `#[WithoutValidation]` property is never a validated request field.
+     * Whether the property is excluded from the request shape:
+     *  - a spatie `#[Computed]` (server-derived, output-only) or `#[WithoutValidation]` property is
+     *    never a validated request field;
+     *  - a spatie `#[FromRouteParameter]` property is populated from the route binding, not the request
+     *    body, so it is not a sendable body field;
+     *  - a property-level `#[Hidden]` (Docuccino's or spatie's) is hidden from the documented contract
+     *    in BOTH directions — it already drops from output ({@see isPropertyHidden()}) and here it
+     *    drops from the request body too, matching Scramble's request-hiding semantics for the field
+     *    a client must not (or cannot) send.
      */
     public function isExcludedFromRequest(string $fqcn, string $property): bool
     {
@@ -346,7 +355,10 @@ final class DataClassReflector
         }
 
         return $reflection->getAttributes(self::COMPUTED) !== []
-            || $reflection->getAttributes(self::WITHOUT_VALIDATION) !== [];
+            || $reflection->getAttributes(self::WITHOUT_VALIDATION) !== []
+            || $reflection->getAttributes(self::FROM_ROUTE_PARAMETER) !== []
+            || $reflection->getAttributes(self::SPATIE_HIDDEN) !== []
+            || $reflection->getAttributes(DocuccinoHidden::class) !== [];
     }
 
     /**

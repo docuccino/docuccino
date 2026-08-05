@@ -360,6 +360,18 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   (`Remove::field()`, `#[Hidden]`, `#[IgnoreParam]`, `#[IgnoreResponse]`).
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
 
+**`#[Hidden]` on a Data property is two-directional (Eos pre-flight decision).** A property-level
+`#[Hidden]` hides the property from the RESPONSE schema (as before) AND from the recovered REQUEST
+body — a hidden property is out of the documented contract in whichever direction the Data class is
+used. Rather than a new attribute parameter (the constructor is a `string ...$properties` variadic,
+which cannot cleanly carry a request/response toggle), this conflated meaning is the least-surprising
+rule and matches Scramble's request-context `#[Hidden]` so the migration keeps hiding those fields.
+The only shape it is "wrong" for — a field a client MAY send but the server never returns (a
+`password`) — is served by the idiomatic separate input/output DTO split (which Eos itself follows:
+`DTOs/Data/*` for input, `DTOs/Schema/*` for output), not a shared DTO with `#[Hidden]`.
+`#[FromRouteParameter]` (spatie) is likewise excluded from the request body — the value is bound from
+the route, never sent.
+
 ## 8. TypeEngine boundary (authoritative shape — see inference doc)
 
 ```php

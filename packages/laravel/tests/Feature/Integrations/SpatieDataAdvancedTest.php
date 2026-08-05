@@ -19,6 +19,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountStatus;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ProfileResource;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\RequestExclusionData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\TagData;
 
 /**
@@ -87,6 +88,19 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->dataCollectionOf(AccountData::class, 'tags'))->toBe(TagData::class)
         ->and($reflector->validationTokens(AccountData::class, 'code'))->toBe(['max:5'])
         ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe(['in:active,suspended']);
+});
+
+it('excludes route-parameter and hidden properties from the request shape', function (): void {
+    $reflector = new DataClassReflector;
+
+    // A plain body field is sendable.
+    expect($reflector->isExcludedFromRequest(RequestExclusionData::class, 'name'))->toBeFalse()
+        // #[FromRouteParameter] comes from the binding, not the body.
+        ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'id'))->toBeTrue()
+        // Docuccino's #[Hidden] now drops from the request body (as well as output).
+        ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'internalToken'))->toBeTrue()
+        // spatie's #[Hidden] does likewise.
+        ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'secret'))->toBeTrue();
 });
 
 it('recovers request rules: enum values, defaults, computed exclusion, and nested recursion', function (): void {
