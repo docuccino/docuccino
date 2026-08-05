@@ -102,3 +102,35 @@ it('turns the real-engine harvest into a deepObject filter param under the deepO
         ->and($filter[0]->explode)->toBeTrue()
         ->and(array_keys($filter[0]->schema['properties']))->toBe(['name', 'status', 'email']);
 })->group('fixture');
+
+it('recovers a subject model and types an enum-cast exact filter through the real engine', function (): void {
+    // The REAL QueryBuilderTraceVisitor recovers `QueryBuilder::for(Listing::class)` and the REAL
+    // FilterColumnResolver reflects the model's `status` enum cast → the enum's backing values +
+    // #[CaseDescription]s, exactly what the extension emits into the filter[status] schema.
+    $harvest = FixtureRunner::traceQbEnrich(
+        'app/Http/Controllers/ListingQueryController.php',
+        'App\\Http\\Controllers\\ListingQueryController',
+        'index',
+    );
+
+    expect($harvest['subjectModel'])->toBe('App\\Models\\Listing');
+
+    $byName = [];
+    foreach ($harvest['filters'] as $filter) {
+        $byName[$filter['name']] = $filter;
+    }
+
+    // The enum-cast exact filter resolves to the enum's backing values + case descriptions.
+    expect($byName['status']['columnKind'])->toBe('enum')
+        ->and($byName['status']['enum'])->toBe('App\\Enums\\ListingStatus')
+        ->and($byName['status']['values'])->toBe(['open', 'closed', 'draft'])
+        ->and($byName['status']['descriptions'])->toBe([
+            'open' => 'Visible to the public and accepting applications.',
+            'closed' => 'No longer accepting applications.',
+        ])
+        // Cache soundness through the real engine: the enum's declaring file joins the dependency set.
+        ->and($byName['status']['dependencyBasenames'])->toContain('ListingStatus.php');
+
+    // The non-exact plain filter is not cast-typed (stays a string).
+    expect($byName['title']['columnKind'])->toBeNull();
+})->group('fixture');

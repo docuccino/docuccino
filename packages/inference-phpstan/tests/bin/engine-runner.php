@@ -16,6 +16,7 @@ declare(strict_types=1);
  * Usage:
  *   php engine-runner.php analyze         <controllerFile> <class> <method>
  *   php engine-runner.php trace-qb        <controllerFile> <class> <method>
+ *   php engine-runner.php trace-qb-enrich <controllerFile> <class> <method>
  *   php engine-runner.php class-metadata  <ignored>        <class>
  *   php engine-runner.php analyze-callable <file> <class> <method> <line> <narrowParam> <narrowType>
  *
@@ -23,6 +24,7 @@ declare(strict_types=1);
  * output before it is ignored by the caller).
  */
 
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassRef;
@@ -31,6 +33,9 @@ use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
+use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
+use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/tests/fixture-app/app';
@@ -41,6 +46,7 @@ require $app.'/vendor/autoload.php';
 // loaded here, so the only phpstan/php-parser in play is the fixture app's.
 spl_autoload_register(static function (string $class) use ($repoRoot): void {
     $map = [
+        'Docuccino\\Attributes\\' => $repoRoot.'/packages/attributes/src/',
         'Docuccino\\Core\\' => $repoRoot.'/packages/core/src/',
         'Docuccino\\Inference\\PhpStan\\Tests\\' => $repoRoot.'/packages/inference-phpstan/tests/',
         'Docuccino\\Inference\\PhpStan\\' => $repoRoot.'/packages/inference-phpstan/src/',
@@ -104,6 +110,34 @@ $result = match ($mode) {
             'perPage' => $probe->recoveredPerPage(),
             'outermost' => $probe->outermostTerminal()['terminal'] ?? null,
         ];
+    })(),
+    'trace-qb-enrich' => (static function () use ($engine, $ref): array {
+        // The REAL QueryBuilder trace visitor + the REAL cast-recovery resolver, run inside the host
+        // app's process where its models/enums are autoloadable: proves an enum-cast column recovers
+        // to its emitted enum-filter shape (backing values + case descriptions) end-to-end.
+        $visitor = new QueryBuilderTraceVisitor;
+        $engine->trace($ref, $visitor);
+        $facts = $visitor->facts;
+
+        $resolver = new FilterColumnResolver;
+        $filters = array_map(static function (QbEntry $filter) use ($resolver, $facts): array {
+            $column = $filter->kind === 'exact' && $facts->subjectModel !== null
+                ? $resolver->resolve($facts->subjectModel, $filter->column())
+                : null;
+
+            return [
+                'name' => $filter->name,
+                'kind' => $filter->kind,
+                'columnKind' => $column?->kind,
+                'enum' => $column?->enum,
+                'values' => $column?->enum !== null ? EnumReflection::values($column->enum) : [],
+                'descriptions' => $column?->enum !== null ? EnumReflection::descriptions($column->enum) : [],
+                'dependencyBasenames' => array_map('basename', $column?->dependencyFiles ?? []),
+                'scalarSchema' => $column?->scalarSchema,
+            ];
+        }, $facts->filters);
+
+        return ['subjectModel' => $facts->subjectModel, 'filters' => $filters];
     })(),
     'trace-json-api-paginate' => (static function () use ($engine, $ref): array {
         $visitor = new JsonApiPaginateTraceVisitor;

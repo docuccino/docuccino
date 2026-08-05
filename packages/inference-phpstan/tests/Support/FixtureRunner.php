@@ -58,6 +58,18 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the REAL QueryBuilderTraceVisitor AND enrich its exact filters with the
+     * REAL FilterColumnResolver: returns the recovered subject model plus, per filter, the resolved
+     * column cast shape (enum FQCN + backing values + case descriptions, or a native scalar schema).
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceQbEnrich(string $controllerRelPath, string $class, string $method): array
+    {
+        return self::invoke('trace-qb-enrich', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
      * Trace a controller with the REAL JsonApiPaginateTraceVisitor: returns whether it reached the
      * `jsonPaginate()` terminal and the folded per-call-site overrides (`maxResults`/`defaultSize`).
      *

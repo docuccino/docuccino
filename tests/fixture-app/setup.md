@@ -97,6 +97,16 @@ custom pagination terminal — the pattern out-of-the-box Scramble fails on.
 - `app/Http/Controllers/UserListController.php` — `listUsers()` returns
   `(new UserIndexQuery())->query()->paginateList(25)`.
 
+The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target model:
+
+- `app/Enums/ListingStatus.php` — a backed enum (`open`/`closed`/`draft`) with
+  `#[CaseDescription]`s on two cases, so recovery yields backing values + `x-enumDescriptions`.
+- `app/Models/Listing.php` — an Eloquent model casting its `status` column to `ListingStatus`,
+  so `AllowedFilter::exact('status')` types from the model's own `$casts` (native reflection).
+- `app/Http/Controllers/ListingQueryController.php` — `index()` builds
+  `QueryBuilder::for(Listing::class)->allowedFilters(['title', AllowedFilter::exact('status')])->paginate(20)`,
+  the target of the `trace-qb-enrich` runner mode (subject-model recovery + enum-cast typing).
+
 ### Exception-flow analysis
 
 - `app/Http/Controllers/ThrowsController.php` — eight actions covering abort/abort_if,
