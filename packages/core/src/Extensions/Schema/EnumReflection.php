@@ -46,8 +46,12 @@ final class EnumReflection
 
     /**
      * `#[CaseDescription]` prose keyed by the same value {@see values()} emits — so the map lines up
-     * with the schema's `enum` member for `x-enumDescriptions`. Cases without the attribute are
-     * omitted.
+     * with the schema's `enum` member for `x-enumDescriptions`. When a case carries no
+     * `#[CaseDescription]`, its docblock SUMMARY (the first prose paragraph) is used instead
+     * (the attribute always wins where both are present); a case with neither is omitted.
+     *
+     * The docblock summary is extracted with a lightweight first-paragraph reader (core stays free of
+     * the phpdoc-parser dependency — this is plain comment-marker stripping, not tag parsing).
      *
      * @return array<string, string>
      */
@@ -55,14 +59,8 @@ final class EnumReflection
     {
         $out = [];
         foreach (self::cases($fqcn) as $case) {
-            $attributes = $case->getAttributes(CaseDescription::class);
-            if ($attributes === []) {
-                continue;
-            }
-
-            try {
-                $description = $attributes[0]->newInstance()->description;
-            } catch (Throwable) {
+            $description = self::caseDescription($case);
+            if ($description === null) {
                 continue;
             }
 
@@ -70,6 +68,52 @@ final class EnumReflection
         }
 
         return $out;
+    }
+
+    private static function caseDescription(ReflectionEnumUnitCase $case): ?string
+    {
+        $attributes = $case->getAttributes(CaseDescription::class);
+        if ($attributes !== []) {
+            try {
+                return $attributes[0]->newInstance()->description;
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        return self::docSummary($case->getDocComment());
+    }
+
+    /**
+     * The first prose paragraph of a docblock (its summary), or null when there is none. Strips the
+     * `/** *​/` markers and per-line `*`, stops at the first blank line or `@tag` line, and collapses
+     * the paragraph to a single trimmed string — deterministic, no external parser.
+     */
+    private static function docSummary(string|false $doc): ?string
+    {
+        if ($doc === false) {
+            return null;
+        }
+
+        $body = preg_replace('#^\s*/\*\*+|\*+/\s*$#', '', $doc) ?? '';
+        $paragraph = [];
+        foreach (preg_split('/\r?\n/', $body) ?: [] as $line) {
+            $line = trim(ltrim(trim($line), '*'));
+
+            if ($line === '' || str_starts_with($line, '@')) {
+                if ($paragraph !== []) {
+                    break;
+                }
+
+                continue;
+            }
+
+            $paragraph[] = $line;
+        }
+
+        $summary = trim(implode(' ', $paragraph));
+
+        return $summary === '' ? null : $summary;
     }
 
     /**

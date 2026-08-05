@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Workbench\App\Enums\Season;
 use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
 
@@ -38,6 +39,18 @@ it('documents a backed enum by its backing values with case descriptions', funct
             'draft' => 'Not yet visible to applicants.',
             'published' => 'Live and accepting traffic.',
         ],
+    ]);
+});
+
+it('falls back to a case docblock summary for x-enumDescriptions when no attribute is present', function (): void {
+    $schema = convertEnum(new EnumT(Season::class, ['Summer', 'Winter', 'Spring']));
+
+    expect($schema['x-enumDescriptions'])->toBe([
+        // Summer: docblock summary used (no attribute).
+        'summer' => 'Warm and dry.',
+        // Winter: the attribute wins over its docblock.
+        'winter' => 'Cold and wet.',
+        // Spring: neither attribute nor docblock → omitted.
     ]);
 });
 
