@@ -346,7 +346,24 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "author": {},
+                  "author": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "email": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "email"
+                    ]
+                  },
                   "body": {
                     "type": "string",
                     "maxLength": 500
@@ -363,15 +380,16 @@
                   "secret": {
                     "type": "string"
                   },
-                  "subtitle": {}
+                  "subtitle": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "id",
                   "heading",
                   "body",
                   "secret",
-                  "internal",
-                  "author"
+                  "internal"
                 ]
               }
             }
@@ -2402,7 +2420,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "fc0eda9f1b4075df4adfa8082e71618b507cc29867a4d4a1b0db61f3518c0963",
-      "contentHash": "13e80dcee10a64f68463ea97d476018517a5a9c912606b19fe55bbde551fa822"
+      "contentHash": "720e46c16f2d46fca3f31bad949479523678b0b6d3a7258fd3c66bf392e922cf"
     },
     "generator": {
       "name": "docuccino/laravel",

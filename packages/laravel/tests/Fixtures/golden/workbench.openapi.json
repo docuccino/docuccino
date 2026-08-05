@@ -128,7 +128,24 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "author": {},
+                  "author": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "email": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "email"
+                    ]
+                  },
                   "body": {
                     "type": "string",
                     "maxLength": 500
@@ -145,15 +162,16 @@
                   "secret": {
                     "type": "string"
                   },
-                  "subtitle": {}
+                  "subtitle": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "id",
                   "heading",
                   "body",
                   "secret",
-                  "internal",
-                  "author"
+                  "internal"
                 ]
               }
             }
