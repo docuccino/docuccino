@@ -4,9 +4,20 @@ declare(strict_types=1);
 
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderFacts;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
+
+/** The enum column schema an exact filter is enriched with (backing values + case descriptions). */
+function enumColumnSchema(): array
+{
+    return [
+        'type' => 'string',
+        'enum' => ['draft', 'published', 'archived'],
+        'x-enumDescriptions' => ['draft' => 'Not yet.', 'published' => 'Live.'],
+    ];
+}
 
 /**
  * Dataset coverage over the representation-policy expression of every recovered fact kind, in BOTH
@@ -172,4 +183,98 @@ it('adds page/per_page for length + simple pagination and cursor/per_page for cu
 
 it('contributes nothing when no facts were recovered', function (): void {
     expect((new QueryBuilderParameters)->build(new QueryBuilderFacts, bracketedPolicy()))->toBe([]);
+});
+
+// --- Enum-cast / column-typed exact filters (comma/whereIn array modelling, feature 1) ---
+
+it('models an enum-typed exact filter as a comma-serialised array in the bracketed policy', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [(new QbEntry('status', 'exact'))->withColumn(enumColumnSchema(), enumTyped: true)];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    // Comma form: array of the enum values, style form + explode false serialises to `filter[status]=a,b`.
+    expect($byName['filter[status]']->schema)->toBe(['type' => 'array', 'items' => enumColumnSchema()])
+        ->and($byName['filter[status]']->style)->toBe('form')
+        ->and($byName['filter[status]']->explode)->toBeFalse()
+        ->and($byName['filter[status]']->description)->toBe('Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).');
+});
+
+it('models an enum-typed exact filter as an array property under the deepObject policy', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [(new QbEntry('status', 'exact'))->withColumn(enumColumnSchema(), enumTyped: true)];
+    });
+
+    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy());
+
+    expect($specs[0]->schema['properties']['status'])->toBe([
+        'type' => 'array',
+        'items' => enumColumnSchema(),
+        'description' => 'Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).',
+    ]);
+});
+
+it('emits a native (non-enum) cast schema as its scalar type keeping the plain-string serialization', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [(new QbEntry('active', 'exact'))->withColumn(['type' => 'boolean'], enumTyped: false)];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    // No array wrapping, no whereIn note, no style override — churn control for non-enum filters.
+    expect($byName['filter[active]']->schema)->toBe(['type' => 'boolean'])
+        ->and($byName['filter[active]']->style)->toBeNull()
+        ->and($byName['filter[active]']->description)->toBe('Exact-match filter');
+});
+
+it('carries a constant ->default() onto the schema as the single value (not a wrapped list)', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [
+            (new QbEntry('status', 'exact', hasDefault: true, default: 'published'))
+                ->withColumn(enumColumnSchema(), enumTyped: true),
+        ];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[status]']->schema)->toBe(['type' => 'array', 'items' => enumColumnSchema(), 'default' => 'published']);
+});
+
+it('appends the nullable note to the description without adding a null enum case', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [
+            (new QbEntry('status', 'exact', nullable: true))->withColumn(enumColumnSchema(), enumTyped: true),
+        ];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[status]']->description)
+        ->toBe('Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.')
+        ->and($byName['filter[status]']->schema['items']['enum'])->toBe(['draft', 'published', 'archived']);
+});
+
+it('uses a leading comment as the description, overriding the generic kind fragment', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact', comment: 'The lifecycle status.')];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[status]']->description)->toBe('The lifecycle status.');
+});
+
+it('follows the package config renamed parameter names', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact')];
+        $f->sorts = [new QbEntry('name', 'default')];
+        $f->includes = [new QbEntry('author', 'default')];
+        $f->fields = [new QbEntry('articles.title', 'field')];
+    });
+
+    $config = new QueryBuilderConfig(filter: 'f', sort: 's', include: 'inc', fields: 'flds');
+    $names = array_map(static fn (QueryParameterSpec $s): string => $s->name, (new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($names)->toBe(['f[status]', 's', 'inc', 'flds[articles]']);
 });
