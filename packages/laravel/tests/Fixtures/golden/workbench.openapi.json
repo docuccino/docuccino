@@ -289,6 +289,31 @@
         }
       }
     },
+    "/api/created-articles": {
+      "post": {
+        "summary": "A resource wrapping a fresh Model::create() → a 201 Created response (Wave C item 4).",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ArticleResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/forms": {
       "get": {
         "summary": "List forms.",

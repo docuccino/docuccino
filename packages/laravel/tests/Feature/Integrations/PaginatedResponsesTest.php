@@ -54,3 +54,13 @@ it('still data-wraps a paginated collection when resource wrapping is disabled',
         ->and($paginated['properties'])->toHaveKey('data')
         ->and($paginated['required'])->toBe(['data', 'links', 'meta']);
 });
+
+it('re-homes a created-resource response from 200 to 201', function (): void {
+    $op = generateDocument()->document->toArray()['paths']['/api/created-articles']['post'];
+
+    // The resource body moves to 201 Created; the inferred 200 is dropped.
+    expect($op['responses'])->toHaveKey('201')
+        ->and($op['responses'])->not->toHaveKey('200')
+        ->and($op['responses']['201']['description'])->toBe('Created')
+        ->and($op['responses']['201']['content']['application/json']['schema']['properties'])->toHaveKey('data');
+});

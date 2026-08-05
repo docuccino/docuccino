@@ -52,6 +52,12 @@ final class IntegrationsController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /** A resource wrapping a fresh Model::create() → a 201 Created response (Wave C item 4). */
+    public function storeCreatedArticle(): ArticleResource
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A first-party JSON:API resource → JSON:API document + include/fields query params. */
     public function showJsonApiArticle(string $id): ArticleJsonApiResource
     {

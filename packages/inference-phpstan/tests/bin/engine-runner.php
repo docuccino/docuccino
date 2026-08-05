@@ -32,6 +32,7 @@ use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
+use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
@@ -181,6 +182,14 @@ $result = match ($mode) {
         $engine->trace($ref, $visitor);
 
         return ['paginates' => $visitor->paginates, 'kind' => $visitor->kind];
+    })(),
+    'trace-created-resource' => (static function () use ($engine, $ref): array {
+        // Proves the CreatedResourceVisitor recognises a resource wrapping a real Model::create() on
+        // the real engine — the 201 status recovery (Wave C item 4).
+        $visitor = new CreatedResourceVisitor;
+        $engine->trace($ref, $visitor);
+
+        return ['created' => $visitor->created];
     })(),
     default => ['error' => 'unknown mode: '.$mode],
 };

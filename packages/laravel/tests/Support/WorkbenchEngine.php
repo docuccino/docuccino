@@ -95,6 +95,12 @@ final class WorkbenchEngine
                     '$q->jsonPaginate()',
                     'Illuminate\\Database\\Eloquent\\Builder',
                 ),
+                // A resource wrapping Model::create() → the created-resource visitor sees the New_ over
+                // a create() static call (it reads AST names, so FQCNs are used here) and re-homes 200→201.
+                self::CONTROLLER.'storeCreatedArticle' => QbTraceScript::forChain(
+                    'new \\'.self::ARTICLE_RESOURCE.'(\\'.self::WIDGET_MODEL.'::create([]))',
+                    'Illuminate\\Database\\Eloquent\\Builder',
+                ),
             ],
             analyses: [
                 'Workbench\\App\\Http\\Requests\\StoreWidgetRequest::rules' => new ActionAnalysis(
@@ -133,6 +139,9 @@ final class WorkbenchEngine
                 ),
                 self::CONTROLLER.'listJsonPaginatedArticles' => new ActionAnalysis(
                     returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
+                ),
+                self::CONTROLLER.'storeCreatedArticle' => new ActionAnalysis(
+                    returns: [new ReturnSite(new ClassT(self::ARTICLE_RESOURCE), $location)],
                 ),
                 self::ARTICLE_RESOURCE.'::toArray' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
                     new ArrayShapeField('id', ScalarT::int()),

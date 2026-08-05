@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\ApiResources\ApiResourcesIntegration;
+use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceResponsesExtension;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiParametersExtension;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiResourceSchema;
 use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
@@ -72,9 +73,9 @@ it('omits the JSON:API pieces on a Laravel without the first-party JsonApiResour
     // Absent → the always-on JsonResource mapper + paginated-collection response extension; JSON:API
     // schema + params dropped.
     expect(ApiResourcesIntegration::extensions($absent))
-        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class]);
+        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class, CreatedResourceResponsesExtension::class]);
 
     // Present → the JSON:API mapper and parameters extension join the set.
     expect(ApiResourcesIntegration::extensions($present))
-        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class, JsonApiResourceSchema::class, JsonApiParametersExtension::class]);
+        ->toBe([JsonResourceSchema::class, PaginatedResourceResponsesExtension::class, CreatedResourceResponsesExtension::class, JsonApiResourceSchema::class, JsonApiParametersExtension::class]);
 });

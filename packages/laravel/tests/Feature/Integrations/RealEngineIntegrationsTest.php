@@ -267,6 +267,21 @@ it('recovers the resource-collection paginating terminal + kind through the real
     'cursorPaginate → cursor' => ['cursor', 'cursor'],
 ])->group('fixture');
 
+it('recognises a resource wrapping Model::create() as a 201 through the real engine', function (string $method, bool $created): void {
+    // store() returns new UserResource(User::create(...)) → wasRecentlyCreated → 201; show() wraps an
+    // existing model → stays 200. Proves the recovery half of Wave C item 4 (not just the AST match).
+    $trace = FixtureRunner::traceCreatedResource(
+        'app/Http/Controllers/UserWriteController.php',
+        'App\\Http\\Controllers\\UserWriteController',
+        $method,
+    );
+
+    expect($trace['created'])->toBe($created);
+})->with([
+    'store wraps create() → 201' => ['store', true],
+    'show wraps an existing model → 200' => ['show', false],
+])->group('fixture');
+
 // ---------------------------------------------------------------------------------------------------
 // Phase 5c integrations — the recovery half proven against the REAL engine (M2 / binding coverage).
 // ---------------------------------------------------------------------------------------------------

@@ -76,6 +76,7 @@ abstract class TestCase extends Orchestra
         $router->get('api/paginated-articles', [IntegrationsController::class, 'listPaginatedArticles']);
         $router->get('api/json-paginated-articles', [IntegrationsController::class, 'listJsonPaginatedArticles']);
         $router->get('api/article-resources/{id}', [IntegrationsController::class, 'showArticleResource']);
+        $router->post('api/created-articles', [IntegrationsController::class, 'storeCreatedArticle']);
         $router->get('api/jsonapi-articles/{id}', [IntegrationsController::class, 'showJsonApiArticle']);
         $router->get('api/model-widgets/{id}', [IntegrationsController::class, 'showWidget']);
         $router->delete('api/model-widgets/{id}', [IntegrationsController::class, 'destroyWidget']);

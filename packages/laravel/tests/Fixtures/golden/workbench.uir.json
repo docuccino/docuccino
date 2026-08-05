@@ -685,6 +685,78 @@
         }
       }
     },
+    "/api/created-articles": {
+      "post": {
+        "x-docuccino": {
+          "id": "op:v1:6mr26ud4xrn6myak",
+          "provenance": [
+            {
+              "producer": "docblock",
+              "layer": "docblock",
+              "fields": [
+                "summary"
+              ]
+            }
+          ]
+        },
+        "summary": "A resource wrapping a fresh Model::create() → a 201 Created response (Wave C item 4).",
+        "responses": {
+          "201": {
+            "x-docuccino": {
+              "id": "res:v1:znlsamk636to44c2",
+              "provenance": [
+                {
+                  "producer": "integration:api-resources",
+                  "layer": "integration",
+                  "fields": [
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 56,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeCreatedArticle"
+                  }
+                }
+              ]
+            },
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:api-resources",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 56,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeCreatedArticle"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ArticleResource"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/forms": {
       "get": {
         "x-docuccino": {
@@ -1236,7 +1308,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                    "line": 56,
+                    "line": 62,
                     "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                   }
                 }
@@ -1260,7 +1332,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                      "line": 56,
+                      "line": 62,
                       "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                     }
                   }
@@ -1285,7 +1357,7 @@
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                    "line": 56,
+                    "line": 62,
                     "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                   }
                 }
@@ -1306,7 +1378,7 @@
                     ],
                     "source": {
                       "file": "workbench/app/Http/Controllers/IntegrationsController.php",
-                      "line": 56,
+                      "line": 62,
                       "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::showJsonApiArticle"
                     }
                   }
@@ -2849,7 +2921,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "6f17355bae81d652f750f20437518e598da489c879f421262abc700602dc9069",
-      "contentHash": "4ea636908dc1649eaf9d1c01e9f1beefecda1175894349925da19b283a49a22c"
+      "contentHash": "544c651efa7e668283c7f8c6b6a2f3b0a0693d10bca093eef7aa88af6c0d05a8"
     },
     "generator": {
       "name": "docuccino/laravel",

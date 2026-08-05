@@ -104,6 +104,17 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller with the REAL CreatedResourceVisitor: returns whether the action returns a
+     * resource wrapped directly around a `Model::create(...)` (→ a 201 response).
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceCreatedResource(string $controllerRelPath, string $class, string $method): array
+    {
+        return self::invoke('trace-created-resource', self::path($controllerRelPath), $class, $method);
+    }
+
+    /**
      * The real engine's {@see ClassMetadata} for a class (its property
      * names + reflected types), serialized. The file argument is unused for this mode.
      *
