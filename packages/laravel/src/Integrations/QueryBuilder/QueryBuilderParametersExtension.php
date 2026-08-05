@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
+use BackedEnum;
 use Docuccino\Attributes\QueryParameter;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
@@ -15,10 +16,9 @@ use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\ClassRef;
-use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
-use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
 
 /**
  * Documents a `spatie/laravel-query-builder` list endpoint (design §Phase 4 — Query Builder). It
@@ -175,40 +175,42 @@ final class QueryBuilderParametersExtension implements OperationExtension
      */
     private function applyCustomAttribute(QbEntry $filter, QueryParameter $attribute, RouteContext $context): QbEntry
     {
-        $dtype = $attribute->type === null ? null : $this->typeStringToDType($attribute->type);
-        $schema = $dtype === null ? null : $context->converter()->convert($dtype);
-
         $default = is_scalar($attribute->default) ? $attribute->default : null;
 
-        return $filter->withColumn(
-            $schema,
+        // Description / default / example are type-independent; set them first, then let the type
+        // (if any) supply the schema — applyColumn preserves them.
+        $filter = $filter->withColumn(
+            null,
             enumTyped: false,
             comment: $attribute->description,
             hasDefault: $default !== null,
             default: $default,
             example: $attribute->example,
         );
+
+        return $attribute->type === null
+            ? $filter
+            : $this->applyColumn($filter, $this->attributeColumn($attribute->type), $context, asArray: false);
     }
 
     /**
-     * Interpret a custom-filter `#[QueryParameter(type: …)]` string as a core {@see DType}: a backed
-     * enum class-string yields the enum schema (backing values + `x-enumDescriptions`), the scalar
-     * names their scalar; an unrecognised string leaves the value untyped (a plain string). A scoped
-     * subset of the attribute-layer type grammar — a custom filter's value is a scalar or an enum.
+     * Interpret a custom-filter `#[QueryParameter(type: …)]` string as a {@see FilterColumn}: a backed
+     * enum class-string yields the enum (backing values + `x-enumDescriptions` through the converter),
+     * a scalar name (`int`/`string`/`bool`/`float`) yields its schema directly via the cast table, and
+     * anything else leaves the value untyped. A scoped subset of the attribute-layer type grammar — a
+     * custom filter's value is a scalar or an enum.
      */
-    private function typeStringToDType(string $type): ?DType
+    private function attributeColumn(string $type): FilterColumn
     {
-        if (enum_exists($type) && is_subclass_of($type, \BackedEnum::class)) {
-            return new EnumT($type, EnumReflection::names($type));
+        if (enum_exists($type) && is_subclass_of($type, BackedEnum::class)) {
+            $file = EnumReflection::file($type);
+
+            return FilterColumn::enum($type, $file !== null ? [$file] : []);
         }
 
-        return match ($type) {
-            'string' => ScalarT::string(),
-            'int', 'integer' => ScalarT::int(),
-            'float', 'number', 'double' => ScalarT::float(),
-            'bool', 'boolean' => ScalarT::bool(),
-            default => null,
-        };
+        $schema = CastSchema::forCast($type);
+
+        return $schema === null ? FilterColumn::none() : FilterColumn::scalar($schema);
     }
 
     /**
