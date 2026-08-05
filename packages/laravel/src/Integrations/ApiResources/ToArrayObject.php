@@ -56,32 +56,53 @@ final class ToArrayObject
         // toArray (or any file its return shape traced) must invalidate the warm fragment (design §10).
         $context->dependsOn(...$analysis->dependencyFiles);
 
-        $shape = null;
+        // Every non-list array-shape return SITE (a `toArray` with request-dependent branches returns
+        // several) is merged, rather than the first-shape-wins that dropped the other branches' keys.
+        $shapes = [];
         foreach ($analysis->returns as $return) {
             if ($return->type instanceof ArrayShapeT && ! $return->type->isList) {
-                $shape = $return->type;
-                break;
+                $shapes[] = $return->type;
             }
         }
 
-        if ($shape === null) {
+        if ($shapes === []) {
             return null;
+        }
+
+        return $this->mergeShapes($shapes, $context);
+    }
+
+    /**
+     * Merge one or more `toArray` return sites into a single object schema (multi-return-site union).
+     * The key set is the union of all sites in first-seen order; a key is `required` only when it is
+     * present in EVERY site with no optional/conditional marker anywhere (absent from a site, or a
+     * `?key`/`MissingValue` conditional in any site, makes it optional — a key nullable in the
+     * required-vs-nullable convention is still required). A key whose converted schema differs across
+     * sites becomes an `anyOf` of the distinct site schemas; identical schemas collapse to one.
+     *
+     * @param  list<ArrayShapeT>  $shapes
+     * @return array<string, mixed>
+     */
+    private function mergeShapes(array $shapes, SchemaContext $context): array
+    {
+        $siteCount = count($shapes);
+
+        /** @var array<string, array{schemas: list<array<string, mixed>>, present: int, optional: bool}> $merged */
+        $merged = [];
+        foreach ($shapes as $shape) {
+            foreach ($this->siteFields($shape, $context) as $key => $field) {
+                $merged[$key] ??= ['schemas' => [], 'present' => 0, 'optional' => false];
+                $merged[$key]['present']++;
+                $merged[$key]['optional'] = $merged[$key]['optional'] || $field['optional'];
+                $merged[$key]['schemas'][] = $field['schema'];
+            }
         }
 
         $properties = [];
         $required = [];
-        foreach ($shape->fields as $field) {
-            $key = (string) $field->key;
-            [$type, $conditional] = self::stripMissing($field->type);
-
-            $properties[$key] = $context->convert($type);
-
-            // A field the toArray shape always emits is required, even when its value is nullable:
-            // the key is on the wire carrying `null`, so nullability is a property of the VALUE (the
-            // schema's type union), never of presence. Only a `?key` shape marker or a stripped
-            // `MissingValue` (a `when*` conditional) makes the property optional (cross-mapper
-            // required-vs-nullable convention — matches ModelSchema/DataSchema).
-            if (! $field->optional && ! $conditional) {
+        foreach ($merged as $key => $info) {
+            $properties[$key] = self::combine($info['schemas']);
+            if (! $info['optional'] && $info['present'] === $siteCount) {
                 $required[] = $key;
             }
         }
@@ -92,6 +113,64 @@ final class ToArrayObject
         }
 
         return $object;
+    }
+
+    /**
+     * Convert one return site's fields to a `key => {schema, optional}` map, stripping the
+     * `MissingValue` conditional marker (→ optional) and recursing into nested object shapes so a
+     * nested conditional (`'meta' => ['x' => $this->when(...)]`) is stripped there too — the core
+     * array mapper does not recurse conditionals.
+     *
+     * @return array<string, array{schema: array<string, mixed>, optional: bool}>
+     */
+    private function siteFields(ArrayShapeT $shape, SchemaContext $context): array
+    {
+        $fields = [];
+        foreach ($shape->fields as $field) {
+            [$type, $conditional] = self::stripMissing($field->type);
+
+            $fields[(string) $field->key] = [
+                'schema' => $this->convertValue($type, $context),
+                'optional' => $field->optional || $conditional,
+            ];
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Convert a field value type, recursing this mapper's conditional-aware handling into a nested
+     * (non-list) object shape rather than deferring to the core array mapper — so a `MissingValue`
+     * nested in `'meta' => [...]` is stripped, not leaked. Everything else goes through the chain.
+     *
+     * @return array<string, mixed>
+     */
+    private function convertValue(DType $type, SchemaContext $context): array
+    {
+        if ($type instanceof ArrayShapeT && ! $type->isList) {
+            return $this->mergeShapes([$type], $context);
+        }
+
+        return $context->convert($type);
+    }
+
+    /**
+     * Collapse the per-site schemas recovered for one key: a single distinct schema is emitted as-is,
+     * conflicting schemas across return sites become an `anyOf` of the distinct variants (first-seen
+     * order, deduped by encoded form for determinism).
+     *
+     * @param  list<array<string, mixed>>  $schemas
+     * @return array<string, mixed>
+     */
+    private static function combine(array $schemas): array
+    {
+        $distinct = [];
+        foreach ($schemas as $schema) {
+            $distinct[(string) json_encode($schema)] = $schema;
+        }
+        $distinct = array_values($distinct);
+
+        return count($distinct) === 1 ? $distinct[0] : ['anyOf' => $distinct];
     }
 
     /**

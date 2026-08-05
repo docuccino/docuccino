@@ -23,6 +23,7 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateFacts;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParameters;
 use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldJsonApiResourceSchema;
+use Docuccino\Laravel\Tests\Fixtures\ApiResources\MultiShapeResource;
 use Docuccino\Laravel\Tests\Fixtures\TimacdonaldJsonApi\TimacdonaldArticleResource;
 
 /**
@@ -169,6 +170,47 @@ it('types $model->toResource(Class) and $collection->toResourceCollection(Class)
         ->and($collectionType->fqcn)->toBe('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection')
         ->and($collectionType->typeArgs[0] ?? null)->toBeInstanceOf(ClassT::class)
         ->and($collectionType->typeArgs[0]->fqcn)->toBe('App\\Http\\Resources\\UserResource');
+})->group('fixture');
+
+it('merges multiple toArray return sites and recurses nested conditionals through the real engine', function (): void {
+    // The real engine pairs each `return` with a ReturnSite: ProfileResource has two (the minimal
+    // branch and the full branch), and the full branch's nested `meta` carries a `when(...)` field
+    // typed `string|MissingValue`. Proves the recovery half of Wave C items 6 (multi-site) + 7
+    // (nested conditional) — not just the mapper mechanics.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
+        'app/Http/Resources/ProfileResource.php',
+        'App\\Http\\Resources\\ProfileResource',
+        'toArray',
+    ));
+
+    $shapes = array_values(array_filter(
+        array_map(static fn ($return): DType => $return->type, $analysis->returns),
+        static fn (DType $t): bool => $t instanceof ArrayShapeT && ! $t->isList,
+    ));
+    expect($shapes)->toHaveCount(2);
+
+    $keySets = array_map(
+        static fn (ArrayShapeT $s): array => array_map(static fn ($f): string => (string) $f->key, $s->fields),
+        $shapes,
+    );
+    expect($keySets)->toContain(['id', 'name'])
+        ->and($keySets)->toContain(['id', 'email', 'meta']);
+
+    // Drive the REAL-recovered multi-site analysis through the mapper (keyed onto a loadable fixture,
+    // same technique as the timacdonald composition proof) and assert the merged contract.
+    $engine = new StubTypeEngine(analyses: [MultiShapeResource::class.'::toArray' => $analysis]);
+    $components = new ComponentRegistry;
+    $converter = new SchemaConverter([new JsonResourceSchema, ...DefaultTypeMappers::all()], $engine, $components);
+    $converter->toSchema(new ClassT(MultiShapeResource::class));
+
+    $object = $components->schemas()['MultiShapeResource'];
+    // Union of keys; only `id` (in both sites, non-optional) is required.
+    expect(array_keys($object['properties']))->toBe(['id', 'name', 'email', 'meta'])
+        ->and($object['required'])->toBe(['id']);
+    // The nested conditional recurses: meta.role is optional, meta.name required.
+    expect($object['properties']['meta']['type'])->toBe('object')
+        ->and($object['properties']['meta']['required'])->toBe(['name'])
+        ->and($object['properties']['meta']['properties'])->toHaveKey('role');
 })->group('fixture');
 
 // ---------------------------------------------------------------------------------------------------
