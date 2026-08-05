@@ -1,6 +1,6 @@
 ---
 title: Spatie Data
-description: Document spatie/laravel-data classes as request bodies and reusable response schemas — honoring Hidden, Optional, Lazy, name mapping, and collections.
+description: Document spatie/laravel-data classes as request bodies and reusable response schemas — honoring Hidden, Optional, Lazy, name mapping, wrapping, rules() overrides, request partials, and collections.
 sidebar:
   order: 1
 ---
@@ -61,6 +61,32 @@ the same way it would from a Form Request's `rules()`:
 The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped by `#[Hidden]`, and
 the nullable `dueAt` isn't required.
 
+### Overriding the rules with `rules()`
+
+Define a static `rules()` on the Data class and Docuccino reads it the same way it reads a Form
+Request's — literal string rules and `Rule::*` factory descriptors alike. A field you override there
+**wins** over what its property type would infer, matching Spatie's own resolver:
+
+```php
+class CreateInvoiceData extends Data
+{
+    public function __construct(
+        public int $customerId,
+        public string $currency,
+    ) {}
+
+    public static function rules(ValidationContext $context): array
+    {
+        return [
+            'currency' => ['required', Rule::enum(Currency::class)],
+        ];
+    }
+}
+```
+
+`currency` is now documented with the enum's backing values instead of a bare string. Fields you
+don't mention keep their inferred rules.
+
 ## Response schemas from Data returns
 
 Return a `Data` class (or a `DataCollection`) and it's documented as a **reusable component schema**,
@@ -73,6 +99,28 @@ public function show(Invoice $invoice): InvoiceData
 }
 ```
 
+### Wrapping
+
+If your app wraps responses — a class-level `defaultWrap()` or the global `data.wrap` config —
+Docuccino nests the response schema under that key at the top level, exactly as the JSON your app
+returns:
+
+```json
+{ "data": { "$ref": "#/components/schemas/InvoiceData" } }
+```
+
+`defaultWrap()` on the class takes precedence over the global key. Only the **response root** is
+wrapped — a nested Data property stays an unwrapped, shared `$ref`. A paginated collection is always
+wrapped, so its wrap key simply names the envelope's items key (`{ data, links, meta }`) — never a
+second layer.
+
+### `include` / `exclude` / `only` / `except` query parameters
+
+When a Data class opts into Spatie's request partials — by overriding `allowedRequestIncludes()`,
+`allowedRequestExcludes()`, `allowedRequestOnly()`, or `allowedRequestExcept()` — the matching
+`include` / `exclude` / `only` / `except` query parameter is documented (a comma-separated list) on
+every operation that returns that class. Only the methods you override are surfaced.
+
 ## Conventions Docuccino honors
 
 Docuccino respects Spatie Data's own attributes and conventions, so the documented schema matches the
@@ -83,9 +131,13 @@ JSON your app actually produces and accepts:
 | `#[Hidden]` | Drops the property entirely. |
 | `Optional` / `Lazy` | Makes the property non-required. |
 | `#[MapName]` / `#[MapOutputName]` | Renames the property key to the mapped name. |
+| Global name-mapping strategy | `data.name_mapping_strategy` (e.g. snake_case) renames every un-mapped key, on input and output. |
 | Nested `Data` | Recurses into a nested (referenced) schema. |
 | `DataCollection` | Becomes an array of the item schema. |
 | Paginated Data wrapper | Produces spatie's own paginator envelope — `links` as an array of `{ url, label, active }`, `meta` with the `*_page_url` members (distinct from Laravel's resource envelope). |
+| `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
+| `rules()` | Overrides the inferred request rules per field. |
+| `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |
 
 Add examples with [`#[Example]`](/laravel/reference/attributes/#example) on a property, and pin
 anything inference can't determine with the usual [attributes](/laravel/reference/attributes/) — they
