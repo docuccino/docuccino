@@ -45,7 +45,7 @@ final class TypeStringParser
         private readonly PhpDocParserStack $stack = new PhpDocParserStack,
     ) {}
 
-    public function parse(string $type): DType
+    public function parse(string $type, ?ImportContext $imports = null): DType
     {
         $type = trim($type);
         if ($type === '') {
@@ -57,25 +57,25 @@ final class TypeStringParser
             return new UnknownT('unparseable type: '.$type);
         }
 
-        return $this->map($node);
+        return $this->map($node, $imports);
     }
 
-    private function map(TypeNode $node): DType
+    private function map(TypeNode $node, ?ImportContext $imports): DType
     {
         return match (true) {
-            $node instanceof NullableTypeNode => UnionT::of([$this->map($node->type), new NullT]),
-            $node instanceof UnionTypeNode => UnionT::of(array_values(array_map($this->map(...), $node->types))),
-            $node instanceof IntersectionTypeNode => IntersectionT::of(array_values(array_map($this->map(...), $node->types))),
-            $node instanceof ArrayTypeNode => new ListT($this->map($node->type)),
-            $node instanceof GenericTypeNode => $this->mapGeneric($node),
-            $node instanceof ArrayShapeNode => $this->mapArrayShape($node),
+            $node instanceof NullableTypeNode => UnionT::of([$this->map($node->type, $imports), new NullT]),
+            $node instanceof UnionTypeNode => UnionT::of(array_values(array_map(fn (TypeNode $t): DType => $this->map($t, $imports), $node->types))),
+            $node instanceof IntersectionTypeNode => IntersectionT::of(array_values(array_map(fn (TypeNode $t): DType => $this->map($t, $imports), $node->types))),
+            $node instanceof ArrayTypeNode => new ListT($this->map($node->type, $imports)),
+            $node instanceof GenericTypeNode => $this->mapGeneric($node, $imports),
+            $node instanceof ArrayShapeNode => $this->mapArrayShape($node, $imports),
             $node instanceof ConstTypeNode => $this->mapConst($node),
-            $node instanceof IdentifierTypeNode => $this->mapIdentifier($node->name),
+            $node instanceof IdentifierTypeNode => $this->mapIdentifier($node->name, $imports),
             default => new UnknownT('unsupported type node'),
         };
     }
 
-    private function mapIdentifier(string $name): DType
+    private function mapIdentifier(string $name, ?ImportContext $imports): DType
     {
         return match (strtolower($name)) {
             'int', 'integer', 'positive-int', 'negative-int', 'non-negative-int' => ScalarT::int(),
@@ -87,14 +87,14 @@ final class TypeStringParser
             'mixed' => new UnknownT('mixed'),
             'object' => new UnknownT('object'),
             'void', 'never', 'callable', 'scalar' => new UnknownT($name),
-            default => new ClassT(ltrim($name, '\\')),
+            default => new ClassT($this->resolveClass($name, $imports)),
         };
     }
 
-    private function mapGeneric(GenericTypeNode $node): DType
+    private function mapGeneric(GenericTypeNode $node, ?ImportContext $imports): DType
     {
         $base = strtolower($node->type->name);
-        $args = array_map($this->map(...), $node->genericTypes);
+        $args = array_map(fn (TypeNode $t): DType => $this->map($t, $imports), $node->genericTypes);
 
         if (($base === 'list' || $base === 'non-empty-list') && count($args) === 1) {
             return new ListT($args[0]);
@@ -108,17 +108,23 @@ final class TypeStringParser
             };
         }
 
-        return new ClassT(ltrim($node->type->name, '\\'), array_values($args));
+        return new ClassT($this->resolveClass($node->type->name, $imports), array_values($args));
     }
 
-    private function mapArrayShape(ArrayShapeNode $node): DType
+    /** Resolve a class name against the file's imports + namespace (when given), else strip a leading slash. */
+    private function resolveClass(string $name, ?ImportContext $imports): string
+    {
+        return $imports !== null ? $imports->resolve($name) : ltrim($name, '\\');
+    }
+
+    private function mapArrayShape(ArrayShapeNode $node, ?ImportContext $imports): DType
     {
         $fields = [];
         $index = 0;
         foreach ($node->items as $item) {
             $fields[] = new ArrayShapeField(
                 key: $this->shapeKey($item, $index),
-                type: $this->map($item->valueType),
+                type: $this->map($item->valueType, $imports),
                 optional: $item->optional,
             );
             $index++;

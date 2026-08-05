@@ -13,6 +13,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Inference\PhpStan\Types\ImportContext;
 use Docuccino\Inference\PhpStan\Types\TypeStringParser;
 
 /**
@@ -33,6 +34,11 @@ final class AttributeResponsesExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
+        // Resolve unqualified class names in `type:` strings against the controller file's imports +
+        // namespace, so `#[Response(type: 'MfaChallengeData|…')]` finds the real class (not a bare
+        // object) without forcing FQCN/::class strings.
+        $imports = ImportContext::forFile($context->actionRef->file === '' ? null : $context->actionRef->file);
+
         foreach ($context->attributes->all(IgnoreResponse::class) as $ignore) {
             $operation->removeResponse((string) $ignore->status);
         }
@@ -45,25 +51,25 @@ final class AttributeResponsesExtension implements OperationExtension
             $response->setDescription($attribute->description, Contribution::attribute($context->actionSource()));
 
             if ($attribute->type !== null) {
-                $schema = $context->converter()->toSchema($this->types->parse($attribute->type))->schema;
+                $schema = $context->converter()->toSchema($this->types->parse($attribute->type, $imports))->schema;
                 foreach ($schema as $keyword => $value) {
                     $response->content($attribute->mediaType)->set($keyword, $value, Contribution::attribute($context->actionSource()));
                 }
             }
         }
 
-        $this->applyResponseHeaders($operation, $context);
+        $this->applyResponseHeaders($operation, $context, $imports);
         $this->applyExamples($operation, $context);
     }
 
-    private function applyResponseHeaders(OperationDraft $operation, RouteContext $context): void
+    private function applyResponseHeaders(OperationDraft $operation, RouteContext $context, ImportContext $imports): void
     {
         /** @var array<string, array<string, array<string, mixed>>> $byStatus */
         $byStatus = [];
         foreach ($context->attributes->all(ResponseHeader::class) as $header) {
             $status = (string) $header->status;
             $schema = $header->type !== null
-                ? $context->converter()->toSchema($this->types->parse($header->type))->schema
+                ? $context->converter()->toSchema($this->types->parse($header->type, $imports))->schema
                 : ['type' => 'string'];
 
             $entry = ['schema' => $schema];

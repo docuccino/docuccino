@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Inference\PhpStan\Types\ImportContext;
 use Docuccino\Inference\PhpStan\Types\TypeStringParser;
 
 /**
@@ -143,4 +144,24 @@ it('maps nullable, union and intersection composites', function (): void {
 
     $intersection = parseType('Countable&Traversable');
     expect($intersection)->toBeInstanceOf(IntersectionT::class);
+});
+
+it('resolves unqualified class names against a file import context', function (): void {
+    $imports = ImportContext::forFile(dirname(__DIR__).'/Fixtures/ImportSample.php');
+    $parser = new TypeStringParser;
+
+    // A union of unqualified short names is resolved through the file's `use` imports (one aliased).
+    $union = $parser->parse('MfaChallengeData|Enrollment', $imports);
+    expect($union)->toBeInstanceOf(UnionT::class);
+    expect(array_map(static fn (ClassT $c): string => $c->fqcn, $union->members))
+        ->toBe(['App\\Data\\MfaChallengeData', 'App\\Data\\MfaEnrollmentChallengeData']);
+
+    // A name under an imported namespace prefix, a same-namespace name, and an absolute name.
+    expect($parser->parse('Models\\User', $imports))->toEqual(new ClassT('App\\Models\\User'))
+        ->and($parser->parse('LocalData', $imports))->toEqual(new ClassT('Docuccino\\Sample\\Http\\LocalData'))
+        ->and($parser->parse('\\App\\Already\\Qualified', $imports))->toEqual(new ClassT('App\\Already\\Qualified'));
+});
+
+it('leaves short class names unqualified without an import context (back-compat)', function (): void {
+    expect(parseType('MfaChallengeData'))->toEqual(new ClassT('MfaChallengeData'));
 });
