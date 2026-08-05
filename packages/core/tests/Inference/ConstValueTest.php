@@ -35,6 +35,30 @@ it('records the FQCN on a descriptor but shortens the class for display', functi
         ->and(ConstValue::fromArray($value->toArray())->render())->toBe($value->render());
 });
 
+it('carries chained calls on a descriptor, renders them, and round-trips', function (): void {
+    // Rule::enum('…Status')->only(['Active'])->except(['Archived']) — the fluent chain survives the fold.
+    $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar('App\\Enums\\Status')])
+        ->withChainedCall('only', [ConstValue::array([ConstValue::scalar('Active')])])
+        ->withChainedCall('except', [ConstValue::array([ConstValue::scalar('Archived')])]);
+
+    expect($value->isDescriptor())->toBeTrue()
+        ->and($value->chain)->toHaveCount(2)
+        ->and($value->render())->toBe("Rule::enum('App\\Enums\\Status')->only(['Active'])->except(['Archived'])")
+        ->and(ConstValue::fromArray($value->toArray())->render())->toBe($value->render())
+        ->and(ConstValue::fromArray($value->toArray())->toArray())->toBe($value->toArray());
+});
+
+it('leaves an unchained descriptor serialization byte-identical (no chain key)', function (): void {
+    $value = ConstValue::descriptor('AllowedFilter::exact', [ConstValue::scalar('status')]);
+
+    expect($value->toArray())->not->toHaveKey('chain')
+        ->and($value->chain)->toBe([]);
+});
+
+it('is a no-op to chain a call onto a non-descriptor', function (): void {
+    expect(ConstValue::scalar('x')->withChainedCall('only', [])->isScalar())->toBeTrue();
+});
+
 it('round-trips an array of mixed const values', function (): void {
     $value = ConstValue::array([
         ConstValue::scalar('name'),

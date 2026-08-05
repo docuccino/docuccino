@@ -52,3 +52,48 @@ it('ignores a descriptor it does not recognise', function (): void {
 
     expect((new ConstValueToRules)->fold($value))->toBe([]);
 });
+
+it('narrows a Rule::enum case list with an ->only([...]) chain (validation §4 #10)', function (): void {
+    // Rule::enum(WidgetStatus::class)->only([WidgetStatus::Draft, WidgetStatus::Published]) — the chain
+    // args fold to case NAMES; narrowEnum keeps their backing values in declaration order.
+    $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
+        ->withChainedCall('only', [ConstValue::array([ConstValue::scalar('Draft'), ConstValue::scalar('Published')])]);
+
+    $rules = (new ConstValueToRules)->fold($value);
+
+    expect($rules)->toHaveCount(1)
+        ->and($rules[0]->name)->toBe('enum')
+        ->and($rules[0]->parameters)->toBe(['draft', 'published'])
+        ->and($rules[0]->note)->toBe(WidgetStatus::class);
+});
+
+it('narrows a Rule::enum case list with an ->except([...]) chain', function (): void {
+    $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
+        ->withChainedCall('except', [ConstValue::array([ConstValue::scalar('Archived')])]);
+
+    $rules = (new ConstValueToRules)->fold($value);
+
+    // Declaration order preserved; only the excepted case is dropped.
+    expect($rules[0]->parameters)->toBe(['draft', 'published'])
+        ->and($rules[0]->note)->toBe(WidgetStatus::class);
+});
+
+it('applies chained only() then except() left to right, spread-arg form included', function (): void {
+    // only(Draft, Published, Archived) as spread scalar args, then except([Published]).
+    $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
+        ->withChainedCall('only', [ConstValue::scalar('Draft'), ConstValue::scalar('Published'), ConstValue::scalar('Archived')])
+        ->withChainedCall('except', [ConstValue::array([ConstValue::scalar('Published')])]);
+
+    $rules = (new ConstValueToRules)->fold($value);
+
+    expect($rules[0]->parameters)->toBe(['draft', 'archived']);
+});
+
+it('ignores an unknown chained method and keeps the full case list', function (): void {
+    $value = ConstValue::descriptor('Illuminate\\Validation\\Rule::enum', [ConstValue::scalar(WidgetStatus::class)])
+        ->withChainedCall('somethingElse', [ConstValue::array([ConstValue::scalar('Draft')])]);
+
+    $rules = (new ConstValueToRules)->fold($value);
+
+    expect($rules[0]->parameters)->toBe(['draft', 'published', 'archived']);
+});

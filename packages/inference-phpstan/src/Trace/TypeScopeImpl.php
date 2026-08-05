@@ -38,7 +38,14 @@ final class TypeScopeImpl implements TypeScope
      *   2. factory static-call → a call descriptor {factory, args}, folded
      *      BEFORE asking PHPStan for the type (which would collapse it to the
      *      factory's return class);
-     *   3. genuine literal     → defer to PHPStan constant folding.
+     *   3. fluent method-call over a descriptor → the SAME descriptor with the
+     *      call appended to its chain, so `Rule::enum(...)->only([...])` survives
+     *      the AST-level fold (validation §4 #10);
+     *   4. enum-case constant → the case NAME as a scalar, so a case referenced
+     *      in a fluent arg (`->only([Status::Active])`) is recoverable — a bare
+     *      `::class` is left to case 5, and a non-enum class constant keeps its
+     *      PHPStan-folded scalar value;
+     *   5. genuine literal     → defer to PHPStan constant folding.
      *
      * Returns null when nothing constant is recoverable.
      */
@@ -72,7 +79,32 @@ final class TypeScopeImpl implements TypeScope
             return ConstValue::descriptor($factory, $args);
         }
 
-        // 3. Genuine literal reached through any expression — let PHPStan fold it.
+        // 3. Fluent method-call over a descriptor receiver — append the call to the receiver's chain.
+        if ($expr instanceof Node\Expr\MethodCall && $expr->name instanceof Node\Identifier) {
+            $receiver = $this->constantValueOf($expr->var);
+            if ($receiver !== null && $receiver->isDescriptor()) {
+                $args = [];
+                foreach ($expr->getArgs() as $arg) {
+                    $args[] = $this->constantValueOf($arg->value)
+                        ?? ConstValue::unknown('non-constant chained-call arg');
+                }
+
+                return $receiver->withChainedCall($expr->name->toString(), $args);
+            }
+        }
+
+        // 4. Enum-case constant (`Status::Active`) → the case name, so fluent args referencing cases
+        //    fold. `::class` (a constant string) and non-enum class constants fall through to case 5.
+        if ($expr instanceof Node\Expr\ClassConstFetch
+            && $expr->class instanceof Node\Name
+            && $expr->name instanceof Node\Identifier
+            && strtolower($expr->name->toString()) !== 'class'
+            && enum_exists($this->scope->resolveName($expr->class))
+        ) {
+            return ConstValue::scalar($expr->name->toString());
+        }
+
+        // 5. Genuine literal reached through any expression — let PHPStan fold it.
         $type = $this->scope->getType($expr);
 
         $strings = $type->getConstantStrings();

@@ -365,7 +365,7 @@ it('recovers Rule::enum(...) inside a real FormRequest rules() and diagnoses an 
         'rules',
     );
 
-    expect(array_keys($trace['fields']))->toBe(['title', 'status'])
+    expect(array_keys($trace['fields']))->toBe(['title', 'status', 'priority'])
         ->and($trace['unrecoverable'])->toBe(['callback']);
 
     $titleRules = array_map(static fn (array $r): string => $r['name'], $trace['fields']['title']);
@@ -380,6 +380,17 @@ it('recovers Rule::enum(...) inside a real FormRequest rules() and diagnoses an 
     expect(array_keys($statusRules))->toBe(['required', 'enum'])
         ->and($statusRules['enum']['parameters'])->toBe(['open', 'closed', 'draft'])
         ->and($statusRules['enum']['note'])->toBe('App\\Enums\\ListingStatus');
+
+    // `priority` chains `->only([ListingStatus::Open, ListingStatus::Closed])` off the descriptor:
+    // the real engine folds each enum-case arg to its case name, so the recovered case list is
+    // NARROWED to those two backing values (validation §4 #10 — chained-call folding).
+    $priorityRules = [];
+    foreach ($trace['fields']['priority'] as $rule) {
+        $priorityRules[$rule['name']] = $rule;
+    }
+    expect(array_keys($priorityRules))->toBe(['nullable', 'enum'])
+        ->and($priorityRules['enum']['parameters'])->toBe(['open', 'closed'])
+        ->and($priorityRules['enum']['note'])->toBe('App\\Enums\\ListingStatus');
 })->group('fixture');
 
 it('recovers a real laravel-actions rules() array end-to-end into a RuleSet', function (): void {
