@@ -61,7 +61,140 @@ the real list of allowed filters and sorts.
 You wrote no parameter annotations — yet `filter[status]`, `filter[customer_id]`, `sort`, `include`,
 `page`, and `per_page` are all documented, alongside a paginated response.
 
+## Typed filters from your model's casts
+
+When an **exact** filter's column has an [Eloquent cast](https://laravel.com/docs/eloquent-mutators#attribute-casting),
+Docuccino types the parameter from that cast instead of defaulting to a string. It reads the subject
+model straight from `QueryBuilder::for(Invoice::class)` — no annotation, no extra config.
+
+The biggest win is enum casts. Cast a column to a
+[backed enum](https://laravel.com/docs/eloquent-mutators#enum-casting) and the filter documents its
+exact allowed values — including per-case descriptions when you annotate the enum with
+`#[CaseDescription]`:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Enums/InvoiceStatus.php
+	enum InvoiceStatus: string
+	{
+	    #[CaseDescription('Not yet sent to the customer.')]
+	    case Draft = 'draft';
+
+	    #[CaseDescription('Sent and awaiting payment.')]
+	    case Sent = 'sent';
+
+	    case Paid = 'paid';
+	}
+
+	// app/Models/Invoice.php
+	protected $casts = ['status' => InvoiceStatus::class];
+
+	// app/Http/Controllers/InvoiceController.php
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([AllowedFilter::exact('status')]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{
+	  "name": "filter[status]",
+	  "in": "query",
+	  "required": false,
+	  "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+	  "style": "form",
+	  "explode": false,
+	  "schema": {
+	    "type": "array",
+	    "items": {
+	      "type": "string",
+	      "enum": ["draft", "sent", "paid"],
+	      "x-enumDescriptions": {
+	        "draft": "Not yet sent to the customer.",
+	        "sent": "Sent and awaiting payment."
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+**Why an array?** Spatie's exact filter treats a comma-joined value (`filter[status]=draft,sent`) as
+a `whereIn` list. Documenting the filter as a single string would mark that legal request invalid, so
+Docuccino models an enum filter as an array of the allowed values with `style: form, explode: false`
+— the serialization that produces the comma form — and notes the behavior in the description.
+
+Other casts map to their natural scalar type:
+
+| Cast | Filter schema |
+| --- | --- |
+| `boolean` | `type: boolean` |
+| `integer` | `type: integer` |
+| `float` / `double` | `type: number` |
+| `datetime`, `immutable_datetime` | `type: string, format: date-time` |
+| `date`, `immutable_date` | `type: string, format: date` |
+| A backed enum | `type: array` of the backing values (above) |
+| Anything else (custom casters, `decimal`, no cast) | `type: string` |
+
+Only **exact** filters on the subject model's own columns are typed. Scope, callback, custom,
+operator, trashed, and dotted relation-path filters (`customer.name`) stay strings — Docuccino never
+guesses. If it can't resolve the subject model, every filter falls back to a string, exactly as
+before.
+
+### Internal column names
+
+When a filter's public name differs from the database column, pass both to `exact()`. The public name
+stays what clients send; Docuccino uses the internal column for the cast lookup:
+
+```php
+// Documented as filter[status]; typed from the `status_code` column's cast.
+AllowedFilter::exact('status', 'status_code');
+```
+
+## Describing filters
+
+### A comment becomes the description
+
+Write a comment directly above an allow-list entry and it becomes that filter's description — the
+simplest possible way to explain a parameter, right where it's defined:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([
+	        // The lifecycle stage of the invoice.
+	        AllowedFilter::exact('status'),
+	        AllowedFilter::partial('customer_name'),
+	    ]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{ "name": "filter[status]", "in": "query", "description": "The lifecycle stage of the invoice.", "...": "..." }
+	```
+	</TabItem>
+</Tabs>
+
+Both `//` line comments and `/** */` blocks work; Docuccino takes the first sentence, verbatim. The
+same applies to sorts and includes.
+
+### Defaults and nullable filters
+
+Chained modifiers are recovered too:
+
+- `->default('sent')` sets the parameter's `schema.default`.
+- `->nullable()` appends a note that the filter accepts `null` to match absent values. (It does **not**
+  add `null` as an enum value — the empty filter is a request form, not one of the enum's cases.)
+
+```php
+AllowedFilter::exact('status')->default('sent')->nullable();
+```
+
 ## Configuration
+
+### Custom pagination terminals
 
 If your app paginates through a custom helper method, tell Docuccino its name so pagination
 parameters are still added:
@@ -75,9 +208,30 @@ parameters are still added:
 
 `paginate`, `simplePaginate`, and `cursorPaginate` are recognized out of the box.
 
+### Renamed parameter keys
+
+Spatie lets you rename the request keys (`filter`, `sort`, `include`, `fields`, `append`) in its own
+`config/query-builder.php`. Docuccino reads that config and documents whatever names you've chosen —
+if you rename `filter` to `filters`, the parameters come out as `filters[status]`. When the config
+isn't readable it falls back to the package defaults and emits an info diagnostic so you know why.
+
 ## When it can't tell
 
 If an allowed filter or sort is computed in a way that can't be resolved statically, Docuccino emits
 a warning diagnostic naming the exact expression — it never silently drops a parameter. You can then
-document that one parameter with [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter). Values
-you set with attributes or docblocks always take precedence over what's inferred.
+document that one parameter with [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter),
+addressing it by name:
+
+```php
+#[QueryParameter('filter[status]', description: 'Only active invoices.')]
+public function index() { /* … */ }
+```
+
+Values you set with attributes or docblocks always take precedence over what's inferred.
+
+:::note[Per-filter patching needs the bracketed style]
+Addressing a single filter by name (`filter[status]`) works with the default bracketed parameters.
+If you switch the document to the `deepObject` representation, all filters collapse into one `filter`
+object parameter — there's no `filter[status]` to target, so patch the whole `filter` parameter
+instead.
+:::

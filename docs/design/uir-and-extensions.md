@@ -306,6 +306,25 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
       consumes the adapter's route-reflection `ReflectedAction`. This attribute-coupled category
       awaits the pending decision on where the shared type-string grammar belongs; only the
       genuinely-clean `AttributeOverridesExtension` moved now.
+  - Query Builder recovery vs representation (Tom, 2026-08-05 — the enum-cast filter wave). Recovery
+    is adapter-side: `QueryBuilderTraceVisitor` folds the subject model, allow-lists (with internal
+    column names + constant `->default()`/`->nullable()` modifiers + a leading `//` or `/** */`
+    comment above the entry), and pagination into policy-independent `QueryBuilderFacts`.
+    Representation is `QueryBuilderParameters`, the only place the OAS *expression* is chosen under
+    the document's `representation.filters` policy. Two decisions recorded:
+    - **Enum-cast exact filters model as an array, not a scalar enum.** Spatie's exact filter treats
+      a comma-joined value as a `whereIn` list, so a strict scalar `enum` would reject a legal
+      `filter[status]=draft,sent`. The shipped shape is `type: array, items: {type: string,
+      enum:[…], x-enumDescriptions}` with `style: form, explode: false` (the comma serialization) in
+      the bracketed policy, an array property under `deepObject`; a constant `->default()` sits on
+      the array schema as the single value, `->nullable()` adds a description note (never a null enum
+      case). Non-enum casts keep their plain scalar shape (churn control); unresolved subject/column
+      degrades every filter to `string`, as before. The array modelling held up against Scalar
+      rendering + validators, so the `type: string, enum:[…]` fallback the wave left open was not
+      needed.
+    - **A leading comment is an integration-layer description (precedence 20)** — below docblock (30)
+      and `#[QueryParameter]` (40), so authored descriptions still win; recovered purely from the
+      array-item node's attached comment, first sentence verbatim, no tag parsing.
 
 ## 7. Precedence / patch semantics
 
@@ -413,8 +432,10 @@ validate always run fresh. Watch mode later = loop incremental build + SSE push.
             "provenance": [ { "producer": "integration:query-builder", "layer": "integration", "fields": ["*"],
               "source": { "file": "modules/Form/Queries/FormIndexQuery.php", "line": 22 }, "confidence": 0.9 } ] },
           "name": "filter[status]", "in": "query", "required": false,
-          "schema": { "type": "string", "enum": ["draft", "published", "archived"],
-                      "x-enumDescriptions": { "draft": "Not yet visible", "published": "Live", "archived": "Read-only" } } },
+          "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+          "style": "form", "explode": false,
+          "schema": { "type": "array", "items": { "type": "string", "enum": ["draft", "published", "archived"],
+                      "x-enumDescriptions": { "draft": "Not yet visible", "published": "Live", "archived": "Read-only" } } } },
         { "x-docuccino": { "id": "par:v1:77aa88bb99cc00dd" },
           "name": "per_page", "in": "query", "required": false,
           "schema": { "type": "integer", "default": 15, "minimum": 1, "maximum": 100,
