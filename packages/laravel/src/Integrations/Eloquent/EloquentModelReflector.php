@@ -25,12 +25,12 @@ final class EloquentModelReflector
     }
 
     /**
-     * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>}
+     * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>}
      */
     public function facts(string $fqcn): array
     {
         if (! class_exists($fqcn)) {
-            return ['hidden' => [], 'visible' => [], 'appends' => [], 'casts' => [], 'classHidden' => []];
+            return ['hidden' => [], 'visible' => [], 'appends' => [], 'casts' => [], 'classHidden' => [], 'fillable' => [], 'dates' => []];
         }
 
         $reflection = new ReflectionClass($fqcn);
@@ -47,6 +47,8 @@ final class EloquentModelReflector
             'appends' => self::stringList($defaults['appends'] ?? []),
             'casts' => self::castMap($defaults['casts'] ?? []),
             'classHidden' => $classHidden,
+            'fillable' => self::stringList($defaults['fillable'] ?? []),
+            'dates' => self::stringList($defaults['dates'] ?? []),
         ];
     }
 

@@ -15,7 +15,9 @@ use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 
 /**
@@ -47,11 +49,16 @@ function eloquentEngine(): StubTypeEngine
 
 function modelSchema(ClassT $type): array
 {
+    return modelRegistry($type)->schemas();
+}
+
+function modelRegistry(ClassT $type): ComponentRegistry
+{
     $components = new ComponentRegistry;
     $converter = new SchemaConverter([new ModelSchema, new EnumSchema, ...DefaultTypeMappers::all()], eloquentEngine(), $components);
     $converter->toSchema($type);
 
-    return $components->schemas();
+    return $components;
 }
 
 it('builds a model schema honouring hidden, appends, and casts', function (): void {
@@ -90,4 +97,41 @@ it('reflects model facts without instantiating', function (): void {
         ->and($facts['casts'])->toHaveKey('created_at')
         ->and(EloquentModelReflector::isModel(Widget::class))->toBeTrue()
         ->and(EloquentModelReflector::isModel('Illuminate\\Database\\Eloquent\\Model'))->toBeFalse();
+});
+
+it('reflects the floor sources ($fillable, $dates) alongside casts', function (): void {
+    $facts = (new EloquentModelReflector)->facts(Ledger::class);
+
+    expect($facts['fillable'])->toBe(['reference', 'amount', 'notes'])
+        ->and($facts['dates'])->toBe(['posted_at'])
+        ->and($facts['casts'])->toBe(['amount' => 'integer', 'secret' => 'string']);
+});
+
+it('builds the column universe from the floor sources when the engine reports no columns', function (): void {
+    // Ledger has no @property docblock, so eloquentEngine() reports no columns for it: the whole
+    // schema comes from the floor union (casts keys, $dates, $fillable), with $hidden still filtering.
+    $ledger = modelSchema(new ClassT(Ledger::class))['Ledger'];
+
+    // Order: casts keys, then $dates, then $fillable-only names. `secret` ($hidden) is dropped.
+    expect(array_keys($ledger['properties']))->toBe(['amount', 'posted_at', 'reference', 'notes'])
+        ->and($ledger['properties'])->not->toHaveKey('secret');
+
+    // A cast key is typed by its cast; a $dates entry is a date-time; a $fillable-only name is a
+    // permissive `{}` at lowered confidence.
+    expect($ledger['properties']['amount'])->toBe(['type' => 'integer'])
+        ->and($ledger['properties']['posted_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+        ->and($ledger['properties']['reference'])->toBe([])
+        ->and($ledger['properties']['notes'])->toBe([]);
+
+    // Cast/date floor columns serialise (required); the untyped permissive ones stay optional.
+    expect($ledger['required'])->toBe(['amount', 'posted_at']);
+});
+
+it('keeps the bare-object behaviour but raises an info diagnostic for an undocumented model', function (): void {
+    $registry = modelRegistry(new ClassT(Blank::class));
+
+    expect($registry->schemas()['Blank'])->toBe(['type' => 'object', 'properties' => []]);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->toContain('eloquent.no-columns');
 });

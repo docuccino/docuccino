@@ -122,10 +122,13 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 - `app/Data/ArticleData.php` — a `spatie/laravel-data` Data class with typed public promoted
   properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine recovers precise
   property types by reflection.
-- `app/Models/CatalogItem.php` — an Eloquent model declaring its columns as typed public
-  properties (`id: int`, `sku: string`, `is_active: bool`, `description: ?string`) plus an
-  `is_active` boolean `$casts` entry, so `classMetadata()` recovers the columns (and a
-  cast-target `bool` type) through native reflection. Only ever reflected — never queried.
+- `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
+  (magic attributes) and documenting its columns the ide-helper way, via class-level
+  `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,
+  `name: string`), so `classMetadata()` recovers the column universe and its types from the
+  docblocks — the shape a real model has (Finding 0). Its `$casts` (a `ListingStatus` enum + a
+  `boolean` + a `hashed` column) and `$hidden` drive the adapter-side floor + visibility union
+  (proven in-process by the Eloquent mapper test). Only ever reflected — never queried.
 
 ### Inferred exception-handler tier
 

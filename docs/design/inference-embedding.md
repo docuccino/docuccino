@@ -133,6 +133,39 @@ else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason
 Translation is EAGER at query time (serializable across workers/cache); class expansion
 is LAZY via `classMetadata()` (memoized per class per run).
 
+### Eloquent column source (Wave A, 2026-08-05)
+
+A real Eloquent model declares **no** PHP column properties — attributes are magic (`$attributes`) —
+so `ClassMetadataFactory`'s public-property enumeration yielded zero columns for every realistically
+authored model (AUDIT-eloquent Finding 0). The column universe is now a **union, most-authoritative
+first**, split across the placement boundary:
+
+1. **`@property` / `@property-read` class docblock tags** — the ide-helper convention. Read by
+   `DocBlockReader::properties()` and typed through the shared `TypeStringParser` grammar, appended
+   as `PropertyMetadata` in `ClassMetadataFactory` (a native public property of the same name wins).
+   This lives **in the engine**: it owns the phpdoc grammar and the tag is a general PHP/phpstan
+   convention (Data/Resource classes documented this way benefit too), not Eloquent vocabulary. This
+   is the primary, high-confidence source.
+2. **Floor sources** — `$casts` keys (a cast key IS a column, typed by its cast via `CastSchema`),
+   `$dates` entries (date-time), and `$fillable`-only names (permissive `{}` at lowered confidence).
+   These are Eloquent vocabulary, so they live **in the adapter** (`ModelSchema` unions them over the
+   engine metadata; `EloquentModelReflector` reflects them without booting the model). A cast/date
+   floor column is treated as serialised (required); an untyped `$fillable`-only one stays optional.
+
+When **no** source yields a column the empty-object behaviour is kept, but `ModelSchema` raises the
+`eloquent.no-columns` info diagnostic telling the author to add `@property` tags — never silent.
+
+**Source (2b) — Larastan schema knowledge — was investigated and deliberately skipped.**
+`ClassMetadataFactory` is a native-reflection + docblock component that never enters PHPStan's
+analysis scope. Larastan's `ModelPropertyExtension` / `SchemaAggregator` resolve a model property
+lazily *during analysis of a `$model->column` member-access expression* and expose no
+enumerate-all-columns entry point we can call without reaching into private analysis internals — which
+the brief forbids. Revisit only if a first-class schema-introspection embedding is added later.
+
+The `casts()` **method** form (Laravel 11+) is not yet folded into the floor casts (it needs method
+analysis, unlike the reflected `$casts` property) — tracked as AUDIT-eloquent gap #2 (separate M
+effort); the `$casts` property form is recovered today.
+
 ## 6. Exception flow (3 layers) — CORRECTED per the Phase 0 spike (8/8 fixture cases PASS)
 
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**

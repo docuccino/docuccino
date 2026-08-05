@@ -42,6 +42,39 @@ final class DocBlockReader
         return null;
     }
 
+    /**
+     * The `@property` / `@property-read` tags a class docblock declares (the ide-helper model-column
+     * convention: `@property int $id`), as an ordered `name => {type, description}` map. Both write and
+     * read forms are enumerated — a serialized attribute is readable — with `@property` before
+     * `@property-read`; a duplicate name keeps its first (more-authoritative) declaration. `$` is
+     * stripped from the property name; an empty description becomes null.
+     *
+     * @return array<string, array{type: string, description: ?string}>
+     */
+    public function properties(?string $docComment): array
+    {
+        $node = $this->stack->parseDocBlock($docComment);
+        if ($node === null) {
+            return [];
+        }
+
+        $out = [];
+        foreach ([...$node->getPropertyTagValues(), ...$node->getPropertyReadTagValues()] as $tag) {
+            $name = ltrim($tag->propertyName, '$');
+            if ($name === '' || isset($out[$name])) {
+                continue;
+            }
+
+            $description = trim($tag->description);
+            $out[$name] = [
+                'type' => (string) $tag->type,
+                'description' => $description === '' ? null : $description,
+            ];
+        }
+
+        return $out;
+    }
+
     /** The first `@example` value, or null. */
     public function example(?string $docComment): ?string
     {

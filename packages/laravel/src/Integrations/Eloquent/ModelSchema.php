@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
@@ -19,14 +21,27 @@ use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\UnionT;
 
 /**
- * Maps an Eloquent model to an object schema (superseding the core class mapper for models). Columns
- * come from the engine's {@see ClassMetadata}; the model's own presentation
- * facts ({@see EloquentModelReflector}) refine the set:
+ * Maps an Eloquent model to an object schema (superseding the core class mapper for models).
+ *
+ * The column universe is a union, most-authoritative first (design — see
+ * docs/design/inference-embedding.md §"Eloquent column source"):
+ *
+ * 1. the engine's {@see ClassMetadata} — a real model declares no PHP column properties, so this is
+ *    almost entirely its class-level `@property`/`@property-read` docblock tags (typed, high
+ *    confidence); a native public property, where one exists, also lands here;
+ * 2. floor sources reflected off the model — a `$casts` key IS a column (typed via its cast), a
+ *    `$dates` entry is a date-time column, and a `$fillable`-only name is a permissive column at
+ *    lowered confidence.
+ *
+ * The model's own presentation facts ({@see EloquentModelReflector}) then refine the set:
  *
  * - `$visible` (allow-list) / `$hidden` + a class-level `#[Hidden]` list (deny-list) filter columns.
  * - `$casts` fix the schema of a column: datetime → `format: date-time`, native casts fix the type
  *   ({@see CastSchema}); an enum cast routes the column through the Enum integration path (`EnumT`).
  * - `$appends` add accessor-backed properties (optional; permissive when untyped).
+ *
+ * When NO source yields a column, today's behaviour is kept (an empty object plus any appends) but an
+ * info diagnostic tells the author how to document columns (`@property` docblocks) — never silent.
  *
  * The component is named by `#[SchemaName]` (else the short class name) and pinned by `#[SchemaId]`
  * (else the FQCN); self-references are cycle-broken via the reserved name.
@@ -81,6 +96,33 @@ final class ModelSchema implements TypeToSchema
                 }
             }
 
+            // Floor columns: a column the engine did not surface but the model itself evidences —
+            // a `$casts` key (typed by its cast), a `$dates` entry (date-time), or a `$fillable`-only
+            // name (permissive, at lowered confidence). Docblock/native columns above are more
+            // authoritative, so an already-present name is left untouched.
+            foreach ($this->floorColumns($facts) as $column) {
+                if (isset($properties[$column]) || ! self::isColumnVisible($column, $facts['visible'], $hidden)) {
+                    continue;
+                }
+
+                [$schema, $isRequired] = $this->floorColumnSchema($column, $facts, $context);
+                $properties[$column] = $schema;
+                if ($isRequired) {
+                    $required[] = $column;
+                }
+            }
+
+            // No source yielded a column: keep the empty-object behaviour but tell the author how to
+            // document one, so an undocumented model never renders as a silent bare object.
+            if ($properties === []) {
+                $context->diagnostic(new Diagnostic(
+                    severity: Severity::Info,
+                    code: 'eloquent.no-columns',
+                    message: sprintf('Model %s exposes no documentable columns; its response is documented as a bare object.', $fqcn),
+                    help: 'Add `@property` (or `@property-read`) docblock tags for the model\'s attributes — e.g. `@property int $id` — so its columns and their types are recovered.',
+                ));
+            }
+
             // Appended accessors: optional, permissive unless a cast pins the shape.
             foreach ($facts['appends'] as $append) {
                 if (isset($properties[$append])) {
@@ -107,6 +149,50 @@ final class ModelSchema implements TypeToSchema
     private function columnSchema(string $column, DType $type, array $casts, SchemaContext $context): array
     {
         return $this->castSchema($column, $casts, $context) ?? $context->convert($type);
+    }
+
+    /**
+     * The floor-source column names, in deterministic priority order: `$casts` keys, then `$dates`,
+     * then `$fillable`. Deduped, first occurrence wins (so a name's most-authoritative floor source
+     * decides its type in {@see floorColumnSchema()}).
+     *
+     * @param  array{casts: array<string, string>, dates: list<string>, fillable: list<string>}  $facts
+     * @return list<string>
+     */
+    private function floorColumns(array $facts): array
+    {
+        $seen = [];
+        foreach ([...array_keys($facts['casts']), ...$facts['dates'], ...$facts['fillable']] as $name) {
+            $seen[$name] = true;
+        }
+
+        return array_keys($seen);
+    }
+
+    /**
+     * The schema (and whether it is required) for a floor column: its cast shape when cast, a
+     * date-time when a `$dates` entry, else a permissive `{}` at lowered confidence for a
+     * `$fillable`-only name whose type is genuinely unknown (also the case for a custom caster the
+     * cast table does not recognise). Cast/date floor columns are treated as always-serialised
+     * (required); an untyped permissive one is left optional, since its presence is a guess.
+     *
+     * @param  array{casts: array<string, string>, dates: list<string>, fillable: list<string>}  $facts
+     * @return array{0: array<string, mixed>, 1: bool}
+     */
+    private function floorColumnSchema(string $column, array $facts, SchemaContext $context): array
+    {
+        $cast = $this->castSchema($column, $facts['casts'], $context);
+        if ($cast !== null) {
+            return [$cast, true];
+        }
+
+        if (in_array($column, $facts['dates'], true)) {
+            return [['type' => 'string', 'format' => 'date-time'], true];
+        }
+
+        $context->lowerConfidence(0.6);
+
+        return [[], false];
     }
 
     /**
