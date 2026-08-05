@@ -28,6 +28,10 @@ final class FrameworkExceptionTable
         'Illuminate\\Auth\\AuthenticationException' => ['status' => '401', 'validation' => false],
         'Illuminate\\Auth\\Access\\AuthorizationException' => ['status' => '403', 'validation' => false],
         'Illuminate\\Database\\Eloquent\\ModelNotFoundException' => ['status' => '404', 'validation' => false],
+        // The PARENT of ModelNotFoundException (and MultipleRecordsFoundException) — a bare
+        // `sole()`/`->firstOrFail()` on the query builder throws this directly, and subtype matching
+        // against ModelNotFoundException alone would miss it (a parent is not a subclass).
+        'Illuminate\\Database\\RecordsNotFoundException' => ['status' => '404', 'validation' => false],
         'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException' => ['status' => '404', 'validation' => false],
     ];
 

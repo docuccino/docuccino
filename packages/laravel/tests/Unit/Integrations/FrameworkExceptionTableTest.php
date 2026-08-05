@@ -23,6 +23,7 @@ it('resolves each mapped exception to its status subtype-aware', function (strin
     'authentication → 401' => ['Illuminate\\Auth\\AuthenticationException', '401', false],
     'authorization → 403' => ['Illuminate\\Auth\\Access\\AuthorizationException', '403', false],
     'model-not-found → 404' => ['Illuminate\\Database\\Eloquent\\ModelNotFoundException', '404', false],
+    'records-not-found (parent) → 404' => ['Illuminate\\Database\\RecordsNotFoundException', '404', false],
     'http-not-found → 404' => ['Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', '404', false],
     // Subtype: a subclass of a mapped base inherits its mapping.
     'a ModelNotFound subclass inherits 404' => [FixtureMissingModelException::class, '404', false],
