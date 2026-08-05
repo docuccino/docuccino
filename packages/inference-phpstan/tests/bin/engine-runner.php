@@ -32,6 +32,7 @@ use Docuccino\Inference\PhpStan\Analysis\EngineConfig;
 use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
+use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
@@ -138,6 +139,25 @@ $result = match ($mode) {
         }, $facts->filters);
 
         return ['subjectModel' => $facts->subjectModel, 'filters' => $filters];
+    })(),
+    'trace-rules' => (static function () use ($engine, $ref): array {
+        // The REAL RulesMethodVisitor runs in the engine subprocess: it must recover a rules()
+        // method's returned array with AST-level constant folding so Rule::enum(...) descriptors
+        // survive (validation §1). Returns each field's recovered rule names + params, plus the
+        // fields present but unrecoverable.
+        $visitor = new RulesMethodVisitor;
+        $engine->trace($ref, $visitor);
+
+        $fields = [];
+        foreach ($visitor->ruleSet()->fields as $field => $rules) {
+            $fields[$field] = array_map(static fn ($rule): array => [
+                'name' => $rule->name,
+                'parameters' => $rule->parameters,
+                'note' => $rule->note,
+            ], $rules);
+        }
+
+        return ['fields' => $fields, 'unrecoverable' => $visitor->unrecoverableFields()];
     })(),
     'trace-json-api-paginate' => (static function () use ($engine, $ref): array {
         $visitor = new JsonApiPaginateTraceVisitor;

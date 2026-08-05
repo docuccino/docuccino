@@ -70,6 +70,18 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a class's `rules()` with the REAL RulesMethodVisitor: returns each field's recovered
+     * rule names/params/note (so a `Rule::enum(...)` descriptor's backing values + FQCN are visible)
+     * plus the fields present but unrecoverable.
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceRules(string $relPath, string $class, string $method): array
+    {
+        return self::invoke('trace-rules', self::path($relPath), $class, $method);
+    }
+
+    /**
      * Trace a controller with the REAL JsonApiPaginateTraceVisitor: returns whether it reached the
      * `jsonPaginate()` terminal and the folded per-call-site overrides (`maxResults`/`defaultSize`).
      *

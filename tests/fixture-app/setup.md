@@ -155,3 +155,7 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 - `app/Actions/PublishArticleAction.php` — a `lorisleiva/laravel-actions` action whose literal
   `rules()` array the engine recovers into a constant shape, turned into a `RuleSet` by
   `ShapeToRuleSet`.
+- `app/Http/Requests/StoreListingRequest.php` — a FormRequest whose `rules()` mixes a pipe-string
+  rule, a `Rule::enum(ListingStatus::class)` factory descriptor, and a closure rule, so the real
+  `RulesMethodVisitor` proves descriptor folding inside a FormRequest (enum backing values + FQCN)
+  and the `validation.rule-unrecoverable` diagnostic for the closure field (validation §1).

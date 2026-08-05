@@ -241,6 +241,34 @@ it('recovers spatie jsonPaginate() through the real engine and maps it to page[n
         ->and($byName['page[size]']->schema['maximum'])->toBe(100);
 })->group('fixture');
 
+it('recovers Rule::enum(...) inside a real FormRequest rules() and diagnoses an unrecoverable field', function (): void {
+    // ShapeToRuleSet alone drops Rule::enum silently (the descriptor is a bare object by the DType
+    // stage, validation §1). The RulesMethodVisitor traces the returned array with constant folding,
+    // so the enum descriptor survives with its backing values + FQCN; the closure-ruled field is
+    // recovered by neither path and is flagged unrecoverable (diagnostic, never a silent drop).
+    $trace = FixtureRunner::traceRules(
+        'app/Http/Requests/StoreListingRequest.php',
+        'App\\Http\\Requests\\StoreListingRequest',
+        'rules',
+    );
+
+    expect(array_keys($trace['fields']))->toBe(['title', 'status'])
+        ->and($trace['unrecoverable'])->toBe(['callback']);
+
+    $titleRules = array_map(static fn (array $r): string => $r['name'], $trace['fields']['title']);
+    expect($titleRules)->toBe(['required', 'string', 'max']);
+
+    // The enum descriptor folded to an `enum` rule with the backing values as parameters and the
+    // enum FQCN in the note — the same shape the inline path produces.
+    $statusRules = [];
+    foreach ($trace['fields']['status'] as $rule) {
+        $statusRules[$rule['name']] = $rule;
+    }
+    expect(array_keys($statusRules))->toBe(['required', 'enum'])
+        ->and($statusRules['enum']['parameters'])->toBe(['open', 'closed', 'draft'])
+        ->and($statusRules['enum']['note'])->toBe('App\\Enums\\ListingStatus');
+})->group('fixture');
+
 it('recovers a real laravel-actions rules() array end-to-end into a RuleSet', function (): void {
     // Real recovery: the engine analyses the action's literal rules() array into a constant shape...
     $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
