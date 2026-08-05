@@ -68,11 +68,61 @@ it('decrypts-then-casts an encrypted:<inner> compound to the inner shape', funct
         ->and(CastSchema::forCast('encrypted'))->toBe(['type' => 'string']);
 });
 
+it('maps every built-in As* class cast to its serialised shape', function (string $cast, array $expected): void {
+    // The `As*` class casts serialise to a fixed shape read from the class FQCN in `$casts` — not the
+    // null fallback this test used to pin (an enshrined-wrong "no type at all", audit eloquent #8).
+    // AsEncrypted* decrypts-THEN-casts, so they are the decoded object/array, never the opaque string.
+    expect(CastSchema::forCast($cast))->toBe($expected);
+})->with([
+    'AsStringable → string' => ['Illuminate\\Database\\Eloquent\\Casts\\AsStringable', ['type' => 'string']],
+    'AsUri → string' => ['Illuminate\\Database\\Eloquent\\Casts\\AsUri', ['type' => 'string']],
+    'AsHtmlString → string' => ['Illuminate\\Database\\Eloquent\\Casts\\AsHtmlString', ['type' => 'string']],
+    'AsFluent → object' => ['Illuminate\\Database\\Eloquent\\Casts\\AsFluent', ['type' => 'object']],
+    'AsArrayObject → object' => ['Illuminate\\Database\\Eloquent\\Casts\\AsArrayObject', ['type' => 'object']],
+    'AsCollection → array' => ['Illuminate\\Database\\Eloquent\\Casts\\AsCollection', ['type' => 'array']],
+    'AsEncryptedArrayObject → object' => ['Illuminate\\Database\\Eloquent\\Casts\\AsEncryptedArrayObject', ['type' => 'object']],
+    'AsEncryptedCollection → array' => ['Illuminate\\Database\\Eloquent\\Casts\\AsEncryptedCollection', ['type' => 'array']],
+]);
+
+it('exposes the enum parameter of an AsEnumCollection / AsEnumArrayObject cast (routed by ModelSchema)', function (?string $enum, string $cast): void {
+    // The two enum-valued As* casts serialise to an array of the parameterised enum's values; forCast
+    // returns null for them (the array + enum routing is assembled by ModelSchema through the Enum
+    // integration), exposing only the enum FQCN here so the mapper can route it.
+    expect(CastSchema::forCast($cast))->toBeNull()
+        ->and(CastSchema::enumCollectionEnum($cast))->toBe($enum);
+})->with([
+    'AsEnumCollection:Enum' => [WidgetStatus::class, 'Illuminate\\Database\\Eloquent\\Casts\\AsEnumCollection:'.WidgetStatus::class],
+    'AsEnumArrayObject:Enum' => [WidgetStatus::class, 'Illuminate\\Database\\Eloquent\\Casts\\AsEnumArrayObject:'.WidgetStatus::class],
+]);
+
+it('reports enumCollectionEnum null for a non-enum-collection cast', function (string $cast): void {
+    expect(CastSchema::enumCollectionEnum($cast))->toBeNull();
+})->with([
+    'a bare enum-collection with no parameter' => ['Illuminate\\Database\\Eloquent\\Casts\\AsEnumCollection'],
+    'a plain As* cast' => ['Illuminate\\Database\\Eloquent\\Casts\\AsCollection'],
+    'a native cast' => ['datetime'],
+    'an empty string' => [''],
+]);
+
+it('recognises the date casts serializeDate() governs (excluding the integer timestamp cast)', function (string $cast, bool $isDate): void {
+    expect(CastSchema::isDateCast($cast))->toBe($isDate);
+})->with([
+    'datetime' => ['datetime', true],
+    'datetime:FORMAT' => ['datetime:Y-m-d', true],
+    'immutable_datetime' => ['immutable_datetime', true],
+    'custom_datetime' => ['custom_datetime', true],
+    'date' => ['date', true],
+    'immutable_date' => ['immutable_date', true],
+    'DATE (case-insensitive)' => ['DATE', true],
+    'timestamp is a unix integer, not serializeDate' => ['timestamp', false],
+    'boolean' => ['boolean', false],
+    'a custom caster' => ['App\\Casts\\Money', false],
+]);
+
 it('returns null for a cast the table does not know so the column keeps its inferred type', function (string $cast): void {
     expect(CastSchema::forCast($cast))->toBeNull();
 })->with([
     'a custom caster class' => ['App\\Casts\\Money'],
-    'the AsStringable helper' => ['Illuminate\\Database\\Eloquent\\Casts\\AsStringable'],
     'an unknown keyword' => ['nonsense'],
     'an empty string' => [''],
 ]);
