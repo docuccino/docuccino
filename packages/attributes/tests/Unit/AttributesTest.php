@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\Abilities;
 use Docuccino\Attributes\BodyParameter;
 use Docuccino\Attributes\CaseDescription;
 use Docuccino\Attributes\CookieParameter;
@@ -17,12 +18,14 @@ use Docuccino\Attributes\IgnoreResponse;
 use Docuccino\Attributes\InDocs;
 use Docuccino\Attributes\Internal;
 use Docuccino\Attributes\OperationId;
+use Docuccino\Attributes\OptionallyAuthenticated;
 use Docuccino\Attributes\PathParameter;
 use Docuccino\Attributes\QueryParameter;
 use Docuccino\Attributes\Response;
 use Docuccino\Attributes\ResponseHeader;
 use Docuccino\Attributes\SchemaId;
 use Docuccino\Attributes\SchemaName;
+use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Unauthenticated;
 
 /**
@@ -62,6 +65,9 @@ function attributeCatalogue(): array
         'Group' => [Group::class, $classFn | Attribute::IS_REPEATABLE],
         'ExcludeFromDocs' => [ExcludeFromDocs::class, $classFn],
         'Unauthenticated' => [Unauthenticated::class, $classFn],
+        'OptionallyAuthenticated' => [OptionallyAuthenticated::class, $classFn],
+        'Security' => [Security::class, $classFn | Attribute::IS_REPEATABLE],
+        'Abilities' => [Abilities::class, $classFn],
         'OperationId' => [OperationId::class, Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION],
         'InDocs' => [InDocs::class, $classFn],
         'Example' => [Example::class, Attribute::TARGET_METHOD | Attribute::TARGET_PROPERTY | Attribute::TARGET_FUNCTION | Attribute::TARGET_PARAMETER | Attribute::IS_REPEATABLE],
@@ -124,7 +130,7 @@ function defaultArgs(string $class): array
         CookieParameter::class, BodyParameter::class, Group::class,
         IgnoreParam::class, ResponseHeader::class => ['name'],
         OperationId::class, SchemaId::class => ['id'],
-        SchemaName::class => ['name'],
+        SchemaName::class, Security::class => ['name'],
         CaseDescription::class => ['a description'],
         IgnoreResponse::class => [200],
         DescriptionFromFile::class => ['docs/x.md'],

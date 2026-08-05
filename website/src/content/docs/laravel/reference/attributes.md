@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 22 attributes with signatures and examples.
+description: The docuccino/attributes package — all 25 attributes with signatures and examples.
 ---
 
 
@@ -301,6 +301,62 @@ Targets `CLASS | METHOD | FUNCTION`. Marker. Clears any inferred security requir
 ```php
 #[Unauthenticated]
 public function health(): JsonResponse { /* … */ }
+```
+
+## Security
+
+These declare (or relax) an operation's security requirement where middleware detection can't see it
+— a Gate/policy check, or a `tokenCan()` guard in the action body. They apply over inferred security,
+**field by field**, at the attribute precedence layer.
+
+### `#[Security]`
+
+Targets `CLASS | METHOD | FUNCTION`, repeatable.
+
+```php
+public function __construct(
+    public string $scheme,     // a scheme name from security.schemes config or an integration
+    array $scopes = [],        // scopes/abilities required against that scheme (all-of)
+)
+```
+
+Declares an explicit security requirement referencing a registered scheme by name. Repeat it to model
+an **OR-list** — any one alternative satisfies the operation; several scopes in one attribute are an
+all-of within that scheme.
+
+```php
+// Either an OAuth2 token with `reports.read`, or an API key:
+#[Security('oauth2', ['reports.read'])]
+#[Security('apiKey')]
+public function reports(): JsonResponse { /* … */ }
+```
+
+### `#[OptionallyAuthenticated]`
+
+Targets `CLASS | METHOD | FUNCTION`. Marker. Makes the operation usable anonymously **or**
+authenticated: the security becomes `[{}, …]` — the empty (anonymous) requirement followed by
+whatever was inferred from middleware or declared with `#[Security]`.
+
+```php
+#[OptionallyAuthenticated] // works signed-out; richer response when a token is present
+public function feed(): JsonResponse { /* … */ }
+```
+
+### `#[Abilities]`
+
+Targets `CLASS | METHOD | FUNCTION`.
+
+```php
+public function __construct(string ...$abilities) // stored as list<string> $abilities
+```
+
+Declares the Sanctum token abilities an operation requires when the check lives in the action body
+rather than in `abilities:`/`ability:` middleware. Surfaced as an `x-abilities` extension member and a
+"Requires token ability: …" description line (bearer tokens can't carry abilities as OAS scopes).
+
+```php
+#[Abilities('posts:publish')]
+public function publish(int $id): JsonResponse { /* … */ }
 ```
 
 ## Identity & naming
