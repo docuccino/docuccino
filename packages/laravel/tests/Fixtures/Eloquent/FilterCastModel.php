@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Tests\Fixtures\Eloquent;
 
+use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
 use Illuminate\Database\Eloquent\Model;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
  * A model fixture whose `$casts` cover every kind the Query Builder filter-column resolver maps: a
- * backed enum, the native scalar casts ({@see \Docuccino\Laravel\Integrations\Eloquent\CastSchema}),
+ * backed enum, the native scalar casts ({@see CastSchema}),
  * an unrecognised custom caster, and a no-cast column. Only ever reflected — never queried.
  */
 final class FilterCastModel extends Model

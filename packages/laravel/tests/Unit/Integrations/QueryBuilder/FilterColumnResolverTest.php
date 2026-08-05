@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumn;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\FilterCastModel;
+use Workbench\App\Enums\WidgetStatus;
 
 /**
  * Dataset coverage over the cast → filter-column mapping (the resolver reuses the Eloquent
@@ -21,20 +22,20 @@ it('maps a subject-model column cast to its filter-column shape', function (stri
     }
 
     if ($kind === FilterColumn::KIND_ENUM) {
-        expect($resolved->enum)->toBe(Workbench\App\Enums\WidgetStatus::class)
+        expect($resolved->enum)->toBe(WidgetStatus::class)
             ->and($resolved->dependencyFiles)->not->toBe([]);
     }
 })->with([
-    'enum cast'            => ['status', FilterColumn::KIND_ENUM, null],
-    'boolean cast'        => ['active', FilterColumn::KIND_SCALAR, ['type' => 'boolean']],
-    'integer cast'        => ['quantity', FilterColumn::KIND_SCALAR, ['type' => 'integer']],
-    'float cast'          => ['rating', FilterColumn::KIND_SCALAR, ['type' => 'number']],
-    'datetime cast'       => ['published_at', FilterColumn::KIND_SCALAR, ['type' => 'string', 'format' => 'date-time']],
+    'enum cast' => ['status', FilterColumn::KIND_ENUM, null],
+    'boolean cast' => ['active', FilterColumn::KIND_SCALAR, ['type' => 'boolean']],
+    'integer cast' => ['quantity', FilterColumn::KIND_SCALAR, ['type' => 'integer']],
+    'float cast' => ['rating', FilterColumn::KIND_SCALAR, ['type' => 'number']],
+    'datetime cast' => ['published_at', FilterColumn::KIND_SCALAR, ['type' => 'string', 'format' => 'date-time']],
     'immutable_date cast' => ['archived_on', FilterColumn::KIND_SCALAR, ['type' => 'string', 'format' => 'date']],
-    'decimal cast'        => ['price', FilterColumn::KIND_SCALAR, ['type' => 'string']],
-    'string cast'         => ['nickname', FilterColumn::KIND_SCALAR, ['type' => 'string']],
-    'custom caster'       => ['custom', FilterColumn::KIND_NONE, null],
-    'no cast'             => ['untyped_column', FilterColumn::KIND_NONE, null],
+    'decimal cast' => ['price', FilterColumn::KIND_SCALAR, ['type' => 'string']],
+    'string cast' => ['nickname', FilterColumn::KIND_SCALAR, ['type' => 'string']],
+    'custom caster' => ['custom', FilterColumn::KIND_NONE, null],
+    'no cast' => ['untyped_column', FilterColumn::KIND_NONE, null],
     'dotted relation path' => ['author.name', FilterColumn::KIND_NONE, null],
 ]);
 
