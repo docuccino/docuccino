@@ -169,6 +169,13 @@ final class DataSchema implements TypeToSchema
             return ['type' => 'array', 'items' => $context->convert(new ClassT($item))];
         }
 
+        // A `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` serialises the datetime as a Unix
+        // timestamp integer — not the default date-time string. Only the numeric `U` format changes
+        // the type; other explicit formats still render as a date/date-time string below.
+        if ($this->reflector->dateTimeCastFormat($fqcn, $property) === 'U') {
+            return ['type' => 'integer', 'description' => 'Unix timestamp (seconds).'];
+        }
+
         if ($this->isDateTime($clean)) {
             return ['type' => 'string', 'format' => $this->dateFormatToOas()];
         }

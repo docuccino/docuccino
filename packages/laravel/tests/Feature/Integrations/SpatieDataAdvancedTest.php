@@ -21,6 +21,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ProfileResource;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RequestExclusionData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\TagData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\TimestampData;
 
 /**
  * The harder spatie surfaces Wave B added — class-level/mapper-class mapping, dates, enums, nested
@@ -88,6 +89,27 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->dataCollectionOf(AccountData::class, 'tags'))->toBe(TagData::class)
         ->and($reflector->validationTokens(AccountData::class, 'code'))->toBe(['max:5'])
         ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe(['in:active,suspended']);
+});
+
+it('documents a WithCast DateTimeInterfaceCast format:U property as an integer timestamp', function (): void {
+    $components = new ComponentRegistry;
+    $engine = new StubTypeEngine(classes: [
+        TimestampData::class => new ClassMetadata(TimestampData::class, [
+            new PropertyMetadata('expiresAt', new ClassT('DateTimeImmutable')),
+            new PropertyMetadata('createdAt', new ClassT('DateTimeImmutable')),
+        ]),
+    ]);
+    (new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], $engine, $components))->toSchema(new ClassT(TimestampData::class));
+
+    $properties = $components->schemas()['TimestampData']['properties'];
+
+    // The `format: 'U'` cast → integer (Unix seconds); the plain datetime stays a date-time string.
+    expect($properties['expiresAt'])->toBe(['type' => 'integer', 'description' => 'Unix timestamp (seconds).'])
+        ->and($properties['createdAt'])->toBe(['type' => 'string', 'format' => 'date-time']);
+
+    // The reflector reads the format straight off the attribute.
+    expect((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'expiresAt'))->toBe('U')
+        ->and((new DataClassReflector)->dateTimeCastFormat(TimestampData::class, 'createdAt'))->toBeNull();
 });
 
 it('excludes route-parameter and explicitly request-hidden properties, but not output-#[Hidden] ones', function (): void {

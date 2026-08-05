@@ -94,6 +94,10 @@ final class DataClassReflector
 
     private const FROM_ROUTE_PARAMETER = 'Spatie\\LaravelData\\Attributes\\FromRouteParameter';
 
+    private const WITH_CAST = 'Spatie\\LaravelData\\Attributes\\WithCast';
+
+    private const DATETIME_CAST = 'Spatie\\LaravelData\\Casts\\DateTimeInterfaceCast';
+
     private const DATA_COLLECTION_OF = 'Spatie\\LaravelData\\Attributes\\DataCollectionOf';
 
     private const RULE_ATTRIBUTE = 'Spatie\\LaravelData\\Attributes\\Validation\\Rule';
@@ -186,6 +190,34 @@ final class DataClassReflector
             'schemaName' => SchemaIdentity::name($fqcn),
             'schemaId' => SchemaIdentity::id($fqcn),
         ];
+    }
+
+    /**
+     * The `format` of a property's `#[WithCast(DateTimeInterfaceCast::class, format: '…')]`, or null
+     * when the property has no such cast. The format is read from the attribute arguments by
+     * reflection (nothing is instantiated); it governs the wire representation — notably `U` (a Unix
+     * timestamp serialised as an integer) rather than the default date-time string.
+     */
+    public function dateTimeCastFormat(string $fqcn, string $property): ?string
+    {
+        $reflection = $this->property($fqcn, $property);
+        if ($reflection === null) {
+            return null;
+        }
+
+        $attributes = $reflection->getAttributes(self::WITH_CAST);
+        if ($attributes === []) {
+            return null;
+        }
+
+        $arguments = $attributes[0]->getArguments();
+        if (($arguments[0] ?? null) !== self::DATETIME_CAST) {
+            return null;
+        }
+
+        $format = $arguments['format'] ?? $arguments[1] ?? null;
+
+        return is_string($format) ? $format : null;
     }
 
     /** Whether the named property is hidden from output (property-level spatie/Docuccino `#[Hidden]`). */
