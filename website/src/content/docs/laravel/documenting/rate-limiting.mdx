@@ -19,7 +19,8 @@ Docuccino reads the throttle configuration from the middleware:
 | --- | --- |
 | `throttle:60,1` | 60 requests per 1 minute. |
 | `throttle:60` | 60 requests per minute. |
-| `throttle:api` (a named limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
+| `throttle:api` (a named limiter with a simple limit) | The concrete numbers, read from the limiter's `RateLimiter::for` closure — e.g. `fn () => Limit::perMinute(60)` documents 60 per minute. |
+| `throttle:api` (a dynamic, conditional, or custom-response limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
 
 <Tabs>
 	<TabItem label="Your code">
@@ -49,7 +50,24 @@ None.
 
 ## Named limiters
 
-A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`
-— which Docuccino never executes. The `429` response and its headers are still documented, but the
-concrete numbers can't be recovered, so Docuccino emits an info diagnostic noting the limit came from a
-named limiter. Inline limits (`throttle:60,1`) carry their numbers straight through.
+A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`.
+Docuccino never *executes* that closure, but it reads it: when the limiter simply returns a single
+`Limit`, its numbers flow straight into the `429`.
+
+```php
+// A limiter Docuccino folds — the 429 documents 60 requests per minute.
+RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
+```
+
+All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognised, and a
+trailing `->by(...)` partition key is ignored (it does not change the documented limit).
+
+Docuccino keeps the numberless `429` — plus an info diagnostic — when the limit can't be read
+statically, rather than guessing. That covers a limiter that:
+
+- returns different limits down different branches (a conditional or multi-`return` closure);
+- computes its rate from a non-literal value (`Limit::perMinute($request->user()->rate)`);
+- is unlimited (`Limit::none()`) or returns an array of limits;
+- attaches a custom response body (`->response(...)`).
+
+Inline limits (`throttle:60,1`) always carry their numbers straight through.

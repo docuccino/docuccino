@@ -24,7 +24,7 @@ final class RateLimitResponse
 
         if (! $limit->isNamed()) {
             $rateLimit['example'] = $limit->maxAttempts;
-            $retryAfter['example'] = (int) round(($limit->decayMinutes ?? 1.0) * 60);
+            $retryAfter['example'] = $limit->retryAfterSeconds();
         }
 
         $description = 'Too Many Requests — the rate limit for this endpoint has been exceeded.';

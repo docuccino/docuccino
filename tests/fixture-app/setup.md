@@ -155,6 +155,11 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 - `app/Actions/PublishArticleAction.php` — a `lorisleiva/laravel-actions` action whose literal
   `rules()` array the engine recovers into a constant shape, turned into a `RuleSet` by
   `ShapeToRuleSet`.
+- `app/Providers/AppServiceProvider.php` — named rate limiters in their idiomatic shapes: the
+  Laravel-11 skeleton default `api` arrow limiter (`fn ($r) => Limit::perMinute(60)->by(…)`), a
+  full-closure `uploads` limiter on a per-hour window, and a conditional `dynamic` one. The engine's
+  closure trace (via `trace-rate-limiter`, located by line) folds the first two to concrete numbers
+  and leaves the conditional one numberless (small-integrations §1, Wave D item 4).
 - `app/Http/Requests/StoreListingRequest.php` — a FormRequest whose `rules()` mixes a pipe-string
   rule, a `Rule::enum(ListingStatus::class)` factory descriptor, and a closure rule, so the real
   `RulesMethodVisitor` proves descriptor folding inside a FormRequest (enum backing values + FQCN)

@@ -115,6 +115,18 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a named rate limiter's `RateLimiter::for` closure (located by line) with the REAL
+     * RateLimiterLimitVisitor: returns whether it folded to a concrete limit and the recovered
+     * maxAttempts + decay-seconds (or the bail signal for a limiter it could not fold).
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceRateLimiter(string $relPath, int $line): array
+    {
+        return self::invoke('trace-rate-limiter', self::path($relPath), '', '{closure}', (string) $line);
+    }
+
+    /**
      * The real engine's {@see ClassMetadata} for a class (its property
      * names + reflected types), serialized. The file argument is unused for this mode.
      *

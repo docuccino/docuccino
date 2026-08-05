@@ -34,3 +34,27 @@ it('builds a 429 without numeric examples for a named limiter', function (): voi
     expect($response['headers']['X-RateLimit-Limit']['schema'])->toBe(['type' => 'integer'])
         ->and($response['headers']['Retry-After']['schema'])->toBe(['type' => 'integer']);
 });
+
+it('derives the Retry-After example from a folded limiter window in seconds', function (int $decaySeconds, int $expected): void {
+    $response = (new RateLimitResponse)->build(new ThrottleLimit(maxAttempts: 60, decaySeconds: $decaySeconds));
+
+    expect($response['headers']['X-RateLimit-Limit']['schema'])->toBe(['type' => 'integer', 'example' => 60])
+        ->and($response['headers']['Retry-After']['schema'])->toBe(['type' => 'integer', 'example' => $expected]);
+})->with([
+    'per-second window' => [1, 1],
+    'per-minute window' => [60, 60],
+    'per-hour window' => [3600, 3600],
+    'per-day window' => [86400, 86400],
+]);
+
+it('prefers decaySeconds over decayMinutes for Retry-After when both are present', function (): void {
+    // A folded named limiter carries its window in seconds directly; the whole-minute decay is unused.
+    $limit = new ThrottleLimit(maxAttempts: 100, decayMinutes: 1.0, decaySeconds: 3600);
+
+    expect($limit->retryAfterSeconds())->toBe(3600);
+});
+
+it('derives Retry-After from decayMinutes when no decaySeconds is folded (inline throttle)', function (): void {
+    expect((new ThrottleLimit(maxAttempts: 60, decayMinutes: 2.0))->retryAfterSeconds())->toBe(120)
+        ->and((new ThrottleLimit(maxAttempts: 60, decayMinutes: 0.5))->retryAfterSeconds())->toBe(30);
+});

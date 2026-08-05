@@ -19,6 +19,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-qb-enrich <controllerFile> <class> <method>
  *   php engine-runner.php class-metadata  <ignored>        <class>
  *   php engine-runner.php analyze-callable <file> <class> <method> <line> <narrowParam> <narrowType>
+ *   php engine-runner.php trace-rate-limiter <file> <ignored> <ignored> <line>
  *
  * Emits `@@RESULT@@` followed by a single JSON line (so any incidental host
  * output before it is ignored by the caller).
@@ -38,6 +39,7 @@ use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
+use Docuccino\Laravel\Integrations\RateLimit\RateLimiterLimitVisitor;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 
 $repoRoot = dirname(__DIR__, 4);
@@ -182,6 +184,22 @@ $result = match ($mode) {
         $engine->trace($ref, $visitor);
 
         return ['paginates' => $visitor->paginates, 'kind' => $visitor->kind];
+    })(),
+    'trace-rate-limiter' => (static function () use ($engine, $file, $line): array {
+        // The REAL RateLimiterLimitVisitor over a named limiter's RateLimiter::for closure located by
+        // line — proves the engine's closure trace folds an idiomatic `fn ($r) => Limit::perMinute(60)
+        // ->by(…)` arrow limiter to concrete numbers (small-integrations §1 feasibility, Wave D item 4).
+        $visitor = new RateLimiterLimitVisitor;
+        $engine->trace(new ActionRef($file, null, '{closure}', $line), $visitor);
+        $limit = $visitor->limit;
+
+        return [
+            'resolved' => $limit->resolved(),
+            'bailed' => $limit->bailed,
+            'returnsSeen' => $limit->returnsSeen,
+            'maxAttempts' => $limit->maxAttempts,
+            'decaySeconds' => $limit->decaySeconds,
+        ];
     })(),
     'trace-created-resource' => (static function () use ($engine, $ref): array {
         // Proves the CreatedResourceVisitor recognises a resource wrapping a real Model::create() on
