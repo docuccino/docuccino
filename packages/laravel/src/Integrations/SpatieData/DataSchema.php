@@ -15,7 +15,7 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
+use Docuccino\Laravel\Integrations\Support\SpatieDataEnvelope;
 
 /**
  * Maps a `spatie/laravel-data` Data class (and its collections) to an OAS schema, superseding the
@@ -32,7 +32,9 @@ use Docuccino\Laravel\Integrations\Support\PaginationEnvelope;
  *   cycle-broken via the reserved component name, mirroring the core class mapper).
  *
  * A `DataCollection` renders as an array of its item schema; the paginated variants
- * (`PaginatedDataCollection`/`CursorPaginatedDataCollection`) render the shared paginator envelope.
+ * (`PaginatedDataCollection`/`CursorPaginatedDataCollection`) render spatie's OWN paginator envelope
+ * ({@see SpatieDataEnvelope}) — `links` as an array of `{url,label,active}`, meta with the `*_page_url`
+ * members — which diverges from Laravel's resource envelope.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DataSchema implements TypeToSchema
@@ -175,8 +177,8 @@ final class DataSchema implements TypeToSchema
         $items = $item !== null ? $context->convert($item) : [];
 
         $schema = match ($this->reflector->collectionKind($type->fqcn)) {
-            'length' => PaginationEnvelope::length($items),
-            'cursor' => PaginationEnvelope::cursor($items),
+            'length' => SpatieDataEnvelope::length($items),
+            'cursor' => SpatieDataEnvelope::cursor($items),
             default => ['type' => 'array', 'items' => $items],
         };
 

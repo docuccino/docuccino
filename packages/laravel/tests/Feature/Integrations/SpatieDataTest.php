@@ -76,19 +76,34 @@ it('hoists a Data class to a component honouring #[SchemaName]/#[SchemaId], hidd
         ->and($article['properties']['author']['anyOf'][0]['$ref'] ?? null)->toBe('#/components/schemas/AuthorData');
 });
 
-it('renders a paginated DataCollection as the length-aware envelope', function (): void {
+it('renders a paginated DataCollection as spatie\'s own length-aware envelope', function (): void {
     $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
 
     $paginated = $converter->toSchema(new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [new ClassT(AuthorData::class)]))->schema;
+    // Spatie's shape (NOT the Laravel resource envelope): data/links/meta all required, `links` is an
+    // array of {url,label,active} objects, and `meta` carries the *_page_url members (audit gap 7).
     expect($paginated['type'])->toBe('object')
-        ->and($paginated['required'])->toBe(['data'])
+        ->and($paginated['required'])->toBe(['data', 'links', 'meta'])
         ->and($paginated['properties']['data']['type'])->toBe('array')
         ->and($paginated['properties']['data']['items'])->toHaveKey('$ref')
-        ->and($paginated['properties']['meta']['properties'])->toHaveKey('total');
+        ->and($paginated['properties']['links']['type'])->toBe('array')
+        ->and($paginated['properties']['links']['items']['properties'])->toHaveKeys(['url', 'label', 'active'])
+        ->and($paginated['properties']['meta']['properties'])->toHaveKeys(['total', 'first_page_url', 'last_page_url', 'next_page_url', 'prev_page_url']);
 
     $simple = $converter->toSchema(new ClassT(DataClassReflector::DATA_COLLECTION, [new ClassT(AuthorData::class)]))->schema;
     expect($simple['type'])->toBe('array')
         ->and($simple['items'])->toHaveKey('$ref');
+});
+
+it('renders a cursor-paginated DataCollection as spatie\'s cursor envelope', function (): void {
+    $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
+
+    $cursor = $converter->toSchema(new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [new ClassT(AuthorData::class)]))->schema;
+    // Cursor: empty `links` array, cursor tokens + neighbouring page URLs in meta, no total/last_page.
+    expect($cursor['required'])->toBe(['data', 'links', 'meta'])
+        ->and($cursor['properties']['links']['type'])->toBe('array')
+        ->and($cursor['properties']['meta']['properties'])->toHaveKeys(['next_cursor', 'prev_cursor', 'next_page_url', 'prev_page_url'])
+        ->and($cursor['properties']['meta']['properties'])->not->toHaveKey('total');
 });
 
 it('recovers request rules from Data properties + spatie validation attributes', function (): void {

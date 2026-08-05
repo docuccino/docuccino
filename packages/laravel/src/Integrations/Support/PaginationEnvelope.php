@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\Support;
 
 /**
- * The JSON paginator envelopes Laravel serialises around a page of items (`{data, links, meta}`),
- * shared by the integrations that document a paginated collection so the wrapper shape stays
- * identical whoever produces it. Two shapes are modelled — length-aware ({@see length()}) and cursor
- * ({@see cursor()}); each builder takes the already-converted item schema and wraps it. `data` is the
- * only guaranteed member (an empty page still carries it).
+ * The JSON paginator envelopes Laravel serialises around a page of resource-collection items
+ * (`{data, links, meta}`), shared by the integrations that document a Laravel-paginated collection
+ * (API resources, `jsonPaginate`) so the wrapper shape stays identical whoever produces it. Three
+ * modes are modelled — length-aware ({@see length()}), simple ({@see simple()}) and cursor
+ * ({@see cursor()}); each builder takes the already-converted item schema and wraps it. `data`, `links`
+ * and `meta` are always emitted (an empty page still carries them), so all three are required.
+ *
+ * This is Laravel's `AbstractPaginator` envelope; `spatie/laravel-data` uses a different one
+ * ({@see SpatieDataEnvelope}) — the two are NOT interchangeable.
  */
 final class PaginationEnvelope
 {
     /**
-     * The length-aware paginator shape (`paginate()`): `data` plus first/last/prev/next `links` and a
-     * `meta` block with the page counters.
+     * The length-aware paginator shape (`paginate()`): first/last/prev/next `links` and a `meta`
+     * block with the full page counters (it knows the total, hence `last_page`/`total`).
      *
      * @param  array<string, mixed>  $items
      * @return array<string, mixed>
@@ -23,21 +27,40 @@ final class PaginationEnvelope
     public static function length(array $items): array
     {
         return self::wrap($items, [
-            'links' => self::object([
-                'first' => self::nullableString(),
-                'last' => self::nullableString(),
-                'prev' => self::nullableString(),
-                'next' => self::nullableString(),
-            ]),
-            'meta' => self::object([
-                'current_page' => ['type' => 'integer'],
-                'from' => self::nullableInteger(),
-                'last_page' => ['type' => 'integer'],
-                'path' => self::nullableString(),
-                'per_page' => ['type' => 'integer'],
-                'to' => self::nullableInteger(),
-                'total' => ['type' => 'integer'],
-            ]),
+            'first' => self::nullableString(),
+            'last' => self::nullableString(),
+            'prev' => self::nullableString(),
+            'next' => self::nullableString(),
+        ], [
+            'current_page' => ['type' => 'integer'],
+            'from' => self::nullableInteger(),
+            'last_page' => ['type' => 'integer'],
+            'path' => self::nullableString(),
+            'per_page' => ['type' => 'integer'],
+            'to' => self::nullableInteger(),
+            'total' => ['type' => 'integer'],
+        ]);
+    }
+
+    /**
+     * The simple paginator shape (`simplePaginate()`): it does NOT count the full result set, so
+     * there is no `last` link and the `meta` block omits `last_page`/`total`.
+     *
+     * @param  array<string, mixed>  $items
+     * @return array<string, mixed>
+     */
+    public static function simple(array $items): array
+    {
+        return self::wrap($items, [
+            'first' => self::nullableString(),
+            'prev' => self::nullableString(),
+            'next' => self::nullableString(),
+        ], [
+            'current_page' => ['type' => 'integer'],
+            'from' => self::nullableInteger(),
+            'path' => self::nullableString(),
+            'per_page' => ['type' => 'integer'],
+            'to' => self::nullableInteger(),
         ]);
     }
 
@@ -51,32 +74,34 @@ final class PaginationEnvelope
     public static function cursor(array $items): array
     {
         return self::wrap($items, [
-            'links' => self::object([
-                'first' => self::nullableString(),
-                'last' => self::nullableString(),
-                'prev' => self::nullableString(),
-                'next' => self::nullableString(),
-            ]),
-            'meta' => self::object([
-                'path' => self::nullableString(),
-                'per_page' => ['type' => 'integer'],
-                'next_cursor' => self::nullableString(),
-                'prev_cursor' => self::nullableString(),
-            ]),
+            'first' => self::nullableString(),
+            'last' => self::nullableString(),
+            'prev' => self::nullableString(),
+            'next' => self::nullableString(),
+        ], [
+            'path' => self::nullableString(),
+            'per_page' => ['type' => 'integer'],
+            'next_cursor' => self::nullableString(),
+            'prev_cursor' => self::nullableString(),
         ]);
     }
 
     /**
      * @param  array<string, mixed>  $items
-     * @param  array<string, array<string, mixed>>  $extra
+     * @param  array<string, array<string, mixed>>  $links
+     * @param  array<string, array<string, mixed>>  $meta
      * @return array<string, mixed>
      */
-    private static function wrap(array $items, array $extra): array
+    private static function wrap(array $items, array $links, array $meta): array
     {
         return [
             'type' => 'object',
-            'properties' => ['data' => ['type' => 'array', 'items' => $items]] + $extra,
-            'required' => ['data'],
+            'properties' => [
+                'data' => ['type' => 'array', 'items' => $items],
+                'links' => self::object($links),
+                'meta' => self::object($meta),
+            ],
+            'required' => ['data', 'links', 'meta'],
         ];
     }
 
