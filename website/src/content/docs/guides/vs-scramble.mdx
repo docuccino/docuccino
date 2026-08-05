@@ -76,11 +76,15 @@ so a query composed several helper methods deep is still fully documented.
 
 | Capability | Docuccino | Scramble (free) | Scramble Pro |
 | --- | :---: | :---: | :---: |
-| Middleware-based auth detection | ✓ | ✓ | ✓ |
+| Middleware-based auth detection (driver-based — custom `passport`/`sanctum` guards) | ✓ | ✓ | ✓ |
 | Sanctum dual-mode (token **and** stateful cookie) | ✓ | — | — |
+| Sanctum token abilities (`x-abilities`) | ✓ | — | — |
 | Passport OAuth2 scopes, per operation | ✓ | — | — |
+| Passport client-credentials (machine-to-machine) | ✓ | — | — |
+| Optional / per-operation security override (`#[Security]`, `#[OptionallyAuthenticated]`) | ✓ | — | — |
 | Permission / role requirements (`x-permissions`) | ✓ | — | — |
 | Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — | — |
+| Named rate-limiter `429` numbers folded from `RateLimiter::for` closures | ✓ | — | — |
 
 ### Error responses
 
@@ -145,8 +149,9 @@ Most annotations map across cleanly.
 | Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
 
 Docuccino also adds attributes with no direct Scramble equivalent — `#[OperationId]`, `#[Internal]`,
-`#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`,
-`#[SchemaName]`, and more. See the full [attributes reference](/laravel/reference/attributes/).
+`#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`, `#[SchemaName]`,
+and the security family `#[Security]`, `#[OptionallyAuthenticated]` and `#[Abilities]`. See the full
+[attributes reference](/laravel/reference/attributes/).
 
 ## Migrating your config
 
