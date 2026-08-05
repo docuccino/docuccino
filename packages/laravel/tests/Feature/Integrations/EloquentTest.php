@@ -6,19 +6,29 @@ use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\Eloquent\AccessorReader;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Blank;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Boutique;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Chronicle;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\CustomCaster;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Invoice;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Ledger;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Merchant;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Post;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
 use Workbench\App\Enums\WidgetStatus;
@@ -58,7 +68,37 @@ function eloquentEngine(): StubTypeEngine
             new PropertyMetadata('meta', ScalarT::string()),
             new PropertyMetadata('status', ScalarT::string()),
         ]),
-    ]);
+        Boutique::class => new ClassMetadata(Boutique::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('sku', ScalarT::string()),
+        ]),
+        Post::class => new ClassMetadata(Post::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('title', ScalarT::string()),
+        ]),
+        Merchant::class => new ClassMetadata(Merchant::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('name', ScalarT::string()),
+        ]),
+        Chronicle::class => new ClassMetadata(Chronicle::class, [
+            new PropertyMetadata('id', ScalarT::int()),
+            new PropertyMetadata('title', ScalarT::string()),
+        ]),
+    ], callables: (static function (): array {
+        // The accessor / custom-caster / relation return types the real engine recovers, scripted here
+        // so the in-process mapper test drives the same shapes (the real recovery half is proven
+        // out-of-process in RealEngineIntegrationsTest). Keyed by CallableRef::symbol().
+        $loc = new SourceLocation('');
+        $returning = static fn (DType $type): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite($type, $loc)]);
+
+        return [
+            Boutique::class.'::getFullLabelAttribute' => $returning(ScalarT::string()),
+            Boutique::class.'::getOptionsAttribute' => $returning(ScalarT::string()),
+            CustomCaster::class.'::get' => $returning(ScalarT::string()),
+            Boutique::class.'::posts' => $returning(new ClassT('Illuminate\\Database\\Eloquent\\Relations\\HasMany', [new ClassT(Post::class)])),
+            Boutique::class.'::owner' => $returning(new ClassT('Illuminate\\Database\\Eloquent\\Relations\\BelongsTo', [new ClassT(Merchant::class)])),
+        ];
+    })());
 }
 
 function modelSchema(ClassT $type): array
@@ -195,4 +235,87 @@ it('keeps the bare-object behaviour but raises an info diagnostic for an undocum
 
     $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
     expect($codes)->toContain('eloquent.no-columns');
+});
+
+it('discovers a model\'s classic and Attribute accessors via real reflection', function (): void {
+    // Real reflection + php-parser over the idiomatic Boutique fixture (not a stub): the classic
+    // getters map to snake-cased attribute names analysed by their own method; the Attribute accessor
+    // is located by the LINE of its get closure (a closure ref, not a named method); framework getters
+    // (getKeyName, …) are excluded.
+    $accessors = (new AccessorReader)->read(Boutique::class);
+
+    $byAttribute = [];
+    foreach ($accessors as $accessor) {
+        $byAttribute[$accessor['attribute']] = $accessor['ref'];
+    }
+
+    expect(array_keys($byAttribute))->toBe(['full_label', 'options', 'nickname'])
+        ->and($byAttribute['full_label']->symbol())->toBe(Boutique::class.'::getFullLabelAttribute')
+        ->and($byAttribute['options']->symbol())->toBe(Boutique::class.'::getOptionsAttribute');
+
+    // The Attribute accessor is a line-located closure (no class/method), so the engine analyses the
+    // get closure's return type — not the method's `Attribute` return type.
+    $nickname = $byAttribute['nickname'];
+    expect($nickname->isClosure())->toBeTrue()
+        ->and($nickname->line)->toBeGreaterThan(0)
+        ->and($nickname->class)->toBeNull()
+        ->and($nickname->method)->toBeNull();
+});
+
+it('types appended accessors, overrides a column\'s cast with its accessor, and maps the As* casts', function (): void {
+    $boutique = modelSchema(new ClassT(Boutique::class))['Boutique'];
+
+    // full_label is an appended accessor typed by getFullLabelAttribute() → string (was permissive {}).
+    expect($boutique['properties']['full_label'])->toBe(['type' => 'string']);
+
+    // options carries an `array` cast, but getOptionsAttribute(): string OVERRIDES it — the accessor
+    // type wins and the cast is skipped (mirroring HasAttributes' mutate-then-cast precedence).
+    expect($boutique['properties']['options'])->toBe(['type' => 'string']);
+
+    // AsCollection → array; AsEnumCollection:Enum → an array of that enum's values (routed through the
+    // Enum integration); the custom CastsAttributes caster → its get() return type (string).
+    expect($boutique['properties']['tags'])->toBe(['type' => 'array'])
+        ->and($boutique['properties']['kinds']['type'])->toBe('array')
+        ->and($boutique['properties']['kinds']['items']['enum'])->toBe(['draft', 'published', 'archived'])
+        ->and($boutique['properties']['secret'])->toBe(['type' => 'string']);
+
+    // The appended accessor stays optional; every cast column is required.
+    expect($boutique['required'])->toBe(['id', 'sku', 'options', 'tags', 'kinds', 'secret', 'posts', 'owner']);
+});
+
+it('adds $with eager-loaded relations as nested model schemas (to-many array, to-one nullable ref)', function (): void {
+    $registry = modelRegistry(new ClassT(Boutique::class));
+    $boutique = $registry->schemas()['Boutique'];
+
+    // posts (HasMany<Post>) → an array of the related model; owner (BelongsTo<Merchant>) → a nullable
+    // reference. Both are eager-loaded, so present on every response (required).
+    expect($boutique['properties']['posts'])->toBe(['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Post']])
+        ->and($boutique['properties']['owner'])->toBe(['anyOf' => [['$ref' => '#/components/schemas/Merchant'], ['type' => 'null']]]);
+
+    // The related models are hoisted as their own components (depth-capped via the shared hoist).
+    expect($registry->schemas())->toHaveKeys(['Post', 'Merchant']);
+});
+
+it('weakens date claims to plain strings and diagnoses a serializeDate() override', function (): void {
+    $registry = modelRegistry(new ClassT(Chronicle::class));
+    $chronicle = $registry->schemas()['Chronicle'];
+
+    // The datetime cast + the framework timestamps drop their `format`: the wire format is now
+    // statically unknowable (published_at keeps only `type: string`, timestamps likewise).
+    expect($chronicle['properties']['published_at'])->toBe(['type' => 'string'])
+        ->and($chronicle['properties']['created_at'])->toBe(['type' => 'string'])
+        ->and($chronicle['properties']['updated_at'])->toBe(['type' => 'string']);
+
+    $codes = array_map(static fn ($d): string => $d->code, $registry->diagnostics());
+    expect($codes)->toContain('eloquent.custom-date-serialization');
+});
+
+it('reflects $with and the serializeDate override in the model facts', function (): void {
+    $boutique = (new EloquentModelReflector)->facts(Boutique::class);
+    expect($boutique['with'])->toBe(['posts', 'owner'])
+        ->and($boutique['overridesSerializeDate'])->toBeFalse();
+
+    $chronicle = (new EloquentModelReflector)->facts(Chronicle::class);
+    expect($chronicle['overridesSerializeDate'])->toBeTrue()
+        ->and($chronicle['with'])->toBe([]);
 });

@@ -415,3 +415,78 @@ it('recovers a real laravel-actions rules() array end-to-end into a RuleSet', fu
     expect($ruleNames('title'))->toBe(['required', 'string', 'max'])
         ->and($ruleNames('body'))->toBe(['required', 'string']);
 })->group('fixture');
+
+// ---------------------------------------------------------------------------------------------------
+// Wave D — Eloquent accessor / custom-cast / $with recovery, proven against the REAL engine.
+// ---------------------------------------------------------------------------------------------------
+
+it('recovers a classic Eloquent accessor return type through the real engine', function (): void {
+    // App\Models\Product::getFullLabelAttribute(): string — the engine recovers the accessor's own
+    // return type, which ModelSchema uses to type the `full_label` append (Wave D item 7, classic).
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Models/Product.php',
+        'App\\Models\\Product',
+        'getFullLabelAttribute',
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->not->toBeNull()
+        ->and($type->canonicalKey())->toBe(ScalarT::string()->canonicalKey());
+})->group('fixture');
+
+it('recovers an Attribute::make(get:) closure return type through the real engine', function (): void {
+    // The `display_name` accessor returns Attribute::make(get: function (): string { … }); the engine
+    // analyses the GET CLOSURE (located by line, as AccessorReader locates it), not the method's
+    // Attribute return type, recovering `string` (Wave D item 7, Attribute form).
+    $file = FixtureRunner::path('app/Models/Product.php');
+    $line = 0;
+    foreach (file($file) ?: [] as $index => $text) {
+        if (str_contains($text, 'get: function')) {
+            $line = $index + 1;
+            break;
+        }
+    }
+    expect($line)->toBeGreaterThan(0);
+
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Models/Product.php',
+        '',
+        '',
+        $line,
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->not->toBeNull()
+        ->and($type->canonicalKey())->toBe(ScalarT::string()->canonicalKey());
+})->group('fixture');
+
+it('recovers a custom CastsAttributes caster get() return type through the real engine', function (): void {
+    // App\Casts\Money::get(): float — the engine recovers the caster's get() return type, which
+    // ModelSchema uses to type the `price` column cast by it (Wave D item 7, custom cast / eloquent #9).
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Casts/Money.php',
+        'App\\Casts\\Money',
+        'get',
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->not->toBeNull()
+        ->and($type->canonicalKey())->toBe(ScalarT::float()->canonicalKey());
+})->group('fixture');
+
+it('resolves a $with relation\'s related model through the real engine', function (): void {
+    // App\Models\Product::seller(): BelongsTo<User, $this> — the engine resolves the relation return
+    // type, whose first type argument is the related model ModelSchema nests under the `seller` key
+    // (Wave D item 8, $with default eager load / eloquent #13).
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Models/Product.php',
+        'App\\Models\\Product',
+        'seller',
+    ));
+
+    $type = $analysis->returns[0]->type ?? null;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and(is_a($type->fqcn, 'Illuminate\\Database\\Eloquent\\Relations\\BelongsTo', true))->toBeTrue()
+        ->and($type->typeArgs[0] ?? null)->toBeInstanceOf(ClassT::class)
+        ->and($type->typeArgs[0]->fqcn)->toBe('App\\Models\\User');
+})->group('fixture');

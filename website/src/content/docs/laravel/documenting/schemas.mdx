@@ -67,8 +67,41 @@ query parameters they accept.
 
 When a model appears in your output, Docuccino documents it from its columns and casts, refined by
 the model's own conventions: `$hidden` and class-level `#[Hidden]` remove properties, `$visible`
-restricts to an allow-list, `$casts` set formats (dates become `date-time`, enum casts route through
-the enum schema), and `$appends` add accessor properties. Non-nullable columns are marked required.
+restricts to an allow-list, and `$casts` (whether the `$casts` property or the `casts()` method) set
+each column's shape. Columns come from the model's `@property` / `@property-read` docblock tags — the
+ide-helper convention — so a model whose attributes are magic still documents fully. Every serialised
+column is marked required (a nullable one as required with a `null`-admitting type).
+
+**Casts.** Dates become `date-time` (a `datetime:Y-m-d` cast becomes `date`), enum casts route through
+the shared [enum schema](#enums), and the built-in `As*` class casts are recognised:
+
+| Cast | Documented as |
+| --- | --- |
+| `AsStringable`, `AsUri`, `AsHtmlString` | `string` |
+| `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | object |
+| `AsCollection`, `AsEncryptedCollection` | array |
+| `AsEnumCollection:Status`, `AsEnumArrayObject:Status` | array of the enum's values |
+
+A custom `CastsAttributes` caster is typed from its `get()` return type — so a `Money` or value-object
+cast documents as whatever `get()` returns, not an opaque string.
+
+**Accessors.** A classic `getFullNameAttribute()` and an `Attribute::make(get: …)` accessor both flow
+their return type into the schema: an accessor for an `$appends` attribute types that appended property,
+and an accessor that shadows a real column overrides its type (the cast is skipped, exactly as Eloquent
+serialises it). An accessor whose return type can't be determined statically leaves the property
+permissive rather than guessing.
+
+**Default eager loads.** Relations listed in `$with` serialise on every response, so each is documented
+as a nested schema under its snake-cased key — a to-many relation as an array of the related model, a
+to-one relation as a nullable reference. Nesting is bounded by the same component-sharing that hoists
+every model to a reusable `#/components/schemas` entry: a relation back to a model already being
+expanded (a cycle, or a self-relation) resolves to a `$ref` rather than recursing forever, so deeply
+related models stay a graph of references, never an infinite inline expansion.
+
+**Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
+every date attribute, which can't be known statically — so its date and datetime columns are documented
+as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. Pin an exact
+format with an annotation if your clients need one.
 
 Polymorphic (`morphTo`) relations become a `oneOf` of the possible models, with a `discriminator`
 when every variant is registered in a morph map — so clients can tell the variants apart reliably.

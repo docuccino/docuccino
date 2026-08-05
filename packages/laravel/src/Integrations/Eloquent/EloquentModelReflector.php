@@ -28,6 +28,8 @@ final class EloquentModelReflector
 
     private const HAS_ULIDS = 'Illuminate\\Database\\Eloquent\\Concerns\\HasUlids';
 
+    private const SERIALIZE_DATE = 'serializeDate';
+
     /** Whether an FQCN is a concrete Eloquent model (the schema mapper's trigger). */
     public static function isModel(string $fqcn): bool
     {
@@ -35,12 +37,12 @@ final class EloquentModelReflector
     }
 
     /**
-     * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, timestamps: bool, softDeletes: bool, keyName: string, keySchema: array<string, mixed>}
+     * @return array{hidden: list<string>, visible: list<string>, appends: list<string>, casts: array<string, string>, classHidden: list<string>, fillable: list<string>, dates: list<string>, with: list<string>, timestamps: bool, softDeletes: bool, overridesSerializeDate: bool, keyName: string, keySchema: array<string, mixed>}
      */
     public function facts(string $fqcn): array
     {
         if (! class_exists($fqcn)) {
-            return ['hidden' => [], 'visible' => [], 'appends' => [], 'casts' => [], 'classHidden' => [], 'fillable' => [], 'dates' => [], 'timestamps' => false, 'softDeletes' => false, 'keyName' => 'id', 'keySchema' => ['type' => 'integer']];
+            return ['hidden' => [], 'visible' => [], 'appends' => [], 'casts' => [], 'classHidden' => [], 'fillable' => [], 'dates' => [], 'with' => [], 'timestamps' => false, 'softDeletes' => false, 'overridesSerializeDate' => false, 'keyName' => 'id', 'keySchema' => ['type' => 'integer']];
         }
 
         $reflection = new ReflectionClass($fqcn);
@@ -66,12 +68,33 @@ final class EloquentModelReflector
             'classHidden' => $classHidden,
             'fillable' => self::stringList($defaults['fillable'] ?? []),
             'dates' => self::stringList($defaults['dates'] ?? []),
+            // Relations named in `$with` are eager-loaded on every query, so they serialise on every
+            // response (nested model schemas keyed by the snake-cased relation name).
+            'with' => self::stringList($defaults['with'] ?? []),
             // Timestamps default on unless the model sets `$timestamps = false`.
             'timestamps' => ($defaults['timestamps'] ?? true) !== false,
             'softDeletes' => in_array(self::SOFT_DELETES, $traits, true),
+            // A model overriding serializeDate() rewrites every date attribute's wire format, making it
+            // statically unknowable — the date/datetime cast claims are weakened to a plain string.
+            'overridesSerializeDate' => self::overridesSerializeDate($reflection),
             'keyName' => is_string($defaults['primaryKey'] ?? null) ? $defaults['primaryKey'] : 'id',
             'keySchema' => self::keySchema($defaults, $traits),
         ];
+    }
+
+    /**
+     * Whether the model declares its own `serializeDate()` — i.e. the method's declaring class is not
+     * one of Illuminate's (the default lives in the HasAttributes concern).
+     *
+     * @param  ReflectionClass<object>  $reflection
+     */
+    private static function overridesSerializeDate(ReflectionClass $reflection): bool
+    {
+        if (! $reflection->hasMethod(self::SERIALIZE_DATE)) {
+            return false;
+        }
+
+        return ! str_starts_with($reflection->getMethod(self::SERIALIZE_DATE)->getDeclaringClass()->getName(), 'Illuminate\\');
     }
 
     /**
