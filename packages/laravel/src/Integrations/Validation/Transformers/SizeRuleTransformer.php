@@ -12,8 +12,14 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 /**
  * Size rules (`min`, `max`, `between:a,b`, `size:n`), applied type-aware (Laravel's own semantics):
  * a numeric field bounds `minimum`/`maximum`, an array bounds `minItems`/`maxItems`, and any other
- * field bounds `minLength`/`maxLength`. Runs after {@see TypeRuleTransformer} so the field type is
- * known; an untyped field defaults to string-length bounds, matching Laravel's default coercion.
+ * field bounds `minLength`/`maxLength`. Runs after {@see TypeRuleTransformer} + {@see FileRuleTransformer}
+ * so the field type is known; an untyped field defaults to string-length bounds, matching Laravel's
+ * default coercion.
+ *
+ * On a FILE field (`format: binary`) these bounds mean KILOBYTES, not string length — emitting
+ * `maxLength: 2048` for `file|max:2048` is actively wrong. OpenAPI has no file-size keyword, so the
+ * honest representation is a human description note; no numeric length keyword is emitted (decision
+ * logged in docs/plan.md).
  */
 final class SizeRuleTransformer implements RuleTransformer
 {
@@ -31,6 +37,12 @@ final class SizeRuleTransformer implements RuleTransformer
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
+        if ($field->get('format') === 'binary') {
+            $this->fileSize($field, $rule);
+
+            return;
+        }
+
         [$minKeyword, $maxKeyword] = $this->keywords($field->type());
 
         match ($rule->name) {
@@ -39,6 +51,29 @@ final class SizeRuleTransformer implements RuleTransformer
             'size' => $this->size($field, $minKeyword, $maxKeyword, $rule->parameter()),
             default => $this->between($field, $minKeyword, $maxKeyword, $rule),
         };
+    }
+
+    /**
+     * A size bound on a file field is in KB. Append a human note rather than emit a wrong length/size
+     * keyword; skip non-numeric parameters.
+     */
+    private function fileSize(ValidationField $field, ValidationRule $rule): void
+    {
+        $note = match ($rule->name) {
+            'min' => is_numeric($rule->parameter()) ? sprintf('Minimum file size: %s KB.', $rule->parameter()) : null,
+            'max' => is_numeric($rule->parameter()) ? sprintf('Maximum file size: %s KB.', $rule->parameter()) : null,
+            'size' => is_numeric($rule->parameter()) ? sprintf('File size must be exactly %s KB.', $rule->parameter()) : null,
+            default => is_numeric($rule->parameter(0)) && is_numeric($rule->parameter(1))
+                ? sprintf('File size must be between %s and %s KB.', $rule->parameter(0), $rule->parameter(1))
+                : null,
+        };
+
+        if ($note === null) {
+            return;
+        }
+
+        $existing = $field->get('description');
+        $field->set('description', is_string($existing) && $existing !== '' ? $existing.' '.$note : $note);
     }
 
     /**

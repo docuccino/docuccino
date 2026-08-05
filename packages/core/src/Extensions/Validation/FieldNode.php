@@ -23,6 +23,14 @@ final class FieldNode
 
     public bool $required = false;
 
+    /**
+     * A `sometimes`-style rule was seen: the field is validated only when present, so it must stay
+     * OUT of the parent's `required` list even if a `required` rule was also given (Laravel's
+     * `sometimes|required` = "required when present" = optional in the request contract). Tracked
+     * separately from {@see $required} so presence resolution is order-independent.
+     */
+    public bool $presenceOptional = false;
+
     public bool $nullable = false;
 
     /**
@@ -61,7 +69,7 @@ final class FieldNode
             $required = [];
             foreach ($this->properties as $name => $node) {
                 $properties[$name] = $node->build($policy);
-                if ($node->required) {
+                if ($node->required && ! $node->presenceOptional) {
                     $required[] = $name;
                 }
             }

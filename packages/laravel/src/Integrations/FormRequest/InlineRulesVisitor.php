@@ -29,6 +29,14 @@ final class InlineRulesVisitor implements TraceVisitor
      */
     private array $fields = [];
 
+    /**
+     * Field names present in the rules array whose value folded to no rules (never recovered) — a
+     * closure / custom Rule object / conditional descriptor. The caller emits a diagnostic for these.
+     *
+     * @var list<string>
+     */
+    private array $unrecoverable = [];
+
     public function __construct(
         private readonly ConstValueToRules $folder = new ConstValueToRules,
     ) {}
@@ -46,6 +54,14 @@ final class InlineRulesVisitor implements TraceVisitor
     public function ruleSet(): RuleSet
     {
         return new RuleSet($this->fields);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function unrecoverableFields(): array
+    {
+        return $this->unrecoverable;
     }
 
     /** The rules-array argument of a `validate()` / `Validator::make()` call, or null. */
@@ -83,14 +99,18 @@ final class InlineRulesVisitor implements TraceVisitor
                 continue;
             }
 
+            $field = $item->key->value;
             $value = $scope->constantValueOf($item->value);
-            if ($value === null) {
+            $rules = $value === null ? [] : $this->folder->fold($value);
+
+            if ($rules !== []) {
+                $this->fields[$field] = $rules;
+
                 continue;
             }
 
-            $rules = $this->folder->fold($value);
-            if ($rules !== []) {
-                $this->fields[$item->key->value] = $rules;
+            if (! in_array($field, $this->unrecoverable, true)) {
+                $this->unrecoverable[] = $field;
             }
         }
     }

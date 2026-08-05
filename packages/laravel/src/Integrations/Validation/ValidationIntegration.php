@@ -8,10 +8,12 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Laravel\Integrations\Validation\Transformers\ChoiceRuleTransformer;
+use Docuccino\Laravel\Integrations\Validation\Transformers\ConditionalRequiredRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\ConfirmedRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\DateFormatRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\ExistsRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\FileRuleTransformer;
+use Docuccino\Laravel\Integrations\Validation\Transformers\NoOpRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\PresenceRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\RegexRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\SizeRuleTransformer;
@@ -48,6 +50,8 @@ final class ValidationIntegration
             new RegexRuleTransformer,
             new SizeRuleTransformer,
             new ConfirmedRuleTransformer,
+            new ConditionalRequiredRuleTransformer,
+            new NoOpRuleTransformer,
         ];
     }
 }

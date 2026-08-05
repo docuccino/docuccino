@@ -10,8 +10,10 @@ use Docuccino\Core\Extensions\Validation\ValidationField;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 
 /**
- * Presence rules: `required` marks the field required; `nullable` allows a null value; `sometimes`
- * (validate-only-if-present) leaves it optional. `present`/`filled` are treated as `required`.
+ * Presence rules: `required`/`present` mark the field required; `nullable` allows a null value;
+ * `sometimes` (validate-only-if-present) forces it optional even alongside `required`. `filled`
+ * ("non-empty WHEN present") does NOT require presence — it is consumed with no presence effect, so
+ * a `filled` field stays optional (Laravel semantics; it was previously mis-mapped to required).
  */
 final class PresenceRuleTransformer implements RuleTransformer
 {
@@ -30,9 +32,11 @@ final class PresenceRuleTransformer implements RuleTransformer
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
         match ($rule->name) {
-            'required', 'present', 'filled' => $field->markRequired(),
+            'required', 'present' => $field->markRequired(),
             'nullable' => $field->markNullable(),
-            default => $field->markOptional(),
+            'sometimes' => $field->markSometimes(),
+            // `filled` is consumed but has no presence/schema effect on its own.
+            default => null,
         };
     }
 }

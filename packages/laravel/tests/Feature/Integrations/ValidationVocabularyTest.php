@@ -143,10 +143,12 @@ it('normalises regex delimiters to a bare ECMA-262 pattern across delimiter styl
 ]);
 
 it('applies every presence-rule entry to the required/nullable contract', function (): void {
-    // required / present / filled all mark the field required.
+    // required / present mark the field required.
     expect(convertFieldRules([['string'], ['required']])->schema['required'] ?? [])->toBe(['f']);
     expect(convertFieldRules([['string'], ['present']])->schema['required'] ?? [])->toBe(['f']);
-    expect(convertFieldRules([['string'], ['filled']])->schema['required'] ?? [])->toBe(['f']);
+
+    // filled ("non-empty WHEN present") does NOT require presence — the field stays optional.
+    expect(convertFieldRules([['string'], ['filled']])->schema)->not->toHaveKey('required');
 
     // sometimes leaves the field optional (no `required` list emitted).
     expect(convertFieldRules([['string'], ['sometimes']])->schema)->not->toHaveKey('required');
@@ -154,6 +156,63 @@ it('applies every presence-rule entry to the required/nullable contract', functi
     // nullable widens the type to allow null (2020-12 default policy → `[t, null]`).
     expect(convertFieldRules([['string'], ['nullable']])->schema['properties']['f']['type'])->toBe(['string', 'null']);
 });
+
+it('resolves sometimes|required as optional regardless of rule order', function (): void {
+    // "required when present" is optional in the request contract, order-independent.
+    expect(convertFieldRules([['string'], ['sometimes'], ['required']])->schema)->not->toHaveKey('required');
+    expect(convertFieldRules([['string'], ['required'], ['sometimes']])->schema)->not->toHaveKey('required');
+    // required|filled is still required (filled has no presence effect).
+    expect(convertFieldRules([['string'], ['required'], ['filled']])->schema['required'] ?? [])->toBe(['f']);
+});
+
+it('documents a file size bound in KB as a description note, never a length keyword', function (): void {
+    $max = convertFieldRules([['file'], ['max', ['2048']]])->schema['properties']['f'];
+    expect($max)->not->toHaveKey('maxLength')
+        ->and($max['format'])->toBe('binary')
+        ->and($max['description'])->toBe('Maximum file size: 2048 KB.');
+
+    $between = convertFieldRules([['file'], ['between', ['10', '2048']]])->schema['properties']['f'];
+    expect($between)->not->toHaveKey('maxLength')
+        ->and($between['description'])->toBe('File size must be between 10 and 2048 KB.');
+
+    $size = convertFieldRules([['file'], ['size', ['500']]])->schema['properties']['f'];
+    expect($size['description'])->toBe('File size must be exactly 500 KB.');
+});
+
+it('switches to multipart on mimes/mimetypes/extensions but adds nothing else', function (): void {
+    foreach (['mimes', 'mimetypes', 'extensions'] as $rule) {
+        $result = convertFieldRules([['file'], [$rule, ['pdf']]]);
+        expect($result->mediaType)->toBe('multipart/form-data');
+    }
+
+    // Bare mimes (no accompanying file rule) still flips multipart and contributes no keyword.
+    $bare = convertFieldRules([['mimes', ['pdf', 'doc']]]);
+    expect($bare->mediaType)->toBe('multipart/form-data')
+        ->and($bare->schema['properties']['f'])->toBe([]);
+});
+
+it('consumes known no-op rules without a diagnostic or schema effect', function (): void {
+    foreach (['bail', 'exclude', 'exclude_if', 'exclude_unless', 'exclude_with', 'exclude_without', 'current_password'] as $rule) {
+        $result = convertFieldRules([['string'], [$rule]]);
+        expect($result->schema['properties']['f'])->toBe(['type' => 'string'])
+            ->and($result->diagnostics)->toBe([]);
+    }
+});
+
+it('describes conditional-required rules and leaves the field optional', function (array $rule, string $note): void {
+    $result = convertFieldRules([['string'], $rule]);
+
+    expect($result->schema)->not->toHaveKey('required')
+        ->and($result->schema['properties']['f']['description'])->toBe($note)
+        ->and($result->diagnostics)->toBe([]);
+})->with([
+    'required_if' => [['required_if', ['status', 'active']], 'Required when status is active.'],
+    'required_unless' => [['required_unless', ['role', 'admin']], 'Required unless role is admin.'],
+    'required_with' => [['required_with', ['first', 'last']], 'Required when any of first, last is present.'],
+    'required_with_all' => [['required_with_all', ['first', 'last']], 'Required when first, last are all present.'],
+    'required_without' => [['required_without', ['first', 'last']], 'Required when any of first, last is absent.'],
+    'required_without_all' => [['required_without_all', ['first', 'last']], 'Required when first, last are all absent.'],
+]);
 
 it('documents the confirmed partner and switches file rules to multipart', function (): void {
     $confirmed = convertFieldRules([['string'], ['required'], ['confirmed']]);

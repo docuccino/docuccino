@@ -58,9 +58,18 @@ final readonly class ValidationField
         $this->node->required = false;
     }
 
+    /**
+     * A `sometimes`-style rule: the field is validated only when present, so it never joins the
+     * parent's `required` list — even alongside a `required` rule — regardless of rule order.
+     */
+    public function markSometimes(): void
+    {
+        $this->node->presenceOptional = true;
+    }
+
     public function isRequired(): bool
     {
-        return $this->node->required;
+        return $this->node->required && ! $this->node->presenceOptional;
     }
 
     public function markNullable(): void

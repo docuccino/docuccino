@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\FormRequest;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -60,6 +62,19 @@ final class ValidationRequestExtension implements OperationExtension
         $context->trace($visitor);
 
         $inline = $visitor->ruleSet();
+
+        foreach ($visitor->unrecoverableFields() as $field) {
+            if ($inline->fields[$field] ?? null) {
+                continue;
+            }
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Info,
+                code: 'validation.rule-unrecoverable',
+                message: sprintf('Inline validation field "%s" has no statically recoverable rules; it is omitted from the request schema.', $field),
+                help: 'Its rules are a closure, a custom Rule object, or a Rule::when()/conditional descriptor. Express the field with recoverable rules (string/array rules, Rule::enum(), Rule::in(), …) so it is documented.',
+                routeSignature: $context->route->signature(),
+            ));
+        }
 
         return $inline->isEmpty() ? null : $inline;
     }
