@@ -1445,6 +1445,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Unix timestamp (seconds, UTC) at which the current rate limit window resets.",
+                "schema": {
+                  "type": "integer"
+                }
               }
             },
             "content": {
@@ -2380,7 +2386,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "c8562caa03cf188e4749c5a22400ed5b4306b8c5ee869dedce4d8470aafd38a4",
-      "contentHash": "25191badf193df3ab0154104e5492252eb93c0739d6324f35b6b33f468f2de97"
+      "contentHash": "c81e788a7e56d725f7c9927e1edf7001e4f64c84ca2014ddf36eef05f565ad8a"
     },
     "generator": {
       "name": "docuccino/laravel",
