@@ -90,17 +90,18 @@ it('reflects the new attribute facts off the real class', function (): void {
         ->and($reflector->validationTokens(AccountData::class, 'status'))->toBe(['in:active,suspended']);
 });
 
-it('excludes route-parameter and hidden properties from the request shape', function (): void {
+it('excludes route-parameter and explicitly request-hidden properties, but not output-#[Hidden] ones', function (): void {
     $reflector = new DataClassReflector;
 
     // A plain body field is sendable.
     expect($reflector->isExcludedFromRequest(RequestExclusionData::class, 'name'))->toBeFalse()
         // #[FromRouteParameter] comes from the binding, not the body.
         ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'id'))->toBeTrue()
-        // Docuccino's #[Hidden] now drops from the request body (as well as output).
+        // #[HiddenFromRequest] explicitly drops the field from the request body.
         ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'internalToken'))->toBeTrue()
-        // spatie's #[Hidden] does likewise.
-        ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'secret'))->toBeTrue();
+        // #[Hidden] hides from OUTPUT only — it stays a sendable request field (the leakage lint's job
+        // is to surface such a field, so #[Hidden] must NOT silently remove it from the request).
+        ->and($reflector->isExcludedFromRequest(RequestExclusionData::class, 'secret'))->toBeFalse();
 });
 
 it('recovers request rules: enum values, defaults, computed exclusion, and nested recursion', function (): void {

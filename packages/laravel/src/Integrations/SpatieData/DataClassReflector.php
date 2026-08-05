@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
 use Docuccino\Attributes\Hidden as DocuccinoHidden;
+use Docuccino\Attributes\HiddenFromRequest;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Support\Fqcn;
@@ -342,10 +343,13 @@ final class DataClassReflector
      *    never a validated request field;
      *  - a spatie `#[FromRouteParameter]` property is populated from the route binding, not the request
      *    body, so it is not a sendable body field;
-     *  - a property-level `#[Hidden]` (Docuccino's or spatie's) is hidden from the documented contract
-     *    in BOTH directions — it already drops from output ({@see isPropertyHidden()}) and here it
-     *    drops from the request body too, matching Scramble's request-hiding semantics for the field
-     *    a client must not (or cannot) send.
+     *  - a Docuccino `#[HiddenFromRequest]` property is deliberately dropped from the request body.
+     *
+     * A property-level `#[Hidden]` is NOT excluded here: `#[Hidden]` hides from OUTPUT only, and a
+     * property hidden from output but still present in the request is a real shape the data-leakage
+     * lint is designed to surface — conflating the two would silently suppress that signal (see the
+     * decision recorded in docs/design/uir-and-extensions.md §7). Request-hiding is the explicit
+     * `#[HiddenFromRequest]` opt-in instead.
      */
     public function isExcludedFromRequest(string $fqcn, string $property): bool
     {
@@ -357,8 +361,7 @@ final class DataClassReflector
         return $reflection->getAttributes(self::COMPUTED) !== []
             || $reflection->getAttributes(self::WITHOUT_VALIDATION) !== []
             || $reflection->getAttributes(self::FROM_ROUTE_PARAMETER) !== []
-            || $reflection->getAttributes(self::SPATIE_HIDDEN) !== []
-            || $reflection->getAttributes(DocuccinoHidden::class) !== [];
+            || $reflection->getAttributes(HiddenFromRequest::class) !== [];
     }
 
     /**

@@ -13,6 +13,7 @@ use Docuccino\Attributes\ExcludeFromDocs;
 use Docuccino\Attributes\Group;
 use Docuccino\Attributes\HeaderParameter;
 use Docuccino\Attributes\Hidden;
+use Docuccino\Attributes\HiddenFromRequest;
 use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Attributes\IgnoreResponse;
 use Docuccino\Attributes\InDocs;
@@ -57,6 +58,7 @@ function attributeCatalogue(): array
     return [
         'Response' => [Response::class, $classFn | Attribute::IS_REPEATABLE],
         'Hidden' => [Hidden::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY],
+        'HiddenFromRequest' => [HiddenFromRequest::class, Attribute::TARGET_PROPERTY],
         'QueryParameter' => [QueryParameter::class, $classFn | Attribute::IS_REPEATABLE],
         'PathParameter' => [PathParameter::class, $classFn | Attribute::IS_REPEATABLE],
         'HeaderParameter' => [HeaderParameter::class, $classFn | Attribute::IS_REPEATABLE],
