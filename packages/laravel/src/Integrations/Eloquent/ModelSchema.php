@@ -91,9 +91,11 @@ final class ModelSchema implements TypeToSchema
                 }
                 $properties[$property->name] = $schema;
 
-                if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
-                    $required[] = $property->name;
-                }
+                // A declared column is always serialised (its key is present), so it is required — even
+                // when nullable. Nullability is a property of the VALUE, carried in the schema's type
+                // union, not of presence. (Fixes the inversion where nullable columns were dropped from
+                // required AND rendered without a null branch.)
+                $required[] = $property->name;
             }
 
             // Floor columns: a column the engine did not surface but the model itself evidences —
@@ -148,7 +150,34 @@ final class ModelSchema implements TypeToSchema
      */
     private function columnSchema(string $column, DType $type, array $casts, SchemaContext $context): array
     {
-        return $this->castSchema($column, $casts, $context) ?? $context->convert($type);
+        $cast = $this->castSchema($column, $casts, $context);
+        if ($cast === null) {
+            return $context->convert($type);
+        }
+
+        // The cast fixes the non-null serialised shape; when the column type admits null, widen it so
+        // the schema is string-or-null (not a non-nullable string on an always-present nullable column).
+        return $type instanceof UnionT && $type->containsNull() ? self::widenNullable($cast) : $cast;
+    }
+
+    /**
+     * Add a `null` branch to a cast fragment's `type` (2020-12 `[t, null]` form), leaving an enum or
+     * already-nullable fragment untouched.
+     *
+     * @param  array<string, mixed>  $schema
+     * @return array<string, mixed>
+     */
+    private static function widenNullable(array $schema): array
+    {
+        $type = $schema['type'] ?? null;
+
+        if (is_string($type) && $type !== 'null') {
+            $schema['type'] = [$type, 'null'];
+        } elseif (is_array($type) && ! in_array('null', $type, true)) {
+            $schema['type'] = [...array_values($type), 'null'];
+        }
+
+        return $schema;
     }
 
     /**

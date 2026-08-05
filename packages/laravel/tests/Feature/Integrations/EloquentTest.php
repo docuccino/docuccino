@@ -68,17 +68,19 @@ it('builds a model schema honouring hidden, appends, and casts', function (): vo
     expect(array_keys($widget['properties']))
         ->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta', 'display_name']);
 
-    // datetime cast → date-time format; boolean cast overrides the engine's string type; array cast.
-    expect($widget['properties']['created_at'])->toBe(['type' => 'string', 'format' => 'date-time'])
+    // datetime cast → date-time format, widened to admit null on the nullable column; boolean cast
+    // overrides the engine's string type; array cast admits a JSON object or array.
+    expect($widget['properties']['created_at'])->toBe(['type' => ['string', 'null'], 'format' => 'date-time'])
         ->and($widget['properties']['is_active'])->toBe(['type' => 'boolean'])
-        ->and($widget['properties']['meta'])->toBe(['type' => 'array']);
+        ->and($widget['properties']['meta'])->toBe(['type' => ['array', 'object']]);
 
     // enum cast routes through the Enum integration (backing values + case descriptions).
     expect($widget['properties']['status']['enum'])->toBe(['draft', 'published', 'archived'])
         ->and($widget['properties']['status'])->toHaveKey('x-enumDescriptions');
 
-    // nullable created_at and the appended accessor are non-required.
-    expect($widget['required'])->toBe(['id', 'name', 'is_active', 'status', 'meta']);
+    // Every declared column is present in the payload, so all are required — a nullable column
+    // (created_at) is required with a null-admitting type. The appended accessor stays optional.
+    expect($widget['required'])->toBe(['id', 'name', 'created_at', 'is_active', 'status', 'meta']);
 });
 
 it('applies a $visible allow-list', function (): void {
