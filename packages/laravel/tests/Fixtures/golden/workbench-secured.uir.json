@@ -2308,7 +2308,10 @@
         "type": "object",
         "properties": {
           "created_at": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "display_name": {},
@@ -2319,7 +2322,10 @@
             "type": "boolean"
           },
           "meta": {
-            "type": "array"
+            "type": [
+              "array",
+              "object"
+            ]
           },
           "name": {
             "type": "string"
@@ -2340,6 +2346,7 @@
         "required": [
           "id",
           "name",
+          "created_at",
           "is_active",
           "status",
           "meta"
@@ -2420,7 +2427,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "fc0eda9f1b4075df4adfa8082e71618b507cc29867a4d4a1b0db61f3518c0963",
-      "contentHash": "720e46c16f2d46fca3f31bad949479523678b0b6d3a7258fd3c66bf392e922cf"
+      "contentHash": "533daf765f733afc14eeafbfd7339720416911fc133002c55e33e757e83ade50"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -939,7 +939,10 @@
         "type": "object",
         "properties": {
           "created_at": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "display_name": {},
@@ -950,7 +953,10 @@
             "type": "boolean"
           },
           "meta": {
-            "type": "array"
+            "type": [
+              "array",
+              "object"
+            ]
           },
           "name": {
             "type": "string"
@@ -971,6 +977,7 @@
         "required": [
           "id",
           "name",
+          "created_at",
           "is_active",
           "status",
           "meta"
