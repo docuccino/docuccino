@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
+use Docuccino\Attributes\QueryParameter;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\ClassRef;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Patch\Contribution;
 
 /**
@@ -28,12 +33,17 @@ use Docuccino\Core\Patch\Contribution;
  * entries degrade to warning diagnostics naming the exact expression — never a silent drop. Writes at
  * the integration layer, so docblocks/attributes still override.
  */
+// Runs before the attribute parameter layer (priority > its default) so a deepObject container this
+// integration emits already exists when `#[QueryParameter('filter[child]')]` patches its property.
+#[ExtensionOrder(priority: Priorities::EARLY)]
 final class QueryBuilderParametersExtension implements OperationExtension
 {
     public function __construct(
         private readonly QueryBuilderConfig $config = new QueryBuilderConfig,
         private readonly QueryBuilderParameters $builder = new QueryBuilderParameters,
         private readonly FilterColumnResolver $columns = new FilterColumnResolver,
+        private readonly ScopeParameterResolver $scopes = new ScopeParameterResolver,
+        private readonly CustomFilterReader $customFilters = new CustomFilterReader,
     ) {}
 
     public function phase(): OperationPhase
@@ -76,27 +86,54 @@ final class QueryBuilderParametersExtension implements OperationExtension
             return;
         }
 
+        $model = $facts->subjectModel;
         $context->recordDependencyFiles(
-            $context->engine->classMetadata(new ClassRef($facts->subjectModel))->dependencyFiles,
+            $context->engine->classMetadata(new ClassRef($model))->dependencyFiles,
         );
 
         $facts->filters = array_map(
-            fn (QbEntry $filter): QbEntry => $filter->kind === 'exact'
-                ? $this->enrichExact($filter, $facts->subjectModel, $context)
-                : $filter,
+            fn (QbEntry $filter): QbEntry => $this->enrichFilter($filter, $model, $context),
             $facts->filters,
         );
     }
 
-    private function enrichExact(QbEntry $filter, string $model, RouteContext $context): QbEntry
+    /**
+     * Type one filter off the subject model per its kind: a resolved column (`exact`/static
+     * `operator`/`callback`) off the model cast; a `scope` off its scope-method value parameter; a
+     * `custom` off its class attribute or `__invoke` body. A partial/bare-string filter over an enum
+     * column is never enum-typed — it earns an info nudge to switch to `exact` instead.
+     */
+    private function enrichFilter(QbEntry $filter, string $model, RouteContext $context): QbEntry
     {
-        $column = $this->columns->resolve($model, $filter->column());
+        if (in_array($filter->kind, ['default', 'partial'], true)) {
+            $this->nudgePartialOnEnum($filter, $model, $context);
 
+            return $filter;
+        }
+
+        return match ($filter->kind) {
+            'exact', 'operator', 'callback' => $filter->typeColumn !== null
+                ? $this->applyColumn($filter, $this->columns->resolve($model, $filter->typeColumn), $context, asArray: $filter->kind === 'exact')
+                : $filter,
+            'scope' => $this->applyColumn($filter, $this->scopes->resolve($model, $filter->name), $context, asArray: false),
+            'custom' => $this->enrichCustom($filter, $model, $context),
+            default => $filter,
+        };
+    }
+
+    /**
+     * Apply a resolved {@see FilterColumn} onto a filter: an enum yields the backing values +
+     * `x-enumDescriptions` (as a `whereIn` array only for the whereIn kinds — `$asArray`), a native
+     * scalar its type, and none leaves the filter a plain string. The enum's declaring file joins the
+     * fragment-cache dependency set.
+     */
+    private function applyColumn(QbEntry $filter, FilterColumn $column, RouteContext $context, bool $asArray): QbEntry
+    {
         if ($column->isEnum() && $column->enum !== null) {
             $context->recordDependencyFiles($column->dependencyFiles);
             $schema = $context->converter()->convert(new EnumT($column->enum, EnumReflection::names($column->enum)));
 
-            return $filter->withColumn($schema, enumTyped: true);
+            return $filter->withColumn($schema, enumTyped: $asArray);
         }
 
         if ($column->isScalar() && $column->scalarSchema !== null) {
@@ -104,6 +141,96 @@ final class QueryBuilderParametersExtension implements OperationExtension
         }
 
         return $filter;
+    }
+
+    /**
+     * Enrich a custom filter: a class-level `#[QueryParameter]` attribute (the explicit override) wins,
+     * otherwise the column its `__invoke` body filters on types the value off the model cast. The
+     * filter class file always joins the dependency set.
+     */
+    private function enrichCustom(QbEntry $filter, string $model, RouteContext $context): QbEntry
+    {
+        if ($filter->filterClass === null) {
+            return $filter;
+        }
+
+        $facts = $this->customFilters->read($filter->filterClass);
+        if ($facts->file !== null) {
+            $context->recordDependencyFiles([$facts->file]);
+        }
+
+        if ($facts->attribute !== null) {
+            return $this->applyCustomAttribute($filter, $facts->attribute, $context);
+        }
+
+        return $facts->column !== null
+            ? $this->applyColumn($filter, $this->columns->resolve($model, $facts->column), $context, asArray: false)
+            : $filter;
+    }
+
+    /**
+     * Fold a custom filter class's `#[QueryParameter]` into the filter's schema/description/default/
+     * example (its `name` is ignored — the parameter name is the `AllowedFilter` name). Applied at the
+     * integration layer, so a route-level attribute still overrides it downstream.
+     */
+    private function applyCustomAttribute(QbEntry $filter, QueryParameter $attribute, RouteContext $context): QbEntry
+    {
+        $dtype = $attribute->type === null ? null : $this->typeStringToDType($attribute->type);
+        $schema = $dtype === null ? null : $context->converter()->convert($dtype);
+
+        $default = is_scalar($attribute->default) ? $attribute->default : null;
+
+        return $filter->withColumn(
+            $schema,
+            enumTyped: false,
+            comment: $attribute->description,
+            hasDefault: $default !== null,
+            default: $default,
+            example: $attribute->example,
+        );
+    }
+
+    /**
+     * Interpret a custom-filter `#[QueryParameter(type: …)]` string as a core {@see DType}: a backed
+     * enum class-string yields the enum schema (backing values + `x-enumDescriptions`), the scalar
+     * names their scalar; an unrecognised string leaves the value untyped (a plain string). A scoped
+     * subset of the attribute-layer type grammar — a custom filter's value is a scalar or an enum.
+     */
+    private function typeStringToDType(string $type): ?DType
+    {
+        if (enum_exists($type) && is_subclass_of($type, \BackedEnum::class)) {
+            return new EnumT($type, EnumReflection::names($type));
+        }
+
+        return match ($type) {
+            'string' => ScalarT::string(),
+            'int', 'integer' => ScalarT::int(),
+            'float', 'number', 'double' => ScalarT::float(),
+            'bool', 'boolean' => ScalarT::bool(),
+            default => null,
+        };
+    }
+
+    /**
+     * Info nudge: a partial (or bare-string) filter over an enum-cast column cannot document its
+     * values (a partial match is a substring, not an enum member) — suggest `AllowedFilter::exact` for
+     * exact matching with documented values. The filter is never enum-typed.
+     */
+    private function nudgePartialOnEnum(QbEntry $filter, string $model, RouteContext $context): void
+    {
+        $column = $this->columns->resolve($model, $filter->column());
+        if (! $column->isEnum()) {
+            return;
+        }
+
+        $context->recordDependencyFiles($column->dependencyFiles);
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'query-builder.partial-on-enum',
+            message: sprintf('Filter "%s" is a partial match over an enum-cast column; its documented values cannot be enumerated.', $filter->name),
+            routeSignature: $context->route->signature(),
+            help: sprintf('Use AllowedFilter::exact(\'%s\') for exact matching so the enum\'s values are documented.', $filter->name),
+        ));
     }
 
     private function reportUnresolved(QueryBuilderFacts $facts, RouteContext $context): void

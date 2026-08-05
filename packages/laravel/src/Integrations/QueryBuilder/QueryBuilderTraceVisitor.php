@@ -59,11 +59,29 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
     private array $terminals;
 
     /**
+     * The internal-column-name argument position per factory — the default is the second argument
+     * (`AllowedFilter::exact('status', 'status_code')`), but `callback`/`custom` carry a
+     * closure/instance there (internal name is third) and `operator` a `FilterOperator` + boolean
+     * before it (internal name is fourth).
+     *
+     * @var array<string, int>
+     */
+    private const INTERNAL_ARG_INDEX = [
+        'callback' => 2,
+        'custom' => 2,
+        'operator' => 3,
+    ];
+
+    /** `FilterOperator` cases that compare for equality — the value is typed off the column like `exact`. */
+    private const STATIC_OPERATORS = ['DYNAMIC', 'EQUAL'];
+
+    /**
      * @param  list<string>  $customTerminals  extra paginating terminals (length-aware), e.g. `paginateList`
      */
     public function __construct(
         public readonly QueryBuilderFacts $facts = new QueryBuilderFacts,
         array $customTerminals = [],
+        private readonly WhereColumnAnalyzer $whereColumns = new WhereColumnAnalyzer,
     ) {
         $terminals = [
             'paginate' => 'length',
@@ -198,6 +216,11 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
             return;
         }
 
+        // Only filters carry column typing / a custom-filter class; sorts/includes/fields never do.
+        [$typeColumn, $filterClass] = $bucket === 'filters'
+            ? $this->filterTyping($entry, $value, $base, $scope)
+            : [null, null];
+
         $entry = new QbEntry(
             $entry->name,
             $entry->kind,
@@ -206,6 +229,8 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
             $default,
             $nullable,
             $itemNode !== null ? $this->leadingComment($itemNode) : null,
+            typeColumn: $typeColumn,
+            filterClass: $filterClass,
         );
 
         if ($bucket === 'defaultSorts') {
@@ -289,23 +314,104 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         }
 
         if ($value->isDescriptor()) {
-            $name = $value->args[0] ?? null;
-            if ($name instanceof ConstValue && $name->isScalar() && is_string($name->scalar)) {
-                return new QbEntry($name->scalar, self::factoryMethod((string) $value->factory), self::internalArg($value));
+            $method = self::factoryMethod((string) $value->factory);
+            $name = $this->descriptorName($value, $method);
+            if ($name !== null) {
+                return new QbEntry($name, $method, self::internalArg($value, $method));
             }
         }
 
         return null;
     }
 
-    /** The second factory argument as an internal column name, when it is a non-empty string. */
-    private static function internalArg(ConstValue $descriptor): ?string
+    /**
+     * The public filter name from a descriptor's first argument, or — for `AllowedFilter::trashed()`
+     * called with no name — its documented default `trashed`.
+     */
+    private function descriptorName(ConstValue $value, string $method): ?string
     {
-        $second = $descriptor->args[1] ?? null;
+        $first = $value->args[0] ?? null;
+        if ($first instanceof ConstValue && $first->isScalar() && is_string($first->scalar) && $first->scalar !== '') {
+            return $first->scalar;
+        }
 
-        return $second instanceof ConstValue && $second->isScalar() && is_string($second->scalar) && $second->scalar !== ''
-            ? $second->scalar
+        return $method === 'trashed' ? 'trashed' : null;
+    }
+
+    /** The factory's internal-column-name argument (position varies by factory), when a non-empty string. */
+    private static function internalArg(ConstValue $descriptor, string $method): ?string
+    {
+        $arg = $descriptor->args[self::INTERNAL_ARG_INDEX[$method] ?? 1] ?? null;
+
+        return $arg instanceof ConstValue && $arg->isScalar() && is_string($arg->scalar) && $arg->scalar !== ''
+            ? $arg->scalar
             : null;
+    }
+
+    /**
+     * The column a filter types its value off (else null), and the custom-filter class FQCN (else
+     * null), per kind: `exact` and a static `operator` type off the internal column; a `callback`
+     * types off the column its closure's `where(…)` targets; a `custom` records its filter class for
+     * the extension to analyse. Everything else stays a plain string.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function filterTyping(QbEntry $entry, ConstValue $value, Node\Expr $base, TypeScope $scope): array
+    {
+        return match ($entry->kind) {
+            'exact' => [$entry->column(), null],
+            'operator' => [$this->operatorIsStatic($value) ? $entry->column() : null, null],
+            'callback' => [$this->callbackColumn($base), null],
+            'custom' => [null, $this->customFilterClass($value, $base, $scope)],
+            default => [null, null],
+        };
+    }
+
+    /** Whether an `AllowedFilter::operator` descriptor's operator argument is an equality comparison. */
+    private function operatorIsStatic(ConstValue $value): bool
+    {
+        $operator = $value->args[1] ?? null;
+
+        return $operator instanceof ConstValue && $operator->isScalar() && is_string($operator->scalar)
+            && in_array($operator->scalar, self::STATIC_OPERATORS, true);
+    }
+
+    /** The column a callback filter's inline closure filters on, via {@see WhereColumnAnalyzer}. */
+    private function callbackColumn(Node\Expr $base): ?string
+    {
+        if (! $base instanceof Node\Expr\StaticCall) {
+            return null;
+        }
+
+        $callback = $base->getArgs()[1]->value ?? null;
+
+        return $callback instanceof Node\Expr\Closure || $callback instanceof Node\Expr\ArrowFunction
+            ? $this->whereColumns->fromClosure($callback)
+            : null;
+    }
+
+    /**
+     * The custom-filter class FQCN: the folded `F::class` second argument, else the instantiated
+     * class's type off a `new F` argument. A variable/dynamic instance is unrecoverable (null).
+     */
+    private function customFilterClass(ConstValue $value, Node\Expr $base, TypeScope $scope): ?string
+    {
+        $second = $value->args[1] ?? null;
+        if ($second instanceof ConstValue && $second->isScalar() && is_string($second->scalar) && $second->scalar !== '') {
+            return $second->scalar;
+        }
+
+        if ($base instanceof Node\Expr\StaticCall) {
+            $argument = $base->getArgs()[1]->value ?? null;
+            if ($argument instanceof Node\Expr\New_) {
+                $type = $scope->typeOf($argument);
+                if ($type instanceof ClassT) {
+                    return $type->fqcn;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function recordTerminal(Node\Expr\MethodCall $node, string $name, TypeScope $scope): void

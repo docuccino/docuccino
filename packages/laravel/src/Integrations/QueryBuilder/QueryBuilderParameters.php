@@ -25,6 +25,9 @@ final class QueryBuilderParameters
 
     private const NULLABLE_NOTE = 'Accepts `null` to filter for absent values.';
 
+    /** The soft-delete filter's fixed value set (Spatie's `FiltersTrashed`). */
+    private const TRASHED_VALUES = ['with', 'only'];
+
     /**
      * Filter kind → human description fragment.
      *
@@ -40,7 +43,7 @@ final class QueryBuilderParameters
         'callback' => 'Custom filter',
         'custom' => 'Custom filter',
         'operator' => 'Operator filter',
-        'trashed' => 'Soft-delete (trashed) filter',
+        'trashed' => 'Soft-delete filter: `with` includes soft-deleted records, `only` returns only soft-deleted; omit to exclude them.',
         'belongsTo' => 'Relationship filter',
     ];
 
@@ -91,6 +94,7 @@ final class QueryBuilderParameters
                 description: $this->filterDescription($filter),
                 style: $style,
                 explode: $explode,
+                example: $filter->example,
             );
         }
 
@@ -98,14 +102,19 @@ final class QueryBuilderParameters
     }
 
     /**
-     * The bracketed-filter schema plus its serialization style: an enum-typed exact filter becomes a
-     * comma-serialised array (so a `whereIn` list validates), a native cast becomes its scalar schema,
-     * and anything else keeps the plain-string shape.
+     * The bracketed-filter schema plus its serialization style: the soft-delete filter is a fixed
+     * `with`/`only` enum, an enum-typed exact filter becomes a comma-serialised array (so a `whereIn`
+     * list validates), a resolved column/scope/custom type becomes its scalar schema, and anything
+     * else keeps the plain-string shape.
      *
      * @return array{0: array<string, mixed>, 1: string|null, 2: bool|null}
      */
     private function filterSchema(QbEntry $filter): array
     {
+        if ($filter->kind === 'trashed') {
+            return [$this->withDefault(self::trashedSchema(), $filter), null, null];
+        }
+
         if ($filter->enumTyped && $filter->columnSchema !== null) {
             $schema = ['type' => 'array', 'items' => $filter->columnSchema];
 
@@ -124,15 +133,31 @@ final class QueryBuilderParameters
      */
     private function filterProperty(QbEntry $filter): array
     {
-        if ($filter->enumTyped && $filter->columnSchema !== null) {
+        if ($filter->kind === 'trashed') {
+            $schema = self::trashedSchema();
+        } elseif ($filter->enumTyped && $filter->columnSchema !== null) {
             $schema = ['type' => 'array', 'items' => $filter->columnSchema];
         } else {
             $schema = $filter->columnSchema ?? ['type' => 'string'];
         }
 
         $schema['description'] = $this->filterDescription($filter);
+        if ($filter->example !== null) {
+            $schema['example'] = $filter->example;
+        }
 
         return $this->withDefault($schema, $filter);
+    }
+
+    /**
+     * The soft-delete filter's fixed schema — a `with`/`only` string enum (never a `whereIn` array;
+     * a single mode is selected).
+     *
+     * @return array<string, mixed>
+     */
+    private static function trashedSchema(): array
+    {
+        return ['type' => 'string', 'enum' => self::TRASHED_VALUES];
     }
 
     /**
