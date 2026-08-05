@@ -302,6 +302,33 @@ it('keys fragments per route so distinct routes never collide', function (): voi
         ->and($forms)->not->toBe($formsOtherExt);
 });
 
+it('invalidates the query-builder fragment when an enum-cast filter file changes (feature 1 dependency)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    // Cold run: the QB route's filter[status] enum schema is derived from Form's WidgetStatus cast,
+    // and the enum's declaring file is recorded as a fragment dependency by the QB integration.
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // Warm run with the enum file untouched: the QB fragment is a byte-identical cache hit.
+    generateDocument()->document;
+    expect($engine->analyzeCount)->toBe(0);
+
+    // Editing the enum's declaring file changes its stored hash → the enum-typed QB fragment rebuilds.
+    $enumFile = (string) (new ReflectionEnum('Workbench\\App\\Enums\\WidgetStatus'))->getFileName();
+    $original = (string) file_get_contents($enumFile);
+    try {
+        file_put_contents($enumFile, $original."\n// fragment-cache dependency probe\n");
+        generateDocument()->document;
+
+        expect($engine->analyzeCount)->toBeGreaterThan(0);
+    } finally {
+        file_put_contents($enumFile, $original);
+    }
+});
+
 it('is a no-op when disabled (default): the engine runs on every build', function (): void {
     // cache.enabled defaults to false; no cache directory is configured.
     $engine = new CountingTypeEngine(WorkbenchEngine::make());
