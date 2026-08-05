@@ -183,6 +183,68 @@ it('attributes a comment directly above an allow-list entry as its description',
         ->and($facts->filters[1]->comment)->toBeNull();
 });
 
+it('marks a static operator filter to type off its internal column, and leaves a non-static one untyped', function (string $chain, ?string $typeColumn): void {
+    $facts = traceQbSnippet($chain)->facts;
+
+    expect($facts->filters[0]->kind)->toBe('operator')
+        ->and($facts->filters[0]->typeColumn)->toBe($typeColumn);
+})->with([
+    'EQUAL is static → typed off the name' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::operator('score', FilterOperator::EQUAL)])", 'score'],
+    'DYNAMIC is static → typed' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::operator('score', FilterOperator::DYNAMIC)])", 'score'],
+    'GREATER_THAN is not static → string' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::operator('score', FilterOperator::GREATER_THAN)])", null],
+]);
+
+it('reads the operator internal-column name from the fourth factory argument', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::operator('score', FilterOperator::EQUAL, 'and', 'score_cents')])"
+    )->facts;
+
+    expect($facts->filters[0]->internal)->toBe('score_cents')
+        ->and($facts->filters[0]->typeColumn)->toBe('score_cents');
+});
+
+it('recovers a callback filter\'s where column from its inline closure, and bails on a complex body', function (string $chain, string $kind, ?string $typeColumn): void {
+    $facts = traceQbSnippet($chain)->facts;
+
+    expect($facts->filters[0]->kind)->toBe($kind)
+        ->and($facts->filters[0]->typeColumn)->toBe($typeColumn);
+})->with([
+    'closure where' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::callback('active', function (\$q, \$value) { \$q->where('is_active', \$value); })])", 'callback', 'is_active'],
+    'arrow where' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::callback('active', fn (\$q, \$value) => \$q->where('is_active', \$value))])", 'callback', 'is_active'],
+    'complex closure bails' => ["QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::callback('active', function (\$q, \$value) { \$q->where('a', \$value); \$q->orWhere('b', \$value); })])", 'callback', null],
+]);
+
+it('recovers a custom filter class FQCN from the F::class form', function (): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::custom('flag', App\\Filters\\FlagFilter::class)])"
+    )->facts;
+
+    expect($facts->filters[0]->kind)->toBe('custom')
+        ->and($facts->filters[0]->filterClass)->toBe('App\\Filters\\FlagFilter');
+});
+
+it('recovers the trashed filter, defaulting its name when called with no argument', function (): void {
+    $facts = traceQbSnippet(
+        'QueryBuilder::for(App\\Models\\User::class)->allowedFilters([AllowedFilter::trashed()])'
+    )->facts;
+
+    expect($facts->filters[0]->name)->toBe('trashed')
+        ->and($facts->filters[0]->kind)->toBe('trashed');
+});
+
+it('attributes a comment directly above a bare-string filter entry as its description', function (): void {
+    $chain = "QueryBuilder::for(App\\Models\\User::class)->allowedFilters([\n"
+        ."    // The applicant's full name.\n"
+        ."    'name',\n"
+        .'])';
+
+    $facts = traceQbSnippet($chain)->facts;
+
+    expect($facts->filters[0]->name)->toBe('name')
+        ->and($facts->filters[0]->kind)->toBe('default')
+        ->and($facts->filters[0]->comment)->toBe("The applicant's full name.");
+});
+
 it('recovers a full chain built through a helper (all allow-lists + pagination together)', function (): void {
     $facts = traceQbSnippet(
         'QueryBuilder::for(User::class)'

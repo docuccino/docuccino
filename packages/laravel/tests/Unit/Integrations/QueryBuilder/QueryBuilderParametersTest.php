@@ -278,3 +278,67 @@ it('follows the package config renamed parameter names', function (): void {
 
     expect($names)->toBe(['f[status]', 's', 'inc', 'flds[articles]']);
 });
+
+// --- Filter-kind breadth (round 2): trashed, scope/callback single-value enum, example ---
+
+it('expresses the trashed filter as a fixed with/only enum in both policies', function (RepresentationPolicy $policy, callable $extract): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('trashed', 'trashed')];
+    });
+
+    $schema = $extract((new QueryBuilderParameters)->build($facts, $policy));
+
+    expect($schema['type'])->toBe('string')
+        ->and($schema['enum'])->toBe(['with', 'only']);
+})->with([
+    'bracketed' => [new RepresentationPolicy, static fn (array $specs): array => specsByName($specs)['filter[trashed]']->schema],
+    'deepObject' => [deepObjectPolicy(), static fn (array $specs): array => $specs[0]->schema['properties']['trashed']],
+]);
+
+it('describes the trashed filter with its with/only/omit contract', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('trashed', 'trashed')];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[trashed]']->description)->toContain('with')
+        ->and($byName['filter[trashed]']->description)->toContain('only')
+        ->and($byName['filter[trashed]']->description)->toContain('omit');
+});
+
+it('models a scope/callback enum column as a SINGLE enum value, not a whereIn array', function (string $kind): void {
+    // Non-exact kinds are single-value comparisons (`where(col, $value)`), so enumTyped is false and
+    // the enum schema is used directly — no `type: array` / `whereIn` note.
+    $facts = factsWith(function (QueryBuilderFacts $f) use ($kind): void {
+        $f->filters = [(new QbEntry('status', $kind))->withColumn(enumColumnSchema(), enumTyped: false)];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[status]']->schema)->toBe(enumColumnSchema())
+        ->and($byName['filter[status]']->style)->toBeNull()
+        ->and($byName['filter[status]']->description)->not->toContain('whereIn');
+})->with(['scope', 'callback', 'operator', 'custom']);
+
+it('threads a custom-filter example onto the parameter in both policies', function (RepresentationPolicy $policy, callable $extract): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [(new QbEntry('score', 'custom'))->withColumn(['type' => 'integer'], enumTyped: false, comment: 'Minimum score.', example: 42)];
+    });
+
+    [$example, $description] = $extract((new QueryBuilderParameters)->build($facts, $policy));
+
+    expect($example)->toBe(42)
+        ->and($description)->toContain('Minimum score.');
+})->with([
+    'bracketed' => [new RepresentationPolicy, static function (array $specs): array {
+        $spec = specsByName($specs)['filter[score]'];
+
+        return [$spec->example, (string) $spec->description];
+    }],
+    'deepObject' => [deepObjectPolicy(), static function (array $specs): array {
+        $property = $specs[0]->schema['properties']['score'];
+
+        return [$property['example'], (string) $property['description']];
+    }],
+]);

@@ -68,6 +68,13 @@ final class StubTraceScope implements TypeScope
             return ConstValue::scalar(ltrim($expr->class->toString(), '\\'));
         }
 
+        // A non-`::class` class constant folds to the member NAME, mirroring the real engine's enum-case
+        // handling (`FilterOperator::EQUAL` → `'EQUAL'`) — the QB operator filter keys on it. The stub's
+        // controlled snippets only reference enum cases here, so this needs no enum_exists probe.
+        if ($expr instanceof Node\Expr\ClassConstFetch && $expr->name instanceof Node\Identifier) {
+            return ConstValue::scalar($expr->name->toString());
+        }
+
         if ($expr instanceof Node\Expr\StaticCall && $expr->class instanceof Node\Name && $expr->name instanceof Node\Identifier) {
             $factory = $expr->class->toString().'::'.$expr->name->toString();
             $args = [];
