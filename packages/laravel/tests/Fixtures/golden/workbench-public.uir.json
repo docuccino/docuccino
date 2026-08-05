@@ -228,21 +228,16 @@
             "authorizationUrl": "http://localhost/oauth/authorize",
             "refreshUrl": "http://localhost/oauth/token",
             "scopes": {
-              "*": "Full access to the API"
+              "read": "read",
+              "write": "write"
             },
             "tokenUrl": "http://localhost/oauth/token"
           },
           "clientCredentials": {
             "refreshUrl": "http://localhost/oauth/token",
             "scopes": {
-              "*": "Full access to the API"
-            },
-            "tokenUrl": "http://localhost/oauth/token"
-          },
-          "password": {
-            "refreshUrl": "http://localhost/oauth/token",
-            "scopes": {
-              "*": "Full access to the API"
+              "read": "read",
+              "write": "write"
             },
             "tokenUrl": "http://localhost/oauth/token"
           }
@@ -260,7 +255,7 @@
     "document": {
       "id": "doc:public",
       "configHash": "325af5cca035e5e24961fa232b988bc292c737eb2ca9c69ffdbd0c408acb7237",
-      "contentHash": "e97493a50f64d9601f0c8235e06e299cf2c13fae34e5924bdac7838b07a6d9b9"
+      "contentHash": "75d3a2305251a3cc3fd71b2ce5321ab5c509b1e527cc26ca02727cc5eeb52b29"
     },
     "generator": {
       "name": "docuccino/laravel",
