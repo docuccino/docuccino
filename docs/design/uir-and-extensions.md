@@ -193,6 +193,11 @@ body matches the document's error style:
 |---|---|---|
 | 401 | auth middleware matches `security.auto_detect_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
 | 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
+
+> **Deliberate gap:** the 422 signal is body-verb only. A validated GET/HEAD applies its rules as query
+> parameters (never a `requestBody`), so a validated read endpoint is NOT documented with an implicit
+> 422 even though it can 422 at runtime. Left as-is to avoid a 422 on every validated read (review B6).
+
 | 404 | the route has ≥1 model-bound path parameter — ONE 404 per operation, not per param | `ModelNotFoundException` |
 | 403 | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` the engine proves is not a literal `return true` | `AuthorizationException` |
 
