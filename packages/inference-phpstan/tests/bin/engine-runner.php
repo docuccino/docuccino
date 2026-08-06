@@ -115,8 +115,12 @@ register_shutdown_function(static function () use ($tmp): void {
 });
 
 $engine = (new PhpStanEngineFactory)->create(
-    new RuntimeConfig($app, $tmp, PHP_VERSION_ID, [$app.'/app']),
-    EngineConfig::forProject($app.'/app'),
+    // PRIME scope (bodies preserved) covers `modules/` too, so a Query class OUTSIDE the descend
+    // scope is not body-stripped when the QB trace follows a `$query->query()` hop into it.
+    new RuntimeConfig($app, $tmp, PHP_VERSION_ID, [$app.'/app', $app.'/modules']),
+    // DESCEND scope stays `app/` (throws/inline-rules bounded); vendorPath lets the QB trace follow a
+    // QueryBuilder-return-type hop into the primed `modules/` Query class, never into vendor.
+    EngineConfig::forProjectWithVendor($app.'/vendor', $app.'/app'),
 );
 
 $ref = new ActionRef($file, $class === '' ? null : $class, $method);
@@ -151,7 +155,7 @@ $result = match ($mode) {
         // app's process where its models/enums are autoloadable: proves an enum-cast column recovers
         // to its emitted enum-filter shape (backing values + case descriptions) end-to-end.
         $visitor = new QueryBuilderTraceVisitor;
-        $engine->trace($ref, $visitor);
+        $report = $engine->trace($ref, $visitor);
         $facts = $visitor->facts;
 
         $resolver = new FilterColumnResolver;
@@ -182,7 +186,14 @@ $result = match ($mode) {
             ];
         }, $facts->filters);
 
-        return ['subjectModel' => $facts->subjectModel, 'filters' => $filters];
+        // visitedBasenames proves cache soundness: a Query class reached only via the return-type
+        // follow-beyond still lands in the trace's dependency files (edit it → fragment invalidates).
+        return [
+            'subjectModel' => $facts->subjectModel,
+            'filters' => $filters,
+            'sorts' => array_map(static fn (QbEntry $s): string => $s->name, $facts->sorts),
+            'visitedBasenames' => array_map('basename', $report->dependencyFiles),
+        ];
     })(),
     'trace-rules' => (static function () use ($engine, $ref): array {
         // The REAL RulesMethodVisitor runs in the engine subprocess: it must recover a rules()

@@ -6,6 +6,8 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\FollowsReturnType;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
@@ -34,7 +36,7 @@ use PhpParser\Node;
  * Every un-foldable allow-list entry is recorded on {@see QueryBuilderFacts::$unresolved} with its
  * source location, so a dynamic chain degrades to a named diagnostic rather than silence.
  */
-final class QueryBuilderTraceVisitor implements TraceVisitor
+final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
 {
     private const QUERY_BUILDER = 'Spatie\\QueryBuilder\\QueryBuilder';
 
@@ -108,6 +110,17 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         // Descend into any app-code call so allow-lists built inside a helper are reached; the engine
         // declines vendor / magic / over-budget descent on its own (Spike B split).
         return $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\StaticCall;
+    }
+
+    /**
+     * Follow a callee whose return type IS a Spatie `QueryBuilder` (subclass) even when it lies
+     * outside the configured project paths — the modular `$query->query(): InvoiceQueryBuilder` hop
+     * where the whole `allowedFilters(...)` chain lives. The engine still never descends into vendor,
+     * so this reaches the app's own Query class without following the package's builder methods.
+     */
+    public function followsReturnType(DType $returnType): bool
+    {
+        return $returnType instanceof ClassT && is_a($returnType->fqcn, self::QUERY_BUILDER, true);
     }
 
     private function visitMethodCall(Node\Expr\MethodCall $node, string $name, TypeScope $scope): void

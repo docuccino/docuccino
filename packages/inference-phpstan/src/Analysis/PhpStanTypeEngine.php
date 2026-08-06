@@ -379,6 +379,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $visitor,
             $this->config->traceDepth,
             $this->config->fileBudget,
+            $this->config->vendorPath,
         );
 
         try {

@@ -169,3 +169,36 @@ it('types a scope filter off its enum value parameter and a callback filter off 
         ->and($byName['active']['columnKind'])->toBe('scalar')
         ->and($byName['active']['scalarSchema'])->toBe(['type' => 'boolean']);
 })->group('fixture');
+
+it('follows a `$query->query()` hop into a Query class OUTSIDE the project paths (modular layout)', function (): void {
+    // InvoiceController + InvoiceIndexQuery live under `modules/` (namespace Modules\Billing), which is
+    // NOT in the engine's project paths (only `app/` is) — exactly the modular layout that hid Eos's
+    // filters. The controller body is `$this->query->query()->paginateList(...)`; the allow-lists live
+    // inside InvoiceIndexQuery::query(): ListQueryBuilder. Recovering them proves the engine follows
+    // the QueryBuilder-return-type hop beyond the project paths (never into vendor).
+    $harvest = FixtureRunner::traceQbEnrich(
+        'modules/Billing/InvoiceController.php',
+        'Modules\\Billing\\InvoiceController',
+        'index',
+    );
+
+    // Subject model + filters recovered THROUGH the out-of-project hop.
+    expect($harvest['subjectModel'])->toBe('App\\Models\\Listing')
+        ->and($harvest['sorts'])->toBe(['title']);
+
+    $byName = [];
+    foreach ($harvest['filters'] as $filter) {
+        $byName[$filter['name']] = $filter;
+    }
+
+    // Enum typing + the leading comment recover through the hop, same as an in-project query class.
+    expect($byName)->toHaveKeys(['status', 'title'])
+        ->and($byName['status']['kind'])->toBe('exact')
+        ->and($byName['status']['columnKind'])->toBe('enum')
+        ->and($byName['status']['values'])->toBe(['open', 'closed', 'draft'])
+        ->and($byName['status']['comment'])->toBe('The listing\'s publication status.');
+
+    // Cache soundness: the out-of-project Query class file lands in the trace's dependency set, so
+    // editing it invalidates the warm fragment (the follow-beyond descent records it like any file).
+    expect($harvest['visitedBasenames'])->toContain('InvoiceIndexQuery.php');
+})->group('fixture');

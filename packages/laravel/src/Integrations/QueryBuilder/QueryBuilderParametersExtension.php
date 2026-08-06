@@ -80,6 +80,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         }
 
         $this->reportUnresolved($facts, $context);
+        $this->reportNoAllowLists($facts, $context);
         $this->reportDefaultConfig($context);
         $this->documentStrictModeError($operation, $context);
     }
@@ -277,6 +278,30 @@ final class QueryBuilderParametersExtension implements OperationExtension
                 help: 'Use a literal value or a factory call (e.g. AllowedFilter::exact(\'status\')) so it can be recovered.',
             ));
         }
+    }
+
+    /**
+     * Silence kill: a paginating QB terminal was reached but NO allow-list entry was recovered (and
+     * none even attempted-but-unresolved) — typically the `allowedFilters()`/`allowedSorts()` chain
+     * lives behind an indirection the trace could not follow. Emit an info naming the action so the
+     * loss is never silent. Skipped whenever any entry (recovered OR unresolved) was seen.
+     */
+    private function reportNoAllowLists(QueryBuilderFacts $facts, RouteContext $context): void
+    {
+        if (! $facts->paginates
+            || $facts->filters !== [] || $facts->sorts !== [] || $facts->includes !== [] || $facts->fields !== []
+            || $facts->unresolved !== []
+        ) {
+            return;
+        }
+
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'query-builder.no-allowlists-recovered',
+            message: sprintf('A paginating Query Builder terminal was reached in %s but no allowed filters/sorts/includes were recovered.', $context->actionRef->symbol()),
+            routeSignature: $context->route->signature(),
+            help: 'If this endpoint offers filters/sorts, declare them via allowedFilters()/allowedSorts() where the trace can reach them (a method returning your QueryBuilder subclass is followed); otherwise this is expected.',
+        ));
     }
 
     private function reportDefaultConfig(RouteContext $context): void

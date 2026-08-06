@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Trace;
 
+use Docuccino\Core\Inference\FollowsReturnType;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
@@ -21,7 +22,10 @@ use PHPStan\Analyser\Scope;
  * for determinism — descent ordering.
  *
  * `enterNode` returning `true` is a *request* the Tracer may decline: it only
- * descends into project-code callees within depth and file budget.
+ * descends into project-code callees within depth and file budget. A visitor
+ * implementing {@see FollowsReturnType} widens this to non-vendor app callees
+ * OUTSIDE the project paths whose RETURN TYPE it follows (the modular
+ * `$query->query()` Query-Builder hop) — never into vendor.
  *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
@@ -33,6 +37,9 @@ final class Tracer
     /** @var array<string, true> every file the walk located/analysed */
     private array $visitedFiles = [];
 
+    /** The normalised app vendor directory (follow-beyond never descends into it), or null when unset. */
+    private readonly ?string $vendorPrefix;
+
     public function __construct(
         private readonly RuntimeAdapter $adapter,
         private readonly TypeTranslator $translator,
@@ -41,7 +48,10 @@ final class Tracer
         private readonly TraceVisitor $visitor,
         private readonly int $maxDepth = 4,
         private readonly int $fileBudget = 40,
-    ) {}
+        ?string $vendorPath = null,
+    ) {
+        $this->vendorPrefix = $vendorPath === null ? null : rtrim($adapter->normalize($vendorPath), '/');
+    }
 
     public function run(string $class, string $method, string $file, int $depth = 0): void
     {
@@ -79,8 +89,13 @@ final class Tracer
             }
 
             $callee = $this->calleeResolver->resolve($node, $scope);
-            if ($callee === null || ! $this->projectFilter->isProjectFile($callee->file)) {
-                return; // vendor / magic / unresolvable — the engine declines
+            if ($callee === null) {
+                return; // magic / unresolvable / PHP-internal — the engine declines
+            }
+            if (! $this->projectFilter->isProjectFile($callee->file)
+                && ! $this->shouldFollowBeyondProject($node, $callee, $typeScope)
+            ) {
+                return; // vendor, or outside project paths with no return-type follow — declined
             }
 
             $pos = $node->getStartFilePos();
@@ -100,6 +115,36 @@ final class Tracer
             $seen[$ck] = true;
             $this->run($target['callee']->class, $target['callee']->method, $target['callee']->file, $depth + 1);
         }
+    }
+
+    /**
+     * Whether to descend into a callee that lies OUTSIDE the configured project paths: only when the
+     * visitor follows the callee's resolved return type (a Query-Builder visitor following a Spatie
+     * `QueryBuilder` subclass into a modular Queries class) AND the callee is not vendor code. Bounded
+     * like every descent by depth/file budget; vendor is never followed.
+     */
+    private function shouldFollowBeyondProject(Node\Expr $node, Callee $callee, TypeScopeImpl $typeScope): bool
+    {
+        if (! $this->visitor instanceof FollowsReturnType || $this->isVendorFile($callee->file)) {
+            return false;
+        }
+
+        return $this->visitor->followsReturnType($typeScope->typeOf($node));
+    }
+
+    /**
+     * Whether a file is under the app's vendor tree. With no vendor boundary configured, everything
+     * outside the project paths is treated as vendor (follow-beyond stays off — the safe default).
+     */
+    private function isVendorFile(string $file): bool
+    {
+        if ($this->vendorPrefix === null) {
+            return true;
+        }
+
+        $normalised = $this->adapter->normalize($file);
+
+        return $normalised === $this->vendorPrefix || str_starts_with($normalised, $this->vendorPrefix.'/');
     }
 
     /**

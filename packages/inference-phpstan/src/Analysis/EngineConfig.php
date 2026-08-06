@@ -16,6 +16,10 @@ final readonly class EngineConfig
 {
     /**
      * @param  list<string>  $projectPaths  directories treated as descendable project code
+     * @param  string|null  $vendorPath  the app's vendor directory; a trace visitor that follows a
+     *                                   callee's return type may descend into non-vendor app code
+     *                                   OUTSIDE $projectPaths (a modular Queries class) but never into
+     *                                   this tree. Null disables that widening.
      */
     public function __construct(
         public array $projectPaths,
@@ -23,10 +27,16 @@ final readonly class EngineConfig
         public int $traceDepth = 4,
         public int $throwDepth = 3,
         public int $fileBudget = 40,
+        public ?string $vendorPath = null,
     ) {}
 
     public static function forProject(string ...$projectPaths): self
     {
         return new self(array_values($projectPaths), KnownThrowers::default());
+    }
+
+    public static function forProjectWithVendor(string $vendorPath, string ...$projectPaths): self
+    {
+        return new self(array_values($projectPaths), KnownThrowers::default(), vendorPath: $vendorPath);
     }
 }
