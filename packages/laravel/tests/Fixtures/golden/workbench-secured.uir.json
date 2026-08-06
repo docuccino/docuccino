@@ -141,7 +141,12 @@
                   "layer": "integration",
                   "fields": [
                     "$ref"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                  }
                 }
               ]
             },
@@ -714,7 +719,12 @@
                   "layer": "integration",
                   "fields": [
                     "description"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 92,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::checkout"
+                  }
                 }
               ]
             },
@@ -731,7 +741,12 @@
                           "properties",
                           "required",
                           "type"
-                        ]
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 92,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::checkout"
+                        }
                       }
                     ]
                   },
@@ -1037,7 +1052,12 @@
                   "layer": "integration",
                   "fields": [
                     "$ref"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                  }
                 }
               ]
             },
@@ -3354,7 +3374,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "5296ada4bd1632bf0b22bd17ac1c8afb9a1e0be0944196eafc11ed3d4d766628",
-      "contentHash": "6fa55e7f6b7011fa747ef9d10a510f7a0f9a3afbb88813e1dc772ff44b9f11ff"
+      "contentHash": "ab9f861b6887837266a3d4ba24897e8bba2362360833528b025351ac45b5cb41"
     },
     "generator": {
       "name": "docuccino/laravel",

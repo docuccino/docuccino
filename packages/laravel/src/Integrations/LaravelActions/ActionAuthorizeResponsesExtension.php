@@ -61,7 +61,10 @@ final class ActionAuthorizeResponsesExtension implements OperationExtension
                 continue;
             }
 
-            $this->applier->apply($operation, $draft, $mapper->producer());
+            // The synthetic AuthorizationException has no recovered throw site; the real one is the
+            // action's authorize() gate, so anchor the 403 to the action (arch review PIN 4 — carry a
+            // source rather than none).
+            $this->applier->apply($operation, $draft, $mapper->producer(), $context->actionSource());
 
             return;
         }

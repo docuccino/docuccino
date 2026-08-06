@@ -132,7 +132,12 @@
                   "layer": "integration",
                   "fields": [
                     "description"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                  }
                 }
               ]
             },
@@ -149,7 +154,12 @@
                           "properties",
                           "required",
                           "type"
-                        ]
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FormController.php",
+                          "line": 32,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                        }
                       }
                     ]
                   },
@@ -777,7 +787,12 @@
                   "layer": "integration",
                   "fields": [
                     "description"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 92,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::checkout"
+                  }
                 }
               ]
             },
@@ -794,7 +809,12 @@
                           "properties",
                           "required",
                           "type"
-                        ]
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 92,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::checkout"
+                        }
                       }
                     ]
                   },
@@ -1101,7 +1121,12 @@
                   "layer": "integration",
                   "fields": [
                     "description"
-                  ]
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/FormController.php",
+                    "line": 32,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                  }
                 }
               ]
             },
@@ -1118,7 +1143,12 @@
                           "properties",
                           "required",
                           "type"
-                        ]
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/FormController.php",
+                          "line": 32,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\FormController::show"
+                        }
                       }
                     ]
                   },
@@ -3473,7 +3503,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "28798ac55915f102c4ffe141fd144692c8dcd2bc49dd333923632f3860768d32",
-      "contentHash": "228614064949955c571597f7bb5894949075192e22ae179868c846a3931afa08"
+      "contentHash": "c1f29fc546501e2ea2072a3295cc32b19d98d940cfce9d4cf6d344e8002f4600"
     },
     "generator": {
       "name": "docuccino/laravel",

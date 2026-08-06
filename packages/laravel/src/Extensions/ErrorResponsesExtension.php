@@ -11,6 +11,8 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
 use Docuccino\Core\Inference\ThrowDisposition;
+use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Provenance\Source;
 
 /**
  * Turns the action's signalled exceptions into error responses (design §Errors) by running each
@@ -50,9 +52,25 @@ final class ErrorResponsesExtension implements OperationExtension
                     continue;
                 }
 
-                $this->applier->apply($operation, $draft, $mapper->producer());
+                $this->applier->apply($operation, $draft, $mapper->producer(), $this->throwSource($context, $throw));
                 break;
             }
         }
+    }
+
+    /**
+     * The provenance source for an explicit throw: its recovered throw site (the first call-chain
+     * frame), falling back to the action itself when the engine reported no usable location — so an
+     * explicit-throw error response carries a source exactly as a synthesized one does (arch review
+     * PIN 4), rather than a sourceless contribution.
+     */
+    private function throwSource(RouteContext $context, ThrownException $throw): ?Source
+    {
+        $frame = $throw->callChain[0] ?? null;
+        if ($frame !== null && $frame->location->file !== '') {
+            return $context->sourceAt($frame->location, $frame->symbol === '' ? null : $frame->symbol);
+        }
+
+        return $context->actionSource();
     }
 }
