@@ -35,7 +35,12 @@ final class Validator
 
     public static function defaultSchemaPath(): string
     {
-        return dirname(__DIR__, 4).'/spec/uir/1.0/schema.json';
+        // Resolve PACKAGE-relative (packages/core/src/Validation → packages/core), never
+        // monorepo-relative: the schema ships inside the package's resources/ so it resolves
+        // identically from a vendor/docuccino/core install. The canonical authoring copy at the
+        // monorepo root (spec/uir/1.0/schema.json) is synced here by `composer sync-schema`; a
+        // byte-equality drift guard keeps the two identical (see SchemaShippingTest).
+        return dirname(__DIR__, 2).'/resources/spec/uir/1.0/schema.json';
     }
 
     /**

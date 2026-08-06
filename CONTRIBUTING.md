@@ -33,7 +33,12 @@ This is a monorepo, subtree-split into individual packages on release:
   core's `TypeEngine`.
 - `packages/laravel` — `docuccino/laravel`, the Laravel adapter (provider, config, commands, viewer,
   integrations).
-- `spec/` — the versioned UIR JSON Schemas (published to spec.docuccino.app).
+- `spec/` — the versioned UIR JSON Schemas (published to spec.docuccino.app). This is the
+  **canonical authoring copy** of each schema. `packages/core` ships its own package-relative copy
+  under `packages/core/resources/spec/` (so `Validator` resolves the schema from a vendor install,
+  not from a monorepo-relative path). Edit the canonical copy under `spec/`, then run
+  `composer sync-schema` to refresh the package copy; a byte-equality drift guard (`SchemaShippingTest`)
+  fails CI if they diverge.
 - `website/` — the Astro + Starlight docs site (a Node project, not a Composer package).
 
 ## Local development
