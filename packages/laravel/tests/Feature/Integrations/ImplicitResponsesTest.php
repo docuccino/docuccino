@@ -100,14 +100,21 @@ it('adds no 401 to a route without auth middleware', function (): void {
     expect(implicitStatuses(runImplicit($context)))->toBe([]);
 });
 
-it('synthesizes a 422 when a validated request body was recovered', function (): void {
+it('synthesizes a 422 when a validated request body was recovered at the integration layer', function (string $producer): void {
     $context = implicitContext(new RouteDescriptor(['POST'], 'api/things'));
     $operation = new OperationDraft;
-    // Stand in for a request extension having recovered a body (its integration producer owns it).
-    $operation->set('requestBody', ['content' => ['application/json' => ['schema' => ['type' => 'object']]]], Contribution::integration('spatie-data'));
+    // Stand in for a request-recovery integration having recovered a body (its integration producer
+    // owns it). Layer-based, not a closed producer list: form-request/spatie-data/laravel-actions all
+    // qualify, and so does a third-party recoverer writing at the integration layer.
+    $operation->set('requestBody', ['content' => ['application/json' => ['schema' => ['type' => 'object']]]], Contribution::integration($producer));
 
     expect(implicitStatuses(runImplicit($context, $operation)))->toContain('422');
-});
+})->with([
+    'form-request' => ['form-request'],
+    'spatie-data' => ['spatie-data'],
+    'laravel-actions' => ['laravel-actions'],
+    'third-party recoverer' => ['acme-request-recovery'],
+]);
 
 it('adds no 422 when the request body came from an attribute, not validation recovery', function (): void {
     $context = implicitContext(new RouteDescriptor(['POST'], 'api/things'));

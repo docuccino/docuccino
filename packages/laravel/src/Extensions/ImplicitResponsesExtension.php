@@ -56,13 +56,6 @@ final class ImplicitResponsesExtension implements OperationExtension
 
     private const AUTHORIZATION = 'Illuminate\\Auth\\Access\\AuthorizationException';
 
-    /** requestBody producers that mean "a validated request was recovered". */
-    private const VALIDATION_PRODUCERS = [
-        'integration:form-request',
-        'integration:spatie-data',
-        'integration:laravel-actions',
-    ];
-
     public function __construct(
         private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
     ) {}
@@ -149,12 +142,18 @@ final class ImplicitResponsesExtension implements OperationExtension
         return $ignored;
     }
 
-    /** True when a request extension recovered a validated body (its producer owns `requestBody`). */
+    /**
+     * True when a request extension recovered a validated body. Layer-based, not a closed producer
+     * list: any winning `requestBody` contribution at the INTEGRATION layer (its provenance producer
+     * is `integration:*`, the Contribution::integration() marker) means a request-recovery
+     * integration owns the body — so third-party request recoverers earn the implicit 422 too, while
+     * an attribute-layer `#[BodyParameter]` body (producer `attribute`) correctly does not.
+     */
     private function hasValidatedRequest(OperationDraft $operation): bool
     {
         $producer = $operation->producerFor('requestBody');
 
-        return $producer !== null && in_array($producer, self::VALIDATION_PRODUCERS, true);
+        return $producer !== null && str_starts_with($producer, 'integration:');
     }
 
     /**
