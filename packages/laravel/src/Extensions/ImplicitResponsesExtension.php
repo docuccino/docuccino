@@ -187,6 +187,14 @@ final class ImplicitResponsesExtension implements OperationExtension
         }
 
         $reflection = new ReflectionClass($formRequest);
+
+        // Record the FormRequest file BEFORE the method-presence bail (design §10 cache soundness):
+        // adding an authorize() gate to a warm-cached route's FormRequest must invalidate its fragment.
+        $formRequestFile = $reflection->getFileName();
+        if ($formRequestFile !== false) {
+            $context->recordDependencyFiles([$formRequestFile]);
+        }
+
         if (! $reflection->hasMethod('authorize')) {
             return false;
         }

@@ -48,6 +48,13 @@ final class PathParametersExtension implements OperationExtension
 
             $parameter->setRequired(! in_array($name, $context->optionalPathParameters, true), $contribution);
 
+            if ($isBound) {
+                // Record the bound model's file (design §10 cache soundness): switching a model to
+                // HasUuids changes the route-key schema, so a warm DELETE /users/{user} fragment must
+                // invalidate. Plain reflection keeps this framework-neutral (no integration import).
+                $this->recordModelFile($context, $context->routeBindings[$name]);
+            }
+
             $keySchema = $isBound ? $context->routeBindingKeySchema($context->routeBindings[$name]) : null;
             if ($keySchema !== null) {
                 foreach ($keySchema as $keyword => $value) {
@@ -61,6 +68,19 @@ final class PathParametersExtension implements OperationExtension
                 $parameter->setDescription(self::TRASHED_NOTE, $contribution);
                 $parameter->setDocuccinoFact('routeBinding', ['withTrashed' => true]);
             }
+        }
+    }
+
+    /** Record the bound model class's file as a fragment-cache dependency, if it can be reflected. */
+    private function recordModelFile(RouteContext $context, string $modelFqcn): void
+    {
+        if (! class_exists($modelFqcn)) {
+            return;
+        }
+
+        $file = (new \ReflectionClass($modelFqcn))->getFileName();
+        if ($file !== false) {
+            $context->recordDependencyFiles([$file]);
         }
     }
 }

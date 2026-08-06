@@ -42,6 +42,15 @@ final class RulesFromClass
         }
 
         $reflection = new ReflectionClass($class);
+
+        // Record the FormRequest file BEFORE the method-presence bail (design §10 cache soundness):
+        // adding a `rules()` method to a warm-cached route's FormRequest must invalidate its fragment,
+        // which the analysis-driven dependency below can only record once the method already exists.
+        $file = $reflection->getFileName();
+        if ($file !== false) {
+            $context->recordDependencyFiles([$file]);
+        }
+
         if (! $reflection->hasMethod('rules')) {
             return null;
         }
