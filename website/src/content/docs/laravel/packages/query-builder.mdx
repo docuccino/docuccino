@@ -168,6 +168,33 @@ uses the comma `whereIn` array. Anything Docuccino can't reduce to one column or
 non-equality operator (`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path
 (`customer.name`) — stays a plain string. It never guesses.
 
+### Filter factories (a `ListFilters`-style helper)
+
+If you funnel the recurring filter idioms through a small factory that returns an `AllowedFilter`,
+Docuccino types the filter from the **call site** — no descent into the factory body needed:
+
+```php
+final class ListFilters
+{
+    public static function enum(string $key, string $enumClass, ?string $column = null): AllowedFilter { /* … */ }
+    public static function boolean(string $key, ?string $column = null): AllowedFilter { /* … */ }
+}
+
+// In your query:
+->allowedFilters([
+    ListFilters::enum('status', OrderStatus::class), // → the enum's values + x-enumDescriptions
+    ListFilters::boolean('active'),                  // → the `active` column's boolean cast
+])
+```
+
+Any argument that is a **backed-enum class-string** names the filter's value domain, so it's documented
+with that enum's backing values and `#[CaseDescription]` prose directly (a single-value comparison, so
+a scalar enum — not the `whereIn` array). With no enum argument, the filter's key is taken as the
+column and typed off the model cast (so a `boolean`/`uuid` idiom types correctly); a name that isn't a
+column — a multi-column search — stays a plain string. Spatie's own `AllowedFilter::*` factories are
+unaffected. Keep a single unconditional `return AllowedFilter::…()` in each factory method so it stays
+statically resolvable.
+
 ### Partial filters over an enum column
 
 A `partial` filter (and a bare-string filter, which is partial by default) matches a **substring**, not

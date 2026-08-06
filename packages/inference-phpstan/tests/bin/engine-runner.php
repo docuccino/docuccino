@@ -45,6 +45,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
 use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\InlineRulesVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
+use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumn;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
@@ -165,15 +166,25 @@ $result = match ($mode) {
             // Mirror the extension's per-kind typing: a resolved column (exact/callback) off the model
             // cast, a scope value parameter off its scope method — proving both against the real engine.
             $column = match (true) {
+                // A project-factory filter carrying a backed-enum class-string types off it DIRECTLY
+                // (no model needed) — the ListFilters-style recovery.
+                $filter->factoryEnum !== null => FilterColumn::enum(
+                    $filter->factoryEnum,
+                    ($f = EnumReflection::file($filter->factoryEnum)) !== null ? [$f] : [],
+                ),
                 $model === null => null,
                 $filter->kind === 'scope' => $scopes->resolve($model, $filter->name),
                 in_array($filter->kind, ['exact', 'callback'], true) && $filter->typeColumn !== null => $resolver->resolve($model, $filter->typeColumn),
+                // A non-enum project factory (boolean/uuid) types off its key column via the model cast.
+                $filter->factoryClass !== null && $filter->typeColumn !== null => $resolver->resolve($model, $filter->typeColumn),
                 default => null,
             };
 
             return [
                 'name' => $filter->name,
                 'kind' => $filter->kind,
+                'factoryEnum' => $filter->factoryEnum,
+                'factoryClass' => $filter->factoryClass,
                 // The recovered leading comment (real-engine proof that PHPStan's parser attributes
                 // it to the array item the same way ParserFactory does → an override description).
                 'comment' => $filter->comment,

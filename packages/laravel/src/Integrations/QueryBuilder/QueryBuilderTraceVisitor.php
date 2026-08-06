@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
+use BackedEnum;
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
@@ -39,6 +40,8 @@ use PhpParser\Node;
 final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
 {
     private const QUERY_BUILDER = 'Spatie\\QueryBuilder\\QueryBuilder';
+
+    private const ALLOWED_FILTER = 'Spatie\\QueryBuilder\\AllowedFilter';
 
     /**
      * Config method → the allow-list it fills and the default kind for a bare-string entry.
@@ -227,9 +230,9 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
         }
 
         // Only filters carry column typing / a custom-filter class; sorts/includes/fields never do.
-        [$typeColumn, $filterClass] = $bucket === 'filters'
+        [$typeColumn, $filterClass, $factoryEnum, $factoryClass] = $bucket === 'filters'
             ? $this->filterTyping($entry, $value, $base, $scope)
-            : [null, null];
+            : [null, null, null, null];
 
         $entry = new QbEntry(
             $entry->name,
@@ -241,6 +244,8 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
             $itemNode !== null ? $this->leadingComment($itemNode) : null,
             typeColumn: $typeColumn,
             filterClass: $filterClass,
+            factoryEnum: $factoryEnum,
+            factoryClass: $factoryClass,
         );
 
         if ($bucket === 'defaultSorts') {
@@ -364,17 +369,65 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
      * types off the column its closure's `where(…)` targets; a `custom` records its filter class for
      * the extension to analyse. Everything else stays a plain string.
      *
-     * @return array{0: string|null, 1: string|null}
+     * @return array{0: string|null, 1: string|null, 2: string|null, 3: string|null} typeColumn, filterClass, factoryEnum, factoryClass
      */
     private function filterTyping(QbEntry $entry, ConstValue $value, Node\Expr $base, TypeScope $scope): array
     {
         return match ($entry->kind) {
-            'exact' => [$entry->column(), null],
-            'operator' => [$this->operatorIsStatic($value) ? $entry->column() : null, null],
-            'callback' => [$this->callbackColumn($base), null],
-            'custom' => [null, $this->customFilterClass($value, $base, $scope)],
-            default => [null, null],
+            'exact' => [$entry->column(), null, null, null],
+            'operator' => [$this->operatorIsStatic($value) ? $entry->column() : null, null, null, null],
+            'callback' => [$this->callbackColumn($base), null, null, null],
+            'custom' => [null, $this->customFilterClass($value, $base, $scope), null, null],
+            default => $this->factoryTyping($value, $entry),
         };
+    }
+
+    /**
+     * A filter produced by a PROJECT factory — a helper method returning a Spatie `AllowedFilter`
+     * (e.g. a `ListFilters::enum(...)` idiom), as opposed to a Spatie `AllowedFilter::*` factory. Its
+     * typing comes entirely from the CALL-SITE arguments already folded into the descriptor — no descent
+     * into the factory body is needed: a backed-enum class-string argument names the value domain (typed
+     * off that enum directly), otherwise the filter's own name is the column to type off the model cast
+     * (the `$column ?? $key` idiom). A bare string, or a Spatie-own factory kind not handled above,
+     * returns all-null (unchanged — stays a plain string).
+     *
+     * @return array{0: string|null, 1: string|null, 2: string|null, 3: string|null}
+     */
+    private function factoryTyping(ConstValue $value, QbEntry $entry): array
+    {
+        $factory = (string) $value->factory;
+        if ($factory === '' || str_starts_with($factory, self::ALLOWED_FILTER.'::')) {
+            return [null, null, null, null];
+        }
+
+        $factoryClass = self::factoryClass($factory);
+        $enum = self::factoryEnumArg($value);
+
+        return $enum !== null
+            ? [null, null, $enum, $factoryClass]
+            : [$entry->name, null, null, $factoryClass];
+    }
+
+    /** A backed-enum class-string among the factory's folded arguments (its value domain), else null. */
+    private static function factoryEnumArg(ConstValue $value): ?string
+    {
+        foreach ($value->args as $arg) {
+            if ($arg->isScalar() && is_string($arg->scalar) && $arg->scalar !== ''
+                && enum_exists($arg->scalar) && is_subclass_of($arg->scalar, BackedEnum::class)
+            ) {
+                return $arg->scalar;
+            }
+        }
+
+        return null;
+    }
+
+    /** The declaring class of a `Class::method` factory FQCN. */
+    private static function factoryClass(string $factory): string
+    {
+        $sep = strpos($factory, '::');
+
+        return $sep === false ? $factory : substr($factory, 0, $sep);
     }
 
     /** Whether an `AllowedFilter::operator` descriptor's operator argument is an equality comparison. */

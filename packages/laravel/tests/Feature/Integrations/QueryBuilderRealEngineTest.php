@@ -202,3 +202,38 @@ it('follows a `$query->query()` hop into a Query class OUTSIDE the project paths
     // editing it invalidates the warm fragment (the follow-beyond descent records it like any file).
     expect($harvest['visitedBasenames'])->toContain('InvoiceIndexQuery.php');
 })->group('fixture');
+
+it('types a project-factory (ListFilters-style) filter through the query hop on the real engine', function (): void {
+    // Modules\Billing\OrderIndexQuery builds its allow-list from a user-land factory (InvoiceFilters)
+    // rather than direct AllowedFilter::* calls. The real engine must fold the factory call at the site
+    // — recovering the backed-enum class-string argument (→ enum typing) and the key column (→ boolean
+    // cast) — without descending into the factory body, all through the $query->query() hop.
+    $harvest = FixtureRunner::traceQbEnrich(
+        'modules/Billing/OrderController.php',
+        'Modules\\Billing\\OrderController',
+        'index',
+    );
+
+    expect($harvest['subjectModel'])->toBe('App\\Models\\Listing');
+
+    $byName = [];
+    foreach ($harvest['filters'] as $filter) {
+        $byName[$filter['name']] = $filter;
+    }
+
+    // The enum factory recovered its backed-enum class-string argument → enum values + descriptions.
+    expect($byName['status']['factoryEnum'])->toBe('App\\Enums\\ListingStatus')
+        ->and($byName['status']['columnKind'])->toBe('enum')
+        ->and($byName['status']['values'])->toBe(['open', 'closed', 'draft'])
+        ->and($byName['status']['descriptions'])->toBe([
+            'open' => 'Visible to the public and accepting applications.',
+            'closed' => 'No longer accepting applications.',
+        ])
+        // The enum's declaring file joins the dependency set (cache soundness).
+        ->and($byName['status']['dependencyBasenames'])->toContain('ListingStatus.php');
+
+    // The boolean factory has no enum argument → types off its key column's model cast.
+    expect($byName['active']['factoryEnum'])->toBeNull()
+        ->and($byName['active']['columnKind'])->toBe('scalar')
+        ->and($byName['active']['scalarSchema'])->toBe(['type' => 'boolean']);
+})->group('fixture');

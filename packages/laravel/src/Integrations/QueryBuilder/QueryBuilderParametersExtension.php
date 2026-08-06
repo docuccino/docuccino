@@ -24,6 +24,7 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
+use ReflectionClass;
 
 /**
  * Documents a `spatie/laravel-query-builder` list endpoint (design §Phase 4 — Query Builder). It
@@ -137,6 +138,17 @@ final class QueryBuilderParametersExtension implements OperationExtension
      */
     private function enrichFilter(QbEntry $filter, string $model, RouteContext $context): QbEntry
     {
+        // A project factory (a ListFilters-style helper returning an AllowedFilter): record its file
+        // (fragment-cache soundness) and, when it received a backed-enum class-string argument, type the
+        // value off that enum directly — a single-value comparison, so a scalar enum (not the whereIn
+        // array `exact` uses).
+        if ($filter->factoryClass !== null) {
+            $this->recordFactoryFile($filter, $context);
+        }
+        if ($filter->factoryEnum !== null) {
+            return $this->applyColumn($filter, $this->enumColumn($filter->factoryEnum), $context, asArray: false);
+        }
+
         if (in_array($filter->kind, ['default', 'partial'], true)) {
             $this->nudgePartialOnEnum($filter, $model, $context);
 
@@ -149,8 +161,34 @@ final class QueryBuilderParametersExtension implements OperationExtension
                 : $filter,
             'scope' => $this->applyColumn($filter, $this->scopes->resolve($model, $filter->name), $context, asArray: false),
             'custom' => $this->enrichCustom($filter, $model, $context),
-            default => $filter,
+            // A project-factory filter with no enum argument types off its own name as the column (the
+            // `$column ?? $key` idiom) — e.g. a boolean/uuid factory over the model's cast; a name that
+            // is not a column (a multi-column search) degrades cleanly to a plain string.
+            default => $filter->typeColumn !== null
+                ? $this->applyColumn($filter, $this->columns->resolve($model, $filter->typeColumn), $context, asArray: false)
+                : $filter,
         };
+    }
+
+    /** A {@see FilterColumn} for a backed-enum class-string recovered from a project-factory argument. */
+    private function enumColumn(string $enumClass): FilterColumn
+    {
+        $file = EnumReflection::file($enumClass);
+
+        return FilterColumn::enum($enumClass, $file !== null ? [$file] : []);
+    }
+
+    /** Record the project factory's declaring file as a fragment-cache dependency (its identity shapes typing). */
+    private function recordFactoryFile(QbEntry $filter, RouteContext $context): void
+    {
+        if ($filter->factoryClass === null || ! class_exists($filter->factoryClass)) {
+            return;
+        }
+
+        $file = (new ReflectionClass($filter->factoryClass))->getFileName();
+        if ($file !== false) {
+            $context->recordDependencyFiles([$file]);
+        }
     }
 
     /**

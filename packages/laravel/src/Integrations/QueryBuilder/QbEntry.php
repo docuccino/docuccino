@@ -50,6 +50,12 @@ final readonly class QbEntry
         public ?string $typeColumn = null,
         public ?string $filterClass = null,
         public mixed $example = null,
+        // Set when the entry was produced by a PROJECT factory (a helper returning a Spatie
+        // AllowedFilter, e.g. a ListFilters::enum(...) idiom) rather than a Spatie AllowedFilter::*
+        // factory: `factoryEnum` is a backed-enum class-string argument (→ typed off it directly),
+        // `factoryClass` the factory's declaring class (recorded as a fragment-cache dependency).
+        public ?string $factoryEnum = null,
+        public ?string $factoryClass = null,
     ) {}
 
     /** The underlying column a cast lookup keys on: the recovered internal name, else the public name. */
@@ -87,6 +93,8 @@ final readonly class QbEntry
             $this->typeColumn,
             $this->filterClass,
             $example ?? $this->example,
+            $this->factoryEnum,
+            $this->factoryClass,
         );
     }
 }
