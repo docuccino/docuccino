@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Http\Response;
 
 class SpikeController extends Controller
 {
@@ -81,5 +82,15 @@ class SpikeController extends Controller
     public function collectionToResourceCollection(): ResourceCollection
     {
         return User::all()->toResourceCollection(UserResource::class);
+    }
+
+    /**
+     * `response()->noContent()` — the bundled ResponseJsonReturnTypeExtension must recover it as
+     * `JsonResponse<void, 204>` on the REAL engine (no scripted stub), so a 204 with an empty body is
+     * documented. The declared `Response` return type is deliberately wider than what the call yields.
+     */
+    public function noContent(): Response
+    {
+        return response()->noContent();
     }
 }

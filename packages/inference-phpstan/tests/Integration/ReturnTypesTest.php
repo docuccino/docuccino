@@ -67,6 +67,21 @@ it('recovers an AnonymousResourceCollection for resourceCollection', function ()
     expect($returns[0]['type']['fqcn'])->toContain('AnonymousResourceCollection');
 })->group('fixture');
 
+it('recovers response()->noContent() as JsonResponse<void, 204> on the real engine', function (): void {
+    // The noContent() branch of the bundled ResponseJsonReturnTypeExtension had no surviving real
+    // proof (its spike evidence was deleted); this pins it end-to-end: a void payload + folded 204.
+    $returns = spikeReturns('noContent');
+
+    expect($returns)->toHaveCount(1);
+    $type = $returns[0]['type'];
+    expect($type['kind'])->toBe('class')
+        ->and($type['fqcn'])->toBe('Illuminate\\Http\\JsonResponse')
+        ->and($type['typeArgs'])->toHaveCount(2)
+        ->and($type['typeArgs'][0]['kind'])->toBe('void')
+        ->and($type['typeArgs'][1]['kind'])->toBe('literal')
+        ->and($type['typeArgs'][1]['value'])->toBe(204);
+})->group('fixture');
+
 it('recovers a spatie two-arg paginated collection generic with the item as the LAST arg', function (): void {
     // Real-engine/docblock proof for the A1 fix: spatie's collectables are `@template TKey of
     // array-key, @template TValue`, so `PaginatedDataCollection<int, ArticleData>` recovers as a

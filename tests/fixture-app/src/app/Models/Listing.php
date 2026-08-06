@@ -14,17 +14,18 @@ use Illuminate\Database\Eloquent\Model;
  * the real engine (subject-model recovery) + native `$casts` reflection. The `scopeStatus` local scope
  * types a `AllowedFilter::scope('status')` off its enum value parameter, and the `active` boolean cast
  * types a `AllowedFilter::callback` whose closure filters on it. Only ever reflected — never queried.
+ *
+ * Declares NO public column properties — its attributes are magic (they live in the `$attributes`
+ * array), documented the idiomatic ide-helper way with class-level `@property` tags, so the fixture
+ * exercises the real recovery path (a model shaped to satisfy the analyzer would prove nothing).
+ *
+ * @property int $id               The listing identifier.
+ * @property string $title         The listing title.
+ * @property ListingStatus $status The publication status (backed enum).
+ * @property bool $active          Whether the listing is active.
  */
 class Listing extends Model
 {
-    public int $id;
-
-    public string $title;
-
-    public ListingStatus $status;
-
-    public bool $active;
-
     /**
      * @var array<string, string>
      */

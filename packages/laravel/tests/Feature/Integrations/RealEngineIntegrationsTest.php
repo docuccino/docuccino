@@ -138,7 +138,7 @@ it('recovers a real Data class shape via classMetadata (property types, not a st
         $byName[$property->name] = $property->type;
     }
 
-    expect(array_keys($byName))->toBe(['id', 'title', 'subtitle']);
+    expect(array_keys($byName))->toBe(['id', 'title', 'subtitle', 'summary']);
 
     // Precise types recovered by reflection: id is an integer, subtitle is nullable.
     expect($byName['id']->canonicalKey())->toBe(ScalarT::int()->canonicalKey());
@@ -146,6 +146,15 @@ it('recovers a real Data class shape via classMetadata (property types, not a st
     $subtitle = $byName['subtitle'];
     expect($subtitle)->toBeInstanceOf(UnionT::class)
         ->and(array_filter($subtitle->members, static fn ($m): bool => $m instanceof NullT))->not->toBeEmpty();
+
+    // The `string|Optional` union is recovered as a union whose members include spatie's Optional
+    // marker class — the real-engine proof that Optional-union properties survive reflection.
+    $summary = $byName['summary'];
+    expect($summary)->toBeInstanceOf(UnionT::class)
+        ->and(array_filter(
+            $summary->members,
+            static fn ($m): bool => $m instanceof ClassT && str_contains($m->fqcn, 'Optional'),
+        ))->not->toBeEmpty();
 })->group('fixture');
 
 it('threads the item resource type through Resource::collection() via the collection stub', function (): void {
