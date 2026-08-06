@@ -55,11 +55,15 @@ final class DataRequestExtension implements OperationExtension
 
         $this->reportUnrecognisedMappers($fqcn, $context);
 
+        $metadata = $context->engine->classMetadata(new ClassRef($fqcn));
+
         // A static rules() override (read via the shared literal+descriptor engine analysis) wins per
         // field over the property-inferred rules — spatie's DataValidationRulesResolver override.
-        $overrides = $this->rulesOverride->analyse($context, $fqcn);
+        // Property-recovered fields (e.g. an UploadedFile-typed property) are passed so an unrecoverable
+        // dynamic rules() for such a field does not raise a stale `validation.rule-unrecoverable`.
+        $documentedByProperties = $this->rules->propertyFieldKeys($fqcn, $metadata, $context->engine);
+        $overrides = $this->rulesOverride->analyse($context, $fqcn, $documentedByProperties);
 
-        $metadata = $context->engine->classMetadata(new ClassRef($fqcn));
         $ruleSet = $this->rules->build($fqcn, $metadata, $context->engine, $overrides);
         if ($ruleSet->isEmpty()) {
             return;

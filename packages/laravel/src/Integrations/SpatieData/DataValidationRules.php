@@ -56,6 +56,19 @@ final class DataValidationRules
         return $this->reflector;
     }
 
+    /**
+     * The request field keys recovered from the class's PROPERTIES alone (before any rules() override),
+     * so a caller can tell which fields the property inference documents — e.g. to suppress a stale
+     * `validation.rule-unrecoverable` for a field whose rules() is dynamic but whose type (an
+     * `UploadedFile`) already documents it.
+     *
+     * @return list<string>
+     */
+    public function propertyFieldKeys(string $fqcn, ClassMetadata $metadata, TypeEngine $engine): array
+    {
+        return array_keys($this->fieldsFor($fqcn, $metadata, $engine, '', [$fqcn]));
+    }
+
     public function build(string $fqcn, ClassMetadata $metadata, TypeEngine $engine, ?RuleSet $overrides = null): RuleSet
     {
         $fields = $this->fieldsFor($fqcn, $metadata, $engine, '', [$fqcn]);

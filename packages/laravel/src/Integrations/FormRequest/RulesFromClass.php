@@ -35,7 +35,13 @@ final class RulesFromClass
         private readonly ShapeToRuleSet $shapes = new ShapeToRuleSet,
     ) {}
 
-    public function analyse(RouteContext $context, string $class): ?RuleSet
+    /**
+     * @param  list<string>  $documentedElsewhere  field names another producer already documents (e.g. a
+     *                                             spatie Data property typed as an upload); their
+     *                                             rules() being unrecoverable is not a real omission, so
+     *                                             no `validation.rule-unrecoverable` fires for them.
+     */
+    public function analyse(RouteContext $context, string $class, array $documentedElsewhere = []): ?RuleSet
     {
         if (! class_exists($class)) {
             return null;
@@ -75,7 +81,7 @@ final class RulesFromClass
         $traceFields = $visitor->ruleSet()->fields;
 
         foreach ($visitor->unrecoverableFields() as $field) {
-            if (isset($shapeFields[$field]) || isset($traceFields[$field])) {
+            if (isset($shapeFields[$field]) || isset($traceFields[$field]) || in_array($field, $documentedElsewhere, true)) {
                 continue;
             }
             $context->components->addDiagnostic(new Diagnostic(
