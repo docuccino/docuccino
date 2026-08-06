@@ -36,20 +36,27 @@ final class FrameworkExceptionTable
     ];
 
     /**
-     * HTTP status → RFC 9110 §15 reason phrase, for every status the mapped exceptions produce. The
-     * ONE map both the framework-errors tier and the problem-details preset read, so a status's human
-     * label is identical across the two presentations. The 401 phrase is the RFC 9110 §15.5.2 value
-     * **Unauthorized**, which resolves the historical split (framework-errors previously said
-     * "Unauthenticated" while problem-details said "Unauthorized"). (PHP coerces the numeric-string
-     * keys to int.)
+     * HTTP status → RFC 9110 §15 reason phrase — the ONE map every error tier reads (framework-errors,
+     * the problem-details preset, the terminal `DefaultExceptionToResponse` fallback and the
+     * inferred-handler `HandlerResponseBuilder`), so a status's human label is identical no matter
+     * which tier wins the chain. The 401 phrase is the RFC 9110 §15.5.2 value **Unauthorized**, which
+     * resolves the historical split (framework-errors said "Unauthorized" while the fallback and
+     * inferred-handler tiers still said "Unauthenticated"). Covers every status those tiers can emit;
+     * an unlisted status degrades to a generic `Error`. (PHP coerces the numeric-string keys to int.)
      *
      * @var array<int, string>
      */
     private const REASON_PHRASES = [
+        '400' => 'Bad Request',
         '401' => 'Unauthorized',
         '403' => 'Forbidden',
         '404' => 'Not Found',
+        '405' => 'Method Not Allowed',
+        '409' => 'Conflict',
         '422' => 'Unprocessable Entity',
+        '429' => 'Too Many Requests',
+        '500' => 'Internal Server Error',
+        '503' => 'Service Unavailable',
     ];
 
     /**
@@ -83,5 +90,21 @@ final class FrameworkExceptionTable
     public static function reason(string $status): string
     {
         return self::REASON_PHRASES[$status] ?? 'Error';
+    }
+
+    /**
+     * The `[status, reason-phrase]` pairs (drives the dataset test over EVERY entry). Returned as a
+     * list of pairs rather than a map because PHP coerces the numeric-string status keys back to int.
+     *
+     * @return list<array{string, string}>
+     */
+    public static function reasonPhrases(): array
+    {
+        $out = [];
+        foreach (self::REASON_PHRASES as $status => $phrase) {
+            $out[] = [(string) $status, $phrase];
+        }
+
+        return $out;
     }
 }

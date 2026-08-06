@@ -13,27 +13,18 @@ use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
+use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 
 /**
  * Turns a handler/closure analysis into an error response (design §6). Reads the recovered
  * `JsonResponse<TPayload, TStatus>` — the handler's REAL rendered status + payload shape — and
  * builds a {@see ResponseDraft} under that status, hoisting the payload schema through the route's
  * converter. Returns null when the analysis recovered no documentable `JsonResponse` (too-dynamic
- * body → the mapper defers to the next tier + a diagnostic).
+ * body → the mapper defers to the next tier + a diagnostic). Reason phrases come from the shared
+ * {@see FrameworkExceptionTable} so the inferred-handler tier can never drift from the others.
  */
 final class HandlerResponseBuilder
 {
-    private const REASONS = [
-        '400' => 'Bad Request',
-        '401' => 'Unauthenticated',
-        '403' => 'Forbidden',
-        '404' => 'Not Found',
-        '409' => 'Conflict',
-        '422' => 'Unprocessable Entity',
-        '429' => 'Too Many Requests',
-        '500' => 'Server Error',
-    ];
-
     public static function build(ActionAnalysis $analysis, RouteContext $context, Contribution $contribution): ?ResponseDraft
     {
         foreach ($analysis->returns as $return) {
@@ -44,7 +35,7 @@ final class HandlerResponseBuilder
 
             $status = self::foldStatus($type->typeArgs[1] ?? null);
             $draft = new ResponseDraft($status);
-            $draft->setDescription(self::REASONS[$status] ?? 'Error', $contribution);
+            $draft->setDescription(FrameworkExceptionTable::reason($status), $contribution);
 
             $payload = $type->typeArgs[0] ?? null;
             if ($payload !== null && ! $payload instanceof VoidT && ! $payload instanceof NeverT) {

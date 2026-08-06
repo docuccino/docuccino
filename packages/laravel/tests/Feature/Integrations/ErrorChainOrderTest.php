@@ -6,6 +6,7 @@ use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ThrowConfidence;
@@ -35,6 +36,30 @@ it('resolves the exception mapper chain in the documented tier order', function 
         FrameworkErrorsExceptionToResponse::class,
         DefaultExceptionToResponse::class,
     ]);
+});
+
+it('emits the shared 401 reason phrase Unauthorized from the terminal fallback tier', function (): void {
+    // The historical drift: this fallback said "Unauthenticated" while the shared table says
+    // "Unauthorized". It now reads the table, so 401 is "Unauthorized" everywhere.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/fallback-401'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet,
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+    $throw = new ThrownException(
+        'RuntimeException',
+        401,
+        [],
+        ThrowConfidence::Certain,
+        ThrowDisposition::Signal,
+    );
+
+    $draft = (new DefaultExceptionToResponse)->toResponse($throw, $context, new ComponentRegistry);
+
+    expect($draft->status)->toBe('401')
+        ->and($draft->guard()->resolved()['description'] ?? null)->toBe('Unauthorized');
 });
 
 it('cascades past the deferring inferred tier to the problem-details preset, skipping the framework tier', function (): void {

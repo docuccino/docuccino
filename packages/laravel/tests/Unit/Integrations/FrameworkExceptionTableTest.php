@@ -35,13 +35,14 @@ it('declines an unmapped exception', function (): void {
 
 it('uses the RFC reason phrase for every mapped status', function (string $status, string $reason): void {
     expect(FrameworkExceptionTable::reason($status))->toBe($reason);
-})->with([
-    '401 is Unauthorized (the resolved inconsistency)' => ['401', 'Unauthorized'],
-    '403 is Forbidden' => ['403', 'Forbidden'],
-    '404 is Not Found' => ['404', 'Not Found'],
-    '422 is Unprocessable Entity' => ['422', 'Unprocessable Entity'],
-    'an unlisted status degrades to Error' => ['418', 'Error'],
-]);
+})->with(FrameworkExceptionTable::reasonPhrases());
+
+it('locks 401 to Unauthorized and degrades an unlisted status to Error', function (): void {
+    expect(FrameworkExceptionTable::reason('401'))->toBe('Unauthorized')
+        ->and(FrameworkExceptionTable::reason('500'))->toBe('Internal Server Error')
+        ->and(FrameworkExceptionTable::reason('418'))->toBe('Error')
+        ->and(FrameworkExceptionTable::reason('402'))->toBe('Error');
+});
 
 it('makes the framework-errors description and problem-details title agree on the 401 phrase', function (): void {
     $auth = 'Illuminate\\Auth\\AuthenticationException';
