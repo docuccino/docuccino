@@ -30,17 +30,17 @@ final class SpatieDataEnvelope
     public static function length(array $items, string $dataKey = 'data'): array
     {
         return self::wrap($items, $dataKey, [
-            'meta' => self::object([
+            'meta' => SchemaShorthand::object([
                 'current_page' => ['type' => 'integer'],
-                'first_page_url' => self::nullableString(),
-                'from' => self::nullableInteger(),
+                'first_page_url' => SchemaShorthand::nullableString(),
+                'from' => SchemaShorthand::nullableInteger(),
                 'last_page' => ['type' => 'integer'],
-                'last_page_url' => self::nullableString(),
-                'next_page_url' => self::nullableString(),
-                'path' => self::nullableString(),
+                'last_page_url' => SchemaShorthand::nullableString(),
+                'next_page_url' => SchemaShorthand::nullableString(),
+                'path' => SchemaShorthand::nullableString(),
                 'per_page' => ['type' => 'integer'],
-                'prev_page_url' => self::nullableString(),
-                'to' => self::nullableInteger(),
+                'prev_page_url' => SchemaShorthand::nullableString(),
+                'to' => SchemaShorthand::nullableInteger(),
                 'total' => ['type' => 'integer'],
             ]),
         ]);
@@ -56,13 +56,13 @@ final class SpatieDataEnvelope
     public static function cursor(array $items, string $dataKey = 'data'): array
     {
         return self::wrap($items, $dataKey, [
-            'meta' => self::object([
-                'path' => self::nullableString(),
+            'meta' => SchemaShorthand::object([
+                'path' => SchemaShorthand::nullableString(),
                 'per_page' => ['type' => 'integer'],
-                'next_cursor' => self::nullableString(),
-                'next_page_url' => self::nullableString(),
-                'prev_cursor' => self::nullableString(),
-                'prev_page_url' => self::nullableString(),
+                'next_cursor' => SchemaShorthand::nullableString(),
+                'next_page_url' => SchemaShorthand::nullableString(),
+                'prev_cursor' => SchemaShorthand::nullableString(),
+                'prev_page_url' => SchemaShorthand::nullableString(),
             ]),
         ]);
     }
@@ -83,8 +83,8 @@ final class SpatieDataEnvelope
                 $dataKey => ['type' => 'array', 'items' => $items],
                 'links' => [
                     'type' => 'array',
-                    'items' => self::object([
-                        'url' => self::nullableString(),
+                    'items' => SchemaShorthand::object([
+                        'url' => SchemaShorthand::nullableString(),
                         'label' => ['type' => 'string'],
                         'active' => ['type' => 'boolean'],
                     ]),
@@ -92,30 +92,5 @@ final class SpatieDataEnvelope
             ] + $extra,
             'required' => [$dataKey, 'links', 'meta'],
         ];
-    }
-
-    /**
-     * @param  array<string, array<string, mixed>>  $properties
-     * @return array<string, mixed>
-     */
-    private static function object(array $properties): array
-    {
-        return ['type' => 'object', 'properties' => $properties];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function nullableString(): array
-    {
-        return ['type' => ['string', 'null']];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function nullableInteger(): array
-    {
-        return ['type' => ['integer', 'null']];
     }
 }

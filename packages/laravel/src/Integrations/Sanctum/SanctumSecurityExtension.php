@@ -128,8 +128,6 @@ final class SanctumSecurityExtension implements OperationExtension
      */
     private function defaultGuard(): string
     {
-        $guard = $this->config?->get('auth.defaults.guard');
-
-        return is_string($guard) && $guard !== '' ? $guard : 'web';
+        return AuthGuardDrivers::defaultGuard($this->config?->get('auth.defaults.guard'));
     }
 }

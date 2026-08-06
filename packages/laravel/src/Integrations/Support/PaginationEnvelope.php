@@ -27,17 +27,17 @@ final class PaginationEnvelope
     public static function length(array $items): array
     {
         return self::wrap($items, [
-            'first' => self::nullableString(),
-            'last' => self::nullableString(),
-            'prev' => self::nullableString(),
-            'next' => self::nullableString(),
+            'first' => SchemaShorthand::nullableString(),
+            'last' => SchemaShorthand::nullableString(),
+            'prev' => SchemaShorthand::nullableString(),
+            'next' => SchemaShorthand::nullableString(),
         ], [
             'current_page' => ['type' => 'integer'],
-            'from' => self::nullableInteger(),
+            'from' => SchemaShorthand::nullableInteger(),
             'last_page' => ['type' => 'integer'],
-            'path' => self::nullableString(),
+            'path' => SchemaShorthand::nullableString(),
             'per_page' => ['type' => 'integer'],
-            'to' => self::nullableInteger(),
+            'to' => SchemaShorthand::nullableInteger(),
             'total' => ['type' => 'integer'],
         ]);
     }
@@ -52,15 +52,15 @@ final class PaginationEnvelope
     public static function simple(array $items): array
     {
         return self::wrap($items, [
-            'first' => self::nullableString(),
-            'prev' => self::nullableString(),
-            'next' => self::nullableString(),
+            'first' => SchemaShorthand::nullableString(),
+            'prev' => SchemaShorthand::nullableString(),
+            'next' => SchemaShorthand::nullableString(),
         ], [
             'current_page' => ['type' => 'integer'],
-            'from' => self::nullableInteger(),
-            'path' => self::nullableString(),
+            'from' => SchemaShorthand::nullableInteger(),
+            'path' => SchemaShorthand::nullableString(),
             'per_page' => ['type' => 'integer'],
-            'to' => self::nullableInteger(),
+            'to' => SchemaShorthand::nullableInteger(),
         ]);
     }
 
@@ -74,15 +74,15 @@ final class PaginationEnvelope
     public static function cursor(array $items): array
     {
         return self::wrap($items, [
-            'first' => self::nullableString(),
-            'last' => self::nullableString(),
-            'prev' => self::nullableString(),
-            'next' => self::nullableString(),
+            'first' => SchemaShorthand::nullableString(),
+            'last' => SchemaShorthand::nullableString(),
+            'prev' => SchemaShorthand::nullableString(),
+            'next' => SchemaShorthand::nullableString(),
         ], [
-            'path' => self::nullableString(),
+            'path' => SchemaShorthand::nullableString(),
             'per_page' => ['type' => 'integer'],
-            'next_cursor' => self::nullableString(),
-            'prev_cursor' => self::nullableString(),
+            'next_cursor' => SchemaShorthand::nullableString(),
+            'prev_cursor' => SchemaShorthand::nullableString(),
         ]);
     }
 
@@ -98,35 +98,10 @@ final class PaginationEnvelope
             'type' => 'object',
             'properties' => [
                 'data' => ['type' => 'array', 'items' => $items],
-                'links' => self::object($links),
-                'meta' => self::object($meta),
+                'links' => SchemaShorthand::object($links),
+                'meta' => SchemaShorthand::object($meta),
             ],
             'required' => ['data', 'links', 'meta'],
         ];
-    }
-
-    /**
-     * @param  array<string, array<string, mixed>>  $properties
-     * @return array<string, mixed>
-     */
-    private static function object(array $properties): array
-    {
-        return ['type' => 'object', 'properties' => $properties];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function nullableString(): array
-    {
-        return ['type' => ['string', 'null']];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function nullableInteger(): array
-    {
-        return ['type' => ['integer', 'null']];
     }
 }

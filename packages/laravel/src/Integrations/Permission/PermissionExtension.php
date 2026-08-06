@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\DescriptionAppender;
 
 /**
  * Documents the authorization a `spatie/laravel-permission` middleware enforces (design §Phase 4).
@@ -73,9 +74,6 @@ final class PermissionExtension implements OperationExtension
     {
         $lines = implode("\n\n", array_map(static fn (PermissionRequirement $r): string => $r->describe(), $requirements));
 
-        $current = $operation->resolvedField('description');
-        $description = is_string($current) && $current !== '' ? $current."\n\n".$lines : $lines;
-
-        $operation->setDescription($description, $contribution);
+        DescriptionAppender::append($operation, $lines, $contribution);
     }
 }

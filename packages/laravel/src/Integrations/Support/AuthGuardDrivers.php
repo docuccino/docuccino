@@ -80,4 +80,13 @@ final class AuthGuardDrivers
 
         return [];
     }
+
+    /**
+     * The app's default auth guard for resolving a bare `auth` middleware, from a raw
+     * `config('auth.defaults.guard')` value — Laravel's own default is `web` when unset/blank.
+     */
+    public static function defaultGuard(mixed $configured): string
+    {
+        return is_string($configured) && $configured !== '' ? $configured : 'web';
+    }
 }
