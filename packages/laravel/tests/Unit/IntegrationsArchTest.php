@@ -33,7 +33,11 @@ arch('built-in integrations consume only the public extension surface')
         'Docuccino\Core\Extensions\Ordering',
         'Docuccino\Core\Draft',
         'Docuccino\Core\Inference',
-        'Docuccino\Core\Patch',
+        // Patch is allow-listed at CLASS granularity, not namespace: it contains @internal classes
+        // (PatchGuard, FieldState) the frozen extension-author surface must NOT silently expose.
+        // Integrations write provenance via Contribution and delete via Remove — nothing else.
+        'Docuccino\Core\Patch\Contribution',
+        'Docuccino\Core\Patch\Remove',
         'Docuccino\Core\Diagnostics',
         'Docuccino\Core\Provenance',
         'Docuccino\Attributes',
