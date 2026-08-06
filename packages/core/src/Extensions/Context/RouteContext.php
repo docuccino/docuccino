@@ -135,20 +135,22 @@ final class RouteContext
     }
 
     /**
-     * A success-status override for a returned class from the gated {@see ResponseStatusResolver}
-     * chain (first non-null wins), or null to keep the inferred default. A disabled integration
-     * contributes nothing.
+     * The success-status override(s) for a returned class from the gated {@see ResponseStatusResolver}
+     * chain (first resolver returning a non-empty list wins), or `[]` to keep the inferred default. A
+     * disabled integration contributes nothing.
+     *
+     * @return list<int>
      */
-    public function resolveResponseStatus(string $fqcn): ?int
+    public function resolveResponseStatuses(string $fqcn): array
     {
         foreach ($this->responseStatusResolvers as $resolver) {
-            $status = $resolver->resolveStatus($this, $fqcn);
-            if ($status !== null) {
-                return $status;
+            $statuses = $resolver->resolveStatuses($this, $fqcn);
+            if ($statuses !== []) {
+                return $statuses;
             }
         }
 
-        return null;
+        return [];
     }
 
     /**

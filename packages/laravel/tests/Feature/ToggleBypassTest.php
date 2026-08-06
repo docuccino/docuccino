@@ -110,7 +110,7 @@ it('returns the neutral default from each context chain when empty, and the cont
 
     // Empty chains → neutral defaults (a disabled integration is inert).
     expect($empty->responseAnalysisRedirect())->toBeNull()
-        ->and($empty->resolveResponseStatus('App\\Data'))->toBeNull()
+        ->and($empty->resolveResponseStatuses('App\\Data'))->toBe([])
         ->and($empty->payloadMediaType($payload))->toBe('application/json')
         ->and($empty->routeBindingKeySchema('App\\Models\\Post'))->toBeNull();
 
@@ -125,9 +125,9 @@ it('returns the neutral default from each context chain when empty, and the cont
         }],
         responseStatusResolvers: [new class implements ResponseStatusResolver
         {
-            public function resolveStatus(RouteContext $context, string $fqcn): ?int
+            public function resolveStatuses(RouteContext $context, string $fqcn): array
             {
-                return 201;
+                return [201];
             }
         }],
         payloadMediaTypeResolvers: [new class implements PayloadMediaTypeResolver
@@ -147,7 +147,7 @@ it('returns the neutral default from each context chain when empty, and the cont
     );
 
     expect($populated->responseAnalysisRedirect()?->producer)->toBe('integration:laravel-actions')
-        ->and($populated->resolveResponseStatus('App\\Data'))->toBe(201)
+        ->and($populated->resolveResponseStatuses('App\\Data'))->toBe([201])
         ->and($populated->payloadMediaType($payload))->toBe('application/vnd.api+json')
         ->and($populated->routeBindingKeySchema('App\\Models\\Post'))->toBe(['type' => 'string', 'format' => 'uuid']);
 });

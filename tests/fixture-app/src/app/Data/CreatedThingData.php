@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Data;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Spatie\LaravelData\Data;
 
 /**
- * A spatie Data class overriding calculateResponseStatus() to a constant 201, so the real engine's
- * return-type inference over the override yields a literal-int type — the recovery half the
+ * A spatie Data class overriding calculateResponseStatus() to a class constant (Response::HTTP_CREATED — Eos's exact
+ * shape), so the real engine folds the class-const fetch to a literal-int return type — the recovery half the
  * DataResponseStatus fold (gap 5) reads. Only ever analysed.
  */
 class CreatedThingData extends Data
@@ -20,6 +21,6 @@ class CreatedThingData extends Data
 
     protected function calculateResponseStatus(Request $request): int
     {
-        return 201;
+        return Response::HTTP_CREATED;
     }
 }

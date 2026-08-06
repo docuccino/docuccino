@@ -56,12 +56,23 @@ final class InferredResponsesExtension implements OperationExtension
 
     private const DEFAULT_STATUS = '200';
 
-    /** @var array<int, string> canonical reason phrases for the statuses this extension emits */
+    /**
+     * Canonical RFC reason phrases for the statuses this extension emits. Beyond the 2xx range a
+     * `calculateResponseStatus()` override can re-home a Responsable body to a 4xx (e.g. Eos's
+     * challenge DTOs return 422), so those phrases are covered too; an unlisted status falls back to
+     * `OK`.
+     *
+     * @var array<int, string>
+     */
     private const REASONS = [
         '200' => 'OK',
         '201' => 'Created',
         '202' => 'Accepted',
+        '203' => 'Non-Authoritative Information',
         '204' => 'No Content',
+        '205' => 'Reset Content',
+        '206' => 'Partial Content',
+        '422' => 'Unprocessable Entity',
     ];
 
     public function phase(): OperationPhase
@@ -84,24 +95,15 @@ final class InferredResponsesExtension implements OperationExtension
                 continue;
             }
 
-            // A Data class returned directly (Responsable) may override calculateResponseStatus() to
-            // 201/202/… — that replaces the inferred 200. A JsonResponse-wrapped payload keeps its own
-            // folded status ($type !== $payload there), so this only re-homes a bare Data return. The
-            // override arrives through the gated ResponseStatusResolver chain, never a direct import.
-            if ($status === self::DEFAULT_STATUS && $payload instanceof ClassT && $return->type === $payload) {
-                $override = $context->resolveResponseStatus($payload->fqcn);
-                if ($override !== null) {
-                    $status = (string) $override;
+            foreach ($this->placeReturn($status, $payload, $return->type, $context) as [$placedStatus, $placedPayload]) {
+                $bucket = $byStatus[$placedStatus] ??= ['payloads' => [], 'location' => null, 'empty' => false];
+                $bucket['location'] ??= $return->location;
+                if ($placedPayload !== null) {
+                    $bucket['payloads'][] = $placedPayload;
                 }
+                $bucket['empty'] = $bucket['empty'] || ($placedPayload === null && $empty);
+                $byStatus[$placedStatus] = $bucket;
             }
-
-            $bucket = $byStatus[$status] ??= ['payloads' => [], 'location' => null, 'empty' => false];
-            $bucket['location'] ??= $return->location;
-            if ($payload !== null) {
-                $bucket['payloads'][] = $payload;
-            }
-            $bucket['empty'] = $bucket['empty'] || $empty;
-            $byStatus[$status] = $bucket;
         }
 
         if ($byStatus === []) {
@@ -116,6 +118,59 @@ final class InferredResponsesExtension implements OperationExtension
             // the string the draft API and reason table expect.
             $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer);
         }
+    }
+
+    /**
+     * Place a return into `(status, payload)` bucket(s). Normally one — the unwrapped pair. But a bare
+     * Data return (Responsable, still at the default 200, the whole return type IS the payload) may
+     * override `calculateResponseStatus()` to 201/202/… (or several statuses for a conditional whose
+     * arms all fold): each folded status re-homes the body off 200. A UNION of Data classes returned
+     * directly — Eos's `MfaChallengeData|EmailVerificationChallengeData|…` from one action — re-homes
+     * EACH member to its own status(es); a member with no override, and any non-class member, stays at
+     * 200. Overrides arrive through the gated {@see ResponseStatusResolver} chain, never a direct import.
+     *
+     * @return list<array{0: string, 1: ?DType}>
+     */
+    private function placeReturn(string $status, ?DType $payload, DType $returnType, RouteContext $context): array
+    {
+        // Only a bare Data return is re-homed: still the default 200, and the payload IS the whole
+        // return type (a JsonResponse-wrapped payload keeps its own folded status — $returnType !== payload).
+        if ($status !== self::DEFAULT_STATUS || $payload === null || $returnType !== $payload) {
+            return [[$status, $payload]];
+        }
+
+        if ($payload instanceof ClassT) {
+            return $this->placeByStatuses($payload, $context->resolveResponseStatuses($payload->fqcn));
+        }
+
+        if ($payload instanceof UnionT) {
+            $out = [];
+            foreach ($payload->members as $member) {
+                $out = $member instanceof ClassT
+                    ? [...$out, ...$this->placeByStatuses($member, $context->resolveResponseStatuses($member->fqcn))]
+                    : [...$out, [self::DEFAULT_STATUS, $member]];
+            }
+
+            return $out;
+        }
+
+        return [[$status, $payload]];
+    }
+
+    /**
+     * Place one payload under each resolved status (the same body under every status), or under the
+     * default 200 when no override folded.
+     *
+     * @param  list<int>  $statuses
+     * @return list<array{0: string, 1: ?DType}>
+     */
+    private function placeByStatuses(DType $payload, array $statuses): array
+    {
+        if ($statuses === []) {
+            return [[self::DEFAULT_STATUS, $payload]];
+        }
+
+        return array_map(static fn (int $s): array => [(string) $s, $payload], $statuses);
     }
 
     /**
