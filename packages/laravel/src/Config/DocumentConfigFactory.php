@@ -49,6 +49,7 @@ final readonly class DocumentConfigFactory
             routeInclude: Hydrate::stringList($routes['include'] ?? []),
             routeExclude: Hydrate::stringList($routes['exclude'] ?? []),
             routeFilter: $closure instanceof Closure ? $closure : null,
+            includeVendor: ($routes['include_vendor'] ?? false) === true,
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
             errorResponses: is_string($preset) ? $preset : 'none',
             errorsShape: $errorsShape === 'pointer-list' ? 'pointer-list' : 'map',

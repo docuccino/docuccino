@@ -3388,8 +3388,8 @@
   "x-docuccino": {
     "document": {
       "id": "doc:pointer-list",
-      "configHash": "2c12b3ed1d74f4ebbeac3df3040e63343e0895429b89e770fe4d75619a73b5c4",
-      "contentHash": "dfac50e6b976f64d3c9995c78d447e5e5ece7c6168df3e1ea3bc8b412439ac44"
+      "configHash": "a16009c154324b1c7cd44a8a9ce1e3c4152e0efdae100eeafdbadec0408fc017",
+      "contentHash": "0b2f006e9841bc514c7faeea79cec730b9b15e40cc1171b48c406a39add77bc1"
     },
     "generator": {
       "name": "docuccino/laravel",

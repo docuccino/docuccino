@@ -26,6 +26,8 @@ final class LaravelRouteResolver implements RouteResolver
         private readonly RouteReflector $reflector = new RouteReflector,
         private readonly AttributeCollector $attributes = new AttributeCollector,
         private readonly ResolvedRouteIndex $index = new ResolvedRouteIndex,
+        // Supplied by the service provider with base_path('vendor'); null disables vendor exclusion.
+        private readonly ?VendorRoutePolicy $vendorPolicy = null,
     ) {}
 
     public function resolve(DocumentConfig $document): iterable
@@ -43,6 +45,12 @@ final class LaravelRouteResolver implements RouteResolver
             // Reflect once here; the builder reuses this via the shared index — no re-locate/reflect.
             $reflected = $this->reflector->forRoute($route);
             if (! $this->passesAttributes($reflected, $document)) {
+                continue;
+            }
+
+            // Default vendor exclusion (route:list --except-vendor semantics): needs the resolved
+            // controller file, so it runs post-reflection and after the include/exclude/closure gate.
+            if ($this->excludedAsVendor($reflected, $document)) {
                 continue;
             }
 
@@ -147,6 +155,24 @@ final class LaravelRouteResolver implements RouteResolver
         $filter = $document->routeFilter;
 
         return ! (is_callable($filter) && $filter($descriptor) === false);
+    }
+
+    /**
+     * Whether a route is dropped by the default vendor exclusion. A closure / unreflectable action
+     * (no controller class) is passed a null file and is never excluded; an application controller's
+     * file is not under vendor/, so it passes too.
+     */
+    private function excludedAsVendor(?ReflectedAction $reflected, DocumentConfig $document): bool
+    {
+        if ($this->vendorPolicy === null) {
+            return false;
+        }
+
+        $controllerFile = $reflected !== null && $reflected->controllerClass !== null
+            ? $reflected->actionRef->file
+            : null;
+
+        return $this->vendorPolicy->excludesVendorRoute($controllerFile, $document->includeVendor);
     }
 
     private function passesAttributes(?ReflectedAction $reflected, DocumentConfig $document): bool

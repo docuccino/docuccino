@@ -39,6 +39,9 @@ final readonly class DocumentConfig
         public array $routeInclude = [],
         public array $routeExclude = [],
         public mixed $routeFilter = null,
+        // Opt back into documenting routes whose resolved controller file lives under vendor/ (they
+        // are excluded by default, mirroring Laravel's `route:list --except-vendor`).
+        public bool $includeVendor = false,
         public ?string $authMiddleware = null,
         public string $errorResponses = 'none',
         // How a 422 problem-details body models its `errors`: 'map' (field → messages, the default) or

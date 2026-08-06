@@ -32,6 +32,10 @@ return [
                 'include' => ['api/*'],
                 'exclude' => [],
                 'closure' => null, // fn (RouteDescriptor $route): bool => ...
+                // Routes whose resolved controller class file lives under vendor/ are excluded by
+                // default (the same as `php artisan route:list --except-vendor`); closures and your
+                // own app controllers are unaffected. Set true to document installed packages' routes.
+                'include_vendor' => false,
             ],
             'security' => [
                 // Routes whose middleware matches this wildcard get the `default` requirement below.

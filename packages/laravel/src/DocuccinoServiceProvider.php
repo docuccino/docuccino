@@ -38,7 +38,9 @@ use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
+use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
+use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
@@ -79,6 +81,12 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // builder reads it back O(1), so a route is reflected once per build. Scoped so both share
         // one index within a request/build and it resets between them.
         $this->app->scoped(ResolvedRouteIndex::class);
+
+        // The route resolver excludes vendor-package controller routes by default (route:list
+        // --except-vendor semantics); supply the app's vendor directory as the boundary.
+        $this->app->when(LaravelRouteResolver::class)
+            ->needs(VendorRoutePolicy::class)
+            ->give(fn (): VendorRoutePolicy => new VendorRoutePolicy($this->app->basePath('vendor')));
 
         // Provenance `source.file` paths are relativised against the app base path (design §4);
         // the resolver falls back to a composer-root walk for files outside it (the workbench).
