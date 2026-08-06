@@ -82,8 +82,26 @@ $line = (int) ($argv[5] ?? 0);
 $narrowParam = ($argv[6] ?? '') === '' ? null : $argv[6];
 $narrowType = ($argv[7] ?? '') === '' ? null : $argv[7];
 
-$tmp = sys_get_temp_dir().'/docuccino-runner-'.getmypid();
+// A unique tmp dir per invocation — PID alone is reused across the many subprocesses a
+// fixture-group run forks, violating RuntimeConfig's "MUST be isolated per invocation"
+// contract; uniqid() makes it collision-free. Cleaned up on shutdown so runs don't leak.
+$tmp = sys_get_temp_dir().'/docuccino-runner-'.getmypid().'-'.uniqid('', true);
 @mkdir($tmp, 0777, true);
+
+register_shutdown_function(static function () use ($tmp): void {
+    if (! is_dir($tmp)) {
+        return;
+    }
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($tmp, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+    foreach ($it as $entry) {
+        /** @var SplFileInfo $entry */
+        $entry->isDir() ? @rmdir($entry->getPathname()) : @unlink($entry->getPathname());
+    }
+    @rmdir($tmp);
+});
 
 $engine = (new PhpStanEngineFactory)->create(
     new RuntimeConfig($app, $tmp, PHP_VERSION_ID, [$app.'/app']),

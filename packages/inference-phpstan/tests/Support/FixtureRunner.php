@@ -161,19 +161,41 @@ final class FixtureRunner
      */
     private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array
     {
+        // Harden the subprocess against the historical fixture-group flake (plan.md decision log,
+        // 2026-08-06): the engine cold-compiles a PHPStan container and analyses the whole
+        // Laravel+Larastan app, so it needs a generous memory ceiling; pcov is disabled because
+        // subprocess coverage is invisible anyway (docs/testing.md) and only slows/bloats the run.
+        // stderr is captured to a temp file so an OOM/fatal surfaces in the failure message instead
+        // of the opaque "produced no result: ''".
+        $stderrFile = tempnam(sys_get_temp_dir(), 'docuccino-runner-stderr-');
+
         $command = implode(' ', array_map('escapeshellarg', [
             PHP_BINARY,
+            '-d', 'memory_limit=2G',
+            '-d', 'pcov.enabled=0',
             self::runner(),
             $mode,
             $file,
             $class,
             $method,
             ...$extra,
-        ])).' 2>/dev/null';
+        ])).($stderrFile !== false ? ' 2>'.escapeshellarg($stderrFile) : ' 2>/dev/null');
 
         $output = shell_exec($command);
+
+        $stderr = '';
+        if ($stderrFile !== false) {
+            $stderr = (string) @file_get_contents($stderrFile);
+            @unlink($stderrFile);
+        }
+
         if (! is_string($output) || ! str_contains($output, '@@RESULT@@')) {
-            throw new RuntimeException('engine-runner produced no result: '.var_export($output, true));
+            throw new RuntimeException(sprintf(
+                "engine-runner produced no result.\n  mode: %s\n  stdout: %s\n  stderr: %s",
+                $mode,
+                var_export($output, true),
+                $stderr === '' ? '(empty)' : trim($stderr),
+            ));
         }
 
         $json = substr($output, strpos($output, '@@RESULT@@') + strlen('@@RESULT@@'));
