@@ -69,7 +69,7 @@ final class AttributeRequestBodyExtension implements OperationExtension
      */
     private function existingBody(OperationDraft $operation): array
     {
-        $existing = $operation->guard()->resolved()['requestBody'] ?? null;
+        $existing = $operation->resolvedField('requestBody');
         if (! is_array($existing)) {
             return ['application/json', [], [], false];
         }

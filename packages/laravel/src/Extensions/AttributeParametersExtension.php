@@ -136,7 +136,7 @@ final class AttributeParametersExtension implements OperationExtension
         }
 
         $container = $operation->parameter('query', $parent);
-        if (($container->guard()->resolved()['style'] ?? null) !== 'deepObject') {
+        if ($container->resolvedField('style') !== 'deepObject') {
             return null;
         }
 
@@ -180,7 +180,7 @@ final class AttributeParametersExtension implements OperationExtension
     {
         foreach ($deepRequired as $parent => $children) {
             $schema = $operation->parameter('query', $parent)->schema();
-            $existing = $schema->guard()->resolved()['required'] ?? [];
+            $existing = $schema->resolvedField('required') ?? [];
             $existingNames = is_array($existing) ? array_values(array_filter($existing, 'is_string')) : [];
             $merged = array_values(array_unique([...$existingNames, ...$children]));
 

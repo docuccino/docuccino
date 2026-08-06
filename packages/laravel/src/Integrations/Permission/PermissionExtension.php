@@ -73,7 +73,7 @@ final class PermissionExtension implements OperationExtension
     {
         $lines = implode("\n\n", array_map(static fn (PermissionRequirement $r): string => $r->describe(), $requirements));
 
-        $current = $operation->guard()->resolved()['description'] ?? null;
+        $current = $operation->resolvedField('description');
         $description = is_string($current) && $current !== '' ? $current."\n\n".$lines : $lines;
 
         $operation->setDescription($description, $contribution);

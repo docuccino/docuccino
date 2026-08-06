@@ -59,7 +59,7 @@ it('emits the shared 401 reason phrase Unauthorized from the terminal fallback t
     $draft = (new DefaultExceptionToResponse)->toResponse($throw, $context, new ComponentRegistry);
 
     expect($draft->status)->toBe('401')
-        ->and($draft->guard()->resolved()['description'] ?? null)->toBe('Unauthorized');
+        ->and($draft->resolvedField('description'))->toBe('Unauthorized');
 });
 
 it('cascades past the deferring inferred tier to the problem-details preset, skipping the framework tier', function (): void {

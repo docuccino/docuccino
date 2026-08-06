@@ -64,6 +64,25 @@ final class ResponseDraft
         return isset($this->content[$mediaType]);
     }
 
+    /** The provenance producer of the currently-winning contribution for a field, or null if unset. */
+    public function producerFor(string $field): ?string
+    {
+        return $this->guard->producerFor($field);
+    }
+
+    /** The currently-resolved value of a field (Remove sentinels omitted), or null if unset. */
+    public function resolvedField(string $field): mixed
+    {
+        return $this->guard->resolved()[$field] ?? null;
+    }
+
+    /**
+     * The underlying patch guard.
+     *
+     * @internal Not part of the frozen extension-author surface: it hands back the {@see PatchGuard}
+     * (itself `@internal`). Extensions read winning state through {@see producerFor()} /
+     * {@see resolvedField()} instead.
+     */
     public function guard(): PatchGuard
     {
         return $this->guard;

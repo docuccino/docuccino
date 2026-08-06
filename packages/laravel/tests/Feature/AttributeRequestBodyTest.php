@@ -38,7 +38,7 @@ function runBodyParameters(array $attributes, ?callable $seedInferred = null): a
     (new AttributeRequestBodyExtension)->handle($operation, $context);
 
     /** @var array<string, mixed> $body */
-    $body = $operation->guard()->resolved()['requestBody'] ?? [];
+    $body = $operation->resolvedField('requestBody') ?? [];
 
     return $body;
 }

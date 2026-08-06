@@ -137,3 +137,19 @@ it('carries schema mock hints through freeze into x-docuccino.mock', function ()
 
     expect($frozen['x-docuccino']['mock'])->toBe(['faker' => 'numberBetween:1,100']);
 });
+
+it('exposes winning value + producer through the public read accessors (B1)', function (): void {
+    $draft = new OperationDraft;
+    $draft->setSummary('Docblock summary', Contribution::docblock());
+    $draft->setSummary('Attribute summary', Contribution::attribute());
+
+    // resolvedField returns the winning value; producerFor names its layer producer; both null when unset.
+    expect($draft->resolvedField('summary'))->toBe('Attribute summary')
+        ->and($draft->producerFor('summary'))->toBe('attribute')
+        ->and($draft->resolvedField('operationId'))->toBeNull()
+        ->and($draft->producerFor('operationId'))->toBeNull();
+
+    // A Remove sentinel resolves to null through resolvedField (sentinel omitted, not surfaced).
+    $draft->set('deprecated', Remove::value(), Contribution::overlay());
+    expect($draft->resolvedField('deprecated'))->toBeNull();
+});

@@ -152,7 +152,7 @@ final class ImplicitResponsesExtension implements OperationExtension
     /** True when a request extension recovered a validated body (its producer owns `requestBody`). */
     private function hasValidatedRequest(OperationDraft $operation): bool
     {
-        $producer = $operation->guard()->producerFor('requestBody');
+        $producer = $operation->producerFor('requestBody');
 
         return $producer !== null && in_array($producer, self::VALIDATION_PRODUCERS, true);
     }

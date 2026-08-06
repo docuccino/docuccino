@@ -82,7 +82,7 @@ final class AttributeSecurityExtension implements OperationExtension
      */
     private function inferredSecurity(OperationDraft $operation): ?array
     {
-        $security = $operation->guard()->resolved()['security'] ?? null;
+        $security = $operation->resolvedField('security');
         if (! is_array($security)) {
             return null;
         }
