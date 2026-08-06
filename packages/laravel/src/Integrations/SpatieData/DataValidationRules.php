@@ -43,6 +43,12 @@ final class DataValidationRules
     /** Rule names that already fix a scalar type, so no type rule is synthesised alongside them. */
     private const TYPE_RULES = ['string', 'integer', 'int', 'numeric', 'boolean', 'bool', 'array'];
 
+    /** A property of this type (or a subclass) IS a file upload, whatever its rules() recovered. */
+    private const UPLOADED_FILE = 'Illuminate\\Http\\UploadedFile';
+
+    /** File-implying rule names — if a property already states one, we never synthesise a second. */
+    private const FILE_RULES = ['file', 'image'];
+
     public function __construct(private readonly DataClassReflector $reflector = new DataClassReflector) {}
 
     public function reflector(): DataClassReflector
@@ -93,10 +99,58 @@ final class DataValidationRules
             $tokens = $this->reflector->validationTokens($fqcn, $property->name);
             $attributeRules = array_map(RuleParsing::token(...), $tokens);
 
+            // A property typed Illuminate\Http\UploadedFile (incl. ?UploadedFile and a list of it) IS a
+            // file upload — synthesise a `file` rule so the shared validation chain flips the body to
+            // multipart/form-data and emits a binary schema, regardless of whether the class's rules()
+            // was statically foldable (Eos's CreateUploadData has a dynamic rules() and only #[Required]).
+            // Composes with an explicit file/image rule rather than doubling it.
+            $upload = $this->uploadedFileKind($stripped, $attributeRules);
+            if ($upload === 'single') {
+                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null), ...$attributeRules, ValidationRule::of('file')];
+
+                continue;
+            }
+            if ($upload === 'list') {
+                // Each item is the uploaded file; the field itself is the (multipart) array.
+                $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, 'array'), ...$attributeRules];
+                $fields[$key.'.*'] = [ValidationRule::of('file')];
+
+                continue;
+            }
+
             $fields[$key] = [...$this->presence($fqcn, $property->name, $stripped, $attributeRules, null), ...$attributeRules];
         }
 
         return $fields;
+    }
+
+    /**
+     * Classify a property type as a file upload: `'single'` for `UploadedFile` / `?UploadedFile`,
+     * `'list'` for a list of `UploadedFile`, else null. Returns null when the property already carries
+     * a file-implying rule (`file`/`image`) so the synthesised rule never doubles an explicit one.
+     *
+     * @param  list<ValidationRule>  $attributeRules
+     */
+    private function uploadedFileKind(DType $stripped, array $attributeRules): ?string
+    {
+        foreach ($attributeRules as $rule) {
+            if (in_array($rule->name, self::FILE_RULES, true)) {
+                return null;
+            }
+        }
+
+        $type = self::unwrapNull($stripped);
+
+        if ($type instanceof ListT && self::isUploadedFile($type->value)) {
+            return 'list';
+        }
+
+        return self::isUploadedFile($type) ? 'single' : null;
+    }
+
+    private static function isUploadedFile(DType $type): bool
+    {
+        return $type instanceof ClassT && is_a($type->fqcn, self::UPLOADED_FILE, true);
     }
 
     /**
