@@ -24,7 +24,9 @@ result:
 Docuccino reads your app's real error handling and documents the exact shape it produces. It
 understands:
 
-- `render` callbacks registered in `bootstrap/app.php` (`->withExceptions(...)`),
+- `render` callbacks registered in `bootstrap/app.php` (`->withExceptions(...)`) — whether you pass a
+  closure (`->render(fn (PaymentException $e) => …)`), an invokable renderer (`->render(new ProblemRenderer)`),
+  or an `[$object, 'method']` pair,
 - an exception's own `render()` method,
 - and `Responsable` exceptions' `toResponse()`.
 

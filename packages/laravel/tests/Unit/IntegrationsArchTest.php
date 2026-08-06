@@ -31,6 +31,11 @@ arch('built-in integrations consume only the public extension surface')
         'Docuccino\Core\Extensions\Validation\ValidationRule',
         'Docuccino\Core\Extensions\Context',
         'Docuccino\Core\Extensions\Ordering',
+        // The document draft handed to a DocumentTransformer::transform() — already public
+        // extension-author surface (it is the parameter type of the public DocumentTransformer contract,
+        // and is not @internal). An integration that contributes a whole-document diagnostic (the
+        // inferred-handler render-callback skip report) implements that contract and so references it.
+        'Docuccino\Core\Extensions\Document\UirDocumentDraft',
         'Docuccino\Core\Draft',
         'Docuccino\Core\Inference',
         // Patch is allow-listed at CLASS granularity, not namespace: it contains @internal classes

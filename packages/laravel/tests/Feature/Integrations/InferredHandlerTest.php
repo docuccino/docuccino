@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Tests\Support\InvokableRenderer;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -43,6 +44,29 @@ function registerRenderCallback(Closure $callback, string $exceptionType): strin
         null,
         null,
         $function->getStartLine(),
+        $function->getParameters()[0]->getName(),
+        $exceptionType,
+    ))->symbol();
+}
+
+/**
+ * Register an INVOKABLE renderer (Laravel wraps it via `Closure::fromCallable()`) and return the
+ * method-based CallableRef symbol the mapper will analyse it under — mirroring the mapper routing a
+ * method-backed callback to method analysis rather than the by-line closure path.
+ */
+function registerInvokableRenderCallback(object $renderer, string $exceptionType): string
+{
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable($renderer);
+
+    $function = new ReflectionFunction(Closure::fromCallable($renderer));
+
+    return (new CallableRef(
+        (string) $function->getFileName(),
+        $renderer::class,
+        $function->getName(),
+        0,
         $function->getParameters()[0]->getName(),
         $exceptionType,
     ))->symbol();
@@ -107,4 +131,42 @@ it('stays inert (framework tier owns the 404) when no handler matches the except
 
     expect($producers)->toContain('integration:framework-errors')
         ->and($producers)->not->toContain('integration:inferred-handler');
+});
+
+it('documents an invokable renderer via method analysis, winning over the framework tier', function (): void {
+    // The Eos shape: `$exceptions->render(new SomeRenderer)`. Laravel wraps it as a method-backed
+    // closure, and the mapper must analyse `__invoke` (not the closure-by-line path, whose target line is
+    // a method declaration, not a closure literal).
+    $symbol = registerInvokableRenderCallback(new InvokableRenderer, MODEL_NOT_FOUND);
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('error', ScalarT::string())]),
+                new LiteralT(410),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $responses = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    expect($responses)->toHaveKey('410')->and($responses)->not->toHaveKey('404');
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['410']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:inferred-handler')
+        ->and($responses['410']['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('error');
+});
+
+it('reports render-callback-skipped (never silently) for an unanalysable render callback', function (): void {
+    bindStubEngine();
+
+    // A first parameter with a builtin type is not an exception the tier can bind — unanalysable.
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable(static fn (string $whoops) => response()->json([], 400));
+
+    $codes = array_map(static fn ($d): string => $d->code, generateDocument()->diagnostics);
+
+    expect($codes)->toContain('inferred-handler.render-callback-skipped');
 });

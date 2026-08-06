@@ -102,6 +102,28 @@ it('does not raise the ambiguity diagnostic for the ordinary sequential-instance
     expect($codes)->not->toContain('inference.ambiguous-narrowing');
 })->group('fixture');
 
+it('recovers an invokable renderer’s shape via method analysis of __invoke', function (): void {
+    // The Eos shape: `$exceptions->render(new InvokableProblemRenderer)`. Laravel wraps it as a
+    // method-backed closure, so the tier analyses `__invoke` — proven here against the real engine, with
+    // `$e` narrowed to a specific thrown type, exactly as the mapper drives it.
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/InvokableProblemRenderer.php',
+        'App\\Exceptions\\InvokableProblemRenderer',
+        '__invoke',
+        param: 'e',
+        narrowType: 'App\\Exceptions\\OutOfStockException',
+    ));
+
+    expect($analysis->returns)->toHaveCount(1);
+    $type = $analysis->returns[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)
+        ->and($type->fqcn)->toBe('Illuminate\\Http\\JsonResponse')
+        ->and(($type->typeArgs[1] ?? null)?->value)->toBe(409);
+
+    $keys = array_map(static fn (array $f): string => $f['key'] ?? '', $type->typeArgs[0]->toArray()['fields'] ?? []);
+    expect($keys)->toContain('type', 'title', 'status', 'instance');
+})->group('fixture');
+
 it('recovers a per-exception render-callback closure by file+line', function (): void {
     $source = (string) file_get_contents(FixtureRunner::path('app/Exceptions/RenderCallbacks.php'));
     $line = 0;

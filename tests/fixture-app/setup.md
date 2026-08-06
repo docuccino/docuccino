@@ -157,6 +157,11 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.
+- `app/Exceptions/InvokableProblemRenderer.php` — a catch-all `__invoke(Throwable $e): JsonResponse`
+  with sequential `instanceof` branches (409/401 + a 500 default) emitting a distinct
+  `application/problem+json`-style body (a `type`/`title`/`status`/`instance` shape). Registered as an
+  invokable object, it reaches the handler as a `Closure::fromCallable()` naming `__invoke`, so it is
+  analysed as that METHOD with `$e` narrowed — the shape a by-line closure lookup would miss.
 
 ### JSON:API + laravel-actions recovery
 
