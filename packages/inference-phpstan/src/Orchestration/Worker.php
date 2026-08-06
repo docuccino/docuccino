@@ -12,6 +12,8 @@ use Symfony\Component\Process\Process;
  * streaming {@see InputStream}, buffers stdout, and hands back complete NDJSON
  * messages. All scheduling state (which actions are in flight, timers, attempt
  * counts) lives in {@see WorkerPool}; this class is only lifecycle + framed IO.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class Worker
 {

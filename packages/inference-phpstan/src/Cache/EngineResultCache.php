@@ -19,6 +19,8 @@ use Docuccino\Core\Inference\ClassRef;
  * Contract: a cache *hit* MUST return a value byte-identical (after canonical
  * serialization) to what a *miss* would have recomputed. Implementations tolerate
  * concurrent writers.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 interface EngineResultCache
 {

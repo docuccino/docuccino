@@ -35,6 +35,8 @@ use Throwable;
  *
  * The in-process engine boots on first use only, so an analyze-only run never
  * pays for a second container boot in the parent.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class OrchestratedTypeEngine implements TypeEngine
 {

@@ -17,6 +17,8 @@ use Docuccino\Core\Inference\TypeEngine;
  * analyses or once `memory_get_usage(true)` crosses `rssLimitBytes` — the parent
  * respawns a fresh worker. A poison action that hard-crashes mid-analysis never
  * returns a result line; the parent detects the truncated stream and contains it.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class WorkerLoop
 {

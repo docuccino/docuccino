@@ -17,6 +17,8 @@ use PHPStan\Reflection\ReflectionProvider;
  * Everything an adapter does upward is expressed in `PhpParser\Node`, PHPStan
  * `Scope`, and `ReflectionProvider` — all BC-promised — so only booting, parser
  * priming and file walking need per-minor attention.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 interface RuntimeAdapter
 {

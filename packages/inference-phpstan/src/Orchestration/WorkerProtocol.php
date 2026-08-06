@@ -18,6 +18,8 @@ use Docuccino\Core\Inference\ActionRef;
  *
  * The `id` is the {@see ActionRef::symbol()} so the parent can match a result to
  * its request regardless of which worker (or attempt) produced it.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class WorkerProtocol
 {

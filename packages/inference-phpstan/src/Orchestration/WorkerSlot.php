@@ -9,6 +9,8 @@ namespace Docuccino\Inference\PhpStan\Orchestration;
  * {@see Worker} (null until spawned / after a crash), the ids of its current
  * assignment, which of them have been acknowledged, whether its startup
  * handshake arrived, and when the in-flight action's clock started.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class WorkerSlot
 {

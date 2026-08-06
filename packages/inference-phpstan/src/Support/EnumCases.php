@@ -12,6 +12,8 @@ use Throwable;
  * Reads an enum's case names via reflection. Shared by the type translator
  * (scope-driven) and the native type mapper (reflection-driven), which
  * previously carried byte-identical private copies.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class EnumCases
 {

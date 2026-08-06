@@ -17,6 +17,8 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
  *
  * The per-entry half (action-file hash + each dependency-file hash) is added by
  * {@see FilesystemEngineResultCache} at store/lookup time.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class VersionFingerprint
 {

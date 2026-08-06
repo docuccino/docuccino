@@ -16,6 +16,8 @@ use PHPStan\Analyser\Scope;
  * The engine-side {@see TypeScope}: the only type-engine surface a visitor sees.
  * Wraps a PHPStan `Scope` + {@see TypeTranslator}; `PhpParser\Node` crosses the
  * boundary while `PHPStan\*` stops here (design §4, Spike B).
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class TypeScopeImpl implements TypeScope
 {

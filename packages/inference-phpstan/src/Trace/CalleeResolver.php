@@ -20,6 +20,8 @@ use PHPStan\Reflection\ReflectionProvider;
  * (`__call`, e.g. Spatie QB forwarding `paginate`), or a PHP-internal/stub method
  * with no file. That null is exactly the boundary signal both callers act on
  * (Spike B trap #6); the caller then applies its own {@see ProjectFilter} gate.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class CalleeResolver
 {

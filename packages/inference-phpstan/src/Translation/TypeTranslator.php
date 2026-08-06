@@ -45,6 +45,8 @@ use Throwable;
  * each marked with a line-scoped, justified ignore directive rather than any
  * blanket suppression. The translator needs no booted container, which is what
  * makes its unit tests table-driven.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class TypeTranslator
 {

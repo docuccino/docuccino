@@ -28,6 +28,8 @@ use Throwable;
  * normalisation, cwd management — lives here (design §2). All of it was proven
  * out by Spike A; every documented trap is honoured with a comment pointing at
  * it.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class RuntimeAdapter implements RuntimeAdapterContract
 {

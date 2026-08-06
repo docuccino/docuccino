@@ -22,6 +22,8 @@ use ReflectionProperty;
  * high-confidence column universe), typed through the shared {@see TypeStringParser}
  * grammar. Native public properties win over a same-named docblock tag. Memoised per
  * class per run; always total (an unresolvable class yields an empty, well-formed metadata).
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class ClassMetadataFactory
 {

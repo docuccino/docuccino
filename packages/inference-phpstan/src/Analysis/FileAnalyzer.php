@@ -16,6 +16,8 @@ use PHPStan\Node\MethodReturnStatementsNode;
  * with its flow-refined scope and carries the method's throw points (design §2).
  * Memoised per file so descent re-uses a single rich parse; the adapter's
  * priming guarantees bodies survive.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class FileAnalyzer
 {

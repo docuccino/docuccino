@@ -37,6 +37,8 @@ use PHPStan\Type\Type;
  * Result identity is `(fqcn, httpStatusHint)`: two aborts (403/404) are two
  * responses. Vendor-declared 500-class exceptions are demoted to `internal`;
  * dropped bare-`Throwable` noise is counted and never surfaced.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class ThrowAnalyzer
 {

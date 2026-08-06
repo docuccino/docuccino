@@ -50,6 +50,8 @@ use Throwable;
  * Not built here (Phase 2b): worker orchestration, recycling/bisection, the
  * engine result cache. The seams are present — `dependencyFiles` feeds the
  * cache key; the adapter is swappable per PHPStan minor — but no stubs.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class PhpStanTypeEngine implements TypeEngine
 {

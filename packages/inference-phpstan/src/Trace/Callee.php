@@ -10,6 +10,8 @@ use Docuccino\Inference\PhpStan\Support\ProjectFilter;
  * The concrete method a call node dispatches to: declaring class, method name,
  * and the file it lives in. Whether it is project or vendor code is decided by
  * {@see ProjectFilter}, not stored here.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class Callee
 {

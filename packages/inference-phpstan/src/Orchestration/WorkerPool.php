@@ -35,6 +35,8 @@ use Docuccino\Inference\PhpStan\Cache\VersionFingerprint;
  *     {@see NullTypeEngine} (Larastan could not boot the app), the pool tears the
  *     workers down and finishes in-process, attaching one engine-level fatal
  *     diagnostic per action so docblock/attribute-only docs still build.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class WorkerPool
 {

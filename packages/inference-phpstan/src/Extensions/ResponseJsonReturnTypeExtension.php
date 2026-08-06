@@ -36,6 +36,8 @@ use PHPStan\Type\VoidType;
  * Laravel classes are referenced by FQCN string rather than imported: this package carries no
  * hard dependency on illuminate/*, and the extension only ever executes inside a booted host app
  * where those classes exist.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class ResponseJsonReturnTypeExtension implements DynamicMethodReturnTypeExtension
 {

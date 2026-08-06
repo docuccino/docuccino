@@ -12,6 +12,8 @@ use Closure;
  * interprocedural descent (Spike C): descent auto-stops at the first
  * vendor-declared method even when the receiver is a project class (e.g.
  * `Model::findOrFail` on an `App\Models\User`).
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class ProjectFilter
 {

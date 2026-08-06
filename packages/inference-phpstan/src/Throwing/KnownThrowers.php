@@ -14,6 +14,8 @@ namespace Docuccino\Inference\PhpStan\Throwing;
  *
  * Immutable + additive: `withFunction()` / `withMethod()` return a new registry,
  * so users layer their own throwers on top of the defaults.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class KnownThrowers
 {

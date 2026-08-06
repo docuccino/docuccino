@@ -9,6 +9,8 @@ use Docuccino\Core\Inference\ActionRef;
 /**
  * An {@see ActionRef} paired with its pre-encoded NDJSON request line and stable
  * request id — the unit the {@see WorkerPool} queues, sends and tracks.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class ActionRefLine
 {

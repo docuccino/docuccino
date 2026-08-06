@@ -12,6 +12,8 @@ use OutOfRangeException;
  * Selects the {@see RuntimeAdapter} for the installed PHPStan minor. Only one
  * adapter exists in Phase 2a ({@see V2_2Adapter}, targeting 2.2.x/2.3.x); the
  * factory is the seam where additional per-minor adapters slot in (Phase 2b).
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class RuntimeAdapterFactory
 {

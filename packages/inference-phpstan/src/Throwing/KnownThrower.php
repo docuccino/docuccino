@@ -9,6 +9,8 @@ namespace Docuccino\Inference\PhpStan\Throwing;
  * Laravel-semantic callee raises, plus how to derive its HTTP status —
  * either a fixed status, or by constant-folding a positional argument
  * (`abort($status)` = arg 0; `abort_if($cond, $status)` = arg 1).
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class KnownThrower
 {

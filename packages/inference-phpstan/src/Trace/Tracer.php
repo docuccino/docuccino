@@ -22,6 +22,8 @@ use PHPStan\Analyser\Scope;
  *
  * `enterNode` returning `true` is a *request* the Tracer may decline: it only
  * descends into project-code callees within depth and file budget.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class Tracer
 {

@@ -27,6 +27,8 @@ use Docuccino\Core\Inference\ClassRef;
  * Concurrency-safe: writes go to a unique temp file and are `rename()`d into place
  * (atomic on the same filesystem); reads tolerate absent/partial/corrupt files.
  * No absolute paths leak into keys as identity — only their content hashes do.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class FilesystemEngineResultCache implements EngineResultCache
 {

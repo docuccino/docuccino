@@ -25,6 +25,8 @@ use Docuccino\Inference\PhpStan\Cache\VersionFingerprint;
  * The hit path returns a value byte-identical to the miss path because the cache
  * stores the canonical `toArray()` and the decorator returns the same object it
  * would have computed.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class CachingTypeEngine implements TypeEngine
 {

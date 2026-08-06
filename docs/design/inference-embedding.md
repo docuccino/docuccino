@@ -98,6 +98,20 @@ interface TypeScope {
 
 `PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
 
+**Public surface (`@internal` convention).** The only classes in
+`packages/inference-phpstan/src` that are part of this package's supported API are the ones a
+consumer legitimately imports to configure and build the engine: `Analysis\EngineConfig`,
+`Analysis\PhpStanEngineFactory`, `Runtime\RuntimeConfig`, `Metadata\DocBlockReader`,
+`Types\TypeStringParser`, and `Types\ImportContext` (the last two colocate with the type-string
+grammar whose home the design defers — §5). Everything else — the Analysis engine implementations
+behind the factory, the whole `Orchestration`/`Runtime` (bar `RuntimeConfig`) worker machinery, and
+the `Trace`/`Throwing`/`Translation`/`Support`/`Cache`/`Metadata`-factory/PHPStan-extension internals
+— carries an `@internal` marker: it is an engine implementation detail, free to change between
+releases, and no adapter extension imports it (the Laravel adapter reaches only the six public
+classes above; the engine's own test harness may of course use the internals). A type reachable only
+as a construction detail of a public class (e.g. an `OrchestrationConfig` folded inside `EngineConfig`)
+is `@internal` too — reachability is not the public contract.
+
 **Trace contract refinements (verified in the Phase 0 spike, all-PASS — the
 2-deep-helper-chain constant recovery + custom-terminal pagination case):**
 - Responsibility split: the visitor is pure semantics + harvesting (zero PHPStan imports);

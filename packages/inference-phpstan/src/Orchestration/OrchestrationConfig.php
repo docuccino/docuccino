@@ -13,6 +13,8 @@ use Docuccino\Core\Inference\TypeEngine;
  * returns a constructed {@see TypeEngine}; each worker
  * `require`s it once at startup (see `bin/worker.php`). Keeping bootstrap out of
  * the package is what lets the same worker binary run in any host app.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class OrchestrationConfig
 {

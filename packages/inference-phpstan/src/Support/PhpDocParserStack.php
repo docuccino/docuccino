@@ -21,6 +21,8 @@ use Throwable;
  * engine's docblock reader and the attribute type-string parser share one wiring instead of each
  * re-rolling it. Lives here (not in the framework-agnostic `docuccino/core`) because core stays
  * free of the phpdoc-parser dependency.
+ *
+ * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final class PhpDocParserStack
 {
