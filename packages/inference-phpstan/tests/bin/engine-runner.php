@@ -43,7 +43,6 @@ use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
 use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
-use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateTraceVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
@@ -200,13 +199,15 @@ $result = match ($mode) {
         return ['fields' => $fields, 'unrecoverable' => $visitor->unrecoverableFields()];
     })(),
     'trace-json-api-paginate' => (static function () use ($engine, $ref): array {
-        $visitor = new JsonApiPaginateTraceVisitor;
+        // The shared PaginationTerminalVisitor recovers the jsonPaginate terminal + its outermost
+        // int args (jsonPaginate(?maxResults, ?defaultSize)) on the real engine.
+        $visitor = new PaginationTerminalVisitor(['jsonPaginate' => 'length']);
         $engine->trace($ref, $visitor);
 
         return [
-            'paginates' => $visitor->facts->paginates,
-            'maxResults' => $visitor->facts->maxResultsOverride,
-            'defaultSize' => $visitor->facts->defaultSizeOverride,
+            'paginates' => $visitor->paginates,
+            'maxResults' => $visitor->outermostArgs[0] ?? null,
+            'defaultSize' => $visitor->outermostArgs[1] ?? null,
         ];
     })(),
     'trace-pagination-terminal' => (static function () use ($engine, $ref): array {

@@ -37,10 +37,32 @@ final class PaginationTerminalVisitor implements TraceVisitor
         'Spatie\\QueryBuilder\\QueryBuilder',
     ];
 
+    /**
+     * The single Laravel paginating-terminal → paginator-kind table, shared by every consumer (QB
+     * parameters, the resource envelope, json-api-paginate) so the terminal→kind mapping is defined
+     * exactly once. Custom / package terminals extend it with their own kind.
+     *
+     * @var array<string, string>
+     */
+    public const PAGINATOR_TERMINALS = [
+        'paginate' => 'length',
+        'simplePaginate' => 'simple',
+        'cursorPaginate' => 'cursor',
+    ];
+
     public bool $paginates = false;
 
     /** The outermost terminal's paginator kind: length | simple | cursor. */
     public ?string $kind = null;
+
+    /**
+     * The outermost terminal call's positional arguments, each constant-folded to an int when it
+     * folds to a literal (else null) — e.g. `jsonPaginate($maxResults, $defaultSize)`. Read by
+     * consumers that recover a per-call-site size override; empty when the terminal takes no args.
+     *
+     * @var list<?int>
+     */
+    public array $outermostArgs = [];
 
     /**
      * @param  array<string, string>  $terminals  terminal method name → paginator kind
@@ -54,7 +76,7 @@ final class PaginationTerminalVisitor implements TraceVisitor
             && isset($this->terminals[$node->name->toString()])
             && $this->receiverIsBuilder($node->var, $scope)
         ) {
-            $this->record($node->name->toString());
+            $this->record($node->name->toString(), $node, $scope);
         }
 
         // The magic-static `Model::paginate(...)` form: the terminal is a method of the model's builder,
@@ -64,7 +86,7 @@ final class PaginationTerminalVisitor implements TraceVisitor
             && isset($this->terminals[$node->name->toString()])
             && $this->classIsModel($node->class, $scope)
         ) {
-            $this->record($node->name->toString());
+            $this->record($node->name->toString(), $node, $scope);
         }
 
         // Descend into any app-code call so a terminal built inside a helper is reached; the engine
@@ -72,7 +94,7 @@ final class PaginationTerminalVisitor implements TraceVisitor
         return $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\StaticCall;
     }
 
-    private function record(string $terminal): void
+    private function record(string $terminal, Node\Expr\MethodCall|Node\Expr\StaticCall $call, TypeScope $scope): void
     {
         // The outermost terminal is recorded first (the engine walks the entry method before
         // descending), so the shallowest call site wins.
@@ -82,6 +104,13 @@ final class PaginationTerminalVisitor implements TraceVisitor
 
         $this->paginates = true;
         $this->kind = $this->terminals[$terminal];
+
+        $args = [];
+        foreach ($call->getArgs() as $arg) {
+            $value = $scope->constantValueOf($arg->value);
+            $args[] = $value !== null && $value->isScalar() && is_int($value->scalar) ? $value->scalar : null;
+        }
+        $this->outermostArgs = $args;
     }
 
     private function receiverIsBuilder(Node\Expr $receiver, TypeScope $scope): bool

@@ -9,6 +9,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
+use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 use PhpParser\Comment;
 use PhpParser\Node;
 
@@ -83,11 +84,7 @@ final class QueryBuilderTraceVisitor implements TraceVisitor
         array $customTerminals = [],
         private readonly WhereColumnAnalyzer $whereColumns = new WhereColumnAnalyzer,
     ) {
-        $terminals = [
-            'paginate' => 'length',
-            'simplePaginate' => 'simple',
-            'cursorPaginate' => 'cursor',
-        ];
+        $terminals = PaginationTerminalVisitor::PAGINATOR_TERMINALS;
         foreach ($customTerminals as $terminal) {
             $terminals[$terminal] ??= 'length';
         }

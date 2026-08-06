@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\JsonApiPaginate;
 
+use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
+
 /**
- * What a {@see JsonApiPaginateTraceVisitor} recovers from an action's chain: whether it reaches a
- * `jsonPaginate()` terminal at all, and the per-call-site overrides the macro accepts
- * (`jsonPaginate(?maxResults, ?defaultSize)`), folded from the outermost call. A mutable accumulator
- * the visitor writes and the parameters extension reads back once the trace returns.
+ * The `jsonPaginate()` facts the parameters extension builds from the shared
+ * {@see PaginationTerminalVisitor} trace: whether the chain
+ * reaches the terminal at all, and the per-call-site overrides the macro accepts
+ * (`jsonPaginate(?maxResults, ?defaultSize)`), folded from the outermost call's int args. A small DTO
+ * the parameters extension populates once the trace returns and hands to {@see JsonApiPaginateParameters}.
  */
 final class JsonApiPaginateFacts
 {

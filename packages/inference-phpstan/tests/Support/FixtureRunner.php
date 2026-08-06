@@ -82,8 +82,9 @@ final class FixtureRunner
     }
 
     /**
-     * Trace a controller with the REAL JsonApiPaginateTraceVisitor: returns whether it reached the
-     * `jsonPaginate()` terminal and the folded per-call-site overrides (`maxResults`/`defaultSize`).
+     * Trace a controller with the REAL shared PaginationTerminalVisitor over the `jsonPaginate`
+     * terminal: returns whether it reached the terminal and the folded per-call-site overrides
+     * (`maxResults`/`defaultSize`, from the outermost call's int args).
      *
      * @return array<string, mixed>
      */

@@ -342,9 +342,9 @@ it('recovers a real timacdonald JSON:API resource attributes shape and maps it t
 })->group('fixture');
 
 it('recovers spatie jsonPaginate() through the real engine and maps it to page[number]/page[size]', function (): void {
-    // The REAL JsonApiPaginateTraceVisitor runs in the engine subprocess: it must recognise the
+    // The REAL shared PaginationTerminalVisitor runs in the engine subprocess: it must recognise the
     // jsonPaginate() terminal one call deep, match the (where-narrowed) Eloquent builder receiver, and
-    // fold the two literal overrides from the call site.
+    // fold the two literal overrides from the outermost call site's int args.
     $trace = FixtureRunner::traceJsonApiPaginate(
         'app/Http/Controllers/JsonApiPaginateController.php',
         'App\\Http\\Controllers\\JsonApiPaginateController',

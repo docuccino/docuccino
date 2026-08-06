@@ -377,6 +377,16 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     nested schema drafts (per-property PatchGuard provenance, so the override is recorded with the
     integration value kept in `overrode`). The QB integration runs at `Priorities::EARLY` so its
     container exists before the attribute layer patches into it.
+  - Single paginating-terminal table + custom-terminal resource envelope (D3, 2026-08-06). The
+    length/simple/cursor terminal→kind table lives once on `Support\PaginationTerminalVisitor`
+    (`PAGINATOR_TERMINALS`); the QB parameters visitor, the API-resources envelope, and json-api-paginate
+    all read it (the standalone `JsonApiPaginateTraceVisitor` is deleted — the shared visitor now also
+    exposes the outermost terminal call's folded int args, which is all json-api-paginate needed extra).
+    **Decision:** a custom QB terminal configured under `integrations.query_builder.pagination_terminals`
+    (e.g. Eos's `paginateList`) now ALSO triggers the API-resources `{data, links, meta}` envelope
+    (length-aware), not only the QB page parameters — the terminal set is config-shared, so a resource
+    collection paginated by a custom terminal is documented consistently with its page params instead of
+    getting parameters but a bare-array body.
 
 ## 7. Precedence / patch semantics
 

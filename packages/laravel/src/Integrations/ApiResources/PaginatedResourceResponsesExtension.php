@@ -27,13 +27,6 @@ use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 #[ExtensionOrder(priority: Priorities::LATE)]
 final class PaginatedResourceResponsesExtension implements OperationExtension
 {
-    /** @var array<string, string> paginating terminal → paginator kind */
-    private const TERMINALS = [
-        'paginate' => 'length',
-        'simplePaginate' => 'simple',
-        'cursorPaginate' => 'cursor',
-    ];
-
     public function phase(): OperationPhase
     {
         return OperationPhase::Responses;
@@ -46,7 +39,7 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
             return;
         }
 
-        $visitor = new PaginationTerminalVisitor(self::TERMINALS);
+        $visitor = new PaginationTerminalVisitor($this->terminals($context));
         $context->trace($visitor);
 
         if (! $visitor->paginates || $visitor->kind === null) {
@@ -60,5 +53,30 @@ final class PaginatedResourceResponsesExtension implements OperationExtension
             $visitor->kind,
             Contribution::integration('api-resources', $context->actionSource()),
         );
+    }
+
+    /**
+     * The paginating terminals that trigger the resource envelope: the shared length/simple/cursor
+     * table plus any custom Query-Builder terminals configured under
+     * `integrations.query_builder.pagination_terminals` (arch PIN 3 — a resource collection paginated
+     * via a custom QB terminal such as `paginateList` earns the `{data, links, meta}` envelope too,
+     * length-aware, so it is documented consistently with its QB page parameters).
+     *
+     * @return array<string, string>
+     */
+    private function terminals(RouteContext $context): array
+    {
+        $terminals = PaginationTerminalVisitor::PAGINATOR_TERMINALS;
+
+        $custom = $context->document->integration('query_builder')['pagination_terminals'] ?? null;
+        if (is_array($custom)) {
+            foreach ($custom as $terminal) {
+                if (is_string($terminal)) {
+                    $terminals[$terminal] ??= 'length';
+                }
+            }
+        }
+
+        return $terminals;
     }
 }

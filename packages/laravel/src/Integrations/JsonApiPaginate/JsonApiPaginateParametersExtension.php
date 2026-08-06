@@ -11,11 +11,12 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 
 /**
  * Documents a `spatie/laravel-json-api-paginate` list endpoint (Phase 5c). It traces the action with
- * a {@see JsonApiPaginateTraceVisitor} (so the walk's dependency files join the fragment-cache key),
- * and when the chain reaches `jsonPaginate()` contributes the JSON:API `page[number]`/`page[size]`
+ * the shared {@see PaginationTerminalVisitor} (so the walk's dependency files join the fragment-cache
+ * key), and when the chain reaches `jsonPaginate()` contributes the JSON:API `page[number]`/`page[size]`
  * (or `page[cursor]`/`page[size]`) query parameters, respecting the package's configured names and
  * sizes. The response envelope is documented separately by {@see JsonApiPaginateResponsesExtension},
  * which wraps a resource-collection body in the `{data, links, meta}` paginator envelope for the
@@ -35,16 +36,24 @@ final class JsonApiPaginateParametersExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        $visitor = new JsonApiPaginateTraceVisitor(methodName: $this->config->methodName);
+        // Trace with the shared PaginationTerminalVisitor (the jsonPaginate terminal → the config's
+        // mode); it also exposes the outermost call's folded int args — the macro's
+        // jsonPaginate(?maxResults, ?defaultSize) per-call-site overrides.
+        $visitor = new PaginationTerminalVisitor([$this->config->methodName => $this->config->mode]);
         $context->trace($visitor);
 
-        if (! $visitor->facts->paginates) {
+        if (! $visitor->paginates) {
             return;
         }
 
+        $facts = new JsonApiPaginateFacts;
+        $facts->paginates = true;
+        $facts->maxResultsOverride = $visitor->outermostArgs[0] ?? null;
+        $facts->defaultSizeOverride = $visitor->outermostArgs[1] ?? null;
+
         $contribution = Contribution::integration('json-api-paginate', $context->actionSource());
 
-        foreach ($this->builder->build($this->config, $visitor->facts) as $spec) {
+        foreach ($this->builder->build($this->config, $facts) as $spec) {
             $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
