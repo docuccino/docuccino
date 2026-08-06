@@ -182,6 +182,13 @@ final class WorkbenchEngine
                     new ReturnSite($jsonResponse(new ArrayShapeT([new ArrayShapeField('status', new LiteralT('accepted'))]), 202), $location),
                 ]),
 
+                // A union of a bare spatie Data (its own inferred success status + envelope) and a
+                // noContent() 204 — the merge must document BOTH statuses from one action.
+                self::CONTROLLER.'storeOrCancel' => new ActionAnalysis(returns: [
+                    new ReturnSite(new ClassT(self::ARTICLE_DATA), $location),
+                    new ReturnSite($jsonResponse(new VoidT, 204), $location),
+                ]),
+
                 // A polymorphic morph (Widget|Gadget) → discriminated oneOf keyed by the morph map.
                 self::CONTROLLER.'showAttachment' => new ActionAnalysis(
                     returns: [new ReturnSite(UnionT::of([new ClassT(self::WIDGET_MODEL), new ClassT(self::GADGET_MODEL)]), $location)],

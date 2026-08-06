@@ -93,4 +93,14 @@ final class IntegrationsController
     {
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
+
+    /**
+     * A union of a spatie Data envelope and a noContent() 204 — two statuses from one action. Placed
+     * last so adding it never shifts a golden-routed method's source line. Routed only ad-hoc in
+     * DataOrNoContentUnionTest (never in the default route set), so no committed golden includes it.
+     */
+    public function storeOrCancel(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
 }
