@@ -100,19 +100,9 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $source = $context->actionSource();
         $source = $source === null ? null : new Source($source->file, $source->line, 'query-builder:strict-mode');
 
-        foreach ($context->exceptionMappers as $mapper) {
-            if (! $mapper->supports($throw, $context)) {
-                continue;
-            }
-
-            $draft = $mapper->toResponse($throw, $context, $context->components);
-            if ($draft === null) {
-                continue;
-            }
-
-            $this->errors->apply($operation, $draft, 'integration:query-builder', $source);
-
-            return;
+        $mapped = $context->mapThrow($throw);
+        if ($mapped !== null) {
+            $this->errors->apply($operation, $mapped->draft, 'integration:query-builder', $source);
         }
     }
 

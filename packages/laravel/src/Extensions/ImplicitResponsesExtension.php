@@ -113,19 +113,9 @@ final class ImplicitResponsesExtension implements OperationExtension
         $throw = new ThrownException($exceptionFqcn, $status, [], ThrowConfidence::Certain, ThrowDisposition::Signal);
         $source = $this->signalSource($context, $signal);
 
-        foreach ($context->exceptionMappers as $mapper) {
-            if (! $mapper->supports($throw, $context)) {
-                continue;
-            }
-
-            $draft = $mapper->toResponse($throw, $context, $context->components);
-            if ($draft === null) {
-                continue;
-            }
-
-            $this->applier->apply($operation, $draft, self::PRODUCER, $source);
-
-            return;
+        $mapped = $context->mapThrow($throw);
+        if ($mapped !== null) {
+            $this->applier->apply($operation, $mapped->draft, self::PRODUCER, $source);
         }
     }
 

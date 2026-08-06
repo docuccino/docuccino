@@ -21,6 +21,7 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
@@ -104,6 +105,29 @@ final class RouteContext
             $redirect = $target->resolve($this);
             if ($redirect !== null) {
                 return $redirect;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Walk the exception→response chain for a throw and return the first mapper that supports it AND
+     * yields a non-null {@see ResponseDraft}, paired with that draft (or null when none applies). The
+     * single home for the "first supports() + non-null toResponse() wins" chain resolution the error /
+     * implicit / QB-strict / action-authorize extensions all synthesize a throw for — each then applies
+     * the returned draft with its own producer/source.
+     */
+    public function mapThrow(ThrownException $throw): ?MappedResponse
+    {
+        foreach ($this->exceptionMappers as $mapper) {
+            if (! $mapper->supports($throw, $this)) {
+                continue;
+            }
+
+            $draft = $mapper->toResponse($throw, $this, $this->components);
+            if ($draft !== null) {
+                return new MappedResponse($mapper, $draft);
             }
         }
 

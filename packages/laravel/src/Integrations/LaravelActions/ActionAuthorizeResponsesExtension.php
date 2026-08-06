@@ -51,22 +51,12 @@ final class ActionAuthorizeResponsesExtension implements OperationExtension
             ThrowDisposition::Signal,
         );
 
-        foreach ($context->exceptionMappers as $mapper) {
-            if (! $mapper->supports($throw, $context)) {
-                continue;
-            }
-
-            $draft = $mapper->toResponse($throw, $context, $context->components);
-            if ($draft === null) {
-                continue;
-            }
-
+        $mapped = $context->mapThrow($throw);
+        if ($mapped !== null) {
             // The synthetic AuthorizationException has no recovered throw site; the real one is the
             // action's authorize() gate, so anchor the 403 to the action (arch review PIN 4 — carry a
             // source rather than none).
-            $this->applier->apply($operation, $draft, $mapper->producer(), $context->actionSource());
-
-            return;
+            $this->applier->apply($operation, $mapped->draft, $mapped->mapper->producer(), $context->actionSource());
         }
     }
 

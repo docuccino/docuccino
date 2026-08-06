@@ -42,18 +42,9 @@ final class ErrorResponsesExtension implements OperationExtension
                 continue;
             }
 
-            foreach ($context->exceptionMappers as $mapper) {
-                if (! $mapper->supports($throw, $context)) {
-                    continue;
-                }
-
-                $draft = $mapper->toResponse($throw, $context, $context->components);
-                if ($draft === null) {
-                    continue;
-                }
-
-                $this->applier->apply($operation, $draft, $mapper->producer(), $this->throwSource($context, $throw));
-                break;
+            $mapped = $context->mapThrow($throw);
+            if ($mapped !== null) {
+                $this->applier->apply($operation, $mapped->draft, $mapped->mapper->producer(), $this->throwSource($context, $throw));
             }
         }
     }
