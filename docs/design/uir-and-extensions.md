@@ -427,8 +427,8 @@ return [
             'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
             'routes' => ['include' => ['api/*'], 'exclude' => [...], 'closure' => null],
             'security' => [...full scheme set..., 'auto_detect_middleware' => 'auth*'],
-            'error_responses' => 'problem-details',
-            'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...]],
+            'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+            'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
             'content' => ['dir' => 'resources/docs/api'],
             'overlays' => ['resources/docs/overlays/*.yaml'],
             'representation' => ['filters' => 'bracketed|deepObject', 'nullable' => …, 'enums' => …, 'operation_id' => …],
@@ -457,10 +457,19 @@ return [
 ];
 ```
 
-`error_responses` accepts `default` (framework-default JSON error shapes), `problem-details`
-(the RFC 9457 preset), or `none` (no error responses). Integration config lives under one `integrations.<name>` bag
-per integration — there is no back-compat read of the old flat `security.sanctum` / `passport` /
-`query_builder` locations (pre-launch).
+`error_responses` accepts either a string preset — `default` (framework-default JSON error shapes),
+`problem-details` (the RFC 9457 preset), or `none` (no error responses) — **or** a bag
+`['preset' => <string>, 'errors_shape' => 'map'|'pointer-list']`, where `errors_shape` chooses how a
+422 body models its `errors`: `map` (field → messages, the default) or `pointer-list` (a list of
+`{detail, pointer}` objects, JSON-Pointer style). `tags.default_strategy` chooses how an operation
+with no `#[Group]` gets its default tag: `controller` (the controller's short name → `tags.map`, the
+default) or `none` (no default tag); an unknown value coerces to `controller` and emits a
+`config.unknown-tag-strategy` info diagnostic. Setting `enabled` on one of the always-on producers
+(validation / form_request / framework_errors / problem_details / inferred_handler) has no effect and
+emits a `config.enabled-ignored` info diagnostic — only the toggleable integrations honour `enabled`.
+Integration config lives under one `integrations.<name>` bag per integration — there is no
+back-compat read of the old flat `security.sanctum` / `passport` / `query_builder` locations
+(pre-launch).
 
 ## 10. Fragment caching
 

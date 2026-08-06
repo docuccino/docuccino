@@ -65,6 +65,8 @@ final readonly class DocumentConfig
      * How an operation with no `#[Group]` gets its default tag: `controller` (the controller's short
      * name, `Controller` suffix stripped, then run through `tags.map`) or `none` (no default tag).
      * Defaults to `controller` so an untagged API still groups sensibly (`tags.map` can then remap).
+     * An unknown value coerces to `controller`; the adapter surfaces that coercion as a config info
+     * diagnostic (`config.unknown-tag-strategy`) rather than swallowing it silently.
      */
     public function tagDefaultStrategy(): string
     {

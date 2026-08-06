@@ -25,6 +25,7 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Validation\Validator;
+use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Registry\IntegrationToggles;
@@ -82,6 +83,10 @@ final class DocumentGenerator
         // permission awaiting opt-in, or an explicit `enabled => false`) — the discoverability signal
         // (design §4). Nothing fires for an integration whose package is absent.
         $bag->addAll(IntegrationToggles::diagnostics($document));
+
+        // Config-shape info diagnostics (design §9): an `enabled` switch on an always-on producer, or
+        // an unknown tags.default_strategy — surfaced instead of silently ignored/coerced.
+        $bag->addAll(ConfigDiagnostics::for($document));
 
         // Compile the narrative content tree (design §Narrative content layer): a document-level
         // input assembled fresh each build. It is deliberately KEPT OUT of the fragment cache key —
