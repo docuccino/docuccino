@@ -342,3 +342,27 @@ it('threads a custom-filter example onto the parameter in both policies', functi
         return [$property['example'], (string) $property['description']];
     }],
 ]);
+
+it('describes every filter kind, falling back to a generic label for an unknown kind', function (string $kind, string $expected): void {
+    // Coverage standard: every FILTER_DESCRIPTIONS entry + the unknown-kind degradation ('Filter').
+    $facts = factsWith(function (QueryBuilderFacts $f) use ($kind): void {
+        $f->filters = [new QbEntry('thing', $kind)];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect($byName['filter[thing]']->description)->toBe($expected);
+})->with([
+    'default' => ['default', 'Partial-match filter'],
+    'partial' => ['partial', 'Partial-match filter'],
+    'exact' => ['exact', 'Exact-match filter'],
+    'beginsWithStrict' => ['beginsWithStrict', 'Begins-with filter'],
+    'endsWithStrict' => ['endsWithStrict', 'Ends-with filter'],
+    'scope' => ['scope', 'Query-scope filter'],
+    'callback' => ['callback', 'Custom filter'],
+    'custom' => ['custom', 'Custom filter'],
+    'operator' => ['operator', 'Operator filter'],
+    'belongsTo' => ['belongsTo', 'Relationship filter'],
+    'trashed' => ['trashed', 'Soft-delete filter: `with` includes soft-deleted records, `only` returns only soft-deleted; omit to exclude them.'],
+    'unknown fallback' => ['wibble', 'Filter'],
+]);

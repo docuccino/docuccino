@@ -63,6 +63,8 @@ it('bails to the numberless floor for an unfoldable limiter', function (string $
     'non-literal argument' => ['\\Illuminate\\Cache\\RateLimiting\\Limit::perMinute($max)'],
     'array of limits' => ['[\\Illuminate\\Cache\\RateLimiting\\Limit::perMinute(60)]'],
     '->response() custom body' => ["\\Illuminate\\Cache\\RateLimiting\\Limit::perMinute(60)->response(function () { return 'x'; })"],
+    // A match-expression body: constantValueOf on a Match_ returns no descriptor → numberless floor.
+    'match-expression body' => ['match (true) { default => \\Illuminate\\Cache\\RateLimiting\\Limit::perMinute(10) }'],
 ]);
 
 it('bails on multiple returns (a conditional limiter)', function (): void {

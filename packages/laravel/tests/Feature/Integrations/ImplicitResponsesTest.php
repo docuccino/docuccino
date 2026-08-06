@@ -24,6 +24,7 @@ use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\GateController;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\GateRequest;
+use Docuccino\Laravel\Tests\Fixtures\FormRequest\PlainRequest;
 
 /**
  * The implicit-response matrix (design §Errors): 401/422/404/403 synthesized from statically-visible
@@ -155,7 +156,9 @@ it('synthesizes a 403 for authorization middleware', function (string $middlewar
 })->with([
     'can' => ['can:update,post'],
     'signed' => ['signed'],
+    'signed:relative' => ['signed:relative'],
     'verified' => ['verified'],
+    'verified:route' => ['verified:route'],
 ]);
 
 it('synthesizes a 403 for a FormRequest whose authorize() can deny', function (): void {
@@ -181,6 +184,22 @@ it('adds no 403 for a FormRequest authorize() that returns literal true', functi
         engine: $engine,
         actionRef: new ActionRef((string) (new ReflectionClass(GateController::class))->getFileName(), GateController::class, 'store'),
         formRequestClass: GateRequest::class,
+    );
+
+    expect(implicitStatuses(runImplicit($context)))->not->toContain('403');
+});
+
+it('adds no 403 when the route has no FormRequest and no authorization middleware', function (): void {
+    $context = implicitContext(new RouteDescriptor(['POST'], 'api/open', middleware: ['throttle:60,1']));
+
+    expect(implicitStatuses(runImplicit($context)))->not->toContain('403');
+});
+
+it('adds no 403 for a FormRequest that declares no authorize() gate of its own', function (): void {
+    $context = implicitContext(
+        new RouteDescriptor(['POST'], 'api/plain'),
+        actionRef: new ActionRef((string) (new ReflectionClass(GateController::class))->getFileName(), GateController::class, 'store'),
+        formRequestClass: PlainRequest::class,
     );
 
     expect(implicitStatuses(runImplicit($context)))->not->toContain('403');

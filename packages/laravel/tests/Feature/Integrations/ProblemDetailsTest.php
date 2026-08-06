@@ -157,4 +157,9 @@ it('parses the error_responses bag into a preset + errors shape', function (): v
     $string = app(DocumentConfigFactory::class)->make('default', ['error_responses' => 'problem-details'], 'skeleton');
     expect($string->errorResponses)->toBe('problem-details')
         ->and($string->errorsShape)->toBe('map');
+
+    // An unknown errors_shape value degrades to the default 'map' rather than being carried through.
+    $invalid = app(DocumentConfigFactory::class)->make('default', ['error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'wibble']], 'skeleton');
+    expect($invalid->errorResponses)->toBe('problem-details')
+        ->and($invalid->errorsShape)->toBe('map');
 });
