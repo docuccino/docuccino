@@ -97,9 +97,13 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
     {
         foreach ($this->reflector->renderCallbacks() as $callback) {
             if ($fqcn === $callback->exceptionType || is_a($fqcn, $callback->exceptionType, true)) {
-                // A closure located by line; the parameter is narrowed to the thrown type (a no-op for
-                // a callback typed to the exact exception, branch selection for a catch-all).
-                return new CallableRef($callback->file, null, null, $callback->line, $callback->parameterName, $fqcn);
+                // The parameter is narrowed to the thrown type (a no-op for a callback typed to the exact
+                // exception, branch selection for a catch-all). A method-backed callback (an invokable
+                // renderer, `[$obj, 'method']`, first-class callable) is analysed as its real method; a
+                // genuine anonymous closure is located by line.
+                return $callback->isMethod()
+                    ? new CallableRef($callback->file, $callback->class, $callback->method, 0, $callback->parameterName, $fqcn)
+                    : new CallableRef($callback->file, null, null, $callback->line, $callback->parameterName, $fqcn);
             }
         }
 

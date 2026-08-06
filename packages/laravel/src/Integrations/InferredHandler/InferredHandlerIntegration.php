@@ -23,6 +23,9 @@ final class InferredHandlerIntegration
             // Environment-digest seam (A4): the registered render-callback set feeds the document-level
             // fragment-cache digest so adding a render handler re-documents the inferred error tier.
             RenderCallbackDigestContributor::class,
+            // Kills the tier's silence: reports one diagnostic per registered-but-unanalysable render
+            // callback (runs once per build regardless of routes).
+            RenderCallbackSkipTransformer::class,
         ];
     }
 }
