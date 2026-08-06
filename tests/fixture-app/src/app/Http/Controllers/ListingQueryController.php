@@ -24,6 +24,7 @@ class ListingQueryController extends Controller
     {
         return QueryBuilder::for(Listing::class)
             ->allowedFilters([
+                // Full-text match on the listing title.
                 'title',
                 AllowedFilter::exact('status'),
             ])

@@ -133,6 +133,11 @@ it('recovers a subject model and types an enum-cast exact filter through the rea
 
     // The non-exact plain filter is not cast-typed (stays a string).
     expect($byName['title']['columnKind'])->toBeNull();
+
+    // The leading `// Full-text match on the listing title.` comment is recovered on the real engine —
+    // proving PHPStan's parser attributes the comment to the array item the way ParserFactory does, so
+    // the comment→description override actually fires (previously proven only over bare parser nodes).
+    expect($byName['title']['comment'])->toBe('Full-text match on the listing title.');
 })->group('fixture');
 
 it('types a scope filter off its enum value parameter and a callback filter off its where column, on the real engine', function (): void {

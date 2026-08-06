@@ -382,6 +382,25 @@ it('recovers spatie jsonPaginate() through the real engine and maps it to page[n
         ->and($byName['page[size]']->schema['maximum'])->toBe(100);
 })->group('fixture');
 
+it('recovers a Validator::make() rule array inside a Queries class reached by descent from the action', function (): void {
+    // The Eos GET-params pattern: the controller action calls a Queries method that runs
+    // Validator::make($input, [...]) one hop away. The engine's bounded descent must reach that call
+    // and the InlineRulesVisitor recover its literal rule array — previously promised but unproven.
+    $trace = FixtureRunner::traceInlineRules(
+        'app/Http/Controllers/ValidatedListController.php',
+        'App\\Http\\Controllers\\ValidatedListController',
+        'index',
+    );
+
+    expect(array_keys($trace['fields']))->toBe(['status', 'per_page']);
+
+    $statusRules = array_map(static fn (array $r): string => $r['name'], $trace['fields']['status']);
+    expect($statusRules)->toBe(['required', 'string']);
+
+    $perPageRules = array_map(static fn (array $r): string => $r['name'], $trace['fields']['per_page']);
+    expect($perPageRules)->toBe(['nullable', 'integer']);
+})->group('fixture');
+
 it('recovers Rule::enum(...) inside a real FormRequest rules() and diagnoses an unrecoverable field', function (): void {
     // ShapeToRuleSet alone drops Rule::enum silently (the descriptor is a bare object by the DType
     // stage, validation §1). The RulesMethodVisitor traces the returned array with constant folding,

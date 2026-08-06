@@ -16,8 +16,10 @@ use PhpParser\Node\Identifier;
  * `Validator::make($data, [...])` call from the action body — field keys straight from the AST, each
  * rule value constant-folded so `Rule::enum(...)` descriptors survive; nothing is ever executed. The
  * shared harvest + unrecoverable-field bookkeeping lives in {@see RulesHarvestingVisitor}; this
- * subclass supplies only the front matching — locating the rules-array argument. It never requests
- * descent; the engine already visits every node of the action body.
+ * subclass supplies only the front matching — locating the rules-array argument. It requests descent
+ * into called project code so a `Validator::make(...)` built inside a Queries/service class one or
+ * more hops from the action is reached (the Eos GET-params pattern); the engine declines vendor /
+ * magic / over-budget descent on its own (Spike B split).
  */
 final class InlineRulesVisitor extends RulesHarvestingVisitor
 {
@@ -28,7 +30,9 @@ final class InlineRulesVisitor extends RulesHarvestingVisitor
             $this->harvest($rulesArgument, $scope);
         }
 
-        return false;
+        // Descend into any app-code call so a validate() built inside a helper/Queries class is
+        // reached; the engine bounds the descent and declines vendor/magic callees.
+        return $node instanceof MethodCall || $node instanceof StaticCall;
     }
 
     /** The rules-array argument of a `validate()` / `Validator::make()` call, or null. */

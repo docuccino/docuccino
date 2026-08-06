@@ -82,6 +82,18 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller action with the REAL InlineRulesVisitor: the engine's bounded descent must
+     * reach a `Validator::make($data, [...])` inside a Queries class one hop away and recover its rule
+     * array. Same shape as {@see traceRules()}.
+     *
+     * @return array<string, mixed>
+     */
+    public static function traceInlineRules(string $relPath, string $class, string $method): array
+    {
+        return self::invoke('trace-inline-rules', self::path($relPath), $class, $method);
+    }
+
+    /**
      * Trace a controller with the REAL shared PaginationTerminalVisitor over the `jsonPaginate`
      * terminal: returns whether it reached the terminal and the folded per-call-site overrides
      * (`maxResults`/`defaultSize`, from the outermost call's int args).

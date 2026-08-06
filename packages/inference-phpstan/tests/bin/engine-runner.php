@@ -20,6 +20,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-qb                  <controllerFile> <class> <method>
  *   php engine-runner.php trace-qb-enrich           <controllerFile> <class> <method>
  *   php engine-runner.php trace-rules               <file> <class> <method>
+ *   php engine-runner.php trace-inline-rules        <controllerFile> <class> <method>
  *   php engine-runner.php trace-json-api-paginate   <controllerFile> <class> <method>
  *   php engine-runner.php trace-pagination-terminal <controllerFile> <class> <method>
  *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
@@ -42,6 +43,7 @@ use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
 use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
+use Docuccino\Laravel\Integrations\FormRequest\InlineRulesVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
@@ -168,6 +170,9 @@ $result = match ($mode) {
             return [
                 'name' => $filter->name,
                 'kind' => $filter->kind,
+                // The recovered leading comment (real-engine proof that PHPStan's parser attributes
+                // it to the array item the same way ParserFactory does → an override description).
+                'comment' => $filter->comment,
                 'columnKind' => $column?->kind,
                 'enum' => $column?->enum,
                 'values' => $column?->enum !== null ? EnumReflection::values($column->enum) : [],
@@ -185,6 +190,24 @@ $result = match ($mode) {
         // survive (validation §1). Returns each field's recovered rule names + params, plus the
         // fields present but unrecoverable.
         $visitor = new RulesMethodVisitor;
+        $engine->trace($ref, $visitor);
+
+        $fields = [];
+        foreach ($visitor->ruleSet()->fields as $field => $rules) {
+            $fields[$field] = array_map(static fn ($rule): array => [
+                'name' => $rule->name,
+                'parameters' => $rule->parameters,
+                'note' => $rule->note,
+            ], $rules);
+        }
+
+        return ['fields' => $fields, 'unrecoverable' => $visitor->unrecoverableFields()];
+    })(),
+    'trace-inline-rules' => (static function () use ($engine, $ref): array {
+        // The REAL InlineRulesVisitor traces the CONTROLLER action; the engine's bounded descent must
+        // reach a `Validator::make($data, [...])` call inside a Queries class one hop away and recover
+        // its rule array (the Eos GET-params validation pattern).
+        $visitor = new InlineRulesVisitor;
         $engine->trace($ref, $visitor);
 
         $fields = [];
