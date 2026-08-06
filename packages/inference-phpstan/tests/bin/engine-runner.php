@@ -13,13 +13,21 @@ declare(strict_types=1);
  * runner, which loads ONLY the fixture app's autoloader plus a hand-registered
  * PSR-4 map for the docuccino packages under test.
  *
- * Usage:
- *   php engine-runner.php analyze         <controllerFile> <class> <method>
- *   php engine-runner.php trace-qb        <controllerFile> <class> <method>
- *   php engine-runner.php trace-qb-enrich <controllerFile> <class> <method>
- *   php engine-runner.php class-metadata  <ignored>        <class>
- *   php engine-runner.php analyze-callable <file> <class> <method> <line> <narrowParam> <narrowType>
- *   php engine-runner.php trace-rate-limiter <file> <ignored> <ignored> <line>
+ * Usage (one mode per invocation — each maps 1:1 onto a FixtureRunner method):
+ *   php engine-runner.php analyze                   <controllerFile> <class> <method>
+ *   php engine-runner.php analyze-callable          <file> <class> <method> <line> <narrowParam> <narrowType>
+ *   php engine-runner.php class-metadata            <ignored>        <class>
+ *   php engine-runner.php trace-qb                  <controllerFile> <class> <method>
+ *   php engine-runner.php trace-qb-enrich           <controllerFile> <class> <method>
+ *   php engine-runner.php trace-rules               <file> <class> <method>
+ *   php engine-runner.php trace-json-api-paginate   <controllerFile> <class> <method>
+ *   php engine-runner.php trace-pagination-terminal <controllerFile> <class> <method>
+ *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
+ *   php engine-runner.php trace-rate-limiter        <file> <ignored> <ignored> <line>
+ *
+ * Dispatch stays a `match ($mode)` rather than a mode => factory table: each arm is a thin visitor
+ * probe carrying a wave-traceability comment, and a test-only harness does not warrant the extra
+ * indirection (revisit if the mode set keeps growing).
  *
  * Emits `@@RESULT@@` followed by a single JSON line (so any incidental host
  * output before it is ignored by the caller).
@@ -56,9 +64,11 @@ spl_autoload_register(static function (string $class) use ($repoRoot): void {
         'Docuccino\\Core\\' => $repoRoot.'/packages/core/src/',
         'Docuccino\\Inference\\PhpStan\\Tests\\' => $repoRoot.'/packages/inference-phpstan/tests/',
         'Docuccino\\Inference\\PhpStan\\' => $repoRoot.'/packages/inference-phpstan/src/',
-        // The JSON:API-paginate trace visitor lives adapter-side but imports only core + php-parser
-        // (+ its own dep-free Facts), so it runs here to prove terminal/receiver matching on the real
-        // engine (spike-d / Phase 5c M2).
+        // Several adapter-side trace visitors (QB, json-api-paginate, pagination terminal, rules,
+        // created-resource) run here to prove terminal/receiver matching + rule/column recovery on the
+        // REAL engine. They import only core + php-parser (+ their own dep-free facts/config), so the
+        // fixture app's phpstan/php-parser stays the only one in play — hence mapping all of
+        // `Docuccino\Laravel\` here is sound (this was one class at spike-d; it is now the norm).
         'Docuccino\\Laravel\\' => $repoRoot.'/packages/laravel/src/',
     ];
     foreach ($map as $prefix => $dir) {

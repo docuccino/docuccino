@@ -2,36 +2,17 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Inference\TypeEngine;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
-use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\FormController;
 
-/**
+/*
  * Security scheme configuration → document (design §Auth detection / §Security scheme breadth):
  * the scheme catalogue, document-level and per-operation requirements, middleware auto-detection,
- * and the #[Unauthenticated] opt-out.
- *
- * @param  callable(array<string, mixed>): array<string, mixed>  $mutate
- * @return array<string, mixed>
+ * and the #[Unauthenticated] opt-out. Uses the shared `stubDocumentArray()` (tests/Pest.php).
  */
-function generateSecurity(callable $mutate): array
-{
-    app()->instance(TypeEngine::class, WorkbenchEngine::make());
-
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $raw = $mutate($raw);
-
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-
-    return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document->toArray();
-}
 
 it('emits the full scheme set and a document-level requirement', function (): void {
-    $document = generateSecurity(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['security']['schemes'] = [
             'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
             'basic' => ['type' => 'http', 'scheme' => 'basic'],
@@ -61,7 +42,7 @@ it('applies the default requirement to auth-detected routes only, and clears it 
     $router = app('router');
     $router->get('api/protected', [FormController::class, 'index'])->middleware('auth:sanctum');
 
-    $document = generateSecurity(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['security']['schemes'] = ['bearer' => ['type' => 'http', 'scheme' => 'bearer']];
         $raw['security']['default'] = [['bearer' => []]];
 
@@ -81,7 +62,7 @@ it('supports a multi-scheme AND requirement', function (): void {
     $router = app('router');
     $router->get('api/protected', [FormController::class, 'index'])->middleware('auth');
 
-    $document = generateSecurity(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['security']['default'] = [['bearer' => [], 'apiKey' => []]];
 
         return $raw;
@@ -92,7 +73,7 @@ it('supports a multi-scheme AND requirement', function (): void {
 });
 
 it('emits no security by default', function (): void {
-    $document = generateSecurity(static fn (array $raw): array => $raw);
+    $document = stubDocumentArray(static fn (array $raw): array => $raw);
 
     expect($document)->not->toHaveKey('security')
         ->and($document['components'] ?? [])->not->toHaveKey('securitySchemes');

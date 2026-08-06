@@ -4,6 +4,7 @@ declare(strict_types=1);
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
@@ -43,6 +44,40 @@ function generateDocument(?callable $mutateConfig = null): GenerationResult
     $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
+}
+
+/**
+ * The full round-trip the feature suites lean on: bind the deterministic stub engine, generate the
+ * `default` document (optionally mutating its raw config), and return the emitted array — so suites
+ * stop each re-rolling the bindStubEngine + generate + toArray wiring (or coupling to a peer test's
+ * file-level global).
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
+ * @return array<string, mixed>
+ */
+function stubDocumentArray(?callable $mutateConfig = null): array
+{
+    bindStubEngine();
+
+    return generateDocument($mutateConfig)->document->toArray();
+}
+
+/**
+ * Index a list of {@see QueryParameterSpec} by parameter name
+ * — the shared helper the query-builder and json-api-paginate parameter unit suites both need
+ * (promoted here so neither couples to the other's file-level global).
+ *
+ * @param  list<QueryParameterSpec>  $specs
+ * @return array<string, QueryParameterSpec>
+ */
+function specsByName(array $specs): array
+{
+    $byName = [];
+    foreach ($specs as $spec) {
+        $byName[$spec->name] = $spec;
+    }
+
+    return $byName;
 }
 
 /**

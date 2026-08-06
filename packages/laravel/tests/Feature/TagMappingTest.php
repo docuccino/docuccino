@@ -3,32 +3,17 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\Contracts\TagMapper;
-use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tags\PrefixTagMapper;
-use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
-/**
+/*
  * Tag mapping (design §Multiple documents): `tags.map`/`tags.mapper` rewrite operation tags and
- * `tags.definitions` emit the sorted document-level `tags` array.
+ * `tags.definitions` emit the sorted document-level `tags` array. Uses the shared
+ * `stubDocumentArray()` (tests/Pest.php).
  */
-function generateWithConfig(callable $mutate): array
-{
-    app()->instance(TypeEngine::class, WorkbenchEngine::make());
-
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $raw = $mutate($raw);
-
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-    $result = app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
-
-    return $result->document->toArray();
-}
 
 it('maps operation tags through the configured map and emits sorted document-level tags', function (): void {
-    $document = generateWithConfig(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['tags']['map'] = ['Forms' => 'Form Management'];
         $raw['tags']['definitions'] = [
             ['name' => 'Zebra', 'weight' => 10],
@@ -49,13 +34,13 @@ it('maps operation tags through the configured map and emits sorted document-lev
 it('derives a default tag from the controller short name when there is no #[Group]', function (): void {
     // IntegrationsController carries no #[Group]; the default strategy tags its operations by the
     // controller short name with the "Controller" suffix stripped.
-    $document = generateWithConfig(static fn (array $raw): array => $raw);
+    $document = stubDocumentArray(static fn (array $raw): array => $raw);
 
     expect($document['paths']['/api/article-resources']['get']['tags'])->toBe(['Integrations']);
 });
 
 it('runs the default controller tag through tags.map', function (): void {
-    $document = generateWithConfig(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['tags']['map'] = ['Integrations' => 'Content'];
 
         return $raw;
@@ -65,7 +50,7 @@ it('runs the default controller tag through tags.map', function (): void {
 });
 
 it('emits no default tag under the none strategy but keeps explicit #[Group] tags', function (): void {
-    $document = generateWithConfig(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['tags']['default_strategy'] = 'none';
 
         return $raw;
@@ -76,7 +61,7 @@ it('emits no default tag under the none strategy but keeps explicit #[Group] tag
 });
 
 it('resolves a custom tags.mapper class-string from the container', function (): void {
-    $document = generateWithConfig(function (array $raw): array {
+    $document = stubDocumentArray(function (array $raw): array {
         $raw['tags']['mapper'] = UppercaseTagMapper::class;
 
         return $raw;
@@ -86,7 +71,7 @@ it('resolves a custom tags.mapper class-string from the container', function ():
 });
 
 it('leaves tags untouched and emits no document tags by default', function (): void {
-    $document = generateWithConfig(static fn (array $raw): array => $raw);
+    $document = stubDocumentArray(static fn (array $raw): array => $raw);
 
     expect($document['paths']['/api/forms']['get']['tags'])->toBe(['Forms'])
         ->and($document)->not->toHaveKey('tags');

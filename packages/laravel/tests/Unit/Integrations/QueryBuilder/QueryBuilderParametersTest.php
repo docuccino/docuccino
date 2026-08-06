@@ -32,19 +32,6 @@ function factsWith(callable $mutate): QueryBuilderFacts
     return $facts;
 }
 
-/**
- * @return array<string, QueryParameterSpec>
- */
-function specsByName(array $specs): array
-{
-    $byName = [];
-    foreach ($specs as $spec) {
-        $byName[$spec->name] = $spec;
-    }
-
-    return $byName;
-}
-
 function bracketedPolicy(): RepresentationPolicy
 {
     return new RepresentationPolicy;
