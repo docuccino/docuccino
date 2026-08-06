@@ -100,7 +100,7 @@ it('does not wrap a nested Data property (only the response root is wrapped)', f
 
 it('uses the wrap key as the paginated envelope items key without double-wrapping', function (string $wrap, string $expectedItemsKey): void {
     $result = convertWithWrap(
-        new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [new ClassT(AuthorData::class)]),
+        new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]),
         new WrapResolver($wrap),
     );
 
@@ -117,7 +117,7 @@ it('uses the wrap key as the paginated envelope items key without double-wrappin
 
 it('defaults the paginated envelope items key to data when no wrap is configured', function (): void {
     $result = convertWithWrap(
-        new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [new ClassT(AuthorData::class)]),
+        new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]),
         new WrapResolver,
     );
 
@@ -125,7 +125,7 @@ it('defaults the paginated envelope items key to data when no wrap is configured
 });
 
 it('wraps a plain DataCollection at the root under the global key, but leaves it a bare array nested', function (): void {
-    $wrapped = convertWithWrap(new ClassT(DataClassReflector::DATA_COLLECTION, [new ClassT(AuthorData::class)]), new WrapResolver('data'));
+    $wrapped = convertWithWrap(new ClassT(DataClassReflector::DATA_COLLECTION, [ScalarT::int(), new ClassT(AuthorData::class)]), new WrapResolver('data'));
 
     expect($wrapped['root'])->toBe([
         'type' => 'object',
@@ -134,7 +134,7 @@ it('wraps a plain DataCollection at the root under the global key, but leaves it
     ]);
 
     // With no wrap configured the same collection is a bare array (no envelope).
-    $bare = convertWithWrap(new ClassT(DataClassReflector::DATA_COLLECTION, [new ClassT(AuthorData::class)]), new WrapResolver);
+    $bare = convertWithWrap(new ClassT(DataClassReflector::DATA_COLLECTION, [ScalarT::int(), new ClassT(AuthorData::class)]), new WrapResolver);
     expect($bare['root']['type'])->toBe('array');
 });
 

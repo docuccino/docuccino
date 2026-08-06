@@ -119,7 +119,7 @@ final class DataValidationRules
         }
 
         if ($stripped instanceof ClassT && DataClassReflector::isDataCollection($stripped->fqcn)) {
-            $item = $stripped->typeArgs[0] ?? null;
+            $item = DataClassReflector::collectionValueType($stripped);
 
             return $item instanceof ClassT && DataClassReflector::isData($item->fqcn)
                 ? $this->descend($item->fqcn, true, $engine, $visiting)

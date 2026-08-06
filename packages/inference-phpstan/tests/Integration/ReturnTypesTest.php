@@ -67,6 +67,27 @@ it('recovers an AnonymousResourceCollection for resourceCollection', function ()
     expect($returns[0]['type']['fqcn'])->toContain('AnonymousResourceCollection');
 })->group('fixture');
 
+it('recovers a spatie two-arg paginated collection generic with the item as the LAST arg', function (): void {
+    // Real-engine/docblock proof for the A1 fix: spatie's collectables are `@template TKey of
+    // array-key, @template TValue`, so `PaginatedDataCollection<int, ArticleData>` recovers as a
+    // TWO-arg generic whose ITEM is the last arg. Reading typeArgs[0] would type the items as the
+    // integer key — the confirmed live bug the SpatieData mapper (DataClassReflector::collectionValueType)
+    // now reads correctly.
+    $returns = spikeReturns('paginatedArticles');
+
+    expect($returns)->toHaveCount(1);
+    $type = $returns[0]['type'];
+    expect($type['kind'])->toBe('class')
+        ->and($type['fqcn'])->toBe('Spatie\\LaravelData\\PaginatedDataCollection')
+        ->and($type['typeArgs'])->toHaveCount(2)
+        ->and($type['typeArgs'][0]['kind'])->toBe('scalar')
+        ->and($type['typeArgs'][0]['scalar'])->toBe('int');
+
+    $item = $type['typeArgs'][count($type['typeArgs']) - 1];
+    expect($item['kind'])->toBe('class')
+        ->and($item['fqcn'])->toBe('App\\Data\\ArticleData');
+})->group('fixture');
+
 it('reports a distinct type per return path in a union action', function (): void {
     $returns = spikeReturns('unionAction');
 

@@ -79,7 +79,10 @@ it('hoists a Data class to a component honouring #[SchemaName]/#[SchemaId], hidd
 it('renders a paginated DataCollection as spatie\'s own length-aware envelope', function (): void {
     $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
 
-    $paginated = $converter->toSchema(new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [new ClassT(AuthorData::class)]))->schema;
+    // The TWO-arg shape spatie's own generics (`@template TKey of array-key, @template TValue`) and the
+    // docblock parser produce: [TKey=int, TValue=AuthorData]. The item type is the LAST arg — reading
+    // typeArgs[0] here would document the items as `{type: integer}` (the key), the confirmed A1 bug.
+    $paginated = $converter->toSchema(new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema;
     // Spatie's shape (NOT the Laravel resource envelope): data/links/meta all required, `links` is an
     // array of {url,label,active} objects, and `meta` carries the *_page_url members (audit gap 7).
     expect($paginated['type'])->toBe('object')
@@ -90,15 +93,35 @@ it('renders a paginated DataCollection as spatie\'s own length-aware envelope', 
         ->and($paginated['properties']['links']['items']['properties'])->toHaveKeys(['url', 'label', 'active'])
         ->and($paginated['properties']['meta']['properties'])->toHaveKeys(['total', 'first_page_url', 'last_page_url', 'next_page_url', 'prev_page_url']);
 
-    $simple = $converter->toSchema(new ClassT(DataClassReflector::DATA_COLLECTION, [new ClassT(AuthorData::class)]))->schema;
+    $simple = $converter->toSchema(new ClassT(DataClassReflector::DATA_COLLECTION, [ScalarT::int(), new ClassT(AuthorData::class)]))->schema;
     expect($simple['type'])->toBe('array')
         ->and($simple['items'])->toHaveKey('$ref');
 });
 
+it('reads the collection ITEM type from the last generic arg across arities', function (array $typeArgs, bool $expectRef): void {
+    $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
+
+    $simple = $converter->toSchema(new ClassT(DataClassReflector::DATA_COLLECTION, $typeArgs))->schema;
+
+    expect($simple['type'])->toBe('array');
+    if ($expectRef) {
+        // The value type resolves to the hoisted AuthorData component, never the {type:integer} key.
+        expect($simple['items'])->toHaveKey('$ref')
+            ->and($simple['items'])->not->toBe(['type' => 'integer']);
+    } else {
+        // Bare `DataCollection` (no generics) → an untyped item array (empty items schema).
+        expect($simple['items'])->toBe([]);
+    }
+})->with([
+    'bare (no generics)' => [[], false],
+    'one-arg <AuthorData>' => [[new ClassT(AuthorData::class)], true],
+    'two-arg <int, AuthorData>' => [[ScalarT::int(), new ClassT(AuthorData::class)], true],
+]);
+
 it('renders a cursor-paginated DataCollection as spatie\'s cursor envelope', function (): void {
     $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
 
-    $cursor = $converter->toSchema(new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [new ClassT(AuthorData::class)]))->schema;
+    $cursor = $converter->toSchema(new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema;
     // Cursor: empty `links` array, cursor tokens + neighbouring page URLs in meta, no total/last_page.
     expect($cursor['required'])->toBe(['data', 'links', 'meta'])
         ->and($cursor['properties']['links']['type'])->toBe('array')

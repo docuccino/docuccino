@@ -8,8 +8,9 @@ use Docuccino\Attributes\Hidden as DocuccinoHidden;
 use Docuccino\Attributes\HiddenFromRequest;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Support\Fqcn;
-use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Illuminate\Support\Str;
 use ReflectionClass;
 use ReflectionIntersectionType;
@@ -51,7 +52,7 @@ final class DataClassReflector
     /**
      * The global default name-mapping strategy (`config('data.name_mapping_strategy.{input,output}')`)
      * as built-in mapper FQCNs, injected by the service provider (the integration stays
-     * vendor-import-free, mirroring {@see PassportRuntime}).
+     * vendor-import-free, mirroring the Passport integration's runtime-config injection).
      * A whole-class default (commonly `SnakeCaseMapper::class`) renames EVERY property key that carries
      * no explicit `#[MapName]`/`#[MapInputName]`/`#[MapOutputName]` — spatie's `NameMappersResolver`
      * falls back to it precisely when no map attribute governs the property.
@@ -167,6 +168,19 @@ final class DataClassReflector
     public static function isDataCollection(string $fqcn): bool
     {
         return is_a($fqcn, self::BASE_COLLECTABLE, true);
+    }
+
+    /**
+     * The ITEM (value) type of a spatie collection generic. Spatie declares its collectables with
+     * `@template TKey of array-key, @template TValue`, so the value type is the LAST type arg:
+     * `PaginatedDataCollection<int, AuthorData>` → `AuthorData`, `DataCollection<AuthorData>` →
+     * `AuthorData`, bare `DataCollection` → null. Reading typeArgs[0] documents the key, not the item.
+     */
+    public static function collectionValueType(ClassT $type): ?DType
+    {
+        $args = $type->typeArgs;
+
+        return $args === [] ? null : $args[array_key_last($args)];
     }
 
     /** Whether an FQCN is a `DateTimeInterface` (spatie serialises these to a formatted string). */

@@ -80,7 +80,7 @@ final class DataPartialsExtension implements OperationExtension
             }
 
             if (DataClassReflector::isDataCollection($type->fqcn)) {
-                $item = $type->typeArgs[0] ?? null;
+                $item = DataClassReflector::collectionValueType($type);
                 if ($item instanceof ClassT && DataClassReflector::isData($item->fqcn)) {
                     return $item->fqcn;
                 }
@@ -94,7 +94,10 @@ final class DataPartialsExtension implements OperationExtension
     private static function unwrap(DType $type): DType
     {
         if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE) {
-            return $type->typeArgs[0] ?? $type;
+            // JsonResponse is single-arg, so the payload is the last (only) type arg.
+            $args = $type->typeArgs;
+
+            return $args === [] ? $type : $args[array_key_last($args)];
         }
 
         return $type;

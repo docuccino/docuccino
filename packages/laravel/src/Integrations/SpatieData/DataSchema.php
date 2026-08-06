@@ -209,7 +209,11 @@ final class DataSchema implements TypeToSchema
 
     private function collection(ClassT $type, SchemaContext $context): SchemaResult
     {
-        $item = $type->typeArgs[0] ?? null;
+        // Spatie's collection generics are `@template TKey of array-key, @template TValue` — so the
+        // ITEM type is the LAST arg. `PaginatedDataCollection<int, AuthorData>` (the shape spatie's
+        // own generics + the docblock parser produce) carries [TKey=int, TValue=AuthorData]; reading
+        // typeArgs[0] there would document the items as `{type: integer}`.
+        $item = DataClassReflector::collectionValueType($type);
         $items = $item !== null ? $context->convert($item) : [];
 
         // A paginated collection is ALWAYS wrapped: the items key IS the wrap key (global ?? 'data'),
