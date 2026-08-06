@@ -73,7 +73,13 @@ it('recovers a spatie two-arg paginated collection generic with the item as the 
     // TWO-arg generic whose ITEM is the last arg. Reading typeArgs[0] would type the items as the
     // integer key — the confirmed live bug the SpatieData mapper (DataClassReflector::collectionValueType)
     // now reads correctly.
-    $returns = spikeReturns('paginatedArticles');
+    $analysis = FixtureRunner::analyze(
+        'app/Http/Controllers/PaginatedCollectionController.php',
+        'App\\Http\\Controllers\\PaginatedCollectionController',
+        'index',
+    );
+    /** @var list<array<string, mixed>> $returns */
+    $returns = $analysis['returns'];
 
     expect($returns)->toHaveCount(1);
     $type = $returns[0]['type'];

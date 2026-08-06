@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Data\ArticleData;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -12,7 +11,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Resources\Json\ResourceCollection;
-use Spatie\LaravelData\PaginatedDataCollection;
 
 class SpikeController extends Controller
 {
@@ -83,21 +81,5 @@ class SpikeController extends Controller
     public function collectionToResourceCollection(): ResourceCollection
     {
         return User::all()->toResourceCollection(UserResource::class);
-    }
-
-    /**
-     * A spatie paginated collection. Its generics are `@template TKey of array-key, @template TValue`,
-     * so the recovered type carries TWO args — [int, ArticleData] — and the collection ITEM is the
-     * LAST one. This is the real-engine/docblock proof for the A1 fix: reading typeArgs[0] would type
-     * the collection items as the integer key.
-     *
-     * @return PaginatedDataCollection<int, ArticleData>
-     */
-    public function paginatedArticles(): PaginatedDataCollection
-    {
-        /** @var PaginatedDataCollection<int, ArticleData> $collection */
-        $collection = ArticleData::collect(User::query()->paginate());
-
-        return $collection;
     }
 }
