@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
+use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Identifier;
@@ -12,10 +13,6 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeFinder;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitor\NameResolver;
-use PhpParser\ParserFactory;
-use Throwable;
 
 /**
  * Recovers the cast map a model declares via the Laravel 11+ `casts()` METHOD (the default skeleton
@@ -36,28 +33,9 @@ final class CastsMethodReader
             return [];
         }
 
-        try {
-            $code = file_get_contents($file);
-            if ($code === false) {
-                return [];
-            }
+        $method = ParsedClassFile::methods($file)['casts'] ?? null;
 
-            $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($code);
-            if ($ast === null) {
-                return [];
-            }
-
-            $ast = (new NodeTraverser(new NameResolver))->traverse($ast);
-
-            $method = (new NodeFinder)->findFirst(
-                $ast,
-                static fn (object $node): bool => $node instanceof ClassMethod && $node->name->toString() === 'casts',
-            );
-
-            return $method instanceof ClassMethod ? $this->fromMethod($method) : [];
-        } catch (Throwable) {
-            return [];
-        }
+        return $method instanceof ClassMethod ? $this->fromMethod($method) : [];
     }
 
     /**

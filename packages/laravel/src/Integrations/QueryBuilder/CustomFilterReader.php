@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 use Docuccino\Attributes\QueryParameter;
-use PhpParser\Node\Stmt\ClassMethod;
-use PhpParser\NodeFinder;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitor\NameResolver;
-use PhpParser\ParserFactory;
+use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
 use ReflectionClass;
 use Throwable;
 
@@ -69,24 +65,8 @@ final class CustomFilterReader
     /** The column the class's `__invoke` filters on, by parsing the class file. */
     private function invokeColumn(string $file): ?string
     {
-        $code = file_get_contents($file);
-        if ($code === false) {
-            return null;
-        }
+        $method = ParsedClassFile::methods($file)['__invoke'] ?? null;
 
-        $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($code);
-        if ($ast === null) {
-            return null;
-        }
-
-        $ast = (new NodeTraverser(new NameResolver))->traverse($ast);
-
-        foreach ((new NodeFinder)->findInstanceOf($ast, ClassMethod::class) as $method) {
-            if ($method->name->toString() === '__invoke') {
-                return $this->whereColumns->fromInvoke($method);
-            }
-        }
-
-        return null;
+        return $method === null ? null : $this->whereColumns->fromInvoke($method);
     }
 }

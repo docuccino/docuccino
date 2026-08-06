@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
 use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
 use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\ArrowFunction;
@@ -15,9 +16,6 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\NodeFinder;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitor\NameResolver;
-use PhpParser\ParserFactory;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
@@ -86,7 +84,7 @@ final class AccessorReader
                     continue;
                 }
 
-                $methodNodes ??= $this->methodNodes($file);
+                $methodNodes ??= ParsedClassFile::methods($file);
                 $line = $this->getClosureLine($methodNodes[$name] ?? null);
                 if ($line !== null) {
                     $accessors[] = [
@@ -107,34 +105,6 @@ final class AccessorReader
         $type = $method->getReturnType();
 
         return $type instanceof ReflectionNamedType && $type->getName() === self::ATTRIBUTE;
-    }
-
-    /**
-     * The class's method nodes, keyed by method name (names resolved to FQCNs so an `Attribute::make`
-     * call matches whatever alias the file imported it under).
-     *
-     * @return array<string, ClassMethod>
-     */
-    private function methodNodes(string $file): array
-    {
-        $code = file_get_contents($file);
-        if ($code === false) {
-            return [];
-        }
-
-        $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($code);
-        if ($ast === null) {
-            return [];
-        }
-
-        $ast = (new NodeTraverser(new NameResolver))->traverse($ast);
-
-        $nodes = [];
-        foreach ((new NodeFinder)->findInstanceOf($ast, ClassMethod::class) as $method) {
-            $nodes[$method->name->toString()] = $method;
-        }
-
-        return $nodes;
     }
 
     /**
