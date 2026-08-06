@@ -15,7 +15,8 @@ return [
     |
     | Each entry is an independent pipeline run: its own route filters, info,
     | servers, security and export target, sharing route contexts and the
-    | TypeEngine in-process. Phase 3a plumbs the whole map but ships one document.
+    | TypeEngine in-process. Add further documents beside `default` to emit a
+    | multi-document set (see the multiple-documents guide).
     */
     'documents' => [
         'default' => [
@@ -77,7 +78,8 @@ return [
                 // 'resources/docs/overlays/*.yaml',
             ],
             'representation' => [
-                'filters' => 'bracketed',          // FUTURE (filter styles): not read yet | bracketed | deepObject
+                'filters' => 'bracketed',          // bracketed (filter[status]) | deepObject (one `filter` deepObject param)
+                'lists' => 'comma',                // comma (?sort=a,b) | array (exploded ?sort[]=a&sort[]=b)
                 'nullable' => 'type-array',        // type-array (type: [x, null]) | anyof ({type: null} branch)
                 'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
                 // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
