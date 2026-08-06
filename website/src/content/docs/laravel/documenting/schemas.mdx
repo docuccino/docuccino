@@ -26,7 +26,7 @@ that schema.
 	        'id' => $this->id,
 	        'total' => $this->total,
 	        'status' => $this->status,
-	        'customer' => new CustomerResource($this->whenLoaded('customer')), // optional
+	        'customer' => $this->whenLoaded('customer', fn () => new CustomerResource($this->customer)), // optional
 	    ];
 	}
 	```
@@ -38,8 +38,8 @@ that schema.
 	  "properties": {
 	    "id":       { "type": "integer" },
 	    "total":    { "type": "number" },
-	    "status":   { "$ref": "#/components/schemas/InvoiceStatus" },
-	    "customer": { "anyOf": [ { "$ref": "#/components/schemas/CustomerResource" }, { "type": "null" } ] }
+	    "status":   { "type": "string", "enum": ["draft", "sent", "paid"] },
+	    "customer": { "$ref": "#/components/schemas/CustomerResource" }
 	  },
 	  "required": ["id", "total", "status"]
 	}
@@ -47,8 +47,12 @@ that schema.
 	</TabItem>
 </Tabs>
 
-The conditional `customer` isn't in `required` — `whenLoaded` made it optional — and `status` points at
-the shared enum schema below.
+The conditional `customer` isn't in `required` — `whenLoaded` made it optional — and it stays a plain
+`$ref`: an unloaded relation is simply omitted from the response, never sent as `null`. Give `whenLoaded`
+its second closure argument (as above) so the optionality is recovered — passing a bare
+`$this->whenLoaded('customer')` straight into a resource constructor hides the conditional, and the
+property comes out required. `status` is documented inline from its enum's cases (see [Enums](#enums)) —
+enums are always inlined where they appear, never hoisted to a shared component.
 
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
 not, so they can be shared by reference. Control this with the `api_resources.wrap` option:
@@ -69,11 +73,13 @@ When a model appears in your output, Docuccino documents it from its columns and
 the model's own conventions: `$hidden` and class-level `#[Hidden]` remove properties, `$visible`
 restricts to an allow-list, and `$casts` (whether the `$casts` property or the `casts()` method) set
 each column's shape. Columns come from the model's `@property` / `@property-read` docblock tags — the
-ide-helper convention — so a model whose attributes are magic still documents fully. Every serialised
-column is marked required (a nullable one as required with a `null`-admitting type).
+ide-helper convention — so a model whose attributes are magic still documents fully. Even without those
+tags there's a floor: a `$casts` key is a column (typed from its cast), a `$dates` entry is a date-time
+column, and a `$fillable`-only name is a permissive column. Every serialized column is marked required (a
+nullable one as required with a `null`-admitting type).
 
 **Casts.** Dates become `date-time` (a `datetime:Y-m-d` cast becomes `date`), enum casts route through
-the shared [enum schema](#enums), and the built-in `As*` class casts are recognised:
+the shared [enum schema](#enums), and the built-in `As*` class casts are recognized:
 
 | Cast | Documented as |
 | --- | --- |
@@ -88,10 +94,10 @@ cast documents as whatever `get()` returns, not an opaque string.
 **Accessors.** A classic `getFullNameAttribute()` and an `Attribute::make(get: …)` accessor both flow
 their return type into the schema: an accessor for an `$appends` attribute types that appended property,
 and an accessor that shadows a real column overrides its type (the cast is skipped, exactly as Eloquent
-serialises it). An accessor whose return type can't be determined statically leaves the property
+serializes it). An accessor whose return type can't be determined statically leaves the property
 permissive rather than guessing.
 
-**Default eager loads.** Relations listed in `$with` serialise on every response, so each is documented
+**Default eager loads.** Relations listed in `$with` serialize on every response, so each is documented
 as a nested schema under its snake-cased key — a to-many relation as an array of the related model, a
 to-one relation as a nullable reference. Nesting is bounded by the same component-sharing that hoists
 every model to a reusable `#/components/schemas` entry: a relation back to a model already being
@@ -130,7 +136,7 @@ its backing). Add per-case descriptions with
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	"InvoiceStatus": {
+	{
 	  "type": "string",
 	  "enum": ["draft", "sent", "paid"],
 	  "x-enumDescriptions": {
@@ -143,8 +149,14 @@ its backing). Add per-case descriptions with
 	</TabItem>
 </Tabs>
 
-Descriptions are emitted as `x-enumDescriptions`. To also emit codegen name hints
-(`x-enumNames` / `x-enum-varnames`), set `representation.enums.naming` in your config.
+This schema is emitted **inline** wherever the enum appears — as a property's schema, a parameter
+schema, and so on. Enums are never hoisted into `#/components/schemas`, so there's no shared
+`InvoiceStatus` component to reference.
+
+Descriptions are emitted as `x-enumDescriptions`. A case with no `#[CaseDescription]` falls back to its
+docblock summary — the first prose line of the case's doc comment — and the attribute wins when both are
+present. To also emit codegen name hints (`x-enumNames` / `x-enum-varnames`), set
+`representation.enums.naming` in your config.
 
 ## When it can't tell
 
@@ -152,11 +164,5 @@ If a resource, model, or enum can't be fully resolved, Docuccino falls back to a
 (for example a bare object) rather than failing, and records lower confidence. Annotations always
 take precedence, so you can pin anything the inference couldn't determine.
 
-## Route-model binding
-
-When a route binds a model to a path parameter (`Route::get('/invoices/{invoice}', …)` with an
-`Invoice $invoice` action argument), Docuccino types that path parameter from the model's route key —
-a `uuid`/`ulid`-string for `HasUuids`/`HasUlids` models, an integer otherwise — instead of assuming
-`integer`. It also documents the implicit `404` the binding produces when the record is missing (one
-`404` per operation). See
-[implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).
+When one of these models is bound to a path parameter through route-model binding, its route key also
+types that path parameter — see [path parameters](/laravel/documenting/requests/#path-parameters).

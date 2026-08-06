@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 Activates automatically when [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) is installed.
 A `Data` class is documented from its properties and validation attributes — **statically**, without
@@ -27,7 +27,7 @@ the same way it would from a Form Request's `rules()`:
 	        public int $customerId,
 	        public string $currency,
 	        public ?string $dueAt,
-	        #[Hidden]
+	        #[HiddenFromRequest]
 	        public ?string $internalNote,
 	    ) {}
 	}
@@ -47,7 +47,7 @@ the same way it would from a Form Request's `rules()`:
 	        "properties": {
 	          "customerId": { "type": "integer" },
 	          "currency":   { "type": "string" },
-	          "dueAt":      { "type": "string" }
+	          "dueAt":      { "type": ["string", "null"] }
 	        },
 	        "required": ["customerId", "currency"]
 	      }
@@ -58,8 +58,15 @@ the same way it would from a Form Request's `rules()`:
 	</TabItem>
 </Tabs>
 
-The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped by `#[Hidden]`, and
-the nullable `dueAt` isn't required.
+The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped from the request by
+`#[HiddenFromRequest]`, and the nullable `dueAt` isn't required (its type admits `null`).
+
+<Aside type="note" title="Hidden vs HiddenFromRequest">
+Spatie's own `#[Hidden]` hides a property from the serialized **output**, not the request — a property
+you accept but never send back stays in the documented request body (and the data-leakage lint can flag
+it). To drop a property from the documented **request** body — a server-populated value like
+`internalNote` — use Docuccino's [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest).
+</Aside>
 
 ### Overriding the rules with `rules()`
 
@@ -87,6 +94,33 @@ class CreateInvoiceData extends Data
 `currency` is now documented with the enum's backing values instead of a bare string. Fields you
 don't mention keep their inferred rules.
 
+### Validation attributes
+
+Spatie Data's validation **attributes** are read too — statically, never executed — and map to exactly
+the same schema constraints as their string-rule equivalents. A `#[Max(100)]` documents identically to
+`'max:100'` on a Form Request, so you don't annotate anything twice:
+
+```php
+class CreateInvoiceData extends Data
+{
+    public function __construct(
+        #[Required, Max(120)]
+        public string $reference,
+        #[Email]
+        public string $billingEmail,
+        #[In(['GBP', 'USD', 'EUR'])]
+        public string $currency,
+        #[Min(0)]
+        public int $amount,
+    ) {}
+}
+```
+
+`#[Required]` marks the property required, `#[Max]` / `#[Min]` become length or range keywords (by the
+property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum`. The whole rule floor
+the [validation-rule mapping](/laravel/documenting/requests/#request-bodies) covers is available through
+the attribute DSL, and a property's own type contributes the base type where no attribute states one.
+
 ## Response schemas from Data returns
 
 Return a `Data` class (or a `DataCollection`) and it's documented as a **reusable component schema**,
@@ -98,6 +132,11 @@ public function show(Invoice $invoice): InvoiceData
     return InvoiceData::from($invoice); // → a reusable InvoiceData schema
 }
 ```
+
+A Data response class that overrides `calculateResponseStatus()` to return a single constant status
+(`return 201;`, or a folded constant like `Response::HTTP_CREATED`) has that status documented in place
+of the default `200`. A conditional or computed status can't be read statically, so the response stays
+`200` with an info diagnostic — see [Responses](/laravel/documenting/responses/#spatie-data-success-status).
 
 ### Wrapping
 
@@ -128,7 +167,10 @@ JSON your app actually produces and accepts:
 
 | Convention | Effect on the schema |
 | --- | --- |
-| `#[Hidden]` | Drops the property entirely. |
+| `#[Hidden]` (spatie) | Drops the property from the **output** schema only; it stays in the request body. |
+| `#[HiddenFromRequest]` (Docuccino) | Drops the property from the **request** body only; the response schema is untouched. |
+| `#[Computed]` / `#[WithoutValidation]` | Excluded from the request body — a computed/server-derived value is never a sendable field. |
+| `#[FromRouteParameter]` | Excluded from the request body — populated from the route binding, not the payload. |
 | `Optional` / `Lazy` | Makes the property non-required. |
 | `#[MapName]` / `#[MapOutputName]` | Renames the property key to the mapped name. |
 | Global name-mapping strategy | `data.name_mapping_strategy` (e.g. snake_case) renames every un-mapped key, on input and output. |

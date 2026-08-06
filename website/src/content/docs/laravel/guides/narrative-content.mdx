@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-import { FileTree, Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
+import { FileTree, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
 
 A generated reference tells a reader *what* each endpoint does. It rarely tells them *where to start*,
 *how to authenticate*, or *how the pieces fit together*. Docuccino lets you write that narrative as
@@ -99,7 +99,7 @@ gets the operation or schema's stable UIR identity appended as a `ref`, so a con
 without re-resolving:
 
 ```markdown
-::operation{id="invoices.index" ref="op:v1:mfz3q8k2w9r7t1ua"}
+::operation{id="invoices.index" ref="op:v1:mfz3q6k2w5r7t4ua"}
 ```
 
 A directive that points at something that **doesn't exist** becomes an error diagnostic — the page is

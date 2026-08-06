@@ -62,7 +62,7 @@ sources can describe the same operation (an inferred type, an integration, a doc
 they're merged by a fixed order of precedence, field by field:
 
 ```
-inference  <  integration  <  docblock  <  attribute  <  overlay  <  config
+fallback  <  inference  <  integration  <  docblock  <  attribute  <  overlay  <  config
 ```
 
 Higher layers win individual fields without discarding the rest, and every contribution is recorded in

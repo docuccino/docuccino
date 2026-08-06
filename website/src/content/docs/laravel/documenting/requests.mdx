@@ -22,21 +22,25 @@ constructs your objects, so generating docs has no side effects.
 
 Every `{param}` in a route's URI becomes a path parameter. Docuccino types it from the route itself:
 
-- A parameter bound to a model through **route-model binding** takes an `integer` schema — Laravel's
-  default `id` route key.
+- A parameter bound to a model through **route-model binding** is typed from the model's route key:
+  a `uuid`- or `ulid`-formatted string for a `HasUuids` / `HasUlids` model, an `integer` for the default
+  incrementing key, or a plain `string` for a non-incrementing string key — so a UUID- or ULID-keyed
+  model is documented correctly with no annotation.
 - An **unbound** segment is a required `string`.
 - An optional segment (`{param?}`) is documented as optional.
 - A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
   consumers know a trashed record can resolve there.
 
+A model binding also documents the implicit `404` the binding produces when the record is missing (one
+`404` per operation). See [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).
+
 ```php
 // routes/api.php
-Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']); // {invoice} → integer id
+Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']); // {invoice} typed from Invoice's route key
 ```
 
-When your route key isn't an integer `id` — a UUID or a slug from `getRouteKeyName()` — refine it with
-[`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to set the type, an OpenAPI
-`format`, a description, or an example:
+Reach for [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to refine a parameter — set
+an OpenAPI `format`, a description, or an example, or give an unbound segment a non-string type:
 
 ```php
 #[PathParameter(name: 'invoice', type: 'string', format: 'uuid', description: 'Invoice public id')]
@@ -45,9 +49,9 @@ public function show(Invoice $invoice): InvoiceResource { /* … */ }
 
 ## Query parameters
 
-Docuccino expresses validation by HTTP verb: **write** verbs (`POST`, `PUT`, `PATCH`) get a request
-body, while **read** verbs (`GET`) get query parameters. So the same validation rules that document a
-create endpoint's body document a list endpoint's query string.
+Docuccino expresses validation by HTTP verb: **write** verbs (`POST`, `PUT`, `PATCH`, `DELETE`) get a
+request body, while **read** verbs (`GET` and `HEAD`) get query parameters. So the same validation rules
+that document a create endpoint's body document a list endpoint's query string.
 
 ```php
 // A GET action that validates its input documents query parameters:
@@ -111,7 +115,7 @@ action — becomes the request body schema. Rules map to JSON Schema: presence t
 	        "properties": {
 	          "customer_id": { "type": "integer" },
 	          "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"] },
-	          "due_at":      { "type": "string", "format": "date" }
+	          "due_at":      { "type": ["string", "null"], "format": "date" }
 	        },
 	        "required": ["customer_id", "currency"]
 	      }
@@ -135,8 +139,10 @@ response schemas, live on the [Spatie Data](/laravel/packages/spatie-data/) page
 ## File uploads
 
 A `file` or `image` rule documents the field as a binary string; a `file`, `image`, `mimes`,
-`mimetypes`, or `extensions` rule also flips the request media type to `multipart/form-data`
-automatically, with the rest of the body carried alongside it:
+`mimetypes`, `extensions`, or `dimensions` rule also flips the request media type to
+`multipart/form-data` automatically, with the rest of the body carried alongside it. A `dimensions`
+rule (image width/height) implies an upload too, and — since OpenAPI has no keyword for pixel
+dimensions — its constraints are recorded as a description note on the field:
 
 ```php
 public function rules(): array

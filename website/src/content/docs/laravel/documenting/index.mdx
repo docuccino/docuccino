@@ -82,7 +82,7 @@ attribute. Docuccino merges them with a clear order of precedence, and higher la
 field (an attribute can override one field of a response without discarding the rest):
 
 ```
-inference  <  integration  <  docblock  <  attribute  <  overlay  <  config
+fallback  <  inference  <  integration  <  docblock  <  attribute  <  overlay  <  config
 ```
 
 So an integration's best guess is always something you can refine with a docblock or an

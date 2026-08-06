@@ -67,7 +67,11 @@ and the matching description line.
 A pipe-separated list is **any-of** — the caller needs any one of the listed roles/permissions, not
 all of them — so the description says so explicitly. `permission:invoices.view|invoices.manage`
 becomes *"Requires any of these permissions: invoices.view, invoices.manage"*, and the `::using()`
-FQCN forms (`PermissionMiddleware::using(...)`) are recognised the same as the short aliases.
+FQCN forms (`PermissionMiddleware::using(...)`) are recognized the same as the short aliases.
+
+An optional guard suffix (`permission:invoices.view,web`) is captured too: the guard name is carried on
+the `x-permissions` entry as a `guard` member, so a requirement scoped to a specific auth guard stays
+unambiguous.
 
 ## Configuration
 

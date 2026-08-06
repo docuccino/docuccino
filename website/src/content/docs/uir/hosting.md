@@ -27,8 +27,10 @@ https://spec.docuccino.app/uir/1.0/schema.json
 - **Structural changes** get a new major version at a new URL, so documents written against an older
   version keep validating against the schema they were built for.
 
-Because consumers ignore unrecognized `x-docuccino` members, additive growth never breaks existing
-readers.
+New members added in a minor revision are optional, so a document that predates them still validates.
+Because the `x-docuccino` subtree is strictly closed, this growth happens by versioning the schema —
+never by readers silently tolerating members they don't recognize — so additive growth never breaks a
+document validating against the version it declares.
 
 ## Validating a document
 

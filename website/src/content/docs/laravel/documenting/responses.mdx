@@ -27,7 +27,8 @@ through the same inference that powers everything else:
 - a **backed enum** becomes its [enum schema](/laravel/documenting/schemas/#enums);
 - a **resource collection** becomes an array of that schema, wrapped in the `{ data, links, meta }`
   pagination envelope when the collection paginates — `paginate()` (length-aware), `simplePaginate()`
-  (no `total`/`last_page`), `cursorPaginate()`, or the package's `jsonPaginate()`.
+  (no `total`/`last_page`), `cursorPaginate()`, or the
+  [Spatie JSON API Paginate](/laravel/packages/json-api-paginate/) package's `jsonPaginate()`.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -46,7 +47,11 @@ through the same inference that powers everything else:
 	    "description": "OK",
 	    "content": {
 	      "application/json": {
-	        "schema": { "$ref": "#/components/schemas/InvoiceResource" }
+	        "schema": {
+	          "type": "object",
+	          "properties": { "data": { "$ref": "#/components/schemas/InvoiceResource" } },
+	          "required": ["data"]
+	        }
 	      }
 	    }
 	  }
@@ -54,6 +59,10 @@ through the same inference that powers everything else:
 	```
 	</TabItem>
 </Tabs>
+
+A top-level resource is wrapped under `data` (Laravel's default `$wrap`); the `InvoiceResource`
+component it references is defined once and shared. Control or disable the wrapping with the
+`api_resources.wrap` option — see [resource wrapping](/laravel/documenting/schemas/#api-resources).
 
 ## Status codes and JsonResponse
 
@@ -73,10 +82,19 @@ public function store(StoreInvoiceRequest $request): JsonResponse
 A status computed at runtime (not a literal) falls back to `200`; pin it with
 [`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
 
-Returning a resource wrapped directly around a freshly created model —
-`return new InvoiceResource(Invoice::create($request->validated()))` — is documented as `201 Created`
-automatically, matching Laravel's own `wasRecentlyCreated` status. (Only that direct form is detected;
-create into a variable first, or use `#[Response]`, when you need the code to be explicit.)
+Returning a resource wrapped directly around a freshly created model — `new InvoiceResource(Invoice::create(...))`,
+`InvoiceResource::make(Invoice::create(...))`, or the same around `Invoice::forceCreate(...)` — is
+documented as `201 Created` automatically, matching Laravel's own `wasRecentlyCreated` status (those
+factory methods set that flag, so `ResourceResponse::calculateStatus()` answers `201`). Only that direct
+create-wrap is detected; create into a variable first, or use `#[Response]`, when you need the code to be
+explicit.
+
+### Spatie Data success status
+
+A [Spatie Data](/laravel/packages/spatie-data/) response class that overrides `calculateResponseStatus()`
+to return a single constant status — `return 201;`, or a folded constant like `Response::HTTP_CREATED` —
+has that status documented in place of the default `200`. A conditional or computed status can't be read
+statically, so the response stays `200` with an info diagnostic rather than a guess.
 
 ## Empty responses
 

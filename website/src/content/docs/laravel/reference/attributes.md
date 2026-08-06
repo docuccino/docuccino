@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 25 attributes with signatures and examples.
+description: The docuccino/attributes package — all 26 attributes with signatures and examples.
 ---
 
 
@@ -16,6 +16,39 @@ response and leaves the inferred body schema intact.
 Attributes apply to controllers, actions, Form Requests, Data classes, enum cases, and closure
 routes, as each attribute's targets allow. A `type:` string (where present) accepts the same type
 syntax you use in docblocks.
+
+## At a glance
+
+All 26 attributes, grouped by what they do:
+
+| Attribute | Does |
+| --- | --- |
+| [`#[Response]`](#response) | Declare or refine a response for a status. |
+| [`#[ResponseHeader]`](#responseheader) | Document a response header on a status. |
+| [`#[QueryParameter]`](#queryparameter) | Add or patch a query parameter. |
+| [`#[PathParameter]`](#pathparameter) | Refine a path parameter (type, format, example). |
+| [`#[HeaderParameter]`](#headerparameter) | Add or patch a request header parameter. |
+| [`#[CookieParameter]`](#cookieparameter) | Add or patch a cookie parameter. |
+| [`#[BodyParameter]`](#bodyparameter) | Add or patch one property of the request body. |
+| [`#[Hidden]`](#hidden) | Remove properties from the output schema. |
+| [`#[HiddenFromRequest]`](#hiddenfromrequest) | Remove a property from the request body only. |
+| [`#[ExcludeFromDocs]`](#excludefromdocs) | Drop a route (or controller) from the docs. |
+| [`#[Internal]`](#internal) | Flag a node `x-internal: true`. |
+| [`#[InDocs]`](#indocs) | Pin a route to named output documents. |
+| [`#[IgnoreParam]`](#ignoreparam) | Drop an inferred parameter by name. |
+| [`#[IgnoreResponse]`](#ignoreresponse) | Drop an inferred response by status. |
+| [`#[Group]`](#group) | Assign an operation to an OAS tag. |
+| [`#[OperationId]`](#operationid) | Override the `operationId`. |
+| [`#[DeprecatedOperation]`](#deprecatedoperation) | Mark an operation deprecated. |
+| [`#[Unauthenticated]`](#unauthenticated) | Clear the inferred security requirement. |
+| [`#[Security]`](#security) | Declare a security requirement (repeatable OR-list). |
+| [`#[OptionallyAuthenticated]`](#optionallyauthenticated) | Allow anonymous **or** authenticated access. |
+| [`#[Abilities]`](#abilities) | Declare required Sanctum token abilities. |
+| [`#[SchemaId]`](#schemaid) | Pin a class's stable diff identity. |
+| [`#[SchemaName]`](#schemaname) | Set a class's component display name. |
+| [`#[Example]`](#example) | Attach an example value (repeatable). |
+| [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
+| [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
 
 ## Responses
 
@@ -195,8 +228,8 @@ public function __construct() // no arguments
 ```
 
 Excludes a request-DTO / FormRequest property from the documented request body, without touching the
-response schema — the request-side counterpart to `#[Hidden]` (for a server-populated value, or a
-Scramble request-`#[Hidden]` field being migrated).
+response schema — the request-side counterpart to `#[Hidden]`, for a server-populated value that
+clients never send.
 
 ```php
 #[HiddenFromRequest]

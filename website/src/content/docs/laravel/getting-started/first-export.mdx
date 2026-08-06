@@ -45,6 +45,13 @@ default document writes `docs/openapi.json`. To choose a format or output path e
 
 See the [commands reference](/laravel/reference/commands/#docuccinoexport) for every flag.
 
+<Aside type="note" title="`--out` and multiple documents">
+`--out` writes a single file, so it can't be combined with a run over *several* documents — the later
+ones would clobber the earlier. With one document (the published default) it's fine; once you add
+[more documents](/laravel/guides/multiple-documents/), either pass a `{document}` argument alongside
+`--out`, or drop `--out` and let each document write its own `export.path`.
+</Aside>
+
 ## What Docuccino read
 
 For each route that matches your document's filters, Docuccino inspects your code and assembles an

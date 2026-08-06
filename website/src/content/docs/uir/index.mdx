@@ -39,9 +39,10 @@ Exporting OpenAPI simply strips and remaps that key — so nothing is lost in tr
 }
 ```
 
-There are **no timestamps anywhere** — they'd break determinism, so the format forbids them.
-Consumers are expected to ignore `x-docuccino` members they don't recognize, which lets the format
-grow without breaking older readers.
+There are **no timestamps anywhere** — they'd break determinism, so the format forbids them. The
+`x-docuccino` subtree is **strictly defined and closed to undefined members** — a determinism
+guarantee, since nothing non-deterministic can slip in. The format grows through versioned, additive
+schema revisions rather than by readers tolerating unknown members (see [spec hosting](/uir/hosting/)).
 
 ## Stable identities
 
@@ -50,11 +51,11 @@ computed from meaning, never from file paths or line numbers, so they survive re
 
 | Kind | Built from | Survives | Changes when |
 | --- | --- | --- | --- |
-| `op:` | method + path template (params normalized) | file moves, controller/method renames, path-param renames | the URL or method changes |
+| `op:` | document + method + path template (params normalized) | file moves, controller/method renames, path-param renames | the URL, method, or containing document changes |
 | `par:` | operation + location + name | reorder, description edits | the parameter is renamed |
 | `sch:` (named) | class name (pin with `#[SchemaId]`) | file moves | the class is renamed without a pin |
 | `sch:` (inline) | the schema's structure | prose edits | the shape changes |
-| `res:` | operation + status + media type | — | the status changes |
+| `res:` | operation + status + media type | — | the status or media type changes |
 
 This is what makes a meaningful diff possible: rename a controller and nothing changes; change a URL
 and the diff shows exactly that operation removed and added.
@@ -78,16 +79,18 @@ fixed order of HTTP methods, 2-space indentation, and a trailing newline. The re
 
 ## Provenance
 
-Each contribution to the document is recorded — what produced it, which fields it set, and the
-source location — so tooling (and you) can answer "why is this documented this way?":
+Each contribution to the document is recorded — what produced it, the precedence layer it applied at,
+which fields it set, and the source location — so tooling (and you) can answer "why is this documented
+this way?":
 
 ```json
 {
   "producer": "integration:query-builder",
+  "layer": "integration",
   "fields": ["schema", "description"],
   "source": { "file": "app/Http/Controllers/InvoiceController.php", "line": 28 },
   "confidence": 0.9,
-  "overrode": [ { "field": "description", "producer": "inference" } ]
+  "overrode": [ { "field": "description", "value": "Filter the result set." } ]
 }
 ```
 

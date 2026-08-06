@@ -61,7 +61,8 @@ exactly one operation:
   replaces a scalar or array outright.
 - **`remove`** deletes the targeted node.
 
-An action that declares both, or neither, is rejected with a diagnostic rather than guessed at.
+An action that declares neither `update` nor `remove` is invalid: rather than guess, Docuccino skips
+the **whole overlay file** at parse time and records one `overlay.invalid` warning naming it.
 
 ### Where overlays live
 
@@ -81,7 +82,7 @@ Overlays are applied at **assembly time**, once your operations have been built,
 layer in Docuccino's precedence chain:
 
 ```
-inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45) < config(50)
+fallback(5) < inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45) < config(50)
 ```
 
 So an overlay **beats** anything inferred, integrated, or written as a docblock or attribute — and
@@ -256,5 +257,5 @@ operation, or synthesize structure programmatically — reach past overlays:
 <CardGrid>
 	<LinkCard title="How contributions combine" href="/laravel/documenting/#how-contributions-combine" description="The full precedence chain and how higher layers win field by field." />
 	<LinkCard title="Overlays configuration" href="/laravel/reference/configuration/#overlays" description="The overlays glob and how it's resolved." />
-	<LinkCard title="Coming from Scribe?" href="/guides/vs-scribe/" description="Where .scribe hand-edits and custom.*.yaml map onto attributes and Overlays." />
+	<LinkCard title="Coming from Scribe?" href="/guides/vs-scribe/" description="How hand-edited specs and custom endpoint definitions map onto attributes and Overlays." />
 </CardGrid>

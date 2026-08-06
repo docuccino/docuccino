@@ -107,6 +107,7 @@ biggest win is deletion.
 | `.scribe/**` hand-edits, `custom.*.yaml` | OpenAPI Overlays or attributes at source | Different philosophy — see below. |
 | Strategy plugin API | `OperationExtension`, `TypeToSchema`, `ExceptionToResponse`, `RuleTransformer`, `DocumentTransformer` | Register from any provider, any order. |
 | Deprecation (none in Scribe) | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Docuccino-only. |
+| Request field to omit | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a server-populated field from the documented request body. Docuccino-only. |
 
 ## Migrating your config
 
@@ -120,6 +121,7 @@ Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
 | `base_url` | `documents.default.servers` |
 | `auth.*` | `documents.default.security` + Sanctum/Passport integrations (inferred) |
 | `type: laravel`, `laravel.docs_url`, `laravel.middleware` | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
+| `groups.default` | `documents.default.tags.default_strategy` (`controller` \| `none`) |
 | `--config scribe_admin` (multi-docs) | A second named entry under `documents` |
 | `postman` / `openapi` output toggles | OpenAPI is always emitted; `docuccino:export` picks the format |
 
@@ -149,9 +151,10 @@ them carefully:
   (including `->only()` / `->except()`), or `Rule::in()`.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
-- **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
-  languages, `intro.md` / `auth.md` prose sections. Docuccino's viewer is Scalar: configurable, but
-  not a template layer you own.
+- **Fully Blade-customizable HTML** — publishable views, custom themes, and custom example-request
+  languages. Docuccino's viewer is Scalar: configurable, but not a template layer you own. (Standalone
+  prose like Scribe's `intro.md` / `auth.md` *is* covered — Docuccino compiles a folder of Markdown
+  guides into the document; see [Guides, pages & prose](/laravel/guides/narrative-content/).)
 - **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch to document anything, including
   third-party package routes (Passport, Fortify) with no code access. In Docuccino that's an OpenAPI
   Overlay or a `DocumentTransformer` — see [customizing the output](/laravel/guides/customizing-output/).
@@ -167,8 +170,8 @@ them carefully:
 
 <Aside type="tip">
 Where the two overlap, Docuccino leans on structure: OpenAPI 3.2 with real `components/schemas`,
-deterministic committed output, and a semantic diff you can gate CI on — versus Scribe's OpenAPI
-export, which is optional, off by default, 3.0.3, and inlines schemas with no reusable components.
+deterministic committed output, and a semantic diff you can gate CI on. Scribe's OpenAPI export (see the
+at-a-glance table above for how it differs) is a lighter, optional artifact by design.
 </Aside>
 
 ## Running them side by side
@@ -185,8 +188,8 @@ transition:
 	</TabItem>
 	<TabItem label="Compare the specs">
 	```bash
-	# Turn on Scribe's OpenAPI export (off by default) and diff directionally —
-	# expect Docuccino's to be richer (components/schemas, 3.2 vs 3.0.3)
+	# Turn on Scribe's OpenAPI export and diff directionally —
+	# expect Docuccino's to be the richer spec (reusable components/schemas)
 	php artisan scribe:generate
 	```
 	</TabItem>

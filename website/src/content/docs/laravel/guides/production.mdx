@@ -38,13 +38,11 @@ re-analyzing, gate who can see it, and let CI catch breaking changes.
 
 ## Choosing a viewer source
 
-The viewer's `source` decides how much work a request does:
-
-| `source` | What each request does | Use it for |
-| --- | --- | --- |
-| `generate` | Rebuilds the whole document | Local development, gated internal use |
-| `artifact` | Re-emits the committed `export.path` | A committed spec you deploy with your app |
-| `cache` | Serves the `docuccino:cache`-warmed payload | High-traffic viewers; falls back to `generate` on a cold cache |
+The default `viewer.source` of `generate` rebuilds the document on every request — right for local, wrong
+for production. In production, serve pre-built bytes instead: `artifact` re-emits the committed
+`export.path` with no analysis at request time, and `cache` serves the `docuccino:cache`-warmed payload
+(falling back to `generate` on a cold cache) for high-traffic viewers. The
+[viewer guide](/laravel/guides/viewer/#source-modes) has the full source-mode table.
 
 For `cache`, warm it on deploy and clear it when you regenerate:
 
@@ -58,29 +56,11 @@ Set the store with `cache.store` in your config. See the
 
 ## Gating the viewer
 
-By default the viewer is available only in your `local` environment. To expose it elsewhere, name a
-gate ability and define it:
-
-<Steps>
-
-1. Name the ability on the document:
-
-   ```php
-   // documents.default.viewer.gate
-   'gate' => 'viewApiDocs',
-   ```
-
-2. Define it in a service provider:
-
-   ```php
-   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
-   ```
-
-</Steps>
-
-The gate guards the HTML and `.json` routes; keep `throttle` in `viewer.middleware` when the spec
-endpoint is reachable publicly. To disable the runtime viewer entirely for a document, set
-`viewer.route` to `null`.
+By default the viewer is reachable only in your `local` environment. To expose it anywhere else, name a
+`viewer.gate` ability and define it in a service provider — the gate guards the HTML and `.json` routes,
+and you should keep `throttle` in `viewer.middleware` when the spec endpoint is public. The
+[viewer guide](/laravel/guides/viewer/#access-control) walks through it step by step; to disable the
+runtime viewer entirely for a document, set `viewer.route` to `null`.
 
 ## When to regenerate
 

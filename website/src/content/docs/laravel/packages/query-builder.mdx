@@ -18,8 +18,10 @@ parameters:
 
 - **Filters** — one `filter[<name>]` parameter per `allowedFilter`, with a description of what it
   filters.
-- **Sorts** — a `sort` parameter, documenting the `-name` convention for descending order.
-- **Includes** — an `include` parameter for `allowedIncludes`.
+- **Sorts** — a `sort` parameter, documenting the `-name` convention for descending order; a
+  `->defaultSort('issued_at')` becomes the parameter's `default`.
+- **Includes** — an `include` parameter for `allowedIncludes` — relationships plus the `count`,
+  `exists`, and `aggregate` include kinds.
 - **Sparse fieldsets** — `fields[<type>]` for `allowedFields`.
 - **Pagination** — `page` and `per_page` (or `cursor` and `per_page` for cursor pagination), added
   when the query actually paginates.
@@ -130,12 +132,18 @@ Other casts map to their natural scalar type:
 | Cast | Filter schema |
 | --- | --- |
 | `boolean` | `type: boolean` |
-| `integer` | `type: integer` |
-| `float` / `double` | `type: number` |
+| `integer`, `timestamp` | `type: integer` |
+| `float` / `double` / `real` | `type: number` |
 | `datetime`, `immutable_datetime` | `type: string, format: date-time` |
 | `date`, `immutable_date` | `type: string, format: date` |
+| `array`, `collection`, `json` | `type: [array, object]` (decodes to whichever it stored) |
+| `object` | `type: object` |
+| `encrypted:<inner>` | the inner cast's schema (decrypts, then casts) |
+| `AsStringable`, `AsUri`, `AsHtmlString` | `type: string` |
+| `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | `type: object` |
+| `AsCollection`, `AsEncryptedCollection` | `type: array` |
 | A backed enum | `type: array` of the backing values (above) |
-| Anything else (custom casters, `decimal`, no cast) | `type: string` |
+| Anything else (unrecognized custom casters, `decimal`, no cast) | `type: string` |
 
 If Docuccino can't resolve the subject model, every filter falls back to a string, exactly as before.
 
@@ -151,6 +159,8 @@ it reads only what the kind actually exposes:
 | `callback('active', fn)` | The column of a single `$query->where('active', $value)` in the closure, then that column's cast. | Comment above the entry, or `#[QueryParameter]`. |
 | `custom('flag', new F)` | A `#[QueryParameter]` on the filter class `F`, else the column of a single `where` in `F::__invoke`. | See [custom filter classes](#custom-filter-classes). |
 | `operator('score', FilterOperator::EQUAL)` | The internal column's cast — equality operators (`EQUAL`, `DYNAMIC`) only. | `#[QueryParameter]`. |
+| `beginsWithStrict('name')` / `endsWithStrict('name')` | A begins-with / ends-with substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
+| `belongsTo('team')` | A relationship filter — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `trashed()` | A fixed `with` / `only` enum, with the omitted-value default explained. | — |
 
 A single-value comparison (scope, callback, operator) documents an enum as one value; only `exact`
@@ -205,8 +215,9 @@ simplest possible way to explain a parameter, right where it's defined:
 	</TabItem>
 </Tabs>
 
-Both `//` line comments and `/** */` blocks work; Docuccino takes the first sentence, verbatim. The
-same applies to sorts and includes.
+Both `//` line comments and `/** */` blocks work; Docuccino takes the first sentence, verbatim. Comments
+describe **filters** — sorts and includes carry a generated description instead (the allowed values and
+the `-` descending convention).
 
 ### Defaults and nullable filters
 
@@ -262,6 +273,14 @@ and `default` are applied to the filter's parameter:
 
 The class attribute is an override of inference, not the last word: a `#[QueryParameter('filter[popular]')]`
 on the controller action still wins over it, so a caller can refine a shared filter per endpoint.
+
+## Strict mode and the `400` response
+
+Spatie Query Builder runs in **strict mode by default** — an unknown filter, sort, or include raises an
+`InvalidQuery` (HTTP `400`). Docuccino documents that `400` on every Query Builder operation, rendered
+in your chosen error style (framework defaults or the Problem Details preset), so consumers know a
+mistyped parameter is rejected rather than silently ignored. It's omitted only when strict mode is
+turned off or the document's `error_responses` is set to `none`.
 
 ## Configuration
 

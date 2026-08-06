@@ -3,7 +3,7 @@ title: Docuccino vs Scramble
 description: An honest comparison with Scramble, and a practical guide to moving your annotations and config across.
 ---
 
-import { Tabs, TabItem, Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
 
 [Scramble](https://scramble.dedoc.co) is an excellent, popular API documentation generator, and if
 it's working well for you, that's a great place to be. Docuccino shares its core idea —
@@ -97,7 +97,7 @@ so a query composed several helper methods deep is still fully documented.
 | RFC 9457 Problem Details preset | ✓ | — | — |
 
 Reading your actual exception handling — render callbacks, exception `render()` methods,
-`Responsable` exceptions — is something no other generator does.
+`Responsable` exceptions — is one of Docuccino's standout strengths.
 
 ### Output &amp; workflow
 
@@ -142,13 +142,17 @@ Most annotations map across cleanly.
 | `#[BodyParameter]` | [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) | Patches one property of the inferred body. |
 | `#[PathParameter]` | [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) | Adds an OpenAPI `format`. |
 | `#[HeaderParameter]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | — |
+| `#[CookieParameter]` | [`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) | Direct swap. |
 | `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Tag assignment; repeatable. |
 | `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | Adds named examples, summaries, and `externalValue`. |
 | Exclude a route / controller | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Method or class target. |
 | `@unauthenticated` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
 | `@response {status}` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
-| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. |
+| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. Hides from **output**. |
+| Request-`#[Hidden]` field | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a property from the **request** body only — the request-side counterpart when a field was hidden from a Scramble request schema. |
 | Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
+| Markdown description file | [`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile) | Loads a symbol-anchored Markdown file into `description`. |
+| Deprecation | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Marks an operation (or controller) deprecated, with an optional reason. |
 
 Docuccino also adds attributes with no direct Scramble equivalent — `#[OperationId]`, `#[Internal]`,
 `#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`, `#[SchemaName]`,

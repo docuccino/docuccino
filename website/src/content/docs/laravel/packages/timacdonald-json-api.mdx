@@ -19,11 +19,17 @@ from the same methods the framework's first-party resources expose:
 
 - **`toId()` / `toType()`** — the always-present `id` and `type` strings.
 - **`toAttributes()`** — the `attributes` object.
-- **`toRelationships()`** — the `relationships` object.
 - **`toLinks()` / `toMeta()`** — the `links` and `meta` objects, when present.
 
-Endpoints returning one of these resources (or a collection of them) also gain the JSON:API
-`include` and `fields[TYPE]` query parameters.
+Relationships (`toRelationships()`) and the compound-document `included` array are **not** emitted. Both
+packages express relationships as closures, whose JSON:API `{ data: { type, id } }` linkage shape can't
+be recovered from a static read yet — so they're left out rather than documented as a shape the resource
+never returns.
+
+Endpoints returning one of these resources (or a collection of them) also gain the JSON:API `include`
+and `fields` query parameters. `fields` is a **single** deep-object parameter
+(`fields[TYPE]=field1,field2`), not one parameter per type. The response is served as the JSON:API media
+type `application/vnd.api+json`.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -36,13 +42,6 @@ Endpoints returning one of these resources (or a collection of them) also gain t
 	        return [
 	            'name'  => $this->name,
 	            'email' => $this->email,
-	        ];
-	    }
-
-	    public function toRelationships(Request $request): array
-	    {
-	        return [
-	            'team' => fn () => TeamResource::make($this->team),
 	        ];
 	    }
 	}
@@ -61,17 +60,16 @@ Endpoints returning one of these resources (or a collection of them) also gain t
 	        "name":  { "type": "string" },
 	        "email": { "type": "string" }
 	      }
-	    },
-	    "relationships": { "type": "object" }
+	    }
 	  }
 	}
 	```
 	</TabItem>
 </Tabs>
 
-The resource becomes a `{ data: { id, type, attributes, relationships } }` document schema, hoisted into
-a reusable component, plus `include` and `fields[users]` query parameters on the endpoints that return
-it.
+The resource becomes a `{ data: { id, type, attributes } }` document schema (media type
+`application/vnd.api+json`), hoisted into a reusable component, plus an `include` parameter and a single
+`fields` deep-object parameter on the endpoints that return it.
 
 ## Which one runs
 

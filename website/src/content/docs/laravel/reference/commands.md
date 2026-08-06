@@ -10,9 +10,11 @@ Docuccino registers five artisan commands. Shared behavior:
   `config('docuccino.enabled') === false`, printing a notice. `clear` runs even when disabled, so
   you can always flush the cache.
 - **`{document?}` argument.** Omit it to run over *every* configured document; pass a key to run
-  one. An unknown key errors and exits non-zero. Per-document results aggregate — any single
-  failure fails the whole command.
-- **Diagnostics.** Commands print diagnostics grouped by route signature in deterministic order.
+  one. **`docuccino:diff` is the exception** — with no `{document}` it diffs only the `default`
+  document, not every one. An unknown key errors and exits non-zero. Per-document results aggregate —
+  any single failure fails the whole command.
+- **Diagnostics.** `export`, `validate`, and `cache` print diagnostics grouped by route signature in
+  deterministic order; `diff` and `clear` print none.
 
 ## `docuccino:export`
 

@@ -5,9 +5,8 @@ description: Every live key in config/docuccino.php and what it does.
 
 
 The published `config/docuccino.php` drives everything. This page documents **every key that is
-read today**. A handful of keys are marked FUTURE in the shipped file (multi-format export,
-selectable viewer driver, `representation.filters`) — those are not yet wired and are called out
-where they appear.
+read today**. A couple of keys are marked FUTURE in the shipped file (multi-format export and a
+selectable viewer driver) — those are not yet wired and are called out where they appear.
 
 ## Top level
 
@@ -93,12 +92,12 @@ closure to be documented.
 ],
 ```
 
-| Key | Effect |
-| --- | --- |
-| `auto_detect_middleware` | Wildcard matched against each route's middleware; a match applies the `default` requirement. |
-| `schemes` | `components.securitySchemes` — full breadth: http bearer/basic, apiKey (header/query/cookie), oauth2 flow builders, OpenID Connect. |
-| `default` | The per-operation `security` requirement applied to auth-detected routes. |
-| `document` | A document-wide `security` requirement. |
+| Key | Default | Effect |
+| --- | --- | --- |
+| `auto_detect_middleware` | `'auth*'` | Wildcard matched against each route's middleware; a match applies the `default` requirement. |
+| `schemes` | none | `components.securitySchemes` — full breadth: http bearer/basic, apiKey (header/query/cookie), oauth2 flow builders, OpenID Connect. |
+| `default` | none | The per-operation `security` requirement applied to auth-detected routes. |
+| `document` | none | A document-wide `security` requirement. |
 
 Declaring any `schemes` here **defers** the auto-config security integrations (Sanctum, Passport)
 — explicit config wins. `#[Unauthenticated]` clears a route's requirement regardless.
@@ -174,7 +173,8 @@ examples.
 
 ```php
 'representation' => [
-    'filters' => 'bracketed',       // FUTURE: not read yet | bracketed | deepObject
+    'filters' => 'bracketed',       // bracketed | deepObject (Query Builder filter/field style)
+    'lists' => 'comma',             // comma | array (Query Builder sort/include list style)
     'nullable' => 'type-array',     // type-array (type: [x, null]) | anyof ({type: null} branch)
     'operation_id' => 'route-name', // route-name | controller-method ({ShortController}@{method})
     // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames
@@ -185,12 +185,13 @@ Separates *what was inferred* from *how it is expressed in the spec*. The semant
 stable in `x-docuccino` regardless of policy, so the diff engine can tell "representation changed"
 from "API changed".
 
-| Key | Values | Effect |
-| --- | --- | --- |
-| `filters` | `bracketed` \| `deepObject` | **FUTURE** — not read yet. Query filter style for the Query Builder integration. |
-| `nullable` | `type-array` \| `anyof` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
-| `operation_id` | `route-name` \| `controller-method` | `operationId` strategy. |
-| `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/laravel/documenting/schemas/#enums). |
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). Read at [`RepresentationPolicy`](/laravel/packages/query-builder/), drives the deepObject/bracketed rendering. |
+| `lists` | `comma` \| `array` | `comma` | Query Builder `sort` / `include` list style: a single comma-separated string (`comma`), or an exploded array parameter with `style: form, explode: false` and an `items` enum (`array`). |
+| `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
+| `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
+| `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | `none` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/laravel/documenting/schemas/#enums). |
 
 ### `integrations`
 
@@ -213,6 +214,25 @@ defaults **on** when its package is installed, **except `permission`**, which de
 documenting role and permission names would publish your application's internal authorization
 taxonomy, so it is explicit opt-in. When a package is installed but its integration is disabled, the
 build emits one `integration.disabled` info diagnostic per document, so the switch is discoverable.
+
+There are **eleven** toggleable bags, each keyed by its config name — set
+`integrations.<key>.enabled` to turn one off (or, for `permission`, on):
+
+| Bag key | Package / source | `enabled` default |
+| --- | --- | --- |
+| `api_resources` | Laravel API resources (built in) | `true` |
+| `eloquent` | Eloquent models (built in) | `true` |
+| `rate_limit` | Laravel rate limiting (built in) | `true` |
+| `spatie_data` | `spatie/laravel-data` | `true` |
+| `query_builder` | `spatie/laravel-query-builder` | `true` |
+| `json_api_paginate` | `spatie/laravel-json-api-paginate` | `true` |
+| `laravel_actions` | `lorisleiva/laravel-actions` | `true` |
+| `timacdonald_json_api` | `timacdonald/json-api` | `true` |
+| `sanctum` | `laravel/sanctum` | `true` |
+| `passport` | `laravel/passport` | `true` |
+| `permission` | `spatie/laravel-permission` | **`false`** |
+
+The table below lists the additional options each bag accepts beyond `enabled`.
 
 | Bag | Key | Default | Effect |
 | --- | --- | --- | --- |
@@ -293,11 +313,11 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
 The data-leakage pass is a diagnostics-only `DocumentTransformer` (it never mutates output). It
 warns on schema properties whose names look sensitive (`password`/`token`/`secret`/`api_key`/…).
 
-| Key | Effect |
-| --- | --- |
-| `enabled` | Turn the pass on/off. |
-| `allow` | Safelist known-good properties by name or JSON pointer. |
-| `patterns` | Extra token → human-label heuristics merged over the built-in table (key = normalized token, matched when a property name *contains* it). |
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `true` | Turn the pass on/off. |
+| `allow` | `[]` | Safelist known-good properties by name or JSON pointer. |
+| `patterns` | built-in table | Extra token → human-label heuristics merged over the built-in table (key = normalized token, matched when a property name *contains* it). |
 
 ## Engine
 
@@ -308,10 +328,10 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 ],
 ```
 
-| Key | Effect |
-| --- | --- |
-| `mode` | Which `TypeEngine` backs inference (in-process by default). A boot failure always degrades to the `NullTypeEngine` so docblock/attribute-only docs still build. |
-| `project_paths` | Directories the engine treats as project (vs vendor) code — bounds descent into callee bodies. |
+| Key | Default | Effect |
+| --- | --- | --- |
+| `mode` | `in-process` | Which `TypeEngine` backs inference (in-process by default). A boot failure always degrades to the `NullTypeEngine` so docblock/attribute-only docs still build. |
+| `project_paths` | `['app']` | Directories the engine treats as project (vs vendor) code — bounds descent into callee bodies. |
 
 ## Cache
 

@@ -74,7 +74,11 @@ method, so everything is read from the real signature rather than the trait's ge
 	    } } }
 	  },
 	  "responses": {
-	    "200": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ArticleResource" } } } },
+	    "200": { "content": { "application/json": { "schema": {
+	      "type": "object",
+	      "properties": { "data": { "$ref": "#/components/schemas/ArticleResource" } },
+	      "required": ["data"]
+	    } } } },
 	    "403": { "description": "Forbidden" }
 	  }
 	}
@@ -94,7 +98,11 @@ The method Docuccino reads matches the package's own precedence:
 3. otherwise `__invoke()`.
 
 If you register a specific method explicitly — `Route::post('/articles', [PublishArticle::class, 'handle'])`
-— that method is honored as-is.
+— that method is honored as-is: Docuccino documents its own signature and return type. But the package
+does **not** run the action's `rules()` or `authorize()` for an explicitly-registered method (nor for a
+`WithAttributes` action), so no request body is inferred from `rules()` and no `403` from `authorize()`
+there — documenting them would describe validation the endpoint never performs. Register the action as a
+controller (its `asController()`/`handle()`) to get the `rules()` body and the `authorize()` `403`.
 
 ## Response transformers: `jsonResponse()` and `htmlResponse()`
 

@@ -2,7 +2,7 @@
 title: Error responses
 description: Document 4xx and 5xx responses automatically — from your real exception handling, framework defaults, or the RFC 9457 preset.
 sidebar:
-  order: 4
+  order: 5
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -48,7 +48,7 @@ directly from the code:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"402": {
-	  "description": "Payment Required",
+	  "description": "Error",
 	  "content": {
 	    "application/json": {
 	      "schema": {
@@ -66,8 +66,9 @@ directly from the code:
 </Tabs>
 
 Throw this from an action and a `402` response with that body shape is documented — no annotation
-required. If a handler is too dynamic to read statically, Docuccino says so with a diagnostic
-pointing at the exact expression, and moves on to the next source.
+required. The description is the RFC 9110 reason phrase for the status; a status without a standard
+phrase (like `402` here) is documented with a generic `Error`. If a handler is too dynamic to read
+statically, Docuccino records a diagnostic and moves on to the next source.
 
 ## The Problem Details preset (opt-in)
 
@@ -100,7 +101,7 @@ signals and runs each through the same resolution above, so the body matches you
 
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
-| `401` | The route has authentication middleware (matching `security.auto_detect_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/) — or `#[IgnoreResponse(401)]`. |
+| `401` | The route has authentication middleware (matching `security.auto_detect_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
 | `422` | A validated request body was recovered (Spatie Data, a FormRequest, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
 | `403` | The route has `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
