@@ -82,6 +82,14 @@ final class WorkbenchEngine
                 'Workbench\\App\\Http\\Controllers\\WidgetQueryController::index' => QbTraceScript::forChain(
                     "QueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name', AllowedFilter::exact('status')])->allowedSorts(['name', 'created_at'])->defaultSort('name')->paginate(20)",
                 ),
+                // The flagship QB-list endpoint: a QB SUBCLASS paginated through a CUSTOM terminal
+                // (paginateList). Driven over BOTH the QB params visitor (recovers filters/sorts +
+                // the custom terminal's page params) and the resource-envelope visitor (recovers the
+                // paginator kind → {data,links,meta}) — config declares `paginateList` as a terminal.
+                'Workbench\\App\\Http\\Controllers\\QbListController::index' => QbTraceScript::forChain(
+                    "ListQueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name'])->allowedSorts(['name'])->paginateList(20)",
+                    'Workbench\\App\\Support\\ListQueryBuilder',
+                ),
                 // A paginated resource collection: the chain reaches paginate() on a plain Eloquent
                 // builder (typed as such so the Query-Builder visitor, which needs a Spatie QueryBuilder
                 // receiver, ignores it) — the resource pagination extension wraps the length envelope.
@@ -138,6 +146,11 @@ final class WorkbenchEngine
                     returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
                 ),
                 self::CONTROLLER.'listJsonPaginatedArticles' => new ActionAnalysis(
+                    returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
+                ),
+                // The flagship QB-list return: a resource collection whose envelope is triggered by
+                // the custom terminal recovered from the scripted trace (not the type).
+                'Workbench\\App\\Http\\Controllers\\QbListController::index' => new ActionAnalysis(
                     returns: [new ReturnSite(new ClassT('Illuminate\\Http\\Resources\\Json\\AnonymousResourceCollection', [new ClassT(self::ARTICLE_RESOURCE)]), $location)],
                 ),
                 self::CONTROLLER.'storeCreatedArticle' => new ActionAnalysis(
