@@ -16,12 +16,17 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Facades\Docuccino;
+use Docuccino\Laravel\Integrations\SpatieData\SpatieDataDigestContributor;
+use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\LateBoundMarker;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Facades\RateLimiter as RateLimiterFacade;
 
 /**
  * Write a throwaway PHP file and return its path — a stand-in for a returned DTO/model/enum/resource
@@ -247,6 +252,54 @@ it('invalidates fragments when app.url changes (booted-app cache input)', functi
     generateDocument()->document;
 
     expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('invalidates fragments when a RateLimiter::for registration is added (booted-app cache input)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // The add-a-limiter asymmetry (A4): a route carrying `throttle:brand-new` documents the numberless
+    // 429 floor and records NO closure dependency, so registering the limiter afterwards must refresh
+    // the fragments through the document-level RateLimiter registration-set digest — not a route file.
+    RateLimiterFacade::for('brand-new-limiter', static fn (): Limit => Limit::perMinute(10));
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('invalidates fragments when the query-builder parameter names change (booted-app cache input)', function (): void {
+    enableFragmentCache();
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // Renaming query-builder's `filter` parameter reshapes every QB operation but touches no route
+    // file → the query-builder config digest must invalidate the warm fragments.
+    config()->set('query-builder.parameters.filter', 'q');
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
+it('gates each integration environment-digest contributor with its integration', function (): void {
+    // Gating (A4): the spatie-data digest contributor is contributed when the integration is enabled
+    // and omitted when the document disables it, so a disabled integration's globals never key the cache.
+    /** @var array<string, mixed> $raw */
+    $raw = config('docuccino.documents.default');
+    $factory = app(DocumentConfigFactory::class);
+
+    $enabled = DefaultExtensions::all($factory->make('default', $raw, 'skeleton'));
+    $raw['integrations']['spatie_data']['enabled'] = false;
+    $disabled = DefaultExtensions::all($factory->make('default', $raw, 'skeleton'));
+
+    expect($enabled)->toContain(SpatieDataDigestContributor::class)
+        ->and($disabled)->not->toContain(SpatieDataDigestContributor::class);
 });
 
 it('invalidates every fragment when the resolved extension set changes', function (): void {

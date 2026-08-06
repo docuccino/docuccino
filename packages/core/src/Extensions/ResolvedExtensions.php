@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions;
 
 use Composer\InstalledVersions;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Contracts\EnvironmentDigestContributor;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
@@ -48,6 +49,7 @@ final readonly class ResolvedExtensions
      * @param  list<ResponseStatusResolver>  $responseStatusResolvers  gated success-status overrides
      * @param  list<PayloadMediaTypeResolver>  $payloadMediaTypeResolvers  gated response media-type matchers
      * @param  list<RouteBindingSchemaResolver>  $routeBindingSchemaResolvers  gated route-key schema typers
+     * @param  list<EnvironmentDigestContributor>  $environmentDigestContributors  gated booted-app cache-digest segments
      */
     public function __construct(
         public array $routeResolvers = [],
@@ -60,6 +62,7 @@ final readonly class ResolvedExtensions
         public array $responseStatusResolvers = [],
         public array $payloadMediaTypeResolvers = [],
         public array $routeBindingSchemaResolvers = [],
+        public array $environmentDigestContributors = [],
     ) {
         $byPhase = [];
         foreach ($operationExtensions as $extension) {
@@ -87,7 +90,7 @@ final readonly class ResolvedExtensions
     public function classSignature(): array
     {
         $classes = [];
-        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers, $this->ruleTransformers, $this->responseAnalysisTargets, $this->responseStatusResolvers, $this->payloadMediaTypeResolvers, $this->routeBindingSchemaResolvers] as $partition) {
+        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers, $this->ruleTransformers, $this->responseAnalysisTargets, $this->responseStatusResolvers, $this->payloadMediaTypeResolvers, $this->routeBindingSchemaResolvers, $this->environmentDigestContributors] as $partition) {
             foreach ($partition as $extension) {
                 $classes[$extension::class] = true;
             }

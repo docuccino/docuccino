@@ -18,6 +18,9 @@ final class RateLimitIntegration
     {
         return [
             RateLimitResponsesExtension::class,
+            // Environment-digest seam (A4): the RateLimiter::for registration set feeds the document-level
+            // fragment-cache digest so registering a named limiter refreshes a numberless-429 fragment.
+            RateLimiterDigestContributor::class,
         ];
     }
 }

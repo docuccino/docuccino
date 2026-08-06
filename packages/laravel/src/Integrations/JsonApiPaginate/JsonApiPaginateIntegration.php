@@ -36,6 +36,9 @@ final class JsonApiPaginateIntegration
         return [
             JsonApiPaginateParametersExtension::class,
             JsonApiPaginateResponsesExtension::class,
+            // Environment-digest seam (A4): the renamable page parameter names + pagination mode reshape
+            // the documented parameters, so they feed the document-level fragment-cache digest.
+            JsonApiPaginateConfigDigestContributor::class,
         ];
     }
 }

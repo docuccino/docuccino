@@ -34,6 +34,9 @@ final class SanctumIntegration
         return [
             SanctumSecurityExtension::class,
             SanctumAbilitiesExtension::class,
+            // Environment-digest seam (A4): the auth guards + session cookie shape Sanctum security
+            // output, so they feed the document-level fragment-cache digest.
+            SanctumDigestContributor::class,
         ];
     }
 }

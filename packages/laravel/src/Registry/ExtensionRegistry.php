@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Registry;
 
 use Closure;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Contracts\EnvironmentDigestContributor;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
@@ -72,6 +73,7 @@ final class ExtensionRegistry
             responseStatusResolvers: $sorter->sort($this->partition($instances, ResponseStatusResolver::class)),
             payloadMediaTypeResolvers: $sorter->sort($this->partition($instances, PayloadMediaTypeResolver::class)),
             routeBindingSchemaResolvers: $sorter->sort($this->partition($instances, RouteBindingSchemaResolver::class)),
+            environmentDigestContributors: $sorter->sort($this->partition($instances, EnvironmentDigestContributor::class)),
         );
     }
 

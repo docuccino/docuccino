@@ -20,6 +20,9 @@ final class InferredHandlerIntegration
     {
         return [
             InferredHandlerExceptionToResponse::class,
+            // Environment-digest seam (A4): the registered render-callback set feeds the document-level
+            // fragment-cache digest so adding a render handler re-documents the inferred error tier.
+            RenderCallbackDigestContributor::class,
         ];
     }
 }

@@ -41,6 +41,9 @@ final class SpatieDataIntegration
             // The success-status override resolver (calculateResponseStatus → 201/202): a gated
             // ResponseStatusResolver, so a disabled integration never re-homes a bare Data return's status.
             DataResponseStatus::class,
+            // Environment-digest seam (A4): the global wrap key / name-mapping strategy / date format
+            // reshape every documented Data class, so they feed the document-level fragment-cache digest.
+            SpatieDataDigestContributor::class,
         ];
     }
 }

@@ -25,15 +25,11 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Validation\Validator;
-use Docuccino\Laravel\Integrations\InferredHandler\HandlerReflector;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
-use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\Container;
-use Illuminate\Contracts\Debug\ExceptionHandler;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Throwable;
 
 /**
@@ -96,11 +92,13 @@ final class DocumentGenerator
         [$content, $contentDiagnostics] = $this->contentCompiler->compile($document);
         $bag->addAll($contentDiagnostics);
 
-        // Booted-app facts the fragments depend on but that no route file reflects (design §10, A2):
-        // the registered render-callback set (an added handler must re-document error tiers), the
-        // polymorphic morph map (discriminators), and app.url (Passport oauth2 flow URLs). Folded into
-        // the document-level cache input because each is global — a change can affect any fragment.
-        $configHash = $document->hash().'|env:'.$this->environmentDigest();
+        // Booted-app facts the fragments depend on but that no route file reflects (design §10, A4):
+        // each ENABLED integration contributes its output-shaping global state (render-callback set,
+        // morph map, QB/paginate parameter names, auth guards + session cookie, Passport scopes/grants/
+        // app.url, spatie-data globals, the rate-limiter registration set) through the gated
+        // EnvironmentDigestContributor chain. Folded into the document-level cache input because each is
+        // global — a change can affect any fragment; a DISABLED integration contributes nothing.
+        $configHash = $document->hash().'|env:'.$this->environmentDigest($resolved);
         $extensionClasses = $resolved->cacheSignature();
 
         $fragments = [];
@@ -141,52 +139,28 @@ final class DocumentGenerator
 
     /**
      * A canonical digest of the booted-app facts the fragment cache must key on beyond config,
-     * routes, and extensions (design §10, A2). Each is a global fact whose change can alter any
-     * route's fragment, so it lives at the document level:
-     *
-     * - the registered render-callback set (exception FQCN + source location, in registration
-     *   order) — adding/removing/replacing a handler must re-document the inferred-handler error
-     *   tier, which the per-file dependency hashes alone can miss (the add-a-handler asymmetry);
-     * - `Relation::morphMap()` — drives MorphTo discriminator mappings;
-     * - `app.url` — feeds Passport oauth2 flow URLs into operation security.
-     *
-     * Every read is defensive: an unresolvable fact contributes an empty segment rather than
-     * failing the build, keeping the digest total and deterministic.
+     * routes, and extensions (design §10, A4). Each is a global fact whose change can alter any
+     * route's fragment, so it lives at the document level, and each is contributed by the ENABLED
+     * integration that owns it through the gated {@see EnvironmentDigestContributor} chain (a disabled
+     * integration's globals never key the cache; the pipeline reads only the chain, never an
+     * integration class). Segments are keyed by contributor class and sorted, so the digest is
+     * independent of registration/sort order. Each contributor is itself defensive — an unresolvable
+     * fact contributes the empty string — so the aggregate stays total and deterministic.
      */
-    private function environmentDigest(): string
+    private function environmentDigest(ResolvedExtensions $resolved): string
     {
-        $callbacks = '';
-        try {
-            $handler = $this->container->make(ExceptionHandler::class);
-            $records = [];
-            foreach ((new HandlerReflector($handler))->renderCallbacks() as $callback) {
-                $records[] = $callback->exceptionType.'@'.$callback->file.':'.$callback->line;
-            }
-            $callbacks = implode(',', $records);
-        } catch (Throwable) {
-            // No resolvable handler (or an unexpected shape): contribute nothing.
+        $segments = [];
+        foreach ($resolved->environmentDigestContributors as $contributor) {
+            $segments[$contributor::class] = $contributor->digest();
+        }
+        ksort($segments);
+
+        $parts = [];
+        foreach ($segments as $class => $segment) {
+            $parts[] = $class.':'.$segment;
         }
 
-        $morphMap = Relation::morphMap();
-        ksort($morphMap);
-        $morphs = [];
-        foreach ($morphMap as $alias => $fqcn) {
-            $morphs[] = $alias.'=>'.$fqcn;
-        }
-
-        $appUrl = '';
-        try {
-            $value = $this->container->make(ConfigRepository::class)->get('app.url');
-            $appUrl = is_string($value) ? $value : '';
-        } catch (Throwable) {
-            // No config repository bound: contribute nothing.
-        }
-
-        return hash('sha256', implode("\0", [
-            'render:'.$callbacks,
-            'morph:'.implode(',', $morphs),
-            'appurl:'.$appUrl,
-        ]));
+        return hash('sha256', implode("\0", $parts));
     }
 
     /**

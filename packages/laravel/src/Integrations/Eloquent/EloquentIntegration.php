@@ -22,6 +22,9 @@ final class EloquentIntegration
             // The route-key schema resolver: a gated RouteBindingSchemaResolver, so a disabled Eloquent
             // integration leaves bound path params to the string fallback rather than typing off the model.
             EloquentRouteBindingSchema::class,
+            // Environment-digest seam (A4): the polymorphic morph map drives MorphTo discriminators,
+            // so a morph-map change must invalidate the document-level fragment-cache digest.
+            MorphMapDigestContributor::class,
         ];
     }
 }

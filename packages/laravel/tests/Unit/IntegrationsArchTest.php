@@ -72,12 +72,14 @@ arch('built-in integrations never reach into core internals or adapter wiring')
  * other way — through the gated context chains (response-analysis target, response-status resolver,
  * payload media-type resolver, route-binding schema resolver) and the exception-mapper chain. The
  * Registry is the one sanctioned place that wires integrations into the resolved set, so it is exempt.
- * (`Docuccino\Laravel\Pipeline` joins this rule once the inferred-handler digest seam lands — A4.)
+ * With the environment-digest seam landed (A4), `Docuccino\Laravel\Pipeline` no longer imports
+ * `InferredHandler\HandlerReflector` for the cache digest — it reads the gated
+ * EnvironmentDigestContributor chain instead — so it joins this rule.
  */
 arch('adapter built-in extensions never reach into integrations')
     ->expect('Docuccino\Laravel\Extensions')
     ->not->toUse('Docuccino\Laravel\Integrations');
 
-arch('routing and support wiring never reach into integrations')
-    ->expect(['Docuccino\Laravel\Routing', 'Docuccino\Laravel\Support'])
+arch('routing, pipeline and support wiring never reach into integrations')
+    ->expect(['Docuccino\Laravel\Routing', 'Docuccino\Laravel\Pipeline', 'Docuccino\Laravel\Support'])
     ->not->toUse('Docuccino\Laravel\Integrations');

@@ -22,12 +22,15 @@ use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
+use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfigDigestContributor;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateResponsesExtension;
+use Docuccino\Laravel\Integrations\Passport\PassportDigestContributor;
 use Docuccino\Laravel\Integrations\Passport\PassportIntegration;
 use Docuccino\Laravel\Integrations\Passport\PassportRuntime;
 use Docuccino\Laravel\Integrations\Passport\PassportSecurityExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfigDigestContributor;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
@@ -186,6 +189,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new JsonApiPaginateResponsesExtension(JsonApiPaginateConfig::fromArray($config));
         });
 
+        // The environment-digest contributor (A4) keys the fragment cache on the SAME renamable
+        // parameter names + mode, so it reads the live bag the same way the extensions above do.
+        $this->app->bind(JsonApiPaginateConfigDigestContributor::class, static function (): JsonApiPaginateConfigDigestContributor {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('json-api-paginate', []);
+
+            return new JsonApiPaginateConfigDigestContributor(JsonApiPaginateConfig::fromArray($config));
+        });
+
         // The query-builder integration reads the package's own config for the (renamable) request
         // parameter names (filter/sort/include/fields); an absent bag falls back to defaults + an
         // info diagnostic.
@@ -196,6 +208,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new QueryBuilderParametersExtension(QueryBuilderConfig::fromArray($config));
         });
 
+        // The environment-digest contributor (A4) keys the fragment cache on the SAME renamable
+        // parameter names + strict mode, so it reads the live bag the same way the extension above does.
+        $this->app->bind(QueryBuilderConfigDigestContributor::class, static function (): QueryBuilderConfigDigestContributor {
+            /** @var array<string, mixed> $config */
+            $config = (array) config('query-builder', []);
+
+            return new QueryBuilderConfigDigestContributor(QueryBuilderConfig::fromArray($config));
+        });
+
         // Passport's oauth2 scheme needs runtime facts (the scope catalogue + which grants were
         // enabled) that live on the vendor class. The integration stays vendor-import-free (arch
         // rule), so the provider — allowed to touch Passport — reads them here and injects them.
@@ -204,6 +225,15 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             $config = $app->make('config');
 
             return new PassportSecurityExtension($config, self::passportRuntime());
+        });
+
+        // The environment-digest contributor (A4) needs the same runtime facts (app.url + scopes +
+        // grants), read here and injected so the integration stays vendor-import-free.
+        $this->app->bind(PassportDigestContributor::class, function (Application $app): PassportDigestContributor {
+            /** @var Repository $config */
+            $config = $app->make('config');
+
+            return new PassportDigestContributor($config, self::passportRuntime());
         });
 
         // The spatie-data integration reads the package's own global config — none of which the

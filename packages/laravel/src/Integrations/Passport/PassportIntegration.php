@@ -33,6 +33,9 @@ final class PassportIntegration
     {
         return [
             PassportSecurityExtension::class,
+            // Environment-digest seam (A4): app.url + the scope catalogue + grants shape the oauth2
+            // scheme, so they feed the document-level fragment-cache digest.
+            PassportDigestContributor::class,
         ];
     }
 }

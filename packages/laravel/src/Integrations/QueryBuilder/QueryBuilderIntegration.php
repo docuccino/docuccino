@@ -35,6 +35,9 @@ final class QueryBuilderIntegration
     {
         return [
             QueryBuilderParametersExtension::class,
+            // Environment-digest seam (A4): the renamable filter/sort/include/fields parameter names +
+            // strict mode reshape every QB operation, so they feed the document-level fragment-cache digest.
+            QueryBuilderConfigDigestContributor::class,
         ];
     }
 }
