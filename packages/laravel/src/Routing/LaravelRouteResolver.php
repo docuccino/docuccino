@@ -71,6 +71,12 @@ final class LaravelRouteResolver implements RouteResolver
      * `alias:params` entries are left verbatim (the detectors read their short forms), so this widens
      * detection without the wholesale alias resolution `Router::gatherRouteMiddleware()` would do.
      *
+     * `withoutMiddleware(...)` exclusions are honoured the way {@see Router::resolveMiddleware()}
+     * does: each excluded entry is expanded through the same groups and then removed from the gathered
+     * set, so a route that opts out of `throttle:api` or `auth` is not documented with a 429/401 (or
+     * a security requirement) it never enforces. The match is in our short-form vocabulary rather than
+     * Laravel's resolved-FQCN space, mirroring the alias-preserving gather above.
+     *
      * @return list<string>
      */
     private function gatherMiddleware(Route $route): array
@@ -80,6 +86,15 @@ final class LaravelRouteResolver implements RouteResolver
         $out = [];
         foreach (self::strings($route->gatherMiddleware()) as $entry) {
             $this->expandMiddleware($entry, $groups, $out, []);
+        }
+
+        $excluded = [];
+        foreach (self::strings($route->excludedMiddleware()) as $entry) {
+            $this->expandMiddleware($entry, $groups, $excluded, []);
+        }
+
+        if ($excluded !== []) {
+            $out = array_diff($out, $excluded);
         }
 
         return array_values(array_unique($out));
