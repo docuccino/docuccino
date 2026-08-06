@@ -9,6 +9,10 @@ use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
+use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
+use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
@@ -40,6 +44,10 @@ final readonly class ResolvedExtensions
      * @param  list<ExceptionToResponse>  $exceptionToResponse
      * @param  list<DocumentTransformer>  $documentTransformers
      * @param  list<RuleTransformer>  $ruleTransformers  the validation rule vocabulary chain
+     * @param  list<ResponseAnalysisTarget>  $responseAnalysisTargets  gated success-body analysis redirects
+     * @param  list<ResponseStatusResolver>  $responseStatusResolvers  gated success-status overrides
+     * @param  list<PayloadMediaTypeResolver>  $payloadMediaTypeResolvers  gated response media-type matchers
+     * @param  list<RouteBindingSchemaResolver>  $routeBindingSchemaResolvers  gated route-key schema typers
      */
     public function __construct(
         public array $routeResolvers = [],
@@ -48,6 +56,10 @@ final readonly class ResolvedExtensions
         public array $exceptionToResponse = [],
         public array $documentTransformers = [],
         public array $ruleTransformers = [],
+        public array $responseAnalysisTargets = [],
+        public array $responseStatusResolvers = [],
+        public array $payloadMediaTypeResolvers = [],
+        public array $routeBindingSchemaResolvers = [],
     ) {
         $byPhase = [];
         foreach ($operationExtensions as $extension) {
@@ -75,7 +87,7 @@ final readonly class ResolvedExtensions
     public function classSignature(): array
     {
         $classes = [];
-        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers, $this->ruleTransformers] as $partition) {
+        foreach ([$this->routeResolvers, $this->operationExtensions, $this->typeToSchema, $this->exceptionToResponse, $this->documentTransformers, $this->ruleTransformers, $this->responseAnalysisTargets, $this->responseStatusResolvers, $this->payloadMediaTypeResolvers, $this->routeBindingSchemaResolvers] as $partition) {
             foreach ($partition as $extension) {
                 $classes[$extension::class] = true;
             }

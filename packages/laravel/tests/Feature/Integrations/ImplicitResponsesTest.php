@@ -50,6 +50,7 @@ function implicitContext(
     array $routeBindings = [],
     ?TypeEngine $engine = null,
     ?ActionRef $actionRef = null,
+    ?string $formRequestClass = null,
 ): RouteContext {
     return new RouteContext(
         route: $route,
@@ -59,6 +60,7 @@ function implicitContext(
         document: new DocumentConfig('default', [], authMiddleware: 'auth*', errorResponses: $errorResponses),
         exceptionMappers: implicitResponseMappers($errorResponses),
         routeBindings: $routeBindings,
+        formRequestClass: $formRequestClass,
     );
 }
 
@@ -157,6 +159,7 @@ it('synthesizes a 403 for a FormRequest whose authorize() can deny', function ()
         new RouteDescriptor(['POST'], 'api/gated'),
         engine: $engine,
         actionRef: new ActionRef((string) (new ReflectionClass(GateController::class))->getFileName(), GateController::class, 'store'),
+        formRequestClass: GateRequest::class,
     );
 
     expect(implicitStatuses(runImplicit($context)))->toContain('403');
@@ -170,6 +173,7 @@ it('adds no 403 for a FormRequest authorize() that returns literal true', functi
         new RouteDescriptor(['POST'], 'api/gated'),
         engine: $engine,
         actionRef: new ActionRef((string) (new ReflectionClass(GateController::class))->getFileName(), GateController::class, 'store'),
+        formRequestClass: GateRequest::class,
     );
 
     expect(implicitStatuses(runImplicit($context)))->not->toContain('403');

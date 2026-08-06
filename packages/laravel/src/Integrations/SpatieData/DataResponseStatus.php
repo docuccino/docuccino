@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Integrations\SpatieData;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\LiteralT;
 use ReflectionClass;
@@ -23,11 +24,11 @@ use ReflectionClass;
  * file-identity check against the Data class distinguishes a genuine override from the inherited
  * default, and a plain Data class (no override) is a no-op with no diagnostic.
  */
-final class DataResponseStatus
+final class DataResponseStatus implements ResponseStatusResolver
 {
     private const METHOD = 'calculateResponseStatus';
 
-    public function resolve(RouteContext $context, string $fqcn): ?int
+    public function resolveStatus(RouteContext $context, string $fqcn): ?int
     {
         if (! DataClassReflector::isData($fqcn) || ! class_exists($fqcn)) {
             return null;

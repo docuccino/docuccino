@@ -60,3 +60,20 @@ arch('built-in integrations never reach into core internals or adapter wiring')
         'Docuccino\Laravel\Registry',
         'Docuccino\Laravel\Routing',
     ]);
+
+/**
+ * The reverse direction (arch review PIN 1): the adapter's built-in extensions and its routing/support
+ * wiring must NOT reach into an integration, or a DISABLED integration could still shape output through
+ * a static call the per-document toggle never gates. Everything an integration contributes flows the
+ * other way — through the gated context chains (response-analysis target, response-status resolver,
+ * payload media-type resolver, route-binding schema resolver) and the exception-mapper chain. The
+ * Registry is the one sanctioned place that wires integrations into the resolved set, so it is exempt.
+ * (`Docuccino\Laravel\Pipeline` joins this rule once the inferred-handler digest seam lands — A4.)
+ */
+arch('adapter built-in extensions never reach into integrations')
+    ->expect('Docuccino\Laravel\Extensions')
+    ->not->toUse('Docuccino\Laravel\Integrations');
+
+arch('routing and support wiring never reach into integrations')
+    ->expect(['Docuccino\Laravel\Routing', 'Docuccino\Laravel\Support'])
+    ->not->toUse('Docuccino\Laravel\Integrations');

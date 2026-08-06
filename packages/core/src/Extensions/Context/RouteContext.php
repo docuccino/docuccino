@@ -6,6 +6,10 @@ namespace Docuccino\Core\Extensions\Context;
 
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
+use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
+use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
+use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Contracts\ValidationRulesToSchema;
@@ -15,6 +19,7 @@ use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceReport;
 use Docuccino\Core\Inference\TraceVisitor;
@@ -55,6 +60,11 @@ final class RouteContext
      * @param  list<string>  $pathParameters  route template parameter names, in template order
      * @param  list<string>  $optionalPathParameters  the subset declared optional (`{param?}`)
      * @param  array<string, string>  $routeBindings  path parameter name → bound model FQCN
+     * @param  list<ResponseAnalysisTarget>  $responseAnalysisTargets  gated success-body analysis redirects
+     * @param  list<ResponseStatusResolver>  $responseStatusResolvers  gated success-status overrides
+     * @param  list<PayloadMediaTypeResolver>  $payloadMediaTypeResolvers  gated response media-type matchers
+     * @param  list<RouteBindingSchemaResolver>  $routeBindingSchemaResolvers  gated route-key schema typers
+     * @param  ?string  $formRequestClass  the FormRequest class type-hinted on the action, if any
      */
     public function __construct(
         public readonly RouteDescriptor $route,
@@ -74,8 +84,83 @@ final class RouteContext
         public readonly ?SourcePathResolver $pathResolver = null,
         public readonly ?string $documentedMethod = null,
         public readonly bool $allowsTrashedBindings = false,
+        public readonly array $responseAnalysisTargets = [],
+        public readonly array $responseStatusResolvers = [],
+        public readonly array $payloadMediaTypeResolvers = [],
+        public readonly array $routeBindingSchemaResolvers = [],
+        public readonly ?string $formRequestClass = null,
     ) {
         $this->dependencies = new RouteDependencies;
+    }
+
+    /**
+     * The success-body analysis redirect for this route from the gated {@see ResponseAnalysisTarget}
+     * chain (first non-null wins), or null to analyse the dispatched action itself. A disabled
+     * integration contributes no target, so a plain inference is used and attributed honestly.
+     */
+    public function responseAnalysisRedirect(): ?ResponseAnalysisRedirect
+    {
+        foreach ($this->responseAnalysisTargets as $target) {
+            $redirect = $target->resolve($this);
+            if ($redirect !== null) {
+                return $redirect;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A success-status override for a returned class from the gated {@see ResponseStatusResolver}
+     * chain (first non-null wins), or null to keep the inferred default. A disabled integration
+     * contributes nothing.
+     */
+    public function resolveResponseStatus(string $fqcn): ?int
+    {
+        foreach ($this->responseStatusResolvers as $resolver) {
+            $status = $resolver->resolveStatus($this, $fqcn);
+            if ($status !== null) {
+                return $status;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The media type a response payload serialises as, from the gated {@see PayloadMediaTypeResolver}
+     * chain (first non-null wins), defaulting to `application/json`. A disabled resource integration
+     * contributes no matcher, so its resources stay `application/json`.
+     */
+    public function payloadMediaType(DType $payload): string
+    {
+        foreach ($this->payloadMediaTypeResolvers as $resolver) {
+            $mediaType = $resolver->mediaTypeFor($payload);
+            if ($mediaType !== null) {
+                return $mediaType;
+            }
+        }
+
+        return 'application/json';
+    }
+
+    /**
+     * The JSON-schema keywords for a route-bound model's key, from the gated
+     * {@see RouteBindingSchemaResolver} chain (first non-null wins), or null to fall back to a plain
+     * string. A disabled Eloquent integration contributes nothing.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function routeBindingKeySchema(string $modelFqcn): ?array
+    {
+        foreach ($this->routeBindingSchemaResolvers as $resolver) {
+            $schema = $resolver->keySchemaFor($modelFqcn);
+            if ($schema !== null) {
+                return $schema;
+            }
+        }
+
+        return null;
     }
 
     /**

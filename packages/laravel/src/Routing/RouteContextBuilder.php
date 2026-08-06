@@ -8,12 +8,17 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
+use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
+use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
+use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Inference\PhpStan\Metadata\DocBlockReader;
+use Illuminate\Foundation\Http\FormRequest as LaravelFormRequest;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
 use ReflectionNamedType;
@@ -42,6 +47,10 @@ final class RouteContextBuilder
      * @param  list<TypeToSchema>  $typeMappers
      * @param  list<ExceptionToResponse>  $exceptionMappers
      * @param  list<RuleTransformer>  $ruleTransformers
+     * @param  list<ResponseAnalysisTarget>  $responseAnalysisTargets
+     * @param  list<ResponseStatusResolver>  $responseStatusResolvers
+     * @param  list<PayloadMediaTypeResolver>  $payloadMediaTypeResolvers
+     * @param  list<RouteBindingSchemaResolver>  $routeBindingSchemaResolvers
      */
     public function build(
         RouteDescriptor $descriptor,
@@ -52,6 +61,10 @@ final class RouteContextBuilder
         array $ruleTransformers,
         ComponentRegistry $components,
         ?string $method = null,
+        array $responseAnalysisTargets = [],
+        array $responseStatusResolvers = [],
+        array $payloadMediaTypeResolvers = [],
+        array $routeBindingSchemaResolvers = [],
     ): ?RouteContext {
         // Fast path: reuse the Route + reflection the resolver already produced (O(1), reflected
         // once). On a container miss the index is empty, so fall back to a lookup + fresh reflection.
@@ -88,7 +101,37 @@ final class RouteContextBuilder
             pathResolver: $this->pathResolver,
             documentedMethod: $method ?? $descriptor->primaryMethod(),
             allowsTrashedBindings: $route->allowsTrashedBindings(),
+            responseAnalysisTargets: $responseAnalysisTargets,
+            responseStatusResolvers: $responseStatusResolvers,
+            payloadMediaTypeResolvers: $payloadMediaTypeResolvers,
+            routeBindingSchemaResolvers: $routeBindingSchemaResolvers,
+            formRequestClass: $this->formRequestClass($reflected),
         );
+    }
+
+    /**
+     * The FormRequest class type-hinted on the action, resolved once by reflection so both the
+     * FormRequest rule recovery and the implicit-403 authorize probe read it off the context (no
+     * extension reaches into the integration for this route-identity fact).
+     *
+     * @return class-string<LaravelFormRequest>|null
+     */
+    private function formRequestClass(ReflectedAction $action): ?string
+    {
+        foreach ($action->reflection->getParameters() as $parameter) {
+            $type = $parameter->getType();
+            if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+                continue;
+            }
+
+            $name = $type->getName();
+            if (is_subclass_of($name, LaravelFormRequest::class)) {
+                /** @var class-string<LaravelFormRequest> $name */
+                return $name;
+            }
+        }
+
+        return null;
     }
 
     private function locate(RouteDescriptor $descriptor): ?Route

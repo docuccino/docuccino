@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
+use Docuccino\Laravel\Routing\LaravelActionRouteMethod;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ArchiveArticleAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\ExplicitMethodAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\HandlelessAction;
@@ -32,7 +33,8 @@ it('recognises an action by its AsController/AsAction trait', function (string $
 ]);
 
 it('resolves the dispatched controller method across registration styles', function (string $class, string $registered, string $resolved): void {
-    expect(LaravelAction::controllerMethod($class, $registered))->toBe($resolved);
+    // The route-IDENTITY remap is a non-toggleable routing probe (relocated out of the integration).
+    expect(LaravelActionRouteMethod::resolve($class, $registered))->toBe($resolved);
 })->with([
     'invokable action with asController → asController' => [ArchiveArticleAction::class, '__invoke', 'asController'],
     'invokable action with only handle → handle' => [PublishArticleAction::class, '__invoke', 'handle'],

@@ -8,6 +8,10 @@ use Closure;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
+use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
+use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
+use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
@@ -64,6 +68,10 @@ final class ExtensionRegistry
             exceptionToResponse: $sorter->sort($this->partition($instances, ExceptionToResponse::class)),
             documentTransformers: $sorter->sort($this->partition($instances, DocumentTransformer::class)),
             ruleTransformers: $sorter->sort($this->partition($instances, RuleTransformer::class)),
+            responseAnalysisTargets: $sorter->sort($this->partition($instances, ResponseAnalysisTarget::class)),
+            responseStatusResolvers: $sorter->sort($this->partition($instances, ResponseStatusResolver::class)),
+            payloadMediaTypeResolvers: $sorter->sort($this->partition($instances, PayloadMediaTypeResolver::class)),
+            routeBindingSchemaResolvers: $sorter->sort($this->partition($instances, RouteBindingSchemaResolver::class)),
         );
     }
 

@@ -251,6 +251,10 @@ final class DocumentGenerator
                 $resolved->ruleTransformers,
                 $components,
                 $method,
+                $resolved->responseAnalysisTargets,
+                $resolved->responseStatusResolvers,
+                $resolved->payloadMediaTypeResolvers,
+                $resolved->routeBindingSchemaResolvers,
             );
 
             if ($context === null) {

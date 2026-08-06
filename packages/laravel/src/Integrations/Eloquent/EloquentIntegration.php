@@ -19,6 +19,9 @@ final class EloquentIntegration
         return [
             ModelSchema::class,
             MorphToSchema::class,
+            // The route-key schema resolver: a gated RouteBindingSchemaResolver, so a disabled Eloquent
+            // integration leaves bound path params to the string fallback rather than typing off the model.
+            EloquentRouteBindingSchema::class,
         ];
     }
 }

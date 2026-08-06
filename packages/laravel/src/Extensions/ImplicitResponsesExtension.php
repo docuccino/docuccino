@@ -19,7 +19,6 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\Source;
-use Docuccino\Laravel\Integrations\FormRequest\FormRequestRules;
 use Docuccino\Laravel\Support\AuthMiddlewareDetector;
 use ReflectionClass;
 
@@ -182,7 +181,7 @@ final class ImplicitResponsesExtension implements OperationExtension
     /** Whether the route's FormRequest declares an authorize() gate that is not a literal `return true`. */
     private function formRequestAuthorizes(RouteContext $context): bool
     {
-        $formRequest = FormRequestRules::classFor($context);
+        $formRequest = $context->formRequestClass;
         if ($formRequest === null || ! class_exists($formRequest)) {
             return false;
         }

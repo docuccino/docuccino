@@ -35,6 +35,9 @@ final class TimacdonaldJsonApiIntegration
         return [
             TimacdonaldJsonApiResourceSchema::class,
             TimacdonaldJsonApiParametersExtension::class,
+            // The JSON:API media-type matcher (a gated PayloadMediaTypeResolver): a disabled integration
+            // contributes no matcher, so its resources stay application/json.
+            TimacdonaldMediaType::class,
         ];
     }
 }

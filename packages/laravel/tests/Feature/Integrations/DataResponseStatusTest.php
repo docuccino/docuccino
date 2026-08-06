@@ -50,7 +50,7 @@ function statusEngine(string $fqcn, array $returnTypes): StubTypeEngine
 it('folds a single constant status override to the response status', function (): void {
     $context = statusContext(statusEngine(CreatedData::class, [new LiteralT(201)]));
 
-    expect((new DataResponseStatus)->resolve($context, CreatedData::class))->toBe(201)
+    expect((new DataResponseStatus)->resolveStatus($context, CreatedData::class))->toBe(201)
         ->and($context->components->diagnostics())->toBe([]);
 });
 
@@ -59,14 +59,14 @@ it('leaves a plain Data class (no override) at the inferred status with no diagn
     // file, so it is not treated as a documentable override.
     $context = statusContext(new StubTypeEngine);
 
-    expect((new DataResponseStatus)->resolve($context, AccountData::class))->toBeNull()
+    expect((new DataResponseStatus)->resolveStatus($context, AccountData::class))->toBeNull()
         ->and($context->components->diagnostics())->toBe([]);
 });
 
 it('degrades a non-constant or multi-status override to 200 with a diagnostic', function (array $returnTypes): void {
     $context = statusContext(statusEngine(CreatedData::class, $returnTypes));
 
-    expect((new DataResponseStatus)->resolve($context, CreatedData::class))->toBeNull();
+    expect((new DataResponseStatus)->resolveStatus($context, CreatedData::class))->toBeNull();
 
     $diagnostics = $context->components->diagnostics();
     expect($diagnostics)->toHaveCount(1)

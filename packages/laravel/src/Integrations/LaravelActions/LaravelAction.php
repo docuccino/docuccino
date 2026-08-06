@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\LaravelActions;
 
 use Docuccino\Core\Inference\ActionRef;
-use ReflectionClass;
 use ReflectionMethod;
 
 /**
- * The one place that recognises a `lorisleiva/laravel-actions` action class and resolves which of its
- * methods a route actually dispatches. An action used as a controller carries the package's
- * `AsController` trait (directly, or via the umbrella `AsAction` trait which uses it). When such a
- * class is registered as an invokable route, the package rewrites the dispatched method at runtime —
- * `asController()` if defined, else `handle()`, else the trait's `__invoke()` forwarder (the package's
- * `ControllerDecorator::getDefaultRouteMethod()`). Docuccino must do the same statically so
- * reflection, inference, attributes and the docblock summary all target the real signature instead of
- * the `__invoke(mixed ...$args)` forwarder.
+ * Recognises a `lorisleiva/laravel-actions` action class (it carries the package's `AsController`
+ * trait, directly or via the umbrella `AsAction` trait) and exposes the integration's per-route facts:
+ * whether the package would run its `rules()`/`authorize()` for the dispatched method, the
+ * `jsonResponse()` success-body redirect, and whether it defines `htmlResponse()`. The route-IDENTITY
+ * remap (which method an invokable route dispatches) is a non-toggleable route-reflection probe living
+ * in the routing layer instead (Docuccino\Laravel\Routing\LaravelActionRouteMethod), so it runs
+ * regardless of the integration toggle.
  *
  * All checks are guarded by the trait's presence, so this is inert when the package is absent.
  */
@@ -87,26 +85,6 @@ final class LaravelAction
     }
 
     /**
-     * Resolve the method a route dispatches on an action. Only an invokable registration
-     * (`__invoke`, the trait's forwarder) is remapped — an explicit `[Action::class, 'method']`
-     * registration is honoured verbatim — mirroring the package's own `replaceRouteMethod()`.
-     */
-    public static function controllerMethod(string $fqcn, string $method): string
-    {
-        if ($method !== '__invoke' || ! self::isAction($fqcn) || ! class_exists($fqcn)) {
-            return $method;
-        }
-
-        $reflection = new ReflectionClass($fqcn);
-
-        if ($reflection->hasMethod('asController')) {
-            return 'asController';
-        }
-
-        return $reflection->hasMethod('handle') ? 'handle' : $method;
-    }
-
-    /**
      * The method whose RETURN TYPE is the true 200 wire shape for a JSON client. The package's
      * controller decorator, when the action defines `jsonResponse()` and the client expects JSON,
      * returns `jsonResponse($response, $request)` instead of the dispatched method's value
@@ -115,9 +93,10 @@ final class LaravelAction
      * the decorator has already transformed. Returns an {@see ActionRef} pointing at `jsonResponse()`
      * when the action defines it, else null (leave the dispatched method's return analysis in place).
      *
-     * This mirrors {@see controllerMethod()} — reflection-time knowledge of how the route really
-     * responds — so it is applied regardless of whether the route dispatches invokably or through an
-     * explicitly-registered method (the decorator wraps both).
+     * This mirrors the routing layer's route-method probe (Docuccino\Laravel\Routing\LaravelActionRouteMethod)
+     * — reflection-time knowledge of how the route really responds — so it is applied regardless of
+     * whether the route dispatches invokably or through an explicitly-registered method (the decorator
+     * wraps both).
      */
     public static function responseAnalysisRef(ActionRef $dispatched): ?ActionRef
     {

@@ -38,6 +38,9 @@ final class SpatieDataIntegration
             DataSchema::class,
             DataRequestExtension::class,
             DataPartialsExtension::class,
+            // The success-status override resolver (calculateResponseStatus → 201/202): a gated
+            // ResponseStatusResolver, so a disabled integration never re-homes a bare Data return's status.
+            DataResponseStatus::class,
         ];
     }
 }

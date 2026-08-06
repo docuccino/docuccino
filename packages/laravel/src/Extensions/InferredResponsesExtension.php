@@ -8,6 +8,9 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
+use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
+use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Inference\ActionAnalysis;
@@ -19,11 +22,6 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Integrations\ApiResources\ResourceReflector;
-use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
-use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
-use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
-use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflector;
 
 /**
  * Infers the success response(s) from the action's return paths (design §5). Every return type is
@@ -40,17 +38,21 @@ use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflect
  * status (non-literal) falls back to the default `200`. Bare `void`/`never` returns (no
  * `JsonResponse` wrapper) contribute nothing.
  *
- * One integration-aware redirect: a `lorisleiva/laravel-actions` action that defines `jsonResponse()`
- * has its success body analysed from THAT method's return type, not the dispatched
- * `handle()`/`asController()` — the package's controller decorator transforms the dispatched value
- * through `jsonResponse()` for JSON clients, so it is the real wire shape ({@see LaravelAction::responseAnalysisRef()}).
+ * This is a built-in adapter extension, so it reaches into NO integration: the three integration-aware
+ * decisions all arrive through gated context chains (design §6 — an integration contributes only when
+ * installed AND enabled). A {@see ResponseAnalysisTarget} may
+ * redirect the analysed method (laravel-actions `jsonResponse()`), a
+ * {@see ResponseStatusResolver} may re-home a bare Data return's
+ * status (spatie `calculateResponseStatus()`), and a
+ * {@see PayloadMediaTypeResolver} may classify the media type
+ * (JSON:API resources). A disabled integration contributes none of these, so it cannot shape the
+ * success response; a redirect carries the honest provenance producer.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class InferredResponsesExtension implements OperationExtension
 {
-    public function __construct(
-        private readonly DataResponseStatus $dataStatus = new DataResponseStatus,
-    ) {}
+    /** The Illuminate JSON response FQCN, matched by string so this extension carries no Illuminate/integration import. */
+    private const JSON_RESPONSE = 'Illuminate\\Http\\JsonResponse';
 
     private const DEFAULT_STATUS = '200';
 
@@ -69,10 +71,12 @@ final class InferredResponsesExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
+        [$analysis, $producer] = $this->responseAnalysis($context);
+
         /** @var array<string, array{payloads: list<DType>, location: ?SourceLocation, empty: bool}> $byStatus */
         $byStatus = [];
 
-        foreach ($this->responseAnalysis($context)->returns as $return) {
+        foreach ($analysis->returns as $return) {
             [$status, $payload, $empty] = $this->unwrap($return->type);
 
             // A bare void/never return (no JsonResponse wrapper) documents nothing.
@@ -82,9 +86,10 @@ final class InferredResponsesExtension implements OperationExtension
 
             // A Data class returned directly (Responsable) may override calculateResponseStatus() to
             // 201/202/… — that replaces the inferred 200. A JsonResponse-wrapped payload keeps its own
-            // folded status ($type !== $payload there), so this only re-homes a bare Data return.
+            // folded status ($type !== $payload there), so this only re-homes a bare Data return. The
+            // override arrives through the gated ResponseStatusResolver chain, never a direct import.
             if ($status === self::DEFAULT_STATUS && $payload instanceof ClassT && $return->type === $payload) {
-                $override = $this->dataStatus->resolve($context, $payload->fqcn);
+                $override = $context->resolveResponseStatus($payload->fqcn);
                 if ($override !== null) {
                     $status = (string) $override;
                 }
@@ -109,29 +114,32 @@ final class InferredResponsesExtension implements OperationExtension
         foreach ($byStatus as $status => $bucket) {
             // A numeric-string status key ('200') is coerced to int by PHP array semantics; restore
             // the string the draft API and reason table expect.
-            $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location']);
+            $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer);
         }
     }
 
     /**
-     * The analysis whose return sites define the success body. Normally the dispatched action's own
-     * ({@see RouteContext::analysis()}); for a laravel-actions action defining `jsonResponse()` it is
-     * that method's analysis instead (the transformed JSON wire shape). Analysing `jsonResponse()`
-     * directly — rather than layering an override on top of the dispatched-method body — keeps a single
-     * source for the 200 schema, so no stale keywords from the untransformed body can leak. Its
-     * dependency files are recorded so editing `jsonResponse()` still invalidates the cached fragment.
+     * The analysis whose return sites define the success body, paired with the provenance producer to
+     * attribute it to. Normally the dispatched action's own ({@see RouteContext::analysis()}) with a
+     * null producer (→ plain inference); when a gated {@see ResponseAnalysisTarget}
+     * redirects (a laravel-actions `jsonResponse()`), it is that method's analysis and the redirect's
+     * producer (e.g. `integration:laravel-actions`), so the body is attributed honestly. Analysing the
+     * redirected method directly keeps a single source for the 200 schema; its dependency files are
+     * recorded so editing it still invalidates the cached fragment.
+     *
+     * @return array{0: ActionAnalysis, 1: ?string}
      */
-    private function responseAnalysis(RouteContext $context): ActionAnalysis
+    private function responseAnalysis(RouteContext $context): array
     {
-        $responseRef = LaravelAction::responseAnalysisRef($context->actionRef);
-        if ($responseRef === null) {
-            return $context->analysis();
+        $redirect = $context->responseAnalysisRedirect();
+        if ($redirect === null) {
+            return [$context->analysis(), null];
         }
 
-        $analysis = $context->engine->analyzeAction($responseRef);
+        $analysis = $context->engine->analyzeAction($redirect->ref);
         $context->recordDependencyFiles($analysis->dependencyFiles);
 
-        return $analysis;
+        return [$analysis, $redirect->producer];
     }
 
     /**
@@ -147,7 +155,7 @@ final class InferredResponsesExtension implements OperationExtension
             return [self::DEFAULT_STATUS, null, false];
         }
 
-        if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE) {
+        if ($type instanceof ClassT && $type->fqcn === self::JSON_RESPONSE) {
             $status = $this->foldStatus($type->typeArgs[1] ?? null);
             $payload = $type->typeArgs[0] ?? null;
 
@@ -172,7 +180,7 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * Emit one response: the unioned payload schema under `application/json`, or an empty-bodied
+     * Emit one response: the unioned payload schema under its resolved media type, or an empty-bodied
      * response when there is no payload (e.g. `noContent()`).
      *
      * @param  list<DType>  $payloads
@@ -183,6 +191,7 @@ final class InferredResponsesExtension implements OperationExtension
         string $status,
         array $payloads,
         ?SourceLocation $location,
+        ?string $producer,
     ): void {
         $response = $operation->response($status);
         $response->setDescription(self::REASONS[$status] ?? 'OK', Contribution::fallback());
@@ -195,52 +204,40 @@ final class InferredResponsesExtension implements OperationExtension
         $result = $context->converter()->toSchema($type);
 
         // Anchor the inferred body to the first contributing return path (design §4); an engine that
-        // reports no usable location yields a sourceless contribution rather than a churny one.
+        // reports no usable location yields a sourceless contribution rather than a churny one. When a
+        // redirect fired (laravel-actions jsonResponse) the body is attributed to that integration's
+        // producer, not plain inference.
         $source = $location !== null ? $context->sourceAt($location) : null;
-        $contribution = Contribution::inference($source, $result->confidence);
+        $contribution = $producer !== null
+            ? Contribution::forProducer($producer, $source, $result->confidence)
+            : Contribution::inference($source, $result->confidence);
 
-        $mediaType = self::mediaType($payloads);
+        $mediaType = $this->mediaType($context, $payloads);
         foreach ($result->schema as $keyword => $value) {
             $response->content($mediaType)->set($keyword, $value, $contribution);
         }
     }
 
     /**
-     * The response media type: JSON:API resources (either family, or a collection of them) serialise
-     * as `application/vnd.api+json`; everything else stays `application/json`. A mixed union falls
-     * back to `application/json`.
+     * The response media type from the gated {@see PayloadMediaTypeResolver}
+     * chain: JSON:API resources (either enabled family, or a collection of them) serialise as
+     * `application/vnd.api+json`; everything else stays `application/json`. Every payload must resolve
+     * to the same non-JSON media type — a mixed union falls back to `application/json`.
      *
      * @param  list<DType>  $payloads
      */
-    private static function mediaType(array $payloads): string
+    private function mediaType(RouteContext $context, array $payloads): string
     {
+        $resolved = null;
         foreach ($payloads as $payload) {
-            if (! self::isJsonApi($payload)) {
+            $mediaType = $context->payloadMediaType($payload);
+            if ($mediaType === 'application/json') {
                 return 'application/json';
             }
+            $resolved = $mediaType;
         }
 
-        return $payloads === [] ? 'application/json' : 'application/vnd.api+json';
-    }
-
-    private static function isJsonApi(DType $type): bool
-    {
-        if (! $type instanceof ClassT) {
-            return false;
-        }
-
-        if (ResourceReflector::isJsonApiResource($type->fqcn) || TimacdonaldResourceReflector::isResource($type->fqcn)) {
-            return true;
-        }
-
-        if (! ResourceReflector::isAnonymousCollection($type->fqcn)) {
-            return false;
-        }
-
-        $item = $type->typeArgs[0] ?? null;
-
-        return $item instanceof ClassT
-            && (ResourceReflector::isJsonApiResource($item->fqcn) || TimacdonaldResourceReflector::isResource($item->fqcn));
+        return $resolved ?? 'application/json';
     }
 
     /**

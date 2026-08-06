@@ -6,7 +6,6 @@ namespace Docuccino\Laravel\Routing;
 
 use Closure;
 use Docuccino\Core\Inference\ActionRef;
-use Docuccino\Laravel\Integrations\LaravelActions\LaravelAction;
 use Illuminate\Routing\Route;
 use ReflectionClass;
 use ReflectionFunction;
@@ -82,11 +81,11 @@ final class RouteReflector
         if (str_contains($uses, '@')) {
             [$class, $method] = explode('@', $uses, 2);
 
-            return class_exists($class) ? [$class, LaravelAction::controllerMethod($class, $method)] : [null, $method];
+            return class_exists($class) ? [$class, LaravelActionRouteMethod::resolve($class, $method)] : [null, $method];
         }
 
         // A single-action controller referenced by class name resolves through __invoke — or, for a
         // laravel-actions action registered invokably, through its asController()/handle() method.
-        return class_exists($uses) ? [$uses, LaravelAction::controllerMethod($uses, '__invoke')] : [null, '__invoke'];
+        return class_exists($uses) ? [$uses, LaravelActionRouteMethod::resolve($uses, '__invoke')] : [null, '__invoke'];
     }
 }

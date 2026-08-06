@@ -28,6 +28,10 @@ final class ApiResourcesIntegration
             JsonResourceSchema::class,
             PaginatedResourceResponsesExtension::class,
             CreatedResourceResponsesExtension::class,
+            // The JSON:API media-type matcher (a gated PayloadMediaTypeResolver): only fires for a
+            // first-party JSON:API resource, but registering it here means a disabled api_resources
+            // integration contributes no matcher, so its resources stay application/json.
+            ResourceMediaType::class,
         ];
 
         if ($probe(ResourceReflector::JSON_API_RESOURCE)) {
