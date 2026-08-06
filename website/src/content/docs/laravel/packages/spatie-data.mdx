@@ -133,10 +133,17 @@ public function show(Invoice $invoice): InvoiceData
 }
 ```
 
-A Data response class that overrides `calculateResponseStatus()` to return a single constant status
-(`return 201;`, or a folded constant like `Response::HTTP_CREATED`) has that status documented in place
-of the default `200`. A conditional or computed status can't be read statically, so the response stays
-`200` with an info diagnostic — see [Responses](/laravel/documenting/responses/#spatie-data-success-status).
+A Data response class that overrides `calculateResponseStatus()` has its status documented in place of
+the default `200`. A single constant folds — a plain `return 201;`, a class constant like
+`Response::HTTP_CREATED`, or an enum constant. A **conditional whose arms are all constants** folds too
+and documents **every** status (a `$recent ? 201 : 200` yields both a `201` and a `200`, each carrying
+the response body) — matching what the endpoint actually returns.
+
+When an action returns a **union of Data classes** — `AuthSuccessData|MfaChallengeData` from one
+method — each member is documented under its own `calculateResponseStatus()` (the challenge member at
+`422`, the success member at `200`), so a single action correctly documents several statuses. A
+genuinely computed status can't be read statically, so that member stays `200` with an info diagnostic
+— see [Responses](/laravel/documenting/responses/#spatie-data-success-status).
 
 ### Wrapping
 

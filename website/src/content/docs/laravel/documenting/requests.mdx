@@ -158,6 +158,27 @@ A file size bound (`max`, `min`, `size`, `between`) on a file field is in **kilo
 documented as a description note (e.g. "Maximum file size: 2048 KB.") rather than a string-length
 keyword, which would be wrong.
 
+### `UploadedFile`-typed Data properties
+
+You don't always spell out a `file` rule. A [Spatie Data](/laravel/packages/spatie-data/) property
+typed `Illuminate\Http\UploadedFile` **is** a file upload by its type alone — so it's documented as a
+binary string and flips the body to `multipart/form-data`, even when the rules that constrain it are
+computed at runtime and can't be read statically. `?UploadedFile` stays nullable, a list of
+`UploadedFile` becomes a `multipart` array of binary items, and scalar properties alongside it are
+carried in the same multipart body:
+
+```php
+final class CreateUploadData extends Data
+{
+    public function __construct(
+        public readonly UploadedFile $file,   // → binary string, multipart/form-data
+        public readonly string $collection = 'default', // carried alongside it
+    ) {}
+}
+```
+
+An explicit `file`/`image` rule or attribute is honored as before and never doubled.
+
 ## When it can't tell
 
 If a rule set can't be resolved statically, Docuccino contributes what it can and leaves the rest to

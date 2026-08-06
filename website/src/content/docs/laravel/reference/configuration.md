@@ -69,12 +69,19 @@ example (`{tenant}.example.com`), see [Deploying to production](/laravel/guides/
     'include' => ['api/*'],
     'exclude' => [],
     'closure' => null, // fn (RouteDescriptor $route): bool => ...
+    'include_vendor' => false,
 ],
 ```
 
 Route selection. `include`/`exclude` are URI globs; `closure` is an optional predicate that runs
 after the globs for arbitrary logic. A route must pass includes, fail excludes, and satisfy the
 closure to be documented.
+
+Routes whose resolved controller class file lives under the application's `vendor/` directory are
+**excluded by default** — the same as `php artisan route:list --except-vendor` — so an installed
+package's own routes don't leak into your API reference. Closures and your own app controllers are
+never affected, and the `include`/`exclude`/`closure` filters are unchanged. Set `include_vendor` to
+`true` to document installed packages' routes.
 
 ### `security`
 

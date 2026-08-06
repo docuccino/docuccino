@@ -305,10 +305,46 @@ Spatie lets you rename the request keys (`filter`, `sort`, `include`, `fields`, 
 if you rename `filter` to `filters`, the parameters come out as `filters[status]`. When the config
 isn't readable it falls back to the package defaults and emits an info diagnostic so you know why.
 
+## Query objects (allow-lists in a separate class)
+
+You don't have to build the `QueryBuilder` chain in the controller. A common pattern keeps the
+`allowedFilters()`/`allowedSorts()` allow-lists in a dedicated query class and calls it from the
+action:
+
+```php
+final readonly class InvoiceIndexQuery
+{
+    public function query(): ListQueryBuilder // your QueryBuilder subclass
+    {
+        return ListQueryBuilder::for(Invoice::class)
+            ->allowedFilters([AllowedFilter::exact('status'), 'reference'])
+            ->allowedSorts(['issued_at']);
+    }
+}
+
+final class InvoiceController
+{
+    public function index(InvoiceIndexQuery $query)
+    {
+        return $query->query()->paginateList();
+    }
+}
+```
+
+Docuccino follows the hop: a method call whose return type is your `QueryBuilder` (a subclass counts)
+is followed into that method, so the allow-lists are recovered from wherever they actually live — even
+when the query class sits in a different source root from the controller (e.g. a `Modules\…\Queries`
+namespace). Vendor code is never followed. Everything else on this page — enum typing, comments,
+defaults, custom filters — works identically through the hop, and the query class file joins the
+fragment-cache dependency set, so editing it re-documents the endpoint.
+
 ## When it can't tell
 
 If an allowed filter or sort is computed in a way that can't be resolved statically, Docuccino emits
-a warning diagnostic naming the exact expression — it never silently drops a parameter. You can then
+a warning diagnostic naming the exact expression — it never silently drops a parameter. And if an
+endpoint reaches a paginating terminal on a Query Builder but no allow-lists are recovered at all,
+Docuccino emits an info diagnostic (`query-builder.no-allowlists-recovered`) naming the action — so a
+list endpoint that offers filters you expected to see is never silently under-documented. You can then
 document that one parameter with [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter),
 addressing it by name:
 
