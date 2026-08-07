@@ -1093,16 +1093,7 @@
             "schema": {
               "type": "array",
               "items": {
-                "type": "string",
-                "enum": [
-                  "draft",
-                  "published",
-                  "archived"
-                ],
-                "x-enumDescriptions": {
-                  "draft": "Not yet visible to applicants.",
-                  "published": "Live and accepting traffic."
-                }
+                "$ref": "#/components/schemas/WidgetStatus"
               }
             }
           },
@@ -1386,16 +1377,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "draft": "Not yet visible to applicants.",
-              "published": "Live and accepting traffic."
-            }
+            "$ref": "#/components/schemas/WidgetStatus"
           },
           "updated_at": {
             "type": "string",
@@ -1422,16 +1404,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "draft": "Not yet visible to applicants.",
-              "published": "Live and accepting traffic."
-            }
+            "$ref": "#/components/schemas/WidgetStatus"
           }
         },
         "required": [
@@ -1439,6 +1412,18 @@
           "name",
           "status"
         ]
+      },
+      "WidgetStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enumDescriptions": {
+          "draft": "Not yet visible to applicants.",
+          "published": "Live and accepting traffic."
+        }
       }
     }
   }

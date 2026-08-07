@@ -2666,16 +2666,7 @@
               },
               "type": "array",
               "items": {
-                "type": "string",
-                "enum": [
-                  "draft",
-                  "published",
-                  "archived"
-                ],
-                "x-enumDescriptions": {
-                  "draft": "Not yet visible to applicants.",
-                  "published": "Live and accepting traffic."
-                }
+                "$ref": "#/components/schemas/WidgetStatus"
               }
             }
           },
@@ -3219,16 +3210,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "draft": "Not yet visible to applicants.",
-              "published": "Live and accepting traffic."
-            }
+            "$ref": "#/components/schemas/WidgetStatus"
           },
           "updated_at": {
             "type": "string",
@@ -3258,16 +3240,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "draft": "Not yet visible to applicants.",
-              "published": "Live and accepting traffic."
-            }
+            "$ref": "#/components/schemas/WidgetStatus"
           }
         },
         "required": [
@@ -3275,6 +3248,21 @@
           "name",
           "status"
         ]
+      },
+      "WidgetStatus": {
+        "x-docuccino": {
+          "id": "sch:v1:xxkbfhrj65orbrgo"
+        },
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enumDescriptions": {
+          "draft": "Not yet visible to applicants.",
+          "published": "Live and accepting traffic."
+        }
       }
     },
     "responses": {
@@ -3396,7 +3384,7 @@
     "document": {
       "id": "doc:pointer-list",
       "configHash": "a16009c154324b1c7cd44a8a9ce1e3c4152e0efdae100eeafdbadec0408fc017",
-      "contentHash": "88d670a0ae613c112d90172359ed74f5b92c3c78b1dd92a2981da601b5224424"
+      "contentHash": "a288c860f01a0dbc832fae4aad6fa8266f32aea59f2ee06d0c53f56f0e5effa4"
     },
     "generator": {
       "name": "docuccino/laravel",

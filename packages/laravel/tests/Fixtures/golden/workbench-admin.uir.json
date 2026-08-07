@@ -108,16 +108,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "draft": "Not yet visible to applicants.",
-              "published": "Live and accepting traffic."
-            }
+            "$ref": "#/components/schemas/WidgetStatus"
           }
         },
         "required": [
@@ -125,6 +116,21 @@
           "name",
           "status"
         ]
+      },
+      "WidgetStatus": {
+        "x-docuccino": {
+          "id": "sch:v1:xxkbfhrj65orbrgo"
+        },
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "x-enumDescriptions": {
+          "draft": "Not yet visible to applicants.",
+          "published": "Live and accepting traffic."
+        }
       }
     }
   },
@@ -132,7 +138,7 @@
     "document": {
       "id": "doc:admin",
       "configHash": "f7ea3a4314fc0a4ece2303d4e9a87bb93318ea2d6fd4c67951fa4bab3284a741",
-      "contentHash": "b7619d361e8f0bfca5a60572edae06a3d00f532f6d90f037029a23b5e75f4900"
+      "contentHash": "7f6b185b0fd29b9694b07141dfb2b1c6c014e8a9f680d57358770bbf822a79e1"
     },
     "generator": {
       "name": "docuccino/laravel",
