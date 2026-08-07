@@ -1,0 +1,111 @@
+# Subtree split: publishes each `packages/<name>` directory to its own read-only
+# repository `docuccino/<name>`, which is what Composer/Packagist installs from. The
+# monorepo stays the only place anyone commits.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# REQUIRED SECRET: `SPLIT_TOKEN`
+#
+# The split pushes to OTHER repositories, so the automatic `secrets.GITHUB_TOKEN`
+# cannot be used — it is scoped to this repository alone. A cross-repository token
+# must be created by a human with admin rights on the org (it cannot be minted from
+# inside a workflow):
+#
+#   1. GitHub → Settings → Developer settings → Personal access tokens →
+#      Fine-grained tokens → Generate new token
+#   2. Resource owner: the `docuccino` organization
+#   3. Repository access: "Only select repositories" → docuccino/core,
+#      docuccino/attributes, docuccino/inference-phpstan, docuccino/laravel
+#      (this repository does NOT need to be included)
+#   4. Repository permissions: Contents → Read and write   (nothing else)
+#   5. Expiry: set a calendar reminder — an expired token fails this workflow only,
+#      never the monorepo's own CI
+#   6. Save it as an Actions secret named `SPLIT_TOKEN`, either org-wide
+#      (Organization → Settings → Secrets and variables → Actions, scoped to this
+#      repository) or on this repository (Settings → Secrets and variables →
+#      Actions). Equivalent:
+#        gh secret set SPLIT_TOKEN --repo docuccino/docuccino
+#
+# Until the secret exists every matrix leg fails fast with a clear message (see the
+# "Require SPLIT_TOKEN" step) instead of a confusing git authentication error.
+# ─────────────────────────────────────────────────────────────────────────────────
+#
+# The action clones the target repository, copies the package directory over it and
+# commits — the monorepo's history is NOT replayed, so a shallow checkout is
+# correct and no `fetch-depth: 0` is needed. A run where a package is unchanged
+# produces no commit.
+#
+# Tags propagate: pushing `vX.Y.Z` here tags every split repository with the same
+# version, which is how Composer resolves `docuccino/laravel:^X.Y`.
+
+name: Split
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialise per ref so two pushes in quick succession cannot race the same
+  # split repository into a conflicting state. Never cancel: a half-finished
+  # split would leave the package repositories inconsistent with each other.
+  group: split-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  split:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    # Forks have no SPLIT_TOKEN and must never attempt to push to the org.
+    if: github.repository == 'docuccino/docuccino'
+    strategy:
+      fail-fast: false
+      matrix:
+        # The local directory name and the split repository name are identical for
+        # every package (packages/core → docuccino/core), so one axis covers both.
+        package: [core, attributes, inference-phpstan, laravel]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require SPLIT_TOKEN
+        env:
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+        run: |
+          if [ -z "$SPLIT_TOKEN" ]; then
+            echo "::error::SPLIT_TOKEN is not set. Create a fine-grained PAT with" \
+                 "contents:write on the four docuccino/<package> repositories and save" \
+                 "it as the SPLIT_TOKEN Actions secret (see the header of this workflow)."
+            exit 1
+          fi
+
+      - name: Split ${{ matrix.package }} (branch)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: danharrin/monorepo-split-github-action@v2.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+        with:
+          package_directory: packages/${{ matrix.package }}
+          repository_organization: docuccino
+          repository_name: ${{ matrix.package }}
+          branch: main
+          user_name: docuccino-bot
+          user_email: me@tjmartin.info
+
+      - name: Split ${{ matrix.package }} (tag ${{ github.ref_name }})
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: danharrin/monorepo-split-github-action@v2.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+        with:
+          # `github.ref_name` is already the bare tag on a tag push, so the split
+          # repositories get the identical version string.
+          tag: ${{ github.ref_name }}
+          package_directory: packages/${{ matrix.package }}
+          repository_organization: docuccino
+          repository_name: ${{ matrix.package }}
+          branch: main
+          user_name: docuccino-bot
+          user_email: me@tjmartin.info
