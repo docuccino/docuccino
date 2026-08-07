@@ -2,31 +2,77 @@
 // canonical UIR JSON Schema in the repo's spec/ directory.
 //
 // spec.docuccino.app serves the schema as a static file at its exact `$id` URL
-// (https://spec.docuccino.app/uir/1.0/schema.json), so the published copy MUST match the
-// source of truth in spec/uir/1.0/schema.json.
+// (https://spec.docuccino.app/uir/1.0/schema.json) straight out of public/, so the published copy is
+// COMMITTED — the site never reaches outside its own directory at build or runtime — and MUST match
+// the source of truth in spec/uir/1.0/schema.json.
 //
 //   node scripts/sync-schema.mjs           # copy spec/ -> public/ (run to refresh)
 //   node scripts/sync-schema.mjs --check   # fail (exit 1) if the copies have drifted
 //
-// The `--check` form runs automatically as the `prebuild` npm hook, so a stale copy fails
-// the CI website build instead of silently shipping.
+// The `--check` form runs automatically as the `prebuild` npm hook. TWO environments run that build:
+//
+//   * the monorepo (spec/ present) — full drift guard, so a stale copy fails the build instead of
+//     silently shipping;
+//   * a standalone deploy of website/ alone (Laravel Cloud checks the site out as the document root,
+//     so there is no ../spec) — the drift guard has nothing to compare against, so it verifies the
+//     committed copy is present and parseable and moves on.
+//
+// The guard's real home is therefore monorepo CI (.github/workflows/ci.yml runs this --check on every
+// push and PR, unfiltered), NOT the deploy: drift can never ship green just because a deploy had
+// nothing to check.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
+const specRoot = resolve(repoRoot, 'spec', 'uir');
 
 // Every UIR spec version we publish. Add a row when a new major.minor ships.
 const versions = ['1.0'];
 
 const check = process.argv.includes('--check');
+const published = (version) => resolve(here, '..', 'public', 'uir', version, 'schema.json');
+
+// No monorepo spec/ alongside us: this is a standalone deploy of the website. Verify what we ship
+// rather than pretending to compare it with a source of truth that is not in this checkout.
+if (!existsSync(specRoot)) {
+  if (!check) {
+    console.error(
+      `Cannot sync: ${specRoot} does not exist (this is a standalone website checkout).\n` +
+        `Run \`npm run sync-schema\` from a full monorepo checkout instead.`,
+    );
+    process.exit(1);
+  }
+
+  let missing = false;
+
+  for (const version of versions) {
+    const target = published(version);
+    try {
+      JSON.parse(readFileSync(target, 'utf8'));
+      console.log(
+        `UIR schema ${version}: standalone build: using committed schema (drift check skipped — runs in monorepo CI).`,
+      );
+    } catch (error) {
+      console.error(
+        `UIR schema ${version}: committed copy at ${target} is missing or not valid JSON (${error.message}).\n` +
+          `The site serves this file at its \`$id\` URL, so it must be committed — run \`npm run sync-schema\` ` +
+          `in a monorepo checkout and commit the result.`,
+      );
+      missing = true;
+    }
+  }
+
+  process.exit(missing ? 1 : 0);
+}
+
 let drift = false;
 
 for (const version of versions) {
-  const source = resolve(repoRoot, 'spec', 'uir', version, 'schema.json');
-  const target = resolve(here, '..', 'public', 'uir', version, 'schema.json');
+  const source = resolve(specRoot, version, 'schema.json');
+  const target = published(version);
 
   const src = readFileSync(source, 'utf8');
 

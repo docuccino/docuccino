@@ -73,6 +73,26 @@ jobs:
       - name: Pest (unit + non-fixture integration)
         run: vendor/bin/pest --parallel --exclude-group=fixture
 
+  schema-copies:
+    name: UIR schema copies in sync
+    runs-on: ubuntu-latest
+    # The published website copy (website/public/uir/**) must stay byte-identical to the canonical
+    # spec/uir/**. The website's own build used to be the only guard, but a STANDALONE deploy of
+    # website/ has no ../spec to compare against and legitimately skips the check — so the guard's
+    # home is here, in the workflow that always runs on every push and PR, unfiltered. Drift can
+    # therefore never ship green just because a deploy had nothing to check.
+    # (The packages/core/resources copy has its own drift guard: core's SchemaShippingTest.)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Website schema copy matches spec/ (drift guard)
+        run: node website/scripts/sync-schema.mjs --check
+
   coverage:
     name: Coverage gate (PHP 8.4)
     runs-on: ubuntu-latest
