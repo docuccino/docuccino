@@ -165,6 +165,13 @@ interface ExceptionToResponse {
     public function supports(DType $exceptionType, RouteContext $ctx): bool;
     public function toResponse(DType $exceptionType, RouteContext $ctx, ComponentRegistry $components): ResponseDraft;
 }
+// The ResponseDraft an ExceptionToResponse returns carries INTENDED-PUBLIC write methods:
+// setDescription / setRef / set / content(mediaType) and setExample(mediaType, example) — the last
+// attaches an OAS media-type `example` beside the schema, FIRST-WRITER-WINS so the result is
+// order-stable regardless of extension evaluation order. It is deliberately not `@internal`: the
+// built-in inferred-handler tier attaches its literal-carrying error examples through exactly this
+// method, and the "no privileged back door" promise means a third-party ExceptionToResponse must be
+// able to do the same. (`guard()`, by contrast, IS `@internal`.)
 // Error-response resolution chain (first supports() wins; Phase 4):
 //   1. InferredHandlerExceptionToResponse — analyses the APP'S REAL exception handling:
 //      render callbacks discovered by reflecting the BOOTED app's handler (catches
@@ -456,8 +463,19 @@ interface TypeEngine {
 ```
 
 `DType` closed set: `ScalarT, LiteralT, ArrayShapeT, ListT/MapT, UnionT, IntersectionT,
-ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, UnknownT(reason)`.
+ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
 `NullTypeEngine` in core answers UnknownT for everything (keeps pipeline total).
+
+`StatusMarkerT` is the one member that is not a language type: it is a pipeline-resolution SIGNAL
+meaning "this body member echoes the response's own HTTP status", synthesised by the engine's response
+refinement (never translated from a PHPStan type) and resolved to a `LiteralT` at the response-building
+seam before schema conversion. It lives in the closed DType set rather than in a transient side-channel
+because it must survive the CACHE and WORKER boundaries: the marker sits inside the `ArrayShapeT`
+payload of a `JsonResponse<…>` `ClassT` that is cached in an `ActionAnalysis`, while resolution happens
+later, in the adapter — a side-channel could not cross that boundary. DType consumers are `supports()`
+chains rather than exhaustive `match`es over kind, so adding it broke no totality; the fallback mapper
+maps it honestly to a bare `integer` (no fabricated `const`/example) for the case where nothing resolves
+it.
 
 ## 9. Config shape (docuccino/laravel)
 

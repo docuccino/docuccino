@@ -35,7 +35,9 @@ use PHPStan\Type\Type;
  * analyses the callee's OWN return sites and substitutes the richer recovered type — a
  * `JsonResponse<payload, status, contentType>`.
  *
- * Design invariants (see docs/design/inference-embedding.md §4 and the plan decision log):
+ * The FULL folding arc — descent, value-flow/status provenance, enum-case folding, bounds/memoisation
+ * and containment — is narrated ONCE in docs/design/inference-embedding.md §4a; this header records the
+ * invariants the implementation must hold (see also the plan decision log):
  *   - BOUNDED: reuses the engine's descent depth + per-analysis file budget; declines past either.
  *   - MEMOISED per callee `class::method` — call-INDEPENDENT (payload shape, content type, and a status
  *     that is either a literal or reads from a {@see RefinedResponse::$statusSource} accessor), so one

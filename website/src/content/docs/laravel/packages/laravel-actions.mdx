@@ -62,16 +62,10 @@ method, so everything is read from the real signature rather than the trait's ge
 	```json
 	"post": {
 	  "summary": "Publish a draft article.",
+	  // The action class is the body's single named source, so it hoists to a component.
 	  "requestBody": {
 	    "required": true,
-	    "content": { "application/json": { "schema": {
-	      "type": "object",
-	      "properties": {
-	        "title": { "type": "string", "maxLength": 120 },
-	        "body":  { "type": "string" }
-	      },
-	      "required": ["title", "body"]
-	    } } }
+	    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublishArticle" } } }
 	  },
 	  "responses": {
 	    "200": { "content": { "application/json": { "schema": {
@@ -81,6 +75,15 @@ method, so everything is read from the real signature rather than the trait's ge
 	    } } } },
 	    "403": { "description": "Forbidden" }
 	  }
+	},
+	// components.schemas
+	"PublishArticle": {
+	  "type": "object",
+	  "properties": {
+	    "title": { "type": "string", "maxLength": 120 },
+	    "body":  { "type": "string" }
+	  },
+	  "required": ["title", "body"]
 	}
 	```
 	</TabItem>

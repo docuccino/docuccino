@@ -188,7 +188,7 @@ The honest bounds are deliberate:
 - A method whose body is **computed** rather than a direct constant — `return __($this->titleKey());`,
   `return strtoupper($this->name);` — does not fold. The member is documented at its widened type with
   no `const` or example, never a guessed value.
-- A **vendor** enum's methods are never analysed (the project-only boundary applies to enums too); its
+- A **vendor** enum's methods are never analyzed (the project-only boundary applies to enums too); its
   `->value`/`->name` still fold.
 - If the arm passes a `ProblemType` it can't pin to one case (a variable, `ProblemType::from($code)`),
   nothing folds and the response falls back to the exception's inferred status.

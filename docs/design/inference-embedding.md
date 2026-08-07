@@ -132,11 +132,59 @@ is `@internal` too — reachability is not the public contract.
   the correct "vendor terminal, don't descend" signal; Larastan resolves `static<T>`
   factories (`ListQueryBuilder::for()`) with no custom stub.
 
+## 4a. Response-shape refinement: the folding arc (the inferred-error-examples chain)
+
+The engine recovers a response shape that the DECLARED return type erased. A renderer builds its
+response through a helper — `__invoke` → `renderNotFound()` → `ProblemResponse::make(…): JsonResponse` —
+and the bare `JsonResponse` hint erases the payload/status generic at every call site, so PHPStan hands
+the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection and substitutes a richer
+`JsonResponse<payload, status, contentType>`. Four composed mechanisms, in the order they run:
+
+1. **Helper-indirection descent.** At each harvested return site whose translated type is a bare
+   response class: fold `new JsonResponse($body, $status, [headers])` arguments directly; read an
+   already-resolved generic (`response()->json([...], 422)`) straight off the type; or resolve the
+   callee and analyse ITS return sites, first documentable return winning. A `return null`/void arm is
+   FRAMEWORK DELEGATION — neither a response nor a fold failure.
+2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
+   not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
+   `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The
+   call site then binds them: a constant-foldable argument pins the member to a literal (a per-arm
+   `type` URI becomes a `const`), a caller parameter RE-HOMES the accessor one hop out, and anything
+   else drops the provenance and leaves the member widened. A member reading the SAME accessor that
+   drives the HTTP status becomes a `StatusMarkerT` (§5) for the response seam to fill.
+3. **Enum-case accessor folding** (the final hop). When the call site binds a concrete enum case,
+   `EnumAccessorFolder` resolves the accessors the callee applied to it: `->value`/`->name` from the
+   case by reflection — VENDOR-SAFE, no body analysed; a no-arg `->method()` only for a PROJECT enum, by
+   analysing one method body (a `match ($this)` arm naming the case, or a plain constant return). A
+   computed body, a vendor enum's method, or an un-pinnable argument folds NOTHING — honest-permissive,
+   never guessed. A folded `->status()` supplies the response status as a literal, which the response
+   builder prefers over the exception's throw-status hint.
+4. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
+   reused verbatim (default 4 / 40). Memoisation is per callee `class::method` (and per
+   `(enum-case, method)` for folds) and is sound because the memoised shape is call-independent — with
+   one rule: a computation whose descent hit a depth/budget CUTOFF is returned for the current analysis
+   but NOT memoised, since its richness would otherwise depend on how much budget was already spent
+   before that callee was first reached (worker-/route-order dependent → nondeterminism). Containment is
+   the PRIME scope, not the descend scope: helpers in ANY primed app source root fold (including a
+   modular `Modules\…` root), while vendor — never a primed root — is never followed. Cache soundness:
+   every descended helper file and every folded enum's file is reported into `dependencyFiles`,
+   re-contributed on a memo hit, so editing any of them invalidates the route fragment.
+
+Bounds are shared with §3; the marker type is §5; the per-step decision log (including the deliberate
+"folded status beats the throw hint" choice) is in `plan.md` steps 2c–2f and the Phase-6 fix wave.
+
 ## 5. DType model + translator
 
 Closed set: `ScalarT, LiteralT, ArrayShapeT(fields, isList), ListT/MapT, UnionT,
 IntersectionT, ClassT(fqcn, typeArgs), EnumT(fqcn, cases), CallableT, NullT/VoidT/NeverT,
-UnknownT(reason — always carries why)`. Nullability = `UnionT[..., NullT]`.
+StatusMarkerT, UnknownT(reason — always carries why)`. Nullability = `UnionT[..., NullT]`.
+
+`StatusMarkerT` is the sole non-language member: a resolution SIGNAL ("this body member echoes the
+response's own HTTP status") synthesised by the response refinement (§4a) and resolved to a `LiteralT`
+by the adapter's response builder. The translator NEVER produces it — PHPStan has no such type. It is a
+DType rather than a transient side-channel because it must survive the CACHE and WORKER boundaries: it
+rides inside the `ArrayShapeT` payload of a `JsonResponse<…>` `ClassT` cached in an `ActionAnalysis`,
+while resolution happens later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
 
 Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
 ConstantArrayType → ArrayShapeT (optional keys honored, isList from accessory);

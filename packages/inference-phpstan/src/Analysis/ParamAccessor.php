@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 /**
- * The value-flow provenance of one recovered value: the callee PARAMETER it reads from, and HOW it
- * reads it ({@see AccessorKind} — the parameter itself, or `->value`/`->name`/`->method()` on it when the
- * parameter is an enum). It lets a call site fold the value once it knows the concrete argument bound to
- * that parameter (a literal, a caller parameter to re-home one hop out, or — the enum-case hop — a
- * concrete case whose accessor folds via {@see EnumAccessorFolder}).
+ * ROLE: the value-flow provenance of one recovered value — the callee PARAMETER it reads from plus HOW
+ * it reads it ({@see AccessorKind}). Binding at the call site consumes it.
  *
- * Transient: consumed by binding, never serialised (it round-trips no further than the per-callee memo).
+ * The folding arc it belongs to is documented ONCE, in `inference-embedding.md` §4a (step 2), with the
+ * mechanics in {@see ResponseShapeRefiner}.
  *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */

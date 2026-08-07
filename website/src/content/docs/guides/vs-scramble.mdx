@@ -95,10 +95,17 @@ so a query composed several helper methods deep is still fully documented.
 | --- | :---: | :---: | :---: |
 | Framework error defaults (422 / 401 / 403 / 404) | ✓ | ✓ | ✓ |
 | Inferred exception handlers (your *real* error shapes) | ✓ | — | — |
+| Inferred error **examples**, with `const`-pinned literal members | ✓ | — | — |
 | RFC 9457 Problem Details preset | ✓ | — | — |
 
 Reading your actual exception handling — render callbacks, exception `render()` methods,
-`Responsable` exceptions — is one of Docuccino's standout strengths.
+`Responsable` exceptions — is one of Docuccino's standout strengths. It goes one step further than the
+shape: where a member of your error body is statically knowable — a per-branch `type` URI, a `title`, a
+status that echoes the response — Docuccino pins it as a schema `const` and includes it in a generated
+example, following helper indirection and enum accessors to find it. Members it can't resolve are simply
+left out rather than invented. With Scramble you'd typically hand-write those problem-detail components
+and examples yourself; both approaches get you there, and Scramble's is perfectly serviceable — this
+just removes the hand-maintenance.
 
 ### Output &amp; workflow
 

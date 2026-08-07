@@ -138,6 +138,10 @@ return [
                 'gate' => null,               // Gate ability name; null = local environment only
                 // Middleware for the registered viewer routes. `throttle` protects the (potentially
                 // expensive) spec endpoint from abuse; keep it when exposing the viewer publicly.
+                // `web` suits the common single-domain app, and a `gate`-protected viewer needs it for
+                // session state. BUT if your `web` group carries DOMAIN or TENANT resolution (a
+                // multi-tenant / domain-gated app), these domain-less viewer routes cannot satisfy it
+                // and the viewer 404s — override this array there: drop `web`, or add your domain.
                 'middleware' => ['web', 'throttle:60,1'],
                 // generate | artifact (export.path) | cache (docuccino:cache). NOTE: `generate`
                 // rebuilds the whole document on every request — fine for local/gated use, but for an

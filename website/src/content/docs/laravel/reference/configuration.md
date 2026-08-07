@@ -286,9 +286,20 @@ chosen by the `--format` flag.
 | `driver` | `'scalar'` | **FUTURE** — only the bundled Scalar viewer ships. |
 | `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
 | `gate` | `null` | Gate ability guarding the HTML + `.json` routes. `null` = available only in the `local` environment. The static asset route is never gated. |
-| `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. |
+| `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
 | `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
 | `cdn` | `false` | `true` loads Scalar from jsDelivr instead of the local bundle. |
+
+:::caution[Multi-tenant or domain-gated apps: override `middleware`]
+The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs
+it for session state). But if your `web` group resolves a **domain or tenant**, the viewer's
+domain-less routes cannot satisfy that middleware and the viewer **404s**. Override `middleware` for
+those apps — drop `web`, or register your domain — for example:
+
+```php
+'middleware' => ['throttle:60,1'],
+```
+:::
 
 ### `versioning`
 
@@ -342,7 +353,18 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 | Key | Default | Effect |
 | --- | --- | --- |
 | `mode` | `in-process` | Which `TypeEngine` backs inference (in-process by default). A boot failure always degrades to the `NullTypeEngine` so docblock/attribute-only docs still build. |
-| `project_paths` | `['app']` | Directories the engine treats as project (vs vendor) code — bounds descent into callee bodies. |
+| `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
+
+:::note[`project_paths` is the descend scope, not everything the engine can reach]
+There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider
+**prime** scope — every local PSR-4 source root in your `composer.json`, so a modular `Modules/` root
+too — is derived automatically, and the Query Builder trace and the error-response refiner follow
+helpers into *any* primed root. That's why a query object or problem renderer in `Modules/…` is
+resolved even though it isn't listed here. Vendor code is never primed or followed.
+
+So you rarely need to change this: add a path only to broaden throw/inline-rules descent — not to make
+modular helpers resolvable, which priming already handles.
+:::
 
 ## Cache
 

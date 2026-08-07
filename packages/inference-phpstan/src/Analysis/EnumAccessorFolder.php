@@ -15,23 +15,18 @@ use ReflectionEnumBackedCase;
 use Throwable;
 
 /**
- * Folds an accessor on a KNOWN enum case to a literal — the final hop of the inferred-error-examples
- * chain. When a call site binds a concrete case (`ProblemResponse::make(ProblemType::Forbidden, …)`) to a
- * callee parameter, the {@see ResponseShapeRefiner} asks this folder to resolve the accessors the callee
- * applied to that parameter:
+ * ROLE: folds an accessor on a KNOWN enum case to a literal — the final hop of the folding arc
+ * (`inference-embedding.md` §4a step 3, the canonical account; {@see ResponseShapeRefiner} drives it).
  *
- *   - `->value` / `->name` fold from the case itself via reflection — WORKS FOR VENDOR ENUMS too, since no
- *     method body is analysed. `->value` needs a backed enum; `->name` is universal.
- *   - `->method()` (a no-arg accessor like `status()` / `title()`) folds only for a PROJECT enum, by
- *     analysing the method body with `$this` narrowed to the bound case: a `match ($this)` arm whose
- *     condition names the case folds to that arm's constant body, and a plain constant return folds
- *     outright. Anything else (a translation call, a computed expression, a vendor enum) is honestly
- *     permissive (null) — never guessed.
+ * The two containment rules this class OWNS, since they are enforced here:
+ *   - `->value` / `->name` fold from the case by reflection, so they work for VENDOR enums too (no body
+ *     is analysed). `->value` needs a backed enum; `->name` is universal.
+ *   - `->method()` folds only for a PROJECT enum, by analysing ONE method body with `$this` narrowed to
+ *     the bound case: a `match ($this)` arm naming the case, or a plain constant return. Anything else —
+ *     a computed expression, a translation call, a vendor enum — folds to null, never a guess.
  *
- * BOUNDED + DETERMINISTIC: one method body, no interprocedural descent; memoised per
- * (enum-case, method) so ordering never affects results. CACHE-SOUND: the enum's file is reported through
- * the {@see $recordFile} sink so it lands in the analysis's `dependencyFiles` (editing the enum
- * invalidates the fragment), re-contributed on every memo hit.
+ * Memoised per (enum-case, method); the enum's file is reported through the {@see $recordFile} sink on
+ * every path (miss AND hit) so it lands in `dependencyFiles`.
  *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */

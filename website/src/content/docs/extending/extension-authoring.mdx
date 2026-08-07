@@ -238,7 +238,7 @@ where your fact came from:
 
 | Factory | Layer | Use it for |
 | --- | --- | --- |
-| `Contribution::inference($source, $confidence)` | inference | A fact you analysed from code. |
+| `Contribution::inference($source, $confidence)` | inference | A fact you analyzed from code. |
 | `Contribution::integration($name, $source, $confidence)` | integration | A package-specific contribution (names the producer `integration:<name>`). |
 | `Contribution::docblock($source)` | docblock | A value read from a docblock. |
 | `Contribution::attribute($source)` | attribute | A value declared with an attribute. |
@@ -268,7 +268,12 @@ A **`ParameterDraft`** offers `setDescription(?string, $by)`, `setRequired(?bool
 parameter's JSON Schema); `setDocuccinoFact(key, value)` records a representation-independent semantic
 fact. A **`ResponseDraft`** — constructed `new ResponseDraft($status)` when an `ExceptionToResponse`
 returns one — offers `setDescription(?string, $by)`, `setRef(?string, $by)`, `set(field, value, $by)`,
-and `content(string $mediaType): SchemaDraft` for the response body schema.
+`content(string $mediaType): SchemaDraft` for the response body schema, and
+`setExample(string $mediaType, mixed $example)` to attach an example body alongside that media type's
+schema. Examples are **first-writer-wins**: if another producer already attached one for that media
+type, yours is left out, so the result never depends on extension evaluation order. This is exactly the
+method the built-in inferred-handler support uses to attach its error-response examples — no separate
+back door.
 
 ### The RouteContext surface
 
@@ -277,7 +282,7 @@ and `content(string $mediaType): SchemaDraft` for the response body schema.
 
 | Method | Gives you |
 | --- | --- |
-| `analysis(): ActionAnalysis` | The action's inference result — return types, thrown exceptions, recovered request. Computed once and memoised across phases. |
+| `analysis(): ActionAnalysis` | The action's inference result — return types, thrown exceptions, recovered request. Computed once and memoized across phases. |
 | `trace(TraceVisitor $v): TraceReport` | Drive an interprocedural trace from the action; its dependency files are recorded for you (use this rather than the engine directly). |
 | `dependencies(): RouteDependencies` | The dependency-file bag — `recordDependencyFiles([...])` adds files you read out-of-band, so editing them invalidates the cached fragment. |
 | `converter(): SchemaConverter` | The type→schema converter over the document-wide component registry. |

@@ -38,21 +38,20 @@ the same way it would from a Form Request's `rules()`:
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
+	// A Data class is a single named source class, so the body hoists to a component the operation $refs.
 	"requestBody": {
 	  "required": true,
-	  "content": {
-	    "application/json": {
-	      "schema": {
-	        "type": "object",
-	        "properties": {
-	          "customerId": { "type": "integer" },
-	          "currency":   { "type": "string" },
-	          "dueAt":      { "type": ["string", "null"] }
-	        },
-	        "required": ["customerId", "currency"]
-	      }
-	    }
-	  }
+	  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInvoiceData" } } }
+	},
+	// components.schemas
+	"CreateInvoiceData": {
+	  "type": "object",
+	  "properties": {
+	    "customerId": { "type": "integer" },
+	    "currency":   { "type": "string" },
+	    "dueAt":      { "type": ["string", "null"] }
+	  },
+	  "required": ["customerId", "currency"]
 	}
 	```
 	</TabItem>
@@ -60,6 +59,12 @@ the same way it would from a Form Request's `rules()`:
 
 The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped from the request by
 `#[HiddenFromRequest]`, and the nullable `dueAt` isn't required (its type admits `null`).
+
+Because a Data class is a single named source class, the body is **hoisted to a `#/components/schemas`
+component and the operation `$ref`s it** — so the same Data class accepted by several endpoints becomes
+one shared, deduped component. The hoisting rules are the same as for a Form Request, including the
+`#[BodyParameter]` deviation that keeps one operation's body inline; see
+[Request bodies](/laravel/documenting/requests/) for the full detail.
 
 <Aside type="note" title="Hidden vs HiddenFromRequest">
 Spatie's own `#[Hidden]` hides a property from the serialized **output**, not the request — a property
