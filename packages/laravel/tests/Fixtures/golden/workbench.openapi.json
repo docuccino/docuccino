@@ -314,10 +314,12 @@
                       "const": 402
                     },
                     "title": {
-                      "type": "string"
+                      "type": "string",
+                      "const": "Payment Required"
                     },
                     "type": {
-                      "type": "string"
+                      "type": "string",
+                      "const": "https://example.test/problems/payment-required"
                     }
                   },
                   "required": [
@@ -325,6 +327,11 @@
                     "title",
                     "status"
                   ]
+                },
+                "example": {
+                  "type": "https://example.test/problems/payment-required",
+                  "title": "Payment Required",
+                  "status": 402
                 }
               }
             }

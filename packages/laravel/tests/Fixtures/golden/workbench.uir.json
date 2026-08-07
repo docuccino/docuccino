@@ -825,10 +825,12 @@
                       "const": 402
                     },
                     "title": {
-                      "type": "string"
+                      "type": "string",
+                      "const": "Payment Required"
                     },
                     "type": {
-                      "type": "string"
+                      "type": "string",
+                      "const": "https://example.test/problems/payment-required"
                     }
                   },
                   "required": [
@@ -836,6 +838,11 @@
                     "title",
                     "status"
                   ]
+                },
+                "example": {
+                  "type": "https://example.test/problems/payment-required",
+                  "title": "Payment Required",
+                  "status": 402
                 }
               }
             }
@@ -3503,7 +3510,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "629e381d62903d734c9022986cf7c90ce7866eda81a8a78d2ca5b70131c91a51",
-      "contentHash": "0a9f669fe960a4b91fba471ee77e4cb66db283bb5e705d0859baf8039bef419d"
+      "contentHash": "3ffca330522f417e7fa9f5572d616a19bbc3431416bbe2efca13841bbfe60d48"
     },
     "generator": {
       "name": "docuccino/laravel",
