@@ -387,6 +387,38 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     (length-aware), not only the QB page parameters — the terminal set is config-shared, so a resource
     collection paginated by a custom terminal is documented consistently with its page params instead of
     getting parameters but a bare-array body.
+  - Enum + request-body component hoisting (Tom, 2026-08-07 — the last engine delta from the Eos
+    dogfood, closing the named-component gap vs Scramble). Both are representation moves — the semantic
+    facts (an enum's cases/descriptions; a request's rule set) are unchanged; only their OAS *location*
+    moved from inline to a `$ref`'d `components.schemas` entry.
+    - **Enums hoist by default** (`representation.enums.components`, default `true`). `EnumSchema` (core)
+      resolves the component name via `SchemaIdentity` (`#[SchemaName]` else short name) pinned to the
+      FQCN identity and calls `SchemaContext::reference()`, so one enum is a single deduped component
+      that properties, query-parameter item schemas (the QB enum filters — which already route through
+      the converter, so they inherit the `$ref` for free), and enum-cast columns all reference. Only a
+      **reflectable** enum hoists — an un-autoloadable one has no honest name/identity to pin, so it
+      stays inline; `false` restores the byte-identical inline expression. A **nullable** enum can't
+      carry `type: [x, null]` on a `$ref`, so `UnionTypeToSchema` composes `anyOf: [{$ref}, {type:
+      null}]` under BOTH nullable policies (the existing not-a-simple-type branch already did this).
+    - **Request bodies hoist when recovered from a single source class** (spatie Data / FormRequest /
+      action `rules()` class) — `RecoveredRequest` (core) references the class-derived body as a
+      component named after the class, deduped so the same class across N ops is one component. An
+      inline `validate()`/`Validator::make()` body has no source class to name honestly → stays inline.
+    - **Deviation rule.** An operation carrying a `#[BodyParameter]` keeps its body **inline** for that
+      op. That attribute patches individual body properties at the attribute layer by reading
+      `schema.properties` (`AttributeRequestBodyExtension`); a `$ref` has none, so hoisting would let the
+      patch silently discard the whole shared component (or mutate it for every other op). Dereferencing
+      keeps the `$ref` honest. Call-site partials (`include`/`exclude`/`only`/`except`) shape the
+      *response* via query parameters, not the request body, so they never force the body inline.
+    - **Both-sides naming.** Request- and response-side components of the same class carry DISTINCT diff
+      identities (the request body's is `<FQCN>#request`), so a request rules-shape never dedupes into a
+      response property-shape by identity. Structurally-identical shapes still collapse to ONE component
+      via the registry's structural dedupe; genuinely different shapes (the input/output asymmetry — e.g.
+      a `HiddenFromRequest` field, or validation-shape vs property-shape) yield two components. Because
+      the Request phase precedes Responses, the request keeps the base name and the response is
+      deterministically suffixed (`Name_2`) with the existing `components.name-collision` info — proven
+      live by the workbench `ArticleData` (`#[SchemaName('Article')]`) fixture, used on both sides with
+      divergent shapes.
 
 ## 7. Precedence / patch semantics
 

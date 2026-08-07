@@ -184,7 +184,10 @@ examples.
     'lists' => 'comma',             // comma | array (Query Builder sort/include list style)
     'nullable' => 'type-array',     // type-array (type: [x, null]) | anyof ({type: null} branch)
     'operation_id' => 'route-name', // route-name | controller-method ({ShortController}@{method})
-    // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames
+    // 'enums' => [
+    //     'naming' => 'none',      // none | x-enumNames | x-enum-varnames
+    //     'components' => true,    // true (hoist each enum to a $ref'd component) | false (inline everywhere)
+    // ],
 ],
 ```
 
@@ -199,6 +202,7 @@ from "API changed".
 | `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
 | `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
 | `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | `none` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/laravel/documenting/schemas/#enums). |
+| `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
 
 ### `integrations`
 

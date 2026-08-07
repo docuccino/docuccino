@@ -106,29 +106,33 @@ action — becomes the request body schema. Rules map to JSON Schema: presence t
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
+	// Form Request: the body hoists to a named component the operation $refs.
 	"requestBody": {
 	  "required": true,
-	  "content": {
-	    "application/json": {
-	      "schema": {
-	        "type": "object",
-	        "properties": {
-	          "customer_id": { "type": "integer" },
-	          "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"] },
-	          "due_at":      { "type": ["string", "null"], "format": "date" }
-	        },
-	        "required": ["customer_id", "currency"]
-	      }
-	    }
-	  }
+	  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StoreInvoiceRequest" } } }
+	},
+	// components.schemas
+	"StoreInvoiceRequest": {
+	  "type": "object",
+	  "properties": {
+	    "customer_id": { "type": "integer" },
+	    "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"] },
+	    "due_at":      { "type": ["string", "null"], "format": "date" }
+	  },
+	  "required": ["customer_id", "currency"]
 	}
 	```
 	</TabItem>
 </Tabs>
 
-Either way documents a request body with `customer_id`, `currency` (as an enum), and `due_at`, with the
-right required fields and formats. To patch a single property of the inferred body — a description, an
-example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter).
+Either way documents a body with `customer_id`, `currency` (as an enum), and `due_at`, with the right
+required fields and formats. Because a **Form Request** is a single named source class, its body is
+hoisted to a `#/components/schemas/StoreInvoiceRequest` component and the operation `$ref`s it — so the
+same request class used across several endpoints is one shared, deduped component. An **inline**
+`validate()` / `Validator::make()` body has no source class to name honestly, so it stays inline at the
+operation. To patch a single property of the inferred body — a description, an example — use
+[`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying one keeps its
+body inline for that operation (the patch adjusts a property the shared component must not carry).
 
 <Aside title="Data objects get their own page">
 Type-hint a [Spatie Data](/laravel/packages/spatie-data/) class as your action parameter and Docuccino

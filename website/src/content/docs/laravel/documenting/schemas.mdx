@@ -38,7 +38,7 @@ that schema.
 	  "properties": {
 	    "id":       { "type": "integer" },
 	    "total":    { "type": "number" },
-	    "status":   { "type": "string", "enum": ["draft", "sent", "paid"] },
+	    "status":   { "$ref": "#/components/schemas/InvoiceStatus" },
 	    "customer": { "$ref": "#/components/schemas/CustomerResource" }
 	  },
 	  "required": ["id", "total", "status"]
@@ -51,8 +51,8 @@ The conditional `customer` isn't in `required` — `whenLoaded` made it optional
 `$ref`: an unloaded relation is simply omitted from the response, never sent as `null`. Give `whenLoaded`
 its second closure argument (as above) so the optionality is recovered — passing a bare
 `$this->whenLoaded('customer')` straight into a resource constructor hides the conditional, and the
-property comes out required. `status` is documented inline from its enum's cases (see [Enums](#enums)) —
-enums are always inlined where they appear, never hoisted to a shared component.
+property comes out required. `status` is a `$ref` to the shared `InvoiceStatus` enum component (see
+[Enums](#enums)) — each enum is hoisted once and referenced everywhere it appears.
 
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
 not, so they can be shared by reference. Control this with the `api_resources.wrap` option:
@@ -136,7 +136,7 @@ its backing). Add per-case descriptions with
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	{
+	"InvoiceStatus": {
 	  "type": "string",
 	  "enum": ["draft", "sent", "paid"],
 	  "x-enumDescriptions": {
@@ -149,9 +149,11 @@ its backing). Add per-case descriptions with
 	</TabItem>
 </Tabs>
 
-This schema is emitted **inline** wherever the enum appears — as a property's schema, a parameter
-schema, and so on. Enums are never hoisted into `#/components/schemas`, so there's no shared
-`InvoiceStatus` component to reference.
+The enum is hoisted once to a shared `#/components/schemas/InvoiceStatus` component, and every place it
+appears — a property, a query-parameter item schema, an enum-cast column — `$ref`s it. So its cases and
+descriptions live in exactly one place. A nullable enum can't carry `null` on a `$ref`, so it composes
+as `anyOf: [{ "$ref": … }, { "type": "null" }]`. Prefer the old inline expression (the enum's
+`type`/`enum` repeated at every use site)? Set `representation.enums.components` to `false`.
 
 Descriptions are emitted as `x-enumDescriptions`. A case with no `#[CaseDescription]` falls back to its
 docblock summary — the first prose line of the case's doc comment — and the attribute wins when both are
