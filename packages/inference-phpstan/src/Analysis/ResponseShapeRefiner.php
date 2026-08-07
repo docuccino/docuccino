@@ -102,7 +102,6 @@ final class ResponseShapeRefiner
         $this->enumFolder = new EnumAccessorFolder(
             $this->fileAnalyzer,
             $this->projectFilter,
-            $this->reflectionProvider,
             function (string $file): void {
                 $this->currentFiles[$this->adapter->normalize($file)] = true;
             },
@@ -234,26 +233,8 @@ final class ResponseShapeRefiner
     private function payloadProvenance(Node\Expr $expr, Scope $scope, array $paramNames): array
     {
         $array = $this->bodyArrayLiteral($expr, $scope);
-        if ($array === null) {
-            return [];
-        }
 
-        $provenance = [];
-        foreach ($array->items as $item) {
-            if ($item->key === null) {
-                continue;
-            }
-            $accessor = $this->accessorOf($item->value, $paramNames);
-            if ($accessor === null) {
-                continue;
-            }
-            $keys = $scope->getType($item->key)->getConstantStrings();
-            if (count($keys) === 1) {
-                $provenance[$keys[0]->getValue()] = $accessor;
-            }
-        }
-
-        return $provenance;
+        return $array === null ? [] : AccessorExtractor::provenanceFromArray($array, $paramNames);
     }
 
     /**
@@ -278,44 +259,14 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Classify a body-member / status value expression as an accessor on one of the current parameters:
-     * the parameter itself (identity), `$param->value` / `$param->name`, or a NO-ARG method
-     * `$param->method()` (an enum accessor). Null when the value is not rooted in a parameter.
+     * Classify a body-member / status value expression as an accessor on one of the current parameters
+     * (the pure decision lives in {@see AccessorExtractor}).
      *
      * @param  list<string>  $paramNames
      */
     private function accessorOf(Node\Expr $expr, array $paramNames): ?ParamAccessor
     {
-        if ($expr instanceof Node\Expr\Variable && is_string($expr->name) && in_array($expr->name, $paramNames, true)) {
-            return ParamAccessor::identity($expr->name);
-        }
-
-        if ($expr instanceof Node\Expr\PropertyFetch
-            && $expr->var instanceof Node\Expr\Variable
-            && is_string($expr->var->name)
-            && in_array($expr->var->name, $paramNames, true)
-            && $expr->name instanceof Node\Identifier
-        ) {
-            $kind = match ($expr->name->toString()) {
-                'value' => AccessorKind::Value,
-                'name' => AccessorKind::Name,
-                default => null,
-            };
-
-            return $kind === null ? null : new ParamAccessor($expr->var->name, $kind);
-        }
-
-        if ($expr instanceof Node\Expr\MethodCall
-            && $expr->var instanceof Node\Expr\Variable
-            && is_string($expr->var->name)
-            && in_array($expr->var->name, $paramNames, true)
-            && $expr->name instanceof Node\Identifier
-            && $expr->getArgs() === []
-        ) {
-            return new ParamAccessor($expr->var->name, AccessorKind::Method, $expr->name->toString());
-        }
-
-        return null;
+        return AccessorExtractor::fromExpr($expr, $paramNames);
     }
 
     /**
@@ -517,11 +468,7 @@ final class ResponseShapeRefiner
      */
     private function rehomeAccessor(Node\Expr $argExpr, ParamAccessor $accessor, array $paramNames): ?ParamAccessor
     {
-        if ($argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)) {
-            return $accessor->withParam($argExpr->name);
-        }
-
-        return null;
+        return AccessorExtractor::rehome($argExpr, $accessor, $paramNames);
     }
 
     /**
@@ -532,15 +479,9 @@ final class ResponseShapeRefiner
      */
     private function enumCaseOf(Node\Expr $expr, Scope $scope): ?array
     {
-        if ($expr instanceof Node\Expr\ClassConstFetch
-            && $expr->class instanceof Node\Name
-            && $expr->name instanceof Node\Identifier
-            && strtolower($expr->name->toString()) !== 'class'
-        ) {
-            $fqcn = $scope->resolveName($expr->class);
-            if (enum_exists($fqcn)) {
-                return ['fqcn' => $fqcn, 'case' => $expr->name->toString()];
-            }
+        $fromConst = AccessorExtractor::enumCaseFromConstFetch($expr, static fn (Node\Name $name): string => $scope->resolveName($name));
+        if ($fromConst !== null) {
+            return $fromConst;
         }
 
         $cases = $scope->getType($expr)->getEnumCases();

@@ -9,7 +9,6 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
-use PHPStan\Reflection\ReflectionProvider;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
 use Throwable;
@@ -51,7 +50,6 @@ final class EnumAccessorFolder
     public function __construct(
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly ProjectFilter $projectFilter,
-        private readonly ReflectionProvider $reflectionProvider,
         private readonly Closure $recordFile,
     ) {}
 
@@ -132,7 +130,12 @@ final class EnumAccessorFolder
             $scope = $statement->getScope();
 
             if ($expr instanceof Node\Expr\Match_) {
-                $body = $this->matchArmBody($expr, $enumFqcn, $caseName, $scope);
+                $body = AccessorExtractor::matchArmBodyForCase(
+                    $expr,
+                    $enumFqcn,
+                    $caseName,
+                    static fn (Node\Name $name): string => $scope->resolveName($name),
+                );
 
                 return $body === null ? null : $this->constLiteral($body, $scope);
             }
@@ -141,42 +144,6 @@ final class EnumAccessorFolder
         }
 
         return null;
-    }
-
-    /**
-     * The body expression of the `match ($this)` arm selected for `$caseName` — the arm whose condition
-     * names the case, else the `default` arm — or null when the subject is not `$this` or no arm applies.
-     */
-    private function matchArmBody(Node\Expr\Match_ $match, string $enumFqcn, string $caseName, Scope $scope): ?Node\Expr
-    {
-        if (! $match->cond instanceof Node\Expr\Variable || $match->cond->name !== 'this') {
-            return null;
-        }
-
-        $default = null;
-        foreach ($match->arms as $arm) {
-            if ($arm->conds === null) {
-                $default = $arm->body;
-
-                continue;
-            }
-            foreach ($arm->conds as $cond) {
-                if ($this->condNamesCase($cond, $enumFqcn, $caseName, $scope)) {
-                    return $arm->body;
-                }
-            }
-        }
-
-        return $default;
-    }
-
-    private function condNamesCase(Node\Expr $cond, string $enumFqcn, string $caseName, Scope $scope): bool
-    {
-        return $cond instanceof Node\Expr\ClassConstFetch
-            && $cond->class instanceof Node\Name
-            && $cond->name instanceof Node\Identifier
-            && $cond->name->toString() === $caseName
-            && $scope->resolveName($cond->class) === $enumFqcn;
     }
 
     /** A single constant scalar expression as a literal, or null when it does not constant-fold. */
@@ -207,17 +174,23 @@ final class EnumAccessorFolder
         }
     }
 
-    /** The file the enum method is declared in (via the reflection provider), or null when unresolvable. */
+    /** The file the enum method is declared in (native reflection), or null when unresolvable. */
     private function declaringFile(string $enumFqcn, string $method): ?string
     {
-        if (! $this->reflectionProvider->hasClass($enumFqcn)) {
-            return null;
-        }
-        $class = $this->reflectionProvider->getClass($enumFqcn);
-        if (! $class->hasNativeMethod($method)) {
+        if (! enum_exists($enumFqcn)) {
             return null;
         }
 
-        return $class->getNativeMethod($method)->getDeclaringClass()->getFileName();
+        try {
+            $reflection = new ReflectionEnum($enumFqcn);
+            if (! $reflection->hasMethod($method)) {
+                return null;
+            }
+            $file = $reflection->getMethod($method)->getFileName();
+
+            return $file === false ? null : $file;
+        } catch (Throwable) {
+            return null;
+        }
     }
 }
