@@ -14,15 +14,14 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Inference\PhpStan\Analysis\ResponseShapeRefiner;
 use Docuccino\Laravel\Integrations\Support\FrameworkClasses;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 
 /**
  * Turns a handler/closure analysis into an error response (design §6). Reads the recovered
  * `JsonResponse<TPayload, TStatus, TContentType>` — the handler's REAL rendered status, payload shape
- * and (through {@see ResponseShapeRefiner} helper-indirection
- * refinement) content type — and builds a {@see ResponseDraft} under that status, hoisting the payload
+ * and (through the engine's helper-indirection refinement) content type — and builds a
+ * {@see ResponseDraft} under that status, hoisting the payload
  * schema through the route's converter under the recovered media type (default `application/json`,
  * `application/problem+json` when the helper set that header).
  *
