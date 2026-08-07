@@ -7,6 +7,10 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
 	output: 'server',
 	adapter: node({ mode: 'standalone' }),
+	server: {
+		host: process.env.HOST || '0.0.0.0',
+		port: parseInt(process.env.PORT || '3000'),
+	},
 	site: 'https://docs.docuccino.app',
 	// The bundled Scalar viewer on the landing page is a large, intentional client chunk; lift the
 	// size-warning threshold so it doesn't flag on every build.
