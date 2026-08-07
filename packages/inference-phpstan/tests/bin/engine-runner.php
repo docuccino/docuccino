@@ -16,6 +16,7 @@ declare(strict_types=1);
  * Usage (one mode per invocation — each maps 1:1 onto a FixtureRunner method):
  *   php engine-runner.php analyze                   <controllerFile> <class> <method>
  *   php engine-runner.php analyze-callable          <file> <class> <method> <line> <narrowParam> <narrowType>
+ *   php engine-runner.php refine-pair               <fileBudget> <file1> <class1> <method1> <file2> <class2> <method2>
  *   php engine-runner.php class-metadata            <ignored>        <class>
  *   php engine-runner.php trace-qb                  <controllerFile> <class> <method>
  *   php engine-runner.php trace-qb-enrich           <controllerFile> <class> <method>
@@ -115,13 +116,28 @@ register_shutdown_function(static function () use ($tmp): void {
     @rmdir($tmp);
 });
 
+// The refine-pair mode drives the engine with a deliberately tiny per-analysis file budget (argv[2]) so
+// a shared helper truncates on a budget-spending path and has headroom on a direct one — the
+// determinism/truncation memo guard (ResponseShapeRefiner). Every other mode keeps the real default (40).
+$engineConfig = EngineConfig::forProjectWithVendor($app.'/vendor', $app.'/app');
+if ($mode === 'refine-pair') {
+    $engineConfig = new EngineConfig(
+        $engineConfig->projectPaths,
+        $engineConfig->knownThrowers,
+        $engineConfig->traceDepth,
+        $engineConfig->throwDepth,
+        max(1, (int) ($argv[2] ?? 2)),
+        $engineConfig->vendorPath,
+    );
+}
+
 $engine = (new PhpStanEngineFactory)->create(
     // PRIME scope (bodies preserved) covers `modules/` too, so a Query class OUTSIDE the descend
     // scope is not body-stripped when the QB trace follows a `$query->query()` hop into it.
     new RuntimeConfig($app, $tmp, PHP_VERSION_ID, [$app.'/app', $app.'/modules']),
     // DESCEND scope stays `app/` (throws/inline-rules bounded); vendorPath lets the QB trace follow a
     // QueryBuilder-return-type hop into the primed `modules/` Query class, never into vendor.
-    EngineConfig::forProjectWithVendor($app.'/vendor', $app.'/app'),
+    $engineConfig,
 );
 
 $ref = new ActionRef($file, $class === '' ? null : $class, $method);
@@ -136,6 +152,18 @@ $result = match ($mode) {
         $narrowParam,
         $narrowType,
     ))->toArray(),
+    // Analyse two callables through ONE engine (shared per-callee memo) under the tiny budget: the
+    // determinism guard for the refiner's "never memoise a budget-truncated shape" rule.
+    'refine-pair' => (static function () use ($engine, $app, $argv): array {
+        $analyse = static fn (string $relPath, string $class, string $method): array => $engine->analyzeCallable(
+            new CallableRef($app.'/'.$relPath, $class === '' ? null : $class, $method === '' ? null : $method),
+        )->toArray();
+
+        return [
+            'first' => $analyse($argv[3] ?? '', $argv[4] ?? '', $argv[5] ?? ''),
+            'second' => $analyse($argv[6] ?? '', $argv[7] ?? '', $argv[8] ?? ''),
+        ];
+    })(),
     'class-metadata' => $engine->classMetadata(new ClassRef($class))->toArray(),
     'trace-qb' => (static function () use ($engine, $ref): array {
         $probe = new QueryBuilderProbe;

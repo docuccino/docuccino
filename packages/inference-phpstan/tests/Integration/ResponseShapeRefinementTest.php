@@ -254,6 +254,35 @@ it('folds a VENDOR enum’s ->value/->name but NEVER analyses its method (400)',
         ->and($members['dynamic'])->not->toBeInstanceOf(LiteralT::class);
 })->group('fixture');
 
+/** The folded HTTP status of the single recovered return in a serialized analysis, or null when bare. */
+function pairStatus(array $analysis): ?int
+{
+    $decoded = ActionAnalysis::fromArray(['returns' => $analysis['returns']]);
+    $type = $decoded->returns[0]->type ?? null;
+    if (! $type instanceof ClassT || $type->fqcn !== 'Illuminate\\Http\\JsonResponse') {
+        return null;
+    }
+    $statusArg = $type->typeArgs[1] ?? null;
+
+    return $statusArg instanceof LiteralT && is_int($statusArg->value) ? $statusArg->value : null;
+}
+
+it('never reuses a budget-truncated helper shape where a later analysis had headroom (determinism guard)', function (): void {
+    // ONE engine, tiny file budget (2): BudgetRenderer::deep() spends the budget through BudgetPad +
+    // BudgetShared, so the BudgetLeaf hop is cut off → BudgetShared::make() recovers a TRUNCATED (bare)
+    // shape first. BudgetRenderer::direct() then reaches BudgetShared::make() with headroom. The refiner
+    // must not have memoised the truncation: the direct path must recover the full 418 shape. Without
+    // the "don't memoise a truncated computation" rule this is a latent 1-vs-8-worker nondeterminism.
+    $pair = FixtureRunner::refinePair(
+        2,
+        ['app/Support/BudgetRenderer.php', 'App\\Support\\BudgetRenderer', 'deep'],
+        ['app/Support/BudgetRenderer.php', 'App\\Support\\BudgetRenderer', 'direct'],
+    );
+
+    expect(pairStatus($pair['first']))->toBeNull()   // deep path: BudgetLeaf hop cut off → bare/truncated
+        ->and(pairStatus($pair['second']))->toBe(418); // direct path: full budget → full 418 shape, not the stale truncation
+})->group('fixture');
+
 it('folds each case independently + deterministically (memoisation keyed per enum-case+method)', function (): void {
     // The same helper + enum methods reached for two different cases fold to each case's OWN literals
     // (the fold is memoised per enum-case+method, never leaking across cases), and repeating an analysis

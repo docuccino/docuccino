@@ -37,8 +37,12 @@ use PHPStan\Type\Type;
  * Design invariants (see docs/design/inference-embedding.md §4 and the plan decision log):
  *   - BOUNDED: reuses the engine's descent depth + per-analysis file budget; declines past either.
  *   - MEMOISED per callee `class::method` — call-INDEPENDENT (payload shape, content type, and a status
- *     that is either a literal or reads from a {@see RefinedResponse::$statusSource} accessor), so ordering
- *     never affects results and one helper analysed once is reused across every route reaching it.
+ *     that is either a literal or reads from a {@see RefinedResponse::$statusSource} accessor), so one
+ *     helper analysed once is reused across every route reaching it. Ordering never affects the FINAL
+ *     result: a computation whose descent hit the depth or file-budget cutoff is returned for the current
+ *     analysis but NOT memoised — its richness would otherwise depend on how much of the per-analysis
+ *     budget was already spent before the callee was first reached (which is worker-/route-order
+ *     dependent), so a later analysis with headroom recomputes it in full instead of reusing a truncation.
  *   - TRANSITIVE within bounds: a helper that calls another helper folds through both hops; a
  *     pass-through status re-homes onto the outer callee's parameter at each hop.
  *   - ARGUMENTS MATTER, honestly: a constant-foldable status argument (`make($title, 422, $errors)`)
@@ -82,6 +86,13 @@ final class ResponseShapeRefiner
 
     /** @var array<string, true> cycle guard over the descent (callee `class::method`). */
     private array $inProgress = [];
+
+    /**
+     * Monotonic count of depth/file-budget cutoffs hit so far. A callee whose computation coincides with
+     * an increase in this counter is truncated and must not be memoised (see {@see refineCallee()}); a
+     * cycle decline is deterministic and deliberately does NOT bump it.
+     */
+    private int $budgetCutoffs = 0;
 
     /** @var array<string, true> files touched by the CURRENT analysis, drained by {@see takeFiles()}. */
     private array $currentFiles = [];
@@ -166,9 +177,19 @@ final class ResponseShapeRefiner
 
         // 3. A call into project code whose declared return erased the shape — descend and substitute.
         if ($expr instanceof Node\Expr\MethodCall || $expr instanceof Node\Expr\StaticCall) {
-            if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn) && $depth < $this->maxDepth) {
+            if ($type instanceof ClassT && self::isResponseFqcn($type->fqcn)) {
+                if ($depth >= $this->maxDepth) {
+                    $this->budgetCutoffs++; // depth cutoff — the enclosing shape is truncated
+
+                    return null;
+                }
                 $callee = $this->calleeResolver->resolve($expr, $scope);
-                if ($callee !== null && $this->projectFilter->isProjectFile($callee->file) && $this->withinBudget($callee->file)) {
+                if ($callee !== null && $this->projectFilter->isProjectFile($callee->file)) {
+                    if (! $this->withinBudget($callee->file)) {
+                        $this->budgetCutoffs++; // file-budget cutoff — likewise a truncation
+
+                        return null;
+                    }
                     $child = $this->refineCallee($callee, $depth + 1);
                     if ($child === null || $child->delegates) {
                         return $child;
@@ -178,7 +199,7 @@ final class ResponseShapeRefiner
                 }
             }
 
-            return null; // vendor / unresolvable / over-budget — declined (never descend into vendor)
+            return null; // vendor / unresolvable — a genuine, deterministic decline (never descend into vendor)
         }
 
         // 4. A `return null` / void arm — the renderer delegates this type to the framework.
@@ -305,18 +326,31 @@ final class ResponseShapeRefiner
             return $this->memo[$key]['result'];
         }
 
-        if (isset($this->inProgress[$key]) || $depth > $this->maxDepth || ! $this->withinBudget($callee->file)) {
-            return null; // cycle / over-budget — declined, and deliberately NOT memoised
+        if (isset($this->inProgress[$key])) {
+            return null; // cycle — deterministic; declined without memoising, and NOT a truncation
+        }
+        if ($depth > $this->maxDepth || ! $this->withinBudget($callee->file)) {
+            $this->budgetCutoffs++; // depth/file-budget cutoff at the callee gate — a truncation
+
+            return null; // over-budget — declined, and deliberately NOT memoised
         }
 
         $this->inProgress[$key] = true;
         $filesBefore = $this->currentFiles;
+        $cutoffsBefore = $this->budgetCutoffs;
         $result = $this->computeCalleeShape($callee, $depth);
         unset($this->inProgress[$key]);
 
-        $delta = array_keys(array_diff_key($this->currentFiles, $filesBefore));
-        sort($delta);
-        $this->memo[$key] = ['result' => $result, 'files' => $delta];
+        // Memoise ONLY a shape whose entire descent stayed within budget/depth. A computation that hit a
+        // cutoff (its own, or one in a descended callee) is (possibly) less refined in a way that depends
+        // on how much per-analysis budget was already spent before this callee was first reached —
+        // memoising it would let a later analysis with headroom reuse the truncation, making results
+        // route-/worker-order dependent. Such a result is returned for THIS analysis but recomputed next.
+        if ($this->budgetCutoffs === $cutoffsBefore) {
+            $delta = array_keys(array_diff_key($this->currentFiles, $filesBefore));
+            sort($delta);
+            $this->memo[$key] = ['result' => $result, 'files' => $delta];
+        }
 
         return $result;
     }

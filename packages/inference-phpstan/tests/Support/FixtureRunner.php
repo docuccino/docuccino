@@ -170,6 +170,23 @@ final class FixtureRunner
     }
 
     /**
+     * Analyse two callables through ONE engine under a deliberately tiny per-analysis file budget, so a
+     * shared helper truncates on a budget-spending path and has headroom on a direct one — the refiner's
+     * "never memoise a budget-truncated shape" determinism guard. Returns `{first, second}` analyses.
+     *
+     * The runner takes app-relative paths directly (not resolved through {@see path()}), so pass paths
+     * relative to the fixture app root (e.g. `app/Support/BudgetRenderer.php`).
+     *
+     * @param  array{0: string, 1: string, 2: string}  $first  [relPath, class, method]
+     * @param  array{0: string, 1: string, 2: string}  $second  [relPath, class, method]
+     * @return array<string, mixed>
+     */
+    public static function refinePair(int $fileBudget, array $first, array $second): array
+    {
+        return self::invoke('refine-pair', (string) $fileBudget, $first[0], $first[1], $first[2], $second[0], $second[1], $second[2]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array
