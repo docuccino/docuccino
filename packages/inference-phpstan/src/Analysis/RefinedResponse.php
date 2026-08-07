@@ -25,16 +25,30 @@ use Docuccino\Core\Inference\DType\UnknownT;
  *   - {@see $delegates} marks a return that yielded no response at all (`return null` / void) — the
  *     "delegate to the framework" arm, which is neither a documentable response nor a fold failure.
  *
+ * A third honesty member carries VALUE-FLOW provenance for the payload body:
+ *   - {@see $payloadParamProvenance} maps a top-level payload member key to the CALLEE parameter its
+ *     value passes through unchanged (`['status' => $status, 'type' => $type, …]` inside the helper).
+ *     It lets the CALL SITE fold a member to the literal the caller passed (`type` → the per-arm URI),
+ *     exactly as the status is bound — call-independent, so the callee shape still memoises by symbol
+ *     alone. A member whose provenance is the status parameter is emitted as a {@see StatusMarkerT} so
+ *     that when the status does not fold, the response-building seam still fills it with the concrete
+ *     status the response is documented under. Provenance is TRANSIENT (never serialised): binding
+ *     consumes it, and anything unresolved at emission simply leaves the member at its widened type.
+ *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
 final readonly class RefinedResponse
 {
+    /**
+     * @param  array<string, string>  $payloadParamProvenance  top-level payload member key → callee parameter name
+     */
     public function __construct(
         public ?DType $payload = null,
         public ?LiteralT $status = null,
         public ?string $statusParam = null,
         public ?string $contentType = null,
         public bool $delegates = false,
+        public array $payloadParamProvenance = [],
     ) {}
 
     /** The "delegates to the framework" arm — a `return null` / void return, not a response. */
@@ -56,7 +70,7 @@ final readonly class RefinedResponse
      */
     public function withBoundStatus(LiteralT $status): self
     {
-        return new self($this->payload, $status, null, $this->contentType, $this->delegates);
+        return new self($this->payload, $status, null, $this->contentType, $this->delegates, $this->payloadParamProvenance);
     }
 
     /**
@@ -66,7 +80,18 @@ final readonly class RefinedResponse
      */
     public function withStatusParam(?string $statusParam): self
     {
-        return new self($this->payload, null, $statusParam, $this->contentType, $this->delegates);
+        return new self($this->payload, null, $statusParam, $this->contentType, $this->delegates, $this->payloadParamProvenance);
+    }
+
+    /**
+     * With the payload body and its member→parameter provenance rewritten (used as a call site folds
+     * the arguments the callee forwarded into its body). Everything else is preserved.
+     *
+     * @param  array<string, string>  $payloadParamProvenance
+     */
+    public function withPayload(?DType $payload, array $payloadParamProvenance): self
+    {
+        return new self($payload, $this->status, $this->statusParam, $this->contentType, $this->delegates, $payloadParamProvenance);
     }
 
     /**

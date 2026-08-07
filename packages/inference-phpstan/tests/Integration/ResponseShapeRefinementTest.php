@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
@@ -55,9 +57,17 @@ function invokeShape(string $narrowType): array
     $ctArg = $type->typeArgs[2] ?? null;
     $contentType = $ctArg instanceof LiteralT && is_string($ctArg->value) ? $ctArg->value : null;
 
-    $keys = array_map(static fn (array $f): string => (string) ($f['key'] ?? ''), $type->typeArgs[0]->toArray()['fields'] ?? []);
+    $payload = $type->typeArgs[0] ?? null;
+    expect($payload)->toBeInstanceOf(ArrayShapeT::class);
 
-    return ['status' => $status, 'contentType' => $contentType, 'keys' => $keys, 'deps' => $result['deps']];
+    $keys = [];
+    $members = [];
+    foreach ($payload->fields as $field) {
+        $keys[] = (string) $field->key;
+        $members[(string) $field->key] = $field->type;
+    }
+
+    return ['status' => $status, 'contentType' => $contentType, 'keys' => $keys, 'members' => $members, 'deps' => $result['deps']];
 }
 
 it('recovers a TWO-HOP helper chain: __invoke arm → private method → static make() (404)', function (): void {
@@ -139,4 +149,60 @@ it('the broad non-JSON early-out (return null) never shadows the per-type respon
     foreach (['App\\Exceptions\\InvoiceNotFoundException' => 404, 'App\\Exceptions\\OrderConflictException' => 409] as $type => $status) {
         expect(invokeShape($type)['status'])->toBe($status);
     }
+})->group('fixture');
+
+// --- Value-flow: per-arm literals fold into body members through the helper's parameters ---
+
+it('folds a ONE-HOP arm’s per-arm literals into the body members (409: type const + status literal)', function (): void {
+    // OrderConflict → make('https://…/conflict', 'Conflict', 409, $e->getMessage()): the call-site literals
+    // bind to make()'s $type/$title/$status parameters, so the recovered body carries them as literals —
+    // exactly what documents `type` as a `const` and `status` as 409. $detail ($e->getMessage()) does NOT
+    // fold and stays widened (honest: never pinned to a value that does not flow to it).
+    $members = invokeShape('App\\Exceptions\\OrderConflictException')['members'];
+
+    expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/conflict'))
+        ->and($members['title'])->toEqual(new LiteralT('Conflict'))
+        ->and($members['status'])->toEqual(new LiteralT(409))
+        ->and($members['detail'])->not->toBeInstanceOf(LiteralT::class);
+})->group('fixture');
+
+it('folds a TWO-HOP arm’s per-arm literals two hops out (404: type const + status literal)', function (): void {
+    // NotFound → renderNotFound() → make('https://…/not-found', 'Not Found', 404, …): the literals live at
+    // the innermost make() call inside renderNotFound and bind there, propagating fully-resolved up to __invoke.
+    $members = invokeShape('App\\Exceptions\\InvoiceNotFoundException')['members'];
+
+    expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/not-found'))
+        ->and($members['status'])->toEqual(new LiteralT(404));
+})->group('fixture');
+
+it('marks the status body member as a StatusMarkerT when the status does not fold (renderHttp)', function (): void {
+    // renderHttp passes $e->getStatusCode() through make()'s $status parameter: the HTTP status stays
+    // permissive AND the body `status` member — whose value IS that same parameter — becomes a
+    // StatusMarkerT for the response seam to fill with the concrete documented status (never guessed).
+    $members = invokeShape('Symfony\\Component\\HttpKernel\\Exception\\HttpException')['members'];
+
+    expect($members['status'])->toBeInstanceOf(StatusMarkerT::class)
+        // The non-status literals passed to that arm still fold.
+        ->and($members['type'])->toEqual(new LiteralT('about:blank'))
+        ->and($members['title'])->toEqual(new LiteralT('HTTP Error'));
+})->group('fixture');
+
+it('keeps DIRECTLY-written body literals as literals (422: type/title/status const, dynamic members widened)', function (): void {
+    // validation() writes type/title/status as literals directly in the array (no parameter hop), so they
+    // are recovered as literals; $detail and the $errors list are dynamic and stay widened.
+    $members = invokeShape('Illuminate\\Validation\\ValidationException')['members'];
+
+    expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/validation'))
+        ->and($members['title'])->toEqual(new LiteralT('Unprocessable Entity'))
+        ->and($members['status'])->toEqual(new LiteralT(422))
+        ->and($members['detail'])->not->toBeInstanceOf(LiteralT::class)
+        ->and($members['errors'])->not->toBeInstanceOf(LiteralT::class);
+})->group('fixture');
+
+it('folds the direct-constructor arm’s literal body members (429)', function (): void {
+    // RateLimited returns new JsonResponse([...all literals...], 429): every member is a literal, status included.
+    $members = invokeShape('App\\Exceptions\\RateLimitedException')['members'];
+
+    expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/rate-limited'))
+        ->and($members['status'])->toEqual(new LiteralT(429));
 })->group('fixture');

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
@@ -154,7 +157,7 @@ final class ResponseShapeRefiner
                         return $child;
                     }
 
-                    return $this->bindCallStatus($child, $callee, $expr, $scope, $paramNames);
+                    return $this->bindCall($child, $callee, $expr, $scope, $paramNames);
                 }
             }
 
@@ -181,8 +184,10 @@ final class ResponseShapeRefiner
         $args = $new->getArgs();
 
         $payload = null;
+        $provenance = [];
         if (isset($args[0])) {
             $payload = $this->payloadOf($scope->getType($args[0]->value));
+            $provenance = $this->payloadProvenance($args[0]->value, $scope, $paramNames);
         }
 
         [$status, $statusParam] = isset($args[1])
@@ -191,7 +196,48 @@ final class ResponseShapeRefiner
 
         $contentType = isset($args[2]) ? $this->contentTypeOf($args[2]->value, $scope) : null;
 
-        return new RefinedResponse($payload, $status, $statusParam, $contentType);
+        // A body member whose value passes through the SAME parameter that drives the HTTP status
+        // echoes the response status. Mark it now (call-independent) so a call site that folds the
+        // status folds the member too, and an unfolded status still fills at documentation time.
+        if ($statusParam !== null && $payload instanceof ArrayShapeT) {
+            foreach ($provenance as $key => $param) {
+                if ($param === $statusParam) {
+                    $payload = $this->replaceFieldType($payload, $key, new StatusMarkerT);
+                }
+            }
+        }
+
+        return new RefinedResponse($payload, $status, $statusParam, $contentType, false, $provenance);
+    }
+
+    /**
+     * The member→parameter provenance of a body array literal: each string-keyed member whose value is
+     * one of the current function's parameters, so a call site can fold it to the argument it passed.
+     *
+     * @param  list<string>  $paramNames
+     * @return array<string, string> member key → parameter name
+     */
+    private function payloadProvenance(Node\Expr $expr, Scope $scope, array $paramNames): array
+    {
+        if (! $expr instanceof Node\Expr\Array_) {
+            return [];
+        }
+
+        $provenance = [];
+        foreach ($expr->items as $item) {
+            if ($item->key === null || ! $item->value instanceof Node\Expr\Variable || ! is_string($item->value->name)) {
+                continue;
+            }
+            if (! in_array($item->value->name, $paramNames, true)) {
+                continue;
+            }
+            $keys = $scope->getType($item->key)->getConstantStrings();
+            if (count($keys) === 1) {
+                $provenance[$keys[0]->getValue()] = $item->value->name;
+            }
+        }
+
+        return $provenance;
     }
 
     /**
@@ -283,13 +329,31 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Re-express a callee's pass-through status in the CALLER's terms: bind the argument the caller
-     * passed to the callee's status parameter — a folded literal resolves the status outright; a
-     * parameter of the caller re-homes the pass-through one hop out; anything else leaves it permissive.
+     * Re-express a callee's pass-through recovery in the CALLER's terms: fold the arguments the caller
+     * passed into the callee's status parameter AND into any body members that pass a parameter through.
+     * Payload binding runs first so a status member folds consistently with the HTTP status (both key on
+     * the same argument), then the status value itself is bound.
      *
      * @param  list<string>  $paramNames  the caller's parameter names
      */
-    private function bindCallStatus(RefinedResponse $child, Callee $callee, Node\Expr $call, Scope $scope, array $paramNames): RefinedResponse
+    private function bindCall(RefinedResponse $child, Callee $callee, Node\Expr $call, Scope $scope, array $paramNames): RefinedResponse
+    {
+        return $this->bindStatus(
+            $this->bindPayload($child, $callee, $call, $scope, $paramNames),
+            $callee,
+            $call,
+            $scope,
+            $paramNames,
+        );
+    }
+
+    /**
+     * Bind the callee's pass-through status: a folded literal resolves it outright; a parameter of the
+     * caller re-homes the pass-through one hop out; anything else leaves it permissive.
+     *
+     * @param  list<string>  $paramNames  the caller's parameter names
+     */
+    private function bindStatus(RefinedResponse $child, Callee $callee, Node\Expr $call, Scope $scope, array $paramNames): RefinedResponse
     {
         if ($child->statusParam === null) {
             return $child;
@@ -310,6 +374,44 @@ final class ResponseShapeRefiner
         }
 
         return $child->withStatusParam(null);
+    }
+
+    /**
+     * Fold the arguments the caller passed into the callee's body-member parameters: a constant-foldable
+     * argument pins the member to that literal (a per-arm `type` URI becomes a `const`); a caller
+     * parameter re-homes the provenance one hop out; anything else drops the provenance and leaves the
+     * member at its widened type (a {@see StatusMarkerT} status member is likewise left for the response
+     * seam to fill). Honest: a member is only ever pinned to a value that actually flows to it.
+     *
+     * @param  list<string>  $paramNames  the caller's parameter names
+     */
+    private function bindPayload(RefinedResponse $child, Callee $callee, Node\Expr $call, Scope $scope, array $paramNames): RefinedResponse
+    {
+        if ($child->payloadParamProvenance === [] || ! $child->payload instanceof ArrayShapeT) {
+            return $child;
+        }
+
+        $payload = $child->payload;
+        $rehomed = [];
+        foreach ($child->payloadParamProvenance as $key => $param) {
+            $argExpr = $this->argumentFor($callee, $param, $call);
+            if ($argExpr === null) {
+                continue;
+            }
+
+            $literal = $this->constLiteralOf($argExpr, $scope);
+            if ($literal !== null) {
+                $payload = $this->replaceFieldType($payload, $key, $literal);
+
+                continue;
+            }
+
+            if ($argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)) {
+                $rehomed[$key] = $argExpr->name;
+            }
+        }
+
+        return $child->withPayload($payload, $rehomed);
     }
 
     /**
@@ -342,6 +444,46 @@ final class ResponseShapeRefiner
         $values = $type->getConstantScalarValues();
 
         return count($values) === 1 && is_int($values[0]) ? $values[0] : null;
+    }
+
+    /**
+     * A constant scalar argument (`'https://…'`, `409`, `true`) as a {@see LiteralT}, or null when the
+     * argument does not constant-fold to a single scalar. Mirrors the translator's literal recovery so a
+     * bound body member reads identically to a directly-written literal.
+     */
+    private function constLiteralOf(Node\Expr $expr, Scope $scope): ?LiteralT
+    {
+        $type = $scope->getType($expr);
+
+        $strings = $type->getConstantStrings();
+        if (count($strings) === 1) {
+            return new LiteralT($strings[0]->getValue());
+        }
+
+        if ($type->isConstantScalarValue()->yes()) {
+            $values = $type->getConstantScalarValues();
+            if (count($values) === 1 && is_scalar($values[0])) {
+                return new LiteralT($values[0]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A copy of a keyed array shape with one member's value type replaced (its key and optionality
+     * preserved), or the shape unchanged when the key is absent.
+     */
+    private function replaceFieldType(ArrayShapeT $shape, string $key, DType $type): ArrayShapeT
+    {
+        $fields = array_map(
+            static fn (ArrayShapeField $field): ArrayShapeField => (string) $field->key === $key
+                ? new ArrayShapeField($field->key, $type, $field->optional)
+                : $field,
+            $shape->fields,
+        );
+
+        return new ArrayShapeT($fields, $shape->isList);
     }
 
     /**
