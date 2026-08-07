@@ -33,8 +33,16 @@ final readonly class CallableRef
     /** A stable label for diagnostics, stub maps, and cache keys. */
     public function symbol(): string
     {
-        $target = ($this->class ?? $this->file).'::'.($this->method ?? 'closure@'.$this->line);
+        return $this->narrowType !== null ? $this->target().'#'.$this->narrowType : $this->target();
+    }
 
-        return $this->narrowType !== null ? $target.'#'.$this->narrowType : $target;
+    /**
+     * The callable's identity WITHOUT the per-narrow suffix — the same callback across every thrown
+     * type it is analysed for. Lets the inferred-handler tier summarise deferrals per callback rather
+     * than emitting one diagnostic per exception type.
+     */
+    public function target(): string
+    {
+        return ($this->class ?? $this->file).'::'.($this->method ?? 'closure@'.$this->line);
     }
 }

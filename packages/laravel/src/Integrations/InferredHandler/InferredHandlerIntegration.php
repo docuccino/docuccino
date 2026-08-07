@@ -26,6 +26,9 @@ final class InferredHandlerIntegration
             // Kills the tier's silence: reports one diagnostic per registered-but-unanalysable render
             // callback (runs once per build regardless of routes).
             RenderCallbackSkipTransformer::class,
+            // Collapses deferral noise: one summary diagnostic per callback that genuinely could not
+            // fold a response (naming count + first few exception types), replacing per-exception spam.
+            HandlerDeferralSummaryTransformer::class,
         ];
     }
 }

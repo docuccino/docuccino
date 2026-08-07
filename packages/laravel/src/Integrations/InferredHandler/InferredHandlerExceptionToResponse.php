@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\InferredHandler;
 
-use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
@@ -40,7 +38,10 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
     /** @var array<string, CallableRef|null> memoised candidate per exception FQCN */
     private array $candidates = [];
 
-    public function __construct(private readonly HandlerReflector $reflector) {}
+    public function __construct(
+        private readonly HandlerReflector $reflector,
+        private readonly HandlerDeferralLog $deferrals,
+    ) {}
 
     public function supports(ThrownException $exception, RouteContext $context): bool
     {
@@ -63,25 +64,28 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
         }
 
         $analysis = $context->engine->analyzeCallable($callable);
-        // Cache soundness (design §10): editing the handler must invalidate this route's fragment.
+        // Cache soundness (design §10): editing the handler — or any helper its response is built
+        // through (recorded in dependencyFiles by the refiner) — must invalidate this route's fragment.
         $context->recordDependencyFiles($analysis->dependencyFiles);
 
-        $response = HandlerResponseBuilder::build($analysis, $context, Contribution::integration('inferred-handler'));
-        if ($response === null) {
-            $components->addDiagnostic(new Diagnostic(
-                severity: Severity::Info,
-                code: 'inferred-handler.too-dynamic',
-                message: sprintf(
-                    'The exception handler rendering %s could not be folded to a JSON response; deferring to the next error tier.',
-                    $exception->exceptionFqcn,
-                ),
-                help: 'Return a response()->json([...], status) with a constant status from the handler, or document it with an attribute.',
-            ));
-
-            return null;
+        $response = HandlerResponseBuilder::build(
+            $analysis,
+            $context,
+            Contribution::integration('inferred-handler'),
+            $exception->httpStatusHint,
+        );
+        if ($response !== null) {
+            return $response;
         }
 
-        return $response;
+        // No response recovered. A framework DELEGATION (`return null` / void arm) is expected — defer
+        // silently to the next tier. A genuine fold failure is recorded per callback for one summary
+        // diagnostic at document build (replacing the old per-exception spam).
+        if (! HandlerResponseBuilder::isDelegation($analysis)) {
+            $this->deferrals->record($callable->target(), $exception->exceptionFqcn);
+        }
+
+        return null;
     }
 
     private function candidate(string $fqcn): ?CallableRef

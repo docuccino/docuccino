@@ -21,6 +21,7 @@ use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
 use Docuccino\Laravel\Http\DocsController;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfigDigestContributor;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateParametersExtension;
@@ -81,6 +82,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // builder reads it back O(1), so a route is reflected once per build. Scoped so both share
         // one index within a request/build and it resets between them.
         $this->app->scoped(ResolvedRouteIndex::class);
+
+        // The inferred-handler tier records per-callback response-fold deferrals here; the summary
+        // transformer drains them once at document build. Scoped so both share one log per build.
+        $this->app->scoped(HandlerDeferralLog::class);
 
         // The route resolver excludes vendor-package controller routes by default (route:list
         // --except-vendor semantics); supply the app's vendor directory as the boundary.

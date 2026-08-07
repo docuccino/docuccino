@@ -9,6 +9,8 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -156,6 +158,85 @@ it('documents an invokable renderer via method analysis, winning over the framew
     $producers = array_map(static fn (array $r): string => $r['producer'], $responses['410']['x-docuccino']['provenance'] ?? []);
     expect($producers)->toContain('integration:inferred-handler')
         ->and($responses['410']['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('error');
+});
+
+it('documents the recovered content type (application/problem+json) from a refined helper shape', function (): void {
+    // The refiner recovers a JsonResponse<payload, status, contentType> — the adapter must document the
+    // body under the recovered media type, not the default application/json.
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['type' => 'x', 'title' => 'y'], 404),
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('type', ScalarT::string()), new ArrayShapeField('title', ScalarT::string())]),
+                new LiteralT(404),
+                new LiteralT('application/problem+json'),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $responses = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    expect($responses['404']['content'] ?? [])->toHaveKey('application/problem+json')
+        ->and($responses['404']['content'])->not->toHaveKey('application/json')
+        ->and($responses['404']['content']['application/problem+json']['schema']['properties'] ?? [])->toHaveKeys(['type', 'title']);
+});
+
+it('falls back to the exception status hint when the recovered status did not fold', function (): void {
+    // An enum-derived / dynamic status the refiner could not fold arrives as UnknownT; the adapter must
+    // document the exception's own status classification (404 here) rather than guessing 200.
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['type' => 'x'], 404),
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('type', ScalarT::string())]),
+                new UnknownT('status not folded'),
+                new LiteralT('application/problem+json'),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $responses = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    // Documented under the exception hint (404), not the 200 default; producer is the inferred tier.
+    expect($responses)->toHaveKey('404');
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:inferred-handler')
+        ->and($responses)->not->toHaveKey('200');
+});
+
+it('defers SILENTLY (no too-dynamic diagnostic) when an arm delegates to the framework (null/void)', function (): void {
+    // A `return null` / void arm is a framework delegation, not a fold failure — the tier must NOT raise
+    // a too-dynamic deferral for it; the framework-default tier fills in.
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => null,
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(new VoidT, new SourceLocation(''))]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $result = generateDocument();
+    $responses = $result->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
+
+    $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
+    expect($codes)->not->toContain('inferred-handler.too-dynamic');
+
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:framework-errors');
 });
 
 it('reports render-callback-skipped (never silently) for an unanalysable render callback', function (): void {
