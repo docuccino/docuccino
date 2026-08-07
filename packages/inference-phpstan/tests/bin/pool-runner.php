@@ -69,6 +69,13 @@ $refs = [
     new ActionRef($ctrl('ThrowsController.php'), 'App\\Http\\Controllers\\ThrowsController', 'deepUndeclared'),
     new ActionRef($ctrl('ThrowsController.php'), 'App\\Http\\Controllers\\ThrowsController', 'tryCatch'),
     new ActionRef($ctrl('UserListController.php'), 'App\\Http\\Controllers\\UserListController', 'listUsers'),
+    // Response-shape refinement + enum-case accessor folding + StatusMarkerT + example-source: exercised
+    // through the pool so this new engine output rides the 1-vs-N-worker and cold-vs-warm byte-identity
+    // invariants, not just the single-run refinement fixture tests.
+    new ActionRef($ctrl('ProblemController.php'), 'App\\Http\\Controllers\\ProblemController', 'forbidden'),
+    // …and its unfolded-status sibling, so BOTH refined shapes ride the invariants: a folded literal
+    // status (above) and a permissive status whose body member survives as a StatusMarkerT (here).
+    new ActionRef($ctrl('ProblemController.php'), 'App\\Http\\Controllers\\ProblemController', 'dynamic'),
 ];
 
 $cache = $cacheDir !== ''

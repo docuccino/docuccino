@@ -22,6 +22,12 @@ use Docuccino\Inference\PhpStan\Analysis\PhpStanEngineFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\PoisonInjectingTypeEngine;
 
+// A worker cold-compiles a PHPStan container and analyses the fixture app; like engine-runner.php it
+// needs a generous memory ceiling (the default CLI limit OOMs a refinement-heavy action, which the
+// crash-containment would then degrade to a poisoned unknown — a cold-vs-warm divergence, not a real
+// result). Mirrors engine-runner's 2G.
+ini_set('memory_limit', '2G');
+
 $repoRoot = dirname(__DIR__, 4);
 $app = $repoRoot.'/tests/fixture-app/app';
 

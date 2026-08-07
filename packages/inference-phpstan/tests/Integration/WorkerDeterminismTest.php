@@ -24,12 +24,55 @@ afterEach(function (): void {
     }
 });
 
+/**
+ * The refined `JsonResponse` shape of a pool result: its folded status typeArg and each top-level body
+ * member's DType kind. Keeps the refinement assertions below readable.
+ *
+ * @param  array<string, mixed>  $analysis  one serialized ActionAnalysis from the pool
+ * @return array{status: array<string, mixed>, members: array<string, string>}
+ */
+function refinedShape(array $analysis): array
+{
+    /** @var array{kind: string, fqcn?: string, typeArgs?: list<array<string, mixed>>} $type */
+    $type = $analysis['returns'][0]['type'];
+    expect($type['kind'])->toBe('class')->and($type['fqcn'])->toBe('Illuminate\\Http\\JsonResponse');
+
+    $members = [];
+    /** @var list<array{key: string, type: array{kind: string}}> $fields */
+    $fields = $type['typeArgs'][0]['fields'] ?? [];
+    foreach ($fields as $field) {
+        $members[$field['key']] = $field['type']['kind'];
+    }
+
+    return ['status' => $type['typeArgs'][1] ?? [], 'members' => $members];
+}
+
 it('produces byte-identical results for 1 worker vs 4 workers with recycling', function (): void {
     $one = PoolRunner::run(workers: 1, maxActionsPerWorker: 50);
     $four = PoolRunner::run(workers: 4, maxActionsPerWorker: 3);
 
     expect($four)->toBe($one)
-        ->and(PoolRunner::decode($one))->toHaveCount(10);
+        ->and(PoolRunner::decode($one))->toHaveCount(12);
+
+    // The refinement / enum-fold / StatusMarkerT machinery actually ran through the pool, so the
+    // byte-identity above is a real assertion over the NEW output rather than a no-op. Both refined
+    // shapes are represented:
+    $results = PoolRunner::decode($one);
+
+    // (a) a concrete enum case bound at the call site → accessors fold to per-case literals and the
+    //     HTTP status resolves to the folded 403 (so its body `status` is a literal, not a marker).
+    $folded = refinedShape($results['App\\Http\\Controllers\\ProblemController::forbidden']);
+    expect($folded['status'])->toBe(['kind' => 'literal', 'base' => 'int', 'value' => 403])
+        ->and($folded['members']['type'])->toBe('literal')    // enum ->value → const URI
+        ->and($folded['members']['title'])->toBe('literal')   // match()-method → const
+        ->and($folded['members']['status'])->toBe('literal'); // folded from the same status() accessor
+
+    // (b) the status forwarded from the action's OWN parameter → permissive status (never guessed), and
+    //     the body member reading that accessor survives as a StatusMarkerT for the response seam.
+    $marked = refinedShape($results['App\\Http\\Controllers\\ProblemController::dynamic']);
+    expect($marked['status']['kind'])->toBe('unknown')
+        ->and($marked['members']['type'])->toBe('literal')    // the non-status literals still fold
+        ->and($marked['members']['status'])->toBe('statusMarker');
 })->group('fixture');
 
 it('produces byte-identical results for cold cache vs warm cache', function (): void {
