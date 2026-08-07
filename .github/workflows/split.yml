@@ -94,7 +94,9 @@ jobs:
           user_name: docuccino-bot
           user_email: me@tjmartin.info
 
-      - name: Split ${{ matrix.package }} (tag ${{ github.ref_name }})
+      # The tag is deliberately absent from this step's NAME: `github.ref_name` is the
+      # branch on a branch push, so the skipped step would read "(tag main)".
+      - name: Split ${{ matrix.package }} (tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: danharrin/monorepo-split-github-action@v2.4.5
         env:
