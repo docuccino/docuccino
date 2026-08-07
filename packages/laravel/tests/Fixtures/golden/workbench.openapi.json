@@ -135,53 +135,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "author": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "email": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "email"
-                    ]
-                  },
-                  "body": {
-                    "type": "string",
-                    "maxLength": 500
-                  },
-                  "heading": {
-                    "type": "string"
-                  },
-                  "id": {
-                    "type": "integer"
-                  },
-                  "internal": {
-                    "type": "integer"
-                  },
-                  "secret": {
-                    "type": "string"
-                  },
-                  "subtitle": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "id",
-                  "heading",
-                  "body",
-                  "secret",
-                  "internal"
-                ]
+                "$ref": "#/components/schemas/Article"
               }
             }
           }
@@ -192,7 +146,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Article"
+                  "$ref": "#/components/schemas/Article_2"
                 }
               }
             }
@@ -990,37 +944,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "avatar": {
-                    "description": "An image file.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "format": "binary"
-                  },
-                  "name": {
-                    "type": "string",
-                    "maxLength": 100
-                  },
-                  "quantity": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "role": {
-                    "type": "string",
-                    "enum": [
-                      "admin",
-                      "user"
-                    ]
-                  }
-                },
-                "required": [
-                  "name",
-                  "quantity",
-                  "role"
-                ]
+                "$ref": "#/components/schemas/StoreWidgetRequest"
               }
             }
           }
@@ -1188,23 +1112,38 @@
         "type": "object",
         "properties": {
           "author": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AuthorData"
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
               },
-              {
-                "type": "null"
+              "name": {
+                "type": "string"
               }
+            },
+            "required": [
+              "name",
+              "email"
             ]
           },
           "body": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           },
-          "headline": {
+          "heading": {
             "type": "string"
           },
           "id": {
             "type": "integer"
+          },
+          "internal": {
+            "type": "integer"
+          },
+          "secret": {
+            "type": "string"
           },
           "subtitle": {
             "type": "string"
@@ -1212,9 +1151,10 @@
         },
         "required": [
           "id",
-          "headline",
+          "heading",
           "body",
-          "author"
+          "secret",
+          "internal"
         ]
       },
       "ArticleJsonApiResource": {
@@ -1288,6 +1228,39 @@
           "title"
         ]
       },
+      "Article_2": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "subtitle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "headline",
+          "body",
+          "author"
+        ]
+      },
       "AuthorData": {
         "type": "object",
         "properties": {
@@ -1348,6 +1321,39 @@
         },
         "required": [
           "id"
+        ]
+      },
+      "StoreWidgetRequest": {
+        "type": "object",
+        "properties": {
+          "avatar": {
+            "description": "An image file.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "binary"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "role"
         ]
       },
       "Widget": {

@@ -384,53 +384,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "author": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "email": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "name",
-                      "email"
-                    ]
-                  },
-                  "body": {
-                    "type": "string",
-                    "maxLength": 500
-                  },
-                  "heading": {
-                    "type": "string"
-                  },
-                  "id": {
-                    "type": "integer"
-                  },
-                  "internal": {
-                    "type": "integer"
-                  },
-                  "secret": {
-                    "type": "string"
-                  },
-                  "subtitle": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "id",
-                  "heading",
-                  "body",
-                  "secret",
-                  "internal"
-                ]
+                "$ref": "#/components/schemas/Article"
               }
             }
           }
@@ -465,7 +419,7 @@
                       }
                     ]
                   },
-                  "$ref": "#/components/schemas/Article"
+                  "$ref": "#/components/schemas/Article_2"
                 }
               }
             }
@@ -2437,37 +2391,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "avatar": {
-                    "description": "An image file.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "format": "binary"
-                  },
-                  "name": {
-                    "type": "string",
-                    "maxLength": 100
-                  },
-                  "quantity": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "role": {
-                    "type": "string",
-                    "enum": [
-                      "admin",
-                      "user"
-                    ]
-                  }
-                },
-                "required": [
-                  "name",
-                  "quantity",
-                  "role"
-                ]
+                "$ref": "#/components/schemas/StoreWidgetRequest"
               }
             }
           }
@@ -2969,28 +2893,43 @@
     "schemas": {
       "Article": {
         "x-docuccino": {
-          "id": "sch:v1:rimzqk43cb4hshik"
+          "id": "sch:v1:3uy6swru7tbdze5f"
         },
         "type": "object",
         "properties": {
           "author": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AuthorData"
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "email": {
+                "type": "string"
               },
-              {
-                "type": "null"
+              "name": {
+                "type": "string"
               }
+            },
+            "required": [
+              "name",
+              "email"
             ]
           },
           "body": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           },
-          "headline": {
+          "heading": {
             "type": "string"
           },
           "id": {
             "type": "integer"
+          },
+          "internal": {
+            "type": "integer"
+          },
+          "secret": {
+            "type": "string"
           },
           "subtitle": {
             "type": "string"
@@ -2998,9 +2937,10 @@
         },
         "required": [
           "id",
-          "headline",
+          "heading",
           "body",
-          "author"
+          "secret",
+          "internal"
         ]
       },
       "ArticleJsonApiResource": {
@@ -3078,6 +3018,42 @@
         "required": [
           "id",
           "title"
+        ]
+      },
+      "Article_2": {
+        "x-docuccino": {
+          "id": "sch:v1:rimzqk43cb4hshik"
+        },
+        "type": "object",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "subtitle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "headline",
+          "body",
+          "author"
         ]
       },
       "AuthorData": {
@@ -3179,6 +3155,42 @@
             "default": "about:blank"
           }
         }
+      },
+      "StoreWidgetRequest": {
+        "x-docuccino": {
+          "id": "sch:v1:zh4wul5w3rfncvua"
+        },
+        "type": "object",
+        "properties": {
+          "avatar": {
+            "description": "An image file.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "binary"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "role"
+        ]
       },
       "Widget": {
         "x-docuccino": {
@@ -3384,7 +3396,7 @@
     "document": {
       "id": "doc:pointer-list",
       "configHash": "a16009c154324b1c7cd44a8a9ce1e3c4152e0efdae100eeafdbadec0408fc017",
-      "contentHash": "a288c860f01a0dbc832fae4aad6fa8266f32aea59f2ee06d0c53f56f0e5effa4"
+      "contentHash": "0b180e20974459a9daaf61da8f8c9ff087df6734e9eefa220aead4359bca7502"
     },
     "generator": {
       "name": "docuccino/laravel",
