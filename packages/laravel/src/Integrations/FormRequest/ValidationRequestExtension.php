@@ -38,7 +38,7 @@ final class ValidationRequestExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
-        $rules = $this->recover($context);
+        [$rules, $sourceClass] = $this->recover($context);
         if ($rules === null || $rules->isEmpty()) {
             return;
         }
@@ -48,14 +48,22 @@ final class ValidationRequestExtension implements OperationExtension
             return;
         }
 
-        $this->request->apply($operation, $context, $result, 'form-request');
+        // A FormRequest names the source class (its body hoists to a component); an inline
+        // `validate()`/`Validator::make()` body has no class to name honestly, so it stays inline.
+        $this->request->apply($operation, $context, $result, 'form-request', $sourceClass);
     }
 
-    private function recover(RouteContext $context): ?RuleSet
+    /**
+     * The recovered rule set paired with the single source class it came from (a FormRequest), or null
+     * for an inline body with no source class.
+     *
+     * @return array{0: ?RuleSet, 1: ?string}
+     */
+    private function recover(RouteContext $context): array
     {
         $fromFormRequest = $this->formRequest->recover($context);
         if ($fromFormRequest !== null && ! $fromFormRequest->isEmpty()) {
-            return $fromFormRequest;
+            return [$fromFormRequest, $context->formRequestClass];
         }
 
         $visitor = new InlineRulesVisitor;
@@ -76,6 +84,6 @@ final class ValidationRequestExtension implements OperationExtension
             ));
         }
 
-        return $inline->isEmpty() ? null : $inline;
+        return $inline->isEmpty() ? [null, null] : [$inline, null];
     }
 }

@@ -54,7 +54,10 @@ it('documents a FormRequest as a request body recovered from rules()', function 
     expect($body['required'])->toBeTrue()
         ->and($body['content'])->toHaveKey('multipart/form-data');
 
-    $schema = $body['content']['multipart/form-data']['schema'];
+    // The FormRequest-derived body hoists to a component the operation $refs (single source class).
+    expect($body['content']['multipart/form-data']['schema'])->toBe(['$ref' => '#/components/schemas/StoreWidgetRequest']);
+
+    $schema = $document['components']['schemas']['StoreWidgetRequest'];
 
     expect($schema['type'])->toBe('object')
         ->and($schema['required'])->toBe(['name', 'quantity', 'role'])

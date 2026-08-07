@@ -74,7 +74,7 @@ final class DataRequestExtension implements OperationExtension
             return;
         }
 
-        $this->request->apply($operation, $context, $result, 'spatie-data');
+        $this->request->apply($operation, $context, $result, 'spatie-data', $fqcn);
     }
 
     /**

@@ -43,6 +43,7 @@ final class ActionValidationExtension implements OperationExtension
             return;
         }
 
-        $this->request->apply($operation, $context, $result, 'laravel-actions');
+        // The action class carries the rules(); its body hoists to a component named after it.
+        $this->request->apply($operation, $context, $result, 'laravel-actions', $context->actionRef->class);
     }
 }

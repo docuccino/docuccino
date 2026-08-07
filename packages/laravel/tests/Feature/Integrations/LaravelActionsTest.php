@@ -89,8 +89,12 @@ it('resolves an invokable action to handle(), documenting its summary, rules() b
     // Summary comes from the resolved handle() docblock (not the trait's __invoke forwarder).
     expect($operation['summary'])->toBe('Publish an article.');
 
-    // rules() became the JSON request body.
-    $properties = $operation['requestBody']['content']['application/json']['schema']['properties'] ?? [];
+    // rules() became the JSON request body, hoisted to a component named after the action class
+    // (single source class); the full document carries the component the operation $refs.
+    expect($operation['requestBody']['content']['application/json']['schema'])
+        ->toBe(['$ref' => '#/components/schemas/PublishArticleAction']);
+    $document = generateDocument()->document->toArray();
+    $properties = $document['components']['schemas']['PublishArticleAction']['properties'] ?? [];
     expect($properties)->toHaveKeys(['title', 'body']);
 
     // authorize() became a 403.
