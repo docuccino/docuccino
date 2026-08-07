@@ -85,6 +85,23 @@ it('merges responses by status and content by media type', function (): void {
     expect($content['application/json']['schema']['title'])->toBe('Forms');
 });
 
+it('emits a media-type example beside the schema, first-writer-wins and only where a schema exists', function (): void {
+    $draft = new OperationDraft;
+
+    $response = $draft->response('403');
+    $response->content('application/problem+json')->set('type', 'object', Contribution::inference());
+    $response->setExample('application/problem+json', ['status' => 403, 'type' => 'about:blank']);
+    // First writer wins — a later producer does not overwrite the established example.
+    $response->setExample('application/problem+json', ['status' => 999]);
+    // An example for a media type carrying no schema is dropped (nothing to attach it to).
+    $response->setExample('text/plain', ['ignored' => true]);
+
+    $content = $draft->freeze()->responses['403']->content ?? [];
+
+    expect($content['application/problem+json']['example'])->toBe(['status' => 403, 'type' => 'about:blank'])
+        ->and($content)->not->toHaveKey('text/plain');
+});
+
 it('merges schema properties by name, patching a sibling without discarding others', function (): void {
     $schema = new SchemaDraft;
     $schema->set('type', 'object', Contribution::inference());

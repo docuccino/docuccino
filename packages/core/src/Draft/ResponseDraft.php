@@ -25,6 +25,16 @@ final class ResponseDraft
      */
     private array $content = [];
 
+    /**
+     * Per-media-type example bodies (an OAS media-type `example`, sibling of `schema`). Assembled by a
+     * producer from statically-known values only (literals, resolved status members) — never fabricated
+     * — and emitted verbatim: the canonicalizer keeps an `example` opaque, so insertion order is the
+     * producer's responsibility.
+     *
+     * @var array<string, mixed>
+     */
+    private array $examples = [];
+
     private ?string $id = null;
 
     public function __construct(
@@ -51,6 +61,16 @@ final class ResponseDraft
     public function content(string $mediaType): SchemaDraft
     {
         return $this->content[$mediaType] ??= new SchemaDraft;
+    }
+
+    /**
+     * Attach an example body to a media type. Emitted only when that media type also carries a schema.
+     * First writer wins (a later producer does not overwrite an established example) so the result is
+     * order-stable regardless of extension evaluation order.
+     */
+    public function setExample(string $mediaType, mixed $example): void
+    {
+        $this->examples[$mediaType] ??= $example;
     }
 
     /** The first registered media type (in insertion order), or `''` when the response has none. */
@@ -115,6 +135,9 @@ final class ResponseDraft
             $content = [];
             foreach ($this->content as $mediaType => $schema) {
                 $content[$mediaType] = ['schema' => $schema->freeze()->toArray()];
+                if (array_key_exists($mediaType, $this->examples)) {
+                    $content[$mediaType]['example'] = $this->examples[$mediaType];
+                }
             }
         }
 

@@ -21,6 +21,7 @@ final class DefaultTypeMappers
         return [
             new ScalarTypeToSchema,
             new LiteralTypeToSchema,
+            new StatusMarkerTypeToSchema,
             new EnumTypeToSchema,
             new ArrayShapeTypeToSchema,
             new CollectionTypeToSchema,

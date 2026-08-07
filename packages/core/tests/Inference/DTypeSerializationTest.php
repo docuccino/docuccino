@@ -17,6 +17,7 @@ use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
@@ -39,6 +40,7 @@ function representativeTypes(): array
         new VoidT,
         new NeverT,
         new UnknownT('mixed'),
+        new StatusMarkerT,
         new ListT(ScalarT::int()),
         new MapT(ScalarT::string(), ScalarT::int()),
         new ClassT('App\\Models\\User'),

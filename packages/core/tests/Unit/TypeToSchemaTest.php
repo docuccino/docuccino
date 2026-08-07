@@ -17,6 +17,7 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\PropertyMetadata;
@@ -46,6 +47,8 @@ it('maps each scalar/literal/collection type to its schema', function (DType $ty
     'map of string' => [new MapT(ScalarT::string(), ScalarT::string()), ['type' => 'object', 'additionalProperties' => ['type' => 'string']]],
     'unknown → empty' => [new UnknownT('mixed'), []],
     'standalone null' => [new NullT, ['type' => 'null']],
+    // An unresolved status marker degrades to a bare integer — no fabricated const/example.
+    'status marker → bare integer' => [new StatusMarkerT, ['type' => 'integer']],
 ]);
 
 it('maps an enum to a string enum of case names', function (): void {
