@@ -206,7 +206,9 @@ final readonly class FilesystemEngineResultCache implements EngineResultCache
             @mkdir($dir, 0755, true);
         }
 
-        $tmp = $path.'.'.getmypid().'.'.bin2hex(random_bytes(6)).'.tmp';
+        // random_int (not bin2hex(random_bytes(…))): its int return type is unambiguous in every
+        // supported analyser version, and 63 bits of entropy beats the 48 it replaces.
+        $tmp = $path.'.'.getmypid().'.'.dechex(random_int(0, PHP_INT_MAX)).'.tmp';
         if (@file_put_contents($tmp, $contents) === false) {
             return;
         }

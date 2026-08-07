@@ -163,7 +163,9 @@ final readonly class FragmentCache
             @mkdir($directory, 0755, true);
         }
 
-        $temp = $file.'.'.getmypid().'.'.bin2hex(random_bytes(4)).'.tmp';
+        // random_int (not bin2hex(random_bytes(…))): its int return type is unambiguous in every
+        // supported analyser version, and 63 bits of entropy beats the 32 it replaces.
+        $temp = $file.'.'.getmypid().'.'.dechex(random_int(0, PHP_INT_MAX)).'.tmp';
         if (@file_put_contents($temp, $contents) === false) {
             return;
         }
