@@ -7,23 +7,35 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\UirEmitter;
 
-/**
+/*
  * The narrative content layer end-to-end against the workbench content directory: the compiled
  * pages + nav tree land in the UIR, directives resolve to stable ids, OpenAPI strips the whole
  * layer, and content is a document-level cache input.
  */
-function workbenchContentDir(): string
+
+/**
+ * Point the test app at the workbench content tree the way the shipped config documents it — a `dir`
+ * RELATIVE to the application base path — by basing the app on the adapter package, so the workbench
+ * sits inside it exactly as `resources/docs/api` sits inside a real application.
+ *
+ * The relative form is load-bearing, not cosmetic. `configHash` is a digest of the whole raw config
+ * bag and is EMITTED into the document, so an ABSOLUTE `content.dir` folds a machine-specific
+ * filesystem path into the output: the emitted hashes — and therefore this byte-locked golden — could
+ * only ever match on the machine that generated them. Configuring it relatively also exercises the
+ * project-root-relative page `source` prefix the compiler promises, which nothing else covered.
+ */
+function withWorkbenchContent(): callable
 {
-    return dirname(__DIR__, 2).'/workbench/resources/docs/api';
+    app()->setBasePath(dirname(__DIR__, 2));
+
+    return withContent('workbench/resources/docs/api');
 }
 
 /**
  * @param  array<string, mixed>  $overrides
  */
-function withContent(?string $dir = null, array $overrides = []): callable
+function withContent(string $dir, array $overrides = []): callable
 {
-    $dir ??= workbenchContentDir();
-
     return static function (array $raw) use ($dir, $overrides): array {
         $raw['content'] = ['dir' => $dir] + $overrides;
 
@@ -34,7 +46,7 @@ function withContent(?string $dir = null, array $overrides = []): callable
 it('compiles the workbench content directory into the UIR byte-identical to its golden', function (): void {
     bindStubEngine();
 
-    $document = generateDocument(withContent())->document;
+    $document = generateDocument(withWorkbenchContent())->document;
 
     assertGolden('workbench-content.uir.json', (new UirEmitter)->emit($document));
 });
@@ -42,7 +54,7 @@ it('compiles the workbench content directory into the UIR byte-identical to its 
 it('strips the whole content layer from OpenAPI (byte-identical to the content-free golden)', function (): void {
     bindStubEngine();
 
-    $document = generateDocument(withContent())->document;
+    $document = generateDocument(withWorkbenchContent())->document;
 
     // The UIR carries content...
     expect($document->docuccino?->content?->pages ?? [])->not->toBeEmpty()
@@ -58,7 +70,7 @@ it('strips the whole content layer from OpenAPI (byte-identical to the content-f
 it('resolves directives and the operation nav ref to stable ids', function (): void {
     bindStubEngine();
 
-    $content = generateDocument(withContent())->document->docuccino?->content;
+    $content = generateDocument(withWorkbenchContent())->document->docuccino?->content;
     $intro = collect($content?->pages ?? [])->firstWhere('slug', 'getting-started/introduction');
 
     // The operation id resolved into the body of the introduction page...
@@ -74,7 +86,7 @@ it('resolves directives and the operation nav ref to stable ids', function (): v
 it('warns when the configured content directory is missing', function (): void {
     bindStubEngine();
 
-    $result = generateDocument(withContent(dir: '/does/not/exist/'.uniqid()));
+    $result = generateDocument(withContent('/does/not/exist/'.uniqid()));
 
     $warnings = array_values(array_filter(
         $result->diagnostics,
@@ -90,7 +102,7 @@ it('leaves the document unchanged for an empty content directory (no content key
     $empty = sys_get_temp_dir().'/docuccino-empty-'.uniqid();
     mkdir($empty, 0777, true);
 
-    $result = generateDocument(withContent(dir: $empty));
+    $result = generateDocument(withContent($empty));
 
     expect($result->document->docuccino?->content)->toBeNull()
         ->and($result->diagnostics)->each->toBeInstanceOf(Diagnostic::class);
@@ -110,7 +122,7 @@ it('keeps content out of the fragment cache key (a prose edit does not invalidat
     config()->set('docuccino.cache.enabled', true);
     config()->set('docuccino.cache.path', $cache);
 
-    generateDocument(withContent(dir: $dir));
+    generateDocument(withContent($dir));
     $before = glob($cache.'/*') ?: [];
     expect($before)->not->toBeEmpty();
 
@@ -118,14 +130,14 @@ it('keeps content out of the fragment cache key (a prose edit does not invalidat
     // read content, so the prose edit is a warm hit across every route (content is picked up by the
     // always-fresh assembly step instead).
     file_put_contents($dir.'/index.md', "---\ntitle: Index\n---\nEdited body.\n");
-    generateDocument(withContent(dir: $dir));
+    generateDocument(withContent($dir));
     $afterContentEdit = glob($cache.'/*') ?: [];
     expect(count($afterContentEdit))->toBe(count($before));
 
     // A genuine document-level environment change (app.url feeds Passport oauth2 flow URLs) DOES
     // change the env digest → new fragment cache keys (fresh files).
     config()->set('app.url', 'https://changed.example');
-    generateDocument(withContent(dir: $dir));
+    generateDocument(withContent($dir));
     $afterEnvChange = glob($cache.'/*') ?: [];
     expect(count($afterEnvChange))->toBeGreaterThan(count($afterContentEdit));
 
