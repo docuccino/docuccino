@@ -1,9 +1,12 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import node from '@astrojs/node';
 import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	output: 'server',
+	adapter: node({ mode: 'standalone' }),
 	site: 'https://docs.docuccino.app',
 	// The bundled Scalar viewer on the landing page is a large, intentional client chunk; lift the
 	// size-warning threshold so it doesn't flag on every build.

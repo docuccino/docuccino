@@ -10,12 +10,14 @@
     "preview": "astro preview",
     "sync-schema": "node scripts/sync-schema.mjs",
     "prebuild": "node scripts/sync-schema.mjs --check",
-    "astro": "astro"
+    "astro": "astro",
+    "production": "node ./dist/server/entry.mjs"
   },
   "dependencies": {
+    "@astrojs/node": "^11.1.0",
     "@astrojs/starlight": "0.41.6",
-    "astro": "7.0.2",
-    "sharp": "0.34.5"
+    "astro": "^7.2.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@scalar/api-reference": "^1.64.0"
