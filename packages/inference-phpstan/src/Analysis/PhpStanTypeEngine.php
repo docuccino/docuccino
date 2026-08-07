@@ -181,6 +181,14 @@ final class PhpStanTypeEngine implements TypeEngine
             return $type;
         }
 
+        // Already rich (`response()->json()`/`noContent()` typed by the bundled extension): keep it
+        // verbatim — its shape (incl. a void `noContent` payload) is authoritative, nothing to refine.
+        // Only a bare erased response, or a `new JsonResponse(...)` the extension does not cover, is
+        // followed through helper indirection.
+        if ($type->typeArgs !== [] && ! $expr instanceof Node\Expr\New_) {
+            return $type;
+        }
+
         $refined = $this->refiner()->refine($expr, $scope);
         if ($refined === null) {
             return $type;

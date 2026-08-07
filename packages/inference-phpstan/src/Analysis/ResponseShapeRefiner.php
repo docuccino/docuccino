@@ -19,6 +19,7 @@ use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
+use PHPStan\Type\Type;
 
 /**
  * Response-shape refinement through project-code helper indirection (the inferred-handler flagship).
@@ -124,7 +125,7 @@ final class ResponseShapeRefiner
 
     /**
      * @param  list<string>  $paramNames  the current function's parameter names — a status expression
-     *                                     that is one of these is a PASS-THROUGH the caller can bind.
+     *                                    that is one of these is a PASS-THROUGH the caller can bind.
      */
     private function refineExpr(Node\Expr $expr, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
     {
@@ -200,7 +201,10 @@ final class ResponseShapeRefiner
      */
     private function fromTypeArgs(ClassT $type): RefinedResponse
     {
-        $payload = $this->documentablePayload($type->typeArgs[0] ?? null);
+        // Preserve the already-resolved payload faithfully — a void payload (`noContent()`) is a
+        // meaningful "no body", not an unfolded one; only an UnknownT is genuinely absent.
+        $payloadArg = $type->typeArgs[0] ?? null;
+        $payload = $payloadArg instanceof UnknownT ? null : $payloadArg;
         $statusArg = $type->typeArgs[1] ?? null;
         $status = $statusArg instanceof LiteralT && is_int($statusArg->value) ? $statusArg : null;
         $ctArg = $type->typeArgs[2] ?? null;
@@ -368,7 +372,7 @@ final class ResponseShapeRefiner
     }
 
     /** The payload DType, or null when it is not a documentable body (void/never/unknown). */
-    private function payloadOf(\PHPStan\Type\Type $type): ?DType
+    private function payloadOf(Type $type): ?DType
     {
         return $this->documentablePayload($this->translator->translate($type));
     }
