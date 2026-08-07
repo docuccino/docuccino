@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
+use BackedEnum;
 use Closure;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
@@ -11,7 +12,6 @@ use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use ReflectionEnum;
-use ReflectionEnumBackedCase;
 use Throwable;
 
 /**
@@ -76,12 +76,13 @@ final class EnumAccessorFolder
             if (! $reflection->isBacked() || ! $reflection->hasCase($caseName)) {
                 return null;
             }
-            $case = $reflection->getCase($caseName);
-            if (! $case instanceof ReflectionEnumBackedCase) {
-                return null;
-            }
+            // Read the backing value off the case INSTANCE rather than through
+            // ReflectionEnumBackedCase: `isBacked()` is the invariant that matters, and narrowing
+            // UnitEnum to BackedEnum does not depend on how a given PHPStan release stubs the
+            // return type of ReflectionEnum::getCase().
+            $case = $reflection->getCase($caseName)->getValue();
 
-            return new LiteralT($case->getBackingValue());
+            return $case instanceof BackedEnum ? new LiteralT($case->value) : null;
         } catch (Throwable) {
             return null;
         }
