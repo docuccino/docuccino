@@ -109,6 +109,27 @@ it('emits two distinct components when a class is used as both request and respo
         ->and(array_keys($components->schemas()))->toBe(['Thing', 'Thing_2']);
 });
 
+it('suffixes a THIRD distinct claimant past _2 (collision ordering beyond N=2)', function (): void {
+    $components = new ComponentRegistry;
+
+    // The request phase claims the base name…
+    $op = new OperationDraft;
+    (new RecoveredRequest)->apply($op, requestContext($components), objectSchema(['name' => ['type' => 'string']]), 'spatie-data', 'App\\Thing');
+
+    // …then two further DISTINCT shapes claim it, so the suffix must keep counting deterministically
+    // rather than stopping at _2 (collision ordering was only ever proven to N=2).
+    $second = $components->registerSchema('Thing', ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]], 'App\\Other\\Thing');
+    $third = $components->registerSchema('Thing', ['type' => 'object', 'properties' => ['slug' => ['type' => 'string']]], 'App\\Third\\Thing');
+
+    expect($second)->toBe('Thing_2')
+        ->and($third)->toBe('Thing_3')
+        ->and(array_keys($components->schemas()))->toBe(['Thing', 'Thing_2', 'Thing_3'])
+        // Re-registering an EXISTING identity still dedupes onto its own suffixed name, not a fourth.
+        ->and($components->registerSchema('Thing', ['type' => 'object', 'properties' => ['slug' => ['type' => 'string']]], 'App\\Third\\Thing'))->toBe('Thing_3')
+        // One warning per genuine collision (two), none for the dedupe.
+        ->and($components->diagnostics())->toHaveCount(2);
+});
+
 it('shares one component when a class is used on both sides with an identical shape', function (): void {
     $components = new ComponentRegistry;
     $shape = ['type' => 'object', 'properties' => ['name' => ['type' => 'string']], 'required' => ['name']];

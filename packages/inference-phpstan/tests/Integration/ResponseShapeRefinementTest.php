@@ -151,6 +151,91 @@ it('the broad non-JSON early-out (return null) never shadows the per-type respon
     }
 })->group('fixture');
 
+/**
+ * The recovered shape of one `App\Exceptions\RefinerEdgeCases` (fixture-app) method: folded status,
+ * explicit content type, body members, and the raw typeArgs (empty when nothing richer than the bare
+ * type was recovered).
+ */
+function edgeShape(string $method): array
+{
+    $analysis = ActionAnalysis::fromArray(['returns' => FixtureRunner::analyzeCallable(
+        'app/Exceptions/RefinerEdgeCases.php',
+        'App\\Exceptions\\RefinerEdgeCases',
+        $method,
+    )['returns']]);
+
+    foreach ($analysis->returns as $return) {
+        $type = $return->type;
+        if (! $type instanceof ClassT || $type->fqcn !== 'Illuminate\\Http\\JsonResponse') {
+            continue;
+        }
+
+        $statusArg = $type->typeArgs[1] ?? null;
+        $ctArg = $type->typeArgs[2] ?? null;
+        $payload = $type->typeArgs[0] ?? null;
+
+        $members = [];
+        if ($payload instanceof ArrayShapeT) {
+            foreach ($payload->fields as $field) {
+                $members[(string) $field->key] = $field->type;
+            }
+        }
+
+        return [
+            'status' => $statusArg instanceof LiteralT && is_int($statusArg->value) ? $statusArg->value : null,
+            'contentType' => $ctArg instanceof LiteralT && is_string($ctArg->value) ? $ctArg->value : null,
+            'members' => $members,
+            'typeArgs' => $type->typeArgs,
+        ];
+    }
+
+    return ['status' => null, 'contentType' => null, 'members' => [], 'typeArgs' => []];
+}
+
+it('folds a NARROWED enum variable, not just a written-out Enum::Case argument', function (): void {
+    // The call site passes a VARIABLE that PHPStan narrowed to exactly one case, so the fold must read
+    // the case off the scope's enum cases (the second enumCaseOf path) rather than off a const-fetch.
+    $shape = edgeShape('narrowedEnumVariable');
+
+    expect($shape['status'])->toBe(409) // InvoiceProblem::Conflict->status(), folded through the variable
+        ->and($shape['members']['type'])->toEqual(new LiteralT('https://errors.test/problems/conflict'))
+        ->and($shape['members']['code'])->toEqual(new LiteralT('Conflict'));
+})->group('fixture');
+
+it('recovers the conditionally-appended body member when the caller passes a non-null $data', function (): void {
+    // fromProblem()'s `if ($data !== null) { $body['data'] = $data; }` arm is dead for every other caller
+    // (they all pass null), so the appended member's widening was unproven. It must appear alongside the
+    // folded per-case members, widened rather than pinned (its value does not fold).
+    $shape = edgeShape('conditionalAppend');
+
+    expect($shape['status'])->toBe(403)
+        ->and($shape['members'])->toHaveKey('data')
+        ->and($shape['members']['data'])->not->toBeInstanceOf(LiteralT::class)
+        // …and the folded per-case members are unaffected by the append.
+        ->and($shape['members']['type'])->toEqual(new LiteralT('https://errors.test/problems/forbidden'));
+})->group('fixture');
+
+it('matches the Content-Type header case-insensitively, and recovers none when absent', function (string $method, ?string $contentType, int $status): void {
+    $shape = edgeShape($method);
+
+    expect($shape['contentType'])->toBe($contentType)
+        ->and($shape['status'])->toBe($status);
+})->with([
+    // A lower-case key still yields the explicit media type…
+    'lower-case content-type key' => ['lowercaseContentType', 'application/problem+json', 418],
+    // …and with NO headers argument no content type is recovered (the builder defaults it, never guesses).
+    'no headers argument at all' => ['noHeaders', null, 422],
+])->group('fixture');
+
+it('declines a mutually recursive helper via the cycle guard (no runaway descent)', function (): void {
+    // cyclicA() → cyclicB() → cyclicA(): the second visit hits the in-progress guard and declines, so the
+    // shape stays bare instead of recursing forever, and the analysis still completes cleanly.
+    $shape = edgeShape('cyclicA');
+
+    expect($shape['typeArgs'])->toBe([])
+        ->and($shape['status'])->toBeNull();
+})->group('fixture');
+
 it('follows an error-render helper into a PRIMED modular root (prime-scope containment, not descend)', function (): void {
     // ModularRenderer (app/, descend + prime scope) → ModularProblemResponse::make (Modules\Billing,
     // primed but OUTSIDE the descend scope). The refiner's containment gate is prime scope, so it folds
