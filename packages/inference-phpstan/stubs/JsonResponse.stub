@@ -10,11 +10,20 @@ namespace Illuminate\Http;
  *
  * `TStatus` carries the constant-folded response status when it is statically
  * known (`response()->json($x, 201)` → `JsonResponse<TPayload, 201>`); it
- * defaults to `200` at the call site. The pipeline unwraps both parameters,
+ * defaults to `200` at the call site. The pipeline unwraps these parameters,
  * mapping the payload shape under the folded status.
+ *
+ * A THIRD parameter `TContentType` is populated only by ResponseShapeRefiner
+ * (helper-indirection recovery) when a helper set an explicit `Content-Type`
+ * header (e.g. `new JsonResponse($body, $status, ['Content-Type' =>
+ * 'application/problem+json'])`) — it is not produced by the
+ * `response()->json()` extension, which emits the first two only. The pipeline
+ * hoists the payload schema under the recovered media type (default
+ * `application/json`).
  *
  * @template TPayload
  * @template TStatus of int
+ * @template TContentType of string
  */
 class JsonResponse extends \Symfony\Component\HttpFoundation\JsonResponse
 {
