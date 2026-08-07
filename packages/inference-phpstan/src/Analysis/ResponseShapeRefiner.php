@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
@@ -544,40 +545,25 @@ final class ResponseShapeRefiner
         return [null, $this->accessorOf($expr, $paramNames)];
     }
 
+    /** The int-only specialisation of {@see ScalarFold}: a single constant int, or null. */
     private function intLiteralOf(Node\Expr $expr, Scope $scope): ?int
     {
-        $type = $scope->getType($expr);
-        if (! $type->isInteger()->yes()) {
-            return null;
-        }
+        $folded = ScalarFold::of($scope->getType($expr));
 
-        $values = $type->getConstantScalarValues();
-
-        return count($values) === 1 && is_int($values[0]) ? $values[0] : null;
+        return $folded !== null && is_int($folded[0]) ? $folded[0] : null;
     }
 
     /**
      * A constant scalar argument (`'https://…'`, `409`, `true`) as a {@see LiteralT}, or null when the
-     * argument does not constant-fold to a single scalar. Mirrors the translator's literal recovery so a
-     * bound body member reads identically to a directly-written literal.
+     * argument does not constant-fold to a single scalar (a folded `null` is not a documentable literal).
+     * Mirrors the translator's literal recovery so a bound body member reads identically to a
+     * directly-written literal.
      */
     private function constLiteralOf(Node\Expr $expr, Scope $scope): ?LiteralT
     {
-        $type = $scope->getType($expr);
+        $folded = ScalarFold::of($scope->getType($expr));
 
-        $strings = $type->getConstantStrings();
-        if (count($strings) === 1) {
-            return new LiteralT($strings[0]->getValue());
-        }
-
-        if ($type->isConstantScalarValue()->yes()) {
-            $values = $type->getConstantScalarValues();
-            if (count($values) === 1 && is_scalar($values[0])) {
-                return new LiteralT($values[0]);
-            }
-        }
-
-        return null;
+        return $folded !== null && is_scalar($folded[0]) ? new LiteralT($folded[0]) : null;
     }
 
     /**

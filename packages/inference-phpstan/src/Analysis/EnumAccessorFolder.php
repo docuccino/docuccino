@@ -7,6 +7,7 @@ namespace Docuccino\Inference\PhpStan\Analysis;
 use Closure;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use ReflectionEnum;
@@ -149,21 +150,9 @@ final class EnumAccessorFolder
     /** A single constant scalar expression as a literal, or null when it does not constant-fold. */
     private function constLiteral(Node\Expr $expr, Scope $scope): ?LiteralT
     {
-        $type = $scope->getType($expr);
+        $folded = ScalarFold::of($scope->getType($expr));
 
-        $strings = $type->getConstantStrings();
-        if (count($strings) === 1) {
-            return new LiteralT($strings[0]->getValue());
-        }
-
-        if ($type->isConstantScalarValue()->yes()) {
-            $values = $type->getConstantScalarValues();
-            if (count($values) === 1 && is_scalar($values[0])) {
-                return new LiteralT($values[0]);
-            }
-        }
-
-        return null;
+        return $folded !== null && is_scalar($folded[0]) ? new LiteralT($folded[0]) : null;
     }
 
     private function recordDeclaringFile(string $enumFqcn, string $method): void

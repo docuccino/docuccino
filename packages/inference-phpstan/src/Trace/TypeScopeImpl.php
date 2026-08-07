@@ -8,6 +8,7 @@ use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeScope;
+use Docuccino\Inference\PhpStan\Support\ScalarFold;
 use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
@@ -106,22 +107,11 @@ final class TypeScopeImpl implements TypeScope
             return ConstValue::scalar($expr->name->toString());
         }
 
-        // 5. Genuine literal reached through any expression — let PHPStan fold it.
-        $type = $this->scope->getType($expr);
+        // 5. Genuine literal reached through any expression — let PHPStan fold it (a folded `null` is a
+        //    meaningful constant here, so it is kept verbatim rather than treated as "no fold").
+        $folded = ScalarFold::of($this->scope->getType($expr));
 
-        $strings = $type->getConstantStrings();
-        if (count($strings) === 1) {
-            return ConstValue::scalar($strings[0]->getValue());
-        }
-
-        if ($type->isConstantScalarValue()->yes()) {
-            $values = $type->getConstantScalarValues();
-            if (count($values) === 1) {
-                return ConstValue::scalar($values[0]);
-            }
-        }
-
-        return null;
+        return $folded === null ? null : ConstValue::scalar($folded[0]);
     }
 
     public function location(Node $node): SourceLocation
