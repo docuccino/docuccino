@@ -24,6 +24,29 @@ final readonly class ArrayShapeT extends DType
         return self::KIND;
     }
 
+    /**
+     * A copy of this shape with every field's value type passed through `$map` — keys, key ORDER,
+     * optionality and `isList` all preserved. The seam for the recurring "rewrite some members of a
+     * recovered body" operation (pin one key to a folded literal; resolve every status-provenance member
+     * to a concrete status), which callers otherwise hand-roll as an `array_map` + rebuild.
+     *
+     * @param  callable(DType, string|int): DType  $map  a field's current type + key → its replacement type
+     */
+    public function mapFieldTypes(callable $map): self
+    {
+        return new self(
+            array_map(
+                static fn (ArrayShapeField $field): ArrayShapeField => new ArrayShapeField(
+                    $field->key,
+                    $map($field->type, $field->key),
+                    $field->optional,
+                ),
+                $this->fields,
+            ),
+            $this->isList,
+        );
+    }
+
     public function toArray(): array
     {
         return [

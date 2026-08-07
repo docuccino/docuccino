@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
-use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
@@ -150,14 +149,9 @@ final readonly class RefinedResponse
      */
     private static function replaceFieldType(ArrayShapeT $shape, string $key, DType $type): ArrayShapeT
     {
-        $fields = array_map(
-            static fn (ArrayShapeField $field): ArrayShapeField => (string) $field->key === $key
-                ? new ArrayShapeField($field->key, $type, $field->optional)
-                : $field,
-            $shape->fields,
+        return $shape->mapFieldTypes(
+            static fn (DType $current, string|int $fieldKey): DType => (string) $fieldKey === $key ? $type : $current,
         );
-
-        return new ArrayShapeT($fields, $shape->isList);
     }
 
     /**

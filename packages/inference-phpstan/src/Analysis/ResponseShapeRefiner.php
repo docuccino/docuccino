@@ -285,17 +285,6 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Classify a body-member / status value expression as an accessor on one of the current parameters
-     * (the pure decision lives in {@see AccessorExtractor}).
-     *
-     * @param  list<string>  $paramNames
-     */
-    private function accessorOf(Node\Expr $expr, array $paramNames): ?ParamAccessor
-    {
-        return AccessorExtractor::fromExpr($expr, $paramNames);
-    }
-
-    /**
      * Build a {@see RefinedResponse} from an already-resolved `JsonResponse<payload, status, contentType>`
      * generic (the `response()->json()` extension emits the first two args; the refiner's own descent may
      * carry the third).
@@ -542,7 +531,8 @@ final class ResponseShapeRefiner
             return [new LiteralT($literal), null];
         }
 
-        return [null, $this->accessorOf($expr, $paramNames)];
+        // Not a literal — classify it as an accessor on one of the current parameters (pure decision).
+        return [null, AccessorExtractor::fromExpr($expr, $paramNames)];
     }
 
     /** The int-only specialisation of {@see ScalarFold}: a single constant int, or null. */

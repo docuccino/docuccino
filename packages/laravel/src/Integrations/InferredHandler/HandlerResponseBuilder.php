@@ -7,7 +7,6 @@ namespace Docuccino\Laravel\Integrations\InferredHandler;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Inference\ActionAnalysis;
-use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
@@ -134,14 +133,9 @@ final class HandlerResponseBuilder
             return $payload;
         }
 
-        $fields = array_map(
-            static fn (ArrayShapeField $field): ArrayShapeField => $field->type instanceof StatusMarkerT
-                ? new ArrayShapeField($field->key, new LiteralT($status), $field->optional)
-                : $field,
-            $payload->fields,
+        return $payload->mapFieldTypes(
+            static fn (DType $type): DType => $type instanceof StatusMarkerT ? new LiteralT($status) : $type,
         );
-
-        return new ArrayShapeT($fields, $payload->isList);
     }
 
     /**
