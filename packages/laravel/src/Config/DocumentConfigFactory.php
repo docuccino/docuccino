@@ -14,9 +14,10 @@ use Illuminate\Contracts\Container\Container;
 
 /**
  * Builds a framework-agnostic {@see DocumentConfig} from one `config('docuccino.documents.*')`
- * entry, resolving an `info.description.file` reference to the file's contents so the pipeline
- * never touches the filesystem, and resolving the document's tag mapper (a custom `tags.mapper`
- * class-string from the container, else the built-in {@see PrefixTagMapper} over `tags.map`).
+ * entry: relativising every path-like key against the app base path ({@see ConfigPaths}), resolving an
+ * `info.description.file` reference to the file's contents so the pipeline never touches the
+ * filesystem, and resolving the document's tag mapper (a custom `tags.mapper` class-string from the
+ * container, else the built-in {@see PrefixTagMapper} over `tags.map`).
  */
 final readonly class DocumentConfigFactory
 {
@@ -30,6 +31,11 @@ final readonly class DocumentConfigFactory
      */
     public function make(string $key, array $config, string $onRouteError): DocumentConfig
     {
+        // The single choke point for path handling: every path-like key is rewritten to its
+        // base-relative form BEFORE anything reads the bag, so the emitted `configHash` (a digest of
+        // `raw`) and every typed accessor over it describe the path's meaning, not this machine's layout.
+        $config = ConfigPaths::relativize($config, $this->basePath);
+
         $routes = Hydrate::map($config['routes'] ?? []);
         $security = Hydrate::map($config['security'] ?? []);
         $tags = Hydrate::map($config['tags'] ?? []);

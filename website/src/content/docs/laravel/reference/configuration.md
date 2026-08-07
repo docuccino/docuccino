@@ -33,6 +33,18 @@ return [
 servers, security, content, and export target, and shares route contexts + the TypeEngine
 in-process. The published config ships one document, `default`.
 
+:::note[Paths are stored relative to your application]
+Every path in a document — `info.description.file`, `content.dir`, `overlays`, `export.path` — may be
+written relative to your application root or as an absolute path; both resolve to the same file. Write
+them however you like: a path inside your application is **stored relative to the application root**,
+so the generated document is identical on your laptop, in CI, and in a container, wherever the app is
+checked out.
+
+A path pointing *outside* your application is kept exactly as you wrote it — it has to be, or the file
+could not be read — which makes the generated document specific to machines that have that path. Builds
+say so, once per key, with a `config.machine-dependent-path` info diagnostic.
+:::
+
 ### `info`
 
 ```php

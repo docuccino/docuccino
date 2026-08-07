@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Registry;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Laravel\Config\ConfigPaths;
 
 /**
  * Config-shape info diagnostics for a document (design §9): surface the two silent no-ops the config
@@ -18,6 +19,10 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
  *   the `error_responses` preset, not an `enabled` toggle).
  * - An unknown `tags.default_strategy` value — {@see DocumentConfig::tagDefaultStrategy()} coerces it
  *   to `controller`, and the diagnostic now names the coercion instead of applying it silently.
+ * - A path-like key pointing OUTSIDE the app base path. {@see ConfigPaths} relativises every in-app
+ *   path so it cannot fold this machine's filesystem layout into the emitted `configHash`; a path that
+ *   genuinely lives elsewhere has to be kept verbatim, which DOES make the document machine-dependent
+ *   — so the diagnostic names the key and the path instead of letting committed bytes drift silently.
  *
  * @internal
  */
@@ -60,6 +65,18 @@ final class ConfigDiagnostics
                 message: sprintf(
                     "Unknown tags.default_strategy '%s' — falling back to 'controller' (valid values: controller, none).",
                     $strategy,
+                ),
+            );
+        }
+
+        foreach (ConfigPaths::machineDependent($document->raw) as $outside) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Info,
+                code: 'config.machine-dependent-path',
+                message: sprintf(
+                    "%s points outside the application base path ('%s') — it is kept as configured, so it is folded verbatim into this document's configHash and the output becomes machine-dependent. Move the target inside the application (any in-app path is stored base-path-relative) to keep the emitted bytes portable.",
+                    $outside['key'],
+                    $outside['path'],
                 ),
             );
         }

@@ -45,8 +45,12 @@ final class ConfinedPath
         return $candidate === $base || str_starts_with($candidate, $base.'/');
     }
 
-    /** Collapse `.` and `..` segments lexically, preserving a leading `/`. */
-    private static function normalize(string $path): string
+    /**
+     * Collapse `.` and `..` segments lexically, preserving a leading `/`. Public so the adapter's
+     * base-path relativisation — the inverse direction — shares this one normalizer rather than
+     * re-rolling it.
+     */
+    public static function normalize(string $path): string
     {
         $absolute = str_starts_with($path, '/');
         $segments = [];

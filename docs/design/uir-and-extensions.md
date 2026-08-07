@@ -532,6 +532,22 @@ Integration config lives under one `integrations.<name>` bag per integration —
 back-compat read of the old flat `security.sanctum` / `passport` / `query_builder` locations
 (pre-launch).
 
+**Determinism — paths are stored base-path-relative.** `DocumentConfig::hash()` digests the whole raw
+config bag and that digest is EMITTED as `document.configHash`, so an absolute path anywhere in a
+document's config would fold the generating machine's filesystem layout into a committed artifact: two
+checkouts of the same app at different paths could never emit the same bytes. `ConfigPaths` — the
+single owner of the path-key table (`content.dir`, `export.path`, `info.description.file`, `overlays`)
+— therefore rewrites every path-like value that sits INSIDE the app base path to its base-relative
+form at config-read time, in `DocumentConfigFactory::make()`, the one choke point every command, the
+viewer and the pipeline share. The hash then follows a path's MEANING, not its spelling:
+`base_path('resources/docs/api')` and `'resources/docs/api'` hash identically. Resolution is unchanged
+(a relative value is joined back against the base path by `Paths::absolute()` /
+`ConfinedPath::resolve()`), and containment is decided lexically — no `realpath()` — so a glob obeys
+exactly the same rule as a file. A path genuinely OUTSIDE the app is kept verbatim (rewriting it would
+break the read) and emits a `config.machine-dependent-path` info diagnostic naming the key and the
+path, so the machine dependence is stated rather than silently baked into the output. `cache.path` and
+`engine.project_paths` are app-level, never part of a document bag, so they reach no emitted byte.
+
 ## 10. Fragment caching
 
 Unit = OperationFragment (operation + registered components + diagnostics + provenance,

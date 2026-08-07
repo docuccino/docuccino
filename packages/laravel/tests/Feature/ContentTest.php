@@ -18,11 +18,11 @@ use Docuccino\Core\Emit\UirEmitter;
  * RELATIVE to the application base path — by basing the app on the adapter package, so the workbench
  * sits inside it exactly as `resources/docs/api` sits inside a real application.
  *
- * The relative form is load-bearing, not cosmetic. `configHash` is a digest of the whole raw config
- * bag and is EMITTED into the document, so an ABSOLUTE `content.dir` folds a machine-specific
- * filesystem path into the output: the emitted hashes — and therefore this byte-locked golden — could
- * only ever match on the machine that generated them. Configuring it relatively also exercises the
- * project-root-relative page `source` prefix the compiler promises, which nothing else covered.
+ * Configuring it relatively also exercises the project-root-relative page `source` prefix the compiler
+ * promises, which nothing else covered. It is no longer load-bearing for the byte-locked golden:
+ * `ConfigPaths` relativises any in-app absolute path before it can reach the emitted `configHash`
+ * (proven in `ConfigPathsTest`) — but writing it the way the shipped config documents it stays the
+ * honest fixture.
  */
 function withWorkbenchContent(): callable
 {
