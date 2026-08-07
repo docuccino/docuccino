@@ -3147,7 +3147,7 @@
     "schemas": {
       "Article": {
         "x-docuccino": {
-          "id": "sch:v1:3uy6swru7tbdze5f"
+          "id": "sch:v1:gzk6w6s72s2leqqe"
         },
         "type": "object",
         "properties": {
@@ -3510,7 +3510,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "629e381d62903d734c9022986cf7c90ce7866eda81a8a78d2ca5b70131c91a51",
-      "contentHash": "d4febbd4f84cf6414fa3d168cc2c3961a637db002ccc21bed22c2c1b25e482e7"
+      "contentHash": "55234c3210cf4295f3534ae723d074b59e46b83980ae4cfb747cb6c94314cc2b"
     },
     "generator": {
       "name": "docuccino/laravel",
