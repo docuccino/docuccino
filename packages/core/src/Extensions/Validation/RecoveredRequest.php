@@ -94,8 +94,10 @@ final class RecoveredRequest
         $name = SchemaIdentity::name($sourceClass) ?? Fqcn::short($sourceClass);
 
         // A request-scoped diff identity, distinct from the response-side `sch:<FQCN>`, so the two never
-        // dedupe across the request/response divide by identity alone.
-        $id = $sourceClass.'#request';
+        // dedupe across the request/response divide by identity alone. It honours `#[SchemaId]` exactly as
+        // the response side does ({@see ComponentHoist}/{@see EnumSchema}) so a pinned class stays
+        // rename-stable on BOTH sides — only the `#request` discriminator keeps them distinct.
+        $id = (SchemaIdentity::id($sourceClass) ?? $sourceClass).'#request';
 
         return $context->components->reference($name, $result->schema, $id);
     }

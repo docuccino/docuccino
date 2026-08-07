@@ -49,6 +49,7 @@ schema's `nodeId` pattern.
 | `op:` | doc id + upper method + path template with params positionally normalized (`/forms/{p0}/fields/{p1}`) | file moves, controller/method renames, path-param renames, param reorder | URI or method change |
 | `par:` | parent op id + `in` + name | reorder, description/schema edits | rename (a real contract change for query/header) |
 | `sch:` (named) | source FQCN (+ generic args); pinnable via `#[SchemaId('…')]` | file moves | class rename without pin |
+| `sch:` (request body) | the source class identity (pinned id or FQCN) with a `#request` discriminator appended | same as the class identity above — file moves, and rename **with** a pin | class rename without pin |
 | `sch:` (inline) | structural hash of canonical schema with descriptions/examples/x-docuccino stripped | prose edits | shape change (correct) |
 | `res:` | parent op id + status + media type | — | status change (correct) |
 | `doc:` | config key | everything | doc renamed in config |

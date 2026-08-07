@@ -13,6 +13,7 @@ use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Tests\Fixtures\PinnedRequestClass;
 
 /**
  * A POST route context sharing an explicit component registry so successive applies dedupe against
@@ -120,6 +121,21 @@ it('shares one component when a class is used on both sides with an identical sh
 
     expect($responseName)->toBe('Thing')
         ->and(array_keys($components->schemas()))->toBe(['Thing']);
+});
+
+it('gives a #[SchemaId]-pinned source class a pinned, rename-stable request identity', function (): void {
+    $components = new ComponentRegistry;
+    $schema = objectSchema(['name' => ['type' => 'string']]);
+
+    // PinnedRequestClass carries #[SchemaId('thing.v1')]. The request identity must honour the pin
+    // (like the response side does) — `thing.v1#request`, NOT `<FQCN>#request` — so it stays stable
+    // if the class is renamed, and the #request discriminator still keeps it distinct from the
+    // response-side `thing.v1` identity.
+    $op = new OperationDraft;
+    (new RecoveredRequest)->apply($op, requestContext($components), $schema, 'spatie-data', PinnedRequestClass::class);
+
+    $name = array_key_first($components->schemas());
+    expect($components->schemaIds()[$name])->toBe('thing.v1#request');
 });
 
 it('does not hoist for read verbs (query parameters, never a body)', function (): void {
