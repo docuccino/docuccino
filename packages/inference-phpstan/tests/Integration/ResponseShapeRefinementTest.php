@@ -206,3 +206,65 @@ it('folds the direct-constructor arm’s literal body members (429)', function (
     expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/rate-limited'))
         ->and($members['status'])->toEqual(new LiteralT(429));
 })->group('fixture');
+
+// --- Enum-case accessor folding: a bound case folds ->value / ->name / method accessors (the final hop) ---
+
+it('folds a bound enum case’s accessors into per-case literals + status (403, one hop)', function (): void {
+    // InvoiceForbidden → fromProblem(InvoiceProblem::Forbidden, …): the case binds into the helper's
+    // $problem parameter and its accessors fold — ->value (type URI), ->name (code), status()/title()
+    // (match-method), docsUrl() (plain return) — while classify() (computed) and $detail stay permissive.
+    $shape = invokeShape('App\\Exceptions\\InvoiceForbiddenException');
+    $members = $shape['members'];
+
+    expect($shape['status'])->toBe(403) // the folded status() drives the HTTP status (not the throw hint)
+        ->and($shape['contentType'])->toBe('application/problem+json')
+        ->and($members['type'])->toEqual(new LiteralT('https://errors.test/problems/forbidden'))
+        ->and($members['code'])->toEqual(new LiteralT('Forbidden'))
+        ->and($members['title'])->toEqual(new LiteralT('Forbidden'))
+        ->and($members['status'])->toEqual(new LiteralT(403))
+        ->and($members['docs'])->toEqual(new LiteralT('https://errors.test/docs'))
+        ->and($members['kind'])->not->toBeInstanceOf(LiteralT::class) // computed body — never guessed
+        ->and($members['detail'])->not->toBeInstanceOf(LiteralT::class)
+        // Cache soundness: the enum whose methods were folded joins the dependency set.
+        ->and($shape['deps'])->toContain('InvoiceProblem.php');
+})->group('fixture');
+
+it('folds a bound enum case through a TWO-hop re-home (404: missing)', function (): void {
+    // InvoiceMissing → renderProblem(InvoiceProblem::NotFound, …) → fromProblem(…): the accessor provenance
+    // re-homes through renderProblem's parameter, then folds when the case binds at the outer call.
+    $shape = invokeShape('App\\Exceptions\\InvoiceMissingException');
+    $members = $shape['members'];
+
+    expect($shape['status'])->toBe(404)
+        ->and($members['type'])->toEqual(new LiteralT('https://errors.test/problems/missing'))
+        ->and($members['code'])->toEqual(new LiteralT('NotFound'))
+        ->and($members['title'])->toEqual(new LiteralT('Not Found'))
+        ->and($members['status'])->toEqual(new LiteralT(404));
+})->group('fixture');
+
+it('folds a VENDOR enum’s ->value/->name but NEVER analyses its method (400)', function (): void {
+    // fromOperator(FilterOperator::EQUAL): ->value and ->name fold via reflection (vendor-safe), but
+    // isDynamic() is a vendor method the folder declines to analyse — the member stays permissive.
+    $shape = invokeShape('App\\Exceptions\\InvoiceVendorEnumException');
+    $members = $shape['members'];
+
+    expect($shape['status'])->toBe(400)
+        ->and($members['operator'])->toEqual(new LiteralT('='))
+        ->and($members['label'])->toEqual(new LiteralT('EQUAL'))
+        ->and($members['dynamic'])->not->toBeInstanceOf(LiteralT::class);
+})->group('fixture');
+
+it('folds each case independently + deterministically (memoisation keyed per enum-case+method)', function (): void {
+    // The same helper + enum methods reached for two different cases fold to each case's OWN literals
+    // (the fold is memoised per enum-case+method, never leaking across cases), and repeating an analysis
+    // is byte-identical.
+    $forbidden = invokeShape('App\\Exceptions\\InvoiceForbiddenException')['members'];
+    $missing = invokeShape('App\\Exceptions\\InvoiceMissingException')['members'];
+    $forbiddenAgain = invokeShape('App\\Exceptions\\InvoiceForbiddenException')['members'];
+
+    expect($forbidden['status'])->toEqual(new LiteralT(403))
+        ->and($missing['status'])->toEqual(new LiteralT(404))
+        ->and($forbidden['title'])->toEqual(new LiteralT('Forbidden'))
+        ->and($missing['title'])->toEqual(new LiteralT('Not Found'))
+        ->and($forbiddenAgain)->toEqual($forbidden);
+})->group('fixture');

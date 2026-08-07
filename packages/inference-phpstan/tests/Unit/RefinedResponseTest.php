@@ -9,6 +9,8 @@ use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Inference\PhpStan\Analysis\AccessorKind;
+use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
 use Docuccino\Inference\PhpStan\Analysis\RefinedResponse;
 use Docuccino\Inference\PhpStan\Analysis\ResponseShapeRefiner;
 
@@ -65,53 +67,71 @@ it('places an UnknownT placeholder for an unfolded payload or status (honest, ne
         ->and($type?->typeArgs[1])->toBeInstanceOf(UnknownT::class);
 });
 
-it('binds a pass-through status to a literal and clears the parameter marker', function (): void {
-    $bound = (new RefinedResponse(status: null, statusParam: 'status'))->withBoundStatus(new LiteralT(422));
+it('a ParamAccessor equals only its exact param+kind+method sibling', function (): void {
+    $a = new ParamAccessor('problem', AccessorKind::Method, 'status');
 
-    expect($bound->status)->toEqual(new LiteralT(422))
-        ->and($bound->statusParam)->toBeNull();
+    expect($a->equals(new ParamAccessor('problem', AccessorKind::Method, 'status')))->toBeTrue()
+        ->and($a->equals(new ParamAccessor('problem', AccessorKind::Method, 'title')))->toBeFalse()
+        ->and($a->equals(new ParamAccessor('problem', AccessorKind::Value)))->toBeFalse()
+        ->and($a->equals(new ParamAccessor('other', AccessorKind::Method, 'status')))->toBeFalse()
+        // Re-homing swaps only the parameter, preserving kind + method.
+        ->and($a->withParam('outer'))->toEqual(new ParamAccessor('outer', AccessorKind::Method, 'status'))
+        ->and(ParamAccessor::identity('detail'))->toEqual(new ParamAccessor('detail', AccessorKind::Identity));
 });
 
-it('re-homes a pass-through status onto an outer parameter (transitive binding)', function (): void {
-    $rehomed = (new RefinedResponse(status: new LiteralT(500), statusParam: 'inner'))->withStatusParam('outer');
+it('binds a status source to a literal and clears the source', function (): void {
+    $bound = (new RefinedResponse(status: null, statusSource: ParamAccessor::identity('status')))->withBoundStatus(new LiteralT(422));
 
-    expect($rehomed->statusParam)->toBe('outer')
+    expect($bound->status)->toEqual(new LiteralT(422))
+        ->and($bound->statusSource)->toBeNull();
+});
+
+it('re-homes a status source onto an outer parameter (transitive binding)', function (): void {
+    $rehomed = (new RefinedResponse(status: new LiteralT(500), statusSource: new ParamAccessor('inner', AccessorKind::Method, 'status')))
+        ->withStatusSource(new ParamAccessor('outer', AccessorKind::Method, 'status'));
+
+    expect($rehomed->statusSource)->toEqual(new ParamAccessor('outer', AccessorKind::Method, 'status'))
         ->and($rehomed->status)->toBeNull(); // a pass-through is not simultaneously a literal
 });
 
-it('rewrites the payload and its member→parameter provenance while preserving everything else', function (): void {
+it('rewrites the payload and its member→accessor provenance while preserving everything else', function (): void {
     $original = new RefinedResponse(
         payload: new ArrayShapeT([]),
         status: new LiteralT(403),
         contentType: 'application/problem+json',
-        payloadParamProvenance: ['status' => 'status', 'type' => 'type'],
+        payloadParamProvenance: ['status' => ParamAccessor::identity('status'), 'type' => ParamAccessor::identity('type')],
     );
 
-    $bound = $original->withPayload(new ArrayShapeT([]), ['type' => 'kind']);
+    $bound = $original->withPayload(new ArrayShapeT([]), ['type' => ParamAccessor::identity('kind')]);
 
-    expect($bound->payloadParamProvenance)->toBe(['type' => 'kind'])
+    expect($bound->payloadParamProvenance)->toEqual(['type' => ParamAccessor::identity('kind')])
         ->and($bound->status)->toEqual(new LiteralT(403))
         ->and($bound->contentType)->toBe('application/problem+json');
 
     // The status-only transforms carry the provenance through unchanged.
-    expect($original->withBoundStatus(new LiteralT(404))->payloadParamProvenance)->toBe(['status' => 'status', 'type' => 'type'])
-        ->and($original->withStatusParam('outer')->payloadParamProvenance)->toBe(['status' => 'status', 'type' => 'type']);
+    expect($original->withBoundStatus(new LiteralT(404))->payloadParamProvenance)
+        ->toEqual(['status' => ParamAccessor::identity('status'), 'type' => ParamAccessor::identity('type')]);
 });
 
-it('marks a status-parameter body member as a StatusMarkerT via the constructor factory', function (): void {
+it('marks a status-source body member as a StatusMarkerT via the constructor factory', function (): void {
     $payload = new ArrayShapeT([
         new ArrayShapeField('type', ScalarT::string()),
         new ArrayShapeField('status', ScalarT::int()),
     ]);
 
-    $refined = RefinedResponse::fromConstructor($payload, null, 'status', 'application/problem+json', ['type' => 'type', 'status' => 'status']);
+    // Both the HTTP status and the `status` member read from the SAME accessor (`$problem->status()`) —
+    // the member is marked; `type` reads a DIFFERENT accessor (`$problem->value`) and keeps its type.
+    $statusSource = new ParamAccessor('problem', AccessorKind::Method, 'status');
+    $refined = RefinedResponse::fromConstructor($payload, null, $statusSource, 'application/problem+json', [
+        'type' => new ParamAccessor('problem', AccessorKind::Value),
+        'status' => $statusSource,
+    ]);
 
-    // The member whose provenance is the status parameter is marked; the others keep their type.
     expect(memberType($refined, 'status'))->toBeInstanceOf(StatusMarkerT::class)
         ->and(memberType($refined, 'type'))->toEqual(ScalarT::string())
-        ->and($refined->statusParam)->toBe('status');
+        ->and($refined->statusSource)->toEqual($statusSource);
 
-    // With a folded status (no pass-through parameter) nothing is marked.
+    // With a folded status (no source) nothing is marked.
     $literalStatus = RefinedResponse::fromConstructor($payload, new LiteralT(429), null, null, []);
     expect(memberType($literalStatus, 'status'))->toEqual(ScalarT::int());
 });
@@ -119,27 +139,27 @@ it('marks a status-parameter body member as a StatusMarkerT via the constructor 
 it('binds a body member to a folded literal, dropping its provenance', function (): void {
     $refined = (new RefinedResponse(
         payload: new ArrayShapeT([new ArrayShapeField('type', ScalarT::string())]),
-        payloadParamProvenance: ['type' => 'type'],
+        payloadParamProvenance: ['type' => new ParamAccessor('problem', AccessorKind::Value)],
     ))->bindMember('type', new LiteralT('https://errors.test/conflict'), null);
 
     expect(memberType($refined, 'type'))->toEqual(new LiteralT('https://errors.test/conflict'))
         ->and($refined->payloadParamProvenance)->toBe([]);
 });
 
-it('re-homes a body member’s provenance onto an outer parameter when the argument is a caller parameter', function (): void {
+it('re-homes a body member’s accessor onto an outer parameter when the argument is a caller parameter', function (): void {
     $refined = (new RefinedResponse(
-        payload: new ArrayShapeT([new ArrayShapeField('type', ScalarT::string())]),
-        payloadParamProvenance: ['type' => 'inner'],
-    ))->bindMember('type', null, 'outer');
+        payload: new ArrayShapeT([new ArrayShapeField('title', ScalarT::string())]),
+        payloadParamProvenance: ['title' => new ParamAccessor('inner', AccessorKind::Method, 'title')],
+    ))->bindMember('title', null, new ParamAccessor('outer', AccessorKind::Method, 'title'));
 
-    expect($refined->payloadParamProvenance)->toBe(['type' => 'outer'])
-        ->and(memberType($refined, 'type'))->toEqual(ScalarT::string());
+    expect($refined->payloadParamProvenance)->toEqual(['title' => new ParamAccessor('outer', AccessorKind::Method, 'title')])
+        ->and(memberType($refined, 'title'))->toEqual(ScalarT::string());
 });
 
 it('drops provenance and leaves a StatusMarkerT status member intact when the status does not fold', function (): void {
     $refined = (new RefinedResponse(
         payload: new ArrayShapeT([new ArrayShapeField('status', new StatusMarkerT)]),
-        payloadParamProvenance: ['status' => 'status'],
+        payloadParamProvenance: ['status' => new ParamAccessor('problem', AccessorKind::Method, 'status')],
     ))->bindMember('status', null, null);
 
     // Neither a literal nor a caller parameter: provenance drops, the marker survives for the seam to fill.
@@ -148,14 +168,15 @@ it('drops provenance and leaves a StatusMarkerT status member intact when the st
 });
 
 it('is a payload no-op for a non-shape body (nothing to mark or bind)', function (): void {
-    // fromConstructor must not mark a non-keyed-shape body even with a pass-through status parameter…
+    // fromConstructor must not mark a non-keyed-shape body even with a status source…
     $classPayload = new ClassT('App\\Data\\ErrorData');
-    $refined = RefinedResponse::fromConstructor($classPayload, null, 'status', null, ['status' => 'status']);
+    $statusSource = ParamAccessor::identity('status');
+    $refined = RefinedResponse::fromConstructor($classPayload, null, $statusSource, null, ['status' => $statusSource]);
     expect($refined->payload)->toBe($classPayload)
-        ->and($refined->statusParam)->toBe('status');
+        ->and($refined->statusSource)->toEqual($statusSource);
 
     // …and bindMember leaves a non-shape body untouched while still dropping the resolved provenance.
-    $bound = (new RefinedResponse(payload: $classPayload, payloadParamProvenance: ['status' => 'status']))
+    $bound = (new RefinedResponse(payload: $classPayload, payloadParamProvenance: ['status' => $statusSource]))
         ->bindMember('status', new LiteralT(500), null);
     expect($bound->payload)->toBe($classPayload)
         ->and($bound->payloadParamProvenance)->toBe([]);

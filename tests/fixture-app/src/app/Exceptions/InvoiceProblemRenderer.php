@@ -8,6 +8,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Spatie\QueryBuilder\Enums\FilterOperator;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
@@ -27,7 +28,11 @@ use Throwable;
  *     payload + content type still recover);
  *   - a VENDOR producer (`JsonResponse::fromJsonString`) that must NOT be descended;
  *   - a DIRECT `new JsonResponse(...)` return (429, zero-hop constructor fold);
- *   - a per-type null arm (delegate to the framework) and a broad `return null` early-out (non-JSON).
+ *   - a per-type null arm (delegate to the framework) and a broad `return null` early-out (non-JSON);
+ *   - ENUM-ACCESSOR arms: a concrete {@see InvoiceProblem} case bound into a helper whose body reads the
+ *     case's ->value / ->name / status() / title() / docsUrl() accessors (folded to per-case literals),
+ *     one-hop (403) and two-hop through `renderProblem()` (404); plus a VENDOR-enum arm proving a vendor
+ *     enum's ->value/->name fold while its method stays permissive.
  */
 final class InvoiceProblemRenderer
 {
@@ -46,6 +51,13 @@ final class InvoiceProblemRenderer
                 409,
                 $e->getMessage(),
             ),
+            // Enum-accessor folding: a concrete case binds into the helper's parameter, and its
+            // ->value / ->name / status() / title() / docsUrl() accessors fold to per-case literals.
+            $e instanceof InvoiceForbiddenException => ProblemResponse::fromProblem(InvoiceProblem::Forbidden, $e->getMessage()),
+            // Two-hop enum path: the case is re-homed through renderProblem() before folding at fromProblem().
+            $e instanceof InvoiceMissingException => $this->renderProblem(InvoiceProblem::NotFound, $e->getMessage()),
+            // Vendor enum: ->value / ->name fold, the vendor method stays permissive.
+            $e instanceof InvoiceVendorEnumException => ProblemResponse::fromOperator(FilterOperator::EQUAL),
             $e instanceof InvoiceNotFoundException => $this->renderNotFound($e, $request),
             $e instanceof ValidationException => $this->renderValidation($e, $request),
             $e instanceof HttpException => $this->renderHttp($e, $request),
@@ -64,6 +76,15 @@ final class InvoiceProblemRenderer
     private function renderNotFound(InvoiceNotFoundException $e, Request $request): JsonResponse
     {
         return ProblemResponse::make('https://errors.test/problems/not-found', 'Not Found', 404, $e->getMessage());
+    }
+
+    /**
+     * The extra enum hop (the Eos `renderProblem()` shape): the bound case is forwarded, un-narrowed,
+     * into the factory so the accessor provenance re-homes one hop out before it folds at the call above.
+     */
+    private function renderProblem(InvoiceProblem $problem, string $detail): JsonResponse
+    {
+        return ProblemResponse::fromProblem($problem, $detail);
     }
 
     private function renderValidation(ValidationException $e, Request $request): JsonResponse
