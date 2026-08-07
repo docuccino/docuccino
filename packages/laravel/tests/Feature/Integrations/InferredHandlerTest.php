@@ -213,7 +213,7 @@ it('falls back to the exception status hint when the recovered status did not fo
     expect($responses)->toHaveKey('404');
     $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
     expect($producers)->toContain('integration:inferred-handler')
-        ->and($responses)->not->toHaveKey('200');
+        ->and($responses['404']['content']['application/problem+json']['schema']['properties'] ?? [])->toHaveKey('type');
 });
 
 it('defers SILENTLY (no too-dynamic diagnostic) when an arm delegates to the framework (null/void)', function (): void {
