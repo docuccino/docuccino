@@ -49,6 +49,12 @@ final class ResponseDraftApplier
                 }
                 $response->content((string) $mediaType)->set((string) $keyword, $value, $contribution);
             }
+
+            // Carry the media-type example (a sibling of `schema`, assembled by the mapper from
+            // statically-known values) across the merge; first writer wins in the target.
+            if (is_array($media) && array_key_exists('example', $media)) {
+                $response->setExample((string) $mediaType, $media['example']);
+            }
         }
     }
 }

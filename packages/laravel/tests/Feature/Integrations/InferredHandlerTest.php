@@ -9,6 +9,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ReturnSite;
@@ -185,6 +186,73 @@ it('documents the recovered content type (application/problem+json) from a refin
     expect($responses['404']['content'] ?? [])->toHaveKey('application/problem+json')
         ->and($responses['404']['content'])->not->toHaveKey('application/json')
         ->and($responses['404']['content']['application/problem+json']['schema']['properties'] ?? [])->toHaveKeys(['type', 'title']);
+});
+
+it('assembles a media-type example from folded literals and const-pins each member', function (): void {
+    // The refiner folded the arm's per-arm literals into the body; the adapter must both const-pin each
+    // member (schema) and surface them as a media-type example (Tom: the 403 shows status: 403 + the type const).
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['type' => 'about:blank', 'title' => 'Forbidden', 'status' => 403], 403),
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([
+                    new ArrayShapeField('type', new LiteralT('about:blank')),
+                    new ArrayShapeField('title', new LiteralT('Forbidden')),
+                    new ArrayShapeField('status', new LiteralT(403)),
+                ]),
+                new LiteralT(403),
+                new LiteralT('application/problem+json'),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $media = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses']['403']['content']['application/problem+json'];
+
+    expect($media['example'])->toBe(['type' => 'about:blank', 'title' => 'Forbidden', 'status' => 403])
+        ->and($media['schema']['properties']['type']['const'])->toBe('about:blank')
+        ->and($media['schema']['properties']['status']['const'])->toBe(403);
+});
+
+it('fills a status-provenance member with the response status, omits non-folding members, and is deterministic', function (): void {
+    // A StatusMarkerT member echoes the response status; a widened `detail` did not fold. The example
+    // must carry the concrete status and the folded type, and OMIT detail (never fabricated).
+    $script = static fn (): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(
+        new ClassT('Illuminate\\Http\\JsonResponse', [
+            new ArrayShapeT([
+                new ArrayShapeField('type', new LiteralT('about:blank')),
+                new ArrayShapeField('detail', ScalarT::string()),
+                new ArrayShapeField('status', new StatusMarkerT),
+            ]),
+            new LiteralT(403),
+            new LiteralT('application/problem+json'),
+        ]),
+        new SourceLocation(''),
+    )]);
+
+    $build = function () use ($script): array {
+        $symbol = registerRenderCallback(
+            static fn (ModelNotFoundException $e) => response()->json(['type' => 'about:blank'], 403),
+            MODEL_NOT_FOUND,
+        );
+        app()->instance(TypeEngine::class, WorkbenchEngine::make([$symbol => $script()]));
+
+        return generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses']['403']['content']['application/problem+json'];
+    };
+
+    $media = $build();
+
+    expect($media['example'])->toBe(['type' => 'about:blank', 'status' => 403])
+        ->and($media['schema']['properties']['status']['const'])->toBe(403)
+        ->and($media['schema']['properties']['detail'])->not->toHaveKey('const');
+
+    // Determinism is a product feature: a second build is byte-identical.
+    expect(json_encode($build()['example']))->toBe(json_encode($media['example']));
 });
 
 it('falls back to the exception status hint when the recovered status did not fold', function (): void {

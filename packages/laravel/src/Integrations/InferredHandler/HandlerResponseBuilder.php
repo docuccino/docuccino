@@ -7,10 +7,14 @@ namespace Docuccino\Laravel\Integrations\InferredHandler;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Patch\Contribution;
@@ -24,6 +28,12 @@ use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
  * {@see ResponseDraft} under that status, hoisting the payload
  * schema through the route's converter under the recovered media type (default `application/json`,
  * `application/problem+json` when the helper set that header).
+ *
+ * It also assembles a media-type EXAMPLE from the statically-known members: a body member the engine
+ * folded to a literal (a per-arm `type` URI) contributes its value and a `const`, and a status-provenance
+ * member ({@see StatusMarkerT} — a value that echoes the response status) is filled with THIS response's
+ * concrete status (the 403 response says `403`, the 404 says `404`). Every non-folding member is omitted,
+ * never fabricated; deterministic by construction (declaration order, no randomness).
  *
  * HONESTY where a fold was partial: when the status did not fold to a literal — an enum-derived or
  * otherwise dynamic status the refiner recovered as {@see UnknownT} — the status falls back to the
@@ -57,8 +67,15 @@ final class HandlerResponseBuilder
             $payload = $type->typeArgs[0] ?? null;
             if ($payload !== null && ! $payload instanceof VoidT && ! $payload instanceof NeverT && ! $payload instanceof UnknownT) {
                 $mediaType = self::contentType($type->typeArgs[2] ?? null);
+                // A status-provenance member echoes THIS response's status: resolve it to that concrete
+                // value so its schema is `const`-pinned and it lands in the example (the 403 → 403).
+                $payload = self::resolveStatusMarkers($payload, (int) $status);
                 foreach ($context->converter()->toSchema($payload)->schema as $keyword => $value) {
                     $draft->content($mediaType)->set($keyword, $value, $contribution);
+                }
+                $example = self::assembleExample($payload);
+                if ($example !== []) {
+                    $draft->setExample($mediaType, $example);
                 }
             }
 
@@ -104,5 +121,50 @@ final class HandlerResponseBuilder
         return $contentTypeArg instanceof LiteralT && is_string($contentTypeArg->value)
             ? $contentTypeArg->value
             : 'application/json';
+    }
+
+    /**
+     * Resolve every top-level {@see StatusMarkerT} body member — a value that echoes the response's own
+     * HTTP status — to the concrete status this response is documented under, so it converts to a
+     * `const`-pinned integer and appears in the example. Non-shape / list payloads pass through.
+     */
+    private static function resolveStatusMarkers(DType $payload, int $status): DType
+    {
+        if (! $payload instanceof ArrayShapeT) {
+            return $payload;
+        }
+
+        $fields = array_map(
+            static fn (ArrayShapeField $field): ArrayShapeField => $field->type instanceof StatusMarkerT
+                ? new ArrayShapeField($field->key, new LiteralT($status), $field->optional)
+                : $field,
+            $payload->fields,
+        );
+
+        return new ArrayShapeT($fields, $payload->isList);
+    }
+
+    /**
+     * Assemble the media-type example from SOUND members only: each top-level member folded to a literal
+     * (a per-arm `type` URI, a `status` that resolved) contributes its value; every other member — a
+     * widened scalar, a dynamic body, a nested shape — is OMITTED rather than fabricated. Deterministic
+     * by construction: declaration order, no randomness. Empty (no sound members) → no example emitted.
+     *
+     * @return array<string, string|int|float|bool>
+     */
+    private static function assembleExample(DType $payload): array
+    {
+        if (! $payload instanceof ArrayShapeT || $payload->isList) {
+            return [];
+        }
+
+        $example = [];
+        foreach ($payload->fields as $field) {
+            if ($field->type instanceof LiteralT) {
+                $example[(string) $field->key] = $field->type->value;
+            }
+        }
+
+        return $example;
     }
 }

@@ -250,9 +250,11 @@ final class WorkbenchEngine
                 // The renderable exception's render() as the engine recovers it — the inferred-handler
                 // tier analyses PaymentRequiredException::render and documents its 402 body.
                 self::PAYMENT_EXCEPTION.'::render' => new ActionAnalysis(
+                    // The real render() writes all three members as literals; the engine recovers them so,
+                    // and the inferred-handler tier documents each as a `const` plus a media-type example.
                     returns: [new ReturnSite($jsonResponse(new ArrayShapeT([
-                        new ArrayShapeField('type', ScalarT::string()),
-                        new ArrayShapeField('title', ScalarT::string()),
+                        new ArrayShapeField('type', new LiteralT('https://example.test/problems/payment-required')),
+                        new ArrayShapeField('title', new LiteralT('Payment Required')),
                         new ArrayShapeField('status', new LiteralT(402)),
                     ]), 402), $location)],
                 ),
