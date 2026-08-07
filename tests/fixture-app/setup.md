@@ -42,7 +42,7 @@ cp -R tests/fixture-app/src/app/. tests/fixture-app/app/app/
 #    the PSR-4 root so PHPStan can reflect it, then refresh the autoloader.
 mkdir -p tests/fixture-app/app/modules
 cp -R tests/fixture-app/src/modules/. tests/fixture-app/app/modules/
-php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\\\"]="modules/";file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
+php -r '$f="tests/fixture-app/app/composer.json";$j=json_decode(file_get_contents($f),true);$j["autoload"]["psr-4"]["Modules\\"]="modules/";file_put_contents($f,json_encode($j,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");'
 composer dump-autoload --working-dir=tests/fixture-app/app
 ```
 
