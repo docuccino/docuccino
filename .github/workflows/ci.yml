@@ -79,9 +79,13 @@ jobs:
     # fixture job. It runs the non-fixture suite under pcov: the inference engine's real
     # path executes in a subprocess (see docs/testing.md) that pcov cannot observe either
     # way, so provisioning the fixture app here would cost minutes for <0.1pp — the
-    # fixture job proves that path behaviourally instead. The line floor is an honest
-    # ratchet (measured overall minus a small buffer), raised as coverage rises and never
-    # lowered without a docs/plan.md note.
+    # fixture job proves that path behaviourally instead.
+    #
+    # Line coverage is gated PER PACKAGE (tools/coverage-floors.php), not by one global
+    # --min: the engine package's subprocess-only real path diluted the GLOBAL ratio every
+    # time it grew, so a global gate sat one engine refactor from red for reasons unrelated
+    # to test quality. Floors are honest measured-now values, ratcheted upward and never
+    # lowered without a docs/plan.md note (docs/testing.md).
     steps:
       - uses: actions/checkout@v4
 
@@ -95,8 +99,11 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress
 
-      - name: Pest line coverage (honest floor — ratchet upward, never down)
-        run: vendor/bin/pest --coverage --exclude-group=fixture --min=83
+      - name: Pest line coverage (per-package honest floors — ratchet upward, never down)
+        run: |
+          mkdir -p build
+          vendor/bin/pest --coverage-clover=build/clover.xml --exclude-group=fixture
+          php tools/coverage-floors.php build/clover.xml
 
       - name: Pest type coverage
         run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G

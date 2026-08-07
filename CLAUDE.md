@@ -16,7 +16,9 @@ diffing and a bundled Scalar viewer. Private until v1 launch.
 - **Green on all checks, always**: `vendor/bin/pest` (incl. `--group=fixture` when the
   fixture app is present), `vendor/bin/phpstan` (level max, NO baselines, no blanket
   ignores), `vendor/bin/pint --test`, `composer validate --strict` (all packages).
-  CI also gates line coverage (`--min` in `.github/workflows/ci.yml`) and type coverage (100).
+  CI also gates line coverage **per package** (`composer test:coverage` →
+  `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
+  coverage (100).
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Golden files under
   `packages/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a

@@ -39,8 +39,15 @@ Line coverage needs a coverage driver. The project uses **pcov** (fast, statemen
 # One-time: install pcov (macOS/Homebrew PHP needs the pcre2 headers on the include path)
 CPPFLAGS="-I$(brew --prefix pcre2)/include" pecl install pcov
 
-# Overall line coverage + the enforced minimum (this is what CI runs)
-vendor/bin/pest --coverage --exclude-group=fixture --min=78
+# The ENFORCED gate: clover report + the per-package floors (this is what CI runs)
+composer test:coverage
+
+# …or its two steps by hand
+vendor/bin/pest --coverage-clover=build/clover.xml --exclude-group=fixture
+php tools/coverage-floors.php build/clover.xml
+
+# Overall line coverage, for a quick single number (not the gate)
+vendor/bin/pest --coverage --exclude-group=fixture
 
 # Full text report (per-class line %), written for inspection
 vendor/bin/pest --coverage-text=build/coverage.txt --exclude-group=fixture
@@ -49,12 +56,8 @@ vendor/bin/pest --coverage-text=build/coverage.txt --exclude-group=fixture
 vendor/bin/pest --type-coverage --exclude-group=fixture --min=100
 ```
 
-Per-package numbers are computed from a clover report:
-
-```bash
-vendor/bin/pest --coverage-clover=build/clover.xml --exclude-group=fixture
-# then sum coveredstatements/statements per packages/<pkg>/src/ path
-```
+`tools/coverage-floors.php` is the gate: it sums `coveredstatements`/`statements` per
+`packages/<pkg>/src/` out of the clover report and fails any package under its floor.
 
 ### Why the coverage job excludes the `fixture` group
 
@@ -91,24 +94,42 @@ tests, lifting overall coverage:
 | **Overall (Phase 4b wave 1)**          | **81.1%**  |
 | **Overall (QB filter-kind round 2)**   | **83.8%**  |
 
-`inference-phpstan` (~41%) is mostly proven out-of-process (see above); `attributes`
-is dep-free attribute classes not in the coverage `<source>` set.
+### Measured per package (2026-08-07, Phase-6 fix wave — the enforced floors)
 
-`attributes` is dep-free attribute classes with no branching logic and is not in the
-coverage `<source>` set.
+| Package             | Measured   | Floor | Why                                              |
+|---------------------|------------|-------|--------------------------------------------------|
+| `core`              | **92.32%** | 92    | fully in-process-measurable                      |
+| `laravel`           | **91.40%** | 91    | fully in-process-measurable                      |
+| `inference-phpstan` | **41.13%** | 41    | real path is subprocess-only → `fixture`-proven  |
+| `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
+| Overall             | 83.21%     | —     | informational only; no longer a gate             |
+
+`inference-phpstan`'s figure is **not** comparable to the others and must not be read as
+"untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
+`fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
+for its pure/parent-process classes, never more subprocess fixture tests.
 
 ## The CI coverage gate & ratchet policy
 
-- The gate lives in `.github/workflows/ci.yml` as a dedicated **coverage** job:
-  `pest --coverage --exclude-group=fixture --min=<N>` with **pcov** via `setup-php`.
-- `<N>` is an **honest floor** — the measured overall minus a small buffer, never an
-  aspiration. Current floor: **`--min=83`** (measured 83.8%).
+- The gate lives in `.github/workflows/ci.yml` as a dedicated **coverage** job: a clover report
+  under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
+  **per package**. `composer test:coverage` runs the same two steps locally.
+- Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
+  an aspiration. Current floors: `core` **92**, `laravel` **91**, `inference-phpstan` **41**.
+- **Why per-package rather than one global `--min`:** the engine package's real path is
+  subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
+  ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
+  refactor away from red for reasons unrelated to test quality (the Phase-6 arc added ~700 such
+  lines and pushed measured 83.2% against a floor of 83). Per-package floors localise that: the
+  engine carries its own low, honest floor with the fixture-group note, and the fully-measurable
+  packages carry high ones that a real regression genuinely trips.
 - **Type coverage** is enforced separately: `pest --type-coverage --min=100` (the src set
   is PHPStan level-max, which already implies near-total declared types).
 - **Ratchet policy:**
-  - When overall coverage rises (e.g. a phase adds in-process tests), **raise `--min`** to
-    just under the new measured number in the same PR. Coverage is a monotonic floor.
-  - **Never lower `--min`** without a note in `docs/plan.md` explaining why (e.g. a large
-    subprocess-only subsystem was added). A drop is a plan-level decision, not a quiet CI
-    edit.
-  - Each build phase should ratchet the floor upward as its code lands with tests.
+  - When a package's coverage rises (e.g. a phase adds in-process tests), **raise that package's
+    floor** in `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is
+    a monotonic ratchet.
+  - **Never lower a floor** without a note in `docs/plan.md` explaining why (e.g. a large
+    subprocess-only subsystem landed in that package). A drop is a plan-level decision, not a quiet
+    CI edit.
+  - Each build phase should ratchet its packages' floors upward as code lands with tests.

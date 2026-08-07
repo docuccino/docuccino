@@ -74,6 +74,11 @@
     "scripts": {
         "test": "pest --parallel",
         "test:inference-fixture": "pest --parallel --group=fixture",
+        "test:coverage": [
+            "@php -r \"@mkdir('build', 0755, true);\"",
+            "pest --coverage-clover=build/clover.xml --exclude-group=fixture",
+            "@php tools/coverage-floors.php build/clover.xml"
+        ],
         "analyse": "phpstan analyse --memory-limit=1G",
         "lint": "pint --test",
         "sync-schema": "@php -r \"@mkdir('packages/core/resources/spec/uir/1.0', 0755, true); copy('spec/uir/1.0/schema.json', 'packages/core/resources/spec/uir/1.0/schema.json') or exit(1); echo 'Synced spec/uir/1.0/schema.json -> packages/core/resources/spec/uir/1.0/schema.json'.PHP_EOL;\""
