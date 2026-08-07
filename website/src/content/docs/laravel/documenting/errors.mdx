@@ -92,9 +92,10 @@ Docuccino follows that indirection. It reads each `match`/`if` arm, steps into t
 calls, and recovers the shape the helper actually builds — the payload keys, the status, and the
 media type when the helper sets an explicit `Content-Type` (so an `application/problem+json` factory
 is documented under `application/problem+json`, not `application/json`). A constant status passed to
-the helper (`make('Not Found', 404, …)`) is recovered as that literal; a status the helper derives
-dynamically (an enum method, `$e->getStatusCode()`) can't be read statically, so the response falls
-back to the status Docuccino inferred for the exception itself rather than guessing.
+the helper (`make('Not Found', 404, …)`) is recovered as that literal; a status the helper derives from
+a value it can't see statically (`$e->getStatusCode()`) can't be read, so the response falls back to the
+status Docuccino inferred for the exception itself rather than guessing. When the status comes from an
+**enum case** the arm names explicitly, Docuccino folds it — see [enum-backed problem types](#enum-backed-problem-types) below.
 
 Because the literal values are recovered too, each response carries a concrete **example** alongside
 the schema, and every member whose value is a constant is pinned with a JSON-Schema `const`:
@@ -135,6 +136,62 @@ member that simply carries the response's status code is filled with **this resp
 The `detail` here is `$e->getMessage()`, which has no static value, so it is **omitted from the
 example rather than invented**. Docuccino never fabricates an example value: only what actually flows
 into the body is shown, and the example is deterministic — identical code always produces identical bytes.
+
+### Enum-backed problem types
+
+Many apps keep problem metadata on an enum — one case per problem, with accessors for the URL, status
+and title — and pass a case into the helper:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	enum ProblemType: string
+	{
+	    case Forbidden = 'https://errors.example/forbidden';
+	    case NotFound  = 'https://errors.example/not-found';
+
+	    public function status(): int
+	    {
+	        return match ($this) {
+	            self::Forbidden => 403,
+	            self::NotFound  => 404,
+	        };
+	    }
+
+	    public function title(): string { … }
+	}
+
+	// The arm names a concrete case:
+	$e instanceof AuthorizationException =>
+	    ProblemResponse::make(ProblemType::Forbidden, $e->getMessage(), $request),
+	```
+	</TabItem>
+	<TabItem label="What folds">
+	```text
+	$problemType->value    → "https://errors.example/forbidden"   (the case's backing value)
+	$problemType->name     → "Forbidden"                          (the case name)
+	$problemType->status() → 403   (match ($this) arm for Forbidden)  → also the response status
+	$problemType->title()  → "Forbidden"   (match ($this) arm)
+	```
+	</TabItem>
+</Tabs>
+
+Because the arm names the case, Docuccino resolves the accessors the helper applies to it — even across
+the extra hop from a `renderProblem($case)` wrapper into the factory. `->value` and `->name` come
+straight from the case (so they fold for **vendor** enums too). A no-arg accessor **method** folds by
+reading the method body: a `match ($this)` arm for that case, or a plain constant `return`. A folded
+`status()` becomes the response's status — the enum is the source of truth, so it's preferred over the
+status inferred from the exception type.
+
+The honest bounds are deliberate:
+
+- A method whose body is **computed** rather than a direct constant — `return __($this->titleKey());`,
+  `return strtoupper($this->name);` — does not fold. The member is documented at its widened type with
+  no `const` or example, never a guessed value.
+- A **vendor** enum's methods are never analysed (the project-only boundary applies to enums too); its
+  `->value`/`->name` still fold.
+- If the arm passes a `ProblemType` it can't pin to one case (a variable, `ProblemType::from($code)`),
+  nothing folds and the response falls back to the exception's inferred status.
 
 This descent is **bounded and project-only**: it follows a helper into another helper up to a small
 depth and file budget, and it never steps into framework or vendor code — if the shape is produced by
