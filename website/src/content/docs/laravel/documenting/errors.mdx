@@ -96,6 +96,46 @@ the helper (`make('Not Found', 404, …)`) is recovered as that literal; a statu
 dynamically (an enum method, `$e->getStatusCode()`) can't be read statically, so the response falls
 back to the status Docuccino inferred for the exception itself rather than guessing.
 
+Because the literal values are recovered too, each response carries a concrete **example** alongside
+the schema, and every member whose value is a constant is pinned with a JSON-Schema `const`:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	$e instanceof AuthorizationException =>
+	    ProblemResponse::make('https://errors.example/forbidden', 'Forbidden', 403, $e->getMessage()),
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"403": {
+	  "content": {
+	    "application/problem+json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": {
+	          "type":   { "type": "string",  "const": "https://errors.example/forbidden" },
+	          "title":  { "type": "string",  "const": "Forbidden" },
+	          "status": { "type": "integer", "const": 403 },
+	          "detail": { "type": "string" }
+	        }
+	      },
+	      "example": { "type": "https://errors.example/forbidden", "title": "Forbidden", "status": 403 }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Notice what the `403` shows and what it doesn't: the per-arm `type` URL, the `title`, and the `403`
+are all constants read from the arm, so they appear as both `const`s and in the example. A `status`
+member that simply carries the response's status code is filled with **this response's** status — the
+`403` arm says `403`, a `404` arm says `404` — even when the status itself was computed dynamically.
+The `detail` here is `$e->getMessage()`, which has no static value, so it is **omitted from the
+example rather than invented**. Docuccino never fabricates an example value: only what actually flows
+into the body is shown, and the example is deterministic — identical code always produces identical bytes.
+
 This descent is **bounded and project-only**: it follows a helper into another helper up to a small
 depth and file budget, and it never steps into framework or vendor code — if the shape is produced by
 a vendor call, the response is documented without a recovered body rather than reaching into internals.
