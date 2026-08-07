@@ -35,8 +35,7 @@ arch('built-in integrations consume only the public extension surface')
         // extension-author surface (it is the parameter type of the public DocumentTransformer contract,
         // and is not @internal). An integration that contributes a whole-document diagnostic (the
         // inferred-handler render-callback skip report) implements that contract and so references it.
-        // WIDENING EXPLICITLY APPROVED BY TOM, 2026-08-07 (recorded in the docs/plan.md decision log,
-        // "Phase 6 review fix wave"): the standing rule is that an arch/PHPStan allow-list is never
+        // WIDENING EXPLICITLY APPROVED BY THE MAINTAINER, 2026-08-07: the standing rule is that an arch/PHPStan allow-list is never
         // widened without explicit human approval, so this entry carries its sign-off inline.
         'Docuccino\Core\Extensions\Document\UirDocumentDraft',
         'Docuccino\Core\Draft',

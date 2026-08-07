@@ -41,7 +41,7 @@ use ReflectionClass;
  * synthesis is shadowed — no double response. Overridable by docblock/attribute/overlay, and each
  * status honours `#[IgnoreResponse]`. Skipped when `error_responses => 'none'`. 429 is left to the
  * rate-limit integration; CSRF 419, maintenance 503 and arbitrary custom-middleware throws are
- * deliberate non-goals (recorded in plan.md).
+ * deliberate non-goals.
  */
 #[ExtensionOrder(priority: Priorities::LATE)]
 final class ImplicitResponsesExtension implements OperationExtension

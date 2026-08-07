@@ -100,7 +100,7 @@ foreach (FLOORS as $package => $floor) {
 }
 
 if ($failed) {
-    fwrite(STDERR, "\ncoverage-floors: a package is below its floor. Raise coverage, or (only with a docs/plan.md note) lower the floor.\n");
+    fwrite(STDERR, "\ncoverage-floors: a package is below its floor. Raise coverage, or (only with a documented justification — docs/testing.md) lower the floor.\n");
     exit(1);
 }
 

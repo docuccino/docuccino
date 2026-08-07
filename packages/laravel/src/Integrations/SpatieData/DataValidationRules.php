@@ -115,7 +115,7 @@ final class DataValidationRules
             // A property typed Illuminate\Http\UploadedFile (incl. ?UploadedFile and a list of it) IS a
             // file upload — synthesise a `file` rule so the shared validation chain flips the body to
             // multipart/form-data and emits a binary schema, regardless of whether the class's rules()
-            // was statically foldable (Eos's CreateUploadData has a dynamic rules() and only #[Required]).
+            // was statically foldable (a real CreateUploadData often has a dynamic rules() and only #[Required]).
             // Composes with an explicit file/image rule rather than doubling it.
             $upload = $this->uploadedFileKind($stripped, $attributeRules);
             if ($upload === 'single') {

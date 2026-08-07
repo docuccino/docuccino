@@ -21,7 +21,7 @@ use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 
 /**
  * The consult path — the gate that decides WHEN calculateResponseStatus() overrides re-home the
- * inferred 200 (the Eos miss: overrides were consulted only for a single bare Data ClassT, so a Data
+ * inferred 200 (the real-world miss: overrides were consulted only for a single bare Data ClassT, so a Data
  * returned as one arm of a UNION never had its status folded). Drives the real
  * InferredResponsesExtension with a stub engine scripting the action's return type(s) and a stub
  * ResponseStatusResolver standing in for the folded overrides.
@@ -86,7 +86,7 @@ it('documents every status of a multi-status (ternary) override on a single Data
     expect($statuses)->toBe(['200', '201']);
 });
 
-it('re-homes each member of a union-of-Data return to its own status (the Eos challenge-DTO shape)', function (): void {
+it('re-homes each member of a union-of-Data return to its own status (the multi-challenge-DTO shape)', function (): void {
     // One action returning `AuthSuccessData|MfaChallengeData` as a union: the success arm has no
     // override (stays 200), the challenge arm folds to 422. Both must be documented.
     $statuses = inferredStatuses(

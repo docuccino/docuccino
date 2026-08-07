@@ -2,7 +2,7 @@
 
 Status: approved (2026-08-01). Reconciled with `docs/design/inference-embedding.md` —
 where the two conflict on the TypeEngine boundary, the inference doc wins.
-See `docs/plan.md` for scope/roadmap; this doc carries implementation-level detail.
+See the README for scope; this doc carries implementation-level detail.
 
 ## 1. UIR document
 
@@ -191,7 +191,7 @@ interface ExceptionToResponse {
 interface ExampleProvider { /* chain: static/@example/#[Example] (v1) → factory render / response-calls (v1.1) */ }
 ```
 
-**Implicit responses (Eos pre-flight).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
+**Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
 throws. `ImplicitResponsesExtension` (adapter, Errors phase, `Priorities::LATE`) synthesizes those from
 statically-visible signals and runs each through the SAME resolved exception→response chain, so the
@@ -391,12 +391,12 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     all read it (the standalone `JsonApiPaginateTraceVisitor` is deleted — the shared visitor now also
     exposes the outermost terminal call's folded int args, which is all json-api-paginate needed extra).
     **Decision:** a custom QB terminal configured under `integrations.query_builder.pagination_terminals`
-    (e.g. Eos's `paginateList`) now ALSO triggers the API-resources `{data, links, meta}` envelope
+    (e.g. a `paginateList` helper) now ALSO triggers the API-resources `{data, links, meta}` envelope
     (length-aware), not only the QB page parameters — the terminal set is config-shared, so a resource
     collection paginated by a custom terminal is documented consistently with its page params instead of
     getting parameters but a bare-array body.
-  - Enum + request-body component hoisting (Tom, 2026-08-07 — the last engine delta from the Eos
-    dogfood, closing the named-component gap vs Scramble). Both are representation moves — the semantic
+  - Enum + request-body component hoisting (Tom, 2026-08-07 — the last engine delta from the
+    dogfood run, closing the named-component gap vs Scramble). Both are representation moves — the semantic
     facts (an enum's cases/descriptions; a request's rule set) are unchanged; only their OAS *location*
     moved from inline to a `$ref`'d `components.schemas` entry.
     - **Enums hoist by default** (`representation.enums.components`, default `true`). `EnumSchema` (core)
@@ -441,7 +441,7 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   (`Remove::field()`, `#[Hidden]`, `#[IgnoreParam]`, `#[IgnoreResponse]`).
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
 
-**`#[Hidden]` stays OUTPUT-only; request-hiding is the separate `#[HiddenFromRequest]` (Eos pre-flight
+**`#[Hidden]` stays OUTPUT-only; request-hiding is the separate `#[HiddenFromRequest]` (pre-dogfood
 decision).** `#[Hidden]` was NOT conflated to also hide a Data property from the request body. A
 property hidden from output but still accepted in the request is a real, intentional shape — and
 exactly the accidental exposure the built-in data-leakage lint is designed to surface (the workbench

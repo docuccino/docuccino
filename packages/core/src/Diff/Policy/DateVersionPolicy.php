@@ -7,7 +7,7 @@ namespace Docuccino\Core\Diff\Policy;
 use Docuccino\Core\Diff\Changeset;
 
 /**
- * Date-based versioning policy (Eos's scheme): versions are `YYYY-MM-DD` dates, and a breaking
+ * Date-based versioning policy (the Stripe-style scheme): versions are `YYYY-MM-DD` dates, and a breaking
  * changeset requires a new, strictly-later date version. A non-breaking changeset is satisfied by
  * any date (including an unchanged one — additive changes ship without a version cut). An
  * unparseable date on either side is a violation. A leading `YYYY-MM-DD` is required; any trailing

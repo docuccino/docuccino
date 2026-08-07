@@ -7,8 +7,8 @@ use Illuminate\Routing\Router;
 
 /**
  * End-to-end proof that a `#[Response(type: '<ShortName>')]` short class name resolves through the
- * controller file's ImportContext into the real body schema — the feature the Eos migration notes
- * lean on, previously covered only at the TypeStringParser unit level. A resolution failure would
+ * controller file's ImportContext into the real body schema — the feature a real Scramble migration
+ * leans on, previously covered only at the TypeStringParser unit level. A resolution failure would
  * degrade the 200 body to a bare object with no properties, so asserting PanelData's resolved
  * properties is the signal.
  */

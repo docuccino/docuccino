@@ -383,7 +383,7 @@ it('recovers spatie jsonPaginate() through the real engine and maps it to page[n
 })->group('fixture');
 
 it('recovers a Validator::make() rule array inside a Queries class reached by descent from the action', function (): void {
-    // The Eos GET-params pattern: the controller action calls a Queries method that runs
+    // The modular GET-params pattern: the controller action calls a Queries method that runs
     // Validator::make($input, [...]) one hop away. The engine's bounded descent must reach that call
     // and the InlineRulesVisitor recover its literal rule array — previously promised but unproven.
     $trace = FixtureRunner::traceInlineRules(

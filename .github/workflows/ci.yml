@@ -85,7 +85,7 @@ jobs:
     # --min: the engine package's subprocess-only real path diluted the GLOBAL ratio every
     # time it grew, so a global gate sat one engine refactor from red for reasons unrelated
     # to test quality. Floors are honest measured-now values, ratcheted upward and never
-    # lowered without a docs/plan.md note (docs/testing.md).
+    # lowered without a documented justification (docs/testing.md).
     steps:
       - uses: actions/checkout@v4
 

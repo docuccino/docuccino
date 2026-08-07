@@ -18,7 +18,7 @@ use PhpParser\Node\Identifier;
  * shared harvest + unrecoverable-field bookkeeping lives in {@see RulesHarvestingVisitor}; this
  * subclass supplies only the front matching — locating the rules-array argument. It requests descent
  * into called project code so a `Validator::make(...)` built inside a Queries/service class one or
- * more hops from the action is reached (the Eos GET-params pattern); the engine declines vendor /
+ * more hops from the action is reached (the modular GET-params pattern); the engine declines vendor /
  * magic / over-budget descent on its own (Spike B split).
  */
 final class InlineRulesVisitor extends RulesHarvestingVisitor

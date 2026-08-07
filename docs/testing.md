@@ -1,7 +1,6 @@
 # Testing & coverage standards
 
-This document captures the test-coverage standards enforced from Phase 4 onward
-(mirroring the "Test-coverage standards" section of `docs/plan.md`), plus how to run
+This document is the authority on the project's test-coverage standards, plus how to run
 coverage locally and the ratchet policy for the CI gate.
 
 ## Standards
@@ -129,7 +128,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   - When a package's coverage rises (e.g. a phase adds in-process tests), **raise that package's
     floor** in `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is
     a monotonic ratchet.
-  - **Never lower a floor** without a note in `docs/plan.md` explaining why (e.g. a large
-    subprocess-only subsystem landed in that package). A drop is a plan-level decision, not a quiet
-    CI edit.
+  - **Never lower a floor** without a written justification in the pull request that lowers it (e.g.
+    a large subprocess-only subsystem landed in that package). A drop is a reviewed decision, not a
+    quiet CI edit.
   - Each build phase should ratchet its packages' floors upward as code lands with tests.

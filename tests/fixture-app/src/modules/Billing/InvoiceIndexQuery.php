@@ -9,10 +9,11 @@ use App\Support\ListQueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 
 /**
- * The generic query-object pattern (Eos's `#[ListQuery] → Queries\* → ListQueryBuilder::for()`): the
+ * The generic query-object pattern (`#[ListQuery] → Queries\* → ListQueryBuilder::for()`, as a large
+ * production Laravel app writes it): the
  * whole `allowedFilters()`/`allowedSorts()` chain lives inside `query()`, reached from the controller
  * via `$query->query()->…`. This class lives OUTSIDE the engine's configured project paths (under
- * `modules/`, not `app/`) — exactly the modular layout that hid Eos's filters — so recovering the
+ * `modules/`, not `app/`) — exactly the modular layout that hides a real app's filters — so recovering the
  * allow-lists here proves the engine follows the `query(): ListQueryBuilder` return-type hop beyond
  * the project paths (never into vendor). Only ever analysed.
  */

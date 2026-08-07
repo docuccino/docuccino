@@ -6,8 +6,8 @@ namespace Docuccino\Laravel\Integrations\InferredHandler;
 
 /**
  * Per-build collector of inferred-handler deferrals (design §6). The tier used to emit one
- * `too-dynamic` info diagnostic per (route × thrown exception type) — 656 near-identical lines on the
- * Eos dogfood. Instead, each genuine defer (a renderer whose response for a type could not be folded to
+ * `too-dynamic` info diagnostic per (route × thrown exception type) — 656 near-identical lines when run
+ * against a large production Laravel app. Instead, each genuine defer (a renderer whose response for a type could not be folded to
  * JSON) is recorded here, keyed by CALLBACK, and {@see HandlerDeferralSummaryTransformer} emits one
  * summary per callback at document build. Container-`scoped` so the tier and the transformer share one
  * instance within a build and it resets between builds.

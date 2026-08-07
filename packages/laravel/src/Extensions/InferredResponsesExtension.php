@@ -58,8 +58,8 @@ final class InferredResponsesExtension implements OperationExtension
 
     /**
      * Canonical RFC reason phrases for the statuses this extension emits. Beyond the 2xx range a
-     * `calculateResponseStatus()` override can re-home a Responsable body to a 4xx (e.g. Eos's
-     * challenge DTOs return 422), so those phrases are covered too; an unlisted status falls back to
+     * `calculateResponseStatus()` override can re-home a Responsable body to a 4xx (e.g. challenge
+     * DTOs that return 422), so those phrases are covered too; an unlisted status falls back to
      * `OK`.
      *
      * @var array<int, string>
@@ -125,7 +125,7 @@ final class InferredResponsesExtension implements OperationExtension
      * Data return (Responsable, still at the default 200, the whole return type IS the payload) may
      * override `calculateResponseStatus()` to 201/202/… (or several statuses for a conditional whose
      * arms all fold): each folded status re-homes the body off 200. A UNION of Data classes returned
-     * directly — Eos's `MfaChallengeData|EmailVerificationChallengeData|…` from one action — re-homes
+     * directly — e.g. `MfaChallengeData|EmailVerificationChallengeData|…` from one action — re-homes
      * EACH member to its own status(es); a member with no override, and any non-class member, stays at
      * 200. Overrides arrive through the gated {@see ResponseStatusResolver} chain, never a direct import.
      *

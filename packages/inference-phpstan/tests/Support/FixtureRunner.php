@@ -191,8 +191,7 @@ final class FixtureRunner
      */
     private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array
     {
-        // Harden the subprocess against the historical fixture-group flake (plan.md decision log,
-        // 2026-08-06): the engine cold-compiles a PHPStan container and analyses the whole
+        // Harden the subprocess against the historical fixture-group flake (2026-08-06): the engine cold-compiles a PHPStan container and analyses the whole
         // Laravel+Larastan app, so it needs a generous memory ceiling; pcov is disabled because
         // subprocess coverage is invisible anyway (docs/testing.md) and only slows/bloats the run.
         // stderr is captured to a temp file so an OOM/fatal surfaces in the failure message instead

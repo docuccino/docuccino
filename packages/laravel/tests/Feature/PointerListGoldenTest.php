@@ -10,7 +10,8 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 
 /**
  * A byte-locked golden for the RFC 9457 Problem Details preset with the `pointer-list` errors shape —
- * the exact configuration Eos runs with (`error_responses => ['preset' => 'problem-details',
+ * the exact configuration a large production Laravel app runs with
+ * (`error_responses => ['preset' => 'problem-details',
  * 'errors_shape' => 'pointer-list']`). Guards the pointer-list 422 body (`errors` as a list of
  * `{detail, pointer}` objects) against silent drift end-to-end, not just at the unit level.
  */

@@ -10,7 +10,8 @@ use Spatie\LaravelData\Data;
 /**
  * A Data fixture whose file-ness is carried ONLY by the property TYPE
  * (`Illuminate\Http\UploadedFile`), not by any `#[File]`/`#[Image]`/`#[Mimes]` validation attribute —
- * exactly Eos's `CreateUploadData` (a bare `UploadedFile $file` + `#[Required]`, with the mime/size
+ * exactly the `CreateUploadData` shape a large production Laravel app uses (a bare
+ * `UploadedFile $file` + `#[Required]`, with the mime/size
  * rules hidden in a dynamic `rules()` the analyzer can't fold). Proves the type alone drives
  * multipart + a binary schema. Only ever reflected.
  */

@@ -108,7 +108,8 @@ vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit
 ```
 
 The enforced floors live in `.github/workflows/ci.yml` (the `coverage` job). The line floor is an
-**honest ratchet** — raised as coverage rises, never lowered without a note in `docs/plan.md`.
+**honest ratchet** — raised as coverage rises, never lowered without a documented justification
+(see `docs/testing.md`).
 
 ## Writing an integration
 

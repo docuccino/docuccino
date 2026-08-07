@@ -170,8 +170,8 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    every descended helper file and every folded enum's file is reported into `dependencyFiles`,
    re-contributed on a memo hit, so editing any of them invalidates the route fragment.
 
-Bounds are shared with §3; the marker type is §5; the per-step decision log (including the deliberate
-"folded status beats the throw hint" choice) is in `plan.md` steps 2c–2f and the Phase-6 fix wave.
+Bounds are shared with §3; the marker type is §5. The deliberate "folded status beats the throw hint"
+choice is recorded in the commits that landed the status-folding steps.
 
 ## 5. DType model + translator
 

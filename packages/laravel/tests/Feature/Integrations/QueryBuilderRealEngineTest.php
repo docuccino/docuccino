@@ -172,8 +172,8 @@ it('types a scope filter off its enum value parameter and a callback filter off 
 
 it('follows a `$query->query()` hop into a Query class OUTSIDE the project paths (modular layout)', function (): void {
     // InvoiceController + InvoiceIndexQuery live under `modules/` (namespace Modules\Billing), which is
-    // NOT in the engine's project paths (only `app/` is) — exactly the modular layout that hid Eos's
-    // filters. The controller body is `$this->query->query()->paginateList(...)`; the allow-lists live
+    // NOT in the engine's project paths (only `app/` is) — exactly the modular layout that hides a real
+    // app's filters. The controller body is `$this->query->query()->paginateList(...)`; the allow-lists live
     // inside InvoiceIndexQuery::query(): ListQueryBuilder. Recovering them proves the engine follows
     // the QueryBuilder-return-type hop beyond the project paths (never into vendor).
     $harvest = FixtureRunner::traceQbEnrich(

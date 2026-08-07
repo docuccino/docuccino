@@ -137,7 +137,7 @@ it('stays inert (framework tier owns the 404) when no handler matches the except
 });
 
 it('documents an invokable renderer via method analysis, winning over the framework tier', function (): void {
-    // The Eos shape: `$exceptions->render(new SomeRenderer)`. Laravel wraps it as a method-backed
+    // The common real-world shape: `$exceptions->render(new SomeRenderer)`. Laravel wraps it as a method-backed
     // closure, and the mapper must analyse `__invoke` (not the closure-by-line path, whose target line is
     // a method declaration, not a closure literal).
     $symbol = registerInvokableRenderCallback(new InvokableRenderer, MODEL_NOT_FOUND);

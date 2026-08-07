@@ -63,7 +63,7 @@ final class PhpStanTypeEngine implements TypeEngine
      *
      * NOTE (deliberate deferral): under the worker orchestrator each worker holds its OWN memo, so a
      * callable analysed on two workers is analysed twice. A shared cross-worker callable cache is
-     * deferred (see docs/plan.md, Phase 2b) — it needs the same serialize/transport plumbing as the
+     * deferred — it needs the same serialize/transport plumbing as the
      * engine result cache and is not built here.
      *
      * @var array<string, ActionAnalysis>
@@ -273,7 +273,7 @@ final class PhpStanTypeEngine implements TypeEngine
      * Harvest a callable's return sites for a narrowing request. Each site pairs a recovered type (with
      * response-shape refinement — {@see siteType()}) with the caught-variable class GUARD that makes it
      * reachable: for an `if ($e instanceof X) return …;` chain, PHPStan's per-return narrowing; for a
-     * `return match (true) { $e instanceof X => …, default => … }` renderer (the Eos shape), the arm's
+     * `return match (true) { $e instanceof X => …, default => … }` renderer (a common real-world shape), the arm's
      * own `instanceof` conditions (decomposed here — the outer `match` collapses to one return whose
      * scope leaves `$e` un-narrowed, so the arms must be read from the AST). The reachable site for the
      * narrowed type is chosen by SOURCE-ORDER-FIRST-MATCH over the arms — the runtime semantics of both

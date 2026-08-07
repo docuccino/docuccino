@@ -103,7 +103,7 @@ it('does not raise the ambiguity diagnostic for the ordinary sequential-instance
 })->group('fixture');
 
 it('recovers an invokable renderer’s shape via method analysis of __invoke', function (): void {
-    // The Eos shape: `$exceptions->render(new InvokableProblemRenderer)`. Laravel wraps it as a
+    // The common real-world shape: `$exceptions->render(new InvokableProblemRenderer)`. Laravel wraps it as a
     // method-backed closure, so the tier analyses `__invoke` — proven here against the real engine, with
     // `$e` narrowed to a specific thrown type, exactly as the mapper drives it.
     $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(

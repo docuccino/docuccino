@@ -11,7 +11,7 @@ use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralSummaryTransfo
 
 /**
  * Deferral dedupe (design §6): the tier used to emit one `too-dynamic` diagnostic per (route × thrown
- * type) — 656 near-identical lines on the Eos dogfood. Now each defer is collected per CALLBACK and the
+ * type) — 656 near-identical lines when run against a large production Laravel app. Now each defer is collected per CALLBACK and the
  * transformer emits one summary naming the count + first few exception types.
  */
 it('collects deferrals per callback, deduping repeated exception types', function (): void {

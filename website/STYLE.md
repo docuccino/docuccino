@@ -7,7 +7,7 @@ examples that a reader can paste and run.
 ## Audience & framing
 
 - Written for **new developers adopting Docuccino** — never for ourselves. Zero
-  references to Eos, Tribepad, internal project history, phases, review waves, or agents.
+  references to internal clients, internal project history, phases, review waves, or agents.
 - No internal workings (arch rules, test infrastructure, monorepo mechanics) unless the
   detail adds value to the reader. Prefer outcome framing, e.g.:
   > "Every official integration is built with the same tools we expose to you — you have

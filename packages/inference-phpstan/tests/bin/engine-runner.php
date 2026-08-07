@@ -256,7 +256,7 @@ $result = match ($mode) {
     'trace-inline-rules' => (static function () use ($engine, $ref): array {
         // The REAL InlineRulesVisitor traces the CONTROLLER action; the engine's bounded descent must
         // reach a `Validator::make($data, [...])` call inside a Queries class one hop away and recover
-        // its rule array (the Eos GET-params validation pattern).
+        // its rule array (the modular GET-params validation pattern).
         $visitor = new InlineRulesVisitor;
         $engine->trace($ref, $visitor);
 

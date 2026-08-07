@@ -6,7 +6,6 @@ deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1, with 
 diffing and a bundled Scalar viewer. Private until v1 launch.
 
 > Full references — read these before substantial work:
-> - [`docs/plan.md`](./docs/plan.md) — approved plan, locked decisions, phase roadmap, coverage standards
 > - [`docs/design/uir-and-extensions.md`](./docs/design/uir-and-extensions.md) — UIR spec detail, extension API, precedence, **placement rule**
 > - [`docs/design/inference-embedding.md`](./docs/design/inference-embedding.md) — PHPStan/Larastan engine design + spike-verified traps
 > - [`docs/testing.md`](./docs/testing.md) — coverage standards, how to run coverage, ratchet policy
@@ -93,6 +92,8 @@ Laravel adapter feature tests run on orchestra/testbench with the workbench app 
 
 ## Project status
 
-Phases 0–4a complete; Phase 4b in progress; Phase 5 (content layer, docs site, Scramble
-migration guide) next; Phase 6 (Eos dogfooding) is gated on human oversight — do not start
-it autonomously. Current decisions log lives in `docs/plan.md` (dated inline notes).
+Pre-v1: the core, attributes, inference engine and Laravel adapter are built and green; the
+content layer, docs site and Scramble migration guide are the remaining work before launch.
+Dogfooding against a large production Laravel application is gated on human oversight — do
+not start it autonomously. Roadmap and decision history are maintained outside this repo; the
+binding conventions are the ones in this file and under `docs/`.

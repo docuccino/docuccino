@@ -18,8 +18,7 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
  *
  * On a FILE field (`format: binary`) these bounds mean KILOBYTES, not string length — emitting
  * `maxLength: 2048` for `file|max:2048` is actively wrong. OpenAPI has no file-size keyword, so the
- * honest representation is a human description note; no numeric length keyword is emitted (decision
- * logged in docs/plan.md).
+ * honest representation is a human description note; no numeric length keyword is emitted.
  */
 final class SizeRuleTransformer implements RuleTransformer
 {

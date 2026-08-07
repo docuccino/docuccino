@@ -90,8 +90,8 @@ final class DocumentGenerator
 
         // Compile the narrative content tree (design §Narrative content layer): a document-level
         // input assembled fresh each build. It is deliberately KEPT OUT of the fragment cache key —
-        // operation fragments never read content, so a prose edit must not invalidate them (at Eos
-        // scale that would re-run out-of-process PHPStan across the whole route set for a typo fix).
+        // operation fragments never read content, so a prose edit must not invalidate them (at
+        // production scale that would re-run out-of-process PHPStan across the whole route set for a typo fix).
         // Content edits are picked up regardless: content flows into the always-fresh assembly step
         // and into the document-level contentHash.
         [$content, $contentDiagnostics] = $this->contentCompiler->compile($document);

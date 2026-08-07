@@ -32,7 +32,7 @@ use PhpParser\Node;
  *     **chained modifiers**, and a line or block **comment directly above** the entry;
  *   - `defaultSort`/`defaultSorts` documented defaults;
  *   - paginating terminals (`paginate`/`simplePaginate`/`cursorPaginate` plus any configured custom
- *     terminal, e.g. Eos's `paginateList`) with the per-page folded from the OUTERMOST call site.
+ *     terminal, e.g. a `paginateList` helper) with the per-page folded from the OUTERMOST call site.
  *
  * Every un-foldable allow-list entry is recorded on {@see QueryBuilderFacts::$unresolved} with its
  * source location, so a dynamic chain degrades to a named diagnostic rather than silence.
