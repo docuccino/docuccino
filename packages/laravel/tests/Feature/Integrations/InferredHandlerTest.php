@@ -255,6 +255,30 @@ it('fills a status-provenance member with the response status, omits non-folding
     expect(json_encode($build()['example']))->toBe(json_encode($media['example']));
 });
 
+it('emits no example for a non-shape (object-typed) body — nothing statically known to assemble', function (): void {
+    // A handler that renders an object-typed body (not a keyed array literal) has no folded members, so
+    // there is nothing to example: the schema is still documented, no example is fabricated.
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['ignored' => true], 403),
+        MODEL_NOT_FOUND,
+    );
+
+    $engine = WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ClassT('Workbench\\App\\Data\\FormData'),
+                new LiteralT(403),
+            ]),
+            new SourceLocation(''),
+        )]),
+    ]);
+    app()->instance(TypeEngine::class, $engine);
+
+    $media = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses']['403']['content']['application/json'];
+
+    expect($media)->toHaveKey('schema')->and($media)->not->toHaveKey('example');
+});
+
 it('falls back to the exception status hint when the recovered status did not fold', function (): void {
     // An enum-derived / dynamic status the refiner could not fold arrives as UnknownT; the adapter must
     // document the exception's own status classification (404 here) rather than guessing 200.

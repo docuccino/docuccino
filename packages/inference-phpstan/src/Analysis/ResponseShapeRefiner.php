@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Analysis;
 
-use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
@@ -196,18 +195,10 @@ final class ResponseShapeRefiner
 
         $contentType = isset($args[2]) ? $this->contentTypeOf($args[2]->value, $scope) : null;
 
-        // A body member whose value passes through the SAME parameter that drives the HTTP status
-        // echoes the response status. Mark it now (call-independent) so a call site that folds the
+        // A body member whose value passes through the SAME parameter that drives the HTTP status echoes
+        // the response status: the factory marks it (call-independent) so a call site that folds the
         // status folds the member too, and an unfolded status still fills at documentation time.
-        if ($statusParam !== null && $payload instanceof ArrayShapeT) {
-            foreach ($provenance as $key => $param) {
-                if ($param === $statusParam) {
-                    $payload = $this->replaceFieldType($payload, $key, new StatusMarkerT);
-                }
-            }
-        }
-
-        return new RefinedResponse($payload, $status, $statusParam, $contentType, false, $provenance);
+        return RefinedResponse::fromConstructor($payload, $status, $statusParam, $contentType, $provenance);
     }
 
     /**
@@ -391,27 +382,25 @@ final class ResponseShapeRefiner
             return $child;
         }
 
-        $payload = $child->payload;
-        $rehomed = [];
+        // Classify each member's forwarded argument via the Scope, then let RefinedResponse apply the
+        // (pure) rewrite: a folded literal, a re-homed caller parameter, or a dropped provenance.
         foreach ($child->payloadParamProvenance as $key => $param) {
             $argExpr = $this->argumentFor($callee, $param, $call);
             if ($argExpr === null) {
+                $child = $child->bindMember($key, null, null);
+
                 continue;
             }
 
             $literal = $this->constLiteralOf($argExpr, $scope);
-            if ($literal !== null) {
-                $payload = $this->replaceFieldType($payload, $key, $literal);
+            $rehome = $literal === null && $argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)
+                ? $argExpr->name
+                : null;
 
-                continue;
-            }
-
-            if ($argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)) {
-                $rehomed[$key] = $argExpr->name;
-            }
+            $child = $child->bindMember($key, $literal, $rehome);
         }
 
-        return $child->withPayload($payload, $rehomed);
+        return $child;
     }
 
     /**
@@ -468,22 +457,6 @@ final class ResponseShapeRefiner
         }
 
         return null;
-    }
-
-    /**
-     * A copy of a keyed array shape with one member's value type replaced (its key and optionality
-     * preserved), or the shape unchanged when the key is absent.
-     */
-    private function replaceFieldType(ArrayShapeT $shape, string $key, DType $type): ArrayShapeT
-    {
-        $fields = array_map(
-            static fn (ArrayShapeField $field): ArrayShapeField => (string) $field->key === $key
-                ? new ArrayShapeField($field->key, $type, $field->optional)
-                : $field,
-            $shape->fields,
-        );
-
-        return new ArrayShapeT($fields, $shape->isList);
     }
 
     /**
