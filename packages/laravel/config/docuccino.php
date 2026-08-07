@@ -86,7 +86,10 @@ return [
                 'lists' => 'comma',                // comma (?sort=a,b) | array (exploded ?sort[]=a&sort[]=b)
                 'nullable' => 'type-array',        // type-array (type: [x, null]) | anyof ({type: null} branch)
                 'operation_id' => 'route-name',    // route-name | controller-method ({ShortController}@{method})
-                // 'enums' => ['naming' => 'none'], // none | x-enumNames | x-enum-varnames (codegen name hints)
+                // 'enums' => [
+                //     'naming' => 'none',       // none | x-enumNames | x-enum-varnames (codegen name hints)
+                //     'components' => true,     // true (hoist each enum to a $ref'd component) | false (inline at every use)
+                // ],
             ],
             // Per-integration document-level knobs (design §9). Each key is an integration's bag
             // (snake_case); an integration reads only its own bag. All optional — omit the whole

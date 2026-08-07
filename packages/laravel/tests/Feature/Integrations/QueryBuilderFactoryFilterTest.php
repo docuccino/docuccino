@@ -45,6 +45,7 @@ function runFactoryFilters(string $chain): array
     foreach ($operation->freeze()->parameters as $parameter) {
         $byName[$parameter->name] = $parameter->toArray();
     }
+    $byName['__components'] = $context->components->schemas();
 
     return $byName;
 }
@@ -59,13 +60,17 @@ $factoryChain = 'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->all
 it('types an enum-factory filter off its backed-enum class-string argument (scalar enum, not whereIn)', function () use ($factoryChain): void {
     $byName = runFactoryFilters($factoryChain);
 
-    expect($byName['filter[status]']['schema']['type'])->toBe('string')
-        ->and($byName['filter[status]']['schema']['enum'])->toBe(['draft', 'published', 'archived'])
-        // Single-value comparison → scalar enum, NOT a whereIn array (that is `exact`-only).
+    // The enum hoists to a component (default policy); the filter's value $refs it — a single-value
+    // comparison, so the $ref sits directly on the schema, NOT wrapped in a whereIn array (`items`).
+    expect($byName['filter[status]']['schema']['$ref'])->toBe('#/components/schemas/WidgetStatus')
         ->and($byName['filter[status]']['schema'])->not->toHaveKey('items')
-        ->and($byName['filter[status]']['schema']['x-enumDescriptions'] ?? null)->toBe([
-            'draft' => 'Not yet visible to applicants.',
-            'published' => 'Live and accepting traffic.',
+        ->and($byName['__components']['WidgetStatus'])->toBe([
+            'type' => 'string',
+            'enum' => ['draft', 'published', 'archived'],
+            'x-enumDescriptions' => [
+                'draft' => 'Not yet visible to applicants.',
+                'published' => 'Live and accepting traffic.',
+            ],
         ]);
 });
 

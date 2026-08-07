@@ -118,7 +118,8 @@ function modelRegistry(ClassT $type): ComponentRegistry
 }
 
 it('builds a model schema honouring hidden, appends, and casts', function (): void {
-    $widget = modelSchema(new ClassT(Widget::class))['Widget'];
+    $registry = modelRegistry(new ClassT(Widget::class));
+    $widget = $registry->schemas()['Widget'];
 
     // password ($hidden) and token (class-level #[Hidden]) are dropped; display_name ($appends) added;
     // updated_at is synthesised from the model's default timestamps (created_at is already a cast).
@@ -131,9 +132,11 @@ it('builds a model schema honouring hidden, appends, and casts', function (): vo
         ->and($widget['properties']['is_active'])->toBe(['type' => 'boolean'])
         ->and($widget['properties']['meta'])->toBe(['type' => ['array', 'object']]);
 
-    // enum cast routes through the Enum integration (backing values + case descriptions).
-    expect($widget['properties']['status']['enum'])->toBe(['draft', 'published', 'archived'])
-        ->and($widget['properties']['status'])->toHaveKey('x-enumDescriptions');
+    // enum cast routes through the Enum integration, hoisted to a $ref'd component (backing values +
+    // case descriptions live on the component).
+    expect($widget['properties']['status'])->toBe(['$ref' => '#/components/schemas/WidgetStatus'])
+        ->and($registry->schemas()['WidgetStatus']['enum'])->toBe(['draft', 'published', 'archived'])
+        ->and($registry->schemas()['WidgetStatus'])->toHaveKey('x-enumDescriptions');
 
     // Every declared column is present in the payload, so all are required — a nullable column
     // (created_at) is required with a null-admitting type. The appended accessor stays optional.
@@ -188,12 +191,14 @@ it('reads the casts() method (Laravel 11+) and applies its casts to columns', fu
         'status' => WidgetStatus::class,
     ]);
 
-    $invoice = modelSchema(new ClassT(Invoice::class))['Invoice'];
+    $registry = modelRegistry(new ClassT(Invoice::class));
+    $invoice = $registry->schemas()['Invoice'];
 
-    // The recovered casts refine the columns: datetime (nullable), array→object|array, enum values.
+    // The recovered casts refine the columns: datetime (nullable), array→object|array, enum ($ref).
     expect($invoice['properties']['issued_at'])->toBe(['type' => ['string', 'null'], 'format' => 'date-time'])
         ->and($invoice['properties']['meta'])->toBe(['type' => ['array', 'object']])
-        ->and($invoice['properties']['status']['enum'])->toBe(['draft', 'published', 'archived']);
+        ->and($invoice['properties']['status'])->toBe(['$ref' => '#/components/schemas/WidgetStatus'])
+        ->and($registry->schemas()['WidgetStatus']['enum'])->toBe(['draft', 'published', 'archived']);
 });
 
 it('applies a $visible allow-list', function (): void {
@@ -277,7 +282,8 @@ it('discovers a model\'s classic and Attribute accessors via real reflection', f
 });
 
 it('types appended accessors, overrides a column\'s cast with its accessor, and maps the As* casts', function (): void {
-    $boutique = modelSchema(new ClassT(Boutique::class))['Boutique'];
+    $registry = modelRegistry(new ClassT(Boutique::class));
+    $boutique = $registry->schemas()['Boutique'];
 
     // full_label is an appended accessor typed by getFullLabelAttribute() → string (was permissive {}).
     expect($boutique['properties']['full_label'])->toBe(['type' => 'string']);
@@ -286,11 +292,13 @@ it('types appended accessors, overrides a column\'s cast with its accessor, and 
     // type wins and the cast is skipped (mirroring HasAttributes' mutate-then-cast precedence).
     expect($boutique['properties']['options'])->toBe(['type' => 'string']);
 
-    // AsCollection → array; AsEnumCollection:Enum → an array of that enum's values (routed through the
-    // Enum integration); the custom CastsAttributes caster → its get() return type (string).
+    // AsCollection → array; AsEnumCollection:Enum → an array whose items $ref the hoisted enum
+    // component (routed through the Enum integration); the custom CastsAttributes caster → its get()
+    // return type (string).
     expect($boutique['properties']['tags'])->toBe(['type' => 'array'])
         ->and($boutique['properties']['kinds']['type'])->toBe('array')
-        ->and($boutique['properties']['kinds']['items']['enum'])->toBe(['draft', 'published', 'archived'])
+        ->and($boutique['properties']['kinds']['items'])->toBe(['$ref' => '#/components/schemas/WidgetStatus'])
+        ->and($registry->schemas()['WidgetStatus']['enum'])->toBe(['draft', 'published', 'archived'])
         ->and($boutique['properties']['secret'])->toBe(['type' => 'string']);
 
     // The appended accessor stays optional; every cast column is required.

@@ -12,6 +12,11 @@ namespace Docuccino\Core\Extensions\Context;
  * - `operationId`: `route-name` (default) | `controller-method`.
  * - `enumNaming`: `none` (default) | `x-enumNames` | `x-enum-varnames` — codegen name hints
  *   emitted alongside the enum, never changing the `enum` member itself.
+ * - `enumComponents`: `true` (default) | `false` — whether a reflectable enum hoists to a named
+ *   `components.schemas` entry (deduped by FQCN identity) that properties and query-parameter item
+ *   schemas `$ref`, vs inlining its `type`/`enum`/`x-enumDescriptions` at every use site. Hoisting is
+ *   the better output (one canonical, described enum shared everywhere); `false` restores the inline
+ *   expression byte-for-byte.
  * - `nullable`: `type-array` (default, `type: [x, null]`) | `anyof` (a `{type: null}` branch) —
  *   how a "single type plus null" union is expressed.
  * - `filterStyle` (Query Builder): `bracketed` (default — one flat `filter[status]` param each, and
@@ -37,6 +42,7 @@ final readonly class RepresentationPolicy
         public string $filterStyle = 'bracketed',
         public string $listStyle = 'comma',
         public string $resourceWrap = '',
+        public bool $enumComponents = true,
     ) {}
 
     /**
@@ -48,6 +54,7 @@ final readonly class RepresentationPolicy
     {
         $enums = $representation['enums'] ?? null;
         $enumNaming = is_array($enums) ? ($enums['naming'] ?? null) : null;
+        $enumComponents = is_array($enums) ? ($enums['components'] ?? null) : null;
 
         return new self(
             operationId: self::keyword($representation['operation_id'] ?? null, 'route-name'),
@@ -56,6 +63,7 @@ final readonly class RepresentationPolicy
             filterStyle: self::keyword($representation['filters'] ?? null, 'bracketed'),
             listStyle: self::keyword($representation['lists'] ?? null, 'comma'),
             resourceWrap: self::normalizeWrap($resourceWrap),
+            enumComponents: ! ($enumComponents === false),
         );
     }
 
