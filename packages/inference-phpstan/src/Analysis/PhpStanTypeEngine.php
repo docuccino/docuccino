@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\IntersectionT;
+use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
@@ -68,6 +69,13 @@ final class PhpStanTypeEngine implements TypeEngine
      * @var array<string, ActionAnalysis>
      */
     private array $callableMemo = [];
+
+    /**
+     * The response-shape refiner (helper-indirection recovery), built once per engine so its per-callee
+     * memo is reused across every route reaching a shared helper. Lazy: an engine that never harvests a
+     * bare-response return never builds it.
+     */
+    private ?ResponseShapeRefiner $refiner = null;
 
     public function __construct(
         private readonly RuntimeAdapter $adapter,
@@ -136,7 +144,7 @@ final class PhpStanTypeEngine implements TypeEngine
             returns: $returns,
             throws: $throws,
             diagnostics: $diagnostics,
-            dependencyFiles: [$action->file, ...$throwAnalyzer->visitedFiles()],
+            dependencyFiles: [$action->file, ...$throwAnalyzer->visitedFiles(), ...$this->drainRefinerFiles()],
         );
     }
 
@@ -148,21 +156,50 @@ final class PhpStanTypeEngine implements TypeEngine
         $returns = [];
         foreach ($node->getReturnStatements() as $statement) {
             $returnNode = $statement->getReturnNode();
-            $line = $returnNode->getStartLine();
-            $location = new SourceLocation($file, $line);
-            $expr = $returnNode->expr;
-
-            if ($expr === null) {
-                $returns[] = new ReturnSite(new VoidT, $location);
-
-                continue;
-            }
-
-            $type = $statement->getScope()->getType($expr);
-            $returns[] = new ReturnSite($this->translator->translate($type), $location);
+            $location = new SourceLocation($file, $returnNode->getStartLine());
+            $returns[] = new ReturnSite($this->siteType($returnNode->expr, $statement->getScope()), $location);
         }
 
         return $returns;
+    }
+
+    /**
+     * The type of one return expression, with response-shape refinement (design §4 helper indirection):
+     * a bare `JsonResponse`/`Response` built through a project-code helper is followed to the helper's
+     * own return sites and substituted with the richer `JsonResponse<payload, status, contentType>`. A
+     * refinement that resolves to a `return null` / void arm (the "delegate to the framework" path)
+     * yields {@see VoidT}. Anything not a bare response is translated verbatim.
+     */
+    private function siteType(?Node\Expr $expr, Scope $scope): DType
+    {
+        if ($expr === null) {
+            return new VoidT;
+        }
+
+        $type = $this->translator->translate($scope->getType($expr));
+        if (! $type instanceof ClassT || ! ResponseShapeRefiner::isResponseFqcn($type->fqcn)) {
+            return $type;
+        }
+
+        $refined = $this->refiner()->refine($expr, $scope);
+        if ($refined === null) {
+            return $type;
+        }
+        if ($refined->delegates) {
+            return new VoidT;
+        }
+
+        return $refined->toClassT(ResponseShapeRefiner::CANONICAL_RESPONSE) ?? $type;
+    }
+
+    /**
+     * Drain (and reset) the refiner's touched-file set for the current analysis, or `[]` if it never ran.
+     *
+     * @return list<string>
+     */
+    private function drainRefinerFiles(): array
+    {
+        return $this->refiner === null ? [] : $this->refiner->takeFiles();
     }
 
     public function analyzeCallable(CallableRef $callable): ActionAnalysis
@@ -209,21 +246,30 @@ final class PhpStanTypeEngine implements TypeEngine
         return new ActionAnalysis(
             returns: $narrowed['returns'],
             diagnostics: $narrowed['diagnostics'],
-            dependencyFiles: [$callable->file],
+            dependencyFiles: [$callable->file, ...$this->drainRefinerFiles()],
         );
     }
 
     /**
-     * Harvest a callable's return sites. With a narrowing request, each return is tagged with the
-     * PHPStan-narrowed type of the caught variable at that return, and the site reachable when the
-     * variable is the narrowed exception type is selected by SOURCE-ORDER-FIRST-MATCH (mirroring the
-     * `if ($e instanceof X) return …;` / default control flow) — so a catch-all `render(Throwable $e)`
-     * yields exactly the response for the requested exception type.
+     * Harvest a callable's return sites for a narrowing request. Each site pairs a recovered type (with
+     * response-shape refinement — {@see siteType()}) with the caught-variable class GUARD that makes it
+     * reachable: for an `if ($e instanceof X) return …;` chain, PHPStan's per-return narrowing; for a
+     * `return match (true) { $e instanceof X => …, default => … }` renderer (the Eos shape), the arm's
+     * own `instanceof` conditions (decomposed here — the outer `match` collapses to one return whose
+     * scope leaves `$e` un-narrowed, so the arms must be read from the AST). The reachable site for the
+     * narrowed type is chosen by SOURCE-ORDER-FIRST-MATCH over the arms — the runtime semantics of both
+     * an `if`-chain and `match (true)`.
      *
-     * Narrowing honesty (B2): when MORE THAN ONE return site is guard-satisfiable for the narrowed
-     * type — the ambiguity a negated guard (`if (! ($e instanceof X)) …`) or overlapping `instanceof`
-     * branches produce — the first is still chosen, but an info diagnostic is raised so the recovered
-     * shape is not passed off as unambiguous.
+     * Delegation honesty (design §6): a broad `return null` / void arm that does NOT branch on `$e`
+     * (the `if (! $request->expectsJson()) return null;` early-out) must not shadow a later per-type
+     * response arm — the documented API path is the response, not the framework fall-through. So a
+     * broad DELEGATION site is skipped in favour of any response-producing site; only a genuine
+     * per-type null arm (`$e instanceof X => null`, an exact guard) or an all-delegating renderer
+     * resolves to delegation.
+     *
+     * Narrowing honesty (B2): when a broad guard is chosen ahead of a later EXACT `instanceof` match,
+     * or two arms match the type exactly, an info diagnostic is raised so the shape is not passed off
+     * as unambiguous.
      *
      * @return array{returns: list<ReturnSite>, diagnostics: list<Diagnostic>}
      */
@@ -232,57 +278,169 @@ final class PhpStanTypeEngine implements TypeEngine
         $param = $callable->narrowParameter;
         $narrowTo = $callable->narrowType;
 
-        /** @var list<array{line: int, site: ReturnSite, guard: list<string>}> $sites */
+        /** @var list<array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}> $sites */
         $sites = [];
         foreach ($node->getReturnStatements() as $statement) {
             $returnNode = $statement->getReturnNode();
-            $line = $returnNode->getStartLine();
             $expr = $returnNode->expr;
             $scope = $statement->getScope();
 
-            $type = $expr === null ? new VoidT : $this->translator->translate($scope->getType($expr));
+            // A `match (true)` renderer body decomposes into one site per arm (guard = the arm's
+            // `instanceof` conditions), so per-arm exception mapping composes with refinement.
+            if ($param !== null && $expr instanceof Node\Expr\Match_) {
+                foreach ($this->matchArmSites($expr, $param, $scope) as $armSite) {
+                    $sites[] = $armSite;
+                }
 
-            $guard = [];
-            if ($param !== null) {
-                $guard = $this->classFqcns($this->translator->translate($scope->getType(new Variable($param))));
+                continue;
             }
 
-            $sites[] = ['line' => $line, 'site' => new ReturnSite($type, new SourceLocation($callable->file, $line)), 'guard' => $guard];
+            $type = $this->siteType($expr, $scope);
+            $guard = $param === null ? [] : $this->classFqcns($this->translator->translate($scope->getType(new Variable($param))));
+            $sites[] = [
+                'pos' => $this->sourcePos($returnNode),
+                'line' => $returnNode->getStartLine(),
+                'type' => $type,
+                'guard' => $guard,
+                'delegates' => $this->isDelegation($type),
+            ];
         }
 
         if ($param === null || $narrowTo === null) {
-            return ['returns' => array_map(static fn (array $s): ReturnSite => $s['site'], $sites), 'diagnostics' => []];
+            return [
+                'returns' => array_map(
+                    fn (array $s): ReturnSite => new ReturnSite($s['type'], new SourceLocation($callable->file, $s['line'])),
+                    $sites,
+                ),
+                'diagnostics' => [],
+            ];
         }
 
-        // Deterministic control-flow order, then every return whose caught-variable guard the narrowed
+        // Deterministic control-flow order, then every arm whose caught-variable guard the narrowed
         // type satisfies (an empty/unclassed guard is the unconditional default branch).
-        usort($sites, static fn (array $a, array $b): int => $a['line'] <=> $b['line']);
+        usort($sites, static fn (array $a, array $b): int => $a['pos'] <=> $b['pos']);
         $satisfiable = array_values(array_filter(
             $sites,
             fn (array $candidate): bool => $this->guardSatisfies($candidate['guard'], $narrowTo),
         ));
 
+        $chosen = $this->chooseNarrowedSite($satisfiable, $narrowTo);
+
         return [
-            'returns' => $satisfiable === [] ? [] : [$satisfiable[0]['site']],
-            'diagnostics' => $this->narrowingAmbiguity($satisfiable, $narrowTo, $param, $callable),
+            'returns' => $chosen === null
+                ? []
+                : [new ReturnSite($chosen['type'], new SourceLocation($callable->file, $chosen['line']))],
+            'diagnostics' => $this->narrowingAmbiguity($satisfiable, $chosen, $narrowTo, $param, $callable),
         ];
     }
 
     /**
-     * The narrowing-honesty diagnostic (B2). The source-order-first-match is trustworthy when the
-     * chosen return is an EXACT guard match for the narrowed type (`instanceof <exact>`), or when it
-     * is the sole satisfiable branch — the ordinary sequential-`instanceof`-plus-default shape, where
-     * the exact branch precedes the reachable-for-any default, is unambiguous. It is AMBIGUOUS when a
-     * broad/negated guard (`if (! ($e instanceof X)) …`, matched only via a supertype) is chosen ahead
-     * of a later exact match, or when two branches both match the type exactly; only then is an info
-     * diagnostic raised, so the chosen shape is not passed off as unambiguous.
+     * Choose the reachable site for the narrowed type: the first (in source order) that is an EXACT
+     * guard match or produces a response — so a broad delegation early-out is skipped in favour of the
+     * per-type response arm. Falls back to the first satisfiable site (a genuinely all-delegating
+     * renderer) when nothing else qualifies.
      *
-     * @param  list<array{line: int, site: ReturnSite, guard: list<string>}>  $satisfiable
+     * @param  list<array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}>  $satisfiable
+     * @return array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}|null
+     */
+    private function chooseNarrowedSite(array $satisfiable, string $narrowTo): ?array
+    {
+        foreach ($satisfiable as $site) {
+            if (in_array($narrowTo, $site['guard'], true) || ! $site['delegates']) {
+                return $site;
+            }
+        }
+
+        return $satisfiable[0] ?? null;
+    }
+
+    /**
+     * Expand a `match (true)` body into one site per arm: guard = the `instanceof` classes the arm
+     * conditions test `$param` against (a `default` arm, or a non-`instanceof` condition, is broad),
+     * type = the refined arm-body response. Arm order is preserved via source position.
+     *
+     * @return list<array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}>
+     */
+    private function matchArmSites(Node\Expr\Match_ $match, string $param, Scope $scope): array
+    {
+        $sites = [];
+        foreach ($match->arms as $arm) {
+            $type = $this->siteType($arm->body, $scope);
+            $sites[] = [
+                'pos' => $this->sourcePos($arm->body),
+                'line' => $arm->body->getStartLine(),
+                'type' => $type,
+                'guard' => $arm->conds === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope),
+                'delegates' => $this->isDelegation($type),
+            ];
+        }
+
+        return $sites;
+    }
+
+    /**
+     * The class FQCNs a match arm's conditions test `$param` against — walking `&&`/`||` so a compound
+     * `$e instanceof A && $e instanceof B` contributes both. A condition that is not an `instanceof` on
+     * `$param` contributes nothing (the arm stays broad).
+     *
+     * @param  array<Node\Expr>  $conds
+     * @return list<string>
+     */
+    private function armInstanceofGuards(array $conds, string $param, Scope $scope): array
+    {
+        $fqcns = [];
+        foreach ($conds as $cond) {
+            $this->collectInstanceof($cond, $param, $scope, $fqcns);
+        }
+
+        return array_values(array_unique($fqcns));
+    }
+
+    /**
+     * @param  list<string>  $out
+     */
+    private function collectInstanceof(Node\Expr $node, string $param, Scope $scope, array &$out): void
+    {
+        if ($node instanceof Node\Expr\Instanceof_
+            && $node->expr instanceof Variable
+            && $node->expr->name === $param
+            && $node->class instanceof Node\Name
+        ) {
+            $out[] = $scope->resolveName($node->class);
+
+            return;
+        }
+
+        if ($node instanceof Node\Expr\BinaryOp) {
+            $this->collectInstanceof($node->left, $param, $scope, $out);
+            $this->collectInstanceof($node->right, $param, $scope, $out);
+        }
+    }
+
+    private function isDelegation(DType $type): bool
+    {
+        return $type instanceof VoidT || $type instanceof NullT;
+    }
+
+    private function sourcePos(Node $node): int
+    {
+        $pos = $node->getStartFilePos();
+
+        return $pos >= 0 ? $pos : $node->getStartLine();
+    }
+
+    /**
+     * The narrowing-honesty diagnostic (B2): raised when the CHOSEN site is a broad guard shadowing a
+     * later exact `instanceof` match, or two arms claim the type exactly — the shape is then not
+     * unambiguous. An exact chosen site with no rival exact match, or the ordinary
+     * sequential-`instanceof`-plus-default shape, is unambiguous.
+     *
+     * @param  list<array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}>  $satisfiable
+     * @param  array{pos: int, line: int, type: DType, guard: list<string>, delegates: bool}|null  $chosen
      * @return list<Diagnostic>
      */
-    private function narrowingAmbiguity(array $satisfiable, string $narrowTo, string $param, CallableRef $callable): array
+    private function narrowingAmbiguity(array $satisfiable, ?array $chosen, string $narrowTo, string $param, CallableRef $callable): array
     {
-        $chosen = $satisfiable[0] ?? null;
         if ($chosen === null) {
             return [];
         }
@@ -449,6 +607,20 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->config->knownThrowers,
             new CalleeResolver($this->adapter->reflectionProvider()),
             $this->config->throwDepth,
+        );
+    }
+
+    private function refiner(): ResponseShapeRefiner
+    {
+        return $this->refiner ??= new ResponseShapeRefiner(
+            $this->adapter,
+            $this->translator,
+            $this->fileAnalyzer,
+            new CalleeResolver($this->adapter->reflectionProvider()),
+            $this->projectFilter,
+            $this->adapter->reflectionProvider(),
+            $this->config->traceDepth,
+            $this->config->fileBudget,
         );
     }
 
