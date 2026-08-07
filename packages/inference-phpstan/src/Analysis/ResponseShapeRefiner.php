@@ -37,7 +37,7 @@ use PHPStan\Type\Type;
  * Design invariants (see docs/design/inference-embedding.md §4 and the plan decision log):
  *   - BOUNDED: reuses the engine's descent depth + per-analysis file budget; declines past either.
  *   - MEMOISED per callee `class::method` — call-INDEPENDENT (payload shape, content type, and a status
- *     that is either a literal or a pass-through {@see RefinedResponse::$statusParam}), so ordering
+ *     that is either a literal or reads from a {@see RefinedResponse::$statusSource} accessor), so ordering
  *     never affects results and one helper analysed once is reused across every route reaching it.
  *   - TRANSITIVE within bounds: a helper that calls another helper folds through both hops; a
  *     pass-through status re-homes onto the outer callee's parameter at each hop.
@@ -45,8 +45,15 @@ use PHPStan\Type\Type;
  *     binds at the call site; a status that folds to neither a literal nor a parameter stays
  *     permissive (recovered as {@see UnknownT}, never guessed), and payload/content-type are still
  *     recovered when the status does not fold.
- *   - CACHE-SOUND: every descended helper file is reported via {@see takeFiles()} so it lands in the
- *     analysis's `dependencyFiles` — editing a helper invalidates the route fragment.
+ *   - ENUM CASES FOLD (the final indirection hop): when the call site binds a concrete enum case
+ *     (`make(ProblemType::Forbidden, …)`) to a parameter, the accessors the callee applied to it fold via
+ *     {@see EnumAccessorFolder} — `->value`/`->name` from the case (vendor-safe), a no-arg
+ *     `->status()`/`->title()` from the PROJECT enum's method body (a `match ($this)` arm or a plain
+ *     constant return). A folded `->status()` then supplies the response status as a literal (the
+ *     renderer's own truth), which the response builder prefers over the exception's throw-status hint.
+ *   - CACHE-SOUND: every descended helper file — and every enum file whose method was folded — is
+ *     reported via {@see takeFiles()} so it lands in the analysis's `dependencyFiles`, invalidating the
+ *     route fragment on edit.
  *   - VENDOR IS NEVER DESCENDED: the {@see ProjectFilter} gate is the containment boundary.
  *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
@@ -79,6 +86,9 @@ final class ResponseShapeRefiner
     /** @var array<string, true> files touched by the CURRENT analysis, drained by {@see takeFiles()}. */
     private array $currentFiles = [];
 
+    /** Folds accessors on a bound enum case (`->value`, `->name`, `->status()`) — the final indirection hop. */
+    private readonly EnumAccessorFolder $enumFolder;
+
     public function __construct(
         private readonly RuntimeAdapter $adapter,
         private readonly TypeTranslator $translator,
@@ -88,7 +98,16 @@ final class ResponseShapeRefiner
         private readonly ReflectionProvider $reflectionProvider,
         private readonly int $maxDepth = 4,
         private readonly int $fileBudget = 40,
-    ) {}
+    ) {
+        $this->enumFolder = new EnumAccessorFolder(
+            $this->fileAnalyzer,
+            $this->projectFilter,
+            $this->reflectionProvider,
+            function (string $file): void {
+                $this->currentFiles[$this->adapter->normalize($file)] = true;
+            },
+        );
+    }
 
     /**
      * Whether a class FQCN is a bare response type the refiner should try to enrich. The harvest calls
@@ -189,46 +208,114 @@ final class ResponseShapeRefiner
             $provenance = $this->payloadProvenance($args[0]->value, $scope, $paramNames);
         }
 
-        [$status, $statusParam] = isset($args[1])
+        [$status, $statusSource] = isset($args[1])
             ? $this->resolveStatus($args[1]->value, $scope, $paramNames)
             : [new LiteralT(200), null];
 
         $contentType = isset($args[2]) ? $this->contentTypeOf($args[2]->value, $scope) : null;
 
-        // A body member whose value passes through the SAME parameter that drives the HTTP status echoes
-        // the response status: the factory marks it (call-independent) so a call site that folds the
-        // status folds the member too, and an unfolded status still fills at documentation time.
-        return RefinedResponse::fromConstructor($payload, $status, $statusParam, $contentType, $provenance);
+        // A body member whose value reads from the SAME accessor that drives the HTTP status echoes the
+        // response status: the factory marks it (call-independent) so a call site that folds the status
+        // folds the member too, and an unfolded status still fills at documentation time.
+        return RefinedResponse::fromConstructor($payload, $status, $statusSource, $contentType, $provenance);
     }
 
     /**
-     * The member→parameter provenance of a body array literal: each string-keyed member whose value is
-     * one of the current function's parameters, so a call site can fold it to the argument it passed.
+     * The member→accessor provenance of a response body: each string-keyed member whose value reads off
+     * one of the current function's parameters — the parameter itself (`$detail`), or an accessor on an
+     * enum parameter (`$problem->value` / `$problem->status()`) — so a call site can fold it once it knows
+     * the argument. Handles both the inline `new JsonResponse([...], …)` body and the idiomatic
+     * built-up-variable body (`$body = [...]; …; return new JsonResponse($body, …)`) by tracing the
+     * variable's initialiser assignment.
      *
      * @param  list<string>  $paramNames
-     * @return array<string, string> member key → parameter name
+     * @return array<string, ParamAccessor> member key → the accessor its value reads from
      */
     private function payloadProvenance(Node\Expr $expr, Scope $scope, array $paramNames): array
     {
-        if (! $expr instanceof Node\Expr\Array_) {
+        $array = $this->bodyArrayLiteral($expr, $scope);
+        if ($array === null) {
             return [];
         }
 
         $provenance = [];
-        foreach ($expr->items as $item) {
-            if ($item->key === null || ! $item->value instanceof Node\Expr\Variable || ! is_string($item->value->name)) {
+        foreach ($array->items as $item) {
+            if ($item->key === null) {
                 continue;
             }
-            if (! in_array($item->value->name, $paramNames, true)) {
+            $accessor = $this->accessorOf($item->value, $paramNames);
+            if ($accessor === null) {
                 continue;
             }
             $keys = $scope->getType($item->key)->getConstantStrings();
             if (count($keys) === 1) {
-                $provenance[$keys[0]->getValue()] = $item->value->name;
+                $provenance[$keys[0]->getValue()] = $accessor;
             }
         }
 
         return $provenance;
+    }
+
+    /**
+     * The array literal a response body is built from: the expression itself when written inline, or the
+     * initialiser assignment of a local variable it was built up in (`$body = [...]`). Null when the body
+     * is neither — its member provenance is then simply not recovered (the shape still comes from PHPStan).
+     */
+    private function bodyArrayLiteral(Node\Expr $expr, Scope $scope): ?Node\Expr\Array_
+    {
+        if ($expr instanceof Node\Expr\Array_) {
+            return $expr;
+        }
+
+        if ($expr instanceof Node\Expr\Variable && is_string($expr->name)) {
+            $method = $scope->getFunctionName();
+            if ($method !== null) {
+                return $this->fileAnalyzer->arrayAssignments($scope->getFile())[$method][$expr->name] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Classify a body-member / status value expression as an accessor on one of the current parameters:
+     * the parameter itself (identity), `$param->value` / `$param->name`, or a NO-ARG method
+     * `$param->method()` (an enum accessor). Null when the value is not rooted in a parameter.
+     *
+     * @param  list<string>  $paramNames
+     */
+    private function accessorOf(Node\Expr $expr, array $paramNames): ?ParamAccessor
+    {
+        if ($expr instanceof Node\Expr\Variable && is_string($expr->name) && in_array($expr->name, $paramNames, true)) {
+            return ParamAccessor::identity($expr->name);
+        }
+
+        if ($expr instanceof Node\Expr\PropertyFetch
+            && $expr->var instanceof Node\Expr\Variable
+            && is_string($expr->var->name)
+            && in_array($expr->var->name, $paramNames, true)
+            && $expr->name instanceof Node\Identifier
+        ) {
+            $kind = match ($expr->name->toString()) {
+                'value' => AccessorKind::Value,
+                'name' => AccessorKind::Name,
+                default => null,
+            };
+
+            return $kind === null ? null : new ParamAccessor($expr->var->name, $kind);
+        }
+
+        if ($expr instanceof Node\Expr\MethodCall
+            && $expr->var instanceof Node\Expr\Variable
+            && is_string($expr->var->name)
+            && in_array($expr->var->name, $paramNames, true)
+            && $expr->name instanceof Node\Identifier
+            && $expr->getArgs() === []
+        ) {
+            return new ParamAccessor($expr->var->name, AccessorKind::Method, $expr->name->toString());
+        }
+
+        return null;
     }
 
     /**
@@ -339,32 +426,33 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Bind the callee's pass-through status: a folded literal resolves it outright; a parameter of the
-     * caller re-homes the pass-through one hop out; anything else leaves it permissive.
+     * Bind the callee's status source: a foldable argument resolves it outright — an int literal, or a
+     * concrete enum case whose accessor folds to an int (`make(ProblemType::Forbidden, …)` →
+     * `$problem->status()` → `403`); a caller parameter re-homes the accessor one hop out; anything else
+     * leaves it permissive.
      *
      * @param  list<string>  $paramNames  the caller's parameter names
      */
     private function bindStatus(RefinedResponse $child, Callee $callee, Node\Expr $call, Scope $scope, array $paramNames): RefinedResponse
     {
-        if ($child->statusParam === null) {
+        $source = $child->statusSource;
+        if ($source === null) {
             return $child;
         }
 
-        $argExpr = $this->argumentFor($callee, $child->statusParam, $call);
+        $argExpr = $this->argumentFor($callee, $source->param, $call);
         if ($argExpr === null) {
-            return $child->withStatusParam(null);
+            return $child->withStatusSource(null);
         }
 
-        $literal = $this->intLiteralOf($argExpr, $scope);
-        if ($literal !== null) {
-            return $child->withBoundStatus(new LiteralT($literal));
+        $literal = $this->foldAccessorArgument($argExpr, $source, $scope);
+        if ($literal !== null && is_int($literal->value)) {
+            return $child->withBoundStatus($literal);
         }
 
-        if ($argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)) {
-            return $child->withStatusParam($argExpr->name);
-        }
+        $rehome = $this->rehomeAccessor($argExpr, $source, $paramNames);
 
-        return $child->withStatusParam(null);
+        return $rehome === null ? $child->withStatusSource(null) : $child->withStatusSource($rehome);
     }
 
     /**
@@ -383,19 +471,18 @@ final class ResponseShapeRefiner
         }
 
         // Classify each member's forwarded argument via the Scope, then let RefinedResponse apply the
-        // (pure) rewrite: a folded literal, a re-homed caller parameter, or a dropped provenance.
-        foreach ($child->payloadParamProvenance as $key => $param) {
-            $argExpr = $this->argumentFor($callee, $param, $call);
+        // (pure) rewrite: a folded literal (a caller literal, or an enum-case accessor), a re-homed
+        // accessor one hop out, or a dropped provenance.
+        foreach ($child->payloadParamProvenance as $key => $accessor) {
+            $argExpr = $this->argumentFor($callee, $accessor->param, $call);
             if ($argExpr === null) {
                 $child = $child->bindMember($key, null, null);
 
                 continue;
             }
 
-            $literal = $this->constLiteralOf($argExpr, $scope);
-            $rehome = $literal === null && $argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)
-                ? $argExpr->name
-                : null;
+            $literal = $this->foldAccessorArgument($argExpr, $accessor, $scope);
+            $rehome = $literal === null ? $this->rehomeAccessor($argExpr, $accessor, $paramNames) : null;
 
             $child = $child->bindMember($key, $literal, $rehome);
         }
@@ -404,10 +491,69 @@ final class ResponseShapeRefiner
     }
 
     /**
-     * Resolve a status expression to either a literal int, a pass-through parameter name, or neither.
+     * Fold the argument bound to an accessor's parameter to a literal, when it can be: an IDENTITY
+     * accessor folds a constant-scalar argument directly (a caller-written literal); an enum accessor
+     * (`->value`/`->name`/`->method()`) folds when the argument is a CONCRETE enum case, via
+     * {@see EnumAccessorFolder} (case value/name trivially — vendor-safe; a project method by analysing
+     * its body). Null when nothing folds — never guessed.
+     */
+    private function foldAccessorArgument(Node\Expr $argExpr, ParamAccessor $accessor, Scope $scope): ?LiteralT
+    {
+        if ($accessor->kind === AccessorKind::Identity) {
+            return $this->constLiteralOf($argExpr, $scope);
+        }
+
+        $case = $this->enumCaseOf($argExpr, $scope);
+
+        return $case === null ? null : $this->enumFolder->fold($case['fqcn'], $case['case'], $accessor);
+    }
+
+    /**
+     * Re-home an accessor one hop out when the argument is a caller PARAMETER (`make($problemType, …)`
+     * inside `render($problemType)`): from the caller's vantage the value reads through the same accessor
+     * on the caller's own parameter. Null when the argument is not a caller parameter.
+     *
+     * @param  list<string>  $paramNames  the caller's parameter names
+     */
+    private function rehomeAccessor(Node\Expr $argExpr, ParamAccessor $accessor, array $paramNames): ?ParamAccessor
+    {
+        if ($argExpr instanceof Node\Expr\Variable && is_string($argExpr->name) && in_array($argExpr->name, $paramNames, true)) {
+            return $accessor->withParam($argExpr->name);
+        }
+
+        return null;
+    }
+
+    /**
+     * The concrete enum case an argument expression resolves to (`ProblemType::Forbidden`, or a variable
+     * PHPStan narrowed to a single case), as `{fqcn, case}`, or null when it is not a single known case.
+     *
+     * @return array{fqcn: string, case: string}|null
+     */
+    private function enumCaseOf(Node\Expr $expr, Scope $scope): ?array
+    {
+        if ($expr instanceof Node\Expr\ClassConstFetch
+            && $expr->class instanceof Node\Name
+            && $expr->name instanceof Node\Identifier
+            && strtolower($expr->name->toString()) !== 'class'
+        ) {
+            $fqcn = $scope->resolveName($expr->class);
+            if (enum_exists($fqcn)) {
+                return ['fqcn' => $fqcn, 'case' => $expr->name->toString()];
+            }
+        }
+
+        $cases = $scope->getType($expr)->getEnumCases();
+
+        return count($cases) === 1 ? ['fqcn' => $cases[0]->getClassName(), 'case' => $cases[0]->getEnumCaseName()] : null;
+    }
+
+    /**
+     * Resolve a status expression to either a call-independent literal int, the {@see ParamAccessor} it
+     * reads from (a parameter, or an accessor on an enum parameter like `$problem->status()`), or neither.
      *
      * @param  list<string>  $paramNames
-     * @return array{?LiteralT, ?string}
+     * @return array{?LiteralT, ?ParamAccessor}
      */
     private function resolveStatus(Node\Expr $expr, Scope $scope, array $paramNames): array
     {
@@ -416,11 +562,7 @@ final class ResponseShapeRefiner
             return [new LiteralT($literal), null];
         }
 
-        if ($expr instanceof Node\Expr\Variable && is_string($expr->name) && in_array($expr->name, $paramNames, true)) {
-            return [null, $expr->name];
-        }
-
-        return [null, null];
+        return [null, $this->accessorOf($expr, $paramNames)];
     }
 
     private function intLiteralOf(Node\Expr $expr, Scope $scope): ?int

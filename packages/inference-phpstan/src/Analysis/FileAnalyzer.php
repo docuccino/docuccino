@@ -27,6 +27,9 @@ final class FileAnalyzer
     /** @var array<string, array<int, ClosureReturnStatementsNode>> */
     private array $closureCache = [];
 
+    /** @var array<string, array<string, array<string, Node\Expr\Array_>>> file → method → varName → first array-literal assigned */
+    private array $arrayAssignmentCache = [];
+
     public function __construct(private readonly RuntimeAdapter $adapter) {}
 
     /**
@@ -76,5 +79,47 @@ final class FileAnalyzer
         });
 
         return $this->closureCache[$normalised] = $collected;
+    }
+
+    /**
+     * Harvest the file's `$var = [ ... ]` array-literal assignments, keyed by the containing method name
+     * then by variable name (FIRST assignment wins — the initialiser). It lets the refiner recover the
+     * member→parameter provenance of a response body that is BUILT UP in a local variable before being
+     * handed to `new JsonResponse($body, …)` (the idiomatic shape: a `$body` array literal followed by
+     * conditional `$body[...] = …` appends), not only the inline `new JsonResponse([...], …)` case.
+     * Conditional appends (assignments to an array-dim, not the bare variable) are ignored here — the
+     * payload SHAPE still comes from PHPStan's inferred type of the variable at the return.
+     *
+     * @return array<string, array<string, Node\Expr\Array_>>
+     */
+    public function arrayAssignments(string $file): array
+    {
+        $normalised = $this->adapter->normalize($file);
+        if (isset($this->arrayAssignmentCache[$normalised])) {
+            return $this->arrayAssignmentCache[$normalised];
+        }
+
+        /** @var array<string, array<string, Node\Expr\Array_>> $collected */
+        $collected = [];
+        $this->adapter->processFile($file, static function (Node $node, Scope $scope) use (&$collected): void {
+            if (! $node instanceof Node\Expr\Assign
+                || ! $node->var instanceof Node\Expr\Variable
+                || ! is_string($node->var->name)
+                || ! $node->expr instanceof Node\Expr\Array_
+            ) {
+                return;
+            }
+
+            $method = $scope->getFunctionName();
+            if ($method === null) {
+                return;
+            }
+
+            // First assignment wins: the initialiser carries the member→parameter provenance; a later
+            // reassignment in the same method does not overwrite it.
+            $collected[$method][$node->var->name] ??= $node->expr;
+        });
+
+        return $this->arrayAssignmentCache[$normalised] = $collected;
     }
 }
