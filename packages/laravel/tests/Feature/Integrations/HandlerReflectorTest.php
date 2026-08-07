@@ -7,8 +7,10 @@ use Docuccino\Laravel\Integrations\InferredHandler\RenderCallback;
 use Docuccino\Laravel\Tests\Support\DecoratingExceptionHandler;
 use Docuccino\Laravel\Tests\Support\InvokableRenderer;
 use Docuccino\Laravel\Tests\Support\PairRenderer;
+use Docuccino\Laravel\Tests\Support\UninitializedPropertyExceptionHandler;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\JsonResponse;
 
 /**
  * The reflector must discover EVERY shape of registered render callback Laravel stores, and never drop
@@ -18,6 +20,16 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * anonymous closure keeps its by-line locator. A decorator around the handler (Collision in console)
  * must be walked through, and an unanalysable callback recorded rather than dropped.
  */
+
+/**
+ * A FREE FUNCTION render callback. Laravel wraps it via `Closure::fromCallable()`, so it arrives as a
+ * non-anonymous closure with NO owning class — one of the reflector's three documented skip reasons
+ * (nothing to analyse by name, and its declaration line is not a closure literal).
+ */
+function reflectorFreeFunctionRenderer(ModelNotFoundException $e): JsonResponse
+{
+    return new JsonResponse(['error' => 'gone'], 410);
+}
 
 /** Register a callback on the app handler and return the render callback the reflector newly discovered for it. */
 function reflectNewlyRegistered(callable $callback): RenderCallback
@@ -82,15 +94,41 @@ it('walks through a handler decorator to the wrapped handler that owns the callb
         ->and($invokable[0]->method)->toBe('__invoke');
 });
 
-it('records an unanalysable render callback as skipped rather than dropping it silently', function (): void {
+it('walks past an UNINITIALIZED typed property to reach the wrapped handler', function (): void {
     /** @var object $handler */
     $handler = app(ExceptionHandler::class);
-    // A first parameter with a builtin type is not an exception the tier can bind — unanalysable.
-    $handler->renderable(static fn (string $whoops) => response()->json([], 400));
+    $handler->renderable(Closure::fromCallable(new InvokableRenderer));
+
+    // The decorator declares an uninitialized typed property before $inner: reading it throws, and a
+    // per-walk (rather than per-property) guard would abort discovery entirely and return zero callbacks.
+    $callbacks = (new HandlerReflector(new UninitializedPropertyExceptionHandler($handler)))->renderCallbacks();
+
+    $invokable = array_values(array_filter(
+        $callbacks,
+        static fn (RenderCallback $c): bool => $c->class === InvokableRenderer::class,
+    ));
+
+    expect($invokable)->toHaveCount(1)
+        ->and($invokable[0]->method)->toBe('__invoke');
+});
+
+it('records every unanalysable render-callback shape as skipped rather than dropping it silently', function (callable $callback): void {
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable($callback);
 
     $reflector = new HandlerReflector($handler);
 
     expect($reflector->renderCallbacks())->toBe([])
         ->and($reflector->skipped())->toHaveCount(1)
         ->and($reflector->skipped()[0])->toContain('closure@');
-});
+})->with([
+    // The three skip reasons the resolver's docblock names, one row each:
+    // 1. a first parameter with a BUILTIN type is not an exception the tier can bind.
+    'builtin first parameter' => [fn (): Closure => static fn (string $whoops) => response()->json([], 400)],
+    // 2. ZERO parameters — there is no exception to narrow the analysis to.
+    'zero parameters' => [fn (): Closure => static fn () => response()->json([], 400)],
+    // 3. a bound FREE FUNCTION: non-anonymous with no owning class, so there is nothing to analyse by
+    //    name and its declaration line is not a closure literal — skipped rather than mis-located.
+    'bound free function' => [fn (): Closure => Closure::fromCallable('reflectorFreeFunctionRenderer')],
+]);

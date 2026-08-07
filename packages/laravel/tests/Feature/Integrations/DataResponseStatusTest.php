@@ -8,6 +8,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
@@ -18,6 +19,8 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\SpatieData\DataResponseStatus;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\CreatedData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\NoStatusData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\NotAData;
 
 /**
  * calculateResponseStatus() folding (gap 5): a Data class overriding the method re-homes the inferred
@@ -88,4 +91,40 @@ it('degrades a genuinely computed status to 200 with a diagnostic', function (ar
 })->with([
     'a widened (non-literal) int status' => [[ScalarT::int()]],
     'a foldable arm mixed with a computed arm' => [[new LiteralT(201), ScalarT::int()]],
+    // A literal that is not an INT is not a status — a string/bool/float literal must degrade, never
+    // be coerced into one (foldIntLiterals' is_int guard on the single-literal arm).
+    'a non-int string literal' => [[new LiteralT('201')]],
+    'a non-int bool literal' => [[new LiteralT(true)]],
+    // …and the same guard inside a UNION: one non-int member disqualifies the whole return site,
+    // rather than the int members being documented and the rest silently dropped.
+    'a union mixing an int literal with a string literal' => [[UnionT::of([new LiteralT(201), new LiteralT('created')])]],
+    'a union mixing an int literal with a widened int' => [[UnionT::of([new LiteralT(201), ScalarT::int()])]],
+    // A non-literal, non-union type entirely (the final `return null` fall-through).
+    'a class-typed return' => [[new ClassT('Illuminate\\Http\\JsonResponse')]],
 ]);
+
+it('is inert for a class that is not a spatie Data class at all (no diagnostic)', function (): void {
+    // The isData() guard precedes everything: a plain class — even one that happens to declare
+    // calculateResponseStatus() in its own file — is not this resolver's business, so it returns no
+    // statuses AND raises no diagnostic (the tier must stay silent about non-Data classes).
+    $context = statusContext(statusEngine(NotAData::class, [new LiteralT(201)]));
+
+    expect((new DataResponseStatus)->resolveStatuses($context, NotAData::class))->toBe([])
+        ->and($context->components->diagnostics())->toBe([]);
+});
+
+it('is inert for a non-existent class (nothing to reflect)', function (): void {
+    $context = statusContext(new StubTypeEngine);
+
+    expect((new DataResponseStatus)->resolveStatuses($context, 'App\\Data\\NoSuchData'))->toBe([])
+        ->and($context->components->diagnostics())->toBe([]);
+});
+
+it('is inert for a Data class whose calculateResponseStatus is absent entirely (hasMethod false)', function (): void {
+    // NoStatusData is a Data class that does NOT inherit the ResponsableData trait, so the method is
+    // absent rather than trait-provided — the hasMethod() guard, distinct from the trait-file check.
+    $context = statusContext(new StubTypeEngine);
+
+    expect((new DataResponseStatus)->resolveStatuses($context, NoStatusData::class))->toBe([])
+        ->and($context->components->diagnostics())->toBe([]);
+});

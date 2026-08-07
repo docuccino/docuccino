@@ -18,6 +18,7 @@ use Workbench\App\Enums\WidgetStatus;
  * @property WidgetStatus $status
  * @property bool $active
  * @property int $score
+ * @property string $public_id
  */
 final class Gadget extends Model
 {
@@ -32,6 +33,9 @@ final class Gadget extends Model
         'status' => WidgetStatus::class,
         'active' => 'boolean',
         'score' => 'integer',
+        // A string-cast identifier column, so a `FilterFactory::uuid()` filter types off the cast the
+        // same way the boolean arm does (and is provably NOT left as an untyped default).
+        'public_id' => 'string',
     ];
 
     /**

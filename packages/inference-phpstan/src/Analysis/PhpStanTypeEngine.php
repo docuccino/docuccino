@@ -105,6 +105,11 @@ final class PhpStanTypeEngine implements TypeEngine
                 )],
                 dependencyFiles: [$action->file],
             );
+        } finally {
+            // See analyzeCallableUncached: drain so a mid-analysis throw cannot leak the refiner's
+            // touched files into the next analysis's dependency set (a no-op on the success path,
+            // which already drained while building its result).
+            $this->drainRefinerFiles();
         }
     }
 
@@ -221,6 +226,9 @@ final class PhpStanTypeEngine implements TypeEngine
         try {
             return $this->doAnalyzeCallable($callable);
         } catch (Throwable $e) {
+            // Drain in a finally: files the refiner touched before a mid-analysis throw would otherwise
+            // leak into the NEXT analysis's dependencyFiles (over-invalidation only, never under — but
+            // an analysis must not inherit a failed sibling's dependencies).
             return new ActionAnalysis(
                 diagnostics: [new Diagnostic(
                     Severity::Warning,
@@ -229,6 +237,8 @@ final class PhpStanTypeEngine implements TypeEngine
                 )],
                 dependencyFiles: [$callable->file],
             );
+        } finally {
+            $this->drainRefinerFiles();
         }
     }
 

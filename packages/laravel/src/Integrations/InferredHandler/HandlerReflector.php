@@ -132,7 +132,15 @@ final class HandlerReflector
         }
 
         foreach ($reflection->getProperties() as $property) {
-            $wrapped = $property->getValue($handler);
+            // Per-property, not per-walk: reading an UNINITIALIZED typed property throws, and a single
+            // such property on any handler in the decoration chain would otherwise abort ALL
+            // render-callback discovery. Skip the unreadable property and keep looking.
+            try {
+                $wrapped = $property->getValue($handler);
+            } catch (Throwable) {
+                continue;
+            }
+
             if ($wrapped instanceof ExceptionHandler) {
                 $found = $this->unwrap($wrapped, $depth + 1);
                 if ($found !== null) {

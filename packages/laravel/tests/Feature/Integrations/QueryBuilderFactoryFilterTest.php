@@ -53,6 +53,8 @@ function runFactoryFilters(string $chain): array
 $factoryChain = 'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
     ."\\Workbench\\App\\Support\\FilterFactory::enum('status', \\Workbench\\App\\Enums\\WidgetStatus::class), "  // enum arg → enum typed
     ."\\Workbench\\App\\Support\\FilterFactory::boolean('active'), "                                             // column=key → model bool cast
+    ."\\Workbench\\App\\Support\\FilterFactory::uuid('public_id'), "                                             // column=key → model string cast
+    ."\\Workbench\\App\\Support\\FilterFactory::uuid('gadget', 'public_id'), "                                   // explicit 2nd arg → that column's cast
     ."\\Workbench\\App\\Support\\FilterFactory::search('q', ['name']), "                                         // no single column → string
     ."AllowedFilter::partial('name'),"                                                                          // Spatie's own → untouched (string)
     .'])->paginate()';
@@ -78,6 +80,19 @@ it('types a boolean-factory filter off the model cast for its key column', funct
     $byName = runFactoryFilters($factoryChain);
 
     expect($byName['filter[active]']['schema']['type'])->toBe('boolean');
+});
+
+it('types a uuid-factory filter off the model cast, by key and by explicit column argument', function () use ($factoryChain): void {
+    // The uuid() arm had no rows at all. It types like boolean(): the filter's own key is the column by
+    // default, and an explicit second argument names a different column — both resolved off the model
+    // cast (`public_id => 'string'`), and no enum domain is invented for either.
+    $byName = runFactoryFilters($factoryChain);
+
+    expect($byName['filter[public_id]']['schema']['type'])->toBe('string')
+        ->and($byName['filter[public_id]']['schema'])->not->toHaveKey('enum')
+        // `uuid('gadget', 'public_id')`: the PARAMETER name is the filter key, the second arg the column.
+        ->and($byName['filter[gadget]']['schema']['type'])->toBe('string')
+        ->and($byName['filter[gadget]']['schema'])->not->toHaveKey('enum');
 });
 
 it('leaves a multi-column search factory and Spatie\'s own factories as plain strings', function () use ($factoryChain): void {
