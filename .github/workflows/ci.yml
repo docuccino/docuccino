@@ -25,10 +25,11 @@ jobs:
           # Floor axis: resolve the lowest allowed dependency versions.
           - { php: '8.3', deps: 'lowest' }
           # PHPStan-minor axis: the inference-phpstan constraint is
-          # `~2.2.0 || ~2.3.0` (two tested minors), so exercise both. If it is
-          # ever narrowed to a single minor, drop one entry — the seam stays.
+          # `~2.2.0 || ~2.3.0` (two tested minors). Only 2.2 has been released, so
+          # only 2.2 is exercised — a `~2.3.0` leg cannot resolve and would fail the
+          # build on a dependency that does not exist yet. Add the second entry the
+          # day PHPStan 2.3 ships; the seam stays either way.
           - { php: '8.4', deps: 'locked', phpstan: '~2.2.0' }
-          - { php: '8.4', deps: 'locked', phpstan: '~2.3.0' }
 
     steps:
       - uses: actions/checkout@v4
