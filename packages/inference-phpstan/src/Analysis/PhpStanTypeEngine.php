@@ -84,6 +84,7 @@ final class PhpStanTypeEngine implements TypeEngine
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly ProjectFilter $projectFilter,
         private readonly ClassMetadataFactory $classMetadataFactory,
+        private readonly ProjectFilter $refinerFilter,
     ) {}
 
     public function analyzeAction(ActionRef $action): ActionAnalysis
@@ -625,7 +626,11 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->translator,
             $this->fileAnalyzer,
             new CalleeResolver($this->adapter->reflectionProvider()),
-            $this->projectFilter,
+            // The refiner (and its enum folder) follow error-render helpers across any PRIMED app
+            // source root — a modular monorepo keeps them in `Modules\…`, outside the descend scope
+            // throws/QB-trace use — so it takes the prime-scoped filter, not $this->projectFilter.
+            // Vendor is still never followed (it is not a primed root).
+            $this->refinerFilter,
             $this->adapter->reflectionProvider(),
             $this->config->traceDepth,
             $this->config->fileBudget,

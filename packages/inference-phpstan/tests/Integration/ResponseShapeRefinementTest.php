@@ -151,6 +151,30 @@ it('the broad non-JSON early-out (return null) never shadows the per-type respon
     }
 })->group('fixture');
 
+it('follows an error-render helper into a PRIMED modular root (prime-scope containment, not descend)', function (): void {
+    // ModularRenderer (app/, descend + prime scope) → ModularProblemResponse::make (Modules\Billing,
+    // primed but OUTSIDE the descend scope). The refiner's containment gate is prime scope, so it folds
+    // the modular helper's 451 shape; a descend-scoped gate would decline the module and leave it bare.
+    $analysis = ActionAnalysis::fromArray(['returns' => FixtureRunner::analyzeCallable(
+        'app/Exceptions/ModularRenderer.php',
+        'App\\Exceptions\\ModularRenderer',
+        'render',
+    )['returns']]);
+
+    expect($analysis->returns)->toHaveCount(1);
+    $type = $analysis->returns[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)->and($type->fqcn)->toBe('Illuminate\\Http\\JsonResponse');
+
+    $statusArg = $type->typeArgs[1] ?? null;
+    expect($statusArg)->toEqual(new LiteralT(451)); // folded from the modular helper — proof it was followed
+
+    $members = [];
+    foreach (($type->typeArgs[0] ?? null)?->fields ?? [] as $field) {
+        $members[(string) $field->key] = $field->type;
+    }
+    expect($members['type'])->toEqual(new LiteralT('https://errors.test/problems/modular'));
+})->group('fixture');
+
 // --- Value-flow: per-arm literals fold into body members through the helper's parameters ---
 
 it('folds a ONE-HOP arm’s per-arm literals into the body members (409: type const + status literal)', function (): void {

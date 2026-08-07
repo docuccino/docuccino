@@ -190,6 +190,16 @@ return [
     */
     'engine' => [
         'mode' => env('DOCUCCINO_ENGINE', TypeEngineMode::InProcess->value),
+
+        // The DESCEND scope: directories whose code the engine follows for general interprocedural
+        // analysis (throw classification, inline `Validator::make(...)` rules). This is deliberately
+        // narrow, and it is NOT the whole set of code the engine can reach. The wider PRIME scope —
+        // every local PSR-4 source root in your composer.json, so a modular `Modules\…` root too — is
+        // auto-derived and always at least as wide, because the Query-Builder trace and the
+        // error-response refiner follow helpers into any primed root (a modular monorepo keeps its
+        // query objects / problem renderers there). Vendor code is never primed or followed. So you
+        // rarely need to widen this: add a path here only to broaden throw/inline-rules descent, not to
+        // make modular helpers resolvable — priming already does that.
         'project_paths' => ['app'],
     ],
 

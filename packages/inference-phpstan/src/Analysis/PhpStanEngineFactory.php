@@ -48,9 +48,16 @@ final class PhpStanEngineFactory
 
         $translator = new TypeTranslator;
         $fileAnalyzer = new FileAnalyzer($adapter);
-        $projectFilter = new ProjectFilter(
-            $engineConfig->projectPaths,
-            static fn (string $path): string => $adapter->normalize($path),
+        $normalize = static fn (string $path): string => $adapter->normalize($path);
+        // DESCEND scope (throws / QB-trace / inline-rules): the bounded interprocedural set.
+        $projectFilter = new ProjectFilter($engineConfig->projectPaths, $normalize);
+        // PRIME scope (response-shape refiner + enum folder): every primed app source root, so an
+        // error-render helper in a modular `Modules\…` root folds too. Vendor is not a primed root, so
+        // the vendor containment is unchanged. Falls back to the descend scope when no prime scope was
+        // configured (they coincide for a non-modular app).
+        $refinerFilter = new ProjectFilter(
+            $runtimeConfig->projectPaths !== [] ? $runtimeConfig->projectPaths : $engineConfig->projectPaths,
+            $normalize,
         );
 
         return new PhpStanTypeEngine(
@@ -60,6 +67,7 @@ final class PhpStanEngineFactory
             fileAnalyzer: $fileAnalyzer,
             projectFilter: $projectFilter,
             classMetadataFactory: new ClassMetadataFactory,
+            refinerFilter: $refinerFilter,
         );
     }
 

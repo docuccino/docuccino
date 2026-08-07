@@ -58,7 +58,11 @@ use PHPStan\Type\Type;
  *   - CACHE-SOUND: every descended helper file — and every enum file whose method was folded — is
  *     reported via {@see takeFiles()} so it lands in the analysis's `dependencyFiles`, invalidating the
  *     route fragment on edit.
- *   - VENDOR IS NEVER DESCENDED: the {@see ProjectFilter} gate is the containment boundary.
+ *   - CONTAINMENT = PRIME SCOPE, NOT DESCEND SCOPE: the {@see ProjectFilter} this refiner (and its enum
+ *     folder) carries is built from the PRIMED app source roots (every app PSR-4 root — including a
+ *     modular `Modules\…` root a monorepo keeps its renderers in), NOT the narrower descend scope that
+ *     throws/QB-trace use. So an error-render helper in any primed root folds, while VENDOR IS STILL
+ *     NEVER FOLLOWED (it is not a primed root). That is the containment boundary.
  *
  * @internal Engine implementation detail — not part of the public inference surface (see inference-embedding.md §Public surface).
  */
