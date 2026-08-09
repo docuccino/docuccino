@@ -116,6 +116,21 @@ or an `ExceptionToResponse::producer()` returning `'integration:<name>'`. The fu
 is the FormRequest request-body recovery extension — a distinct producer, so a body recovered
 from a FormRequest's rules is attributed to `integration:form-request`, not `integration:validation`.
 
+**Custom rule objects (`#[RuleSchema]`).** A `new X(...)` in a rule position folds to a `ConstValue`
+INSTANCE kind (class FQCN + folded ctor args — a small sibling of the factory descriptor, since PHPStan
+collapses the expression to a bare object and the class is the only documentable fact). The adapter reads
+the class's `#[RuleSchema]` (`Integrations/Validation/CustomRuleReader`) and maps its fields onto
+SYNTHETIC NAMED RULES rather than writing schema keywords: `type` → a type rule (unrecognised values pass
+through as a rule name, so a typo diagnoses), `enum` → `in:`, `pattern` → `regex:`, `min`/`max` → the size
+rules. `format`/`description`/`example` have no Laravel rule, so the vocabulary gained one transformer
+(`AnnotationRuleTransformer`, effect-ordered last) — keeping ONE schema-writing path through the chain.
+The attribute is the contract, not the `ValidationRule` interface (a vendor rule documents the moment its
+author adds it) and ctor args are ignored. Every recovery path shares the fold or the reader (FormRequest
+/laravel-actions `rules()`, inline `validate()`/`Validator::make`, spatie `#[Rule(new X)]`); each records
+the rule class file as a fragment dependency, whether or not it carried the attribute, so adding the
+attribute invalidates. No attribute → the unchanged `validation.rule-unrecoverable` path; closures stay
+opaque by nature.
+
 `--provenance=none|winners|full`, default `winners` for committed artifacts.
 Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
 All other `x-*` members pass through untouched.
