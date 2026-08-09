@@ -162,9 +162,12 @@ against how you work before you commit:
 - **No watch mode.** Re-run `docuccino:export`, or point the viewer at
   [`source: generate`](/laravel/reference/configuration/#viewer) so it rebuilds per request while you
   work locally.
-- **Rule objects and closure rules aren't read.** Docuccino maps the whole string-rule vocabulary and
-  you can teach it more with a `RuleTransformer`, but a `Rule` object's shape is opaque to static
-  analysis. Docuccino raises a diagnostic naming the field rather than guessing.
+- **Custom rule objects and closure rules aren't documented.** Built-in `Rule::` objects fold
+  statically — `Rule::enum` (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists`
+  and `Rule::unique` — alongside the whole string-rule vocabulary, and you can teach Docuccino more
+  with a `RuleTransformer`. But a custom `ValidationRule` class, a closure, or a `Rule::when()`
+  conditional has opaque logic, so Docuccino raises a diagnostic naming the field rather than
+  guessing at its shape.
 
 ## Running them side by side
 

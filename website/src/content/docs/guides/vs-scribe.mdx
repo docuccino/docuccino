@@ -104,7 +104,7 @@ biggest win is deletion.
 | `examples.faker_seed` | **Delete** — unnecessary | Output is deterministic by construction. |
 | `groups.order` config | [`tags.definitions`](/laravel/reference/configuration/#tags) (weight-ordered) + `tags.map` | Tag objects are sorted by ascending `weight`, then name. |
 | `inheritedDocsOverrides()` | Not needed for route context | Path params, bindings, and controller-level attributes resolve against the concrete child route; use attributes or [overlays](/laravel/reference/configuration/#overlays) for anything an inherited method's body inference doesn't cover. |
-| Custom rule `docs()` method | Express the field with string rules, or add a `RuleTransformer` | A rule *object* is opaque to static analysis; Docuccino diagnoses the field instead of guessing. See [where Scribe is stronger](#where-scribe-is-stronger). |
+| Custom rule `docs()` method | Express the field with string rules, `Rule::` factories, or add a `RuleTransformer` | Built-in `Rule::` objects fold statically; a *custom* rule object is opaque, and Docuccino diagnoses the field instead of guessing. See [where Scribe is stronger](#where-scribe-is-stronger). |
 | `.scribe/**` hand-edits, `custom.*.yaml` | OpenAPI Overlays or attributes at source | Different philosophy — see below. |
 | Strategy plugin API | `OperationExtension`, `TypeToSchema`, `ExceptionToResponse`, `RuleTransformer`, `DocumentTransformer` | Register from any provider, any order. |
 | — | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | New on migration: marks an operation (or a whole controller) deprecated, with a reason. |
@@ -143,11 +143,11 @@ carefully before you switch — for some teams they're the whole reason to stay.
 - **Custom rule objects and closures.** Scribe documents a custom `Rule` object through its `docs()`
   method. Docuccino maps the whole string-rule vocabulary — 78 named rules, from `alpha` and
   `starts_with` patterns to `const` for `accepted`/`declined`, date comparisons, numeric bounds,
-  `not_in` and `distinct` — and a `RuleTransformer` teaches it any string rule you invent. But a rule
-  *object* or a closure rule is opaque to static analysis: Docuccino raises a
+  `not_in` and `distinct` — and a `RuleTransformer` teaches it any string rule you invent. Built-in
+  `Rule::` objects fold too: `Rule::enum` (including `->only()` / `->except()`), `Rule::in`,
+  `Rule::exists` and `Rule::unique`. But a *custom* `ValidationRule` class, a closure, or a
+  `Rule::when()` conditional is opaque to static analysis: Docuccino raises a
   `validation.rule-unrecoverable` diagnostic naming the field rather than guessing at its shape.
-  Express those fields with string or array rules, `Rule::enum()` (including `->only()` /
-  `->except()`), or `Rule::in()`.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
 - **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
