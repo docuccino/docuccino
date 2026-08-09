@@ -81,18 +81,18 @@ Consequences:
   unit tests for its pure/parent-process classes (translators, registries, protocol,
   orchestration bookkeeping) — not more subprocess fixture tests.
 
-## Measured coverage (2026-08-07)
+## Measured coverage (2026-08-09)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **92.32%** | 92    | fully in-process-measurable                      |
-| `laravel`           | **91.40%** | 91    | fully in-process-measurable                      |
-| `inference-phpstan` | **41.13%** | 41    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **92.34%** | 92    | fully in-process-measurable                      |
+| `laravel`           | **91.62%** | 91    | fully in-process-measurable                      |
+| `inference-phpstan` | **41.83%** | 41    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 83.21%     | —     | informational only; no longer a gate             |
+| Overall             | 83.51%     | —     | informational only; no longer a gate             |
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
