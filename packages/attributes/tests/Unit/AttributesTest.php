@@ -24,6 +24,7 @@ use Docuccino\Attributes\PathParameter;
 use Docuccino\Attributes\QueryParameter;
 use Docuccino\Attributes\Response;
 use Docuccino\Attributes\ResponseHeader;
+use Docuccino\Attributes\RuleSchema;
 use Docuccino\Attributes\SchemaId;
 use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
@@ -82,6 +83,7 @@ function attributeCatalogue(): array
         'IgnoreResponse' => [IgnoreResponse::class, $classFn | Attribute::IS_REPEATABLE],
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
         'DescriptionFromFile' => [DescriptionFromFile::class, $classFn | Attribute::TARGET_PROPERTY],
+        'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
     ];
 }
 
