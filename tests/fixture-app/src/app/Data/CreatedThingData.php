@@ -9,9 +9,9 @@ use Illuminate\Http\Response;
 use Spatie\LaravelData\Data;
 
 /**
- * A spatie Data class overriding calculateResponseStatus() to a class constant (Response::HTTP_CREATED — Eos's exact
- * shape), so the real engine folds the class-const fetch to a literal-int return type — the recovery half the
- * DataResponseStatus fold (gap 5) reads. Only ever analysed.
+ * A spatie Data class overriding calculateResponseStatus() to a class constant
+ * (`Response::HTTP_CREATED`, the idiomatic shape), so the engine folds the class-const fetch to a
+ * literal-int return type — the recovery half of the DataResponseStatus fold. Only ever analysed.
  */
 class CreatedThingData extends Data
 {

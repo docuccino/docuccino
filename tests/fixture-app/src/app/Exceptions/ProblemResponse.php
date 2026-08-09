@@ -30,7 +30,7 @@ final class ProblemResponse
     }
 
     /**
-     * The enum-driven factory (the Eos `ProblemDetailsResponse::make()` shape): the problem's type URI,
+     * The enum-driven factory, the common `ProblemDetailsResponse::make()` shape: the problem's type URI,
      * status and title all read off the bound {@see InvoiceProblem} case's accessors, and the body is
      * BUILT UP in a `$body` variable with a conditional `data` append before being handed to
      * `new JsonResponse($body, $problem->status(), …)`. When the call site binds a concrete case, the

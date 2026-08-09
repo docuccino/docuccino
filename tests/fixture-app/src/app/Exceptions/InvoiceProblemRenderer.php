@@ -79,7 +79,7 @@ final class InvoiceProblemRenderer
     }
 
     /**
-     * The extra enum hop (the Eos `renderProblem()` shape): the bound case is forwarded, un-narrowed,
+     * The extra enum hop of the common `renderProblem()` shape: the bound case is forwarded, un-narrowed,
      * into the factory so the accessor provenance re-homes one hop out before it folds at the call above.
      */
     private function renderProblem(InvoiceProblem $problem, string $detail): JsonResponse

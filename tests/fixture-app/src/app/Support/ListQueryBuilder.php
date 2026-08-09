@@ -9,13 +9,10 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\QueryBuilder\QueryBuilder;
 
 /**
- * A user-land QueryBuilder wrapper — mirrors Eos's `ListQueryBuilder`.
- *
- * The point for Spike B: `paginateList()` is a CUSTOM terminal that internally
- * defers to the vendor `paginate()`. Scramble Pro's pagination extension only
- * recognises the literal vendor terminals on the QueryBuilder receiver, so a
- * custom terminal one hop away goes undetected. Docuccino must reach `paginate`
- * through the call graph.
+ * A user-land QueryBuilder wrapper — the common application-side list-builder shape. `paginateList()`
+ * is a CUSTOM terminal that defers to the vendor `paginate()` one hop down, so recovering the
+ * pagination parameters here means reaching the vendor terminal through the call graph rather than
+ * matching a literal receiver method.
  *
  * @template TModel of Model
  *
