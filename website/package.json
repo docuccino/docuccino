@@ -11,7 +11,7 @@
     "sync-schema": "node scripts/sync-schema.mjs",
     "prebuild": "node scripts/sync-schema.mjs --check",
     "astro": "astro",
-    "production": "node ./dist/server/entry.mjs"
+    "production": "HOST=0.0.0.0 PORT=3000 node ./dist/server/entry.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^11.1.0",

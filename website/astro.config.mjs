@@ -8,7 +8,7 @@ export default defineConfig({
 	output: 'server',
 	adapter: node({ mode: 'standalone' }),
 	server: {
-		host: process.env.HOST || '0.0.0.0',
+		host: true,
 		port: parseInt(process.env.PORT || '3000'),
 	},
 	site: 'https://docs.docuccino.app',
