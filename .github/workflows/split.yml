@@ -34,6 +34,10 @@
 # correct and no `fetch-depth: 0` is needed. A run where a package is unchanged
 # produces no commit.
 #
+# The action cannot bootstrap a target repository that has NO commits at all, so
+# the "Initialise" step below gives an empty target its first commit (see that
+# step's comment for the exact failure it prevents).
+#
 # Tags propagate: pushing `vX.Y.Z` here tags every split repository with the same
 # version, which is how Composer resolves `docuccino/laravel:^X.Y`.
 
@@ -80,6 +84,59 @@ jobs:
                  "it as the SPLIT_TOKEN Actions secret (see the header of this workflow)."
             exit 1
           fi
+
+      # An EMPTY target repository (created but never pushed to) cannot be split:
+      # when `main` is absent the action runs `git checkout -b main` immediately
+      # followed by `git push origin main` — BEFORE any file is copied or committed —
+      # and git refuses to push a branch with no commits:
+      #
+      #   error: src refspec main does not match any
+      #   error: failed to push some refs to 'https://github.com/docuccino/<pkg>.git'
+      #
+      # One initial commit is enough for `git checkout main` to succeed; the split's
+      # own first commit then replaces this placeholder with the package's own README.
+      # This step also surfaces a bad SPLIT_TOKEN as a precise message (404 = the
+      # token's repository list does not include this target, 403 = permission or org
+      # policy refusal) instead of an opaque git authentication failure.
+      - name: Initialise docuccino/${{ matrix.package }} if empty
+        env:
+          GH_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          set -u
+          repo="docuccino/$PACKAGE"
+          status="$(gh api "repos/$repo/commits?per_page=1" -i 2>&1 | head -n 1 | awk '{print $2}')"
+
+          case "$status" in
+            200)
+              echo "$repo already has commits — nothing to initialise."
+              exit 0
+              ;;
+            409)
+              echo "$repo is empty — creating its initial commit on main."
+              ;;
+            404)
+              echo "::error::SPLIT_TOKEN cannot see $repo (HTTP 404). Add $repo to the" \
+                   "token's selected repositories, and check the docuccino org's" \
+                   "fine-grained PAT policy has approved the token."
+              exit 1
+              ;;
+            403)
+              echo "::error::SPLIT_TOKEN is forbidden on $repo (HTTP 403). Grant it" \
+                   "Contents: Read and write, or clear the org policy blocking it."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected HTTP $status querying $repo commits."
+              exit 1
+              ;;
+          esac
+
+          readme="$(printf '# docuccino/%s\n\nRead-only split of `packages/%s` from https://github.com/docuccino/docuccino.\n\nOpen issues and pull requests on the monorepo — commits pushed here are overwritten.\n' "$PACKAGE" "$PACKAGE")"
+
+          gh api --method PUT "repos/$repo/contents/README.md" \
+            --field message="chore: initialise split repository" \
+            --field content="$(printf '%s' "$readme" | base64 -w0)"
 
       - name: Split ${{ matrix.package }} (branch)
         if: "!startsWith(github.ref, 'refs/tags/')"
