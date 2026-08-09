@@ -1,11 +1,11 @@
 ---
 title: Spatie Query Builder
-description: Document Spatie Query Builder filters, sorts, includes, and pagination automatically — at any call depth.
+description: Document Spatie Query Builder filters, sorts, includes, sparse fieldsets, and pagination automatically — recovered through your own helper methods, several calls deep.
 sidebar:
   order: 5
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Activates automatically when [Spatie Query Builder](https://spatie.be/docs/laravel-query-builder)
 is installed. It documents the query parameters your list endpoints accept — without you writing a
@@ -16,15 +16,17 @@ single parameter annotation.
 Docuccino follows your controller's query as it's built and turns the allowed operations into query
 parameters:
 
-- **Filters** — one `filter[<name>]` parameter per `allowedFilter`, with a description of what it
-  filters.
-- **Sorts** — a `sort` parameter, documenting the `-name` convention for descending order; a
-  `->defaultSort('issued_at')` becomes the parameter's `default`.
-- **Includes** — an `include` parameter for `allowedIncludes` — relationships plus the `count`,
-  `exists`, and `aggregate` include kinds.
-- **Sparse fieldsets** — `fields[<type>]` for `allowedFields`.
-- **Pagination** — `page` and `per_page` (or `cursor` and `per_page` for cursor pagination), added
-  when the query actually paginates.
+| Allow-list | Parameters | Description Docuccino writes |
+| --- | --- | --- |
+| `allowedFilters` | one `filter[<name>]` each | The filter's kind (or your comment), plus any `whereIn` / `null` notes |
+| `allowedSorts` | `sort` | "Sort by: issued_at, total (prefix `-` for descending)." |
+| `allowedIncludes` | `include` | "Include related resources: customer, lines." |
+| `allowedFields` | `fields[<type>]` | "Comma-separated fields: id, total." |
+| a paginating terminal | `page` + `per_page`, or `cursor` + `per_page` | "Page number." / "Items per page." |
+
+`->defaultSort('issued_at')` becomes the `sort` parameter's `default`. Includes cover relationships
+plus the `count`, `exists`, and `aggregate` include kinds — they're all names in the allow-list, so
+they're all documented.
 
 Crucially, this works even when the query builder is assembled several method calls deep — for
 example behind a reusable base query class. Docuccino traces through your helper methods to recover
@@ -49,12 +51,20 @@ the real list of allowed filters and sorts.
 	<TabItem label="Generated OpenAPI">
 	```json
 	"parameters": [
-	  { "name": "filter[status]",      "in": "query", "required": false, "schema": { "type": "string" } },
-	  { "name": "filter[customer_id]", "in": "query", "required": false, "schema": { "type": "string" } },
-	  { "name": "sort",                "in": "query", "required": false, "schema": { "type": "string" } },
-	  { "name": "include",             "in": "query", "required": false, "schema": { "type": "string" } },
-	  { "name": "page",                "in": "query", "required": false, "schema": { "type": "integer" } },
-	  { "name": "per_page",            "in": "query", "required": false, "schema": { "type": "integer", "default": 15 } }
+	  { "name": "filter[customer_id]", "in": "query", "required": false,
+	    "description": "Partial-match filter", "schema": { "type": "string" } },
+	  { "name": "filter[status]", "in": "query", "required": false,
+	    "description": "Partial-match filter", "schema": { "type": "string" } },
+	  { "name": "include", "in": "query", "required": false,
+	    "description": "Include related resources: customer, lines.",
+	    "schema": { "type": "string" } },
+	  { "name": "page", "in": "query", "required": false, "description": "Page number.",
+	    "schema": { "type": "integer", "default": 1, "minimum": 1 } },
+	  { "name": "per_page", "in": "query", "required": false, "description": "Items per page.",
+	    "schema": { "type": "integer", "default": 15, "minimum": 1 } },
+	  { "name": "sort", "in": "query", "required": false,
+	    "description": "Sort by: issued_at, total (prefix `-` for descending).",
+	    "schema": { "type": "string" } }
 	]
 	```
 	</TabItem>
@@ -62,6 +72,10 @@ the real list of allowed filters and sorts.
 
 You wrote no parameter annotations — yet `filter[status]`, `filter[customer_id]`, `sort`, `include`,
 `page`, and `per_page` are all documented, alongside a paginated response.
+
+A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why those
+two say so. `per_page` defaults to `15` unless you pass a page size at the call site —
+`->paginate(20)` documents `"default": 20`.
 
 ## Typed filters from your model's casts
 
@@ -72,7 +86,7 @@ model straight from `QueryBuilder::for(Invoice::class)` — no annotation, no ex
 The biggest win is enum casts. Cast a column to a
 [backed enum](https://laravel.com/docs/eloquent-mutators#enum-casting) and the filter documents its
 exact allowed values — including per-case descriptions when you annotate the enum with
-`#[CaseDescription]`:
+[`#[CaseDescription]`](/laravel/reference/attributes/#casedescription):
 
 <Tabs>
 	<TabItem label="Your code">
@@ -108,19 +122,26 @@ exact allowed values — including per-case descriptions when you annotate the e
 	  "explode": false,
 	  "schema": {
 	    "type": "array",
-	    "items": {
-	      "type": "string",
-	      "enum": ["draft", "sent", "paid"],
-	      "x-enumDescriptions": {
-	        "draft": "Not yet sent to the customer.",
-	        "sent": "Sent and awaiting payment."
-	      }
-	    }
+	    "items": { "$ref": "#/components/schemas/InvoiceStatus" }
+	  }
+	},
+	// components.schemas — one canonical enum, shared by every use site
+	"InvoiceStatus": {
+	  "type": "string",
+	  "enum": ["draft", "sent", "paid"],
+	  "x-enumDescriptions": {
+	    "draft": "Not yet sent to the customer.",
+	    "sent": "Sent and awaiting payment."
 	  }
 	}
 	```
 	</TabItem>
 </Tabs>
+
+Enums are hoisted to a reusable component by default, so the filter references it rather than
+repeating the values. Set
+[`representation.enums.components` to `false`](/laravel/reference/configuration/#representation) to
+inline the enum at every use site instead.
 
 **Why an array?** Spatie's exact filter treats a comma-joined value (`filter[status]=draft,sent`) as
 a `whereIn` list. Documenting the filter as a single string would mark that legal request invalid, so
@@ -136,6 +157,7 @@ Other casts map to their natural scalar type:
 | `float` / `double` / `real` | `type: number` |
 | `datetime`, `immutable_datetime` | `type: string, format: date-time` |
 | `date`, `immutable_date` | `type: string, format: date` |
+| `datetime:<custom format>` | `type: string`, with the format named in the description |
 | `array`, `collection`, `json` | `type: [array, object]` (decodes to whichever it stored) |
 | `object` | `type: object` |
 | `encrypted:<inner>` | the inner cast's schema (decrypts, then casts) |
@@ -143,9 +165,9 @@ Other casts map to their natural scalar type:
 | `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | `type: object` |
 | `AsCollection`, `AsEncryptedCollection` | `type: array` |
 | A backed enum | `type: array` of the backing values (above) |
-| Anything else (unrecognized custom casters, `decimal`, no cast) | `type: string` |
+| Anything else (`decimal`, `hashed`, `AsEnumCollection`, an unrecognized custom caster, no cast) | `type: string` |
 
-If Docuccino can't resolve the subject model, every filter falls back to a string, exactly as before.
+If Docuccino can't resolve the subject model, every filter falls back to a string.
 
 ### What each filter kind infers
 
@@ -155,18 +177,22 @@ it reads only what the kind actually exposes:
 | Filter kind | What's inferred | How to override |
 | --- | --- | --- |
 | `exact('status')` | The column's cast. A backed enum becomes a comma `whereIn` array of its values. | Comment, docblock, or `#[QueryParameter]`. |
+| `partial('name')` / a bare `'name'` | A substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `scope('popular')` | The `scopePopular` scope's **value parameter** type — a native scalar, or a backed enum (values + descriptions). | Type the scope parameter; or `#[QueryParameter]`. |
 | `callback('active', fn)` | The column of a single `$query->where('active', $value)` in the closure, then that column's cast. | Comment above the entry, or `#[QueryParameter]`. |
 | `custom('flag', new F)` | A `#[QueryParameter]` on the filter class `F`, else the column of a single `where` in `F::__invoke`. | See [custom filter classes](#custom-filter-classes). |
 | `operator('score', FilterOperator::EQUAL)` | The internal column's cast — equality operators (`EQUAL`, `DYNAMIC`) only. | `#[QueryParameter]`. |
 | `beginsWithStrict('name')` / `endsWithStrict('name')` | A begins-with / ends-with substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `belongsTo('team')` | A relationship filter — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
-| `trashed()` | A fixed `with` / `only` enum, with the omitted-value default explained. | — |
+| `trashed()` | A fixed `with` / `only` string enum, with the omitted-value default explained. | — |
 
 A single-value comparison (scope, callback, operator) documents an enum as one value; only `exact`
-uses the comma `whereIn` array. Anything Docuccino can't reduce to one column or a known type — a
-non-equality operator (`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path
-(`customer.name`) — stays a plain string. It never guesses.
+uses the comma `whereIn` array. `AllowedFilter::trashed()` called with no name is documented under
+Spatie's own default name, `filter[trashed]`.
+
+Anything Docuccino can't reduce to one column or a known type — a non-equality operator
+(`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path (`customer.name`) —
+stays a plain string. It never guesses.
 
 ### Filter factories (a `ListFilters`-style helper)
 
@@ -237,22 +263,38 @@ simplest possible way to explain a parameter, right where it's defined:
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	{ "name": "filter[status]", "in": "query", "description": "The lifecycle stage of the invoice.", "...": "..." }
+	{
+	  "name": "filter[status]",
+	  "in": "query",
+	  "required": false,
+	  "description": "The lifecycle stage of the invoice. Accepts a comma-separated list of values (matched as `whereIn`).",
+	  "style": "form",
+	  "explode": false,
+	  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceStatus" } }
+	}
 	```
 	</TabItem>
 </Tabs>
 
-Both `//` line comments and `/** */` blocks work; Docuccino takes the first sentence, verbatim. Comments
-describe **filters** — sorts and includes carry a generated description instead (the allowed values and
-the `-` descending convention).
+Both `//` line comments and `/** */` blocks work; Docuccino takes the first sentence, verbatim, and
+still appends the `whereIn` and `null` notes so the request form stays documented. Two rules:
+
+- the comment's **last line must sit immediately above** the entry — a blank line between them means
+  it belongs to nothing;
+- the entry must be an item of the array literal you pass to `allowedFilters([...])`, which is the
+  normal way to write it.
+
+Comments describe **filters**. Sorts, includes, and fields carry a generated description instead (the
+allowed values and the `-` descending convention).
 
 ### Defaults and nullable filters
 
 Chained modifiers are recovered too:
 
-- `->default('sent')` sets the parameter's `schema.default`.
-- `->nullable()` appends a note that the filter accepts `null` to match absent values. (It does **not**
-  add `null` as an enum value — the empty filter is a request form, not one of the enum's cases.)
+- `->default('sent')` sets the parameter's `schema.default`. The value must be a constant — a computed
+  default can't be read statically, and the rest of the entry is still documented without it.
+- `->nullable()` appends *"Accepts `null` to filter for absent values."* to the description. It does
+  **not** add `null` as an enum value — the empty filter is a request form, not one of the enum's cases.
 
 ```php
 AllowedFilter::exact('status')->default('sent')->nullable();
@@ -298,39 +340,46 @@ and `default` are applied to the filter's parameter:
 	</TabItem>
 </Tabs>
 
-The class attribute is an override of inference, not the last word: a `#[QueryParameter('filter[popular]')]`
-on the controller action still wins over it, so a caller can refine a shared filter per endpoint.
+`type` accepts a scalar name (`int`, `string`, `bool`, `float`) or a backed-enum class-string, which
+documents that enum's values. The class attribute is an override of inference, not the last word: a
+`#[QueryParameter('filter[popular]')]` on the controller action still wins over it, so a caller can
+refine a shared filter per endpoint.
+
+## Sparse fieldsets
+
+`allowedFields` entries are grouped by their `type.field` prefix, one parameter per type:
+
+```php
+->allowedFields(['invoices.id', 'invoices.total', 'customer.name'])
+// → fields[invoices]  "Comma-separated fields: id, total."
+// → fields[customer]  "Comma-separated fields: name."
+```
+
+A bare field name with no `type.` prefix has no type to bracket, so it lands on the unbracketed
+`fields` parameter instead.
 
 ## Strict mode and the `400` response
 
 Spatie Query Builder runs in **strict mode by default** — an unknown filter, sort, or include raises an
 `InvalidQuery` (HTTP `400`). Docuccino documents that `400` on every Query Builder operation, rendered
 in your chosen error style (framework defaults or the Problem Details preset), so consumers know a
-mistyped parameter is rejected rather than silently ignored. It's omitted only when strict mode is
-turned off or the document's `error_responses` is set to `none`.
+mistyped parameter is rejected rather than silently ignored:
 
-## Configuration
-
-### Custom pagination terminals
-
-If your app paginates through a custom helper method, tell Docuccino its name so pagination
-parameters are still added:
-
-```php
-// config/docuccino.php → documents.default.integrations
-'query_builder' => [
-    'pagination_terminals' => ['paginateList'],
-],
+```json
+"400": {
+  "description": "Bad Request",
+  "content": { "application/json": { "schema": {
+    "type": "object", "properties": { "message": { "type": "string" } }
+  } } }
+}
 ```
 
-`paginate`, `simplePaginate`, and `cursorPaginate` are recognized out of the box.
-
-### Renamed parameter keys
-
-Spatie lets you rename the request keys (`filter`, `sort`, `include`, `fields`, `append`) in its own
-`config/query-builder.php`. Docuccino reads that config and documents whatever names you've chosen —
-if you rename `filter` to `filters`, the parameters come out as `filters[status]`. When the config
-isn't readable it falls back to the package defaults and emits an info diagnostic so you know why.
+It's omitted in two cases: the document sets
+[`error_responses` to `none`](/laravel/reference/configuration/#error_responses), or you've turned
+strict mode fully off. "Fully" is the operative word — Docuccino treats strict mode as off only when
+**all three** of `disable_invalid_filter_query_exception`,
+`disable_invalid_sort_query_exception`, and `disable_invalid_includes_query_exception` are `true` in
+`config/query-builder.php`, because any one of them left on can still produce the `400`.
 
 ## Query objects (allow-lists in a separate class)
 
@@ -365,15 +414,64 @@ namespace). Vendor code is never followed. Everything else on this page — enum
 defaults, custom filters — works identically through the hop, and the query class file joins the
 fragment-cache dependency set, so editing it re-documents the endpoint.
 
-## When it can't tell
+## Configuration
 
-If an allowed filter or sort is computed in a way that can't be resolved statically, Docuccino emits
-a warning diagnostic naming the exact expression — it never silently drops a parameter. And if an
-endpoint reaches a paginating terminal on a Query Builder but no allow-lists are recovered at all,
-Docuccino emits an info diagnostic (`query-builder.no-allowlists-recovered`) naming the action — so a
-list endpoint that offers filters you expected to see is never silently under-documented. You can then
-document that one parameter with [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter),
-addressing it by name:
+### Custom pagination terminals
+
+`paginate`, `simplePaginate`, and `cursorPaginate` are recognized out of the box, and each implies its
+paginator kind. If your app paginates through a custom helper method — `paginateList()` in the example
+above — name it so the pagination parameters are still added:
+
+```php
+// config/docuccino.php → documents.default.integrations
+'query_builder' => [
+    'pagination_terminals' => ['paginateList'],
+],
+```
+
+A custom terminal is treated as length-aware (`page` + `per_page`). If yours wraps
+`cursorPaginate()`, leave it out of this list — the trace reaches the real `cursorPaginate` call
+inside it and documents `cursor` correctly.
+
+Only the **outermost** terminal counts, so a page size passed at the call site
+(`->paginateList(50)`) is the one documented.
+
+### Renamed parameter keys
+
+Spatie lets you rename the request keys under `parameters` in its own `config/query-builder.php` —
+`filter`, `sort`, `include`, `fields`. Docuccino reads that config and documents whatever names
+you've chosen: rename `filter` to `filters` and the parameters come out as `filters[status]`. When
+the config isn't readable it falls back to the package defaults and emits a
+`query-builder.default-config` info diagnostic telling you to publish it, so you're never left
+wondering why the names look generic.
+
+### Turning it off
+
+`integrations.query_builder.enabled => false` omits every Query Builder contribution from a document.
+That's the only other switch this integration has — see the
+[`integrations` reference](/laravel/reference/configuration/#integrations).
+
+## Limits, and how you're told
+
+Docuccino never silently drops a parameter. Everything it can't recover becomes a named diagnostic on
+the build:
+
+| Situation | Diagnostic | What lands in the spec |
+| --- | --- | --- |
+| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
+| A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | Pagination parameters only |
+| A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
+| Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
+
+Two things are outside what the trace models today, and neither produces a diagnostic:
+
+- **`allowedAppends`** — no `append` parameter is documented. Add one with
+  `#[QueryParameter('append')]` if your clients use it.
+- **Relationship-path columns** (`customer.name`) — the filter is documented, but as a plain string;
+  only the subject model's own columns are typed from casts.
+
+For anything on this list, document the parameter yourself with
+[`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), addressing it by name:
 
 ```php
 #[QueryParameter('filter[status]', description: 'Only active invoices.')]
@@ -382,14 +480,17 @@ public function index() { /* … */ }
 
 Values you set with attributes or docblocks always take precedence over what's inferred.
 
-Addressing a single filter by name works the same in **both** representations. Under the default
-bracketed style, `#[QueryParameter('filter[status]')]` patches the flat `filter[status]` parameter;
-under the `deepObject` style — where filters collapse into one `filter` object parameter —
-the very same attribute patches that object's `status` property instead. You write it once and it
-lands correctly whichever representation the document uses:
+<Aside title="One attribute, both representations">
+Addressing a single filter by name works the same under either
+[filter representation](/laravel/reference/configuration/#representation). Under the default
+`bracketed` style, `#[QueryParameter('filter[status]')]` patches the flat `filter[status]` parameter;
+under `deepObject` — where filters collapse into one `filter` object parameter with
+`explode: true` — the very same attribute patches that object's `status` property instead. You write
+it once and it lands correctly whichever style the document uses:
 
 ```php
 // Patches filter[status] (bracketed) OR the filter object's `status` property (deepObject).
 #[QueryParameter('filter[status]', type: 'string', description: 'Only active invoices.', required: true)]
 public function index() { /* … */ }
 ```
+</Aside>

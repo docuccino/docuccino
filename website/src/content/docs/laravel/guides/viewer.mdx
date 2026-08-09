@@ -1,6 +1,6 @@
 ---
 title: The viewer
-description: The bundled Scalar API reference — its routes, access control, source modes, and options — served from your own app with no external CDN.
+description: The bundled Scalar API reference — its routes, access control, middleware, and source modes — served from your own app with no external CDN.
 sidebar:
   order: 6
 ---
@@ -10,6 +10,12 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 Docuccino ships an interactive [Scalar](https://scalar.com) API reference and serves it straight from
 your Laravel app — no external service, no CDN required. It has a built-in try-it-out console, so
 readers can call your API from the docs.
+
+<Aside type="caution" title="It's closed outside `local` until you open it">
+With `viewer.gate` unset — the default — the viewer answers only when the app environment is `local`.
+Everywhere else, every viewer route returns **403** until you [name a gate](#access-control). Nothing
+is exposed by installing the package.
+</Aside>
 
 ## Routes
 
@@ -21,8 +27,11 @@ With the default `viewer.route` of `/docs/api`, three routes are registered per 
 | `GET /docs/api.json` | The generated OpenAPI document. |
 | `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). |
 
-Change the base path with `viewer.route`, or set it to `null` to disable the viewer for a document
-(export still works).
+Change the base path with `viewer.route`, or set it to `null` to register nothing for that document
+(export still works). Setting `enabled` to `false` removes the routes for every document at once.
+
+Each document gets its own set, so a second document on `/docs/admin` is entirely independent — see
+[multiple documents](/laravel/guides/multiple-documents/).
 
 ## Access control
 
@@ -34,21 +43,55 @@ name a gate:
 1. Name a gate ability on the document:
 
    ```php
-   // documents.default.viewer.gate
+   // config/docuccino.php — documents.default.viewer
    'gate' => 'viewApiDocs',
    ```
 
 2. Define it in a service provider:
 
    ```php
-   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
+   use Illuminate\Support\Facades\Gate;
+
+   Gate::define('viewApiDocs', fn (?User $user): bool => $user?->isAdmin() ?? false);
    ```
 
 </Steps>
 
-The gate guards the HTML and `.json` routes; the static asset route is never gated. Set
-`viewer.middleware` to control the middleware stack — keep `throttle` when the spec endpoint is public,
-since generating it can be expensive.
+The gate guards the HTML page and the `.json` spec; a denial is a `403`. The static asset route is not
+gated — it's a copy of the Scalar bundle, identical for every app, and gating it would break the page
+for the readers who *are* allowed in.
+
+Type the gate's user parameter as nullable if you want guests to reach it (a public docs page behind a
+token check, say); otherwise Laravel refuses the guest before your closure runs.
+
+## Middleware
+
+`viewer.middleware` is the full stack for all three routes. The default is:
+
+```php
+'middleware' => ['web', 'throttle:60,1'],
+```
+
+`web` gives you session state, which a gate on an authenticated user needs. Keep `throttle` whenever
+the spec endpoint is reachable by anyone who isn't signed in — with `source: generate` a request
+rebuilds the whole document, which is expensive enough to be worth protecting.
+
+<Aside type="caution" title="Multi-tenant or domain-gated apps: override this">
+The viewer's routes are registered **without a domain**. If your `web` group resolves a tenant or a
+domain from the hostname, those routes can't satisfy it and the viewer **404s** — a confusing failure,
+because the config looks right. Override `middleware` for those apps:
+
+```php
+// Drop `web` entirely…
+'middleware' => ['throttle:60,1'],
+
+// …or keep it and add whatever resolves your tenant.
+'middleware' => ['web', 'resolve-tenant', 'throttle:60,1'],
+```
+
+Dropping `web` means no session, so pair it with a gate that doesn't depend on one — an API token or a
+signed URL check rather than `$user?->isAdmin()`.
+</Aside>
 
 ## Source modes
 
@@ -57,18 +100,32 @@ since generating it can be expensive.
 | `source` | Behavior |
 | --- | --- |
 | `generate` | Rebuilds the document on every request. Fine for local or gated use. |
-| `artifact` | Re-emits the committed `export.path` — no analysis at request time. |
-| `cache` | Serves the [`docuccino:cache`](/laravel/reference/commands/#docuccinocache)-warmed payload; falls back to `generate` on a cold cache. |
+| `artifact` | Re-emits the committed `export.path` — no analysis at request time. Serves an empty document if the file isn't there. |
+| `cache` | Serves the [`docuccino:cache`](/laravel/reference/commands/#docuccinocache)-warmed payload; a cold cache falls back to `generate` and logs a warning. |
 
 For anything public or high-traffic, prefer `artifact` or `cache` — see
 [Deploying to production](/laravel/guides/production/).
 
+A UIR artifact works as an `artifact` source too: it's re-emitted through the OpenAPI emitter on the
+way out, so provenance and internal identities never reach the browser.
+
 ## Serving the asset
 
-By default the Scalar script is bundled and served from your own app, so the viewer works on locked-down
-networks with no outbound access. To load it from a CDN instead, set `viewer.cdn` to `true`.
+By default the Scalar script is bundled with the package and served from your own app, so the viewer
+works on locked-down networks with no outbound access. It's a large file that only changes when you
+upgrade Docuccino, so it's served with long-lived immutable cache headers and costs a reader one
+download.
+
+To load it from a CDN instead — trading the offline guarantee for a byte you don't serve — set
+`viewer.cdn`:
+
+```php
+'cdn' => true, // loads Scalar from jsDelivr
+```
+
+The page title comes from the document's `info.title`, so the browser tab matches the API rather than
+saying "API Documentation".
 
 <Aside type="note">
-Only the bundled Scalar viewer ships today (`viewer.driver` is `scalar`). See the
-[viewer configuration](/laravel/reference/configuration/#viewer) for every key and its default.
+See the [viewer configuration](/laravel/reference/configuration/#viewer) for every key and its default.
 </Aside>

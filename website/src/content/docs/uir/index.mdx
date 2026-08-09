@@ -17,8 +17,10 @@ foundation for Docuccino's deterministic output and semantic diff, and it's a cl
 tooling (changelogs, mock servers, AI agent tool schemas) that wants more than plain OpenAPI offers.
 
 <Aside type="note">
-A UIR document is a valid OpenAPI document plus one reserved key, `x-docuccino`, allowed on any node.
-Exporting OpenAPI simply strips and remaps that key — so nothing is lost in translation.
+A UIR document is an OpenAPI document — the same objects in the same places — plus one reserved
+member, `x-docuccino`, allowed on any node, and two root members of its own: `$schema` and `uir`.
+Exporting OpenAPI drops all three. Everything that has a home in OpenAPI survives that trip;
+what doesn't (provenance, identities, the page tree) is UIR-only by design.
 </Aside>
 
 ## Shape
@@ -28,16 +30,25 @@ Exporting OpenAPI simply strips and remaps that key — so nothing is lost in tr
   "$schema": "https://spec.docuccino.app/uir/1.0/schema.json",
   "uir": "1.0.0",
   "openapi": "3.2.0",
-  "info": {}, "servers": [], "security": [], "tags": [],
-  "paths": {}, "webhooks": {},
-  "components": { "schemas": {}, "responses": {}, "parameters": {}, "securitySchemes": {} },
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.2/dialect/base",
+  "info": { "title": "Billing API", "version": "2.1.0" },
+  "servers": [], "security": [], "tags": [],
+  "paths": {},
+  "components": { "schemas": {}, "responses": {}, "securitySchemes": {} },
   "x-docuccino": {
-    "document": { "id": "doc:default", "contentHash": "…" },
-    "content": { "pages": [] },
-    "diagnostics": []
+    "document": {
+      "id": "doc:default",
+      "configHash": "f7ea3a4314fc0a4e…",
+      "contentHash": "7f6b185b0fd29b96…"
+    },
+    "generator": { "name": "docuccino/laravel", "version": "1.0.0", "specVersion": "1.0.0" },
+    "content": { "pages": [], "nav": [] }
   }
 }
 ```
+
+Optional members are simply absent rather than empty: a document with no servers has no `servers` key,
+and one with no [content directory](/laravel/guides/narrative-content/) has no `content`.
 
 There are **no timestamps anywhere** — they'd break determinism, so the format forbids them. The
 `x-docuccino` subtree is **strictly defined and closed to undefined members** — a determinism
@@ -46,24 +57,31 @@ schema revisions rather than by readers tolerating unknown members (see [spec ho
 
 ## Stable identities
 
-Every operation, parameter, named schema, and response carries an `x-docuccino.id`. Identities are
-computed from meaning, never from file paths or line numbers, so they survive refactors:
+Every operation, parameter, named schema, response and content page carries an `x-docuccino.id`.
+Identities are computed from meaning, never from file paths, line numbers or array positions, so they
+survive refactors:
 
 | Kind | Built from | Survives | Changes when |
 | --- | --- | --- | --- |
-| `op:` | document + method + path template (params normalized) | file moves, controller/method renames, path-param renames | the URL, method, or containing document changes |
-| `par:` | operation + location + name | reorder, description edits | the parameter is renamed |
-| `sch:` (named) | class name (pin with `#[SchemaId]`) | file moves | the class is renamed without a pin |
+| `op:` | document + method + path template (params normalized to `{p0}`, `{p1}`…) | file moves, controller/method renames, path-param renames | the URL, method, or containing document changes |
+| `par:` | operation + location + name | reorder, description edits | the parameter is renamed or moves between `query` and `path` |
+| `sch:` (named) | class name and any generic type arguments (pin it with `#[SchemaId]`) | file moves | the class is renamed without a pin |
 | `sch:` (inline) | the schema's structure | prose edits | the shape changes |
-| `res:` | operation + status + media type | — | the status or media type changes |
+| `res:` | operation + status + media type | description edits | the status or media type changes |
+| `page:` | the page's slug | title and body edits | the file moves, unless you pin `slug` in frontmatter |
+
+Ids read as `<kind>:v1:<16 chars>` — `op:v1:sdqfknnscimbfjgg` — where `v1` is the identity algorithm
+version, so a future algorithm can coexist with today's ids. The document id is the one that stays
+legible: `doc:` plus your config key.
 
 This is what makes a meaningful diff possible: rename a controller and nothing changes; change a URL
 and the diff shows exactly that operation removed and added.
 
 ## Deterministic output
 
-The format specifies a canonical ordering and serialization — fixed member order, sorted map keys, a
-fixed order of HTTP methods, 2-space indentation, and a trailing newline. The result:
+The format specifies a canonical ordering and serialization: fixed member order per object type, map
+keys sorted by code point, a fixed order of HTTP methods, parameters sorted by location then name,
+2-space indentation, LF endings, and a trailing newline. The result:
 
 <CardGrid>
 	<Card title="Same code, same bytes" icon="approve-check">
@@ -77,6 +95,11 @@ fixed order of HTTP methods, 2-space indentation, and a trailing newline. The re
 	</Card>
 </CardGrid>
 
+The document carries two hashes, and they answer different questions. `contentHash` digests the whole
+document with the tool metadata excluded — it tells you *the documentation changed*. `configHash`
+digests this document's entry in your config file — it tells you *the change came from configuration,
+not from code*.
+
 ## Provenance
 
 Each contribution to the document is recorded — what produced it, the precedence layer it applied at,
@@ -85,31 +108,53 @@ this way?":
 
 ```json
 {
-  "producer": "integration:query-builder",
-  "layer": "integration",
-  "fields": ["schema", "description"],
-  "source": { "file": "app/Http/Controllers/InvoiceController.php", "line": 28 },
-  "confidence": 0.9,
-  "overrode": [ { "field": "description", "value": "Filter the result set." } ]
+  "producer": "attribute",
+  "layer": "attribute",
+  "fields": ["summary"],
+  "source": {
+    "file": "app/Http/Controllers/InvoiceController.php",
+    "line": 34,
+    "symbol": "App\\Http\\Controllers\\InvoiceController::index"
+  },
+  "confidence": 1,
+  "overrode": [
+    { "field": "summary", "value": "Index invoices", "producer": "docblock" }
+  ]
 }
 ```
 
-When a higher-precedence layer wins a field, the value it replaced is kept in `overrode` rather than
-discarded. Control how much provenance is emitted with `--provenance=none|winners|full`.
+`producer` names the specific source — `inference`, `docblock`, `attribute`, `overlay`, `config`,
+`fallback`, or `integration:<name>` such as `integration:query-builder`. When a higher-precedence layer
+wins a field, the value it replaced is kept in `overrode` rather than discarded, so the whole chain of
+decisions stays readable.
+
+Choose how much of that to emit with `docuccino:export --provenance`:
+
+| Level | Emits |
+| --- | --- |
+| `full` | Every record, including the `overrode` trail. The complete audit. |
+| `winners` (default) | Every record, without the `overrode` trails. |
+| `none` | No provenance at all — smallest document, and immune to line-number churn. |
+
+Provenance only exists in the UIR: the OpenAPI emitters always drop it.
 
 ## Content layer
 
 Point [`content.dir`](/laravel/reference/configuration/#content) at a folder of Markdown and Docuccino
-compiles it into the document: guide pages with stable ids, plus a navigation tree derived from your
-folder structure (overridable in frontmatter). Reference operations and schemas directly from your
+compiles it into the document: guide pages with stable `page:` ids, plus a navigation tree derived from
+your folder structure (overridable in frontmatter). Reference operations and schemas directly from your
 prose with directives, and Docuccino resolves them at build time:
 
 ```markdown
 See ::operation{id="invoices.index"} for pagination, which returns ::schema{name="InvoiceData"}.
 ```
 
-A directive that points at something that doesn't exist becomes a diagnostic — so your guides can't
-silently drift from your API. Because narrative lives in the document, prose changes show up in the
-diff and changelog too, not just API changes.
+Each resolved directive is rewritten with the target's stable id, so a consumer can link to an
+operation without re-resolving anything. A directive that points at something that doesn't exist
+becomes a diagnostic — so your guides can't silently drift from your API. And because narrative lives
+in the document, prose changes show up in the diff and changelog too, not just API changes.
+
+The content layer is UIR-only: plain OpenAPI has nowhere to put a page tree, so the OpenAPI export
+drops it. See [Guides, pages & prose](/laravel/guides/narrative-content/) for the authoring side.
 
 Continue to [spec hosting](/uir/hosting/) for where the JSON Schema lives and how it's versioned.

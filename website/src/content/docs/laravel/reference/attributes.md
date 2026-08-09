@@ -14,8 +14,14 @@ example `#[Response(status: 201, description: 'Created')]` sets just the descrip
 response and leaves the inferred body schema intact.
 
 Attributes apply to controllers, actions, Form Requests, Data classes, enum cases, and closure
-routes, as each attribute's targets allow. A `type:` string (where present) accepts the same type
-syntax you use in docblocks.
+routes, as each attribute's targets allow. Put one on the controller to cover every action in it; the
+same attribute on an action is more specific and wins.
+
+A `type:` string (where present) is parsed by the same grammar as your docblocks, so unions
+(`InvoiceResource|null`), lists (`list<InvoiceResource>`) and array shapes
+(`array{id: int, total: int}`) all work. Unqualified class names resolve against the controller
+file's own `use` statements and namespace, so `#[Response(type: 'InvoiceResource')]` finds the class
+you'd expect without a `::class` reference.
 
 ## At a glance
 
@@ -31,10 +37,10 @@ All 26 attributes, grouped by what they do:
 | [`#[CookieParameter]`](#cookieparameter) | Add or patch a cookie parameter. |
 | [`#[BodyParameter]`](#bodyparameter) | Add or patch one property of the request body. |
 | [`#[Hidden]`](#hidden) | Remove properties from the output schema. |
-| [`#[HiddenFromRequest]`](#hiddenfromrequest) | Remove a property from the request body only. |
+| [`#[HiddenFromRequest]`](#hiddenfromrequest) | Remove a Data-class property from the request body only. |
 | [`#[ExcludeFromDocs]`](#excludefromdocs) | Drop a route (or controller) from the docs. |
-| [`#[Internal]`](#internal) | Flag a node `x-internal: true`. |
-| [`#[InDocs]`](#indocs) | Pin a route to named output documents. |
+| [`#[Internal]`](#internal) | Flag an operation `x-internal: true`. |
+| [`#[InDocs]`](#indocs) | Restrict a route to named output documents. |
 | [`#[IgnoreParam]`](#ignoreparam) | Drop an inferred parameter by name. |
 | [`#[IgnoreResponse]`](#ignoreresponse) | Drop an inferred response by status. |
 | [`#[Group]`](#group) | Assign an operation to an OAS tag. |
@@ -46,7 +52,7 @@ All 26 attributes, grouped by what they do:
 | [`#[Abilities]`](#abilities) | Declare required Sanctum token abilities. |
 | [`#[SchemaId]`](#schemaid) | Pin a class's stable diff identity. |
 | [`#[SchemaName]`](#schemaname) | Set a class's component display name. |
-| [`#[Example]`](#example) | Attach an example value (repeatable). |
+| [`#[Example]`](#example) | Pin the success response's example body. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
 
@@ -86,11 +92,13 @@ public function __construct(
 )
 ```
 
-Documents a single response header on a given status code.
+Documents a single response header on a given status code. Repeat it freely — headers are grouped and
+merged per status. Omit `type` and the header is documented as a string.
 
 ```php
-#[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left', status: 200)]
-public function index(): JsonResponse { /* … */ }
+#[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left this window')]
+#[ResponseHeader(name: 'Retry-After', type: 'integer', description: 'Seconds to wait', status: 429)]
+public function index(): AnonymousResourceCollection { /* … */ }
 ```
 
 ## Parameters
@@ -204,15 +212,17 @@ Targets `CLASS | PROPERTY`.
 public function __construct(string ...$properties) // stored as list<string> $properties
 ```
 
-Removes properties from a schema — on a property it drops that property; on a class it drops the
-named properties (the Eloquent-model / DTO form).
+Removes properties from an output schema. On a class it drops the properties you name — the form
+Eloquent models and Data classes use, where the properties are reflected rather than declared one by
+one. On a property it drops that property, for a Data class whose properties you can annotate
+directly.
 
 ```php
-#[Hidden('password', 'remember_token')] // on the class
-class User extends Model {}
+#[Hidden('password_hash', 'remember_token')] // on the model: merged with $hidden
+class Customer extends Model {}
 
-#[Hidden] // on the property
-public string $internalToken;
+#[Hidden] // on a Data-class property
+public string $internalRiskScore;
 ```
 
 `#[Hidden]` affects the **output** schema only. A property that is hidden from responses but still
@@ -221,20 +231,19 @@ from the documented **request** body, use `#[HiddenFromRequest]` below.
 
 ### `#[HiddenFromRequest]`
 
-Targets `PROPERTY`.
+Targets `PROPERTY`. Marker (no constructor).
 
-```php
-public function __construct() // no arguments
-```
-
-Excludes a request-DTO / FormRequest property from the documented request body, without touching the
-response schema — the request-side counterpart to `#[Hidden]`, for a server-populated value that
-clients never send.
+Excludes a Data-class property from the documented request body without touching the response
+schema — the request-side counterpart to `#[Hidden]`, for a server-populated value clients never
+send.
 
 ```php
 #[HiddenFromRequest]
 public string $capturedIp;
 ```
+
+A Form Request's body comes from its validation rules, so drop a field there by removing its rule —
+or patch the inferred body with [`#[BodyParameter]`](#bodyparameter).
 
 ### `#[ExcludeFromDocs]`
 
@@ -248,13 +257,17 @@ public function debug(): JsonResponse { /* … */ }
 
 ### `#[Internal]`
 
-Targets `CLASS | METHOD | FUNCTION | PROPERTY`. Marker. Flags the node as internal, surfaced as
-`x-internal: true` (kept in the doc but flagged; SDK generators honor it).
+Targets `CLASS | METHOD | FUNCTION | PROPERTY`. Marker. On an action or controller it sets
+`x-internal: true` on the operation — the operation stays in the document, flagged, which is the
+convention SDK generators and doc filters read to keep it out of public output.
 
 ```php
 #[Internal]
 public function purgeCache(): JsonResponse { /* … */ }
 ```
+
+To remove an operation from the document altogether, use
+[`#[ExcludeFromDocs]`](#excludefromdocs) instead.
 
 ### `#[InDocs]`
 
@@ -264,12 +277,18 @@ Targets `CLASS | METHOD | FUNCTION`.
 public function __construct(string ...$documents) // stored as list<string> $documents
 ```
 
-Pins a route (or whole controller) to one or more named output documents.
+Restricts a route (or whole controller) to the named documents. In a multi-document setup it's how
+you keep a partner-only endpoint out of your public spec.
 
 ```php
 #[InDocs('public-api', 'partner-api')]
 public function webhook(Request $request): JsonResponse { /* … */ }
 ```
+
+It **narrows, it doesn't rescue**: the attribute is applied after each document's
+`routes.include` / `routes.exclude` patterns and closure filter, so a route those already excluded
+stays excluded no matter what you list here. To add a route to a document, widen the document's route
+patterns.
 
 ### `#[IgnoreParam]`
 
@@ -317,12 +336,19 @@ public function __construct(
 )
 ```
 
-Assigns an operation to an OAS tag/group (repeatable to place it under several tags).
+Assigns an operation to an OAS tag/group. Repeatable, to place one operation under several tags. On a
+controller it tags every action in it.
 
 ```php
-#[Group(name: 'Users', description: 'User management endpoints')]
-class UserController {}
+#[Group(name: 'Invoices')]
+class InvoiceController {}
 ```
+
+The name goes through the document's [`tags.map`](/laravel/reference/configuration/#tags) before it
+lands in the document, and an operation with no `#[Group]` is tagged by the
+`tags.default_strategy`. Descriptions for the OpenAPI top-level `tags` array come from
+`tags.definitions` in config — which is also what orders them — so that one description lives in one
+place rather than being repeated on every controller.
 
 ### `#[OperationId]`
 
@@ -466,13 +492,29 @@ public function __construct(
 )
 ```
 
-Attaches an example value — optionally named, summarized, or referenced by an `externalValue` URL.
-Repeatable for several named examples.
+Pins the example body for an action's success response: the first `#[Example]` with a non-null `value`
+becomes the `example` on the `200` response's `application/json` content. Inference supplies examples
+for error bodies on its own — this is how you fix the shape of a success payload it can't know.
 
 ```php
-#[Example(value: 'acme-corp', name: 'default', summary: 'Typical tenant slug')]
+#[Example(value: ['id' => 42, 'total' => 19900, 'currency' => 'GBP'])]
+public function show(Invoice $invoice): InvoiceResource { /* … */ }
+```
+
+For a field-level example, an `@example` docblock line on the property is read when the schema comes
+from a [Data class](/laravel/packages/spatie-data/):
+
+```php
+/**
+ * The tenant that owns the invoice.
+ *
+ * @example acme-corp
+ */
 public string $tenant;
 ```
+
+The `name`, `summary` and `externalValue` arguments are part of the attribute's signature; today only
+`value` reaches the emitted document.
 
 ### `#[CaseDescription]`
 

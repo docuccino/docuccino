@@ -5,32 +5,51 @@ sidebar:
   order: 5
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 Error responses are one of the most tedious parts of API docs to maintain by hand. Docuccino
 documents them for you by reading how your application actually handles exceptions, and falls back
 to sensible defaults for the framework's built-in ones.
 
-For each exception an endpoint can throw, Docuccino resolves a response in this order — the first
-match wins, and your [attributes](/laravel/reference/attributes/#response) or config always override the
-result:
+For each exception an endpoint can throw, Docuccino resolves a response through four tiers. The first
+tier that can produce a shape wins, and your [attributes](/laravel/reference/attributes/#response),
+docblocks, overlays or config always override the result:
 
-1. **Your exception handling** (inferred)
-2. **The Problem Details preset** — when you opt in
-3. **Framework defaults**
+<Steps>
+
+1. **Your exception handling** — the shape your code really returns.
+
+2. **The Problem Details preset** — RFC 9457 responses, when you opt in.
+
+3. **Framework defaults** — Laravel's stock JSON shapes for the exceptions it renders itself.
+
+4. **A generic fallback** — any other exception with a known status gets `{ "message": string }` under
+   that status (`500` when the status can't be determined), so an error is never simply undocumented.
+
+</Steps>
 
 ## Your exception handling (automatic)
 
-Docuccino reads your app's real error handling and documents the exact shape it produces. It
-understands:
+Docuccino reads your app's real error handling and documents the exact shape it produces. For each
+exception it looks, in order, for:
 
-- `render` callbacks registered in `bootstrap/app.php` (`->withExceptions(...)`) — whether you pass a
-  closure (`->render(fn (PaymentException $e) => …)`), an invokable renderer (`->render(new ProblemRenderer)`),
-  or an `[$object, 'method']` pair,
-- an exception's own `render()` method,
-- and `Responsable` exceptions' `toResponse()`.
+<Steps>
 
-It analyzes each with the thrown type in mind, so even a single catch-all handler that branches on
+1. **A `render` callback** registered in `bootstrap/app.php` (`->withExceptions(...)`) whose
+   first-parameter type the exception matches — a closure (`->render(fn (PaymentException $e) => …)`),
+   an invokable renderer (`->render(new ProblemRenderer)`), an `[$object, 'method']` pair, or a
+   first-class callable. Callbacks are tried in registration order, which is Laravel's own match
+   order, so the documented shape is the one that actually runs. Callbacks registered by a service
+   provider or a package are found too — Docuccino reflects the booted handler rather than scanning
+   `bootstrap/app.php` as text.
+
+2. **The exception's own `render()` method.**
+
+3. **A `Responsable` exception's `toResponse()`.**
+
+</Steps>
+
+Each is analyzed with the thrown type in mind, so even a single catch-all handler that branches on
 `instanceof` is documented correctly per exception. Status codes and response bodies are read
 directly from the code:
 
@@ -68,9 +87,10 @@ directly from the code:
 </Tabs>
 
 Throw this from an action and a `402` response with that body shape is documented — no annotation
-required. The description is the RFC 9110 reason phrase for the status; a status without a standard
-phrase (like `402` here) is documented with a generic `Error`. If a handler is too dynamic to read
-statically, Docuccino records a diagnostic and moves on to the next source.
+required. The description is the RFC 9110 reason phrase for the status (`401` is `Unauthorized`,
+`422` is `Unprocessable Entity`, and so on); a status without a standard phrase — like `402` here — is
+documented with a generic `Error`. If a handler is too dynamic to read statically, Docuccino records a
+diagnostic and moves on to the next tier.
 
 ### Responses built through a helper
 
@@ -211,17 +231,108 @@ on the preset:
 'error_responses' => 'problem-details',
 ```
 
-Common framework exceptions — validation (`422`), authentication (`401`), authorization (`403`), and
-not-found (`404`) — become reusable `problem+json` responses built on a shared `ProblemDetails`
-schema (`type`, `title`, `status`, `detail`, `instance`), with the validation case adding a
-field-keyed `errors` map. Your own inferred handlers still win where they apply.
+The framework exceptions become reusable `#/components/responses/Problem*` entries, all built on one
+shared `ProblemDetails` schema (`type`, `title`, `status`, `detail`, `instance`) — so an operation's
+error responses are a `$ref`, not a copy, and the shape is described exactly once:
+
+<Tabs>
+	<TabItem label="On the operation">
+	```json
+	"responses": {
+	  "201": { "description": "Created", "content": { "application/json": {
+	    "schema": { "$ref": "#/components/schemas/InvoiceResource" }
+	  } } },
+	  "422": { "$ref": "#/components/responses/ProblemValidation" }
+	}
+	```
+	</TabItem>
+	<TabItem label="Shared components">
+	```json
+	"ProblemDetails": {
+	  "type": "object",
+	  "properties": {
+	    "type":     { "type": "string", "format": "uri", "default": "about:blank" },
+	    "title":    { "type": "string" },
+	    "status":   { "type": "integer" },
+	    "detail":   { "type": "string" },
+	    "instance": { "type": "string", "format": "uri" }
+	  }
+	},
+	// components.responses
+	"ProblemValidation": {
+	  "description": "Validation failed",
+	  "content": { "application/problem+json": {
+	    "schema": { "allOf": [
+	      { "$ref": "#/components/schemas/ProblemDetails" },
+	      { "type": "object", "properties": { "errors": {
+	        "type": "object",
+	        "additionalProperties": { "type": "array", "items": { "type": "string" } }
+	      } } }
+	    ] },
+	    "example": {
+	      "type": "about:blank", "title": "Unprocessable Entity", "status": 422,
+	      "detail": "Validation failed.", "errors": { "field": ["The field is invalid."] }
+	    }
+	  } }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The shared schema stays open — no `additionalProperties: false` — so your app is free to add its own
+members. Every response carries a worked example, and the components you get are:
+
+| Component | Status | For |
+| --- | --- | --- |
+| `ProblemValidation` | `422` | `ValidationException` — adds the `errors` member |
+| `ProblemUnauthenticated` | `401` | `AuthenticationException` |
+| `ProblemForbidden` | `403` | `AuthorizationException` |
+| `ProblemNotFound` | `404` | `ModelNotFoundException`, `NotFoundHttpException` |
+| `Problem<status>` | that status | Any other `HttpException` whose status folds to a constant |
+
+Your own inferred handlers still win where they apply, so the preset only covers what you haven't
+handled yourself.
+
+### Choosing the `422` errors shape
+
+By default `errors` is a field-keyed map of message lists, matching Laravel's stock validation JSON.
+RFC 9457 implementations often prefer a list of JSON-Pointer objects instead — pass the bag form to
+switch:
+
+```php
+'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+```
+
+```json
+"errors": {
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": { "detail": { "type": "string" }, "pointer": { "type": "string" } },
+    "required": ["detail", "pointer"]
+  }
+}
+// example: [ { "detail": "The field is invalid.", "pointer": "#/field" } ]
+```
 
 ## Framework defaults
 
-With `error_responses` set to `default` (the default), Docuccino documents Laravel's stock JSON
-error shapes for framework exceptions it recognizes — `422 {message, errors}` and
-`401`/`403`/`404 {message}` — using the standard HTTP reason phrases. Set `error_responses` to
-`none` to emit no error responses at all.
+With `error_responses` set to `default` (the shipped value), Docuccino documents Laravel's stock JSON
+error shapes for the framework exceptions it recognizes, using the standard HTTP reason phrases as
+descriptions. Matching is subtype-aware, so your own subclass of any of these inherits its shape:
+
+| Exception | Status | Body |
+| --- | --- | --- |
+| `Illuminate\Validation\ValidationException` | `422` | `{ message, errors }` — `errors` is a field-keyed map of message lists |
+| `Illuminate\Auth\AuthenticationException` | `401` | `{ message }` |
+| `Illuminate\Auth\Access\AuthorizationException` | `403` | `{ message }` |
+| `Illuminate\Database\Eloquent\ModelNotFoundException` | `404` | `{ message }` |
+| `Illuminate\Database\RecordsNotFoundException` | `404` | `{ message }` — so a bare `sole()` / `firstOrFail()` on the query builder is covered |
+| `Symfony\…\HttpKernel\Exception\NotFoundHttpException` | `404` | `{ message }` |
+
+Anything outside that table still gets documented if its status is known: the final fallback tier emits
+`{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
+`error_responses` to `none` to emit no error responses at all.
 
 ## Implicit responses (middleware, bindings & validation)
 
@@ -249,10 +360,20 @@ Declare those with a [`#[Response]`](/laravel/reference/attributes/#response) at
 
 ## Configuration
 
-| Option | Values | Effect |
-| --- | --- | --- |
-| `error_responses` | `default` \| `problem-details` \| `none` | Which fallback strategy to use. Your inferred handlers take precedence regardless. |
-| `error_responses.errors_shape` | `map` \| `pointer-list` | The Problem Details `422` `errors` shape: a field-keyed map of messages (default), or a list of `{detail, pointer}` JSON-Pointer objects. Pass `error_responses` as `['preset' => 'problem-details', 'errors_shape' => 'pointer-list']`. |
+One key, in either a string or a bag form:
+
+```php
+// config/docuccino.php → documents.default
+'error_responses' => 'default',
+
+// Or, to also choose how a Problem Details 422 models `errors`:
+'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+```
+
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `error_responses` (or `preset`) | `default` \| `problem-details` \| `none` | `default` | Which fallback strategy to use. Your inferred handlers take precedence regardless; `none` also turns off the implicit responses above. |
+| `errors_shape` | `map` \| `pointer-list` | `map` | The Problem Details `422` `errors` shape. Only meaningful with the `problem-details` preset. |
 
 :::tip
 Because Docuccino reads your *actual* handling first, most apps get accurate error docs with no

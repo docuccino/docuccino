@@ -64,6 +64,17 @@ A top-level resource is wrapped under `data` (Laravel's default `$wrap`); the `I
 component it references is defined once and shared. Control or disable the wrapping with the
 `api_resources.wrap` option — see [resource wrapping](/laravel/documenting/schemas/#api-resources).
 
+Each response's `description` is the standard reason phrase for its status — `200 OK`,
+`201 Created`, `202 Accepted`, `204 No Content`, and so on — so you don't hand-write them. Responses
+are emitted in ascending status order, whatever order your return paths appear in.
+
+### Media types
+
+A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
+resource (or a collection of one) serializes as `application/vnd.api+json`, as does a
+[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource. Every payload under a status
+has to agree: if one return path there is a plain JSON payload, the response is `application/json`.
+
 ## Status codes and JsonResponse
 
 Return `response()->json($payload, $status)` and Docuccino folds the **payload** shape under the status
@@ -79,22 +90,68 @@ public function store(StoreInvoiceRequest $request): JsonResponse
 }
 ```
 
+Two return paths with two statuses become two responses:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	public function queue(QueueReportRequest $request): JsonResponse
+	{
+	    if ($request->boolean('async')) {
+	        return response()->json(['status' => 'accepted'], 202);
+	    }
+
+	    return response()->json(['id' => $this->reports->build($request)->id]);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"200": {
+	  "description": "OK",
+	  "content": { "application/json": { "schema": {
+	    "type": "object",
+	    "properties": { "id": { "type": "integer" } },
+	    "required": ["id"]
+	  } } }
+	},
+	"202": {
+	  "description": "Accepted",
+	  "content": { "application/json": { "schema": {
+	    "type": "object",
+	    "properties": { "status": { "type": "string", "const": "accepted" } },
+	    "required": ["status"]
+	  } } }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Literal values in the payload survive as JSON Schema `const`s, so `'accepted'` is documented as the
+only value that status returns. Two return paths that share a status contribute one response whose
+schema is the union of their shapes.
+
 A status computed at runtime (not a literal) falls back to `200`; pin it with
 [`#[Response]`](/laravel/reference/attributes/#response) when you need an exact code.
 
+### Automatic `201 Created`
+
 Returning a resource wrapped directly around a freshly created model — `new InvoiceResource(Invoice::create(...))`,
 `InvoiceResource::make(Invoice::create(...))`, or the same around `Invoice::forceCreate(...)` — is
-documented as `201 Created` automatically, matching Laravel's own `wasRecentlyCreated` status (those
-factory methods set that flag, so `ResourceResponse::calculateStatus()` answers `201`). Only that direct
+documented as `201 Created` automatically, matching Laravel's own behavior: those factory methods set
+`wasRecentlyCreated`, so `ResourceResponse::calculateStatus()` answers `201`. Only that direct
 create-wrap is detected; create into a variable first, or use `#[Response]`, when you need the code to be
-explicit.
+explicit. An explicit `201` always wins.
 
 ### Spatie Data success status
 
 A [Spatie Data](/laravel/packages/spatie-data/) response class that overrides `calculateResponseStatus()`
-to return a single constant status — `return 201;`, or a folded constant like `Response::HTTP_CREATED` —
-has that status documented in place of the default `200`. A conditional or computed status can't be read
-statically, so the response stays `200` with an info diagnostic rather than a guess.
+has that status documented in place of the default `200`. Anything that folds to constant ints is read:
+`return 201;`, a class constant like `Response::HTTP_CREATED`, or a conditional whose arms are *all*
+constants (`return $invoice->isPaid() ? 200 : 202;`) — a conditional documents the same body under
+**each** status, matching runtime truth. A genuinely computed status (a widened `int`, a non-constant
+expression) leaves the response at `200` and records a
+`spatie-data.response-status-unresolved` info diagnostic rather than guessing.
 
 ## Empty responses
 
@@ -109,8 +166,8 @@ responses without discarding the rest:
 
 | Attribute | Use it to… |
 | --- | --- |
-| [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the description/type/media type of one — repeatable for several statuses. |
-| [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status. |
+| [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the `description`, `type` or `mediaType` of one — repeatable for several statuses. |
+| [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status (`status: 200` by default). |
 | [`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) | Drop an auto-inferred response by status code. |
 
 ```php

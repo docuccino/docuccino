@@ -1,6 +1,6 @@
 ---
 title: JSON:API resources (timacdonald/json-api)
-description: Document timacdonald/json-api resources as JSON:API documents — the pre-13 package Laravel's first-party resources came from.
+description: Document timacdonald/json-api resources as JSON:API documents — identical output to Laravel's first-party JSON:API resources, plus the include and fields query parameters.
 sidebar:
   order: 10
 ---
@@ -17,25 +17,22 @@ identically.
 A resource extending `TiMacDonald\JsonApi\JsonApiResource` becomes a JSON:API document schema, read
 from the same methods the framework's first-party resources expose:
 
-- **`toId()` / `toType()`** — the always-present `id` and `type` strings.
-- **`toAttributes()`** — the `attributes` object.
-- **`toLinks()` / `toMeta()`** — the `links` and `meta` objects, when present.
-
-Relationships (`toRelationships()`) and the compound-document `included` array are **not** emitted. Both
-packages express relationships as closures, whose JSON:API `{ data: { type, id } }` linkage shape can't
-be recovered from a static read yet — so they're left out rather than documented as a shape the resource
-never returns.
+| Member | Where it comes from |
+| --- | --- |
+| `id`, `type` | Always emitted as strings — that's the JSON:API contract, so they're not read from your `toId()` / `toType()` |
+| `attributes` | Analyzed from `toAttributes()` |
+| `meta` | Analyzed from `toMeta()`, when you override it |
+| `links` | Emitted when you override `toLinks()`, as relation-keyed `{ href, meta? }` link objects |
 
 Endpoints returning one of these resources (or a collection of them) also gain the JSON:API `include`
-and `fields` query parameters. `fields` is a **single** deep-object parameter
-(`fields[TYPE]=field1,field2`), not one parameter per type. The response is served as the JSON:API media
-type `application/vnd.api+json`.
+and `fields` query parameters, and the response is served as the JSON:API media type
+`application/vnd.api+json`.
 
 <Tabs>
 	<TabItem label="Your code">
 	```php
-	// app/Http/Resources/UserResource.php
-	class UserResource extends JsonApiResource
+	// app/Http/Resources/CustomerResource.php
+	class CustomerResource extends JsonApiResource
 	{
 	    public function toAttributes(Request $request): array
 	    {
@@ -45,11 +42,34 @@ type `application/vnd.api+json`.
 	        ];
 	    }
 	}
+
+	// app/Http/Controllers/CustomerController.php
+	public function show(Customer $customer): CustomerResource
+	{
+	    return new CustomerResource($customer);
+	}
 	```
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	"UserResource": {
+	"parameters": [
+	  { "name": "fields", "in": "query", "required": false,
+	    "description": "Sparse fieldsets per resource type (fields[TYPE]=field1,field2).",
+	    "style": "deepObject", "explode": true,
+	    "schema": { "type": "object", "additionalProperties": { "type": "string" } } },
+	  { "name": "include", "in": "query", "required": false,
+	    "description": "Comma-separated list of relationships to include as compound-document data.",
+	    "schema": { "type": "string" } }
+	],
+	"responses": {
+	  "200": { "description": "OK", "content": { "application/vnd.api+json": { "schema": {
+	    "type": "object",
+	    "properties": { "data": { "$ref": "#/components/schemas/CustomerResource" } },
+	    "required": ["data"]
+	  } } } }
+	},
+	// components.schemas — the resource OBJECT, hoisted and reusable
+	"CustomerResource": {
 	  "type": "object",
 	  "properties": {
 	    "id":   { "type": "string" },
@@ -59,21 +79,78 @@ type `application/vnd.api+json`.
 	      "properties": {
 	        "name":  { "type": "string" },
 	        "email": { "type": "string" }
-	      }
+	      },
+	      "required": ["name", "email"]
 	    }
-	  }
+	  },
+	  "required": ["id", "type"]
 	}
 	```
 	</TabItem>
 </Tabs>
 
-The resource becomes a `{ data: { id, type, attributes } }` document schema (media type
-`application/vnd.api+json`), hoisted into a reusable component, plus an `include` parameter and a single
-`fields` deep-object parameter on the endpoints that return it.
+Note what's hoisted: the component is the resource **object**, not the `{ data: … }` document. That's
+what lets a collection reference the same object per item and wrap the envelope exactly once:
+
+```json
+// A collection return — one `data` wrap around an array of resource objects
+{
+  "type": "object",
+  "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/CustomerResource" } } },
+  "required": ["data"]
+}
+```
+
+`fields` is a **single** deep-object parameter (`fields[TYPE]=field1,field2`), not one parameter per
+type — the type keys are runtime data, so they're modeled with `additionalProperties`.
+
+## Relationships and `included`
+
+`toRelationships()` and the compound-document `included` array are **not** emitted. Both packages
+express relationships as closures — `'author' => fn () => new AuthorResource($this->author)` — and a
+static read of a closure can't produce JSON:API's `{ data: { type, id } }` linkage object. Emitting a
+guess there would document a shape the resource never returns, so both members are left out until the
+linkage can be modeled from real relationship resolution.
+
+The `include` parameter is still documented, because the endpoint really does accept it. Describe what
+the `included` array holds with a docblock or an
+[`#[Response]`](/laravel/reference/attributes/#response) attribute if your consumers need it.
+
+`links` is handled specially for the same reason: `toLinks()` returns `Link` objects keyed by relation,
+which a flat analysis can't see through — so when you override it, Docuccino emits the link-object
+shape rather than trying to read your keys:
+
+```json
+"links": {
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "properties": { "href": { "type": "string" }, "meta": { "type": "object" } },
+    "required": ["href"]
+  }
+}
+```
 
 ## Which one runs
 
 If your app is on Laravel 13 with the first-party JSON:API resources, that support handles them;
-this integration handles the `timacdonald/json-api` base class. Both produce the same document
-shape, so you can migrate from the package to the framework resources without your documentation
-changing.
+this integration handles the `timacdonald/json-api` base class. Both feed the same document builder,
+so you can migrate from the package to the framework resources without your documentation changing.
+
+A timacdonald resource is also an Illuminate `JsonResource`, but the plain
+[API Resources](/laravel/documenting/schemas/#api-resources) mapper deliberately declines it — you'll
+never get a flat `toArray()` shape for a JSON:API resource by accident.
+
+## Configuration
+
+There's nothing to configure. The only switch is the shared `enabled` opt-out, per document:
+
+```php
+// config/docuccino.php → documents.default.integrations
+'timacdonald_json_api' => ['enabled' => false],
+```
+
+With it off, nothing JSON:API-aware runs for these classes: no document schema, no `include`/`fields`
+parameters, and no `application/vnd.api+json` media type. Turn it off only if you'd rather document
+these endpoints by hand. See the
+[`integrations` reference](/laravel/reference/configuration/#integrations).

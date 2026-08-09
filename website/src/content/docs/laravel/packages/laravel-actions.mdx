@@ -1,15 +1,18 @@
 ---
 title: Laravel Actions
-description: Document lorisleiva/laravel-actions classes used as controllers — the real handle()/asController() signature, request body, and authorization response.
+description: Document lorisleiva/laravel-actions classes used as controllers — the real handle()/asController() signature, request body, authorization response, and jsonResponse() shape.
 sidebar:
   order: 8
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Activates automatically when [`lorisleiva/laravel-actions`](https://laravelactions.com) is installed.
 When you register an action as a route, Docuccino documents it exactly as the package runs it — no
 annotations, no wrapper controller.
+
+Any class using `AsController` counts, including through the umbrella `AsAction` trait, and including
+when the trait comes from a parent class.
 
 ## What it documents
 
@@ -68,12 +71,24 @@ method, so everything is read from the real signature rather than the trait's ge
 	    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublishArticle" } } }
 	  },
 	  "responses": {
-	    "200": { "content": { "application/json": { "schema": {
+	    "200": { "description": "OK", "content": { "application/json": { "schema": {
 	      "type": "object",
 	      "properties": { "data": { "$ref": "#/components/schemas/ArticleResource" } },
 	      "required": ["data"]
 	    } } } },
-	    "403": { "description": "Forbidden" }
+	    "403": { "description": "Forbidden", "content": { "application/json": { "schema": {
+	      "type": "object",
+	      "properties": { "message": { "type": "string" } },
+	      "required": ["message"]
+	    } } } },
+	    "422": { "description": "Unprocessable Entity", "content": { "application/json": { "schema": {
+	      "type": "object",
+	      "properties": {
+	        "message": { "type": "string" },
+	        "errors": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } }
+	      },
+	      "required": ["message", "errors"]
+	    } } } }
 	  }
 	},
 	// components.schemas
@@ -90,7 +105,12 @@ method, so everything is read from the real signature rather than the trait's ge
 </Tabs>
 
 One class, no annotations — and the summary, the `title`/`body` body (with `max:120` as `maxLength`), the
-`ArticleResource` response, and the `403` from `authorize()` are all documented.
+`ArticleResource` response, the `403` from `authorize()`, and the `422` that any validated request can
+return are all documented. The body component is named after the action class, so an action reused
+across several routes is one shared schema.
+
+On a **read verb** (`GET`/`HEAD`) there's no body to send, so `rules()` becomes query parameters
+instead — the same rule as everywhere else in Docuccino.
 
 ## How the dispatched method is resolved
 
@@ -106,6 +126,19 @@ does **not** run the action's `rules()` or `authorize()` for an explicitly-regis
 `WithAttributes` action), so no request body is inferred from `rules()` and no `403` from `authorize()`
 there — documenting them would describe validation the endpoint never performs. Register the action as a
 controller (its `asController()`/`handle()`) to get the `rules()` body and the `authorize()` `403`.
+
+| Registration | Summary &amp; response from | `rules()` body | `authorize()` 403 |
+| --- | --- | --- | --- |
+| `Route::post('/x', Action::class)` | `asController()`, else `handle()`, else `__invoke()` | Yes | Yes |
+| `Route::post('/x', [Action::class, 'store'])` | `store()` | No | No |
+| An action using `WithAttributes` | The dispatched method | No | No |
+
+<Aside type="caution" title="No 403 without error responses">
+The `403` is synthesized from the fact that `authorize()` exists — the throw happens inside the
+package's validation pipeline, not in your `handle()` body — so it follows your document's error
+strategy. With [`error_responses` set to `none`](/laravel/reference/configuration/#error_responses) it
+isn't emitted at all.
+</Aside>
 
 ## Response transformers: `jsonResponse()` and `htmlResponse()`
 
@@ -136,7 +169,7 @@ return type, not `handle()`'s, is the real 200 body. Docuccino documents the tra
 	<TabItem label="Generated OpenAPI">
 	```json
 	"responses": {
-	  "200": { "content": { "application/json": { "schema": {
+	  "200": { "description": "OK", "content": { "application/json": { "schema": {
 	    "type": "object",
 	    "properties": { "data": { "$ref": "#/components/schemas/ArticleResource" } }
 	  } } } }
@@ -149,15 +182,39 @@ The `200` body is the `{ data }` envelope from `jsonResponse()` — the `Article
 is what the transformer wrapped, so it never appears on its own.
 
 An action that defines `htmlResponse()` serves HTML to browser clients. Docuccino records that as a
-`text/html` representation on the success response — a content-type note alongside the JSON body,
-rather than an attempt to type rendered HTML as a JSON schema. An action can define both: the JSON
-body comes from `jsonResponse()`, and `text/html` is listed too.
+`text/html` representation on the same success response — a content-type note alongside the JSON body,
+rather than an attempt to type rendered HTML as a JSON schema:
 
-This mapping applies however the route is registered (invokable or an explicit method) — the package
-wraps every dispatch, so the transformer always runs.
+```json
+"200": {
+  "description": "OK",
+  "content": {
+    "application/json": { "schema": { "type": "object", "properties": { "id": { "type": "integer" } } } },
+    "text/html":        { "schema": { "type": "string" } }
+  }
+}
+```
+
+An action can define both: the JSON body comes from `jsonResponse()`, and `text/html` is listed too.
+This mapping applies however the route is registered — invokable or an explicit method — because the
+package's decorator wraps every dispatch, so the transformer always runs.
+
+## Configuration
+
+There's nothing to configure. The only switch is the shared `enabled` opt-out, per document:
+
+```php
+// config/docuccino.php → documents.default.integrations
+'laravel_actions' => ['enabled' => false],
+```
+
+With it off, the `rules()` body, the `authorize()` `403`, the `jsonResponse()` redirect and the
+`text/html` note are all omitted. Operations still resolve to the dispatched method, so summaries and
+return types stay correct. See the
+[`integrations` reference](/laravel/reference/configuration/#integrations).
 
 ## Refining the output
 
 Everything here is inferred at the integration layer, so the usual
 [attributes](/laravel/reference/attributes/) still apply — add a `#[Group]`, an `#[Example]`, or an extra
-`#[Response]` on the action method and it wins over the inferred values.
+`#[Response]` on the resolved action method and it wins over the inferred values.

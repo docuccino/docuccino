@@ -1,6 +1,6 @@
 ---
 title: Rate limiting
-description: Document 429 responses and rate-limit headers from throttle middleware.
+description: Document 429 responses and rate-limit headers from throttle middleware — including the real numbers from a named limiter.
 sidebar:
   order: 7
 ---
@@ -18,18 +18,18 @@ Docuccino reads the throttle configuration from the middleware:
 | Middleware | Documented limit |
 | --- | --- |
 | `throttle:60,1` | 60 requests per 1 minute. |
-| `throttle:60` | 60 requests per minute. |
+| `throttle:60` | 60 requests per minute (Laravel's default decay). |
+| `throttle:60,0.5` | 60 per 30 seconds — a fractional decay resolves to whole seconds. |
 | `throttle` (bare, no arguments) | Laravel's middleware default — 60 requests per minute. |
-| `throttle:10\|60` (guest\|authenticated) | The authenticated allowance (60) is documented; a note records the lower unauthenticated limit (10 per window). |
-| `throttle:api` (a named limiter with a simple limit) | The concrete numbers, read from the limiter's `RateLimiter::for` closure — e.g. `fn () => Limit::perMinute(60)` documents 60 per minute. |
+| `throttle:10\|60` (guest\|authenticated) | The authenticated allowance (60) is documented; the response description records the lower unauthenticated limit (10 per window). |
+| `throttle:api` (a named limiter with a single limit) | The concrete numbers, read from the limiter's `RateLimiter::for` closure — e.g. `fn () => Limit::perMinute(60)` documents 60 per minute. |
 | `throttle:api` (a dynamic, conditional, or custom-response limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
 
-Both the short `throttle` alias and the `ThrottleRequests::using('api')` / `::with(...)` forms (and the
-FQCN class strings they render to) are recognized. The `429` always carries a small
-`{ "message": string }` JSON body alongside the headers. When a route stacks **several** throttle
-middlewares, a single `429` is documented from the first, with an info diagnostic
-(`rate-limit.multiple-throttles`) noting the others are enforced independently but not separately
-represented.
+Both the short `throttle` alias and the `ThrottleRequests::using('api')` / `::with(...)` forms are
+recognized, including the FQCN strings they render to and the Redis variant
+(`ThrottleRequestsWithRedis`). When a route stacks **several** throttle middlewares, a single `429` is
+documented from the first, with a `rate-limit.multiple-throttles` info diagnostic noting the others are
+enforced independently but not separately represented.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -43,10 +43,22 @@ represented.
 	"429": {
 	  "description": "Too Many Requests — the rate limit for this endpoint has been exceeded.",
 	  "headers": {
-	    "Retry-After":           { "schema": { "type": "integer", "example": 60 } },
-	    "X-RateLimit-Limit":     { "schema": { "type": "integer", "example": 60 } },
-	    "X-RateLimit-Remaining": { "schema": { "type": "integer" } },
-	    "X-RateLimit-Reset":     { "schema": { "type": "integer" } }
+	    "Retry-After": {
+	      "description": "Seconds to wait before making another request.",
+	      "schema": { "type": "integer", "example": 60 }
+	    },
+	    "X-RateLimit-Limit": {
+	      "description": "The maximum number of requests permitted in the current window.",
+	      "schema": { "type": "integer", "example": 60 }
+	    },
+	    "X-RateLimit-Remaining": {
+	      "description": "The number of requests remaining in the current window.",
+	      "schema": { "type": "integer" }
+	    },
+	    "X-RateLimit-Reset": {
+	      "description": "Unix timestamp (seconds, UTC) at which the current rate limit window resets.",
+	      "schema": { "type": "integer" }
+	    }
 	  },
 	  "content": {
 	    "application/json": {
@@ -58,30 +70,47 @@ represented.
 	</TabItem>
 </Tabs>
 
-## Configuration
-
-None.
+`X-RateLimit-Limit` carries the allowance as its example and `Retry-After` carries the window length in
+seconds; the two runtime-varying headers are documented as integers with no example, because there is no
+honest static value for them. The body is always the small `{ "message": string }` JSON payload
+Laravel's `ThrottleRequests` returns.
 
 ## Named limiters
 
 A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`.
-Docuccino never *executes* that closure, but it reads it: when the limiter simply returns a single
-`Limit`, its numbers flow straight into the `429`.
+Docuccino never *executes* that closure, but it reads it: when the limiter returns a single `Limit`, its
+numbers flow straight into the `429`.
 
 ```php
 // A limiter Docuccino folds — the 429 documents 60 requests per minute.
 RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
 ```
 
-All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognized, and a
-trailing `->by(...)` partition key is ignored (it does not change the documented limit).
+All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognized (note
+`perMinutes($decayMinutes, $maxAttempts)` takes its decay first), and a trailing `->by(...)` partition
+key is ignored — it changes who the limit applies to, not what the limit is.
 
-Docuccino keeps the numberless `429` — plus an info diagnostic — when the limit can't be read
-statically, rather than guessing. That covers a limiter that:
+Docuccino keeps the numberless `429` — plus a `rate-limit.dynamic-limit` info diagnostic — when the limit
+can't be read statically, rather than guessing. That covers a limiter that:
 
 - returns different limits down different branches (a conditional or multi-`return` closure);
 - computes its rate from a non-literal value (`Limit::perMinute($request->user()->rate)`);
 - is unlimited (`Limit::none()`) or returns an array of limits;
 - attaches a custom response body (`->response(...)`).
 
+The same diagnostic fires — naming the limiter — when a route throttles on a name that has no
+`RateLimiter::for` registration at all, which is a genuinely useful thing to find out at build time.
+
 Inline limits (`throttle:60,1`) always carry their numbers straight through.
+
+## Configuration
+
+The integration is always on, and has one switch:
+
+```php
+// config/docuccino.php → documents.default.integrations
+'rate_limit' => ['enabled' => false], // stop documenting 429s in this document
+```
+
+Turning it off for a document emits one `integration.disabled` info diagnostic per build, so the choice
+stays visible in the output rather than looking like a bug.

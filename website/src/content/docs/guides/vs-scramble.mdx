@@ -6,137 +6,81 @@ description: An honest comparison with Scramble, and a practical guide to moving
 import { Card, CardGrid, Aside, LinkCard } from '@astrojs/starlight/components';
 
 [Scramble](https://scramble.dedoc.co) is an excellent, popular API documentation generator, and if
-it's working well for you, that's a great place to be. Docuccino shares its core idea —
-documentation generated from your code, not hand-written annotations — and takes it further in a few
-directions. This page compares the two fairly and shows how to move across if you decide to.
+it's working well for you, that's a great place to be. The two tools share a core idea —
+documentation generated from your code, not hand-written annotations — so if you've been happy with
+Scramble's approach, Docuccino will feel familiar. This page covers what's different, what you'd
+gain, what you'd give up, and exactly how to move your annotations, config and extensions across.
 
 <Aside type="note">
-Scramble's exact features and annotation names vary between versions and between the free package
-and Scramble Pro. Treat the Scramble column below as a guide and check it against the version you
-run. The Docuccino column is exact.
+Scramble ships a free core and a paid Scramble Pro tier, and its features and annotation names move
+between versions. Rather than publish a feature matrix that goes stale, this page describes what
+Docuccino does and leaves the current state of Scramble to
+[its own documentation](https://scramble.dedoc.co) — check the version and tier you run.
 </Aside>
 
-## At a glance
+## The shape of the difference
+
+Both tools read your code. Where they diverge:
 
 | | Scramble | Docuccino |
 | --- | --- | --- |
-| Documentation from code | ✅ | ✅ |
-| OpenAPI version | 3.1 | 3.2 (with a 3.1 downlevel export) |
-| Interactive viewer | ✅ | ✅ (bundled Scalar) |
-| Deep query-builder inference | Pro, limited by call depth | ✅ at any call depth |
-| Error responses from your handler | partial | ✅ reads your real handling |
-| Deterministic, byte-stable output | — | ✅ |
-| Semantic diff + CI version gating | — | ✅ (`docuccino:diff --enforce`) |
-| Multiple documents | ✅ (`Scramble::registerApi()`) | ✅ (with per-document security, viewer, export and `#[InDocs]` pinning) |
-| YAML export | — | ✅ |
-| A documented intermediate format | — | ✅ (the [UIR](/uir/)) |
+| Primary artifact | An OpenAPI document | A [UIR](/uir/) document, emitted as OpenAPI 3.2 or 3.1 downlevel, JSON or YAML |
+| Analysis engine | Its own type inference over your code | An embedded PHPStan/Larastan engine |
+| Interactive viewer | Yes | Yes, bundled Scalar |
+| Output stability | Regenerated on demand | Byte-stable for identical code — built to be committed and reviewed |
+| Contract checking | — | `docuccino:diff` over stable node identities, with `--enforce` gating a version policy in CI |
 
-## Feature support, side by side
+That last row is the reason most teams look at Docuccino. Because output is deterministic, the spec
+becomes an artifact you commit; because every node carries a stable identity, Docuccino can tell a
+rename apart from a removal and fail a pull request that breaks the contract without the version bump
+your policy demands. See [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 
-Both tools generate from your code, and there's a large, healthy overlap. The tables below break
-that down capability by capability. Scramble ships a free core and a paid **Scramble Pro** tier;
-they're split out so you can see exactly where each capability lives.
+## What Docuccino infers for you
 
-<Aside type="note">
-`✓` means built-in support; `—` means not supported.
-</Aside>
+Whatever you're migrating from, this is the surface you get without writing an annotation. It's the
+useful list to check your own app against:
 
-### Request &amp; validation
+- **Requests** — Form Requests, inline `validate()`, and Spatie Data objects, with the full Laravel
+  rule vocabulary (78 named rules) mapped to schema constraints.
+- **Query parameters** — Spatie Query Builder filters, sorts, includes, fields and pagination, traced
+  through helper methods several calls deep, so a query assembled across a few methods (or a separate
+  query object) still documents fully.
+- **Responses** — API Resources (including conditional and closure fields), Eloquent model schemas
+  from casts and `@property` docblocks, Data objects, backed enums with case descriptions, pagination
+  envelopes, JSON:API resources, and polymorphic `MorphTo` returns as a discriminated `oneOf`.
+- **Reusable components** — DTOs, models, resources, request bodies and enums hoisted to
+  `components/schemas`, deduped and `$ref`'d.
+- **Path parameters** — typed from the bound model's route key (uuid, ulid, integer, string).
+- **Authentication** — middleware-driven, per guard driver: Sanctum in both token and stateful-cookie
+  modes, token abilities as `x-abilities`, Passport OAuth2 scopes per operation and client-credentials
+  flows, and role/permission requirements as `x-permissions`.
+- **Errors** — the framework's own `401` / `403` / `404` / `422` shapes, plus your *real* error bodies
+  read out of your exception handling, and an RFC 9457 Problem Details preset behind one config line.
+- **Rate limits** — `429` responses with `Retry-After` and `X-RateLimit-*` headers, the numbers folded
+  out of your `RateLimiter::for` closures.
 
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| Validation rules → schema constraints | ✓ | ✓ | ✓ |
-| Form Requests &amp; inline `validate()` | ✓ | ✓ | ✓ |
-| Spatie Data objects | ✓ | — | ✓ |
-| Laravel Actions | ✓ | — | ✓ |
+Error handling deserves a closer look, because it's where inference goes furthest. Docuccino reads
+render callbacks, exception `render()` methods and `Responsable` exceptions — and where a member of
+your error body is statically knowable (a per-branch `type` URI, a `title`, a status that echoes the
+response) it pins that member as a schema `const` and includes it in a generated example, following
+helper indirection and enum accessors to find it. Members it can't resolve are left out rather than
+invented. Documentation you'd otherwise hand-maintain alongside the code that produces it.
 
-### Responses, models &amp; schemas
-
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| API Resources | ✓ | ✓ | ✓ |
-| Eloquent model schemas | ✓ | ✓ | ✓ |
-| Backed enums (+ case descriptions) | ✓ | ✓ | ✓ |
-| Reusable named component schemas (`$ref`'d &amp; deduped: DTOs, models, resources, request bodies, enums) | ✓ | ✓ | ✓ |
-| Pagination inference | ✓ | ✓ | ✓ |
-| Route-model-binding path param types (uuid / ulid / int, from the model's key) | ✓ | ✓ | ✓ |
-| Implicit `401` / `422` / `404` / `403` from middleware, bindings & validation | ✓ | ✓ | ✓ |
-| JSON:API resources (first-party **and** `timacdonald/json-api`) | ✓ | — | ✓ (via the third-party `timacdonald/json-api` package) |
-| JSON API Paginate | ✓ | — | ✓ |
-| Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
-
-### Query parameters
-
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| Spatie Query Builder parameters | ✓ | — | ✓ |
-| …resolved through helper methods, at any call depth | ✓ | — | — |
-
-Scramble Pro reads Spatie Query Builder too; Docuccino traces the builder wherever it's assembled,
-so a query composed several helper methods deep is still fully documented.
-
-### Authentication &amp; operations
-
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| Middleware-based auth detection (driver-based — custom `passport`/`sanctum` guards) | ✓ | ✓ | ✓ |
-| Sanctum dual-mode (token **and** stateful cookie) | ✓ | — | — |
-| Sanctum token abilities (`x-abilities`) | ✓ | — | — |
-| Passport OAuth2 scopes, per operation | ✓ | — | — |
-| Passport client-credentials (machine-to-machine) | ✓ | — | — |
-| Optional / per-operation security override (`#[Security]`, `#[OptionallyAuthenticated]`) | ✓ | — | — |
-| Permission / role requirements (`x-permissions`) | ✓ | — | — |
-| Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — | — |
-| Named rate-limiter `429` numbers folded from `RateLimiter::for` closures | ✓ | — | — |
-
-### Error responses
-
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| Framework error defaults (422 / 401 / 403 / 404) | ✓ | ✓ | ✓ |
-| Inferred exception handlers (your *real* error shapes) | ✓ | — | — |
-| Inferred error **examples**, with `const`-pinned literal members | ✓ | — | — |
-| RFC 9457 Problem Details preset | ✓ | — | — |
-
-Reading your actual exception handling — render callbacks, exception `render()` methods,
-`Responsable` exceptions — is one of Docuccino's standout strengths. It goes one step further than the
-shape: where a member of your error body is statically knowable — a per-branch `type` URI, a `title`, a
-status that echoes the response — Docuccino pins it as a schema `const` and includes it in a generated
-example, following helper indirection and enum accessors to find it. Members it can't resolve are simply
-left out rather than invented. With Scramble you'd typically hand-write those problem-detail components
-and examples yourself; both approaches get you there, and Scramble's is perfectly serviceable — this
-just removes the hand-maintenance.
-
-### Output &amp; workflow
-
-| Capability | Docuccino | Scramble (free) | Scramble Pro |
-| --- | :---: | :---: | :---: |
-| Deterministic, byte-stable output | ✓ | — | — |
-| Committed spec artifact you can review in a PR | ✓ | — | — |
-| Semantic diff + `--enforce` CI version gate | ✓ | — | — |
-
-See [Honest limitations](#honest-limitations-today) for what's still on the roadmap.
-
-## What you can stop maintaining
-
-Because Docuccino infers more, a few things you may currently hand-maintain become automatic:
+## Three things that change about your workflow
 
 <CardGrid>
-	<Card title="Query parameter lists" icon="puzzle">
-		Filters, sorts, includes, and pagination are detected from your query builders — even when the
-		query is assembled several method calls deep. No hand-written parameter annotations.
+	<Card title="Annotations you delete" icon="puzzle">
+		Everything in the list above is inferred, so most parameter and response annotations come out
+		on migration. What's left are the genuine overrides — the facts your code doesn't state.
 	</Card>
-	<Card title="Custom error-response classes" icon="warning">
-		Docuccino reads your actual exception handling, so custom error shapes are documented from the
-		code that produces them — or with the built-in RFC 9457 preset via one config line.
+	<Card title="Registration timing stops mattering" icon="setting">
+		Register extensions from any service provider, in `register()` or `boot()`, in any order.
+		Nothing resolves until a build starts, so an extension can't be missed by registering it late.
 	</Card>
-	<Card title="Registration timing" icon="setting">
-		Register extensions from any service provider, in any order — Docuccino resolves them when it
-		builds, so nothing gets missed.
-	</Card>
-	<Card title="Spec drift" icon="approve-check">
-		Deterministic output plus a semantic diff means your committed spec stays honest, and breaking
-		changes are caught in CI.
+	<Card title="The spec stops drifting" icon="approve-check">
+		Commit the output and gate CI on `docuccino:diff`. Deterministic bytes mean a real change is
+		the only thing that shows up in the diff, and `--enforce` fails the build when a breaking
+		change ships without the version bump your policy requires.
 	</Card>
 </CardGrid>
 
@@ -152,12 +96,12 @@ Most annotations map across cleanly.
 | `#[HeaderParameter]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | — |
 | `#[CookieParameter]` | [`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) | Direct swap. |
 | `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Tag assignment; repeatable. |
-| `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | Adds named examples, summaries, and `externalValue`. |
+| `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | On an action, pins the success response's example body. An `@example` docblock line on a Data-class property carries a field-level example. |
 | Exclude a route / controller | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Method or class target. |
 | `@unauthenticated` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
 | `@response {status}` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
-| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on DTOs; class-level list on models; `$hidden`/`$visible` still respected. Hides from **output**. |
-| Request-`#[Hidden]` field | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a property from the **request** body only — the request-side counterpart when a field was hidden from a Scramble request schema. |
+| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on Data classes; class-level list on models; your model's `$hidden` / `$visible` are read anyway. Hides from **output**. |
+| A field hidden from a request schema | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a Data-class property from the **request** body only, leaving the response schema alone. |
 | Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
 | Markdown description file | [`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile) | Loads a symbol-anchored Markdown file into `description`. |
 | Deprecation | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Marks an operation (or controller) deprecated, with an optional reason. |
@@ -205,28 +149,34 @@ The extension model is similar in spirit; the contracts live in
 The [Writing an integration](/extending/extension-authoring/) guide walks through building one
 end-to-end.
 
-## Honest limitations (today)
+## What Docuccino doesn't do
 
-Docuccino is young, and a few things Scramble users may rely on aren't here yet:
+Docuccino is new, and there are things it deliberately or simply doesn't do today. Check this list
+against how you work before you commit:
 
-- **Postman export** — planned; OpenAPI (JSON/YAML) and the UIR are available today.
-- **Rendering examples from factories / live response calls** — planned. Examples currently come
-  from inference and `#[Example]` / `@example`.
-- **`#[Webhook]` and `#[Mock]` attributes** — planned (webhooks already exist in the document
-  structure).
-- **Watch mode with live viewer refresh** — planned.
+- **No Postman collection export.** Docuccino emits OpenAPI (JSON or YAML) and the UIR; import the
+  OpenAPI file into Postman.
+- **Examples come from inference and `#[Example]`**, never from running your code. There is no
+  factory-rendered or live-response example generation — that's the trade for a generator that needs
+  no database and has no side effects.
+- **No watch mode.** Re-run `docuccino:export`, or point the viewer at
+  [`source: generate`](/laravel/reference/configuration/#viewer) so it rebuilds per request while you
+  work locally.
+- **Rule objects and closure rules aren't read.** Docuccino maps the whole string-rule vocabulary and
+  you can teach it more with a `RuleTransformer`, but a `Rule` object's shape is opaque to static
+  analysis. Docuccino raises a diagnostic naming the field rather than guessing.
 
 ## Running them side by side
 
-You don't have to switch in one go. Because Docuccino writes to its own configured path and serves
-its viewer on its own route, you can generate both specs during a transition and compare:
+You don't have to switch in one go. Docuccino writes to its own configured path and serves its viewer
+on its own route, so nothing collides:
 
 ```bash
 php artisan docuccino:export --out=docs/openapi.docuccino.json
 ```
 
-Diff it against your existing Scramble output, adopt Docuccino where you're happy, and remove the
-Scramble annotations you no longer need as you go.
+Compare it against your existing Scramble output, adopt Docuccino where you're happy with what it
+produces, and remove the annotations it makes redundant as you go.
 
 <CardGrid>
 	<LinkCard title="Get started" href="/laravel/getting-started/" description="Install and export your first document." />

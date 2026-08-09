@@ -1,24 +1,196 @@
 ---
 title: Your first export
-description: Generate an OpenAPI document, view it in the built-in viewer, and learn how to refine it.
+description: Run docuccino:export, see what it read from your code, open it in the built-in viewer, and gate CI on it.
 sidebar:
   order: 2
 ---
 
-import { Steps, Tabs, TabItem, Aside, Badge } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem, Aside, Badge, LinkCard, CardGrid } from '@astrojs/starlight/components';
 
-With Docuccino installed and its config published, you can document your existing API without
-writing a single annotation. This page shows what `docuccino:export` produces, how to view it, and
-how to add detail as you go.
+With Docuccino installed, you can document an existing API without writing a single annotation. This
+page runs the export, shows exactly what came out, and points you at the viewer and CI.
 
-## Export a document
+## Run the export
 
 ```bash
 php artisan docuccino:export
 ```
 
-With no arguments this builds every configured document and writes each to its configured path. The
-default document writes `docs/openapi.json`. To choose a format or output path explicitly:
+```plaintext
+Wrote /home/you/invoices-api/docs/openapi.json (openapi-3.2).
+```
+
+With no arguments this builds every configured document and writes each to its own `export.path`.
+The published default writes one document to `docs/openapi.json` as OpenAPI 3.2, creating the
+directory if it doesn't exist.
+
+## What it read
+
+Docuccino walks each route that matches your document's filters and assembles an operation from your
+code. Here's a list endpoint you'd write anyway, and the operation it produces:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	final class InvoiceController
+	{
+	    /**
+	     * List invoices, filterable and sortable via the query string.
+	     */
+	    public function index(): AnonymousResourceCollection
+	    {
+	        $invoices = QueryBuilder::for(Invoice::class)
+	            ->allowedFilters(['number', AllowedFilter::exact('status')])
+	            ->allowedSorts(['issued_at', 'total'])
+	            ->defaultSort('-issued_at')
+	            ->paginate(20);
+
+	        return InvoiceResource::collection($invoices);
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI (trimmed)">
+	```json
+	"/api/invoices": {
+	  "get": {
+	    "operationId": "invoices.index",
+	    "summary": "List invoices, filterable and sortable via the query string.",
+	    "tags": ["Invoice"],
+	    "parameters": [
+	      {
+	        "name": "filter[number]",
+	        "in": "query",
+	        "description": "Partial-match filter",
+	        "required": false,
+	        "schema": { "type": "string" }
+	      },
+	      {
+	        "name": "filter[status]",
+	        "in": "query",
+	        "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+	        "required": false,
+	        "style": "form",
+	        "explode": false,
+	        "schema": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceStatus" } }
+	      },
+	      {
+	        "name": "page",
+	        "in": "query",
+	        "description": "Page number.",
+	        "required": false,
+	        "schema": { "type": "integer", "default": 1, "minimum": 1 }
+	      },
+	      {
+	        "name": "per_page",
+	        "in": "query",
+	        "description": "Items per page.",
+	        "required": false,
+	        "schema": { "type": "integer", "default": 20, "minimum": 1 }
+	      },
+	      {
+	        "name": "sort",
+	        "in": "query",
+	        "description": "Sort by: issued_at, total (prefix `-` for descending).",
+	        "required": false,
+	        "schema": { "type": "string", "default": "-issued_at" }
+	      }
+	    ],
+	    "responses": {
+	      "200": {
+	        "description": "OK",
+	        "content": {
+	          "application/json": {
+	            "schema": {
+	              "type": "object",
+	              "properties": {
+	                "data": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceResource" } },
+	                "links": { "type": "object" },
+	                "meta": { "type": "object" }
+	              },
+	              "required": ["data", "links", "meta"]
+	            }
+	          }
+	        }
+	      },
+	      "400": {
+	        "description": "Bad Request",
+	        "content": {
+	          "application/json": {
+	            "schema": { "type": "object", "properties": { "message": { "type": "string" } } }
+	          }
+	        }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Nothing in that controller is written for the docs. Every line of the output is derived:
+
+| Output | Where it came from |
+| --- | --- |
+| `operationId` | The route's name, `invoices.index`. |
+| `summary` | The action's docblock summary. |
+| `tags` | The controller name, `InvoiceController` → `Invoice`. |
+| `filter[number]`, `filter[status]` | The `allowedFilters()` allow-list, traced through the builder. `status` is an array of the `InvoiceStatus` enum because the model casts that column to it — and because Query Builder matches a comma-separated list as `whereIn`. |
+| `sort` | The `allowedSorts()` names, with `defaultSort()` as the schema default and the `-` descending convention in the description. |
+| `page`, `per_page` | The `paginate(20)` call — hence the `per_page` default of `20`. |
+| `200` | `InvoiceResource::collection()` over a paginated result: an array of the shared `InvoiceResource` schema inside Laravel's length-aware `{ data, links, meta }` envelope (trimmed above). |
+| `400` | Query Builder's strict mode, which rejects an unknown filter or sort with `InvalidQuery`. |
+
+Add a `StoreInvoiceRequest` to a `store()` action and its `rules()` become the request body. Throw
+`InvoiceNotFoundException` and a `404` appears with the shape your handler really returns. That's the
+whole loop — write ordinary Laravel, get documentation.
+
+## Open the viewer
+
+The built-in viewer serves an interactive [Scalar](https://scalar.com) reference straight from your
+app. With the default `viewer.route` of `/docs/api`, three routes are registered per document:
+
+| Route | Serves |
+| --- | --- |
+| `GET /docs/api` | The interactive API reference page. |
+| `GET /docs/api.json` | The generated OpenAPI document. |
+| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app — no external CDN. |
+
+The viewer answers in your `local` environment and nowhere else. To open it up elsewhere, name a
+gate ability and define it:
+
+<Steps>
+
+1. Set the ability in `config/docuccino.php`:
+
+   ```php
+   // documents.default.viewer.gate
+   'gate' => 'viewApiDocs',
+   ```
+
+2. Define it in a service provider:
+
+   ```php
+   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
+   ```
+
+</Steps>
+
+Once `gate` is set, it is the *only* check — the local-environment shortcut no longer applies, so the
+same rule holds in every environment.
+
+<Aside type="caution" title="In production, don't rebuild on every request">
+The default `viewer.source` of `generate` rebuilds the document per request — fine locally or behind
+a gate, expensive on a public page. Serve the committed file with `viewer.source: 'artifact'`, or a
+warmed cache with `viewer.source: 'cache'` plus `docuccino:cache` in your deploy. See
+[the viewer](/laravel/guides/viewer/) and
+[deploying to production](/laravel/guides/production/).
+</Aside>
+
+## Other formats and paths
+
+`docuccino:export` emits OpenAPI 3.2 by default, and three other artifacts on request:
 
 <Tabs>
 	<TabItem label="OpenAPI 3.2 (default)">
@@ -43,80 +215,24 @@ default document writes `docs/openapi.json`. To choose a format or output path e
 	</TabItem>
 </Tabs>
 
-See the [commands reference](/laravel/reference/commands/#docuccinoexport) for every flag.
+The [UIR](/uir/) is the document Docuccino builds before emitting: OpenAPI-shaped, but carrying a
+stable identity for every operation and schema plus the provenance of each detail. It's what
+`docuccino:diff` compares, so commit the UIR when you want the most precise diffs.
 
 <Aside type="note" title="`--out` and multiple documents">
-`--out` writes a single file, so it can't be combined with a run over *several* documents — the later
-ones would clobber the earlier. With one document (the published default) it's fine; once you add
-[more documents](/laravel/guides/multiple-documents/), either pass a `{document}` argument alongside
-`--out`, or drop `--out` and let each document write its own `export.path`.
+`--out` writes a single file, so it can't take a run over *several* documents — the later ones would
+clobber the earlier, and the command refuses rather than doing it. With one document (the published
+default) it's fine; once you add [more documents](/laravel/guides/multiple-documents/), either name a
+document alongside `--out`, or drop `--out` and let each write its own `export.path`.
 </Aside>
 
-## What Docuccino read
-
-For each route that matches your document's filters, Docuccino inspects your code and assembles an
-operation. For a typical list endpoint like:
-
-```php
-// app/Http/Controllers/InvoiceController.php
-public function index(): AnonymousResourceCollection
-{
-    $invoices = QueryBuilder::for(Invoice::class)
-        ->allowedFilters(['status', 'customer_id'])
-        ->allowedSorts(['issued_at', 'total'])
-        ->paginate();
-
-    return InvoiceResource::collection($invoices);
-}
-```
-
-…it documents the `filter[status]`, `filter[customer_id]`, `sort`, `page`, and `per_page` query
-parameters, and a paginated `200` response whose items are the `InvoiceResource` schema — all from
-reading the code. Add a `StoreInvoiceRequest` to a `store()` action and its validation rules become
-the request body; throw `InvoiceNotFoundException` and a `404` appears.
-
-## View it
-
-The built-in viewer serves an interactive [Scalar](https://scalar.com) reference straight from your
-app. With the default config:
-
-| Route | Serves |
-| --- | --- |
-| `GET /docs/api` | The interactive API reference page. |
-| `GET /docs/api.json` | The generated OpenAPI document. |
-| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). |
-
-The viewer is available in your **local** environment automatically. To expose it elsewhere, set a
-gate and define it:
-
-<Steps>
-
-1. Name a gate ability in `config/docuccino.php`:
-
-   ```php
-   // documents.default.viewer.gate
-   'gate' => 'viewApiDocs',
-   ```
-
-2. Define it in a service provider:
-
-   ```php
-   Gate::define('viewApiDocs', fn ($user) => $user?->isAdmin() ?? false);
-   ```
-
-</Steps>
-
-<Aside type="caution" title="In production, don't regenerate on every request">
-The default `viewer.source` of `generate` rebuilds the document per request — fine for local or
-gated use. For a public viewer, serve the committed file (`viewer.source: artifact`) or a warmed
-cache (`viewer.source: cache`, filled by `docuccino:cache`). See the
-[viewer configuration](/laravel/reference/configuration/#viewer).
-</Aside>
+See the [commands reference](/laravel/reference/commands/#docuccinoexport) for every flag.
 
 ## Gate CI on problems
 
-Docuccino reports diagnostics — an unreadable controller, a query it couldn't resolve — grouped by
-route. Turn them into a failing build:
+Docuccino reports diagnostics — a controller it couldn't read, a query it couldn't resolve, a
+property name that looks like a secret — grouped by route, in a deterministic order. Turn them into
+a failing build:
 
 ```bash
 php artisan docuccino:export --fail-on=warning
@@ -124,18 +240,20 @@ php artisan docuccino:export --fail-on=warning
 
 <Badge text="--fail-on=none" variant="default" /> never fails on severity (the default),
 <Badge text="--fail-on=warning" variant="caution" /> fails on warnings and errors, and
-<Badge text="--fail-on=error" variant="danger" /> fails only on errors. A single broken route yields
-a stub operation plus a diagnostic rather than a failed build, so one bad controller never blocks
-the rest of your docs.
+<Badge text="--fail-on=error" variant="danger" /> fails only on errors. Whichever you pick, a route
+whose analysis fails still leaves a stub operation and a diagnostic behind rather than aborting the
+run, so one bad controller never costs you the rest of your docs. Set `on_route_error` to `'omit'` if
+you'd rather such a route vanished from the document than appeared as a stub.
 
-## Add detail as you go
+## Where to go next
 
-The base export is already useful. Refine it where it helps:
+You've seen the base export. **[Documenting your API](/laravel/documenting/)** is the reference for
+everything Docuccino reads — requests, responses, schemas, errors, authentication, rate limiting —
+and where to reach for an attribute when your code can't say it all.
 
-- Reach for [attributes](/laravel/reference/attributes/) like `#[Group]`, `#[Response]`, and `#[Example]`
-  where you want to say something the code can't.
-- Turn on the [Problem Details preset](/laravel/documenting/errors/) for RFC 9457 errors.
-- Point `content.dir` at a folder of Markdown to add [narrative guides](/laravel/guides/narrative-content/)
-  alongside the reference.
-- Commit the document and wire [`docuccino:diff --enforce`](/laravel/reference/commands/#docuccinodiff) into
-  CI to catch breaking changes.
+<CardGrid>
+	<LinkCard title="Documenting your API" href="/laravel/documenting/" description="Every source Docuccino reads, one concern per page." />
+	<LinkCard title="Attributes reference" href="/laravel/reference/attributes/" description="#[Group], #[Response], #[Example] and the rest." />
+	<LinkCard title="Customizing the output" href="/laravel/guides/customizing-output/" description="Overlays, representation policies, and whole-document transformers." />
+	<LinkCard title="Deploying to production" href="/laravel/guides/production/" description="Commit the artifact, warm the cache, and gate breaking changes." />
+</CardGrid>

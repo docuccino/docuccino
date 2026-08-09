@@ -1,6 +1,6 @@
 ---
 title: Multiple documents
-description: Generate several independent API documents from one app — public vs admin, v1 vs v2 — each with its own routes, security, viewer, and export.
+description: Generate several independent API documents from one app — public vs admin, v1 vs v2 — each with its own routes, security, viewer, and export target.
 sidebar:
   order: 3
 ---
@@ -13,8 +13,8 @@ security, viewer, and export target — all in one config file.
 
 ## Defining documents
 
-`documents` is a map. The published config ships one entry, `default`; add as many as you need. Each is
-a full, self-contained pipeline:
+`documents` is a map, and the keys are yours. The published config ships one entry, `default`; add as
+many as you need. Each is a full, self-contained pipeline:
 
 ```php
 // config/docuccino.php
@@ -22,12 +22,14 @@ a full, self-contained pipeline:
     'public' => [
         'info'   => ['title' => 'Public API', 'version' => '2.0.0'],
         'routes' => ['include' => ['api/*'], 'exclude' => ['api/admin/*']],
+        'error_responses' => 'default',
         'viewer' => ['route' => '/docs/api'],
         'export' => ['path' => 'docs/public.openapi.json'],
     ],
     'admin' => [
         'info'   => ['title' => 'Admin API', 'version' => '1.4.0'],
         'routes' => ['include' => ['api/admin/*']],
+        'error_responses' => 'default',
         'viewer' => ['route' => '/docs/admin', 'gate' => 'viewAdminDocs'],
         'export' => ['path' => 'docs/admin.openapi.json'],
     ],
@@ -38,47 +40,103 @@ Here the two documents split by route glob, expose their viewers on different ro
 gated), and export to different files. The same pattern covers API versioning — a `v1` and a `v2`
 document over `api/v1/*` and `api/v2/*`, each with its own `info.version`.
 
+<Aside type="caution" title="Documents don't inherit from each other">
+Every entry is read on its own: an omitted key falls back to Docuccino's built-in default, **never**
+to what the `default` document says. The three that catch people out:
+
+- **`export.path`** defaults to `docs/openapi.json` — so two documents that both omit it write to the
+  same file, and the second clobbers the first. Always set it per document.
+- **`routes.include`** defaults to *no include filter*, which documents **every** route in the app.
+- **`error_responses`** defaults to `'none'`, so a new document emits no error responses until you
+  ask for a preset.
+</Aside>
+
+### What's per document, and what's global
+
+| Per document (`documents.<key>.*`) | Global (top level) |
+| --- | --- |
+| `info`, `servers`, `routes`, `security` | `enabled` — the master switch |
+| `error_responses`, `tags`, `representation` | `engine` — inference mode and project paths |
+| `content`, `overlays`, `versioning` | `extensions` — your own extension classes |
+| `integrations` — per-document toggles | `lint` — document lint rules |
+| `export`, `viewer` | `on_route_error`, `cache` |
+
+So the analysis engine, your extensions and the lint rules are shared, while everything about *what a
+document contains and where it goes* is yours to set per document.
+
 ## Assigning routes to documents
 
-There are two ways to decide which routes land in a document, and you can combine them:
+Route selection is a filter chain, and every step must pass:
 
 <Tabs>
 	<TabItem label="By route glob">
 	```php
-	// Each document's own routes.include / routes.exclude globs
-	'routes' => ['include' => ['api/v2/*'], 'exclude' => []],
+	use Docuccino\Core\Extensions\Context\RouteDescriptor;
+
+	// documents.<key>.routes — include, then exclude, then an optional closure
+	'routes' => [
+	    'include' => ['api/v2/*'],
+	    'exclude' => ['api/v2/internal/*'],
+	    'closure' => fn (RouteDescriptor $route): bool => $route->name !== null,
+	],
 	```
+	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards. The
+	closure runs last and receives the discovered route — its `methods`, `uri`, `name`, `action` and
+	fully-gathered `middleware`.
 	</TabItem>
 	<TabItem label="By attribute">
 	```php
-	// Pin a route (or a whole controller) to named documents, regardless of globs
+	// Restrict a route (or a whole controller) to named documents
 	use Docuccino\Attributes\InDocs;
 
 	#[InDocs('public', 'partner')]
 	public function webhook(Request $request): JsonResponse { /* … */ }
 	```
+	Without the attribute, a route goes into every document whose globs match it.
 	</TabItem>
 </Tabs>
 
-[`#[InDocs]`](/laravel/reference/attributes/#indocs) is handy when a single endpoint belongs in more
-than one document, or in a document its URL glob wouldn't otherwise catch.
+[`#[InDocs]`](/laravel/reference/attributes/#indocs) **narrows**: it's applied after the globs, so a
+route still has to match the document's `routes.include` to appear at all. Use it for an endpoint that
+several documents' globs would otherwise sweep up — a shared webhook that belongs in the public and
+partner docs but not the admin one.
+
+Two more filters run for every document: `#[ExcludeFromDocs]` drops a route everywhere, and routes
+whose controller lives under `vendor/` are skipped unless the document sets
+`routes.include_vendor => true`.
 
 ## Building them
 
 Every command takes an optional `{document}` argument. Omit it to run over **all** documents; pass a key
-to run one (the one exception is `docuccino:diff`, which diffs only the `default` document when you omit
-the argument):
+to run one:
 
 ```bash
 php artisan docuccino:export          # export every document
 php artisan docuccino:export admin    # export just the admin document
+php artisan docuccino:cache           # warm the runtime cache for every document
 ```
 
-Per-document results aggregate — if any one document fails, the command fails. See the
+Two behaviors worth knowing:
+
+- **`docuccino:diff` is the exception.** With no `{document}` it diffs the `default` document only,
+  never all of them — pass the key explicitly for any other document.
+- **`--out` and multiple documents don't mix.** `docuccino:export --out=...` across every document
+  would have each write clobber the last, so Docuccino refuses: name a document, or configure
+  `export.path` per document.
+
+Per-document results aggregate — if any one document fails, the command exits non-zero. See the
 [commands reference](/laravel/reference/commands/) for the full behavior.
+
+## The cost of a second document
+
+Cheaper than you'd expect. Every document in a single command run is built in the same process by the
+same analysis engine, and the engine keeps its parse of each file — so the second document reuses the
+expensive work rather than booting PHPStan and re-reading your controllers from scratch. What each
+document does pay for is its own assembly: its own operations, components, overlays and content tree.
 
 <Aside title="Everything is per-document">
 Security schemes, the [viewer](/laravel/guides/viewer/) (route, gate, source), error-response strategy,
-and integration toggles are all set per document — so your public API can require OAuth while your admin
-API sits behind a gate, from the same codebase.
+representation policies and integration toggles are all set per document — so your public API can
+require OAuth while your admin API sits behind a gate, from the same codebase. A document that omits
+`viewer.route` simply registers no runtime endpoints; export still works.
 </Aside>

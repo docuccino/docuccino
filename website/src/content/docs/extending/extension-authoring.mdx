@@ -3,7 +3,7 @@ title: Writing an integration
 description: Extend Docuccino with your own type mappers, operation logic, and error responses — using the same tools the built-in integrations use.
 ---
 
-import { Steps, Tabs, TabItem, Card, CardGrid, Aside, FileTree, Badge } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem, Aside, FileTree, Badge } from '@astrojs/starlight/components';
 
 Docuccino is designed to be extended. When it doesn't know how to document something specific to
 your app — a custom value object, a bespoke response envelope, a house error format — you teach it
@@ -17,10 +17,10 @@ do too.
 
 ## How extensions work
 
-An extension is a small class that implements one **contract** (an interface) and is **registered
+An extension is a small class that implements a **contract** (an interface) and is **registered
 once**. You register from any service provider — in `register()` or `boot()`, in any package — and
-Docuccino resolves everything the moment it starts a build. Register early, register late; it just
-works.
+Docuccino resolves everything the moment it starts a build. Register early, register late; it works
+either way, because nothing reads the list until a build asks for it.
 
 ```php
 use Docuccino\Laravel\Facades\Docuccino;
@@ -40,7 +40,14 @@ Docuccino::extend(fn (Registrar $r) => $r
     ->add(HouseErrorResponse::class));
 ```
 
-Extensions are resolved from Laravel's container, so you can constructor-inject anything you need.
+Class-strings are resolved from Laravel's container, so you can constructor-inject anything you need.
+Anything listed in the [`extensions`](/laravel/reference/configuration/#extensions) config key is
+merged in at the same moment, so config and code registration are interchangeable.
+
+Resolution happens once per build, not once per document — a multi-document build shares the same
+extension instances. Keep your extensions stateless (or key any memoization by route) and everything
+stays deterministic. A class that implements several contracts is sorted into each one's chain, so a
+single registration can teach Docuccino more than one thing.
 
 ## Walkthrough: document a value object
 
@@ -79,8 +86,8 @@ mapper — the contract Docuccino uses to turn a PHP type into a JSON Schema.
            return new SchemaResult([
                'type' => 'object',
                'properties' => [
-                   'amount' => ['type' => 'integer', 'description' => 'Minor units, e.g. pennies'],
-                   'currency' => ['type' => 'string', 'example' => 'GBP'],
+                   'amount' => ['type' => 'integer', 'description' => 'Minor units — cents, not dollars'],
+                   'currency' => ['type' => 'string', 'example' => 'USD'],
                ],
                'required' => ['amount', 'currency'],
            ]);
@@ -128,10 +135,15 @@ schema:
 | `convert(DType $type): array` | Convert a nested type through the full mapper chain (e.g. a property whose type is itself complex). |
 | `reference(string $name, array $schema, ?string $schemaId = null): array` | Hoist a named schema into `components.schemas` and get back a `{ "$ref": … }` — the correct way to make a reusable, shareable schema. |
 | `reserveComponentName(string $name, string $schemaId): string` | Reserve the final component name (with collision suffixing) **before** building the body, so a self-referential schema can point its cycle-breaking `$ref` at the exact name. Never fabricate a component name or `#/components/schemas/…` ref yourself. |
-| `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect (an enum or model file too). |
-| `lowerConfidence(float $confidence): void` | Note that this conversion was a best guess. |
+| `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect (an enum or model file too). Empty strings are ignored. |
+| `lowerConfidence(float $confidence): void` | Note that this conversion was a best guess. The lowest value seen wins, and it's recorded in provenance. |
 | `diagnostic(Diagnostic $d): void` | Surface a problem (shown in CLI output, and able to fail CI). |
-| `engine()`, `depth()`, `representation()` | Access the type engine, the current nesting depth, and the document's representation policy. |
+| `engine(): TypeEngine` | The inference engine, for `classMetadata()` class expansion. |
+| `depth(): int` | Recursion depth of the running conversion — `1` at a response or parameter root, deeper for each nested type. Read it when your output depends on being at the root. |
+| `representation(): RepresentationPolicy` | The document's representation policy (enum naming, how nullability is expressed, and so on). |
+
+`convert()` never returns `null` — an unresolvable type comes back as `{}`, so you can always nest it
+safely.
 
 For a reusable component, prefer `reference()` over inlining, and call `dependsOn()` so caching stays
 correct:
@@ -146,48 +158,90 @@ return new SchemaResult(
 
 ## Controlling order
 
-Mappers form a chain and the first match wins, so ordering matters when your mapper competes with a
-built-in. Annotate with `#[ExtensionOrder]` and reach for a named priority:
+Mappers form a chain and the first match wins, so order matters when your mapper covers a type a
+built-in also handles — a model, an enum, a Data class. Annotate with `#[ExtensionOrder]`:
 
 ```php
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 
-#[ExtensionOrder(priority: Priorities::EARLY)]
+#[ExtensionOrder(priority: Priorities::FIRST)]
 final class MoneyToSchema implements TypeToSchema { /* … */ }
 ```
 
 | Priority | Value | When to use |
 | --- | --- | --- |
-| `Priorities::FIRST` | 1000 | Must run before everything. |
-| `Priorities::EARLY` | 100 | Intercept ahead of the built-ins. |
-| `Priorities::DEFAULT` | 0 | The normal case. |
-| `Priorities::LATE` | -100 | Fallback after the built-ins. |
-| `Priorities::LAST` | -1000 | Absolute last resort. |
+| `Priorities::FIRST` | 1000 | Run before everything, built-ins included. |
+| `Priorities::EARLY` | 100 | Ahead of the plain mappers. Several built-ins also sit here (model, enum and Data-class mappers), so this does **not** guarantee you beat a specific one. |
+| `Priorities::DEFAULT` | 0 | The normal case — no opinion about order. |
+| `Priorities::LATE` | -100 | Deliberately after the built-ins. |
+| `Priorities::LAST` | -1000 | Absolute last resort (where the terminal "unknown type" mapper lives). |
 
-You can also require hard ordering relative to specific classes with `before:` and `after:`
-(`#[ExtensionOrder(before: [SomeMapper::class])]`). Because your `supports()` only claims your own
-types, running early is safe — everything else falls straight through to the built-ins.
+So when your type must be claimed by *your* mapper and nothing else, use `Priorities::FIRST` rather
+than `EARLY` — that's above every built-in, with no tie to break.
+
+For ordering between your own extensions, name them and let the sort figure it out — here a broad
+fallback mapper that should only get a look once the specific one has declined:
+
+```php
+#[ExtensionOrder(after: [MoneyToSchema::class])]
+final class ValueObjectToSchema implements TypeToSchema { /* … */ }
+```
+
+`before:` and `after:` become real edges in a topological sort, so the outcome is guaranteed rather
+than a matter of tie-breaks — and a cycle between them fails the build loudly instead of silently
+picking an order. Ties break by priority descending, then class name, then registration index, so the
+emitted bytes never depend on which provider registered first.
+
+Because your `supports()` only claims your own types, running early is safe: everything you don't
+claim falls straight through to the built-ins.
 
 ## The contracts
 
-Pick the contract that matches what you're teaching Docuccino. All live in
-`Docuccino\Core\Extensions\Contracts`.
+Pick the contract that matches what you're teaching Docuccino. They all live in
+`Docuccino\Core\Extensions\Contracts`, and a single class may implement several — the registry
+partitions each instance into every chain it qualifies for.
 
-| Contract | Implement it to… | Key methods |
+These are the five you'll reach for most:
+
+| Contract | Implement it to… | Methods |
 | --- | --- | --- |
 | `TypeToSchema` | Turn a PHP type into a schema. | `supports(DType $type): bool`, `toSchema(DType $type, SchemaContext $context): ?SchemaResult` |
 | `OperationExtension` | Add or adjust parts of an operation (parameters, responses, security…). | `phase(): OperationPhase`, `handle(OperationDraft $operation, RouteContext $context): void` |
 | `ExceptionToResponse` | Document a response for a thrown exception. | `supports(ThrownException $exception, RouteContext $context): bool`, `toResponse(ThrownException $exception, RouteContext $context, ComponentRegistry $components): ?ResponseDraft`, `producer(): string` |
-| `RuleTransformer` | Map a custom validation rule to schema keywords. | `supports(ValidationRule $rule): bool`, `apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void`, `handledRuleNames(): array` |
+| `RuleTransformer` | Map a validation rule to schema keywords. | `supports(ValidationRule $rule): bool`, `apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void`, `handledRuleNames(): array` |
 | `DocumentTransformer` | Post-process the whole finished document. | `transform(UirDocumentDraft $document, DocumentContext $context): void` |
-| `RouteResolver` | Contribute routes beyond Laravel's router. | `resolve(DocumentConfig $config): iterable` |
-| `TagMapper` | Customize how tags are named/grouped. | `map(string $rawTag): string` |
 
-A `TagMapper` is the one contract you don't register through `Docuccino::extend()` — you point a
-document at it per document with the `tags.mapper` config key (see the
-[configuration reference](/laravel/reference/configuration/)), so different documents can name tags
-differently.
+And these cover the rest of the surface:
+
+| Contract | Implement it to… | Methods |
+| --- | --- | --- |
+| `RouteResolver` | Contribute routes beyond Laravel's router. | `resolve(DocumentConfig $document): iterable` |
+| `ValidationRulesToSchema` | Replace the whole rule-set → request-schema step. Almost always the wrong lever: add a `RuleTransformer` instead. | `convert(RuleSet $rules, SchemaContext $context): ValidationSchema` |
+| `ResponseAnalysisTarget` | Point success-body inference at a different method than the dispatched action (the way Laravel Actions' `jsonResponse()` is read). | `resolve(RouteContext $context): ?ResponseAnalysisRedirect` |
+| `ResponseStatusResolver` | Override the success status a returned class documents (a `201` from a Data class's `calculateResponseStatus()`, say). | `resolveStatuses(RouteContext $context, string $fqcn): array` |
+| `PayloadMediaTypeResolver` | Classify a payload's media type — `application/vnd.api+json` for a JSON:API resource, for instance. | `mediaTypeFor(DType $payload): ?string` |
+| `RouteBindingSchemaResolver` | Type a route-model-bound path parameter from the bound model's route key. | `keySchemaFor(string $modelFqcn): ?array` |
+| `EnvironmentDigestContributor` | Fold booted-app state your extension reads (guards, global config) into the cache key. | `digest(): string` |
+| `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
+
+The resolver contracts are **chains resolved per document**, and each returns a "not mine" value —
+`null`, or `[]` for `resolveStatuses()` — to defer to the next implementation. The first one that
+answers wins, and a chain nobody answers falls back to Docuccino's default behavior, so registering
+yours is additive: anything you don't claim is untouched.
+
+<Aside title="TagMapper is configured, not registered">
+`TagMapper` is the one contract you don't hand to `Docuccino::extend()`. Name your class in a
+document's [`tags.mapper`](/laravel/reference/configuration/#tags) config key instead — it's resolved
+from the container per document, so two documents can name tags differently. Everything else in the
+tables above is registered.
+</Aside>
+
+An `EnvironmentDigestContributor` is worth a second look if your extension reads anything outside the
+route's own files — a config value, a registered guard, a global default. The fragment cache keys on
+files; a fact you read from booted state is invisible to it, and a warm cache would keep serving the
+old answer. Return a short deterministic string built from that state (the empty string when nothing
+resolves) and the cache invalidates when it changes.
 
 `OperationExtension`s run in phases, so you can act at the right moment:
 
@@ -236,16 +290,26 @@ final class RequestIdHeader implements OperationExtension
 the merge is deterministic and the provenance explains itself. Build one with a factory that matches
 where your fact came from:
 
-| Factory | Layer | Use it for |
-| --- | --- | --- |
-| `Contribution::inference($source, $confidence)` | inference | A fact you analyzed from code. |
-| `Contribution::integration($name, $source, $confidence)` | integration | A package-specific contribution (names the producer `integration:<name>`). |
-| `Contribution::docblock($source)` | docblock | A value read from a docblock. |
-| `Contribution::attribute($source)` | attribute | A value declared with an attribute. |
-| `Contribution::fallback($source)` | fallback | A last-resort default, below inference. |
+| Factory | Layer | Rank | Use it for |
+| --- | --- | :---: | --- |
+| `Contribution::fallback($source)` | fallback | 5 | A last-resort default, below inference. |
+| `Contribution::inference($source, $confidence)` | inference | 10 | A fact you analyzed from code. |
+| `Contribution::integration($name, $source, $confidence)` | integration | 20 | A package-specific contribution. Names the producer `integration:<name>`, which is what shows up in provenance. |
+| `Contribution::docblock($source)` | docblock | 30 | A value read from a docblock. |
+| `Contribution::attribute($source, $specificity)` | attribute | 40 | A value the developer declared with an attribute. |
+
+The rank is what decides a contest for a field: a **strictly higher** rank overwrites and pushes the
+old value onto that field's `overrode` trail; an equal or lower one is recorded as shadowed and
+changes nothing. Within one layer, `$specificity` breaks the tie (higher wins) — that's how an
+attribute on an action beats the same attribute on its controller.
+
+Two ranks sit above these in the model — `overlay` (45) and `config` (50) — and neither belongs in an
+extension. An [OpenAPI Overlay](/laravel/guides/customizing-output/) is applied to the assembled
+document after every draft has frozen, so it has the last word on the nodes it targets no matter what
+the pipeline wrote there. Treat both as the developer's final say and leave them alone.
 
 Pass `$context->actionSource()` (or `$context->sourceAt($location)`) as the source so provenance points
-at real, project-relative code.
+at real, project-relative code, and pass a `$confidence` below `1.0` when your fact is a best guess.
 
 ### The OperationDraft write API
 
@@ -261,33 +325,50 @@ own their own guarded writes:
 | `parameter(string $in, string $name): ParameterDraft` | Get (or create) a parameter draft, keyed by `(in, name)`. |
 | `response(string $status): ResponseDraft` | Get (or create) a response draft, keyed by status. |
 | `hasParameter` / `removeParameter`, `hasResponse` / `removeResponse` | Test or drop a child draft. |
-| `guard()->resolved()` | Read the operation's current merged fields (e.g. to branch on what inference already set). |
+| `resolvedField(string $field): mixed` | Read the field's current winning value — how you branch on what inference already set. |
+| `producerFor(string $field): ?string` | Which producer currently owns that field (`inference`, `attribute`, `integration:sanctum`…). |
+
+`resolvedField()` and `producerFor()` are on every draft, so the same two reads work on a parameter,
+response or schema draft too.
 
 A **`ParameterDraft`** offers `setDescription(?string, $by)`, `setRequired(?bool, $by)`,
-`set(field, value, $by)`, and `schema()` (a `SchemaDraft` whose own `set(keyword, value, $by)` builds the
-parameter's JSON Schema); `setDocuccinoFact(key, value)` records a representation-independent semantic
-fact. A **`ResponseDraft`** — constructed `new ResponseDraft($status)` when an `ExceptionToResponse`
-returns one — offers `setDescription(?string, $by)`, `setRef(?string, $by)`, `set(field, value, $by)`,
-`content(string $mediaType): SchemaDraft` for the response body schema, and
+`setDeprecated(?bool, $by)`, `set(field, value, $by)`, and `schema()` (a `SchemaDraft` whose own
+`set(keyword, value, $by)` builds the parameter's JSON Schema); `setDocuccinoFact(key, value)` records a
+representation-independent semantic fact.
+
+A **`ResponseDraft`** — which you also construct directly, `new ResponseDraft($status)`, when an
+`ExceptionToResponse` returns one — offers `setDescription(?string, $by)`, `setRef(?string, $by)`,
+`set(field, value, $by)`, `content(string $mediaType): SchemaDraft` for the response body schema,
+`hasContent()` / `primaryMediaType()` to inspect what's there, and
 `setExample(string $mediaType, mixed $example)` to attach an example body alongside that media type's
 schema. Examples are **first-writer-wins**: if another producer already attached one for that media
-type, yours is left out, so the result never depends on extension evaluation order. This is exactly the
+type, yours is left out, so the result never depends on extension evaluation order. An example is only
+emitted when that media type also carries a schema, so set the body schema too. This is exactly the
 method the built-in inferred-handler support uses to attach its error-response examples — no separate
 back door.
 
+A **`SchemaDraft`** adds `property(string $name): self` for nesting into an object's properties and
+`hasProperty(string $name): bool`.
+
 ### The RouteContext surface
 
-`RouteContext` is your window onto the route. Beyond the public `route`, `actionRef`, `attributes`,
-`document`, `pathParameters`, and `routeBindings`, the methods you'll reach for:
+`RouteContext` is your window onto the route. Its readonly properties carry the facts —
+`route` (a `RouteDescriptor`: URI, methods, name, middleware), `actionRef` (the controller class,
+method, file and line), `attributes` (an `AttributeSet`, most-specific first), `document` (the
+`DocumentConfig`), `pathParameters`, `routeBindings`, `summary` / `description` from the docblock, and
+`components` (the document's `ComponentRegistry`, also where diagnostics land).
+
+The methods you'll reach for:
 
 | Method | Gives you |
 | --- | --- |
 | `analysis(): ActionAnalysis` | The action's inference result — return types, thrown exceptions, recovered request. Computed once and memoized across phases. |
-| `trace(TraceVisitor $v): TraceReport` | Drive an interprocedural trace from the action; its dependency files are recorded for you (use this rather than the engine directly). |
-| `dependencies(): RouteDependencies` | The dependency-file bag — `recordDependencyFiles([...])` adds files you read out-of-band, so editing them invalidates the cached fragment. |
-| `converter(): SchemaConverter` | The type→schema converter over the document-wide component registry. |
-| `validation(): ValidationRulesToSchema` | The rule→schema converter over the resolved transformer chain. |
-| `httpMethod(): string` | The specific verb this context documents (branch request-body vs query here). |
+| `trace(TraceVisitor $v): TraceReport` | Drive an interprocedural trace from the action. Its dependency files are recorded for you — use this rather than the engine directly, or your cache key comes out short. |
+| `recordDependencyFiles(array $files): void` | Register files you read out-of-band (a config file, a class you reflected yourself), so editing them invalidates the cached fragment. `dependencies()` hands back the underlying bag with `addFile()` / `addFiles()` if you prefer. |
+| `converter(): SchemaConverter` | The type→schema converter over the document-wide component registry: `$context->converter()->toSchema($type)->schema`. |
+| `validation(): ValidationRulesToSchema` | The rule→schema converter over the resolved transformer chain — feed it a `RuleSet` you recovered. |
+| `httpMethod(): string` | The specific verb this context documents, lower-cased. A multi-method route gets one context per method, so branch request-body vs query on this and not on the route. |
+| `representation(): RepresentationPolicy` | The document's representation policy, for output that has a configured shape. |
 | `actionSource(): ?Source` / `sourceAt(SourceLocation): ?Source` | Project-relative provenance sources for your contributions. |
 
 ### Surfacing a problem
@@ -307,37 +388,42 @@ $context->components->addDiagnostic(new Diagnostic(
 ));
 ```
 
-A `Diagnostic` takes a `Severity`, a stable dotted `code`, a `message`, and optionally a `source`,
-`routeSignature`, and `help` line. From a `TypeToSchema`, `$context->diagnostic($d)` does the same.
+A `Diagnostic` takes a `Severity` — `Error`, `Warning`, `Info` or `Hint` — a stable dotted `code`, a
+`message`, and optionally a `source`, a `routeSignature` and a `help` line. Pick the severity by what
+you want CI to do with it: [`--fail-on`](/laravel/reference/commands/#docuccinoexport) gates on
+`Warning` and `Error` only, so `Info` and `Hint` inform without ever failing a build.
+
+From a `TypeToSchema`, `$context->diagnostic($d)` does the same thing.
 
 ## Packaging as a distributable integration
 
-To share your work as a Composer package, follow the same shape the built-in integrations use: one
-small entry-point class that lists your extensions and (optionally) checks whether its target
-package is installed.
+To share your work as a Composer package, follow the same shape every built-in integration uses: one
+small entry-point class that lists your extensions and checks whether its target package is
+installed, plus a service provider that registers them.
 
 <FileTree>
 
+- composer.json
 - src/
-  - Integrations/
-    - Stripe/
-      - StripeIntegration.php   entry point
-      - StripeToSchema.php
-      - StripeWebhookExtension.php
+  - **StripeIntegration.php** the entry point — what's installed, and what it contributes
+  - StripeIntegrationServiceProvider.php
+  - StripeToSchema.php
+  - StripeWebhookExtension.php
 
 </FileTree>
 
+The entry point holds no logic beyond those two questions:
+
 ```php
+// src/StripeIntegration.php
 namespace Acme\DocuccinoStripe;
 
 final class StripeIntegration
 {
-    // Optional: only activate when the target package is present.
-    public static function installed(?callable $probe = null): bool
+    /** Only activate when the package we document is actually present. */
+    public static function installed(): bool
     {
-        $probe ??= static fn (string $class): bool => class_exists($class);
-
-        return $probe(\Stripe\StripeClient::class);
+        return class_exists(\Stripe\StripeClient::class);
     }
 
     /** @return list<class-string> */
@@ -348,15 +434,40 @@ final class StripeIntegration
 }
 ```
 
-Register it from your package's own service provider, guarded so it's inert when the target isn't
-installed:
+The provider registers them, guarded so the package is inert when the target isn't installed. Nothing
+here needs Docuccino to have booted — the registry resolves at build time — so `register()` is
+enough:
 
 ```php
-use Docuccino\Laravel\Facades\Docuccino;
+// src/StripeIntegrationServiceProvider.php
+namespace Acme\DocuccinoStripe;
 
-if (StripeIntegration::installed()) {
-    foreach (StripeIntegration::extensions() as $extension) {
-        Docuccino::extend($extension);
+use Docuccino\Laravel\Facades\Docuccino;
+use Illuminate\Support\ServiceProvider;
+
+final class StripeIntegrationServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        if (! StripeIntegration::installed()) {
+            return;
+        }
+
+        foreach (StripeIntegration::extensions() as $extension) {
+            Docuccino::extend($extension);
+        }
+    }
+}
+```
+
+Auto-discover it from your `composer.json` and installing the package is all a user has to do:
+
+```json
+{
+    "extra": {
+        "laravel": {
+            "providers": ["Acme\\DocuccinoStripe\\StripeIntegrationServiceProvider"]
+        }
     }
 }
 ```

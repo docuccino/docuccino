@@ -5,12 +5,15 @@ sidebar:
   order: 1
 ---
 
-import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Activates automatically when [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) is installed.
 A `Data` class is documented from its properties and validation attributes — **statically**, without
 constructing it — and works in both directions: as a request body when it's an action parameter, and as
 a reusable schema when it's returned.
+
+All three of spatie's base classes are recognized: `Data`, the output-only `Resource`, and the
+input-only `Dto`.
 
 ## Request bodies from Data classes
 
@@ -58,13 +61,22 @@ the same way it would from a Form Request's `rules()`:
 </Tabs>
 
 The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped from the request by
-`#[HiddenFromRequest]`, and the nullable `dueAt` isn't required (its type admits `null`).
+`#[HiddenFromRequest]`, and the nullable `dueAt` isn't required (its type admits `null`). A property
+with a constructor default isn't required either, and its value is documented as the schema `default`.
 
 Because a Data class is a single named source class, the body is **hoisted to a `#/components/schemas`
 component and the operation `$ref`s it** — so the same Data class accepted by several endpoints becomes
 one shared, deduped component. The hoisting rules are the same as for a Form Request, including the
 `#[BodyParameter]` deviation that keeps one operation's body inline; see
-[Request bodies](/laravel/documenting/requests/) for the full detail.
+[Request bodies](/laravel/documenting/requests/#request-bodies) for the full detail.
+
+Two shapes follow from the HTTP verb, exactly as they do for a Form Request:
+
+- On a **read verb** (`GET`/`HEAD`) there is no body, so the recovered fields become **query
+  parameters** instead.
+- A property typed `Illuminate\Http\UploadedFile` (or a list of them) is a file upload, so the body
+  becomes `multipart/form-data` with a `format: binary` schema — see
+  [File uploads](/laravel/documenting/requests/#uploadedfile-typed-data-properties).
 
 <Aside type="note" title="Hidden vs HiddenFromRequest">
 Spatie's own `#[Hidden]` hides a property from the serialized **output**, not the request — a property
@@ -72,6 +84,25 @@ you accept but never send back stays in the documented request body (and the dat
 it). To drop a property from the documented **request** body — a server-populated value like
 `internalNote` — use Docuccino's [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest).
 </Aside>
+
+### Nested Data and collections
+
+A Data property that is itself a Data class recurses into dotted rules, so nested objects validate and
+document all the way down. A collection property does the same through `.*`:
+
+```php
+class CreateInvoiceData extends Data
+{
+    public function __construct(
+        public CustomerData $customer,                       // → customer.name, customer.email …
+        #[DataCollectionOf(LineItemData::class)]
+        public DataCollection $lines,                        // → lines is an array; lines.*.sku …
+    ) {}
+}
+```
+
+`#[DataCollectionOf]` is how you name the item class when the collection carries no generic. A cycle
+(A holding a B holding an A) stops at the repeat rather than recursing forever.
 
 ### Overriding the rules with `rules()`
 
@@ -97,7 +128,7 @@ class CreateInvoiceData extends Data
 ```
 
 `currency` is now documented with the enum's backing values instead of a bare string. Fields you
-don't mention keep their inferred rules.
+don't mention keep their inferred rules, and a field you declare that no property matches is added.
 
 ### Validation attributes
 
@@ -122,9 +153,16 @@ class CreateInvoiceData extends Data
 ```
 
 `#[Required]` marks the property required, `#[Max]` / `#[Min]` become length or range keywords (by the
-property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum`. The whole rule floor
-the [validation-rule mapping](/laravel/documenting/requests/#request-bodies) covers is available through
-the attribute DSL, and a property's own type contributes the base type where no attribute states one.
+property's type), `#[Email]` a `format: email`, and `#[In]` / `#[Enum]` an `enum` — `#[Enum(Currency::class)]`
+expands to the enum's backing values, never the class name. Presence, type, size, format, and pattern
+attributes are all covered, and a property's own type contributes the base type where no attribute
+states one.
+
+Two escape hatches work as you'd hope:
+
+- `#[Rule('max:10|min:1')]` passes its strings straight through as Laravel rules.
+- An attribute Docuccino doesn't recognize degrades like an unknown string rule — permissive, with an
+  info diagnostic — rather than inventing a constraint.
 
 ## Response schemas from Data returns
 
@@ -138,6 +176,19 @@ public function show(Invoice $invoice): InvoiceData
 }
 ```
 
+The component is named after the class, or after
+[`#[SchemaName]`](/laravel/reference/attributes/#schemaname) when you'd rather choose; pin its diff
+identity across a rename with [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
+
+<Aside type="note" title="Required, not non-null">
+A Data property spatie always serializes is **required** even when it's nullable — the key is on the
+wire carrying `null`, so nullability lives in the value's type (`["string", "null"]`), not in
+presence. Only an `Optional` or `Lazy` marker in the property type makes a key genuinely absent, and
+therefore non-required.
+</Aside>
+
+### Success statuses from `calculateResponseStatus()`
+
 A Data response class that overrides `calculateResponseStatus()` has its status documented in place of
 the default `200`. A single constant folds — a plain `return 201;`, a class constant like
 `Response::HTTP_CREATED`, or an enum constant. A **conditional whose arms are all constants** folds too
@@ -147,8 +198,20 @@ the response body) — matching what the endpoint actually returns.
 When an action returns a **union of Data classes** — `AuthSuccessData|MfaChallengeData` from one
 method — each member is documented under its own `calculateResponseStatus()` (the challenge member at
 `422`, the success member at `200`), so a single action correctly documents several statuses. A
-genuinely computed status can't be read statically, so that member stays `200` with an info diagnostic
-— see [Responses](/laravel/documenting/responses/#spatie-data-success-status).
+genuinely computed status can't be read statically, so that member stays `200` with a
+`spatie-data.response-status-unresolved` info diagnostic — see
+[Responses](/laravel/documenting/responses/#spatie-data-success-status).
+
+### Dates and timestamps
+
+A `DateTimeInterface` property is documented as a string, with the `format` following your app's
+`data.date_format`: a time-bearing format gives `date-time`, a date-only one gives `date`. The one
+property that isn't a string is a Unix timestamp:
+
+```php
+#[WithCast(DateTimeInterfaceCast::class, format: 'U')]
+public CarbonImmutable $issuedAt; // → { "type": "integer", "description": "Unix timestamp (seconds)." }
+```
 
 ### Wrapping
 
@@ -160,17 +223,61 @@ returns:
 { "data": { "$ref": "#/components/schemas/InvoiceData" } }
 ```
 
-`defaultWrap()` on the class takes precedence over the global key. Only the **response root** is
-wrapped — a nested Data property stays an unwrapped, shared `$ref`. A paginated collection is always
-wrapped, so its wrap key simply names the envelope's items key (`{ data, links, meta }`) — never a
-second layer.
+`defaultWrap()` on the class takes precedence over the global key, and it's read as a literal string
+return — a computed wrap key falls back to the global one. Only the **response root** is wrapped: a
+nested Data property stays an unwrapped, shared `$ref`.
+
+### Collections and paginators
+
+| Return type | Documented as |
+| --- | --- |
+| `DataCollection<InvoiceData>` | An array of the item schema — wrapped under the global key at the response root only |
+| `PaginatedDataCollection<int, InvoiceData>` | Spatie's length-aware envelope |
+| `CursorPaginatedDataCollection<int, InvoiceData>` | Spatie's cursor envelope |
+
+Spatie's paginator envelope is **not** Laravel's resource envelope, and Docuccino documents spatie's:
+`links` is an *array* of `{ url, label, active }` objects, and `meta` carries the `*_page_url` members
+alongside the counters (or the cursor tokens, with no `total`). All three members are always
+serialized, so all three are required:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "data":  { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceData" } },
+    "links": { "type": "array", "items": { "type": "object", "properties": {
+      "url": { "type": ["string", "null"] }, "label": { "type": "string" }, "active": { "type": "boolean" }
+    } } },
+    "meta":  { "type": "object", "properties": {
+      "current_page": { "type": "integer" }, "last_page": { "type": "integer" },
+      "per_page": { "type": "integer" }, "total": { "type": "integer" },
+      "first_page_url": { "type": ["string", "null"] }, "last_page_url": { "type": ["string", "null"] },
+      "next_page_url": { "type": ["string", "null"] }, "prev_page_url": { "type": ["string", "null"] }
+    } }
+  },
+  "required": ["data", "links", "meta"]
+}
+```
+
+A paginated collection is always wrapped by spatie, so its wrap key simply names the envelope's items
+key — never a second layer around it.
 
 ### `include` / `exclude` / `only` / `except` query parameters
 
 When a Data class opts into Spatie's request partials — by overriding `allowedRequestIncludes()`,
-`allowedRequestExcludes()`, `allowedRequestOnly()`, or `allowedRequestExcept()` — the matching
-`include` / `exclude` / `only` / `except` query parameter is documented (a comma-separated list) on
-every operation that returns that class. Only the methods you override are surfaced.
+`allowedRequestExcludes()`, `allowedRequestOnly()`, or `allowedRequestExcept()` — the matching query
+parameter is documented on every operation that returns that class. Only the methods you override are
+surfaced, because spatie's own base implementations allow nothing:
+
+| Parameter | Description |
+| --- | --- |
+| `include` | Comma-separated list of lazy/optional properties to include in the response. |
+| `exclude` | Comma-separated list of properties to exclude from the response. |
+| `only` | Comma-separated allow-list of the only properties to return. |
+| `except` | Comma-separated deny-list of properties to omit from the response. |
+
+The allow-list itself isn't enumerated — reading it would mean running your method — so each parameter
+is documented as a free comma-separated string.
 
 ## Conventions Docuccino honors
 
@@ -183,15 +290,24 @@ JSON your app actually produces and accepts:
 | `#[HiddenFromRequest]` (Docuccino) | Drops the property from the **request** body only; the response schema is untouched. |
 | `#[Computed]` / `#[WithoutValidation]` | Excluded from the request body — a computed/server-derived value is never a sendable field. |
 | `#[FromRouteParameter]` | Excluded from the request body — populated from the route binding, not the payload. |
+| `#[Prohibited]` (spatie validation) | Documented as never sendable. |
 | `Optional` / `Lazy` | Makes the property non-required. |
-| `#[MapName]` / `#[MapOutputName]` | Renames the property key to the mapped name. |
-| Global name-mapping strategy | `data.name_mapping_strategy` (e.g. snake_case) renames every un-mapped key, on input and output. |
-| Nested `Data` | Recurses into a nested (referenced) schema. |
-| `DataCollection` | Becomes an array of the item schema. |
-| Paginated Data wrapper | Produces spatie's own paginator envelope — `links` as an array of `{ url, label, active }`, `meta` with the `*_page_url` members (distinct from Laravel's resource envelope). |
+| A constructor default | Makes the property non-required, and documents the value as `default`. |
+| `#[MapName]` / `#[MapInputName]` / `#[MapOutputName]` | Renames the property key to the mapped name, per direction. |
+| A mapper class (`SnakeCaseMapper`, `CamelCaseMapper`, `StudlyCaseMapper`, `LowerCaseMapper`, `UpperCaseMapper`) | Applies that transform to the key. |
+| Global name-mapping strategy | `data.name_mapping_strategy` renames every un-mapped key, independently for input and output. |
+| Nested `Data` | Recurses into a nested (referenced) schema, and into dotted request rules. |
+| `DataCollection` / `#[DataCollectionOf]` | Becomes an array of the item schema. |
+| Paginated Data collections | Produce spatie's own paginator envelope (above), not Laravel's. |
 | `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | Documents the property as an integer Unix timestamp. |
 | `rules()` | Overrides the inferred request rules per field. |
 | `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |
+| `#[SchemaName]` / `#[SchemaId]` | Names the component / pins its diff identity. |
+
+Name mapping resolves in spatie's own order: a property-level attribute beats a class-level one, a
+directional `#[MapInputName]`/`#[MapOutputName]` beats a symmetric `#[MapName]`, and the global
+strategy applies only where no map attribute governs the property.
 
 Add examples with [`#[Example]`](/laravel/reference/attributes/#example) on a property, and pin
 anything inference can't determine with the usual [attributes](/laravel/reference/attributes/) — they
@@ -204,7 +320,17 @@ None required. Like every integration, the Data support accepts an `enabled` opt
 [configuration reference](/laravel/reference/configuration/#integrations). It's a no-op when the package
 isn't installed.
 
+Three of your app's own `config/data.php` settings do reshape the output, and Docuccino reads all
+three: `wrap`, `name_mapping_strategy`, and `date_format`. Change one and every documented Data class
+is rebuilt.
+
 ## When it can't tell
 
 If a property's type can't be resolved statically, Docuccino contributes what it can and records lower
-confidence rather than failing — then your annotations fill the gap.
+confidence rather than failing — then your annotations fill the gap. A Data class it can't expand at
+all is documented as a bare `object`.
+
+One case is worth naming: a **custom name mapper** Docuccino doesn't recognize can't be applied
+without running it, so those keys are documented unmapped and the build emits a
+`spatie-data.unknown-mapper` info diagnostic naming the class. Rename the keys with an explicit
+`#[MapName('…')]` if it matters.

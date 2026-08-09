@@ -5,16 +5,17 @@ sidebar:
   order: 2
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 These three always-on integrations produce the reusable component schemas your responses reference.
+Every one of them is hoisted to `#/components/schemas` and shared by reference, so a resource, model or
+enum is defined exactly once no matter how many operations use it.
 
 ## API Resources
 
 Docuccino documents any `JsonResource` from the shape of its `toArray()` method. Conditional fields —
-`whenLoaded`, `when`, `whenNotNull`, `mergeWhen` — become **optional** properties, so clients know
-they may be absent. A resource returned as `Resource::collection(...)` is documented as an array of
-that schema.
+`whenLoaded`, `when`, `whenNotNull` — become **optional** properties, so clients know they may be
+absent. A resource returned as `Resource::collection(...)` is documented as an array of that schema.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -54,8 +55,22 @@ its second closure argument (as above) so the optionality is recovered — passi
 property comes out required. `status` is a `$ref` to the shared `InvoiceStatus` enum component (see
 [Enums](#enums)) — each enum is hoisted once and referenced everywhere it appears.
 
+**Merged values.** `merge()`, `mergeWhen()` and `mergeUnless()` splice their array's keys into the
+**parent** shape, exactly as Laravel serializes them — never nested under a numeric key. Keys spliced
+by a conditional merge are optional; keys from a plain `merge()` are not.
+
+**Several return paths.** A `toArray()` that branches on the request and returns different arrays has
+every branch merged into one schema, rather than the first branch winning and the others' keys
+vanishing.
+
+**Naming.** A component takes the resource's short class name by default. Override the published name
+with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin the identity the diff engine
+tracks — so a class rename isn't reported as a removal plus an addition — with
+[`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
+
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
-not, so they can be shared by reference. Control this with the `api_resources.wrap` option:
+not, so they can be shared by reference. `withoutWrapping()` is a runtime call Docuccino can't see, so
+`api_resources.wrap` is the escape hatch:
 
 | `wrap` | Result |
 | --- | --- |
@@ -64,8 +79,10 @@ not, so they can be shared by reference. Control this with the `api_resources.wr
 | `true` | Wrap under `data`. |
 | `'result'` (any string) | Wrap under that key. |
 
-Laravel 13's first-party JSON:API resources are supported too, including the `include` and `fields`
-query parameters they accept.
+Laravel 13's first-party JSON:API resources are supported too: `toAttributes()`,
+`toRelationships()`, `toLinks()` and `toMeta()` build the resource object, and the `include` and
+`fields[TYPE]` query parameters those routes accept are added automatically. Pre-13 apps get identical
+output from the [timacdonald/json-api](/laravel/packages/timacdonald-json-api/) integration.
 
 ## Eloquent models
 
@@ -78,18 +95,46 @@ tags there's a floor: a `$casts` key is a column (typed from its cast), a `$date
 column, and a `$fillable`-only name is a permissive column. Every serialized column is marked required (a
 nullable one as required with a `null`-admitting type).
 
-**Casts.** Dates become `date-time` (a `datetime:Y-m-d` cast becomes `date`), enum casts route through
-the shared [enum schema](#enums), and the built-in `As*` class casts are recognized:
+<Aside type="tip" title="No columns? You get told.">
+A model no source yields columns for is documented as a bare object **and** raises an info diagnostic
+telling you to add `@property` tags — it never degrades silently. Running
+`php artisan ide-helper:models` once is usually the whole fix.
+</Aside>
+
+### Casts
+
+A cast pins its column's shape. Native casts:
+
+| Cast | Documented as |
+| --- | --- |
+| `datetime`, `immutable_datetime` | `string`, `format: date-time` |
+| `date`, `immutable_date` | `string`, `format: date` |
+| `datetime:Y-m-d` | `string`, `format: date` (a date-only pattern) |
+| `datetime:<custom format>` | `string`, with the format named in the description — a bespoke format is neither `date` nor `date-time`, so claiming one would be wrong |
+| `timestamp` | `integer` (a unix timestamp, not a date string) |
+| `boolean`, `bool` | `boolean` |
+| `integer`, `int` | `integer` |
+| `real`, `float`, `double` | `number` |
+| `decimal:2`, `hashed`, `string` | `string` |
+| `array`, `collection`, `json` | `type: ["array", "object"]` — a JSON column decodes to whatever it stored |
+| `object` | `object` |
+| `encrypted:<inner>` | The **inner** cast's shape — it decrypts *then* casts, so it's never an opaque string |
+| A backed enum class | A `$ref` to the shared [enum schema](#enums) |
+
+And the built-in `As*` class casts:
 
 | Cast | Documented as |
 | --- | --- |
 | `AsStringable`, `AsUri`, `AsHtmlString` | `string` |
-| `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | object |
-| `AsCollection`, `AsEncryptedCollection` | array |
-| `AsEnumCollection:Status`, `AsEnumArrayObject:Status` | array of the enum's values |
+| `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | `object` |
+| `AsCollection`, `AsEncryptedCollection` | `array` |
+| `AsEnumCollection:InvoiceStatus`, `AsEnumArrayObject:InvoiceStatus` | An array of that enum's values |
 
 A custom `CastsAttributes` caster is typed from its `get()` return type — so a `Money` or value-object
-cast documents as whatever `get()` returns, not an opaque string.
+cast documents as whatever `get()` returns, not an opaque string. An unrecognized caster falls back to
+the column's inferred type.
+
+### Accessors, appends and relations
 
 **Accessors.** A classic `getFullNameAttribute()` and an `Attribute::make(get: …)` accessor both flow
 their return type into the schema: an accessor for an `$appends` attribute types that appended property,
@@ -104,13 +149,30 @@ every model to a reusable `#/components/schemas` entry: a relation back to a mod
 expanded (a cycle, or a self-relation) resolves to a `$ref` rather than recursing forever, so deeply
 related models stay a graph of references, never an infinite inline expansion.
 
+**Polymorphic relations.** A `morphTo` becomes a `oneOf` of the possible models, with a
+`discriminator` when every variant is registered in a morph map — so clients can tell the variants
+apart reliably:
+
+```json
+"schema": {
+  "oneOf": [
+    { "$ref": "#/components/schemas/Invoice" },
+    { "$ref": "#/components/schemas/Subscription" }
+  ],
+  "discriminator": {
+    "propertyName": "type",
+    "mapping": {
+      "invoice": "#/components/schemas/Invoice",
+      "subscription": "#/components/schemas/Subscription"
+    }
+  }
+}
+```
+
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
 every date attribute, which can't be known statically — so its date and datetime columns are documented
 as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. Pin an exact
 format with an annotation if your clients need one.
-
-Polymorphic (`morphTo`) relations become a `oneOf` of the possible models, with a `discriminator`
-when every variant is registered in a morph map — so clients can tell the variants apart reliably.
 
 ## Enums
 
@@ -157,8 +219,12 @@ as `anyOf: [{ "$ref": … }, { "type": "null" }]`. Prefer the old inline express
 
 Descriptions are emitted as `x-enumDescriptions`. A case with no `#[CaseDescription]` falls back to its
 docblock summary — the first prose line of the case's doc comment — and the attribute wins when both are
-present. To also emit codegen name hints (`x-enumNames` / `x-enum-varnames`), set
-`representation.enums.naming` in your config.
+present. A case with neither is simply absent from the map. To also emit codegen name hints alongside
+(never instead of) the values, set `representation.enums.naming` to `x-enumNames` or
+`x-enum-varnames`.
+
+A **pure** enum — one with no backing type — has no values to publish, so it's documented as a string
+schema listing its case names.
 
 ## When it can't tell
 

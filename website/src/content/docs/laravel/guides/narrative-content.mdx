@@ -40,10 +40,14 @@ That tree compiles to two groups — *Guides* and *Webhooks* — plus a top-leve
 without any configuration. Frontmatter (next section) overrides any of it when the defaults aren't
 what you want.
 
+A relative `content.dir` is confined to your application root, and a directory that doesn't exist
+raises a `content.dir-missing` warning rather than failing the build — so a typo tells you instead of
+silently producing no pages.
+
 <Aside title="Where it ends up">
-Pages and the navigation tree compile into the document's `x-docuccino.content` layer. The
-[bundled viewer](/laravel/guides/viewer/) renders them as a sidebar of guides beside your API
-reference.
+Pages and the navigation tree compile into the document's `x-docuccino.content` layer, which travels
+in the [UIR](/uir/#content-layer) export. Read [what each format keeps](#what-each-format-keeps) before
+you build a publishing pipeline around it.
 </Aside>
 
 ## Frontmatter reference
@@ -53,12 +57,12 @@ Docuccino derives sensible defaults from the file's name and location.
 
 | Key | Type | Default | Behavior |
 | --- | --- | --- | --- |
-| `title` | string | File name, humanized | The page's display title. |
-| `slug` | string | Path under `content.dir`, without `.md` | The page's stable slug; its identity is derived from this, so keep it stable across renames. |
+| `title` | string | File name, humanized (`getting-started.md` → *Getting Started*) | The page's display title. |
+| `slug` | string | Path under `content.dir`, without `.md` | The page's stable slug; its identity is derived from this, so keep it stable across renames. Slugs must be unique — a collision is an error and the later page is dropped. |
 | `summary` | string | *none* | A short description carried onto the page. |
 | `tags` | string[] | *none* | Freeform tags carried onto the page. |
-| `nav.group` | string | Parent folder name, humanized | The sidebar group the page sits under. |
-| `nav.order` | integer | *unordered (sorts after ordered pages, then by title)* | Explicit sort weight within its group. |
+| `nav.group` | string | Parent folder name, humanized (no group at the root) | The sidebar group the page sits under. |
+| `nav.order` | integer | *unordered* | Explicit sort weight within its group. |
 | `nav.hidden` | boolean | `false` | Compile the page but leave it out of the navigation tree. |
 | `nav.type` | `page` \| `operation` \| `tag` | `page` | Whether the nav entry links to this page, or references an operation or a tag. |
 | `nav.ref` | string | *none* | For `type: operation` or `tag`, the target — an operationId or `METHOD /path`, or a tag name. |
@@ -77,9 +81,15 @@ nav:
 Every request to a protected endpoint carries a bearer token…
 ```
 
+**Ordering.** Within a group, pages sort by `nav.order`, then title, then slug; pages with no `order`
+come after those that have one. A group takes the lowest `order` among its children, so giving one
+page in a folder `order: 1` lifts the whole group.
+
 Setting `nav.type: operation` with a `nav.ref` turns a nav entry into a link straight to an operation
-in your reference — handy for surfacing a key endpoint in the sidebar. A `ref` that doesn't resolve
-becomes a build diagnostic rather than a dead link.
+in your reference — handy for surfacing a key endpoint in the sidebar. A `nav.type: tag` entry points
+at a tag name (either one your operations carry, or one you defined in `tags.definitions`). A `ref`
+that doesn't resolve raises `content.unresolved-nav-ref` and the entry is left out, rather than
+shipping a dead link.
 
 ## Linking to your API
 
@@ -91,8 +101,10 @@ Paginated results come back from ::operation{id="invoices.index"}, each item sha
 ::schema{name="InvoiceData"}.
 ```
 
-- `::operation{id="…"}` takes an operationId, or a `METHOD /path` signature.
-- `::schema{name="…"}` takes a component schema name.
+- `::operation{id="…"}` takes an operationId, or a `METHOD /path` signature — `GET /api/v1/invoices`,
+  matching the OpenAPI path template, with the method case-insensitive. The signature form is how you
+  address a route that has no name.
+- `::schema{name="…"}` takes a component schema name, as it appears under `components.schemas`.
 
 When the build runs, each directive is checked against the real document. A directive that resolves
 gets the operation or schema's stable UIR identity appended as a `ref`, so a consumer can link to it
@@ -102,11 +114,30 @@ without re-resolving:
 ::operation{id="invoices.index" ref="op:v1:mfz3q6k2w5r7t4ua"}
 ```
 
-A directive that points at something that **doesn't exist** becomes an error diagnostic — the page is
-left untouched, and your build can fail on it. This is the whole point: your guides can't quietly
-drift away from the API they describe. Rename an endpoint and forget to update the guide, and the
-next build tells you. (An unknown directive name — anything other than `::operation` or `::schema` —
-passes through untouched with a warning, so third-party directives are safe.)
+A directive that points at something that **doesn't exist** becomes an error diagnostic — the
+directive is left as you wrote it, and your build can fail on it with `--fail-on=error`. This is the
+whole point: your guides can't quietly drift away from the API they describe. Rename an endpoint and
+forget to update the guide, and the next build tells you.
+
+<Aside type="note" title="Refs are always re-derived">
+Docuccino ignores any `ref` you (or a previous build) wrote and recomputes it from the selector. So
+committing the rewritten Markdown is safe and idempotent, and a `ref` that has gone stale surfaces as
+a broken directive instead of silently pointing at the wrong operation.
+</Aside>
+
+An unknown directive name — anything other than `::operation` or `::schema` — passes through
+untouched with a warning, so directives your own renderer understands are safe to use.
+
+### Content diagnostics
+
+| Code | Severity | Means |
+| --- | --- | --- |
+| `content.dir-missing` | warning | The configured `content.dir` doesn't exist. |
+| `content.duplicate-slug` | error | Two pages resolved to the same slug; the later one was dropped. |
+| `content.unresolved-directive` | error | An `::operation`/`::schema` directive resolved to nothing, or is missing its selector attribute. |
+| `content.unknown-directive` | warning | A directive Docuccino doesn't handle; passed through untouched. |
+| `content.unresolved-nav-ref` | error | A `nav.type: operation`/`tag` entry pointed at something absent. |
+| `content.duplicate-operation-id` | warning | Two operations share an `operationId`, so `::operation{id="…"}` is ambiguous. |
 
 ## Symbol-anchored prose with `#[DescriptionFromFile]`
 
@@ -122,8 +153,8 @@ public function index(): AnonymousResourceCollection { /* … */ }
 ```
 
 The file's contents become that operation's `description`, right where the endpoint appears in the
-reference. The path is resolved within your application root, and the file's content is hashed into
-the operation's cache key, so editing the Markdown correctly invalidates just that fragment.
+reference. The path is resolved within your application root, and the file joins the operation's cache
+dependencies — so editing the Markdown correctly invalidates just that fragment.
 
 <Aside type="tip" title="Which one do I want?">
 Use **`#[DescriptionFromFile]`** when the prose *is* the description of a single operation or schema —
@@ -148,10 +179,11 @@ ordinary OpenAPI fields — `info.description`, tag descriptions, and per-operat
 (including ones set with `#[DescriptionFromFile]`) — survive, because they were standard fields all
 along.
 
-Rendering the guide pages and their multi-page navigation is a job for a UIR consumer: the
-[bundled viewer](/laravel/guides/viewer/) does it, and so can any tool that reads the UIR. Point plain
-OpenAPI tooling at the exported spec and you'll get the reference, rich descriptions and all, but not
-the standalone guides.
+Rendering the guide pages and their multi-page navigation is a job for a UIR consumer. The
+[bundled viewer](/laravel/guides/viewer/) serves OpenAPI, so it shows the reference — rich descriptions
+and all — but not the standalone guides; the same is true of any plain OpenAPI tool you point at the
+export. Today the content layer is for pipelines you build on the UIR: a docs site generator, a
+changelog, or an agent tool catalog that wants your prose alongside your operations.
 
 <Aside title="Prose changes are visible changes">
 Because the content layer participates in the document's `contentHash`, editing a guide or moving a

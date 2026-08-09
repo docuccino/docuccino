@@ -63,6 +63,7 @@ export default defineConfig({
 				{
 					label: 'Package support',
 					items: [
+						{ label: 'Overview', slug: 'laravel/packages' },
 						{ label: 'Spatie Data', slug: 'laravel/packages/spatie-data' },
 						{ label: 'Spatie Query Builder', slug: 'laravel/packages/query-builder' },
 						{ label: 'Laravel Actions', slug: 'laravel/packages/laravel-actions' },

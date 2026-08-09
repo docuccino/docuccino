@@ -1,15 +1,15 @@
 ---
 title: Deploying to production
-description: Ship your docs the safe way — commit the artifact, serve it without rebuilding, gate the viewer, and catch breaking changes in CI.
+description: Ship your docs the safe way — generate in CI, commit the artifact, serve it without rebuilding, gate the viewer, and catch breaking changes before they merge.
 sidebar:
   order: 2
 ---
 
-import { Steps, Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Steps, Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 The default configuration rebuilds your document on every request — perfect for local development,
-wrong for production. This guide covers the production story: commit the artifact, serve it without
-re-analyzing, gate who can see it, and let CI catch breaking changes.
+wrong for production. This guide covers the production story: generate in CI, commit the artifact,
+serve it without re-analyzing, gate who can see it, and let CI catch breaking changes.
 
 ## The shape of a production setup
 
@@ -30,53 +30,128 @@ re-analyzing, gate who can see it, and let CI catch breaking changes.
    'source' => 'artifact', // re-emits the committed export.path; never re-analyzes
    ```
 
-3. **Gate the viewer route** so only the right people reach it (below).
+3. **Gate the viewer route** so only the right people reach it ([below](#gating-the-viewer)).
 
-4. **Diff on every change** to enforce your versioning policy in CI (below).
+4. **Diff on every change** to enforce your versioning policy in CI ([below](#catching-breaking-changes-in-ci)).
 
 </Steps>
 
+Generation is safe to run in any environment, including a CI container with no services attached:
+the pipeline reads types, so it makes no database queries, sends no mail, and dispatches no jobs.
+
 ## Choosing a viewer source
 
-The default `viewer.source` of `generate` rebuilds the document on every request — right for local, wrong
-for production. In production, serve pre-built bytes instead: `artifact` re-emits the committed
-`export.path` with no analysis at request time, and `cache` serves the `docuccino:cache`-warmed payload
-(falling back to `generate` on a cold cache) for high-traffic viewers. The
-[viewer guide](/laravel/guides/viewer/#source-modes) has the full source-mode table.
+`viewer.source` decides where the served spec comes from. In production, serve pre-built bytes:
+
+| `source` | Where the spec comes from | Use it when |
+| --- | --- | --- |
+| `generate` | Rebuilt on every request | Local development, or a gated internal viewer on a small app |
+| `artifact` | The committed `export.path`, re-emitted | You commit the spec — the usual production answer |
+| `cache` | The `docuccino:cache`-warmed payload | High-traffic or public viewers; you'd rather warm on deploy than commit |
+
+The [viewer guide](/laravel/guides/viewer/#source-modes) has the rest of the viewer's options.
+
+<Aside type="caution" title="`artifact` serves what's on disk">
+`artifact` reads `export.path` at request time. If the file isn't in your deployed release, the
+viewer serves an **empty document** rather than falling back to a build — so commit the artifact, or
+add the export to your build step. A UIR artifact is fine too: it's re-emitted as OpenAPI on the way
+out, so provenance never reaches the browser.
+</Aside>
 
 For `cache`, warm it on deploy and clear it when you regenerate:
 
 ```bash
-php artisan docuccino:cache   # build + store each document's payload
+php artisan docuccino:cache   # build and store each document's payload
 php artisan docuccino:clear   # forget the cached payload
 ```
 
-Set the store with `cache.store` in your config. See the
+Set the backing store with `cache.store`. A cold cache falls back to generating the spec and logs a
+warning, so a forgotten warm-up degrades loudly instead of serving nothing. See the
 [commands reference](/laravel/reference/commands/#docuccinocache).
 
 ## Gating the viewer
 
 By default the viewer is reachable only in your `local` environment. To expose it anywhere else, name a
-`viewer.gate` ability and define it in a service provider — the gate guards the HTML and `.json` routes,
-and you should keep `throttle` in `viewer.middleware` when the spec endpoint is public. The
-[viewer guide](/laravel/guides/viewer/#access-control) walks through it step by step; to disable the
-runtime viewer entirely for a document, set `viewer.route` to `null`.
+`viewer.gate` ability and define it in a service provider — the gate guards the HTML and `.json`
+routes, and you should keep `throttle` in `viewer.middleware` when the spec endpoint is public. The
+[viewer guide](/laravel/guides/viewer/#access-control) walks through it step by step.
 
-## When to regenerate
+To turn the runtime viewer off for one document, set its `viewer.route` to `null` — export still
+works. To turn Docuccino off entirely in an environment, use the master switch:
 
-Regenerate whenever the code that shapes your API changes — new routes, changed validation, new
-resources or error handling. The natural home for that is CI: export, then diff the fresh document
-against the committed one and enforce your versioning policy.
-
-```bash
-php artisan docuccino:diff docs/openapi.json --against=HEAD --enforce
+```dotenv
+DOCUCCINO_ENABLED=false
 ```
 
+With `enabled` false, no viewer routes are registered at all and every command except
+`docuccino:clear` aborts with a non-zero exit — so a production box can ship the package without
+serving or generating anything.
+
+## Catching breaking changes in CI
+
+Regenerate whenever the code that shapes your API changes — new routes, changed validation, new
+resources or error handling. The natural home for that is a pull-request job: export, then diff the
+fresh document against the committed one and hold the changeset to your
+[`versioning`](/laravel/reference/configuration/#versioning) policy.
+
+<Tabs>
+	<TabItem label="The three commands">
+	```bash
+	# 1. Regenerate; fail if anything got worse than a warning.
+	php artisan docuccino:export --fail-on=warning
+
+	# 2. Structural check against the UIR schema.
+	php artisan docuccino:validate
+
+	# 3. Compare with the committed artifact and enforce the versioning policy.
+	php artisan docuccino:diff docs/openapi.json --against=HEAD --enforce
+	```
+	</TabItem>
+	<TabItem label="GitHub Actions">
+	```yaml
+	# .github/workflows/api-docs.yml
+	name: API docs
+	on: pull_request
+
+	jobs:
+	  spec:
+	    runs-on: ubuntu-latest
+	    steps:
+	      - uses: actions/checkout@v4
+	      - uses: shivammathur/setup-php@v2
+	        with:
+	          php-version: '8.4'
+	      - run: composer install --no-interaction --prefer-dist
+	      - run: cp .env.example .env && php artisan key:generate
+
+	      # Diff BEFORE overwriting: --against=HEAD reads the committed artifact from git.
+	      - run: php artisan docuccino:diff docs/openapi.json --against=HEAD --enforce
+	      - run: php artisan docuccino:export --fail-on=warning
+	      - run: php artisan docuccino:validate
+
+	      # The committed artifact must match a fresh build — output is deterministic.
+	      - run: git diff --exit-code docs/openapi.json
+	```
+	</TabItem>
+</Tabs>
+
+`--against=HEAD` reads the *old* side out of git (`git show HEAD:docs/openapi.json`), so the job works
+on a clean checkout without a second build. The final `git diff --exit-code` is the step that keeps
+contributors honest: because identical code produces identical bytes, a stale committed spec fails
+the build.
+
 <Aside type="tip">
-Ship a breaking change without the version bump your [`versioning`](/laravel/reference/configuration/#versioning)
-policy requires, and `--enforce` fails the build — so your spec and your version number never drift
-apart.
+Ship a breaking change without the version bump your `versioning` policy requires, and `--enforce`
+fails the build — so your spec and your version number never drift apart. With `versioning: 'none'`
+the diff still prints, it just never fails.
 </Aside>
+
+### What to commit
+
+An OpenAPI artifact is the friendliest thing to review, and it's what most tooling wants. Commit a
+UIR document instead (`--format=uir`) when you also want stable identities and provenance in the
+repo — a richer diff, at the cost of a noisier file. Either way, pair it with `--provenance=none` if
+you'd rather source line numbers didn't churn in your PRs.
 
 ## Multitenant base URLs
 
@@ -95,6 +170,12 @@ server per tenant:
 The viewer renders the variable as an editable field, and the value flows into try-it-out requests.
 Server variables are emitted verbatim — see [`servers`](/laravel/reference/configuration/#servers) in
 the configuration reference.
+
+<Aside type="caution" title="Multi-tenant apps: check `viewer.middleware`">
+The viewer's routes are registered without a domain. If your `web` middleware group resolves a tenant
+from the hostname, those routes can't satisfy it and the viewer 404s. Override `viewer.middleware` for
+those apps — drop `web`, or add your own domain middleware.
+</Aside>
 
 <CardGrid>
 	<Card title="Commit the output" icon="approve-check">

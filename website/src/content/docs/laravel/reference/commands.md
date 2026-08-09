@@ -1,19 +1,23 @@
 ---
 title: Commands
-description: The docuccino artisan commands — export, validate, diff, cache, clear — with real flag tables.
+description: The five docuccino artisan commands — export, validate, diff, cache and clear — with every flag, default and exit code.
 ---
 
 
-Docuccino registers five artisan commands. Shared behavior:
+Docuccino registers five artisan commands. Every one exits `0` on success and `1` on failure, so
+each is safe to gate a CI job on.
 
-- **Enabled guard.** Every command except `docuccino:clear` aborts (exit 1) when
-  `config('docuccino.enabled') === false`, printing a notice. `clear` runs even when disabled, so
-  you can always flush the cache.
+Shared behavior:
+
+- **Enabled guard.** Every command except `docuccino:clear` aborts with exit `1` when
+  `config('docuccino.enabled')` is `false`, printing
+  `Docuccino is disabled (set docuccino.enabled = true to run this command).` `clear` has no guard,
+  so you can always flush the cache.
 - **`{document?}` argument.** Omit it to run over *every* configured document; pass a key to run
-  one. **`docuccino:diff` is the exception** — with no `{document}` it diffs only the `default`
-  document, not every one. An unknown key errors and exits non-zero. Per-document results aggregate —
-  any single failure fails the whole command.
-- **Diagnostics.** `export`, `validate`, and `cache` print diagnostics grouped by route signature in
+  one. **`docuccino:diff` is the exception** — with no `{document}` it diffs the `default`
+  document only, never all of them. An unknown key errors and exits `1`. Per-document results
+  aggregate: any single document failing fails the whole command.
+- **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
   deterministic order; `diff` and `clear` print none.
 
 ## `docuccino:export`
@@ -34,10 +38,12 @@ docuccino:export
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
 | `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` / `openapi-3.2` | Selects the emitter. `uir` → raw UIR; `openapi-3.1` → the downlevel emitter; anything else → OAS 3.2. An invalid value errors (no silent fallback). |
-| `--out` | path / document's `export.path` | Overrides the output path (resolved absolute against `base_path()`; missing directories created). Forbidden when exporting multiple documents without a `document` argument. |
+| `--out` | path / document's [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when you configure more than one document and pass no `document` argument, since every document would clobber the same file: name a document, or configure a per-document `export.path`. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. |
-| `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail (only meaningful for `--format=uir`). Unrecognized values fall back to `winners`. |
-| `--yaml` | flag / off | Emit YAML instead of JSON. |
+| `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. Unrecognized values fall back to `winners`. Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
+| `--yaml` | flag / off | Emit YAML instead of JSON. Applies to the OpenAPI formats only; `--format=uir` always writes canonical UIR JSON. |
+
+The command prints `Wrote <path> (<format>).` per document, then any diagnostics.
 
 **Committing the output.** Docuccino's output is deterministic — identical code produces
 byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) and diff it in CI — see
@@ -60,8 +66,10 @@ docuccino:validate
 | `document` | configured key / all | Which document(s) to validate. Unknown → exit 1. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | *Additional* severity that also fails. Independent of the schema check. |
 
-**A schema violation always fails**, even with the default `--fail-on=none`. `--fail-on` only adds
-warning/error gating on top. Each valid document prints `<key>: valid against UIR <version>.`.
+**A schema violation always fails**, even with the default `--fail-on=none` — `--fail-on` only adds
+warning/error gating on top. A valid document prints `<key>: valid against UIR <version>.`; an
+invalid one prints `<key>: N schema violation(s).` and lists them as `document.schema-invalid` error
+diagnostics grouped by route.
 
 ## `docuccino:diff`
 
@@ -88,18 +96,93 @@ identities.
 | `--enforce` | flag / off | Enforce the document's [`versioning`](/laravel/reference/configuration/#versioning) policy; a violation exits non-zero. Without it, the diff is informational and exits 0 even with changes. |
 | `--format` | `terminal` \| `json` / `terminal` | `terminal` renders a human changeset (+ a satisfied/violated policy line when enforced); `json` prints a machine payload. |
 
+### Output
+
+`terminal` prints a one-line summary (`4 changes (1 breaking)`, or `No API changes.`), then a
+`BREAKING` block ahead of a `NON-BREAKING` block, each line marked `+` added, `-` removed, `~`
+changed. No color, no timestamps — safe to paste into a PR comment.
+
+`json` prints one object:
+
+```json
+{
+  "document": "default",
+  "breaking": true,
+  "counts": { "total": 4, "breaking": 1 },
+  "changes": [
+    {
+      "kind": "removed",
+      "target": "parameter",
+      "id": "op:invoices.index#query:status",
+      "path": "GET /api/invoices parameters query:status",
+      "breaking": true,
+      "code": "parameter.removed"
+    }
+  ],
+  "policy": {
+    "satisfied": false,
+    "policy": "semver",
+    "code": "major-bump-required",
+    "message": "Breaking changes require a major bump (1.4.0 → 1.5.0).",
+    "requiredVersion": "2.0.0"
+  }
+}
+```
+
+`kind` is `added` \| `removed` \| `changed`; `target` is `operation` \| `parameter` \| `response` \|
+`schema` \| `page`; `code` is a stable classification such as `parameter.removed`,
+`parameter.became-required`, `response.content-removed`, `schema.type-narrowed` or
+`operation.security-added`. A change carrying field-level detail adds a `fields` array. The `policy`
+member appears only with `--enforce`, and `requiredVersion` only on a violation.
+
 ### `--enforce` and versioning policies
 
-The policy is chosen from the document's **`versioning` config value** (not a CLI flag). It
-compares the changeset's breaking-change severity against both documents' `info.version`:
+The policy comes from the document's [**`versioning` config value**](/laravel/reference/configuration/#versioning),
+not a CLI flag. It weighs the changeset's breaking changes against both documents' `info.version`.
+The three policies differ mostly in what a *breaking* changeset demands:
 
-| Policy | Fails when |
-| --- | --- |
-| `semver` | The actual `info.version` bump is insufficient for the change severity (e.g. a breaking change without a major bump). The verdict carries the minimum acceptable version. |
-| `date` | The new version's date identifier does not advance as the changeset requires. |
-| `none` | Never — `--enforce` with `none` always passes on versioning. |
+| `versioning` | A breaking changeset passes when… | Verdict codes |
+| --- | --- | --- |
+| `none` (default) | **Never.** No version bump rescues it — the contract is declared unbreakable. Versions are never inspected. | `breaking-forbidden` |
+| `semver` | The major version went up (`1.4.2` → `2.0.0`). While still at `0.y.z` a minor bump is enough (`0.3.1` → `0.4.0`), per semver §4. | `major-bump-required`, `minor-bump-required`, `invalid-version` |
+| `date` | The new `YYYY-MM-DD` version is strictly later than the old one. A trailing suffix is ignored for the comparison, so `2026-08-01` and `2026-08-01-rc1` compare equal. | `new-date-required`, `invalid-date-version` |
 
-Exit is non-zero when `--enforce` produces an unsatisfied verdict; otherwise the command exits 0.
+A non-breaking changeset passes under all three. Note that `semver` and `date` parse both versions
+first, so an unparseable `info.version` on either side is a violation even when nothing about the API
+changed — CI never green-lights a malformed version.
+
+An unrecognized `versioning` keyword resolves to `none` — a typo fails closed rather than quietly
+waving breaking changes through.
+
+Because `none` is the **default**, a first `--enforce` run rejects every breaking change outright.
+That's usually what you want on an internal API; set `versioning` to `semver` or `date` when you're
+ready to ship breaking changes behind a version bump.
+
+On a violation the verdict carries the lowest version that would satisfy the policy, printed as
+`(require ≥ 2.0.0)` and surfaced as `requiredVersion` in the JSON payload. Only an unsatisfied
+verdict makes `--enforce` exit non-zero; without `--enforce` the diff is informational and exits `0`
+however large the changeset.
+
+### In CI
+
+Commit the artifact, then fail the build when it drifts from the code or breaks the contract without
+a version bump:
+
+```bash
+# 1. The committed spec must match the code.
+php artisan docuccino:export --provenance=none
+git diff --exit-code docs/openapi.json
+
+# 2. The change must be structurally valid…
+php artisan docuccino:validate --fail-on=warning
+
+# 3. …and must not break the contract without the version bump the policy demands.
+php artisan docuccino:diff docs/openapi.json --against=origin/main --enforce
+```
+
+Step 3 reads the artifact as it exists on `main` (`git show origin/main:docs/openapi.json`) and
+diffs it against the document generated from the branch, so the check reports exactly what the pull
+request changes about your API.
 
 ## `docuccino:cache`
 
@@ -109,10 +192,14 @@ Build and cache the API document(s) for the runtime endpoint.
 docuccino:cache {document? : The configured document key (defaults to every document)}
 ```
 
-Builds each selected document and stores its OpenAPI 3.2 payload in the configured Laravel cache
-store (`cache.store`) so the runtime viewer can answer `viewer.source: cache` without a rebuild. No
-`--fail-on`; diagnostics don't affect the exit code. Fails only on a disabled install or unknown
-document key.
+Builds each selected document and stores its OpenAPI 3.2 payload — JSON, default emit options — under
+`docuccino:document:<key>` in the [`cache.store`](/laravel/reference/configuration/#cache) Laravel
+cache store (`null` uses your default store), so the runtime viewer can answer
+[`viewer.source: cache`](/laravel/reference/configuration/#viewer) without a rebuild. Stored
+forever: re-run the command to refresh it, typically as a deploy step.
+
+Prints `Cached document "<key>".` per document, then any diagnostics. There is no `--fail-on` here —
+diagnostics never affect the exit code. Fails only on a disabled install or an unknown document key.
 
 ## `docuccino:clear`
 
@@ -122,16 +209,19 @@ Clear the cached runtime API document(s).
 docuccino:clear {document? : The configured document key (defaults to every document)}
 ```
 
-The inverse of `docuccino:cache`: forgets each selected document's cached payload. Notably it has
-**no enabled guard**, so it runs even when `docuccino.enabled` is `false`. Fails only on an unknown
-document key.
+The inverse of `docuccino:cache`: forgets each selected document's cached payload and prints
+`Cleared cached document "<key>".` It is the one command with **no enabled guard**, so it runs even
+when `docuccino.enabled` is `false` — you can always flush a stale payload out of an installation
+you've just switched off. Fails only on an unknown document key.
 
-## Exit-code summary
+## Exit codes
 
-| Command | Non-zero exit triggers |
+Every command returns `0` on success and `1` on failure. What counts as failure:
+
+| Command | Exits `1` when |
 | --- | --- |
-| `export` | disabled; bad `--format`; `--out` with multiple docs; unknown doc; `--fail-on` severity match |
-| `validate` | disabled; unknown doc; any schema violation (always); `--fail-on` severity match |
-| `diff` | disabled; unknown doc; bad/missing `old`; git/JSON failure; incomparable docs; `--enforce` + unsatisfied verdict |
-| `cache` | disabled; unknown doc |
-| `clear` | unknown doc only (no enabled guard) |
+| `export` | disabled; unknown `--format` value; `--out` given while exporting multiple documents; unknown document key; a diagnostic matches `--fail-on` |
+| `validate` | disabled; unknown document key; **any** schema violation (regardless of `--fail-on`); a diagnostic matches `--fail-on` |
+| `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |
+| `cache` | disabled; unknown document key |
+| `clear` | unknown document key (no enabled guard) |

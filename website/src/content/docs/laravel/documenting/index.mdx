@@ -1,6 +1,6 @@
 ---
 title: Supported integrations
-description: Every built-in integration, what each one documents, what it needs, and how it activates.
+description: Every source Docuccino reads — the six documenting concerns, the packages it supports, how each activates, and how contributions combine.
 sidebar:
   label: Overview
   order: 1
@@ -9,15 +9,62 @@ sidebar:
 import { Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
 
 Integrations are how Docuccino understands the packages and conventions you already use. Each one
-reads a specific part of your app — Form Requests, API Resources, Eloquent models, query builders,
+reads a specific part of your app — form requests, API resources, Eloquent models, query builders,
 authentication — and contributes the matching pieces of your documentation.
 
-Mostly, you never switch them on. Each integration activates the moment it's relevant: the Spatie Data
-support the moment `spatie/laravel-data` is installed, the Passport support the moment Passport is, and
-so on. Anything that builds on Laravel itself — validation, Form Requests, resources, models, enums,
-error responses, rate limiting — is always available. The one exception is
-[Spatie Laravel Permission](/laravel/packages/laravel-permission/), which is opt-in because permission
-names expose your internal authorization structure.
+This section is organized by what you're documenting. Start with the page for the concern in front
+of you; come back to the matrix below when you want to know whether a particular package is
+supported.
+
+## Start with what you're documenting
+
+<CardGrid>
+	<LinkCard
+		title="Requests"
+		href="/laravel/documenting/requests/"
+		description="Path parameters, query parameters, request bodies, and file uploads — from your routes and validation rules."
+	/>
+	<LinkCard
+		title="Responses"
+		href="/laravel/documenting/responses/"
+		description="Success responses from your return types — resources, models, enums, JsonResponse payloads, and 204s."
+	/>
+	<LinkCard
+		title="Resources, models & enums"
+		href="/laravel/documenting/schemas/"
+		description="The reusable component schemas your responses reference."
+	/>
+	<LinkCard
+		title="Error responses"
+		href="/laravel/documenting/errors/"
+		description="4xx and 5xx from your real exception handling, framework defaults, or the RFC 9457 preset."
+	/>
+	<LinkCard
+		title="Authentication"
+		href="/laravel/documenting/authentication/"
+		description="Security schemes and per-operation requirements from your route middleware."
+	/>
+	<LinkCard
+		title="Rate limiting"
+		href="/laravel/documenting/rate-limiting/"
+		description="A 429 response and rate-limit headers from throttle middleware."
+	/>
+</CardGrid>
+
+## How support activates
+
+Mostly, you never switch anything on:
+
+- **Laravel's own conventions are always available** — validation, form requests, response inference,
+  API resources, Eloquent models, enums, error handling, rate limiting. There's no package to detect.
+- **A package-backed integration activates the moment its package is installed.** The Spatie Data
+  support the moment `spatie/laravel-data` is there, the Passport support the moment Passport is.
+- **Everything installed is enabled by default, with one exception.**
+  [Spatie Laravel Permission](/laravel/packages/laravel-permission/) is opt-in, because documenting
+  role and permission names publishes your app's internal authorization taxonomy.
+- **A disabled integration says so.** An integration that's installed but switched off emits one
+  `integration.disabled` info diagnostic per build, so the switch is always discoverable from the
+  output rather than something you have to remember.
 
 <Aside title="Built with the tools you have">
 Every integration on this page is built using the same public extension API that's available to
@@ -28,27 +75,30 @@ an integration can read a package, so can one you write. See
 
 ## The integration matrix
 
-Each row links to its detailed page. "Requires" tells you what has to be installed for the
-integration to activate; "Config" links the knobs that tune it.
+Each row links to the page that covers it. **Requires** is what has to be installed for the
+integration to activate; **Config** is the bag that tunes it. Anything with an `integrations.*` bag
+can also be switched off per document with `integrations.<key>.enabled = false` — see
+[`integrations`](/laravel/reference/configuration/#integrations).
 
-### Request &amp; validation
+### Requests &amp; validation
 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
 | [Validation rules](/laravel/documenting/requests/) | Laravel's validation DSL turned into schema constraints — types, formats, sizes, presence, and enumerations | Built in — always on | — |
-| [Form Requests &amp; inline `validate()`](/laravel/documenting/requests/) | Request bodies and query parameters from a Form Request's `rules()`, or an inline `$request->validate([...])` / `Validator::make(...)` | Built in — always on | — |
-| [Spatie Data](/laravel/packages/spatie-data/) | Data classes as reusable schemas, and request bodies from Data-typed action parameters | [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) | — |
-| [Laravel Actions](/laravel/packages/laravel-actions/) | Action classes as controllers — the resolved `handle()`/`asController()` signature, a request body from `rules()`, a `403` from `authorize()`, and a response body from `jsonResponse()` | [`lorisleiva/laravel-actions`](https://laravelactions.com) | — |
+| [Form requests &amp; inline `validate()`](/laravel/documenting/requests/) | Request bodies and query parameters from a form request's `rules()`, or an inline `$request->validate([...])` / `Validator::make(...)` | Built in — always on | — |
+| [Spatie Data](/laravel/packages/spatie-data/) | Data classes as reusable schemas, and request bodies from Data-typed action parameters | [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) | [`integrations.spatie_data`](/laravel/reference/configuration/#integrations) |
+| [Laravel Actions](/laravel/packages/laravel-actions/) | Action classes as controllers — the resolved `handle()`/`asController()` signature, a request body from `rules()`, a `403` from `authorize()`, and a response body from `jsonResponse()` | [`lorisleiva/laravel-actions`](https://laravelactions.com) | [`integrations.laravel_actions`](/laravel/reference/configuration/#integrations) |
 
 ### Responses, models &amp; schemas
 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
 | [Response inference](/laravel/documenting/responses/) | Success responses from your action return types — resources, models, enums, `JsonResponse` payloads with status codes, and `204` | Built in — always on | — |
-| [API Resources](/laravel/documenting/schemas/) | Response schemas from `JsonResource` shapes — plus Laravel's first-party JSON:API resources | `JsonResource` built in; JSON:API auto-activates on Laravel 13 | [`integrations.api_resources.wrap`](/laravel/reference/configuration/#integrations) |
-| [JSON:API resources (timacdonald)](/laravel/packages/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | — |
-| [Eloquent models](/laravel/documenting/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in — always on | — |
-| [Enums](/laravel/documenting/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and optional codegen name hints | Built in — always on | [`representation.enums.naming`](/laravel/reference/configuration/#representation) |
+| [API resources](/laravel/documenting/schemas/#api-resources) | Response schemas from `JsonResource` shapes, wrapped per the resource's own `$wrap` | Built in | [`integrations.api_resources.wrap`](/laravel/reference/configuration/#integrations) |
+| [First-party JSON:API resources](/laravel/packages/timacdonald-json-api/#which-one-runs) | JSON:API documents from Laravel's own `JsonApiResource`, plus its `include` / `fields[TYPE]` parameters | Laravel 13+ — activates when the `JsonApiResource` class exists | [`integrations.api_resources`](/laravel/reference/configuration/#integrations) |
+| [JSON:API resources (timacdonald)](/laravel/packages/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | [`integrations.timacdonald_json_api`](/laravel/reference/configuration/#integrations) |
+| [Eloquent models](/laravel/documenting/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in | [`integrations.eloquent`](/laravel/reference/configuration/#integrations) |
+| [Enums](/laravel/documenting/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and optional codegen name hints | Built in — always on | [`representation.enums`](/laravel/reference/configuration/#representation) |
 
 ### Error responses
 
@@ -65,9 +115,9 @@ integration to activate; "Config" links the knobs that tune it.
 | [Sanctum](/laravel/documenting/authentication/) | Bearer-token and stateful-cookie security schemes — both modes when a single route carries both | [`laravel/sanctum`](https://laravel.com/docs/sanctum) | [`integrations.sanctum`](/laravel/reference/configuration/#integrations) |
 | [Passport](/laravel/documenting/authentication/) | An OAuth2 security scheme with per-operation scopes read from `scope:` / `scopes:` middleware | [`laravel/passport`](https://laravel.com/docs/passport) | [`integrations.passport.url`](/laravel/reference/configuration/#integrations) |
 | [Spatie Laravel Permission](/laravel/packages/laravel-permission/) | `role:` / `permission:` / `role_or_permission:` middleware as an `x-permissions` member and a description line | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | Opt-in — [`integrations.permission.enabled`](/laravel/reference/configuration/#integrations) |
-| [Rate limiting](/laravel/documenting/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in — always on | — |
-| [Spatie Query Builder](/laravel/packages/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder at any call depth | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/laravel/reference/configuration/#integrations) |
-| [Spatie JSON API Paginate](/laravel/packages/json-api-paginate/) | JSON:API `page[number]` / `page[size]` (or `page[cursor]`) pagination parameters from `jsonPaginate()` | [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | — |
+| [Rate limiting](/laravel/documenting/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in | [`integrations.rate_limit`](/laravel/reference/configuration/#integrations) |
+| [Spatie Query Builder](/laravel/packages/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder several method calls deep | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/laravel/reference/configuration/#integrations) |
+| [Spatie JSON API Paginate](/laravel/packages/json-api-paginate/) | JSON:API `page[number]` / `page[size]` (or `page[cursor]`) pagination parameters from `jsonPaginate()` | [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | [`integrations.json_api_paginate`](/laravel/reference/configuration/#integrations) |
 
 ### Quality
 

@@ -1,6 +1,6 @@
 ---
 title: Requests
-description: Document path parameters, query parameters, request bodies, and file uploads — read statically from your routes and validation rules.
+description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes and validation rules.
 sidebar:
   order: 3
 ---
@@ -49,9 +49,10 @@ public function show(Invoice $invoice): InvoiceResource { /* … */ }
 
 ## Query parameters
 
-Docuccino expresses validation by HTTP verb: **write** verbs (`POST`, `PUT`, `PATCH`, `DELETE`) get a
-request body, while **read** verbs (`GET` and `HEAD`) get query parameters. So the same validation rules
-that document a create endpoint's body document a list endpoint's query string.
+Docuccino expresses validation by HTTP verb: **read** verbs (`GET` and `HEAD`) turn the recovered
+rules into query parameters, and every other verb (`POST`, `PUT`, `PATCH`, `DELETE`) gets a request
+body. So the same validation rules that document a create endpoint's body document a list endpoint's
+query string.
 
 ```php
 // A GET action that validates its input documents query parameters:
@@ -65,6 +66,10 @@ public function index(Request $request): AnonymousResourceCollection
 }
 ```
 
+Each field becomes one query parameter carrying that field's schema; a rule that produced a
+description (`in:` on an enum class, a `required_if`, a date format) puts it on the parameter's
+`description` rather than inside its schema.
+
 List endpoints also get their filters, sorts, includes, and pagination inferred straight from
 [Spatie Query Builder](/laravel/packages/query-builder/) — no annotation needed. To add or patch one
 parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
@@ -72,9 +77,7 @@ parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes
 ## Request bodies
 
 A Form Request's `rules()` — or an inline `$request->validate([...])` / `Validator::make(...)` in the
-action — becomes the request body schema. Rules map to JSON Schema: presence to `required`, types to
-`type`, `min`/`max`/`between`/`size` to length and range keywords, `in`/enum rules to `enum`, dates to
-`format`, and cross-field rules like `confirmed` are honored.
+action — becomes the request body schema.
 
 <Tabs>
 	<TabItem label="Form Request">
@@ -126,13 +129,20 @@ action — becomes the request body schema. Rules map to JSON Schema: presence t
 </Tabs>
 
 Either way documents a body with `customer_id`, `currency` (as an enum), and `due_at`, with the right
-required fields and formats. Because a **Form Request** is a single named source class, its body is
-hoisted to a `#/components/schemas/StoreInvoiceRequest` component and the operation `$ref`s it — so the
-same request class used across several endpoints is one shared, deduped component. An **inline**
-`validate()` / `Validator::make()` body has no source class to name honestly, so it stays inline at the
-operation. To patch a single property of the inferred body — a description, an example — use
-[`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying one keeps its
-body inline for that operation (the patch adjusts a property the shared component must not carry).
+required fields and formats. `requestBody.required` is `true` as soon as at least one field is
+required, and omitted when every field is optional.
+
+Because a **Form Request** is a single named source class, its body is hoisted to a
+`#/components/schemas/StoreInvoiceRequest` component and the operation `$ref`s it — so the same
+request class used across several endpoints is one shared, deduped component. Rename the component
+with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin its diff identity across a
+class rename with [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
+
+An **inline** `validate()` / `Validator::make()` body has no source class to name honestly, so it
+stays inline at the operation. To patch a single property of the inferred body — a description, an
+example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying
+one keeps its body inline for that operation, because the patch adjusts a property the shared
+component must not carry.
 
 <Aside title="Data objects get their own page">
 Type-hint a [Spatie Data](/laravel/packages/spatie-data/) class as your action parameter and Docuccino
@@ -140,13 +150,161 @@ documents the body from its properties and validation attributes instead. That, 
 response schemas, live on the [Spatie Data](/laravel/packages/spatie-data/) page.
 </Aside>
 
+### Where the rules can come from
+
+The rules array is recovered without ever being executed, from any of these:
+
+| Source | How it's found |
+| --- | --- |
+| A Form Request type-hinted on the action | Its `rules()` is analyzed as a constant array. |
+| `$request->validate([...])` in the action | Read from the action body. |
+| `Validator::make($data, [...])` in the action | The second argument is read. |
+| Either of the above inside a helper the action calls | Docuccino descends into your own code (bounded), so a `Validator::make(...)` built in a query or service class one or more hops away is still found. Vendor code is never entered. |
+
+Within a rules array, Docuccino reads pipe strings (`'required|integer'`), arrays of rules
+(`['required', 'integer']`), and the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()`
+and `Rule::unique()`. A field whose rules are a closure, a custom `Rule` object, or a conditional
+descriptor can't be read statically: it's omitted from the schema and raises a
+`validation.rule-unrecoverable` info diagnostic naming the field, so nothing disappears silently.
+
+### Nested and array fields
+
+Dot and wildcard paths build a real schema tree. A `*` segment turns the current node into an array
+and descends into its items, so an `items.*.sku` rule documents `items` as an array of objects with a
+`sku` property:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	public function rules(): array
+	{
+	    return [
+	        'reference'      => ['required', 'string', 'max:32'],
+	        'items'          => ['required', 'array', 'min:1'],
+	        'items.*.sku'    => ['required', 'string'],
+	        'items.*.qty'    => ['required', 'integer', 'min:1'],
+	        'billing.email'  => ['required', 'email'],
+	    ];
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{
+	  "type": "object",
+	  "properties": {
+	    "reference": { "type": "string", "maxLength": 32 },
+	    "items": {
+	      "type": "array",
+	      "minItems": 1,
+	      "items": {
+	        "type": "object",
+	        "properties": {
+	          "sku": { "type": "string" },
+	          "qty": { "type": "integer", "minimum": 1 }
+	        },
+	        "required": ["sku", "qty"]
+	      }
+	    },
+	    "billing": {
+	      "type": "object",
+	      "properties": { "email": { "type": "string", "format": "email" } },
+	      "required": ["email"]
+	    }
+	  },
+	  "required": ["reference", "items", "billing"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Notice `min:1` on `items`: size rules are applied **type-aware**, so the same rule bounds `minItems`
+on an array, `minimum` on a number, and `minLength` on anything else. Rule order in your array
+doesn't matter — Docuccino sorts each field's rules into Laravel's own effect order first, so
+`['max:100', 'integer']` and `['integer', 'max:100']` produce identical output.
+
+## Validation rule reference
+
+This is the complete rule vocabulary. Anything not listed leaves the property permissive and raises a
+`validation.rule-unhandled` info diagnostic — and you can teach Docuccino a new rule by registering a
+`RuleTransformer` (see [Writing an integration](/extending/extension-authoring/)).
+
+### Presence
+
+| Rule | Documented as |
+| --- | --- |
+| `required`, `present` | The field joins the object's `required` list. |
+| `nullable` | The type admits `null` (`type: [string, null]`). |
+| `sometimes` | Keeps the field **out** of `required` — even alongside `required`, because `sometimes\|required` means "required when present". |
+| `filled` | Recognized; no effect on the documented shape. |
+| `required_if`, `required_unless`, `required_with`, `required_with_all`, `required_without`, `required_without_all` | A description note ("Required when `status` is `paid`.") — a conditional requirement has no JSON Schema keyword. |
+
+### Types and formats
+
+| Rule | Documented as |
+| --- | --- |
+| `string` | `string` |
+| `integer`, `int` | `integer` |
+| `numeric` | `number` |
+| `boolean`, `bool` | `boolean` |
+| `array` | `array` |
+| `email` | `string`, `format: email` |
+| `uuid` | `string`, `format: uuid` |
+| `ulid` | `string`, `format: ulid` |
+| `url` | `string`, `format: uri` |
+| `ip` | `string`, `format: ip` |
+| `date` | `string`, `format: date` |
+| `date_format:Y-m-d H:i` | `string`, `format: date-time` when the pattern carries a time token, else `date` — plus "Expected format: …" so the exact contract survives. |
+| `json` | `string` with `contentMediaType: application/json` — the value is a string *carrying* JSON. |
+| `timezone` | `string`, described as "Must be a valid timezone identifier." |
+
+### Sizes and ranges
+
+| Rule | Documented as |
+| --- | --- |
+| `min:n`, `max:n` | `minimum`/`maximum` on a number, `minItems`/`maxItems` on an array, `minLength`/`maxLength` otherwise. |
+| `between:a,b` | Both bounds, same type-aware keywords. |
+| `size:n` | Both bounds pinned to `n`. |
+| `gt:n`, `lt:n` | `exclusiveMinimum` / `exclusiveMaximum` (defaults the field to `number`). |
+| `gte:n`, `lte:n` | `minimum` / `maximum`. |
+| `gt:other_field` (any comparison against a field) | A description note — it's a runtime relationship, not a bound. |
+| `multiple_of:n` | `multipleOf` |
+| `decimal:2`, `decimal:1,4` | `number`, plus a note ("Must have 2 decimal places." / "Must have between 1 and 4 decimal places.") — JSON Schema has no decimal-places keyword. |
+| `digits:8`, `digits_between:2,4`, `min_digits:n`, `max_digits:n` | An anchored digit `pattern` — `^\d{8}$`, `^\d{2,4}$`, `^\d{n,}$`, `^\d{1,n}$`. |
+
+### Choices and patterns
+
+| Rule | Documented as |
+| --- | --- |
+| `in:draft,sent,paid` / `Rule::in(...)` / `Rule::enum(InvoiceStatus::class)` | An `enum` of the allowed values — `integer`-typed when every value is a whole number, else `string`. `Rule::enum()` reads the enum's real cases and names the class in the description; a `->only([...])` / `->except([...])` chain narrows the documented values to match. |
+| `not_in:a,b` | `not: { enum: ["a", "b"] }` |
+| `regex:/^INV-\d+$/` | `pattern`, with the PHP delimiters and flags stripped so it's a bare ECMA-262 regex. |
+| `alpha`, `alpha_num`, `alpha_dash` | The equivalent anchored `pattern`. |
+| `starts_with:INV-` / `ends_with:.pdf` | An anchored `pattern` for a single value; a multi-value set becomes a description ("Must start with one of: …"), since there's no single pattern for it. |
+| `accepted`, `accepted_if` | `boolean` with `const: true` (the `_if` form adds "Must be accepted when …"). |
+| `declined`, `declined_if` | `boolean` with `const: false`. |
+| `list` | `array` |
+| `distinct` | `uniqueItems: true` |
+| `exists`, `unique` | A type only (`string` if the field is otherwise untyped) — a foreign-key lookup isn't a documentable shape. |
+| `confirmed` | Adds the implicit `{field}_confirmation` partner, mirroring the field's type and required flag. |
+
+### Recognized with no schema effect
+
+`bail`, `exclude`, `exclude_if`, `exclude_unless`, `exclude_with`, `exclude_without`,
+`current_password`, `prohibited`, `prohibits`. These are consumed deliberately — they're valid rules
+that say nothing about the wire shape, so they never raise an unhandled-rule diagnostic.
+
 ## File uploads
 
-A `file` or `image` rule documents the field as a binary string; a `file`, `image`, `mimes`,
-`mimetypes`, `extensions`, or `dimensions` rule also flips the request media type to
-`multipart/form-data` automatically, with the rest of the body carried alongside it. A `dimensions`
-rule (image width/height) implies an upload too, and — since OpenAPI has no keyword for pixel
-dimensions — its constraints are recorded as a description note on the field:
+A `file` or `image` rule documents the field as `type: string, format: binary`; a `file`, `image`,
+`mimes`, `mimetypes`, `extensions`, or `dimensions` rule also flips the request media type to
+`multipart/form-data` automatically, with the rest of the body carried alongside it. An `image` rule
+adds "An image file." as the description.
+
+`mimes`, `mimetypes` and `extensions` only mark the request as an upload — OpenAPI expresses an
+accepted file type through the media type, not a schema keyword, so nothing is invented on the
+property. `dimensions` likewise records its width/height constraints as a description note, since there
+is no keyword for pixel dimensions.
 
 ```php
 public function rules(): array
@@ -183,15 +341,34 @@ final class CreateUploadData extends Data
 
 An explicit `file`/`image` rule or attribute is honored as before and never doubled.
 
+## Headers and cookies
+
+Headers and cookies aren't inferable — nothing in a route or a rules array names them — so declare
+them where they matter. [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) and
+[`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable and take the same
+shape:
+
+```php
+#[HeaderParameter(name: 'X-Idempotency-Key', type: 'string', required: true, description: 'Replay guard for retries')]
+#[CookieParameter(name: 'invoice_preview', type: 'string', description: 'Signed preview token')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+To drop a parameter Docuccino inferred but you don't want published, use
+[`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) — optionally scoped to one location,
+`#[IgnoreParam(name: 'trace', in: 'query')]`.
+
 ## When it can't tell
 
 If a rule set can't be resolved statically, Docuccino contributes what it can and leaves the rest to
-your annotations. A [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter),
+your annotations, recording an info diagnostic rather than guessing. A
+[`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter),
 [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), or a docblock always takes
 precedence over what's inferred — you're never fighting the tool.
 
 ## Implicit `422`
 
 Because Docuccino recovers your request's validation rules, it also documents the `422` validation
-error that request produces — so a validated write endpoint carries its `422` automatically. See
+error that request produces — so a validated write endpoint carries its `422` automatically. A read
+route's rules become query parameters rather than a body, so it gets no implicit `422`. See
 [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

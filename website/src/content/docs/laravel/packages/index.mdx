@@ -1,0 +1,99 @@
+---
+title: Package support
+description: The packages Docuccino understands out of the box, what each one contributes, and how to cover anything else with your own extension.
+sidebar:
+  label: Overview
+  order: 0
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Docuccino reads more than plain Laravel. When your app leans on a well-known package to shape its
+requests, responses, or query strings, a dedicated integration reads that package's own vocabulary —
+so the documentation matches the JSON your app really sends and accepts.
+
+**"Supported" means zero setup.** Install Docuccino, and each integration below activates the moment
+its package is present in your app. There is nothing to register, no annotations to add, and no
+per-package config to write.
+
+The single exception is [Spatie Laravel Permission](/laravel/packages/laravel-permission/), which is
+**opt-in**: role and permission names are your app's internal authorization taxonomy, and publishing
+them into a public spec should be a deliberate choice. When it's installed but off, every build tells
+you so with one `integration.disabled` info diagnostic pointing at the switch.
+
+## Is my package supported?
+
+<CardGrid>
+	<LinkCard
+		title="Spatie Data"
+		href="/laravel/packages/spatie-data/"
+		description="Data classes as reusable component schemas and as request bodies — Hidden, Optional, Lazy, name mapping, wrapping, rules() overrides, and collections."
+	/>
+	<LinkCard
+		title="Spatie Query Builder"
+		href="/laravel/packages/query-builder/"
+		description="filter[…], sort, include, fields[…] and pagination parameters, recovered even when the query is assembled several method calls deep."
+	/>
+	<LinkCard
+		title="Laravel Actions"
+		href="/laravel/packages/laravel-actions/"
+		description="Action classes as controllers — the dispatched method's signature, a body from rules(), a 403 from authorize(), a body from jsonResponse()."
+	/>
+	<LinkCard
+		title="JSON:API resources"
+		href="/laravel/packages/timacdonald-json-api/"
+		description="timacdonald/json-api resources as JSON:API documents, plus the include and fields query parameters."
+	/>
+	<LinkCard
+		title="Spatie JSON API Paginate"
+		href="/laravel/packages/json-api-paginate/"
+		description="page[number] / page[size] (or page[cursor]) parameters and the matching paginator envelope, from jsonPaginate()."
+	/>
+	<LinkCard
+		title="Spatie Laravel Permission"
+		href="/laravel/packages/laravel-permission/"
+		description="role: / permission: / role_or_permission: middleware as an x-permissions member and a requirement line. Opt-in."
+	/>
+</CardGrid>
+
+## Versions
+
+Docuccino is tested against these major versions on PHP 8.3+ and Laravel 12 or 13:
+
+| Package | Supported |
+| --- | --- |
+| [`spatie/laravel-data`](https://spatie.be/docs/laravel-data) | `^4.0` |
+| [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | `^7.0` |
+| [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | `^2.0` |
+| [`lorisleiva/laravel-actions`](https://laravelactions.com) | `^2.0` |
+| [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | `^6.0` |
+| [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | `^1.0` |
+
+Docuccino never requires any of them: each integration sits behind a class-presence check, so an app
+without the package pays nothing and sees nothing.
+
+## Turning one off
+
+Every integration accepts an `enabled` switch, resolved per document — useful when a package is
+installed for one part of your app but you'd rather its parameters stayed out of a particular
+document:
+
+```php
+// config/docuccino.php → documents.default.integrations
+'query_builder' => ['enabled' => false],
+```
+
+See the [`integrations` reference](/laravel/reference/configuration/#integrations) for all eleven
+toggleable bags and the extra options a few of them accept.
+
+<Aside title="Not on the list?">
+Laravel's own building blocks are already covered: validation and Form Requests, API Resources,
+Eloquent models, enums, error responses and rate limiting are always on, and Sanctum and Passport
+activate with their packages just like the six above. [Supported
+integrations](/laravel/documenting/) is the full matrix.
+
+For anything else, write your own. Every integration on this page is built with exactly the public
+extension API you have: read a class, contribute a schema or a parameter, record a diagnostic. The
+[extension authoring guide](/extending/extension-authoring/) walks one end to end and includes a
+copyable skeleton you can ship as its own composer package.
+</Aside>

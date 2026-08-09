@@ -1,29 +1,55 @@
 ---
 title: Authentication
-description: Auto-configure Sanctum and Passport security schemes from your route middleware.
+description: Document security schemes and per-operation requirements — auto-configured from Sanctum and Passport middleware, or declared in config and attributes.
 sidebar:
   order: 6
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 Docuccino detects how your routes are protected from their middleware and documents the appropriate
-security schemes and requirements. If you'd rather configure schemes yourself, declaring any
-`security.schemes` in your config takes over and these auto-configurations step aside. Routes marked
-[`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) are always documented as public.
+security schemes and requirements. There are three ways an operation ends up with `security`, and they
+compose in a fixed order:
+
+| Source | Layer | When it applies |
+| --- | --- | --- |
+| A **package integration** (Sanctum, Passport) | integration | Its package is installed, the route's middleware matches, and you declared no `security.schemes` of your own. |
+| Your **`security` config** | integration / config | You declared `schemes` — which also stands the integrations down — plus a `default` requirement for auth-detected routes, or a `document`-wide one. |
+| An **attribute** (`#[Security]`, `#[OptionallyAuthenticated]`, `#[Unauthenticated]`) | attribute | Always wins over both, per operation. |
+
+Routes marked [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) are documented as
+public (`security: []`) whatever the middleware says.
+
+## Scheme names
+
+Whichever route documents them, schemes are registered in `components.securitySchemes` under stable
+names — the names an operation's `security` requirement and your own `#[Security]` attributes
+reference:
+
+| Name | Type | Registered by |
+| --- | --- | --- |
+| `sanctumToken` | `http` / `bearer` | Sanctum, on a route with a token guard |
+| `sanctumStateful` | `apiKey` in `cookie` | Sanctum, on a route with the stateful-frontend middleware *and* an auth guard |
+| `passport` | `oauth2` | Passport, on a Passport-protected route |
+| whatever you called it | anything | Your `security.schemes` config |
 
 ## Sanctum
 
 Activates when [Laravel Sanctum](https://laravel.com/docs/sanctum) is installed. Docuccino documents
 both of Sanctum's modes based on the middleware a route uses:
 
-- **Token** (`auth:sanctum`) → an HTTP bearer scheme.
-- **Stateful SPA** (`EnsureFrontendRequestsAreStateful` **alongside an auth guard**) → a cookie-based
-  scheme, with the CSRF/XSRF handshake explained in prose. Because `statefulApi()` prepends that
-  middleware to the whole `api` group, the cookie scheme is documented only on routes that also carry
-  an auth guard — public routes (login, register) are left unsecured, not falsely cookie-protected.
+- **Token** → an HTTP bearer scheme (`sanctumToken`). Detected from `auth:sanctum`, the bare `sanctum`
+  alias, an `abilities:` / `ability:` middleware, or **any** `auth:<guard>` whose configured driver is
+  `sanctum` — so a custom `auth:mobile` guard on the Sanctum driver is recognized, and multi-guard
+  lists (`auth:web,sanctum`) work.
+- **Stateful SPA** → a cookie-based scheme (`sanctumStateful`), documented when
+  `EnsureFrontendRequestsAreStateful` is present **alongside an auth guard**. Because `statefulApi()`
+  prepends that middleware to the whole `api` group, requiring the guard too means public routes
+  (login, register) are left unsecured rather than falsely cookie-protected. OpenAPI can't model the
+  CSRF handshake structurally, so the scheme's description explains the `X-XSRF-TOKEN` flow.
 
-The middleware alone is enough — you write no security config:
+A route that supports both — the common Sanctum reality — gets an **OR-list**: either credential
+satisfies it. The middleware alone is enough; you write no security config:
 
 <Tabs>
 	<TabItem label="Your code">
@@ -37,14 +63,19 @@ The middleware alone is enough — you write no security config:
 	```json
 	"components": {
 	  "securitySchemes": {
-	    "sanctumToken": { "type": "http", "scheme": "bearer" }
+	    "sanctumToken": {
+	      "type": "http",
+	      "scheme": "bearer",
+	      "description": "Sanctum API token authentication: send a personal access / API token as a `Bearer` token in the `Authorization` header."
+	    }
 	  }
 	}
 	```
 	```json
+	// On the operation. With statefulApi() in play the route supports both modes, so this becomes
+	// [ { "sanctumToken": [] }, { "sanctumStateful": [] } ] — either one satisfies it.
 	"security": [ { "sanctumToken": [] } ]
 	```
-	The scheme lands in `components`, and each protected operation carries the matching requirement.
 	</TabItem>
 </Tabs>
 
@@ -54,37 +85,50 @@ Tune which schemes are exposed:
 // config/docuccino.php → documents.default.integrations
 'sanctum' => [
     'modes'  => ['token', 'stateful'], // which schemes to expose (default: both)
-    'cookie' => 'myapp_session',        // stateful cookie name (default: your session cookie)
+    'cookie' => 'myapp_session',        // stateful cookie name (default: your session.cookie)
 ],
 ```
+
+`modes` is intersected with what each route actually supports, so it narrows rather than invents —
+which makes it a clean audience switch across [multiple documents](/laravel/guides/multiple-documents/):
+a public document can list only `token` while an internal one lists both.
 
 ### Token abilities
 
 Sanctum's `abilities:` (all-of) and `ability:` (any-of) middleware — and the deprecated
 `CheckScopes` / `CheckForAnyScope` class forms — describe which token abilities a route needs. Since
 the `sanctumToken` scheme is an HTTP bearer token, OpenAPI can't carry abilities as scopes, so
-Docuccino surfaces them as an `x-abilities` extension member and a "Requires token ability: …"
-description line. Abilities checked in the action body (`$request->user()->tokenCan(…)`) can be
-declared with [`#[Abilities]`](/laravel/reference/attributes/#abilities).
+Docuccino surfaces them as an `x-abilities` extension member and appends a requirement line to the
+operation's description ("Requires token abilities: invoices:create, invoices:send"). Abilities checked
+in the action body (`$request->user()->tokenCan(…)`) can be declared with
+[`#[Abilities]`](/laravel/reference/attributes/#abilities), which is an all-of requirement:
+
+```php
+#[Abilities('invoices:create', 'invoices:send')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
 
 ```json
-"/api/posts": { "post": {
-  "x-abilities": [ { "match": "all", "abilities": ["posts:create", "posts:publish"] } ]
+"/api/invoices": { "post": {
+  "x-abilities": [ { "match": "all", "abilities": ["invoices:create", "invoices:send"] } ]
 } }
 ```
 
 ## Passport
 
 Activates when [Laravel Passport](https://laravel.com/docs/passport) is installed. A route is
-documented with the OAuth2 scheme when it carries `scope:` / `scopes:` or client-credentials
+documented with the `passport` OAuth2 scheme when it carries `scope:` / `scopes:` or client-credentials
 middleware, **or** when one of its `auth:<guard>` middleware resolves to a `passport`-**driver**
 guard. Detection is driver-based, from `config('auth.guards')` — so a custom-named guard
 (`auth:partner` on the passport driver) is recognized, a guard on a `token`/`sanctum` driver is not
-mistaken for Passport, and multi-guard lists (`auth:web,api`) work. The always-available
-authorization-code and client-credentials flows are emitted, plus the password and implicit flows
-**only when the app opted into them** (`Passport::enablePasswordGrant()` / `enableImplicitGrant()`) —
-so the docs never advertise a grant the server rejects. The flow scope map is your real scope
-catalog from `Passport::tokensCan()`, and the endpoints honor `config('passport.path')`.
+mistaken for Passport, and multi-guard lists (`auth:web,api`) work.
+
+The authorization-code and client-credentials flows are always emitted; the password and implicit flows
+appear **only when the app opted into them** (`Passport::enablePasswordGrant()` /
+`enableImplicitGrant()`) — so the docs never advertise a grant the server rejects. The flow endpoints
+honor `config('passport.path')`, and the flow scope map is your real scope catalog from
+`Passport::tokensCan()`. Any scope a route references that the catalog is missing is added (described by
+its own id) so the document stays valid; an app that never called `tokensCan()` gets a single `*` scope.
 
 Per-operation scopes are read from the middleware and modeled by their Laravel semantics:
 `scopes:` (`CheckScopes`) requires **all** listed scopes (one requirement), while `scope:`
@@ -100,6 +144,41 @@ a bare `client` with no scope is still marked protected.
 ],
 ```
 
+## Declaring security yourself
+
+Some apps don't use Sanctum or Passport — a hand-rolled JWT guard, an API key header, an external
+identity provider. Declare the schemes in config and Docuccino publishes them verbatim, in full OpenAPI
+breadth (`http` bearer/basic, `apiKey` in header/query/cookie, `oauth2` with any flows,
+`openIdConnect`):
+
+```php
+// config/docuccino.php → documents.default
+'security' => [
+    // Routes whose middleware matches this wildcard get the `default` requirement below.
+    'auto_detect_middleware' => 'auth*',
+
+    'schemes' => [
+        'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
+        'apiKey' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
+    ],
+
+    // The per-operation requirement applied to routes matched by auto_detect_middleware.
+    'default' => [['bearer' => []]],
+],
+```
+
+Two things worth knowing:
+
+- `auto_detect_middleware` on its own does nothing visible — it decides **which** routes are
+  "protected", and `default` decides **what** requirement they carry. Set both. The pattern is a
+  wildcard matched against each route's middleware strings, so the shipped `auth*` covers `auth`,
+  `auth:web`, `auth:sanctum` and friends.
+- Declaring any `schemes` stands the Sanctum and Passport integrations down entirely — explicit config
+  wins, so you never get a surprise second scheme alongside your own.
+
+Use `security.document` instead of `default` for a requirement that applies to the whole document; see
+the [configuration reference](/laravel/reference/configuration/#security) for the full key list.
+
 ## Declaring security in code
 
 Middleware detection covers the common cases, but some requirements live where static analysis can't
@@ -108,8 +187,9 @@ those with attributes; they apply at the attribute precedence layer, so they win
 inferred from middleware.
 
 - [`#[Security(scheme, scopes)]`](/laravel/reference/attributes/#security) names a requirement against
-  a registered scheme (from `security.schemes` config or an integration). It's repeatable — stack it
-  to model an OR-list where any one alternative satisfies the operation.
+  a registered scheme (from `security.schemes` config or an integration). Several scopes in one
+  attribute are an all-of; the attribute is repeatable, so stacking it models an OR-list where any one
+  alternative satisfies the operation.
 - [`#[OptionallyAuthenticated]`](/laravel/reference/attributes/#optionallyauthenticated) marks an
   endpoint usable anonymously **or** authenticated, emitting `security: [{}, …]` — the empty
   requirement followed by whatever was declared or inferred.
@@ -141,6 +221,11 @@ inferred from middleware.
 	</TabItem>
 </Tabs>
 
+<Aside title="Name a scheme that exists">
+`#[Security]` references a scheme by the name it's registered under. Use your own key from
+`security.schemes`, or one of the integration names — `sanctumToken`, `sanctumStateful`, `passport`.
+</Aside>
+
 ## Authorization: roles & permissions
 
 Authenticating a request is one thing; *authorizing* it — the `role:` / `permission:` middleware from
@@ -153,9 +238,9 @@ names expose your internal authorization taxonomy. See
 | Integration | Option | Default | Effect |
 | --- | --- | --- | --- |
 | _any_ | `enabled` | `true` | Turn the integration on/off for this document. |
-| `sanctum` | `modes` | both | Which Sanctum schemes to expose. |
-| `sanctum` | `cookie` | your session cookie | Stateful cookie name. |
-| `passport` | `url` | your app URL | OAuth2 flow base URL. |
+| `sanctum` | `modes` | both | Which Sanctum schemes to expose, intersected with each route's real support. |
+| `sanctum` | `cookie` | your `session.cookie` | Stateful cookie name. |
+| `passport` | `url` | your `app.url` | OAuth2 flow base URL. |
 
 Each integration is a no-op when its package isn't installed, or when a route has no matching
 middleware. Sanctum and Passport stay on by default — token schemes and OAuth scopes *are* the public

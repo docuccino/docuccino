@@ -33,12 +33,14 @@ into changelogs, mock servers, and agent-facing tool schemas.
 
 ```bash
 composer require docuccino/laravel
-php artisan vendor:publish --tag="docuccino-config"
-php artisan docuccino:export            # → docs/openapi.json
+composer require --dev larastan/larastan   # powers type inference
+php artisan docuccino:export               # → docs/openapi.json
 ```
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
-expose it elsewhere). Full walkthrough: **[Getting started](https://docs.docuccino.app/laravel/getting-started/)**.
+expose it elsewhere). Publishing the config (`php artisan vendor:publish --tag="docuccino-config"`) is
+optional — the defaults are live either way. Full walkthrough:
+**[Getting started](https://docs.docuccino.app/laravel/getting-started/)**.
 
 ## Why Docuccino
 
@@ -46,7 +48,7 @@ expose it elsewhere). Full walkthrough: **[Getting started](https://docs.docucci
   handling (render callbacks, `render()`, `Responsable::toResponse()`), analysed with the thrown
   type narrowed so `instanceof` branches resolve. Error docs are automatic, zero config.
 - **Deep Query Builder chains** — `allowedFilters`/`allowedSorts`/`allowedIncludes` are recovered by
-  constant-folding through helper methods at *any* chain depth, and pagination params appear when
+  constant-folding through helper methods several calls deep, and pagination params appear when
   the call graph reaches a paginating terminal. No hand-written `#[QueryParameter]` lists.
 - **Semantic diff you can gate on** — `docuccino:diff --enforce` compares two artifacts over stable
   identities and enforces a versioning policy (semver / date / none); a breaking change without the

@@ -1,62 +1,80 @@
 ---
 title: Installation
-description: Install Docuccino, publish its config, and understand what it adds to your Laravel app.
+description: Install Docuccino in a Laravel app, publish its config, and export your first OpenAPI document.
 sidebar:
   order: 1
 ---
 
-import { Steps, Card, CardGrid, FileTree, Aside } from '@astrojs/starlight/components';
+import { Steps, Card, CardGrid, FileTree, Aside, LinkCard } from '@astrojs/starlight/components';
 
 Docuccino generates OpenAPI documentation from the real shape of your Laravel application. You
-install one package; it reads your routes, controllers, requests, resources, and exception handling
-and produces an accurate document — with almost no annotation to start.
+install one package; it reads your routes, controllers, form requests, resources, models, and
+exception handling and produces an accurate document — with no annotations to start.
 
 ## Requirements
 
 <CardGrid>
 	<Card title="PHP 8.3+" icon="php" />
-	<Card title="Laravel 12+" icon="laravel" />
+	<Card title="Laravel 12 or 13" icon="laravel" />
 </CardGrid>
-
-Type inference is powered by static analysis and is on by default. If it can't start in your
-environment, Docuccino degrades gracefully — you still get documentation from your annotations and
-docblocks — but the richest results (inferred responses, detected query parameters, automatic error
-responses) come with inference running.
 
 ## Install
 
 <Steps>
 
-1. Require the package with Composer:
+1. Require the package:
 
    ```bash
    composer require docuccino/laravel
    ```
 
-2. Publish the configuration file:
+2. Add Larastan, which powers type inference:
 
    ```bash
-   php artisan vendor:publish --tag="docuccino-config"
+   composer require --dev larastan/larastan
    ```
 
-   This writes `config/docuccino.php`. The defaults document every `api/*` route, export to
-   `docs/openapi.json`, and serve an interactive viewer at `/docs/api`.
+   Docuccino's inference engine runs PHPStan with Larastan's model and container knowledge to read
+   the real types in your code. PHPStan itself arrives with Docuccino; Larastan is the piece that
+   teaches it Laravel.
 
-3. Generate your first document:
+3. Publish the config file — optional, but you'll want it soon:
+
+   ```bash
+   php artisan vendor:publish --tag=docuccino-config
+   ```
+
+   This writes `config/docuccino.php`. The package's defaults are already active without it, so
+   publish when you want to change something. Out of the box they document every `api/*` route in
+   your own application, export to `docs/openapi.json`, and serve an interactive viewer at
+   `/docs/api`.
+
+4. Export your first document:
 
    ```bash
    php artisan docuccino:export
    ```
 
+   ```plaintext
+   Wrote /home/you/invoices-api/docs/openapi.json (openapi-3.2).
+   ```
+
 </Steps>
 
-That's it — open `docs/openapi.json`, or visit `/docs/api` in your browser (it's available in your
-local environment out of the box). The [next page](/laravel/getting-started/first-export/) walks through
-what happened and how to view and refine it.
+That's it. Open `docs/openapi.json`, or visit `/docs/api` in your browser — the bundled viewer is
+live in your `local` environment out of the box, and closed everywhere else until you name a gate.
+[Your first export](/laravel/getting-started/first-export/) walks through what Docuccino read and
+what it produced.
+
+<Aside type="caution" title="Don't skip step 2">
+If the engine can't boot — `larastan/larastan` missing being the usual reason — inference degrades to
+off rather than failing the build. Routes, path parameters, validation rules, middleware-driven
+security, attributes, and docblocks all keep working, but inferred response shapes, detected query
+parameters, and automatic error responses go quiet. That keeps a CI export safe, at the cost of the
+symptom being thin output rather than an error message.
+</Aside>
 
 ## What gets added
-
-Installing Docuccino wires up a few things for you:
 
 <CardGrid>
 	<Card title="Artisan commands" icon="seti:powershell">
@@ -68,7 +86,7 @@ Installing Docuccino wires up a few things for you:
 		`/docs/api.json`, served from your own app — no external CDN required.
 	</Card>
 	<Card title="Automatic integrations" icon="puzzle">
-		Support for Form Requests, API Resources, Eloquent models, enums, Spatie Data, Spatie Query
+		Support for form requests, API resources, Eloquent models, enums, Spatie Data, Spatie Query
 		Builder, Sanctum, Passport, and more — each activates only when you use it.
 	</Card>
 	<Card title="Extension points" icon="setting">
@@ -85,11 +103,25 @@ Installing Docuccino wires up a few things for you:
   - docuccino.php    the single config file — documents, routes, security, viewer
 - docs/
   - openapi.json     your exported document (commit this)
+- storage/
+  - docuccino/       engine scratch files and the fragment cache (add to .gitignore)
 
 </FileTree>
 
 <Aside type="tip" title="Commit the output">
 Docuccino's output is deterministic — identical code always produces byte-for-byte identical
-output. Commit `docs/openapi.json` and you get clean, reviewable diffs on every change, plus the
-ability to gate CI with [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
+output, with no timestamps, absolute paths, or shuffling. Commit `docs/openapi.json` and you get
+clean, reviewable diffs on every change, plus the ability to gate CI with
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 </Aside>
+
+## Turning it off
+
+Set `DOCUCCINO_ENABLED=false` and Docuccino goes completely dormant: the viewer routes are never
+registered and the artisan commands refuse to run. It's the switch to reach for on a production
+host that has no business generating documentation.
+
+<CardGrid>
+	<LinkCard title="Your first export" href="/laravel/getting-started/first-export/" description="See what Docuccino read from your code, and what it emitted." />
+	<LinkCard title="Configuration reference" href="/laravel/reference/configuration/" description="Every option in config/docuccino.php, with its default." />
+</CardGrid>

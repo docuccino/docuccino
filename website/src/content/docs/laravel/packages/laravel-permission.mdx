@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Documents the `role:`, `permission:`, and `role_or_permission:` middleware from
 [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) — the authorization your routes
@@ -14,24 +14,30 @@ require, surfaced in the spec.
 ## Opt-in — off by default
 
 Unlike every other integration, this one is **off by default, even when the package is installed**.
-Role and permission names are your application's internal authorization taxonomy; documenting them
-publishes that structure into your public API spec. So enabling it is a deliberate choice, made per
-document:
+Role and permission names are your application's internal authorization taxonomy: `invoices.approve`,
+`finance-admin`, `can-export-payroll`. Publishing them puts a map of your internal structure into a
+document you may hand to customers, so Docuccino won't do it unless you say so — per document:
 
 ```php
 // config/docuccino.php → documents.default.integrations
 'permission' => ['enabled' => true],
 ```
 
+Per document is the useful granularity. A partner-facing document can leave it off while your
+internal one turns it on, from the same codebase — see
+[Multiple documents](/laravel/guides/multiple-documents/).
+
 When the package is installed but the integration is left off, the build emits a single
 `integration.disabled` info diagnostic per document pointing you at the switch — so the opt-in is
 discoverable without publishing anything.
 
-:::note
-[Sanctum](/laravel/documenting/authentication/) and [Passport](/laravel/documenting/authentication/)
-stay on by default: token schemes and OAuth scopes *are* the public contract, so they leak nothing
-internal. Only permission names do — which is why this one flips.
-:::
+<Aside type="note" title="Why this one and not Sanctum or Passport">
+[Sanctum](/laravel/documenting/authentication/#sanctum) and
+[Passport](/laravel/documenting/authentication/#passport) stay on by default: token schemes and OAuth
+scopes *are* the public contract — a client has to know which scope to request, so documenting them
+leaks nothing. Permission names are the opposite: the client never sends one. That asymmetry is the
+whole rule.
+</Aside>
 
 ## What it documents
 
@@ -61,17 +67,57 @@ Once enabled, a route's permission middleware is documented two ways:
 	</TabItem>
 </Tabs>
 
-With the integration enabled, this documents the operation with the structured `x-permissions` member
-and the matching description line.
+Every middleware form the package ships is recognized, including the `::using()` FQCN style its own
+docs promote:
 
-A pipe-separated list is **any-of** — the caller needs any one of the listed roles/permissions, not
-all of them — so the description says so explicitly. `permission:invoices.view|invoices.manage`
-becomes *"Requires any of these permissions: invoices.view, invoices.manage"*, and the `::using()`
-FQCN forms (`PermissionMiddleware::using(...)`) are recognized the same as the short aliases.
+| Middleware | `x-permissions` entry | Description line |
+| --- | --- | --- |
+| `role:admin` | `{ "type": "role", "values": ["admin"] }` | Requires role: admin |
+| `permission:invoices.view` | `{ "type": "permission", "values": ["invoices.view"] }` | Requires permission: invoices.view |
+| `role_or_permission:editor\|invoices.edit` | `{ "type": "role_or_permission", "values": ["editor", "invoices.edit"] }` | Requires any of these roles or permissions: editor, invoices.edit |
+| `permission:invoices.view\|invoices.manage` | `{ "type": "permission", "values": ["invoices.view", "invoices.manage"] }` | Requires any of these permissions: invoices.view, invoices.manage |
+| `permission:invoices.view,web` | `{ "type": "permission", "values": ["invoices.view"], "guard": "web" }` | Requires permission: invoices.view |
+| `PermissionMiddleware::using('invoices.view')` | Same as `permission:invoices.view` | Same |
 
-An optional guard suffix (`permission:invoices.view,web`) is captured too: the guard name is carried on
-the `x-permissions` entry as a `guard` member, so a requirement scoped to a specific auth guard stays
-unambiguous.
+A pipe-separated list is **any-of** — the caller needs any one of the listed roles or permissions, not
+all of them — so the wording says so explicitly rather than reading as a required set. An optional
+guard suffix is carried on the entry as a `guard` member, so a requirement scoped to a specific auth
+guard stays unambiguous.
+
+A route carrying several of these middleware gets one `x-permissions` entry per middleware, in route
+order, and one description line each separated by a blank line.
+
+<Aside type="caution" title="Your prose wins, so `x-permissions` is the reliable signal">
+The description line is contributed at the integration layer, which sits *below* docblocks and
+attributes in [precedence](/laravel/documenting/#how-contributions-combine). So if the operation's
+description already comes from somewhere higher — the paragraph after your docblock's summary line, or
+an attribute — that prose wins and the generated requirement line doesn't appear. `x-permissions` is
+emitted either way.
+
+Want the requirement in the human-readable description of an already-documented operation? Write it
+into the docblock yourself. Want it machine-readable everywhere? You already have it.
+</Aside>
+
+An operation marked [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) is skipped
+entirely: it documents no security requirement, so an authorization line beside `security: []` would
+contradict itself.
+
+## Reading `x-permissions`
+
+The member is a list of objects, so tooling can consume it without parsing prose:
+
+```json
+"x-permissions": [
+  { "type": "role", "values": ["finance-admin"] },
+  { "type": "permission", "values": ["invoices.approve", "invoices.manage"], "guard": "api" }
+]
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `role` \| `permission` \| `role_or_permission` | Which middleware produced it |
+| `values` | array of strings | The names demanded — **any one** of them satisfies the requirement |
+| `guard` | string, optional | Present only when the middleware named a guard |
 
 ## Configuration
 

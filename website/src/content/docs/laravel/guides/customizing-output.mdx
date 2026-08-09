@@ -50,6 +50,7 @@ actions:
   - target: "$.paths['/api/v1/invoices'].get.summary"
     update: List paginated invoices
   - target: "$.paths['/api/v1/invoices'].get.parameters[?(@.name=='internal_cursor')]"
+    description: Internal pagination cursor, not part of the public contract.
     remove: true
 ```
 
@@ -61,13 +62,13 @@ exactly one operation:
   replaces a scalar or array outright.
 - **`remove`** deletes the targeted node.
 
-An action that declares neither `update` nor `remove` is invalid: rather than guess, Docuccino skips
-the **whole overlay file** at parse time and records one `overlay.invalid` warning naming it.
+An action's optional `description` is a note to your future self: Docuccino reads it and keeps it out
+of the document, so it's the right place to record *why* a correction exists.
 
 ### Where overlays live
 
-Point the document's `overlays` config at one or more globs. Files are applied in glob order, and the
-actions inside each file in the order written:
+Point the document's `overlays` config at one or more globs, relative to your application root. Files
+are applied in glob order, and the actions inside each file in the order written:
 
 ```php
 // config/docuccino.php — documents.default
@@ -75,6 +76,23 @@ actions inside each file in the order written:
     'resources/docs/overlays/*.yaml',
 ],
 ```
+
+### The golden rule: overlays edit what already exists
+
+Overlay 1.0 targets *nodes in a document*. A target that resolves to nothing is not an instruction to
+create it — the action simply has no effect (and Docuccino warns). So when you want to add something,
+**merge onto the parent that exists** rather than targeting the key that's missing:
+
+| You want to add | Don't target | Do target |
+| --- | --- | --- |
+| A `description` on an operation | `….get.description` | `….get`, with `update: {description: …}` |
+| An `example` on a response body | `….content['application/json'].example` | `….content['application/json']`, with `update: {example: …}` |
+| A `DELETE` on a documented path | `….['/api/v1/invoices'].delete` | `….['/api/v1/invoices']`, with `update: {delete: {…}}` |
+
+The one thing this pattern doesn't stretch to is a **whole new path**. `$.paths` and the document root
+are the two nodes that can't carry an overlay's provenance record, so targeting either produces a
+document that fails schema validation (`document.schema-invalid`) rather than a new path. Synthesizing
+paths is a [`DocumentTransformer`](#document-wide-changes) job.
 
 ### When they apply — and what wins
 
@@ -85,8 +103,8 @@ layer in Docuccino's precedence chain:
 fallback(5) < inference(10) < integration(20) < docblock(30) < attribute(40) < overlay(45) < config(50)
 ```
 
-So an overlay **beats** anything inferred, integrated, or written as a docblock or attribute — and
-**loses** only to explicit config. Because merging is field-by-field, an overlay can rewrite one
+So an overlay **beats** anything inferred, integrated, or written as a docblock or attribute: on the
+nodes it targets, it has the last word. Because merging is field-by-field, an overlay can rewrite one
 field of an operation without discarding the rest of it.
 
 Every value an overlay changes is recorded in that node's provenance with `producer: overlay`, and
@@ -101,40 +119,65 @@ real specification, with no ambiguous matches:
 | Selector | Example | Matches |
 | --- | --- | --- |
 | Root | `$` | The document root. |
-| Dot member | `$.info.title` | A named object member. |
-| Bracket member | `$.paths['/api/v1/invoices']` | A member whose key needs quoting (slashes, dots). |
+| Dot member | `$.info.title` | A named object member. Letters, digits, `_` and `-` only. |
+| Bracket member | `$.paths['/api/v1/invoices']` | A member whose key needs quoting — slashes, dots, spaces. |
 | Array index | `…parameters[0]` | An array element by position. |
-| Equality filter | `…parameters[?(@.name=='status')]` | List elements where a string field equals a value. |
+| Equality filter | `…parameters[?(@.name=='status')]` | Every list element whose string field equals a value. |
+
+Bracket notation is what you'll reach for most: path keys (`'/api/v1/invoices'`), status codes
+(`responses['200']`) and media types (`content['application/json']`) all contain characters dot
+notation can't express.
 
 Anything outside this subset — wildcards (`*`), recursive descent (`..`), array slices (`[1:3]`),
 unions, or any comparison other than `==` — raises an error diagnostic rather than matching silently.
-A target that matches nothing raises a warning, never a silent no-op.
+
+### Diagnostics
+
+Nothing about an overlay fails quietly. Every problem shows up in the build output, so
+`docuccino:export --fail-on=warning` catches a rotten overlay in CI:
+
+| Code | Severity | Means |
+| --- | --- | --- |
+| `overlay.invalid` | warning | The file couldn't be parsed — a missing `overlay: 1.0.x` line, a non-list `actions`, or an action with no `target` or no operation. **The whole file is skipped.** |
+| `overlay.target-missing` | warning | The target matched no node; that one action did nothing. |
+| `overlay.unsupported-selector` | error | The target uses JSONPath outside the supported subset. |
+| `overlay.conflicting-operation` | error | One action declares both `update` and `remove`. Split it in two. |
 
 ## Worked examples
 
 ### Patch an operation you can't edit
 
-A billing package ships its own `/oauth/token` route. You can't annotate its controller, but you can
-give it a real summary and a usable example:
+A billing package ships its own `/oauth/token` route. You can't annotate its controller — but you can
+document it. First let the route into the document (routes whose controller lives under `vendor/` are
+excluded by default):
+
+```php
+// config/docuccino.php — documents.default
+'routes' => ['include' => ['api/*', 'oauth/*'], 'include_vendor' => true],
+```
+
+Then give it a real summary, a description, and a usable example:
 
 <Tabs>
 	<TabItem label="Overlay">
 	```yaml
 	overlay: 1.0.0
 	info:
-	  title: Auth route polish
+	  title: Billing route polish
 	  version: 1.0.0
 	actions:
 	  - target: "$.paths['/oauth/token'].post"
 	    update:
 	      summary: Exchange credentials for an access token
+	      tags: [OAuth]
 	      description: |
 	        Issues a bearer token for the client-credentials and password grants.
-	  - target: "$.paths['/oauth/token'].post.responses['200'].content['application/json'].example"
+	  - target: "$.paths['/oauth/token'].post.responses['200'].content['application/json']"
 	    update:
-	      access_token: "eyJ0eXAiOiJKV1Qi…"
-	      token_type: Bearer
-	      expires_in: 3600
+	      example:
+	        access_token: "eyJ0eXAiOiJKV1Qi…"
+	        token_type: Bearer
+	        expires_in: 3600
 	```
 	</TabItem>
 	<TabItem label="Result">
@@ -143,10 +186,13 @@ give it a real summary and a usable example:
 	  "post": {
 	    "summary": "Exchange credentials for an access token",
 	    "description": "Issues a bearer token for the client-credentials and password grants.\n",
+	    "tags": ["OAuth"],
 	    "responses": {
 	      "200": {
+	        "description": "OK",
 	        "content": {
 	          "application/json": {
+	            "schema": { "type": "object" },
 	            "example": {
 	              "access_token": "eyJ0eXAiOiJKV1Qi…",
 	              "token_type": "Bearer",
@@ -162,49 +208,44 @@ give it a real summary and a usable example:
 	</TabItem>
 </Tabs>
 
-Each `update` merges onto a node that already exists in the document, so the operation's inferred
-parameters and other responses are left untouched.
+Each `update` merges onto a node that already exists, so the operation's inferred parameters, its
+other responses, and the response schema are all left untouched. Note the second target: the
+media-type object is what exists, so that's where `example` is merged in.
 
-### Document a third-party package route end to end
+### Add an operation Docuccino never saw
 
-Sometimes a package registers a route that Docuccino never sees — it isn't in your route table under
-a filter you export, or it's served outside the framework router. You can add the whole path with an
-overlay, with one rule to keep in mind: **you merge onto the parent that exists, not onto the key
-that's missing.**
-
-`$.paths` is always present, so target it and merge in the new path item. Targeting
-`$.paths['/oauth/tokens']` directly while it's absent would match nothing (a warning), because
-Overlay 1.0 only edits nodes that already exist:
+Sometimes a route answers a verb Docuccino can't see — it's dispatched outside the framework router,
+or served by an edge function in front of your app. If the *path* is already documented, you can add
+the operation to it:
 
 <Tabs>
 	<TabItem label="Overlay">
 	```yaml
 	overlay: 1.0.0
 	info:
-	  title: Passport token management
+	  title: Invoice voiding
 	  version: 1.0.0
 	actions:
-	  - target: "$.paths"
+	  - target: "$.paths['/api/v1/invoices/{invoice}']"
+	    description: Served by the billing gateway, not by this app's router.
 	    update:
-	      /oauth/tokens:
-	        get:
-	          summary: List the authenticated user's access tokens
-	          tags: [OAuth]
-	          responses:
-	            '200':
-	              description: The personal access tokens belonging to the current user.
+	      delete:
+	        summary: Void an invoice
+	        tags: [Invoices]
+	        responses:
+	          '204':
+	            description: The invoice was voided.
 	```
 	</TabItem>
 	<TabItem label="Result">
 	```json
-	"/oauth/tokens": {
-	  "get": {
-	    "summary": "List the authenticated user's access tokens",
-	    "tags": ["OAuth"],
+	"/api/v1/invoices/{invoice}": {
+	  "get": { "…": "inferred, untouched" },
+	  "delete": {
+	    "summary": "Void an invoice",
+	    "tags": ["Invoices"],
 	    "responses": {
-	      "200": {
-	        "description": "The personal access tokens belonging to the current user."
-	      }
+	      "204": { "description": "The invoice was voided." }
 	    }
 	  }
 	}
@@ -212,12 +253,10 @@ Overlay 1.0 only edits nodes that already exist:
 	</TabItem>
 </Tabs>
 
-The merged path item is hand-authored: there's no inference behind it, and the overlay provenance
-records it against the `paths` node. It's a first-class part of the document and validates like any
-other path, so keep it small and factual — you're describing a contract by hand rather than deriving
-it. For one or two routes this is the simplest tool. If you find yourself synthesizing many
-operations, or want them assembled with the same machinery as your real routes, step up to a
-[`DocumentTransformer`](#document-wide-changes).
+The merged operation is hand-authored: there's no inference behind it, and no stable identity — so
+keep it small and factual, because you're describing a contract by hand rather than deriving it. If
+you find yourself doing this for many operations, or you need a path that isn't in the document at
+all, step up to a [`DocumentTransformer`](#document-wide-changes).
 
 ### Remove something internal from the published spec
 
@@ -237,9 +276,17 @@ actions:
 ```
 
 Removing an array element re-indexes the array to a clean list, so a filtered-out parameter never
-leaves a gap. For recurring, name-based hygiene across a whole document, the
+leaves a gap — and a filter matching several elements removes them all, highest index first. For
+recurring, name-based hygiene across a whole document, the
 [leakage lint](/laravel/reference/configuration/#lint) is a better fit — it flags sensitive-looking
 properties everywhere they appear, rather than one target at a time.
+
+<Aside type="note" title="Prefer `#[Hidden]` when you own the code">
+`remove` prunes the *document*. If the property or parameter is yours, hiding it at the source with
+[`#[Hidden]`](/laravel/reference/attributes/#hidden) or
+[`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) is better: it can't be forgotten when
+the field moves, and it applies to every document at once.
+</Aside>
 
 ## Document-wide changes
 
@@ -250,12 +297,13 @@ operation, or synthesize structure programmatically — reach past overlays:
   filter naming, nullable style, tag mapping, error-response strategy. See the
   [configuration reference](/laravel/reference/configuration/#representation).
 - **A `DocumentTransformer`** is a whole-document post-processor that runs after assembly and
-  overlays. It's the right tool when you need to touch many operations at once, or build structure
-  from data (for example, generating a set of routes from a manifest). Every official integration is
-  built with the same extension points — see [writing an integration](/extending/extension-authoring/).
+  overlays, with the finished document in hand. It's the right tool when you need to touch many
+  operations at once, or build structure from data — generating a set of paths from a manifest, for
+  instance. Every official integration is built with the same extension points — see
+  [writing an integration](/extending/extension-authoring/).
 
 <CardGrid>
 	<LinkCard title="How contributions combine" href="/laravel/documenting/#how-contributions-combine" description="The full precedence chain and how higher layers win field by field." />
 	<LinkCard title="Overlays configuration" href="/laravel/reference/configuration/#overlays" description="The overlays glob and how it's resolved." />
-	<LinkCard title="Coming from Scribe?" href="/guides/vs-scribe/" description="How hand-edited specs and custom endpoint definitions map onto attributes and Overlays." />
+	<LinkCard title="Write a DocumentTransformer" href="/extending/extension-authoring/" description="Build the whole-document post-processor for changes an overlay can't express." />
 </CardGrid>
