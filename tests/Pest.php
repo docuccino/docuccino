@@ -314,3 +314,36 @@ function diagnosticsCoded(array $diagnostics, string $code): array
         static fn (Diagnostic $diagnostic): bool => $diagnostic->code === $code,
     ));
 }
+
+/**
+ * A package's `src/` imports matching a pattern, as `relative/path.php: FQCN` strings.
+ *
+ * The boundary escape hatch for dependencies Pest's arch layers cannot see: a layer is resolved
+ * through composer's PSR-4 prefixes, so phpstan/phpstan — a phar with no prefix — is invisible to
+ * `not->toUse('PHPStan')`, which then passes vacuously. Scanning the imports is the honest test.
+ *
+ * @return list<string>
+ */
+function importsMatching(string $package, string $pattern): array
+{
+    $src = dirname(__DIR__).'/packages/'.$package.'/src';
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS));
+
+    $found = [];
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        preg_match_all('/^use\s+(?!function\s|const\s)([^\s;]+)/m', (string) file_get_contents($file->getPathname()), $matches);
+        foreach ($matches[1] as $import) {
+            if (preg_match($pattern, $import) === 1) {
+                $found[] = str_replace($src.'/', '', $file->getPathname()).': '.$import;
+            }
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
