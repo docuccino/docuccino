@@ -73,7 +73,7 @@ Consequences:
 
 - The `fixture` group is the **behavioural proof** for the inference engine's real path
   (return types, throw analysis, QB trace, determinism). It is *not* a line-coverage
-  contributor. Do not read `inference-phpstan`'s ~41% line figure as "untested" — read it
+  contributor. Do not read `inference-phpstan`'s ~37% line figure as "untested" — read it
   as "mostly proven out-of-process".
 - The CI **coverage** job therefore runs `--exclude-group=fixture` (fast, no app to
   provision) and the separate **fixture** job keeps proving the engine behaviourally.
@@ -88,11 +88,18 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **92.34%** | 92    | fully in-process-measurable                      |
-| `laravel`           | **91.62%** | 91    | fully in-process-measurable                      |
-| `inference-phpstan` | **41.83%** | 41    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **92.21%** | 92    | fully in-process-measurable                      |
+| `laravel`           | **91.90%** | 91    | fully in-process-measurable                      |
+| `inference-phpstan` | **37.35%** | 37    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 83.51%     | —     | informational only; no longer a gate             |
+| Overall             | 82.29%     | —     | informational only; no longer a gate             |
+
+`inference-phpstan`'s floor dropped from 41 to 37 in the same change set that moved the phpdoc type
+grammar into core. Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and
+sat well above the engine's average, so taking them out of the numerator AND denominator lowered the
+ratio without losing a single test: 41.64% over the pre-move file set is the old 41.83% figure. Core
+absorbed them at a slightly lower rate than its own average (92.39% → 92.21%), which is why its floor
+holds at 92 rather than ratcheting. A floor drop is only ever this: a documented denominator change.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
@@ -105,7 +112,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **92**, `laravel` **91**, `inference-phpstan` **41**.
+  an aspiration. Current floors: `core` **92**, `laravel` **91**, `inference-phpstan` **37**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
@@ -120,6 +127,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
     `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is a
     monotonic ratchet.
   - **Never lower a floor** without a written justification in the pull request that lowers it (e.g.
-    a large subprocess-only subsystem landed in that package). A drop is a reviewed decision, not a
-    quiet CI edit.
+    a large subprocess-only subsystem landed in that package, or well-covered classes MOVED to another
+    package and took the numerator with them). A drop is a reviewed decision, not a quiet CI edit —
+    record the arithmetic, as the 41 → 37 entry above does.
   - Ratchet the floors upward in the same change set as the code and tests that raised them.

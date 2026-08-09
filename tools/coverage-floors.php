@@ -28,7 +28,8 @@ declare(strict_types=1);
  * coverage `<source>` set, so it contributes no statements to measure.
  */
 const FLOORS = [
-    // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff.
+    // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff,
+    // the phpdoc type grammar.
     'core' => 92,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
     'laravel' => 91,
@@ -36,7 +37,10 @@ const FLOORS = [
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
     // number — read the figure as "mostly proven out-of-process", never as "untested".
-    'inference-phpstan' => 41,
+    // Was 41 until the phpdoc type grammar (fully unit-tested in-process, 141/161 statements) moved to
+    // core: the remaining package is more subprocess-only than before, so the honest floor fell with the
+    // denominator. No test was lost — 41.64% over the pre-move file set is the same number.
+    'inference-phpstan' => 37,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';
