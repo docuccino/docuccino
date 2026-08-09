@@ -4,9 +4,10 @@ description: Every live key in config/docuccino.php and what it does.
 ---
 
 
-The published `config/docuccino.php` drives everything. This page documents **every key that is
-read today**. A couple of keys are marked FUTURE in the shipped file (multi-format export and a
-selectable viewer driver) — those are not yet wired and are called out where they appear.
+The published `config/docuccino.php` drives everything. Every key is listed in the file itself —
+required keys active, optional ones commented out — so you can discover the whole surface by
+scrolling through it. This page is the long-form version: what each key does, what it defaults to,
+and where its behavior is explained in full.
 
 ## Top level
 
@@ -55,9 +56,10 @@ say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 ],
 ```
 
-Maps to OAS `info`. `description` accepts `['file' => '…md']` to load your API's introduction from a
-Markdown file. `version` is the value the [versioning policy](#versioning) evaluates during
-`docuccino:diff --enforce`.
+Maps to OAS `info`, and any other OAS `info` field you add (`contact`, `license`,
+`termsOfService`, …) is emitted as written. `description` may be a Markdown string or
+`['file' => '…md']` to load your API's introduction from a file. `version` is the value the
+[versioning policy](#versioning) evaluates during `docuccino:diff --enforce`.
 
 ### `servers`
 
@@ -272,19 +274,17 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 ```php
 'export' => [
     'path' => 'docs/openapi.json',
-    'formats' => ['openapi-3.2'], // FUTURE: not read yet; --format selects the emitter today
 ],
 ```
 
-`path` is the default output location for `docuccino:export` and the source for
-`viewer.source: artifact`. `formats` is **FUTURE** (multi-format export) — today the emitter is
-chosen by the `--format` flag.
+`path` is the default output location for `docuccino:export` and the file
+`viewer.source: artifact` serves. The output format is chosen per run by
+[`docuccino:export --format`](/laravel/reference/commands/#docuccinoexport).
 
 ### `viewer`
 
 ```php
 'viewer' => [
-    'driver' => 'scalar',   // FUTURE: selectable viewer driver; only Scalar ships
     'route' => '/docs/api', // null disables the runtime endpoints for this document
     'gate' => null,         // Gate ability name; null = local environment only
     'middleware' => ['web', 'throttle:60,1'],
@@ -295,7 +295,6 @@ chosen by the `--format` flag.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `driver` | `'scalar'` | **FUTURE** — only the bundled Scalar viewer ships. |
 | `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
 | `gate` | `null` | Gate ability guarding the HTML + `.json` routes. `null` = available only in the `local` environment. The static asset route is never gated. |
 | `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
@@ -319,9 +318,9 @@ those apps — drop `web`, or register your domain — for example:
 'versioning' => 'none', // 'semver' | 'date' | 'none'
 ```
 
-Add this key to a document to choose the policy that `docuccino:diff --enforce` applies (default
-`none`). `semver` requires a major version bump for breaking changes; `date` requires a new date
-version; `none` never fails on versioning. See [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
+The policy `docuccino:diff --enforce` applies to this document. `semver` requires a major version
+bump for breaking changes; `date` requires a new date version; `none` never fails on versioning. See
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 
 ## Extensions
 
@@ -364,7 +363,7 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `mode` | `in-process` | Which `TypeEngine` backs inference (in-process by default). A boot failure always degrades to the `NullTypeEngine` so docblock/attribute-only docs still build. |
+| `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
 
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
