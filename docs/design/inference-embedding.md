@@ -16,7 +16,8 @@ findings are inlined below.
   `ContainerFactory`, `NodeScopeResolver`, `ScopeFactory`, `PHPStan\Type\*` is the same
   mechanism Rector and every extension test harness use. Only PHPStan's third-party deps
   are PHP-Scoper-prefixed. `PhpParser\*` and `PHPStan\PhpDocParser\*` resolve from the
-  HOST's composer packages → we require `nikic/php-parser ^5`, `phpstan/phpdoc-parser ^2`.
+  HOST's composer packages → we require `nikic/php-parser ^5`; `phpstan/phpdoc-parser ^2` arrives
+  through `docuccino/core`, which owns the phpdoc grammar.
 - A scoped private PHPStan copy is IMPOSSIBLE while reusing Larastan (identical FQCNs
   can't coexist; Larastan binds unprefixed `PHPStan\*`). → **Share the host's PHPStan.**
   Larastan 3.x requires `phpstan/phpstan ^2.2`, so one version satisfies everyone.
@@ -24,7 +25,9 @@ findings are inlined below.
   never open-ended.
 - Larastan's bootstrap boots the Laravel app (from `getcwd()/bootstrap/app.php`) — doc
   generation runs in app context (same constraint Scramble has). Package is a normal
-  `require-dev` of the end-user app.
+  `require-dev` of the end-user app: since 2026-08-09 `docuccino/inference-phpstan` hard-requires
+  `larastan/larastan` (it cannot analyse a Laravel app without it) and `docuccino/laravel` only
+  SUGGESTS the engine, so a production install carries neither.
 
 ## 2. Embedding mechanics (+ Spike A traps — MUST honor)
 
@@ -105,10 +108,12 @@ interface TypeScope {
 
 **Public surface (`@internal` convention).** The only classes in
 `packages/inference-phpstan/src` that are part of this package's supported API are the ones a
-consumer legitimately imports to configure and build the engine: `Analysis\EngineConfig`,
-`Analysis\PhpStanEngineFactory`, `Runtime\RuntimeConfig`, `Metadata\DocBlockReader`,
-`Types\TypeStringParser`, and `Types\ImportContext` (the last two colocate with the type-string
-grammar whose home the design defers — §5). Everything else — the Analysis engine implementations
+consumer legitimately imports to configure and build the engine: `Analysis\PhpStanTypeEngineBuilder`
+(the entry point an adapter probes for by string — core's `Inference\TypeEngineBuilder` seam),
+`Analysis\EngineConfig`, `Analysis\PhpStanEngineFactory` and `Runtime\RuntimeConfig`. The phpdoc
+grammar readers that used to sit here (`DocBlockReader`, `TypeStringParser`, `ImportContext` and the
+shared parser stack) now live in `Docuccino\Core\TypeGrammar` — see the type-grammar entry in
+`uir-and-extensions.md`. Everything else — the Analysis engine implementations
 behind the factory, the whole `Orchestration`/`Runtime` (bar `RuntimeConfig`) worker machinery, and
 the `Trace`/`Throwing`/`Translation`/`Support`/`Cache`/`Metadata`-factory/PHPStan-extension internals
 — carries an `@internal` marker: it is an engine implementation detail, free to change between
@@ -242,9 +247,10 @@ first**, split across the placement boundary:
 1. **`@property` / `@property-read` class docblock tags** — the ide-helper convention. Read by
    `DocBlockReader::properties()` and typed through the shared `TypeStringParser` grammar, appended
    as `PropertyMetadata` in `ClassMetadataFactory` (a native public property of the same name wins).
-   This lives **in the engine**: it owns the phpdoc grammar and the tag is a general PHP/phpstan
-   convention (Data/Resource classes documented this way benefit too), not Eloquent vocabulary. This
-   is the primary, high-confidence source.
+   The reading lives **in the engine's** `ClassMetadataFactory` (it owns class metadata) over the
+   grammar in `Core\TypeGrammar`: the tag is a general PHP/phpstan convention (Data/Resource classes
+   documented this way benefit too), not Eloquent vocabulary. This is the primary, high-confidence
+   source.
 2. **Floor sources** — `$casts` keys (a cast key IS a column, typed by its cast via `CastSchema`),
    `$dates` entries (date-time), and `$fillable`-only names (permissive `{}` at lowered confidence).
    These are Eloquent vocabulary, so they live **in the adapter** (`ModelSchema` unions them over the

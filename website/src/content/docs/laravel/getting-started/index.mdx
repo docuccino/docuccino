@@ -7,9 +7,9 @@ sidebar:
 
 import { Steps, Card, CardGrid, FileTree, Aside, LinkCard } from '@astrojs/starlight/components';
 
-Docuccino generates OpenAPI documentation from the real shape of your Laravel application. You
-install one package; it reads your routes, controllers, form requests, resources, models, and
-exception handling and produces an accurate document — with no annotations to start.
+Docuccino generates OpenAPI documentation from the real shape of your Laravel application. It reads
+your routes, controllers, form requests, resources, models, and exception handling and produces an
+accurate document — with no annotations to start.
 
 ## Requirements
 
@@ -22,21 +22,22 @@ exception handling and produces an accurate document — with no annotations to 
 
 <Steps>
 
-1. Require the package:
+1. Require the Laravel adapter:
 
    ```bash
    composer require docuccino/laravel
    ```
 
-2. Add Larastan, which powers type inference:
+2. Add the inference engine as a **dev** dependency:
 
    ```bash
-   composer require --dev larastan/larastan
+   composer require --dev docuccino/inference-phpstan
    ```
 
-   Docuccino's inference engine runs PHPStan with Larastan's model and container knowledge to read
-   the real types in your code. PHPStan itself arrives with Docuccino; Larastan is the piece that
-   teaches it Laravel.
+   The engine runs PHPStan with Larastan's model and container knowledge to read the real types in
+   your code — a build-time job, like your test suite. Two packages, then, because analysis belongs
+   wherever you generate the document; production installs the adapter alone and serves the finished
+   document without a static analyser anywhere in `vendor/`.
 
 3. Publish the config file — optional, but you'll want it soon:
 
@@ -67,11 +68,11 @@ live in your `local` environment out of the box, and closed everywhere else unti
 what it produced.
 
 <Aside type="caution" title="Don't skip step 2">
-If the engine can't boot — `larastan/larastan` missing being the usual reason — inference degrades to
-off rather than failing the build. Routes, path parameters, validation rules, middleware-driven
-security, attributes, and docblocks all keep working, but inferred response shapes, detected query
-parameters, and automatic error responses go quiet. That keeps a CI export safe, at the cost of the
-symptom being thin output rather than an error message.
+Without the engine — or if it can't boot — inference degrades to off rather than failing the build.
+Routes, path parameters, validation rules, middleware-driven security, attributes, and docblocks all
+keep working, but inferred response shapes, detected query parameters, and automatic error responses
+go quiet. Every export says so: an `engine.not-installed` warning naming the command that fixes it.
+That keeps a CI export safe without letting thin output pass unremarked.
 </Aside>
 
 ## What gets added

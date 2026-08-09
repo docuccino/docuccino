@@ -261,12 +261,32 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
   No API returns the extension list before resolve — early snapshot is impossible.
 - Extensions are container-resolved (constructor DI). Core is framework-agnostic (no
   illuminate/symfony-framework deps); its runtime dependencies are `psr/container`,
-  `opis/json-schema`, `symfony/yaml`, `nikic/php-parser` and — since core now reads Docuccino
+  `opis/json-schema`, `symfony/yaml`, `nikic/php-parser`, `phpstan/phpdoc-parser` (the standalone
+  parsing library behind `Core\TypeGrammar`, NOT the analyser) and — since core now reads Docuccino
   attributes off reflected classes/enums (`SchemaIdentity`, `EnumReflection`, the attribute
   overrides extension) — the dependency-free, lockstep-versioned `docuccino/attributes`. That tiny
   attribute package is the one runtime dep core added to absorb the attribute-aware placement moves;
-  it is deliberately NOT the framework or the analysis engine (dependency direction stays
-  `attributes ← core ← inference-phpstan ← laravel`).
+  it is deliberately NOT the framework or the analysis engine.
+- **Dependency direction (Tom, 2026-08-09 — the production-safety wave).** The engine and the adapter
+  are SIBLINGS over core, not a chain:
+
+  ```
+                    docuccino/attributes
+                             ↑
+                       docuccino/core ────────────┐
+                        ↑            ↑            │
+        docuccino/laravel      docuccino/inference-phpstan
+       (production: + illuminate)   (dev-only: + phpstan, larastan)
+  ```
+
+  `docuccino/laravel` used to REQUIRE `docuccino/inference-phpstan`, which hard-requires
+  phpstan/phpstan — so a production `composer install` pulled a static analyser into `vendor/`.
+  The engine is now a `suggest` (and a require-dev for the adapter's own tests); the adapter reaches
+  it through core's `Inference\TypeEngineBuilder` seam, probing `Laravel\Engine\EnginePackage::BUILDER`
+  by string. Arch tests freeze both directions: the adapter imports nothing from
+  `Docuccino\Inference\PhpStan` (and no `PHPStan\`/`Larastan\` namespace at all), and the engine
+  imports nothing from `Docuccino\Laravel` or `Illuminate`. Absent engine → `NullTypeEngine` plus one
+  `engine.not-installed` warning per document.
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
   `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
@@ -313,9 +333,8 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     only the `content.dir` config read + compiler invocation. `Core\Support\ConfinedPath` moved on
     the same reasoning (a pure path-confinement utility, the strongest `Fqcn`-precedent candidate);
     the framework-grammar readers `TypeStringParser` + the summary/description docblock split moved
-    laterally to `docuccino/inference-phpstan` instead (they import `PHPStan\PhpDocParser`, which
-    core bans) — that package owns the phpdoc grammar and the shared parser stack, so the split
-    docblock reader merged into its existing `Metadata\DocBlockReader`.
+    laterally to `docuccino/inference-phpstan` first, because they import `PHPStan\PhpDocParser`, which
+    core banned at the time — superseded by the type-grammar move below.
   - Placement re-review follow-up (Tom, 2026-08-03 — after `docuccino/attributes` became a core
     runtime dep, which lifted the gate on attribute-aware moves). Byte-neutral relocations, goldens
     unchanged:
@@ -355,11 +374,22 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
       real (framework-neutral) body worth relocating.
     - The parameter/request-body/response attribute extensions
       (`AttributeParametersExtension`, `AttributeRequestBodyExtension`, `AttributeResponsesExtension`)
-      stay — each depends on `docuccino/inference-phpstan`'s `TypeStringParser` (which imports
-      `PHPStan\PhpDocParser`, banned in core), and `Routing\AttributeCollector` stays because it
-      consumes the adapter's route-reflection `ReflectedAction`. This attribute-coupled category
-      awaits the pending decision on where the shared type-string grammar belongs; only the
-      genuinely-clean `AttributeOverridesExtension` moved now.
+      stay — they read Laravel-code attributes, which is adapter input; and `Routing\AttributeCollector`
+      stays because it consumes the adapter's route-reflection `ReflectedAction`. What DID move is the
+      grammar underneath them — see the type-grammar entry below.
+  - **Type grammar = core (Tom, 2026-08-09).** `Core\TypeGrammar\{PhpDocParserStack, TypeStringParser,
+    ImportContext, DocBlockReader}` (was `Inference\PhpStan\{Support, Types, Metadata}`). Rationale:
+    every future adapter — Symfony, a reference CLI — needs the same grammar to read a
+    `#[Response(type: '…')]` string and a docblock's summary/description/`@property` tags, which is
+    exactly what core is for. It is framework-neutral AND engine-neutral machinery: the input is a
+    type string or a docblock, not Laravel code and not an analysis scope. The blocker was core's
+    ban on `PHPStan\`; that ban now carves out `PHPStan\PhpDocParser\`, the standalone parsing
+    library (production-safe, shipped by every generator in this space), while phpstan/phpstan the
+    analyser stays banned. `ImportContext` needs nikic/php-parser, which core already required, so the
+    move added exactly one dependency. Byte-neutral: goldens unchanged.
+    The adapter's attribute extensions and the engine's `ClassMetadataFactory` now share one grammar
+    from core instead of the adapter reaching sideways into the engine — which is what made the
+    engine droppable at all.
   - Query Builder recovery vs representation (Tom, 2026-08-05 — the enum-cast filter wave). Recovery
     is adapter-side: `QueryBuilderTraceVisitor` folds the subject model, allow-lists (with internal
     column names + constant `->default()`/`->nullable()` modifiers + a leading `//` or `/** */`

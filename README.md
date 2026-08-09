@@ -33,9 +33,12 @@ into changelogs, mock servers, and agent-facing tool schemas.
 
 ```bash
 composer require docuccino/laravel
-composer require --dev larastan/larastan   # powers type inference
-php artisan docuccino:export               # → docs/openapi.json
+composer require --dev docuccino/inference-phpstan   # powers type inference
+php artisan docuccino:export                         # → docs/openapi.json
 ```
+
+Two lines because analysis is a build-time job: the inference engine (PHPStan + Larastan) runs
+wherever you generate, and production serves the finished document without any of it in `vendor/`.
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
 expose it elsewhere). Publishing the config (`php artisan vendor:publish --tag="docuccino-config"`) is
@@ -72,7 +75,7 @@ This is a monorepo, subtree-split into individual packages on release.
 | --- | --- | --- |
 | `docuccino/laravel` | [`packages/laravel`](packages/laravel/README.md) | The Laravel adapter: provider, config, commands, viewer, integrations. |
 | `docuccino/core` | [`packages/core`](packages/core/README.md) | Framework-agnostic UIR model, canonicalizer, identities, emitters, diff, contracts. |
-| `docuccino/inference-phpstan` | [`packages/inference-phpstan`](packages/inference-phpstan/README.md) | PHPStan + Larastan embedded behind core's `TypeEngine`. |
+| `docuccino/inference-phpstan` | [`packages/inference-phpstan`](packages/inference-phpstan/README.md) | PHPStan + Larastan embedded behind core's `TypeEngine`. Install as a **dev** dependency. |
 | `docuccino/attributes` | [`packages/attributes`](packages/attributes/README.md) | Dependency-free PHP attribute classes. |
 
 The versioned UIR JSON Schema lives in [`spec/uir/`](spec/uir/) and is served at its `$id` URLs from

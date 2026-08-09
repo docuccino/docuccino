@@ -39,6 +39,24 @@ serve it without re-analyzing, gate who can see it, and let CI catch breaking ch
 Generation is safe to run in any environment, including a CI container with no services attached:
 the pipeline reads types, so it makes no database queries, sends no mail, and dispatches no jobs.
 
+## Production needs no analysis toolchain
+
+Because the analysis lives in `docuccino/inference-phpstan` and you install it as a dev dependency,
+`composer install --no-dev` deploys the adapter alone: no PHPStan, no Larastan, nothing that reads
+your source at runtime. The production dependency chain is `docuccino/laravel` → `docuccino/core` →
+a JSON-Schema validator, a YAML parser and two small parsing libraries. Serving from `artifact` or
+`cache` then costs one file read.
+
+That is also why the export belongs in CI: the machine that has your dev dependencies is the one that
+can analyse your code. A production box that only serves the committed document never needs to.
+
+<Aside type="tip" title="If your CI export looks thin">
+An export without the engine installed still produces a document — from docblocks, attributes,
+validation rules and middleware — and warns with `engine.not-installed`. If a CI job prunes dev
+dependencies before exporting, that's the warning you'll see. Pair it with `--fail-on=warning` and it
+can't slip through.
+</Aside>
+
 ## Choosing a viewer source
 
 `viewer.source` decides where the served spec comes from. In production, serve pre-built bytes:

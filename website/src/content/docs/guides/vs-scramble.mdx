@@ -25,7 +25,8 @@ Both tools read your code. Where they diverge:
 | | Scramble | Docuccino |
 | --- | --- | --- |
 | Primary artifact | An OpenAPI document | A [UIR](/uir/) document, emitted as OpenAPI 3.2 or 3.1 downlevel, JSON or YAML |
-| Analysis engine | Its own type inference over your code | An embedded PHPStan/Larastan engine |
+| Analysis engine | Its own type inference over your code | An embedded PHPStan/Larastan engine, installed as a dev dependency |
+| Production install | Ships with the analyser | Adapter only — no static-analysis toolchain in `vendor/` |
 | Interactive viewer | Yes | Yes, bundled Scalar |
 | Output stability | Regenerated on demand | Byte-stable for identical code — built to be committed and reviewed |
 | Contract checking | — | `docuccino:diff` over stable node identities, with `--enforce` gating a version policy in CI |

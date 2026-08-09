@@ -34,12 +34,15 @@ diffing and a bundled Scalar viewer.
 ```
 packages/core/               docuccino/core        — UIR model, canonicalizer, identities,
                                                      drafts+PatchGuard, emitters, diff+policies,
-                                                     overlays, Lint, extension contracts.
-                                                     Framework-agnostic (arch-test enforced:
-                                                     no Illuminate/PHPStan imports).
+                                                     overlays, Lint, TypeGrammar (phpdoc/type
+                                                     string readers), extension contracts.
+                                                     Framework-agnostic (arch-test enforced: no
+                                                     Illuminate/engine imports, and no PHPStan
+                                                     but the standalone PhpDocParser).
 packages/attributes/         docuccino/attributes  — dep-free PHP attributes only.
 packages/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine behind
-                                                     core's TypeEngine contract (workers, cache).
+                                                     core's TypeEngine/TypeEngineBuilder contracts
+                                                     (workers, cache). DEV-ONLY install.
 packages/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
 spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).
@@ -59,6 +62,12 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   extend its allow-list only with justification — never duplicate a core utility to dodge it).
 - **Public API boundary**: `@internal` marks non-public core; `CoreBoundaryArchTest` +
   `IntegrationsArchTest` enforce. The extension-author surface freezes at v1.
+- **Package direction**: `attributes ← core ← {laravel, inference-phpstan}` — the adapter and the
+  engine are SIBLINGS. `docuccino/laravel` must install without an analyser: it names the engine's
+  entry class by string (`Engine\EnginePackage`) and degrades to `NullTypeEngine` + one
+  `engine.not-installed` warning. `AdapterBoundaryArchTest` / `EngineBoundaryArchTest` enforce both
+  directions — note a Pest arch layer can only see PSR-4-autoloaded namespaces, so a phar dependency
+  like phpstan/phpstan needs the `importsMatching()` import scan instead.
 - **Precedence**: fallback(5) < inference(10) < integration(20) < docblock(30) <
   attribute(40) < overlay(45) < config(50); field-level patch semantics via PatchGuard.
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over

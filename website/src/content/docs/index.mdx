@@ -39,13 +39,14 @@ each detail came from. That's what powers the deterministic output and the seman
 
 ```bash
 composer require docuccino/laravel
-composer require --dev larastan/larastan   # powers type inference
+composer require --dev docuccino/inference-phpstan   # powers type inference
 php artisan docuccino:export
 ```
 
 Your OpenAPI document lands in `docs/openapi.json`, and the bundled viewer is live at `/docs/api` in
-your local environment. Nothing else to configure — [installation](/laravel/getting-started/) walks
-through it properly.
+your local environment. The engine is a dev dependency because analysis runs where you generate —
+production serves the finished document without it. Nothing else to configure —
+[installation](/laravel/getting-started/) walks through it properly.
 
 ## What you get
 

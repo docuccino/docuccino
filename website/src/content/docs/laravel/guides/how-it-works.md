@@ -49,7 +49,9 @@ independently.
 
 This is the heart of Docuccino, and the reason it's safe to run anywhere. An embedded static-analysis
 engine (PHPStan + Larastan) reads the **types** in your code — controller return types, validation
-rules, resource `toArray()` shapes, exception handlers, query builders — and infers the contract.
+rules, resource `toArray()` shapes, exception handlers, query builders — and infers the contract. It
+ships as a separate dev dependency, `docuccino/inference-phpstan`, because analysis is a build-time
+job: production serves the finished document with no analyser installed.
 
 It **never runs your code**. No controller is invoked, no database is touched, no queue job fires, no
 email is sent. That's the trust argument: documenting a payment endpoint can't charge a card, and

@@ -45,6 +45,7 @@ The tools differ at the root, and it colors everything else:
 | OpenAPI export | A secondary, optional output | The point: 3.2 or 3.1 downlevel, JSON or YAML, with reusable `components/schemas` |
 | Authoring model | Annotate, with partial inference | Infer from code; attributes are overrides |
 | Executes your application code | Yes, for response calls | Never — static analysis only |
+| Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
 | Query params from query builders | Annotate them | Inferred, traced several calls deep |
 | Example responses | Captured from real calls and factories | Inferred, or authored with `#[Example]` |
 | Postman collection | Yes | No — import the OpenAPI file |
