@@ -65,10 +65,10 @@ jobs:
         run: test -z "$DOCUCCINO_UPDATE_GOLDEN"
 
       - name: Pint (code style)
-        run: vendor/bin/pint --test
+        run: composer lint
 
       - name: PHPStan (level max)
-        run: vendor/bin/phpstan analyse --no-progress
+        run: composer analyse
 
       - name: Pest (unit + non-fixture integration)
         run: vendor/bin/pest --parallel --exclude-group=fixture
@@ -121,13 +121,10 @@ jobs:
         run: composer install --no-interaction --no-progress
 
       - name: Pest line coverage (per-package honest floors — ratchet upward, never down)
-        run: |
-          mkdir -p build
-          vendor/bin/pest --coverage-clover=build/clover.xml --exclude-group=fixture
-          php tools/coverage-floors.php build/clover.xml
+        run: composer test:coverage
 
       - name: Pest type coverage
-        run: vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G
+        run: composer test:types
 
   fixture:
     name: Fixture suite (PHP 8.3)
@@ -180,4 +177,4 @@ jobs:
         # while executing zero fixture tests.
         env:
           DOCUCCINO_REQUIRE_FIXTURE: '1'
-        run: vendor/bin/pest --parallel --group=fixture
+        run: composer test:inference-fixture

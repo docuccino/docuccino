@@ -24,8 +24,9 @@ coverage locally and the ratchet policy for the CI gate.
   never typed public column properties; a resource with closure/conditional (`when*`) fields; a
   FormRequest/action with `Rule::*` descriptors; a mapper/attribute used the way the package's own
   docs show. **A fixture shaped to satisfy the analyzer proves nothing** — it hides the gap it was
-  meant to exercise (the CatalogItem/`whenLoaded`-free/no-`Rule::enum` masking the Wave-A audits
-  found). When an audit or test needs a shape the analyzer cannot yet handle, keep the fixture
+  meant to exercise: a model without `@property` docblocks, a resource with no conditional fields,
+  a request with no `Rule::*` descriptor all quietly hide the analyzer paths that matter most.
+  When a test needs a shape the analyzer cannot yet handle, keep the fixture
   idiomatic and **pin the degraded output + its diagnostic** (the honest current behaviour), rather
   than reshaping the fixture until the analyzer looks like it succeeds. Stub-engine fixtures are for
   mapper *mechanics* only and never substitute for a real-engine recovery proof.
@@ -51,8 +52,8 @@ vendor/bin/pest --coverage --exclude-group=fixture
 # Full text report (per-class line %), written for inspection
 vendor/bin/pest --coverage-text=build/coverage.txt --exclude-group=fixture
 
-# Type coverage (declared types over the src set)
-vendor/bin/pest --type-coverage --exclude-group=fixture --min=100
+# Type coverage (declared types over the src set) — 2G, it thrashes for minutes at 1G
+composer test:types
 ```
 
 `tools/coverage-floors.php` is the gate: it sums `coveredstatements`/`statements` per
@@ -80,20 +81,10 @@ Consequences:
   unit tests for its pure/parent-process classes (translators, registries, protocol,
   orchestration bookkeeping) — not more subprocess fixture tests.
 
-## Measured coverage (2026-08-02, updated by Phase 4b wave 1)
+## Measured coverage (2026-08-07)
 
-Line coverage (statements), suite excluding the `fixture` group. The wave-1
-integrations (Query Builder, rate limiting, Sanctum/Passport, permission,
-withTrashed, the core data-leakage lint) landed with in-process dataset + real-path
-tests, lifting overall coverage:
-
-| Package             | Line coverage      |
-|---------------------|--------------------|
-| **Overall (baseline, hardening task)** | **79.45%** |
-| **Overall (Phase 4b wave 1)**          | **81.1%**  |
-| **Overall (QB filter-kind round 2)**   | **83.8%**  |
-
-### Measured per package (2026-08-07, Phase-6 fix wave — the enforced floors)
+Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
+floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
@@ -118,17 +109,17 @@ for its pure/parent-process classes, never more subprocess fixture tests.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
-  refactor away from red for reasons unrelated to test quality (the Phase-6 arc added ~700 such
-  lines and pushed measured 83.2% against a floor of 83). Per-package floors localise that: the
+  refactor away from red for reasons unrelated to test quality — one engine arc added ~700 such
+  lines and pushed measured 83.2% against a floor of 83. Per-package floors localise that: the
   engine carries its own low, honest floor with the fixture-group note, and the fully-measurable
   packages carry high ones that a real regression genuinely trips.
-- **Type coverage** is enforced separately: `pest --type-coverage --min=100` (the src set
-  is PHPStan level-max, which already implies near-total declared types).
+- **Type coverage** is enforced separately at 100%: `composer test:types` (the src set is
+  PHPStan level-max, which already implies near-total declared types).
 - **Ratchet policy:**
-  - When a package's coverage rises (e.g. a phase adds in-process tests), **raise that package's
-    floor** in `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is
-    a monotonic ratchet.
+  - When a package's coverage rises, **raise that package's floor** in
+    `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is a
+    monotonic ratchet.
   - **Never lower a floor** without a written justification in the pull request that lowers it (e.g.
     a large subprocess-only subsystem landed in that package). A drop is a reviewed decision, not a
     quiet CI edit.
-  - Each build phase should ratchet its packages' floors upward as code lands with tests.
+  - Ratchet the floors upward in the same change set as the code and tests that raised them.

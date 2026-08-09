@@ -82,8 +82,10 @@
             "pest --coverage-clover=build/clover.xml --exclude-group=fixture",
             "@php tools/coverage-floors.php build/clover.xml"
         ],
-        "analyse": "phpstan analyse --memory-limit=1G",
+        "test:types": "pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G",
+        "analyse": "phpstan analyse --no-progress --memory-limit=2G",
         "lint": "pint --test",
+        "fix": "pint",
         "sync-schema": "@php -r \"@mkdir('packages/core/resources/spec/uir/1.0', 0755, true); copy('spec/uir/1.0/schema.json', 'packages/core/resources/spec/uir/1.0/schema.json') or exit(1); echo 'Synced spec/uir/1.0/schema.json -> packages/core/resources/spec/uir/1.0/schema.json'.PHP_EOL;\""
     }
 }

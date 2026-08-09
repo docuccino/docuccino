@@ -3,21 +3,25 @@
 Docuccino is an open-source (MIT) API documentation generator for Laravel that compiles
 application code into a **UIR** (Universal Intermediate Representation — an OAS-3.2-shaped,
 deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1, with semantic
-diffing and a bundled Scalar viewer. Private until v1 launch.
+diffing and a bundled Scalar viewer.
 
 > Full references — read these before substantial work:
 > - [`docs/design/uir-and-extensions.md`](./docs/design/uir-and-extensions.md) — UIR spec detail, extension API, precedence, **placement rule**
 > - [`docs/design/inference-embedding.md`](./docs/design/inference-embedding.md) — PHPStan/Larastan engine design + spike-verified traps
 > - [`docs/testing.md`](./docs/testing.md) — coverage standards, how to run coverage, ratchet policy
+> - [`website/STYLE.md`](./website/STYLE.md) — binding style bar for the docs site (Laravel docs are the gold standard)
+> - [`RELEASING.md`](./RELEASING.md) — tagging, the subtree split, `SPLIT_TOKEN`
 
 ## ⚠️ Absolute rules
 
-- **Green on all checks, always**: `vendor/bin/pest` (incl. `--group=fixture` when the
-  fixture app is present), `vendor/bin/phpstan` (level max, NO baselines, no blanket
-  ignores), `vendor/bin/pint --test`, `composer validate --strict` (all packages).
+- **Green on all checks, always**: `composer test` (incl. `composer test:inference-fixture`
+  when the fixture app is present), `composer analyse` (PHPStan level max, NO baselines, no
+  blanket ignores), `composer lint`, `composer validate --strict` (all packages).
   CI also gates line coverage **per package** (`composer test:coverage` →
   `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
-  coverage (100).
+  coverage (`composer test:types`, 100%). **Use the composer scripts** — they carry the flags
+  the gates need (`--parallel`, and the 2G memory limits PHPStan and type coverage want; type
+  coverage thrashes for many minutes at 1G). CI runs the same scripts, so they cannot drift.
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Golden files under
   `packages/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
@@ -66,34 +70,44 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   instead. See `docs/testing.md` §"Fixture honesty".
 - **Fragment cache soundness**: anything an extension reads that affects output must flow
   into `RouteContext::dependencies()` (files) or the descriptor cache inputs.
+- **Config surface**: `packages/laravel/config/docuccino.php` is framework-config style — every
+  option present, optional ones commented out, one short comment each. A key the code reads must
+  appear there, and the website's configuration reference must stay in sync with it.
+- **Comment style**: comments are small and informal. Class docblocks are 1–3 short sentences
+  (what it is + the one non-obvious invariant); method docblocks are annotations plus at most a
+  line of prose; inline comments only where the code isn't obvious. State a cross-cutting
+  invariant in full ONCE, in the class that owns it, and point at it from elsewhere. Long-form
+  design detail belongs in `docs/design/*`, not in a docblock. No project history in comments
+  (no phases, waves, item numbers, review or decision-log references).
 
 ## Dev commands (from the repo root)
 
 ```bash
 composer install
-vendor/bin/pest --parallel              # full suite (fixture group auto-skips w/o fixture app)
-vendor/bin/pest --parallel --group=fixture   # real-engine integration tests
-vendor/bin/phpstan analyse --no-progress
-vendor/bin/pint --test                  # (drop --test to fix)
-vendor/bin/pest --coverage --exclude-group=fixture --min=80
+composer test                    # full suite, parallel (fixture group auto-skips w/o fixture app)
+composer test:inference-fixture  # real-engine integration tests
+composer analyse                 # PHPStan level max (2G)
+composer lint                    # Pint --test  (composer fix to apply)
+composer test:coverage           # clover + per-package floors (needs pcov)
+composer test:types              # type coverage, 100% (2G)
 DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --parallel --filter=<golden test>   # sanctioned regens only
 ```
 
 **ALWAYS pass `--parallel` to pest — every invocation, including `--filter` and single-file
-runs** (full suite ~16s parallel vs ~65s serial; you will run it many times). Prefer the
-composer scripts (`composer test`, `composer test:inference-fixture`), which include it. Never
-define shared helper functions at test-file level — they break under Paratest process
-splitting; shared helpers live in `tests/Pest.php`. If a coverage/type-coverage run hangs
-(stale pcov state, rare), kill it and re-run fresh.
+runs** (full suite ~16s parallel vs ~65s serial; you will run it many times). The composer
+scripts include it. Never define shared helper functions at test-file level — they break under
+Paratest process splitting; shared helpers live in `tests/Pest.php`. If a coverage/type-coverage
+run hangs (stale pcov state, rare), kill it and re-run fresh.
 
 Laravel adapter feature tests run on orchestra/testbench with the workbench app under
 `packages/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
-`tests/fixture-app/app`.
+`tests/fixture-app/app`. The workbench app and `tests/Fixtures/**` are test INPUT the product
+parses — their docblocks and attributes are data, so edit them only to change what a test proves.
 
 ## Project status
 
-Pre-v1: the core, attributes, inference engine and Laravel adapter are built and green; the
-content layer, docs site and Scramble migration guide are the remaining work before launch.
-Dogfooding against a large production Laravel application is gated on human oversight — do
-not start it autonomously. Roadmap and decision history are maintained outside this repo; the
-binding conventions are the ones in this file and under `docs/`.
+Feature-complete and green: core, attributes, the inference engine, the Laravel adapter, the
+content layer and the docs site. The repository is private on GitHub with the subtree-split CI
+live; the public flip and Packagist registration are pending and are Tom's call. Roadmap and
+decision history live outside this repo — the binding conventions are the ones in this file and
+under `docs/`.
