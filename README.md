@@ -6,12 +6,17 @@
   </picture>
 </p>
 
+<!--
+  The CI, Docs and Packagist badges resolve once this repository is public and the packages are
+  registered on Packagist; they render as "invalid"/404 while the repository is private.
+-->
 <p align="center">
-  <a href="https://github.com/docuccino/docuccino/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/badge/CI-pending-lightgrey"></a>
-  <a href="https://github.com/docuccino/docuccino/actions/workflows/website.yml"><img alt="Docs" src="https://img.shields.io/badge/docs-pending-lightgrey"></a>
+  <a href="https://github.com/docuccino/docuccino/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/docuccino/docuccino/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/docuccino/docuccino/actions/workflows/website.yml"><img alt="Docs" src="https://github.com/docuccino/docuccino/actions/workflows/website.yml/badge.svg?branch=main"></a>
+  <a href="https://packagist.org/packages/docuccino/laravel"><img alt="Latest version" src="https://img.shields.io/packagist/v/docuccino/laravel"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
   <img alt="PHP 8.3+" src="https://img.shields.io/badge/php-8.3%2B-777bb4">
-  <img alt="Laravel 12+" src="https://img.shields.io/badge/laravel-12%2B-ff2d20">
+  <img alt="Laravel 12 and 13" src="https://img.shields.io/badge/laravel-12%20%7C%2013-ff2d20">
 </p>
 
 # Docuccino
@@ -33,7 +38,7 @@ php artisan docuccino:export            # → docs/openapi.json
 ```
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
-expose it elsewhere). Full walkthrough: **[Getting started](https://docs.docuccino.app/getting-started/)**.
+expose it elsewhere). Full walkthrough: **[Getting started](https://docs.docuccino.app/laravel/getting-started/)**.
 
 ## Why Docuccino
 
@@ -75,12 +80,12 @@ The versioned UIR JSON Schema lives in [`spec/uir/`](spec/uir/) and is served at
 
 Full documentation is at **[docs.docuccino.app](https://docs.docuccino.app)**:
 
-- [Getting started](https://docs.docuccino.app/getting-started/)
-- [Configuration reference](https://docs.docuccino.app/reference/configuration/) ·
-  [Commands](https://docs.docuccino.app/reference/commands/) ·
-  [Attributes](https://docs.docuccino.app/reference/attributes/)
-- [Integrations](https://docs.docuccino.app/integrations/)
-- [Extension authoring](https://docs.docuccino.app/guides/extension-authoring/) ·
+- [Getting started](https://docs.docuccino.app/laravel/getting-started/)
+- [Configuration reference](https://docs.docuccino.app/laravel/reference/configuration/) ·
+  [Commands](https://docs.docuccino.app/laravel/reference/commands/) ·
+  [Attributes](https://docs.docuccino.app/laravel/reference/attributes/)
+- [Package support](https://docs.docuccino.app/laravel/packages/)
+- [Extension authoring](https://docs.docuccino.app/extending/extension-authoring/) ·
   [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
 - [UIR spec](https://docs.docuccino.app/uir/)
 
@@ -90,6 +95,7 @@ The docs site source lives in [`website/`](website/README.md) (Astro + Starlight
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions require a DCO sign-off (`git commit -s`) and
 follow Conventional Commits; determinism and the golden-file discipline are hard, tested guarantees.
+Releases and the subtree split are described in [RELEASING.md](RELEASING.md).
 
 ## License
 

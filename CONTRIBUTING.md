@@ -24,7 +24,12 @@ package or area: `feat(laravel): …`, `fix(core): …`, `refactor(inference-php
 
 ## Repository layout
 
-This is a monorepo, subtree-split into individual packages on release:
+This is a monorepo. Each `packages/*` directory is subtree-split into a read-only repository of its
+own (`docuccino/core`, `docuccino/attributes`, …) — that is what Composer installs, and the split
+happens on every push to `main` (see [RELEASING.md](RELEASING.md)). Never commit to a split
+repository: it is overwritten. All work happens here.
+
+What lives where:
 
 - `packages/core` — `docuccino/core`, framework-agnostic UIR model, canonicalizer, identity,
   validator, emitters, semantic diff, extension contracts.
@@ -117,7 +122,7 @@ Built-in integrations live in `packages/laravel/src/Integrations/<Name>/` — se
 `<Name>Integration` registrar (a static `extensions()` list, plus a `class_exists`-guarded
 `installed()` for conditional ones), importing only the public extension surface. An arch test
 (`IntegrationsArchTest`) enforces this — they use the *same public API* a third party would. See the
-[extension authoring guide](https://docs.docuccino.app/guides/extension-authoring/) for the full
+[extension authoring guide](https://docs.docuccino.app/extending/extension-authoring/) for the full
 template, the contracts, `#[ExtensionOrder]`, and the placement rule.
 
 ## Docs site
