@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
@@ -297,4 +298,19 @@ function ensureFixtureAvailable(bool $available): void
     }
 
     test()->markTestSkipped('fixture app absent — recreate per tests/fixture-app/setup.md');
+}
+
+/**
+ * A generation result's diagnostics with one code, in order — the shape every diagnostic-asserting
+ * suite needs.
+ *
+ * @param  list<Diagnostic>  $diagnostics
+ * @return list<Diagnostic>
+ */
+function diagnosticsCoded(array $diagnostics, string $code): array
+{
+    return array_values(array_filter(
+        $diagnostics,
+        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === $code,
+    ));
 }
