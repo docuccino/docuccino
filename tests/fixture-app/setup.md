@@ -184,3 +184,7 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
   rule, a `Rule::enum(ListingStatus::class)` factory descriptor, and a closure rule, so the real
   `RulesMethodVisitor` proves descriptor folding inside a FormRequest (enum backing values + FQCN)
   and the `validation.rule-unrecoverable` diagnostic for the closure field (validation §1).
+- `app/Rules/SortCode.php`, `app/Rules/OpaqueSignature.php` and
+  `app/Http/Requests/StorePaymentRequest.php` — a custom rule class carrying `#[RuleSchema]`, an
+  unannotated sibling, and a FormRequest validating with `new` instances of both: the real fold proves an
+  annotated rule OBJECT documents from its class attribute while the unannotated one stays diagnosed.
