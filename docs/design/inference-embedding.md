@@ -72,6 +72,11 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
 - Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Worker fatal → re-queue
   batch with size 1 (bisection isolates the poison action). Engine boot failure → fatal
   diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build).
+- **Two scopes, not one.** The bounds above (depth 4, file budget 40) are shared by every
+  descending analysis, but the *scope* is not. Throw classification and the Query-Builder trace
+  descend only into `engine.project_paths`; the response-shape refiner and its enum folder run on
+  the wider PRIME scope — every primed app PSR-4 root, a modular `Modules\…` root included (§4a
+  step 4). Vendor code is in neither, so it is never followed.
 
 ## 4. Boundary (contract in docuccino/core; zero PHPStan imports)
 
@@ -170,8 +175,40 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    every descended helper file and every folded enum's file is reported into `dependencyFiles`,
    re-contributed on a memo hit, so editing any of them invalidates the route fragment.
 
-Bounds are shared with §3; the marker type is §5. The deliberate "folded status beats the throw hint"
-choice is recorded in the commits that landed the status-folding steps.
+Bounds are shared with §3 (bounds only — §3's scope note); the marker type is §5. "Folded status beats
+the throw hint" is deliberate: the renderer's own status is what the client actually receives.
+
+## 4b. The narrowing half: choosing a renderer's return site
+
+§4a folds a shape once a return site is chosen. Choosing it is the other half, and it is where the
+honesty rules live.
+
+Each of a renderer's return sites is paired with the caught-variable class guard that makes it
+reachable, and two source shapes need different machinery. An `if ($e instanceof X) return …;` chain
+takes its guard from PHPStan's per-return flow narrowing. A
+`return match (true) { $e instanceof X => …, default => … }` renderer collapses to a SINGLE return
+whose scope leaves `$e` un-narrowed, so its arms are decomposed off the AST instead, reading each arm's
+own `instanceof` conditions (walking `&&`/`||`, so a compound condition contributes every class named).
+Selection is source-order-first-match either way — the runtime semantics of both shapes.
+
+Two honesty rules ride on top:
+
+- **Delegation honesty.** A broad `return null` early-out that does not branch on `$e` — the
+  `if (! $request->expectsJson()) return null;` shape — must not shadow a later per-type response arm:
+  the documented API path is the response, not the framework fall-through. A broad delegation site
+  therefore loses to any response-producing site; only a genuine per-type null arm (an exact guard) or
+  an all-delegating renderer resolves to delegation.
+- **Narrowing honesty.** When the chosen site is a broad guard that shadowed a later EXACT `instanceof`
+  match, or when two arms claim the type exactly, an `inference.ambiguous-narrowing` info diagnostic is
+  raised rather than presenting the recovered shape as certain.
+
+**Closure harvesting (verified PHPStan behaviour).** When a closure is harvested by line — the
+`RateLimiter::for` limiters — the visitor must be driven INSIDE the `processNodes` pass, on the live
+scope. An arrow function's scope is a lazy fiber scope that cannot type expressions once the pass has
+ended, so nothing may be deferred until after the walk.
+`ClosureReturnStatementsNode::getStatementResult()->isAlwaysTerminating()` distinguishes a conditional
+(fall-through) closure body from an unconditional one; a limiter that does not always return is left
+unrecovered rather than half-folded.
 
 ## 5. DType model + translator
 

@@ -7,14 +7,13 @@ namespace Docuccino\Attributes;
 use Attribute;
 
 /**
- * Declares an explicit security requirement for an operation, referencing a security scheme by the
- * name it is registered under (via `security.schemes` config or an integration such as Sanctum or
- * Passport). Use it where middleware detection can't see the requirement — a Gate/policy check, or a
- * `$request->user()?->tokenCan()` guard in the action body.
+ * Declares a security requirement for an operation, naming a scheme registered via
+ * `security.schemes` config or an integration like Sanctum or Passport. Reach for it when middleware
+ * detection can't see the requirement — a Gate/policy check, or a `tokenCan()` guard in the action.
  *
- * Repeatable: each `#[Security]` is one alternative, so stacking them models an OR-list of
- * requirements (`[{schemeA: scopesA}, {schemeB: scopesB}]` — any one satisfies the operation). A
- * single attribute with several scopes is an all-of within that one scheme.
+ * Repeatable, and each one is an alternative: stacking them gives an OR-list where any single
+ * requirement satisfies the operation. Several scopes on one attribute is an all-of within that
+ * scheme.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 final readonly class Security

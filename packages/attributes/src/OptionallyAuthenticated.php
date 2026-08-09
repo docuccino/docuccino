@@ -7,10 +7,10 @@ namespace Docuccino\Attributes;
 use Attribute;
 
 /**
- * Marks an operation as usable anonymously OR authenticated: its security becomes an OR-list whose
- * first alternative is the empty requirement `{}` (anonymous), followed by whatever requirement was
- * inferred (from middleware) or declared (via `#[Security]`). This is OAS's `security: [{}, …]`
- * idiom — the endpoint works without credentials but recognises them when present.
+ * Marks an operation as usable anonymously or authenticated. Security becomes an OR-list starting
+ * with the empty requirement `{}`, followed by whatever was inferred from middleware or declared via
+ * `#[Security]` — OAS's `security: [{}, …]` idiom for an endpoint that works without credentials but
+ * recognises them when present.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION)]
 final readonly class OptionallyAuthenticated {}
