@@ -2,15 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Inference\PhpStan\Metadata;
+namespace Docuccino\Core\TypeGrammar;
 
-use Docuccino\Inference\PhpStan\Support\PhpDocParserStack;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 
 /**
- * The package's one docblock reader: prose, `@example`, `@property` tags, and the OAS summary/description
- * split, all through the shared {@see PhpDocParserStack} so there's a single type grammar.
- * Framework-agnostic — it touches no PHPStan analysis internals.
+ * The one docblock reader: prose, `@example`, `@property` tags, and the OAS summary/description split,
+ * all through the shared {@see PhpDocParserStack} so there's a single grammar.
  */
 final class DocBlockReader
 {

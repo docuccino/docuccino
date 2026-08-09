@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Inference\PhpStan\Types;
+namespace Docuccino\Core\TypeGrammar;
 
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\GroupUse;

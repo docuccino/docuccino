@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use Docuccino\Inference\PhpStan\Metadata\DocBlockReader;
+use Docuccino\Core\TypeGrammar\DocBlockReader;
 
 /**
- * The docblock prose reader (in-process, adapter-side): summary/description split, @example, and the
- * degradation branches. read() is built on summary(), so this pins the split's own edge cases (G7).
+ * The docblock prose reader: summary/description split, @example, `@property` tags, and the degradation
+ * branches. read() is built on summary(), so this pins the split's own edge cases.
  */
 it('splits leading prose into summary (first paragraph) and description (remainder)', function (): void {
     $read = (new DocBlockReader)->read("/**\n * First summary line.\n *\n * Second paragraph with detail.\n */");

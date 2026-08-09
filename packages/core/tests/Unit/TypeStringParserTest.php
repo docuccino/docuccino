@@ -12,8 +12,8 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Inference\PhpStan\Types\ImportContext;
-use Docuccino\Inference\PhpStan\Types\TypeStringParser;
+use Docuccino\Core\TypeGrammar\ImportContext;
+use Docuccino\Core\TypeGrammar\TypeStringParser;
 
 /**
  * Covers every branch of the phpdoc type-grammar → {@see DType} mapping the attribute layer relies on

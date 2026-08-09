@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Inference\PhpStan\Support;
+namespace Docuccino\Core\TypeGrammar;
 
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
@@ -17,8 +17,7 @@ use Throwable;
 /**
  * The one phpstan/phpdoc-parser stack, so there's a single type/doc grammar everywhere: lexer and parser
  * construction plus two tolerant entry points (raw docblock → {@see PhpDocNode}, type string →
- * {@see TypeNode}). Lives here rather than in `docuccino/core` to keep core free of the phpdoc-parser
- * dependency.
+ * {@see TypeNode}).
  *
  * @internal
  */

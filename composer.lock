@@ -427,7 +427,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/core",
-                "reference": "f4fb80d1eb88abd9458b17ce7fcccea9e1c0b5a2"
+                "reference": "5e39ff2720f888917d1ecc6d1dd200afc7ce6549"
             },
             "require": {
                 "composer-runtime-api": "^2",
@@ -435,6 +435,7 @@
                 "nikic/php-parser": "^5",
                 "opis/json-schema": "^2.4",
                 "php": "^8.3",
+                "phpstan/phpdoc-parser": "^2",
                 "psr/container": "^1.1 || ^2.0",
                 "symfony/yaml": "^7.0"
             },
@@ -482,7 +483,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/inference-phpstan",
-                "reference": "87d0eb0bcc91a541ff4d18e4d37114edeb2cbcb0"
+                "reference": "47eb903e40b8efaf88b99481a82f2232b160ff64"
             },
             "require": {
                 "docuccino/core": "self.version",
@@ -495,6 +496,9 @@
             "require-dev": {
                 "larastan/larastan": "^3.10",
                 "pestphp/pest": "^4.0"
+            },
+            "suggest": {
+                "larastan/larastan": "^3.10 - required at runtime for inference; without it the engine cannot boot and Docuccino falls back to docblock/attribute-only documentation"
             },
             "bin": [
                 "bin/worker.php"
@@ -544,7 +548,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/laravel",
-                "reference": "95e846b8fe7242272a409ab96f799fbfff72a88f"
+                "reference": "f72e3ef14c51b52b9998a308e3d83cfe02550720"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -565,6 +569,9 @@
                 "spatie/laravel-data": "^4.0",
                 "spatie/laravel-json-api-paginate": "^2.0",
                 "timacdonald/json-api": "^1.0@beta"
+            },
+            "suggest": {
+                "larastan/larastan": "^3.10 - enables type inference; install it as a dev dependency, or documentation comes from docblocks and attributes only"
             },
             "type": "library",
             "extra": {

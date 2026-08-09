@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Docuccino\Inference\PhpStan\Types;
+namespace Docuccino\Core\TypeGrammar;
 
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -16,7 +16,6 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Inference\PhpStan\Support\PhpDocParserStack;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFalseNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFloatNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprIntegerNode;
@@ -36,8 +35,7 @@ use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
 /**
  * Parses a phpstan/phpdoc-parser type string — as written in `#[Response(type: '…')]` and the parameter
  * attributes — into a {@see DType} through the shared {@see PhpDocParserStack}, the same grammar the engine
- * uses for docblocks. It lives here rather than in `docuccino/core` to keep core free of the phpdoc-parser
- * dependency.
+ * uses for docblocks.
  */
 final class TypeStringParser
 {
