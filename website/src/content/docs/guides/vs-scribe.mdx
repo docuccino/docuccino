@@ -104,7 +104,7 @@ biggest win is deletion.
 | `examples.faker_seed` | **Delete** — unnecessary | Output is deterministic by construction. |
 | `groups.order` config | [`tags.definitions`](/laravel/reference/configuration/#tags) (weight-ordered) + `tags.map` | Tag objects are sorted by ascending `weight`, then name. |
 | `inheritedDocsOverrides()` | Not needed for route context | Path params, bindings, and controller-level attributes resolve against the concrete child route; use attributes or [overlays](/laravel/reference/configuration/#overlays) for anything an inherited method's body inference doesn't cover. |
-| Custom rule `docs()` method | Express the field with string rules, `Rule::` factories, or add a `RuleTransformer` | Built-in `Rule::` objects fold statically; a *custom* rule object is opaque, and Docuccino diagnoses the field instead of guessing. See [where Scribe is stronger](#where-scribe-is-stronger). |
+| Custom rule `docs()` method | [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) on the rule class | Same idea, different ergonomics: Scribe calls a method on your rule, Docuccino reads an attribute on it — one declaration, every field that uses the rule. Its fields map onto the rule vocabulary (`type`, `enum`, `pattern`, `min`/`max`, `format`, `description`, `example`), so anything the vocabulary can't express is still a `RuleTransformer`. |
 | `.scribe/**` hand-edits, `custom.*.yaml` | OpenAPI Overlays or attributes at source | Different philosophy — see below. |
 | Strategy plugin API | `OperationExtension`, `TypeToSchema`, `ExceptionToResponse`, `RuleTransformer`, `DocumentTransformer` | Register from any provider, any order. |
 | — | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | New on migration: marks an operation (or a whole controller) deprecated, with a reason. |
@@ -140,14 +140,17 @@ carefully before you switch — for some teams they're the whole reason to stay.
   factories, with states, eager-loaded relations and pivot data. Docuccino has no equivalent — it
   documents the response's *shape*, not a rendered instance of it.
 - **A native Postman collection.** Docuccino emits OpenAPI; import that file into Postman instead.
-- **Custom rule objects and closures.** Scribe documents a custom `Rule` object through its `docs()`
-  method. Docuccino maps the whole string-rule vocabulary — 78 named rules, from `alpha` and
-  `starts_with` patterns to `const` for `accepted`/`declined`, date comparisons, numeric bounds,
-  `not_in` and `distinct` — and a `RuleTransformer` teaches it any string rule you invent. Built-in
-  `Rule::` objects fold too: `Rule::enum` (including `->only()` / `->except()`), `Rule::in`,
-  `Rule::exists` and `Rule::unique`. But a *custom* `ValidationRule` class, a closure, or a
-  `Rule::when()` conditional is opaque to static analysis: Docuccino raises a
-  `validation.rule-unrecoverable` diagnostic naming the field rather than guessing at its shape.
+- **Closure rules.** Scribe's `docs()` method on a custom `Rule` object now has a direct counterpart —
+  [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the rule class, read
+  wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 78
+  named Laravel rules, from `alpha` and `starts_with` patterns to `const` for `accepted`/`declined`, date
+  comparisons, numeric bounds, `not_in` and `distinct`, plus `Rule::enum` (including `->only()` /
+  `->except()`), `Rule::in`, `Rule::exists` and `Rule::unique`. A `RuleTransformer` teaches it any rule
+  you invent. What neither tool reads is a **closure** rule or a `Rule::when()` conditional — there's no
+  `docs()` to call on a closure — so both fall back to something you write by hand: a comment beside the
+  rule in Scribe (lighter, and its advantage here), a
+  [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) in Docuccino, which also names the
+  field in a `validation.rule-unrecoverable` diagnostic rather than quietly omitting it.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
 - **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request

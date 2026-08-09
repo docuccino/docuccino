@@ -162,10 +162,12 @@ The rules array is recovered without ever being executed, from any of these:
 | Either of the above inside a helper the action calls | Docuccino descends into your own code (bounded), so a `Validator::make(...)` built in a query or service class one or more hops away is still found. Vendor code is never entered. |
 
 Within a rules array, Docuccino reads pipe strings (`'required|integer'`), arrays of rules
-(`['required', 'integer']`), and the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()`
-and `Rule::unique()`. A field whose rules are a closure, a custom `Rule` object, or a conditional
-descriptor can't be read statically: it's omitted from the schema and raises a
-`validation.rule-unrecoverable` info diagnostic naming the field, so nothing disappears silently.
+(`['required', 'integer']`), the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()` and
+`Rule::unique()`, and your own rule objects — `new SortCode` documents from the rule class's
+[`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
+`#[RuleSchema]`, or a conditional descriptor can't be read statically: it's omitted from the schema and
+raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing disappears
+silently.
 
 ### Nested and array fields
 
@@ -222,6 +224,78 @@ Notice `min:1` on `items`: size rules are applied **type-aware**, so the same ru
 on an array, `minimum` on a number, and `minLength` on anything else. Rule order in your array
 doesn't matter — Docuccino sorts each field's rules into Laravel's own effect order first, so
 `['max:100', 'integer']` and `['integer', 'max:100']` produce identical output.
+
+### Documenting a custom rule
+
+A custom `ValidationRule` class does its work at runtime, so there's nothing to read from its body. Say
+what it accepts once, on the class, with `#[RuleSchema]` — and every field validated by it is documented,
+in Form Requests, inline `validate()` calls, and Spatie Data's `#[Rule(new …)]` alike:
+
+<Tabs>
+	<TabItem label="Your rule">
+	```php
+	use Docuccino\Attributes\RuleSchema;
+
+	#[RuleSchema(
+	    type: 'string',
+	    pattern: '[0-9]{2}-[0-9]{2}-[0-9]{2}',
+	    min: 8,
+	    max: 8,
+	    description: 'A UK sort code, hyphenated.',
+	    example: '20-15-55',
+	)]
+	final class SortCode implements ValidationRule
+	{
+	    public function validate(string $attribute, mixed $value, Closure $fail): void { /* … */ }
+	}
+	```
+	</TabItem>
+	<TabItem label="Used anywhere">
+	```php
+	public function rules(): array
+	{
+	    return [
+	        'amount'    => ['required', 'integer', 'min:1'],
+	        'sort_code' => ['required', new SortCode],
+	    ];
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{
+	  "sort_code": {
+	    "type": "string",
+	    "pattern": "[0-9]{2}-[0-9]{2}-[0-9]{2}",
+	    "minLength": 8,
+	    "maxLength": 8,
+	    "description": "A UK sort code, hyphenated.",
+	    "example": "20-15-55"
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Every field is optional, and each one maps onto the same rule the vocabulary below already documents —
+so a `min` bounds `minLength`, `minimum` or `minItems` by the resolved type, exactly like `min:8` would:
+
+| Field | Documented as |
+| --- | --- |
+| `type` | A JSON Schema type name (`string`, `integer`, `number`, `boolean`, `array`) — or any type rule name, so `'email'` and `'uuid'` bring their formats along. |
+| `enum` | An `enum` of the allowed values, like `in:…`. |
+| `pattern` | A bare ECMA-262 `pattern`, like `regex:…`. |
+| `min` / `max` | The type-aware size keywords, like `min:` / `max:`. |
+| `format` | A `format`, unless the type rule already implied one. |
+| `description` | The property description (appended to any note the other rules produced). |
+| `example` | The property `example`, typed to match the field. |
+
+<Aside>
+The attribute is the whole contract: it's read by reflection, the constructor arguments at the call site
+are ignored, and the class needn't implement any interface — so a rule from a package documents the
+moment its author adds the attribute. Nothing is instantiated and `validate()` never runs. A rule class
+with no `#[RuleSchema]` keeps the `validation.rule-unrecoverable` diagnostic; closures stay opaque.
+</Aside>
 
 ## Validation rule reference
 
@@ -287,6 +361,18 @@ This is the complete rule vocabulary. Anything not listed leaves the property pe
 | `distinct` | `uniqueItems: true` |
 | `exists`, `unique` | A type only (`string` if the field is otherwise untyped) — a foreign-key lookup isn't a documentable shape. |
 | `confirmed` | Adds the implicit `{field}_confirmation` partner, mirroring the field's type and required flag. |
+
+### Schema annotations
+
+| Rule | Documented as |
+| --- | --- |
+| `format:iban` | A `format`, unless a type rule already set one. |
+| `description:…` | The property description, appended to any note earlier rules produced. |
+| `example:…` | The property `example`, coerced to the field's resolved type. |
+
+These three aren't Laravel rules, so don't put them in a rules array — Laravel would reject them. They
+exist so a [`#[RuleSchema]`](#documenting-a-custom-rule) reaches the schema through the same chain as
+every other rule, and they're applied last, so they see the finished property.
 
 ### Recognized with no schema effect
 

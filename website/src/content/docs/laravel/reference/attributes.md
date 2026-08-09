@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 26 attributes with signatures and examples.
+description: The docuccino/attributes package — all 27 attributes with signatures and examples.
 ---
 
 
@@ -25,7 +25,7 @@ you'd expect without a `::class` reference.
 
 ## At a glance
 
-All 26 attributes, grouped by what they do:
+All 27 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -36,6 +36,7 @@ All 26 attributes, grouped by what they do:
 | [`#[HeaderParameter]`](#headerparameter) | Add or patch a request header parameter. |
 | [`#[CookieParameter]`](#cookieparameter) | Add or patch a cookie parameter. |
 | [`#[BodyParameter]`](#bodyparameter) | Add or patch one property of the request body. |
+| [`#[RuleSchema]`](#ruleschema) | Document what a custom validation rule accepts. |
 | [`#[Hidden]`](#hidden) | Remove properties from the output schema. |
 | [`#[HiddenFromRequest]`](#hiddenfromrequest) | Remove a Data-class property from the request body only. |
 | [`#[ExcludeFromDocs]`](#excludefromdocs) | Drop a route (or controller) from the docs. |
@@ -201,6 +202,37 @@ Patches or adds a single property of the *inferred* request body schema.
 #[BodyParameter(name: 'nickname', type: 'string', description: 'Display name', example: 'Tom')]
 public function update(UpdateUserRequest $request, int $id): UserResource { /* … */ }
 ```
+
+### `#[RuleSchema]`
+
+Targets `CLASS`, not repeatable.
+
+```php
+public function __construct(
+    public ?string $type = null,
+    public ?string $format = null,
+    public ?string $pattern = null,
+    public ?array $enum = null,
+    public int|float|null $min = null,
+    public int|float|null $max = null,
+    public ?string $description = null,
+    public string|int|float|bool|null $example = null,
+)
+```
+
+Documents what a custom validation rule accepts, once, on the rule class — so every field validated by
+it is documented, wherever the rule object appears. Each field maps onto the rule vocabulary (`type` → a
+type rule, `enum` → `in:…`, `min`/`max` → the size rules), so the result is identical to writing those
+rules by hand. The attribute is the contract: the class needn't implement any interface, and the
+constructor arguments at the call site are ignored.
+
+```php
+#[RuleSchema(type: 'string', pattern: '[0-9]{2}-[0-9]{2}-[0-9]{2}', description: 'A UK sort code.')]
+final class SortCode implements ValidationRule { /* … */ }
+```
+
+See [documenting a custom rule](/laravel/documenting/requests/#documenting-a-custom-rule) for the
+field-by-field mapping.
 
 ## Visibility & inclusion
 

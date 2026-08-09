@@ -41,7 +41,7 @@ Whatever you're migrating from, this is the surface you get without writing an a
 useful list to check your own app against:
 
 - **Requests** — Form Requests, inline `validate()`, and Spatie Data objects, with the full Laravel
-  rule vocabulary (78 named rules) mapped to schema constraints.
+  rule vocabulary (78 named Laravel rules) mapped to schema constraints.
 - **Query parameters** — Spatie Query Builder filters, sorts, includes, fields and pagination, traced
   through helper methods several calls deep, so a query assembled across a few methods (or a separate
   query object) still documents fully.
@@ -144,7 +144,7 @@ The extension model is similar in spirit; the contracts live in
 | Operation extension | `OperationExtension` (phased) |
 | Exception-to-response extension | `ExceptionToResponse` |
 | "After document generated" callback | `DocumentTransformer` |
-| Custom validation-rule handling | `RuleTransformer` |
+| Custom validation-rule handling | `RuleTransformer` — or, for one rule class, [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) with no extension at all |
 
 The [Writing an integration](/extending/extension-authoring/) guide walks through building one
 end-to-end.
@@ -162,12 +162,13 @@ against how you work before you commit:
 - **No watch mode.** Re-run `docuccino:export`, or point the viewer at
   [`source: generate`](/laravel/reference/configuration/#viewer) so it rebuilds per request while you
   work locally.
-- **Custom rule objects and closure rules aren't documented.** Built-in `Rule::` objects fold
-  statically — `Rule::enum` (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists`
-  and `Rule::unique` — alongside the whole string-rule vocabulary, and you can teach Docuccino more
-  with a `RuleTransformer`. But a custom `ValidationRule` class, a closure, or a `Rule::when()`
-  conditional has opaque logic, so Docuccino raises a diagnostic naming the field rather than
-  guessing at its shape.
+- **Closure rules aren't documented.** Built-in `Rule::` objects fold statically — `Rule::enum`
+  (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists` and `Rule::unique` —
+  alongside the whole string-rule vocabulary; your own rule classes document from a
+  [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the class; and a
+  `RuleTransformer` teaches Docuccino any rule you invent. But a closure rule, a `Rule::when()`
+  conditional, or a rule class carrying no attribute has opaque logic, so Docuccino raises a diagnostic
+  naming the field rather than guessing at its shape.
 
 ## Running them side by side
 

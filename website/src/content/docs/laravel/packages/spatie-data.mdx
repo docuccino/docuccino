@@ -158,9 +158,12 @@ expands to the enum's backing values, never the class name. Presence, type, size
 attributes are all covered, and a property's own type contributes the base type where no attribute
 states one.
 
-Two escape hatches work as you'd hope:
+The escape hatches work as you'd hope:
 
 - `#[Rule('max:10|min:1')]` passes its strings straight through as Laravel rules.
+- `#[Rule(new SortCode)]` documents from the rule class's own
+  [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) — describe a custom rule
+  once at the class and every property using it picks it up.
 - An attribute Docuccino doesn't recognize degrades like an unknown string rule — permissive, with an
   info diagnostic — rather than inventing a constraint.
 
