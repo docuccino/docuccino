@@ -12,10 +12,10 @@ Scramble's approach, Docuccino will feel familiar. This page covers what's diffe
 gain, what you'd give up, and exactly how to move your annotations, config and extensions across.
 
 <Aside type="note">
-Scramble ships a free core and a paid Scramble Pro tier, and its features and annotation names move
-between versions. Rather than publish a feature matrix that goes stale, this page describes what
-Docuccino does and leaves the current state of Scramble to
-[its own documentation](https://scramble.dedoc.co) — check the version and tier you run.
+Scramble ships a free core and a paid **Scramble PRO** tier, and its features and annotation names
+move between versions. The Scramble columns below were read off
+[its own documentation](https://scramble.dedoc.co) in August 2026 — treat them as a map for finding
+the equivalent, not as a spec, and check the version and tier you run. The Docuccino column is exact.
 </Aside>
 
 ## The shape of the difference
@@ -36,10 +36,106 @@ becomes an artifact you commit; because every node carries a stable identity, Do
 rename apart from a removal and fail a pull request that breaks the contract without the version bump
 your policy demands. See [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
 
+## Feature support, side by side
+
+Both tools generate from your code, and the overlap is large and healthy. The tables below break it
+down capability by capability, with Scramble's free core and **Scramble PRO** split out so you can see
+which tier a capability lives in. `✓` means built-in support; `—` means not supported.
+
+Scramble PRO is a separately-licensed paid add-on, so a `✓` in that column is a capability you buy
+rather than one the free package ships; Docuccino is MIT-licensed with no paid tier, so its column is
+one free package throughout. Prices change — check [Scramble's own site](https://scramble.dedoc.co/pro)
+for the current figures.
+
+### Requests and validation
+
+| Capability | Docuccino (free, MIT) | Scramble (free) | Scramble PRO (paid) |
+| --- | :---: | :---: | :---: |
+| Validation rules → schema constraints | ✓ | ✓ | ✓ |
+| Form Requests and inline `validate()` | ✓ | ✓ | ✓ |
+| Spatie Data objects | ✓ | — | ✓ |
+| Laravel Actions | ✓ | — | ✓ |
+| Spatie Query Builder filters, sorts, includes, fields | ✓ | — | ✓ |
+| …recovered when the query is assembled in a helper method | ✓ | — | ✓ |
+
+Docuccino maps 78 named Laravel rules onto schema constraints, and documents your own rule classes from
+a [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) on the class, with a `RuleTransformer`
+for anything it doesn't know. Query builders are a genuine tie — Scramble PRO follows the builder out of
+the route action too — so if that's what brought you here, the difference is licensing, not capability.
+
+### Responses, models and schemas
+
+| Capability | Docuccino (free, MIT) | Scramble (free) | Scramble PRO (paid) |
+| --- | :---: | :---: | :---: |
+| API Resources | ✓ | ✓ | ✓ |
+| Eloquent model schemas | ✓ | ✓ | ✓ |
+| Backed enums, with case descriptions | ✓ | ✓ | ✓ |
+| Reusable `components/schemas`, deduped and `$ref`'d | ✓ | ✓ | ✓ |
+| Pagination envelopes | ✓ | ✓ | ✓ |
+| Path parameter types from route-model binding | ✓ | ✓ | ✓ |
+| JSON:API resources (`timacdonald/json-api`) | ✓ | — | ✓ |
+| …with the `include` and `fields` query parameters | ✓ | — | — |
+| Spatie JSON API Paginate parameters | ✓ | — | ✓ |
+| Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
+
+### Authentication and operations
+
+| Capability | Docuccino (free, MIT) | Scramble (free) | Scramble PRO (paid) |
+| --- | :---: | :---: | :---: |
+| Security requirements derived from route middleware | ✓ | ✓ | ✓ |
+| Sanctum in both token **and** stateful-cookie modes | ✓ | — | — |
+| Sanctum token abilities (`x-abilities`) | ✓ | — | — |
+| Passport OAuth2 scopes, per operation | ✓ | — | — |
+| Passport client-credentials (machine-to-machine) | ✓ | — | — |
+| Per-operation scheme override (`#[Security]`, `#[OptionallyAuthenticated]`) | ✓ | — | — |
+| Role / permission requirements (`x-permissions`) | ✓ | — | — |
+| Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — | — |
+| `429` numbers folded out of `RateLimiter::for` closures | ✓ | — | — |
+
+Both tools read the middleware stack to decide *whether* an operation is protected. Docuccino goes on
+to read *how*: it resolves the guard's driver, so a custom guard name still lands on the right scheme,
+and it carries abilities, scopes and permissions through to the operation.
+
+### Error responses
+
+| Capability | Docuccino (free, MIT) | Scramble (free) | Scramble PRO (paid) |
+| --- | :---: | :---: | :---: |
+| Framework defaults (`422` / `401` / `403` / `404`) | ✓ | ✓ | ✓ |
+| Exceptions thrown in the action, and `abort()` helpers | ✓ | ✓ | ✓ |
+| Your *real* error shapes, read from your exception handling | ✓ | — | — |
+| Error **examples**, with `const`-pinned literal members | ✓ | — | — |
+| RFC 9457 Problem Details preset | ✓ | — | — |
+
+Reading your actual exception handling is where inference goes furthest, and it's covered in detail
+[below](#what-docuccino-infers-for-you). Scramble documents the exceptions it can see being thrown —
+`validate()`, `authorize()`, `abort()`, missing bound models, and `@throws` one level deep — and leaves
+the *body* of a custom error to you. Both approaches get you a documented error response; the difference
+is whether you hand-maintain its shape beside the code that produces it.
+
+### Output and workflow
+
+| Capability | Docuccino (free, MIT) | Scramble (free) | Scramble PRO (paid) |
+| --- | :---: | :---: | :---: |
+| Interactive viewer | ✓ | ✓ | ✓ |
+| Multiple documents / API versions | ✓ | ✓ | ✓ |
+| Build cache | ✓ | ✓ | ✓ |
+| Deterministic, byte-stable output | ✓ | — | — |
+| A spec artifact you commit and review in a pull request | ✓ | — | — |
+| Semantic diff over stable node identities | ✓ | — | — |
+| CI gate on breaking changes (`docuccino:diff --enforce`) | ✓ | — | — |
+| A documented intermediate format (the [UIR](/uir/)) | ✓ | — | — |
+| No static-analysis toolchain in a production install | ✓ | — | — |
+
+Everything down to the build cache you can have either way. The rows below it are the ones worth
+weighing, because they only exist for structural reasons: output is deterministic, every node carries a
+stable identity, and the analyser is a dev dependency the adapter names by string rather than a hard
+requirement. See [what Docuccino doesn't do](#what-docuccino-doesnt-do) for the other side of the ledger.
+
 ## What Docuccino infers for you
 
-Whatever you're migrating from, this is the surface you get without writing an annotation. It's the
-useful list to check your own app against:
+The tables give the shape; this is what the inference actually covers. Whatever you're migrating from,
+this is the surface you get without writing an annotation — the useful list to check your own app
+against:
 
 - **Requests** — Form Requests, inline `validate()`, and Spatie Data objects, with the full Laravel
   rule vocabulary (78 named Laravel rules) mapped to schema constraints.
