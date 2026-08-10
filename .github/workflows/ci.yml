@@ -178,3 +178,30 @@ jobs:
         env:
           DOCUCCINO_REQUIRE_FIXTURE: '1'
         run: composer test:inference-fixture
+
+  gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    needs: [quality, schema-copies, coverage, fixture]
+    # The ONLY status check main's ruleset requires. Requiring the individual jobs
+    # by name would couple the ruleset to the matrix: every leg is a separate check
+    # name carrying a version string (`Quality PHP 8.4 (phpstan ~2.2.0)`), so adding
+    # or renaming a leg either leaves a required check that can never report — which
+    # blocks every PR permanently — or silently stops gating the new one. One
+    # aggregator keeps the required set at exactly one stable name.
+    #
+    # `always()` plus an explicit result check, NOT a bare `needs:`: a job that is
+    # skipped rather than run reports "skipped", which required status checks accept
+    # as passing. Without this the gate would go green on a suite that never ran.
+    if: always()
+    steps:
+      - name: Require every CI job to have succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          # Bracket notation for schema-copies: a hyphen in a property path parses
+          # as subtraction in a GitHub expression.
+          echo "::error::CI gate failed — quality=${{ needs.quality.result }}" \
+               "schema-copies=${{ needs['schema-copies'].result }}" \
+               "coverage=${{ needs.coverage.result }}" \
+               "fixture=${{ needs.fixture.result }}"
+          exit 1
