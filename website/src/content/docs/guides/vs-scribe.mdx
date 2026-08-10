@@ -87,7 +87,7 @@ biggest win is deletion.
 | --- | --- | --- |
 | Docblock title/description, `#[Endpoint]` | Kept as-is | Docblock summary/description are read natively. |
 | `@group` / `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Direct swap; repeatable; controller-level. |
-| `@subgroup` / `#[Subgroup]` | Flatten into `#[Group]` | No second-level grouping — OpenAPI tags are single-level. |
+| `@subgroup` / `#[Subgroup]` | `#[Group]` + [`tags.definitions`](/laravel/reference/configuration/#tags) `parent` | Tag the operation with the subgroup name, then declare the subgroup tag with its `parent`. Hierarchy is OAS 3.2; a 3.1 export flattens it with a warning. |
 | `@authenticated` / `#[Authenticated]` | **Delete** — inferred | From auth middleware (Sanctum, Passport). |
 | `@unauthenticated` / `#[Unauthenticated]` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred requirement. |
 | `@hideFromAPIDocumentation` | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Also `#[Internal]` and `#[InDocs]` for finer control. |
