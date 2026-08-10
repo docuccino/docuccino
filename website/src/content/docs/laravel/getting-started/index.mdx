@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import { Steps, Card, CardGrid, FileTree, Aside, LinkCard } from '@astrojs/starlight/components';
+import { Steps, Card, CardGrid, FileTree, Aside, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
 
 Docuccino generates OpenAPI documentation from the real shape of your Laravel application. It reads
 your routes, controllers, form requests, resources, models, and exception handling and produces an
@@ -22,24 +22,45 @@ accurate document — with no annotations to start.
 
 <Steps>
 
-1. Require the Laravel adapter:
+1. Install the packages. **Where do your docs need to be readable?** That's the only question — pick
+   the tab that matches and paste:
 
-   ```bash
-   composer require docuccino/laravel
-   ```
+   <Tabs syncKey="install-scenario">
+     <TabItem label="Serve docs from your app">
+     ```bash
+     composer require docuccino/laravel
+     composer require --dev docuccino/inference-phpstan
+     ```
 
-2. Add the inference engine as a **dev** dependency:
+     Readers hit `/docs/api` on a deployed environment. The adapter ships to production and serves a
+     committed artifact or a warmed cache; the engine stays a dev dependency because analysis belongs
+     wherever you generate, and a production host has no business reading your source.
+     </TabItem>
+     <TabItem label="Docs in development only">
+     ```bash
+     composer require --dev docuccino/laravel docuccino/inference-phpstan
+     ```
 
-   ```bash
-   composer require --dev docuccino/inference-phpstan
-   ```
+     You read the docs locally and ship nothing. Everything is dev-only, so `composer install --no-dev`
+     puts neither package in your production `vendor/` — no service provider, no viewer route, no
+     commands. Generate and browse `/docs/api` on your own machine.
+     </TabItem>
+     <TabItem label="Host the spec elsewhere">
+     ```bash
+     composer require --dev docuccino/laravel docuccino/inference-phpstan
+     ```
 
-   The engine runs PHPStan with Larastan's model and container knowledge to read the real types in
-   your code — a build-time job, like your test suite. Two packages, then, because analysis belongs
-   wherever you generate the document; production installs the adapter alone and serves the finished
-   document without a static analyser anywhere in `vendor/`.
+     Your docs live on an external host — ReadMe, Bump.sh, Redocly, or anything that takes an OpenAPI
+     file. Export in CI and upload the artifact; your app never serves docs, so both packages stay
+     dev-only. [Generating in CI](/laravel/guides/production/#catching-breaking-changes-in-ci) has the
+     job, and `docuccino:export --out=` puts the file wherever your upload step wants it.
+     </TabItem>
+   </Tabs>
 
-3. Publish the config file — optional, but you'll want it soon:
+   The engine is the same package either way: it runs PHPStan with Larastan's model and container
+   knowledge to read the real types in your code — a build-time job, like your test suite.
+
+2. Publish the config file — optional, but you'll want it soon:
 
    ```bash
    php artisan vendor:publish --tag=docuccino-config
@@ -50,7 +71,13 @@ accurate document — with no annotations to start.
    your own application, export to `docs/openapi.json`, and serve an interactive viewer at
    `/docs/api`.
 
-4. Export your first document:
+   Installed everything as a dev dependency? Laravel loads every file in `config/` at boot, and the
+   published file names a Docuccino enum for the engine default — so swap that one line for the
+   literal it resolves to, `'mode' => env('DOCUCCINO_ENGINE', 'in-process')`, and drop the
+   `use Docuccino\Laravel\Engine\TypeEngineMode;` import. Then a production boot with the packages
+   pruned never looks for a class that isn't there.
+
+3. Export your first document:
 
    ```bash
    php artisan docuccino:export
@@ -67,7 +94,7 @@ live in your `local` environment out of the box, and closed everywhere else unti
 [Your first export](/laravel/getting-started/first-export/) walks through what Docuccino read and
 what it produced.
 
-<Aside type="caution" title="Don't skip step 2">
+<Aside type="caution" title="Every scenario installs the engine">
 Without the engine — or if it can't boot — inference degrades to off rather than failing the build.
 Routes, path parameters, validation rules, middleware-driven security, attributes, and docblocks all
 keep working, but inferred response shapes, detected query parameters, and automatic error responses
@@ -120,7 +147,8 @@ clean, reviewable diffs on every change, plus the ability to gate CI with
 
 Set `DOCUCCINO_ENABLED=false` and Docuccino goes completely dormant: the viewer routes are never
 registered and the artisan commands refuse to run. It's the switch to reach for on a production
-host that has no business generating documentation.
+host that has no business generating documentation — and one you never need if you installed
+everything as a dev dependency, because there's nothing on that host to turn off.
 
 <CardGrid>
 	<LinkCard title="Your first export" href="/laravel/getting-started/first-export/" description="See what Docuccino read from your code, and what it emitted." />

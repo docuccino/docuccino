@@ -21,7 +21,7 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
 import ApiReferenceEmbed from '../../components/ApiReferenceEmbed.astro';
 
 ## Documentation from your code, not from annotations
@@ -35,17 +35,43 @@ Under the hood, Docuccino builds a **UIR** (Universal Intermediate Representatio
 document that also carries a stable identity for every operation and schema, and a record of where
 each detail came from. That's what powers the deterministic output and the semantic diff.
 
-## Three commands
+## A few commands
 
-```bash
-composer require docuccino/laravel
-composer require --dev docuccino/inference-phpstan   # powers type inference
-php artisan docuccino:export
-```
+Where do your docs need to be readable? Pick the tab that matches:
 
-Your OpenAPI document lands in `docs/openapi.json`, and the bundled viewer is live at `/docs/api` in
-your local environment. The engine is a dev dependency because analysis runs where you generate —
-production serves the finished document without it. Nothing else to configure —
+<Tabs syncKey="install-scenario">
+  <TabItem label="Serve docs from your app">
+  ```bash
+  composer require docuccino/laravel
+  composer require --dev docuccino/inference-phpstan
+  php artisan docuccino:export
+  ```
+
+  Readers hit `/docs/api` on a deployed environment: the adapter ships to production and serves the
+  committed artifact, while the analysis engine stays a dev dependency.
+  </TabItem>
+  <TabItem label="Docs in development only">
+  ```bash
+  composer require --dev docuccino/laravel docuccino/inference-phpstan
+  php artisan docuccino:export
+  ```
+
+  Read the docs locally, ship nothing: `composer install --no-dev` puts neither package in your
+  production `vendor/`.
+  </TabItem>
+  <TabItem label="Host the spec elsewhere">
+  ```bash
+  composer require --dev docuccino/laravel docuccino/inference-phpstan
+  php artisan docuccino:export --out=build/openapi.json
+  ```
+
+  Export in CI and upload the artifact to whichever documentation host you use. Both packages stay
+  dev-only, because your app never serves the docs.
+  </TabItem>
+</Tabs>
+
+Your OpenAPI document lands where you point it, and the bundled viewer is live at `/docs/api` in your
+local environment. Nothing else to configure —
 [installation](/laravel/getting-started/) walks through it properly.
 
 ## What you get

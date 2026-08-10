@@ -31,14 +31,27 @@ into changelogs, mock servers, and agent-facing tool schemas.
 
 ## Quickstart
 
+Where do your docs need to be readable? That's what decides how you install.
+
+**Serve docs from your app** — the viewer live at `/docs/api` on a deployed environment:
+
 ```bash
-composer require docuccino/laravel
+composer require docuccino/laravel                   # ships to production
 composer require --dev docuccino/inference-phpstan   # powers type inference
 php artisan docuccino:export                         # → docs/openapi.json
 ```
 
-Two lines because analysis is a build-time job: the inference engine (PHPStan + Larastan) runs
-wherever you generate, and production serves the finished document without any of it in `vendor/`.
+**Docs in development only**, or **hosted somewhere else** (ReadMe, Bump.sh, any OpenAPI host) — keep
+both packages dev-only, so `composer install --no-dev` ships neither and production `vendor/` holds
+nothing of Docuccino at all:
+
+```bash
+composer require --dev docuccino/laravel docuccino/inference-phpstan
+php artisan docuccino:export                         # then upload the artifact, if it's hosted
+```
+
+Either way analysis is a build-time job: the inference engine (PHPStan + Larastan) runs wherever you
+generate the document, never on a production host.
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
 expose it elsewhere). Publishing the config (`php artisan vendor:publish --tag="docuccino-config"`) is

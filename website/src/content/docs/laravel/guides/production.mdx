@@ -50,6 +50,12 @@ a JSON-Schema validator, a YAML parser and two small parsing libraries. Serving 
 That is also why the export belongs in CI: the machine that has your dev dependencies is the one that
 can analyse your code. A production box that only serves the committed document never needs to.
 
+This guide assumes your app serves the viewer. If it doesn't — because you read the docs only in
+development, or you publish the spec to an external host — install the adapter as a dev dependency too
+and production ships nothing of Docuccino at all. Everything below about generating and diffing in CI
+still applies; only the viewer sections stop mattering. See the
+[installation scenarios](/laravel/getting-started/#install).
+
 <Aside type="tip" title="If your CI export looks thin">
 An export without the engine installed still produces a document — from docblocks, attributes,
 validation rules and middleware — and warns with `engine.not-installed`. If a CI job prunes dev
@@ -111,6 +117,9 @@ Regenerate whenever the code that shapes your API changes — new routes, change
 resources or error handling. The natural home for that is a pull-request job: export, then diff the
 fresh document against the committed one and hold the changeset to your
 [`versioning`](/laravel/reference/configuration/#versioning) policy.
+
+It's the same job when your docs live on an external host: export with `--out=` to wherever your
+upload step reads from, and add that upload after the checks below pass.
 
 <Tabs>
 	<TabItem label="The three commands">

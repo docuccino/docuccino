@@ -370,6 +370,10 @@ Inference needs the dev-only `docuccino/inference-phpstan` package. Without it, 
 degrades to no inference and each export carries one `engine.not-installed` warning naming the
 install command — `null` is the explicit opt-out and stays silent.
 
+`TypeEngineMode::InProcess->value` in the published file is just sugar for the string `'in-process'`.
+If you installed [everything as a dev dependency](/laravel/getting-started/#install), write the
+literal instead and drop the import, so a `--no-dev` boot never resolves a Docuccino class.
+
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
 There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider
 **prime** scope — every local PSR-4 source root in your `composer.json`, so a modular `Modules/` root
