@@ -22,6 +22,7 @@ function goldenFixtures(): array
     return [
         'worked-example' => ['worked-example.json', 'worked-example'],
         'kitchen-sink' => ['kitchen-sink.uir.json', 'kitchen-sink'],
+        'tag-hierarchy' => ['tag-hierarchy.uir.json', 'tag-hierarchy'],
     ];
 }
 
@@ -63,4 +64,5 @@ it('is stable through a decode/re-encode round trip', function (string $fixture)
 })->with([
     'worked-example' => ['worked-example.json'],
     'kitchen-sink' => ['kitchen-sink.uir.json'],
+    'tag-hierarchy' => ['tag-hierarchy.uir.json'],
 ]);

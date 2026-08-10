@@ -18,7 +18,8 @@ use Docuccino\Core\Support\Arr;
  * - `openapi` becomes `3.1.1`;
  * - the 3.2 `jsonSchemaDialect` base is rewritten to the 3.1 base;
  * - the 3.2-only `query` HTTP method is dropped (warning);
- * - the 3.2-only `additionalOperations` path-item member is dropped (warning).
+ * - the 3.2-only `additionalOperations` path-item member is dropped (warning);
+ * - the 3.2-only tag members `summary`, `parent` and `kind` are dropped (a warning each).
  *
  * The rest of 3.2 is compatible with 3.1's JSON Schema dialect and passes through unchanged.
  *
@@ -29,6 +30,13 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
     private const string DIALECT_32 = 'https://spec.openapis.org/oas/3.2/dialect/base';
 
     private const string DIALECT_31 = 'https://spec.openapis.org/oas/3.1/dialect/base';
+
+    /** The 3.2-only Tag Object members, each with the code and the loss its warning reports. */
+    private const array TAG_MEMBERS_32 = [
+        'summary' => ['downlevel.tag-summary', 'Tags fall back to their `name` for display.'],
+        'parent' => ['downlevel.tag-parent', 'The tag hierarchy flattens; nest the naming instead (e.g. "Billing / Invoices").'],
+        'kind' => ['downlevel.tag-kind', 'Tag categorisation is lost; 3.1 consumers treat every tag the same.'],
+    ];
 
     public function __construct(
         private OpenApi32Emitter $oas32 = new OpenApi32Emitter,
@@ -77,6 +85,10 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
             $array['jsonSchemaDialect'] = self::DIALECT_31;
         }
 
+        if (isset($array['tags']) && is_array($array['tags'])) {
+            $array['tags'] = $this->downlevelTags($array['tags'], $diagnostics);
+        }
+
         if (isset($array['paths']) && is_array($array['paths'])) {
             $array['paths'] = $this->downlevelPathMap($array['paths'], $diagnostics);
         }
@@ -96,6 +108,48 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
         }
 
         return $array;
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $tags
+     * @param  list<Diagnostic>  $diagnostics
+     * @return list<mixed>
+     */
+    private function downlevelTags(array $tags, array &$diagnostics): array
+    {
+        $out = [];
+
+        foreach ($tags as $tag) {
+            if (! is_array($tag)) {
+                $out[] = $tag;
+
+                continue;
+            }
+
+            $name = is_string($tag['name'] ?? null) ? $tag['name'] : '(unnamed)';
+
+            foreach (self::TAG_MEMBERS_32 as $member => [$code, $help]) {
+                if (! isset($tag[$member])) {
+                    continue;
+                }
+
+                unset($tag[$member]);
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Warning,
+                    code: $code,
+                    message: sprintf(
+                        'Dropped the OpenAPI 3.2 `%s` member from tag `%s`, which OpenAPI 3.1 does not define.',
+                        $member,
+                        $name,
+                    ),
+                    help: $help,
+                );
+            }
+
+            $out[] = Arr::stringKeyed($tag);
+        }
+
+        return $out;
     }
 
     /**
