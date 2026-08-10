@@ -63,8 +63,10 @@ GitHub's private vulnerability reporting.
 
 This is a monorepo. Each `packages/*` directory is subtree-split into a read-only repository of its
 own (`docuccino/core`, `docuccino/attributes`, …) — that is what Composer installs, and the split
-happens on every push to `main` (see [RELEASING.md](RELEASING.md)). Never commit to a split
-repository: it is overwritten. All work happens here.
+happens on every push to `main` (see [RELEASING.md](RELEASING.md)). `spec/` is split the same way to
+`docuccino/spec`, which is not a Composer package: it exists so GitHub Pages has a repository from
+which to serve `spec.docuccino.app`. Never commit to a split repository: it is overwritten. All work
+happens here.
 
 What lives where:
 
@@ -75,8 +77,11 @@ What lives where:
   core's `TypeEngine`.
 - `packages/laravel` — `docuccino/laravel`, the Laravel adapter (provider, config, commands, viewer,
   integrations).
-- `spec/` — the versioned UIR JSON Schemas (published to spec.docuccino.app). This is the
-  **canonical authoring copy** of each schema. `packages/core` ships its own package-relative copy
+- `spec/` — `docuccino/spec`, the versioned UIR JSON Schemas, served at spec.docuccino.app by that
+  repository's GitHub Pages site. Its `CNAME`, `.nojekyll`, `index.html` and `README.md` are part of
+  the split payload, so they live here — anything added directly to `docuccino/spec` is wiped on the
+  next release. This is the **canonical authoring copy** of each schema. `packages/core` ships its
+  own package-relative copy
   under `packages/core/resources/spec/` (so `Validator` resolves the schema from a vendor install,
   not from a monorepo-relative path). Edit the canonical copy under `spec/`, then run
   `composer sync-schema` to refresh the package copy; a byte-equality drift guard (`SchemaShippingTest`)

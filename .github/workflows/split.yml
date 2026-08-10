@@ -1,6 +1,13 @@
-# Subtree split: publishes each `packages/<name>` directory to its own read-only
-# repository `docuccino/<name>`, which is what Composer/Packagist installs from. The
-# monorepo stays the only place anyone commits.
+# Subtree split: publishes a directory of this monorepo to its own read-only repository
+# `docuccino/<name>`. The monorepo stays the only place anyone commits.
+#
+# Two kinds of target, same machinery:
+#   * `packages/<name>` → the four Composer packages, which is what Composer/Packagist
+#     installs from.
+#   * `spec` → docuccino/spec, whose GitHub Pages site serves spec.docuccino.app at the
+#     schemas' exact `$id` URLs. Not a Composer package; it is split so that Pages has a
+#     repository to serve from, since one Pages site carries only one custom domain and the
+#     monorepo's is already docs.docuccino.app.
 #
 # ─────────────────────────────────────────────────────────────────────────────────
 # REQUIRED SECRET: `SPLIT_TOKEN`
@@ -14,7 +21,8 @@
 #      Fine-grained tokens → Generate new token
 #   2. Resource owner: the `docuccino` organization
 #   3. Repository access: "Only select repositories" → docuccino/core,
-#      docuccino/attributes, docuccino/inference-phpstan, docuccino/laravel
+#      docuccino/attributes, docuccino/inference-phpstan, docuccino/laravel,
+#      docuccino/spec
 #      (this repository does NOT need to be included)
 #   4. Repository permissions: Contents → Read and write   (nothing else)
 #   5. Expiry: set a calendar reminder — an expired token fails this workflow only,
@@ -70,9 +78,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The local directory name and the split repository name are identical for
-        # every package (packages/core → docuccino/core), so one axis covers both.
-        package: [core, attributes, inference-phpstan, laravel]
+        # `package` is the target repository name (and this job's check name); `directory` is
+        # where its contents live here. They are spelled out separately because `spec` does
+        # not sit under packages/ — deriving one from the other only worked while every
+        # target was a Composer package.
+        include:
+          - { package: core, directory: packages/core }
+          - { package: attributes, directory: packages/attributes }
+          - { package: inference-phpstan, directory: packages/inference-phpstan }
+          - { package: laravel, directory: packages/laravel }
+          - { package: spec, directory: spec }
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -83,8 +98,8 @@ jobs:
         run: |
           if [ -z "$SPLIT_TOKEN" ]; then
             echo "::error::SPLIT_TOKEN is not set. Create a fine-grained PAT with" \
-                 "contents:write on the four docuccino/<package> repositories and save" \
-                 "it as the SPLIT_TOKEN Actions secret (see the header of this workflow)."
+                 "contents:write on the five split target repositories and save it as" \
+                 "the SPLIT_TOKEN Actions secret (see the header of this workflow)."
             exit 1
           fi
 
@@ -105,6 +120,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SPLIT_TOKEN }}
           PACKAGE: ${{ matrix.package }}
+          DIRECTORY: ${{ matrix.directory }}
         run: |
           set -u
           repo="docuccino/$PACKAGE"
@@ -135,7 +151,7 @@ jobs:
               ;;
           esac
 
-          readme="$(printf '# docuccino/%s\n\nRead-only split of `packages/%s` from https://github.com/docuccino/docuccino.\n\nOpen issues and pull requests on the monorepo — commits pushed here are overwritten.\n' "$PACKAGE" "$PACKAGE")"
+          readme="$(printf '# docuccino/%s\n\nRead-only split of `%s` from https://github.com/docuccino/docuccino.\n\nOpen issues and pull requests on the monorepo — commits pushed here are overwritten.\n' "$PACKAGE" "$DIRECTORY")"
 
           gh api --method PUT "repos/$repo/contents/README.md" \
             --field message="chore: initialise split repository" \
@@ -147,7 +163,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
         with:
-          package_directory: packages/${{ matrix.package }}
+          package_directory: ${{ matrix.directory }}
           repository_organization: docuccino
           repository_name: ${{ matrix.package }}
           branch: main
@@ -165,7 +181,7 @@ jobs:
           # `github.ref_name` is already the bare tag on a tag push, so the split
           # repositories get the identical version string.
           tag: ${{ github.ref_name }}
-          package_directory: packages/${{ matrix.package }}
+          package_directory: ${{ matrix.directory }}
           repository_organization: docuccino
           repository_name: ${{ matrix.package }}
           branch: main
