@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
+use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\UirEmitter;
@@ -42,6 +43,12 @@ it('emits OpenAPI 3.1 JSON byte-identical to the committed golden', function (st
     $document = UirDocument::fromArray(loadFixture($fixture));
 
     expect((new OpenApi31DownlevelEmitter)->emit($document))->toBe(loadGolden($base.'.openapi31.json'));
+})->with(goldenFixtures());
+
+it('emits OpenAPI 3.0 JSON byte-identical to the committed golden', function (string $fixture, string $base): void {
+    $document = UirDocument::fromArray(loadFixture($fixture));
+
+    expect((new OpenApi30DownlevelEmitter)->emit($document))->toBe(loadGolden($base.'.openapi30.json'));
 })->with(goldenFixtures());
 
 it('emits OpenAPI 3.2 YAML byte-identical to the committed golden', function (string $fixture, string $base): void {

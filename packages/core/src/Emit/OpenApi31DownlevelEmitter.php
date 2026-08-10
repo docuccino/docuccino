@@ -57,19 +57,28 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
 
     public function emitWithReport(UirDocument $document, EmitOptions $options = new EmitOptions): EmitResult
     {
-        $array = $this->oas32->toOpenApiArray($document, $options);
-
         /** @var list<Diagnostic> $diagnostics */
         $diagnostics = [];
-        $downlevelled = $this->downlevel($array, $diagnostics);
 
-        $canonical = $this->canonicalizer->canonicalize($downlevelled);
+        $canonical = $this->canonicalizer->canonicalize($this->toOpenApiArray($document, $diagnostics, $options));
 
         $output = $options->yaml
             ? $this->yaml->serialize($canonical)
             : $this->serializer->serialize($canonical);
 
         return new EmitResult($output, new EmitReport($diagnostics));
+    }
+
+    /**
+     * The pure OpenAPI 3.1 array (pre-canonicalisation), reused by the 3.0 downlevel emitter — 3.0
+     * needs the 3.2-only constructs gone before its own restrictions apply.
+     *
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, mixed>
+     */
+    public function toOpenApiArray(UirDocument $document, array &$diagnostics, EmitOptions $options = new EmitOptions): array
+    {
+        return $this->downlevel($this->oas32->toOpenApiArray($document, $options), $diagnostics);
     }
 
     /**
@@ -188,7 +197,7 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
                 code: 'downlevel.query-method',
-                message: 'Dropped the OpenAPI 3.2 `query` HTTP method, which OpenAPI 3.1 does not define.',
+                message: 'Dropped the OpenAPI 3.2 `query` HTTP method, which OpenAPI 3.1 and below do not define.',
                 routeSignature: 'QUERY '.$template,
                 help: 'Consumers on 3.1 toolchains will not see this operation; keep the 3.2 artifact for full fidelity.',
             );
@@ -199,7 +208,7 @@ final readonly class OpenApi31DownlevelEmitter implements Emitter
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
                 code: 'downlevel.additional-operations',
-                message: 'Dropped the OpenAPI 3.2 `additionalOperations` member, which OpenAPI 3.1 does not define.',
+                message: 'Dropped the OpenAPI 3.2 `additionalOperations` member, which OpenAPI 3.1 and below do not define.',
                 routeSignature: $template,
                 help: 'Model custom HTTP methods with a standard method on 3.1 toolchains.',
             );
