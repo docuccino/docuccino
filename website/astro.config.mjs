@@ -1,16 +1,16 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import node from '@astrojs/node';
 import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	output: 'server',
-	adapter: node({ mode: 'standalone' }),
-	server: {
-		host: true,
-		port: parseInt(process.env.PORT || '3000'),
-	},
+	// Static output (Astro's default — no `output` or `adapter` key). The site is a pure content
+	// site: there are no `src/pages`, no endpoints and no request-time APIs, so nothing here needs a
+	// server. GitHub Pages serves the built `dist/` directly.
+	//
+	// No `base`: the site is served from the root of its own custom domain (see public/CNAME), so
+	// paths stay identical to the URLs already published in every package README. A project-page
+	// deploy would need `base: '/docuccino'` and would move every URL.
 	site: 'https://docs.docuccino.app',
 	// The bundled Scalar viewer on the landing page is a large, intentional client chunk; lift the
 	// size-warning threshold so it doesn't flag on every build.

@@ -1,0 +1,64 @@
+# Deploys the Starlight docs site to GitHub Pages at docs.docuccino.app.
+#
+# The site is static (no adapter — see website/astro.config.mjs), so Pages serves the built
+# `dist/` directly. The custom domain comes from the committed `website/public/CNAME`, which Astro
+# copies into `dist/` on every build; deleting that file would drop the domain on the next deploy.
+#
+# Paths-filtered to match website.yml, which is the PR-time build check. This workflow is the
+# deploy, and runs only on main.
+#
+# Actions are pinned to commit SHAs (the `# vX.Y.Z` beside each is just the readable version).
+# The repository requires SHA pinning, so a mutable tag here would be refused outright.
+
+name: Deploy docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'spec/uir/**'
+      - '.github/workflows/deploy.yml'
+  # Lets a deploy be re-run without an empty commit — useful when only DNS changed.
+  workflow_dispatch:
+
+# `pages: write` + `id-token: write` are what actions/deploy-pages needs to mint its
+# OIDC-authenticated deployment. `contents: read` keeps everything else read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel a running one: Pages deployments are not transactional,
+# so an interrupted run can leave the site mid-update.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A FULL monorepo checkout matters: the build's `prebuild` hook runs
+      # website/scripts/sync-schema.mjs --check, which compares website/public/uir/** against the
+      # canonical spec/uir/**. With spec/ present that is the real drift guard; a website-only
+      # checkout would silently downgrade to "committed copy is parseable".
+      - name: Build with Astro
+        uses: withastro/action@e84f40bd8d2caa9e768ec82ad30dd81f0b280853 # v6.1.2
+        with:
+          path: website
+          node-version: 22
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
