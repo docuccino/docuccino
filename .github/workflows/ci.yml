@@ -32,10 +32,10 @@ jobs:
           - { php: '8.4', deps: 'locked', phpstan: '~2.2.0' }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
           extensions: mbstring, intl, json
@@ -83,10 +83,10 @@ jobs:
     # therefore never ship green just because a deploy had nothing to check.
     # (The packages/core/resources copy has its own drift guard: core's SchemaShippingTest.)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
 
@@ -108,10 +108,10 @@ jobs:
     # to test quality. Floors are honest measured-now values, ratcheted upward and never
     # lowered without a documented justification (docs/testing.md).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.4'
           extensions: mbstring, intl, json
@@ -133,10 +133,10 @@ jobs:
     # Larastan app, which is the slow part, and the fixture behaviour is
     # PHP-version-agnostic.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
           extensions: mbstring, intl, json, dom, curl, fileinfo, sqlite3, pdo_sqlite
@@ -144,7 +144,7 @@ jobs:
 
       - name: Cache fixture app
         id: fixture-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: tests/fixture-app/app
           # Re-provision only when the setup recipe or any fixture source changes.
