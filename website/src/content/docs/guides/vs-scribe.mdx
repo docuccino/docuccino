@@ -42,7 +42,7 @@ The tools differ at the root, and it colors everything else:
 | | Scribe | Docuccino |
 | --- | --- | --- |
 | Primary artifact | A human-first HTML page | An OpenAPI document, plus a bundled viewer |
-| OpenAPI export | A secondary, optional output (OpenAPI 3.0) | The point: 3.2, 3.1 or 3.0, JSON or YAML, with reusable `components/schemas` |
+| OpenAPI export | A secondary output, off by default (OpenAPI 3.0) | The point: 3.2, 3.1 or 3.0, JSON or YAML, with reusable `components/schemas` |
 | Authoring model | Annotate, with partial inference | Infer from code; attributes are overrides |
 | Executes your application code | Yes, for response calls | Never — static analysis only |
 | Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
@@ -55,6 +55,108 @@ The tools differ at the root, and it colors everything else:
 | Custom HTML theming | Yes, Blade templates you publish | No — Scalar is configurable, not a template layer |
 | Generated-UI localization | Yes, via Laravel lang files | No |
 | Documented intermediate format | — | Yes (the [UIR](/uir/)) |
+
+## Feature support, side by side
+
+Capability by capability. The two tools optimize for different artifacts, so neither column wins
+everywhere: Docuccino leads on schema and contract work, Scribe on the rendered page and on examples
+taken from a running app. `✓` means built-in support; `—` means not supported.
+
+### Requests and validation
+
+| Capability | Docuccino | Scribe |
+| --- | :---: | :---: |
+| Validation rules → parameter documentation | ✓ | ✓ |
+| Form Requests and inline `validate()` | ✓ | ✓ |
+| Rules → OpenAPI schema constraints (`pattern`, bounds, `format`) | ✓ | — |
+| Form Requests read without instantiating them | ✓ | — |
+| Custom rule classes documented from the rule class | ✓ | ✓ |
+| Spatie Data objects | ✓ | — |
+| Spatie Query Builder parameters | ✓ | — |
+| Laravel Actions | ✓ | — |
+
+Both tools read the same rules, but they get them differently: Scribe instantiates your Form Request
+and calls `rules()`, which resolves rules assembled at runtime and needs the method to be safe to call;
+Docuccino reads the rule list statically and maps 78 named Laravel rules onto schema constraints, so
+`starts_with:INV` lands as a `pattern` and `between:1,5` as `minimum`/`maximum` in the schema, rather
+than as prose beside the parameter.
+
+### Responses, models and schemas
+
+| Capability | Docuccino | Scribe |
+| --- | :---: | :---: |
+| API Resources | ✓ | ✓ |
+| Pagination envelopes | ✓ | ✓ |
+| Eloquent model schemas from casts and `@property` | ✓ | — |
+| Backed enums, with case descriptions | ✓ | — |
+| Reusable `components/schemas`, deduped and `$ref`'d | ✓ | — |
+| Path parameter types from route-model binding | ✓ | — |
+| Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — |
+| JSON:API resources | ✓ | — |
+| Fractal / league transformers | — | ✓ |
+| Examples captured from a real call to your endpoint | — | ✓ |
+| Examples built from your factories, with states and relations | — | ✓ |
+
+The split is the philosophies showing through. Scribe documents a *rendered instance* of your response
+and is very good at it; Docuccino documents the response's *shape*, which is what a `$ref`-able
+component schema, a client generator and a semantic diff all need.
+
+### Authentication and operations
+
+| Capability | Docuccino | Scribe |
+| --- | :---: | :---: |
+| Marking one endpoint authenticated or not | ✓ | ✓ |
+| Security requirements derived from route middleware | ✓ | — |
+| Sanctum in both token **and** stateful-cookie modes | ✓ | — |
+| Sanctum token abilities (`x-abilities`) | ✓ | — |
+| Passport OAuth2 scopes, per operation | ✓ | — |
+| Passport client-credentials (machine-to-machine) | ✓ | — |
+| Role / permission requirements (`x-permissions`) | ✓ | — |
+| Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — |
+| Try-it-out console wired to your auth, including Sanctum CSRF | — | ✓ |
+
+Scribe's auth is a deliberate one-time declaration: describe the scheme once in `auth.*`, then mark the
+exceptions with `@authenticated` / `@unauthenticated`. It's less to get wrong, and for many APIs it's
+the whole story. Docuccino derives the requirement from the middleware stack per guard driver instead,
+so a new protected route is documented as protected the moment it's routed.
+
+### Error responses
+
+| Capability | Docuccino | Scribe |
+| --- | :---: | :---: |
+| Hand-written error responses | ✓ | ✓ |
+| Framework defaults (`422` / `401` / `403` / `404`) | ✓ | — |
+| Errors implied by middleware, bindings and validation | ✓ | — |
+| Your *real* error shapes, read from your exception handling | ✓ | — |
+| RFC 9457 Problem Details preset | ✓ | — |
+
+In Scribe an error response is something you write down — `@response 404 {...}` — and it's exactly as
+right as you keep it. Docuccino reads your render callbacks, exception `render()` methods and
+`Responsable` exceptions and documents the shape they actually produce, then fills in the framework's
+own shapes for the rest. See [Error responses](/laravel/documenting/errors/).
+
+### Output and workflow
+
+| Capability | Docuccino | Scribe |
+| --- | :---: | :---: |
+| In-browser try-it console | ✓ | ✓ |
+| Markdown prose pages alongside the reference | ✓ | ✓ |
+| Corrections that survive a regenerate | ✓ | ✓ |
+| OpenAPI as the primary artifact, always emitted | ✓ | — |
+| Reusable component schemas in the OpenAPI output | ✓ | — |
+| Deterministic, byte-stable output | ✓ | — |
+| A spec artifact you commit and review in a pull request | ✓ | — |
+| Semantic diff + CI gate on breaking changes | ✓ | — |
+| A documented intermediate format (the [UIR](/uir/)) | ✓ | — |
+| Postman collection export | — | ✓ |
+| Single-page HTML doc with Blade templates you own | — | ✓ |
+| Localized generated UI | — | ✓ |
+| Hand-written endpoints for routes you have no code for | — | ✓ |
+
+Both tools let you correct what was extracted and keep the correction: Scribe by hand-editing the
+`.scribe` YAML, Docuccino with an attribute at the source or a standard
+[OpenAPI Overlay](/laravel/guides/customizing-output/). [Where Scribe is
+stronger](#where-scribe-is-stronger) covers the bottom four rows in detail.
 
 ## What you can stop writing
 
