@@ -86,9 +86,12 @@ return [
                 'map' => [],
                 // A container-resolved TagMapper, replacing the prefix mapper over `map`.
                 // 'mapper' => App\Docs\InvoiceTagMapper::class,
-                // The OpenAPI top-level `tags`, sorted by weight then name.
+                // The OpenAPI top-level `tags`, sorted by weight then name. `parent` nests one entry
+                // under another (it must name a tag defined here) and `kind` categorises it —
+                // both OAS 3.2 only, so the 3.1 downlevel drops them with a warning.
                 // 'definitions' => [
-                //     ['name' => 'Invoices', 'description' => 'Billing documents.', 'weight' => 0],
+                //     ['name' => 'Billing', 'summary' => 'Billing', 'kind' => 'nav', 'weight' => 0],
+                //     ['name' => 'Invoices', 'description' => 'Billing documents.', 'parent' => 'Billing'],
                 // ],
             ],
 

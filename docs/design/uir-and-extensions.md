@@ -570,7 +570,14 @@ return [
 `{detail, pointer}` objects, JSON-Pointer style). `tags.default_strategy` chooses how an operation
 with no `#[Group]` gets its default tag: `controller` (the controller's short name → `tags.map`, the
 default) or `none` (no default tag); an unknown value coerces to `controller` and emits a
-`config.unknown-tag-strategy` info diagnostic. Setting `enabled` on one of the always-on producers
+`config.unknown-tag-strategy` info diagnostic. `tags.definitions` entries are full OAS 3.2 Tag
+Objects (`name` + optional `summary`/`description`/`parent`/`kind`) plus Docuccino's own `weight`,
+which orders the emitted array (weight, then name) and is not emitted. Parents are resolved AFTER
+that sort, so the result never depends on definition order: a `parent` naming no defined tag emits
+`config.unknown-tag-parent`, one that would close a cycle emits `config.tag-parent-cycle`, and in
+both cases the offending LINK alone is dropped (the tag stays) so the hierarchy is always a forest.
+`summary`/`parent`/`kind` are 3.2-only — the 3.1 downlevel drops each with its own
+`downlevel.tag-*` warning. Setting `enabled` on one of the always-on producers
 (validation / form_request / framework_errors / problem_details / inferred_handler) has no effect and
 emits a `config.enabled-ignored` info diagnostic — only the toggleable integrations honour `enabled`.
 Integration config lives under one `integrations.<name>` bag per integration — there is no
