@@ -81,7 +81,9 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   into `RouteContext::dependencies()` (files) or the descriptor cache inputs.
 - **Config surface**: `packages/laravel/config/docuccino.php` is framework-config style — every
   option present, optional ones commented out, one short comment each. A key the code reads must
-  appear there, and the website's configuration reference must stay in sync with it.
+  appear there, and the website's configuration reference must stay in sync with it. It must also stay
+  **pure data** — no imports, no class references, `env()` the only call — so a dev-only install
+  survives a `--no-dev` production boot, which loads every `config/` file (`ShippedConfigTest`).
 - **Comment style**: comments are small and informal. Class docblocks are 1–3 short sentences
   (what it is + the one non-obvious invariant); method docblocks are annotations plus at most a
   line of prose; inline comments only where the code isn't obvious. State a cross-cutting
