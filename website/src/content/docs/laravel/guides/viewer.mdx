@@ -57,9 +57,9 @@ name a gate:
 
 </Steps>
 
-The gate guards the HTML page and the `.json` spec; a denial is a `403`. The static asset route is not
-gated — it's a copy of the Scalar bundle, identical for every app, and gating it would break the page
-for the readers who *are* allowed in.
+The gate guards all three routes — the HTML page, the `.json` spec and the asset; a denial is a `403`.
+The browser fetches the script over the same session as the page, so a reader who is allowed in always
+gets it.
 
 Type the gate's user parameter as nullable if you want guests to reach it (a public docs page behind a
 token check, say); otherwise Laravel refuses the guest before your closure runs.
