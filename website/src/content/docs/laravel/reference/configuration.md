@@ -152,7 +152,8 @@ that recovers your app's real error shape wins ahead of this fallback. The strat
     'map' => [],
     // 'mapper' => Custom::class,   // container-resolved TagMapper; default PrefixTagMapper over `map`.
     // 'definitions' => [           // OAS top-level `tags`, sorted by weight then name:
-    //     ['name' => 'Forms', 'description' => '…', 'weight' => 0],
+    //     ['name' => 'Billing', 'summary' => 'Billing', 'kind' => 'nav', 'weight' => 0],
+    //     ['name' => 'Forms', 'description' => '…', 'parent' => 'Billing'],
     // ],
 ],
 ```
@@ -162,6 +163,25 @@ controller's short name with a trailing `Controller` stripped, e.g. `FormControl
 run through `map`) or `none` (leave it untagged). Closure routes are never auto-tagged.
 `map` is a raw-tag → display-tag table (exact match wins, else the first matching prefix).
 `mapper` swaps in a custom `TagMapper`. `definitions` supplies OAS top-level tag objects.
+
+A definition carries the full OAS 3.2 Tag Object: `name` (required), plus optional `summary`,
+`description`, `parent` and `kind`. `weight` is Docuccino's own — it orders the emitted array
+(ascending weight, then name) and is never emitted.
+
+| Field | Purpose |
+| --- | --- |
+| `summary` | A short display label, where `description` is the prose. |
+| `parent` | The `name` of the tag this one nests under, for a grouped sidebar. |
+| `kind` | A machine-readable category — `nav`, `badge`, `audience` are the common ones; any string is legal. |
+
+`parent` must name another definition, and the links must not form a cycle. A parent naming an
+undefined tag emits a `config.unknown-tag-parent` info diagnostic; a link that closes a cycle emits
+`config.tag-parent-cycle`. Either way the offending link alone is dropped and the build carries on,
+so the emitted hierarchy is always a tree. Because the array is sorted before the parents are
+resolved, the result never depends on the order you wrote the definitions in.
+
+`summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, each with its own
+`downlevel.tag-*` warning — the tags themselves stay, flattened.
 
 ### `content`
 
