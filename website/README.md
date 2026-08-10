@@ -44,10 +44,13 @@ The UIR JSON Schemas are served as static files at their exact `$id` URLs (e.g.
 `https://spec.docuccino.app/uir/1.0/schema.json`).
 
 > **`spec.docuccino.app` is not served by this site's deploy.** A GitHub Pages site carries exactly
-> one custom domain, which is `docs.docuccino.app`. Publishing `spec/` to its own Pages site is a
-> separate task; until it lands, the schema is reachable at
-> `https://docs.docuccino.app/uir/1.0/schema.json`. Nothing dereferences the `$id` at runtime —
-> `Validator` reads core's package-relative copy — so this affects humans and external tooling only.
+> one custom domain, which is `docs.docuccino.app`. The schemas are served from their own Pages site
+> instead: the repo-root `spec/` directory is subtree-split to `docuccino/spec` (see
+> `.github/workflows/split.yml`), which carries the `spec.docuccino.app` domain.
+>
+> `public/uir/` here is a second copy of the same bytes, kept because the drift guard below and
+> ci.yml's `schema-copies` job compare against it. It also means the schema stays reachable at
+> `https://docs.docuccino.app/uir/1.0/schema.json`.
 
 Keep the published copy in sync with the source of truth:
 

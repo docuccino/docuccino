@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>UIR specification — Docuccino</title>
+		<meta
+			name="description"
+			content="Versioned JSON Schemas for the UIR (Universal Intermediate Representation), served at their canonical $id URLs."
+		/>
+		<link rel="icon" href="https://docs.docuccino.app/icon.svg" type="image/svg+xml" />
+		<style>
+			:root {
+				color-scheme: light dark;
+				--bg: #ffffff;
+				--fg: #1b1b1f;
+				--muted: #5c5f66;
+				--rule: #e3e3e8;
+				--link: #6b4423;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #17181c;
+					--fg: #f2f2f4;
+					--muted: #a0a3ad;
+					--rule: #2c2e36;
+					--link: #d8a56b;
+				}
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				padding: 3rem 1.25rem;
+				background: var(--bg);
+				color: var(--fg);
+				font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+			}
+			main {
+				max-width: 44rem;
+				margin: 0 auto;
+			}
+			h1 {
+				font-size: 1.6rem;
+				margin: 0 0 0.35rem;
+			}
+			p.lede {
+				color: var(--muted);
+				margin: 0 0 2rem;
+			}
+			table {
+				width: 100%;
+				border-collapse: collapse;
+				margin: 0 0 2rem;
+			}
+			th,
+			td {
+				text-align: left;
+				padding: 0.6rem 0.5rem;
+				border-bottom: 1px solid var(--rule);
+			}
+			th {
+				font-size: 0.8rem;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+				color: var(--muted);
+				font-weight: 600;
+			}
+			code {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 0.9em;
+			}
+			a {
+				color: var(--link);
+			}
+			footer {
+				color: var(--muted);
+				font-size: 0.9rem;
+				border-top: 1px solid var(--rule);
+				padding-top: 1rem;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>UIR specification</h1>
+			<p class="lede">
+				Versioned JSON Schemas for the Universal Intermediate Representation, served at their
+				canonical <code>$id</code> URLs.
+			</p>
+
+			<table>
+				<thead>
+					<tr>
+						<th>Version</th>
+						<th>Schema</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>1.0</td>
+						<td><a href="/uir/1.0/schema.json"><code>/uir/1.0/schema.json</code></a></td>
+					</tr>
+				</tbody>
+			</table>
+
+			<footer>
+				<p>
+					Documentation: <a href="https://docs.docuccino.app">docs.docuccino.app</a> · Source:
+					<a href="https://github.com/docuccino/docuccino">github.com/docuccino/docuccino</a>
+				</p>
+			</footer>
+		</main>
+	</body>
+</html>
