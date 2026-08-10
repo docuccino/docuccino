@@ -7,7 +7,8 @@ description: Every live key in config/docuccino.php and what it does.
 The published `config/docuccino.php` drives everything. Every key is listed in the file itself —
 required keys active, optional ones commented out — so you can discover the whole surface by
 scrolling through it. This page is the long-form version: what each key does, what it defaults to,
-and where its behavior is explained in full.
+and where its behavior is explained in full. The file is plain data — no imports, no class
+references — so it stays safe to load even where Docuccino itself isn't installed.
 
 ## Top level
 
@@ -356,7 +357,7 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 
 ```php
 'engine' => [
-    'mode' => env('DOCUCCINO_ENGINE', TypeEngineMode::InProcess->value),
+    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
     'project_paths' => ['app'],
 ],
 ```
@@ -369,10 +370,6 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 Inference needs the dev-only `docuccino/inference-phpstan` package. Without it, every mode but `null`
 degrades to no inference and each export carries one `engine.not-installed` warning naming the
 install command — `null` is the explicit opt-out and stays silent.
-
-`TypeEngineMode::InProcess->value` in the published file is just sugar for the string `'in-process'`.
-If you installed [everything as a dev dependency](/laravel/getting-started/#install), write the
-literal instead and drop the import, so a `--no-dev` boot never resolves a Docuccino class.
 
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
 There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider

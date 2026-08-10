@@ -71,11 +71,8 @@ accurate document — with no annotations to start.
    your own application, export to `docs/openapi.json`, and serve an interactive viewer at
    `/docs/api`.
 
-   Installed everything as a dev dependency? Laravel loads every file in `config/` at boot, and the
-   published file names a Docuccino enum for the engine default — so swap that one line for the
-   literal it resolves to, `'mode' => env('DOCUCCINO_ENGINE', 'in-process')`, and drop the
-   `use Docuccino\Laravel\Engine\TypeEngineMode;` import. Then a production boot with the packages
-   pruned never looks for a class that isn't there.
+   The published file is plain data on purpose — no imports, no class references — so a dev-only
+   install stays safe when production boots with the packages pruned.
 
 3. Export your first document:
 
