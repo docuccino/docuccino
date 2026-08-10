@@ -22,6 +22,43 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 package or area: `feat(laravel): …`, `fix(core): …`, `refactor(inference-phpstan): …`,
 `docs(website): …`, `chore(repo): …`. Do **not** add `Co-Authored-By` trailers.
 
+## Submitting changes
+
+`main` is protected: **every change lands through a pull request**, including a maintainer's own.
+Direct pushes to `main` are rejected by a repository ruleset, and there is no admin bypass.
+
+1. Branch from `main` (fork first if you do not have write access).
+2. Commit your work — conventional message, signed off (`git commit -s`).
+3. Open a pull request against `docuccino/docuccino`.
+4. Wait for the **`CI gate`** check to pass, then merge.
+
+`CI gate` is a single aggregate check that fails unless *every* CI job succeeded — the quality
+matrix across PHP 8.3/8.4/8.5 plus the prefer-lowest and PHPStan-minor legs, the UIR schema drift
+guard, the coverage gates, and the fixture suite. It is the only required check by design: the
+individual job names carry version strings that change as the matrix moves, and a required check
+that stops reporting blocks every pull request. Do not add individual jobs to the required set.
+
+Your branch must be up to date with `main` before merging, so that CI's verdict is about the tree
+that actually lands. Rebase if `main` has moved.
+
+Two things CI cannot check for you, so check them yourself before opening a PR:
+
+- The docs site's configuration reference stays in sync with
+  `packages/laravel/config/docuccino.php` when you add or change an option.
+- A golden regeneration is an isolated commit — never bundled with the change that caused it.
+
+### Release tags are immutable
+
+`v*` tags cannot be moved or deleted once pushed: a tag fans out through the subtree split to all
+four package repositories and is what Composer resolves, so a mutable tag would mean one version
+resolving to different bytes. A mistake in a release is corrected by cutting the next patch
+version, never by re-tagging. See [RELEASING.md](RELEASING.md).
+
+## Reporting a security issue
+
+Do not open a public issue. Follow [SECURITY.md](SECURITY.md), which routes reports through
+GitHub's private vulnerability reporting.
+
 ## Repository layout
 
 This is a monorepo. Each `packages/*` directory is subtree-split into a read-only repository of its
