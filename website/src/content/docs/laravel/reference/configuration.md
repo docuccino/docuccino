@@ -364,12 +364,16 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
+| `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two working modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
 
 Inference needs the dev-only `docuccino/inference-phpstan` package. Without it, every mode but `null`
 degrades to no inference and each export carries one `engine.not-installed` warning naming the
 install command — `null` is the explicit opt-out and stays silent.
+
+The engine also carries `orchestrated` and `caching` worker compositions, but the adapter does not
+plumb them through yet: setting either warns (`engine.mode-not-wired`) and runs in-process. Stay on
+`in-process` or `null`.
 
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
 There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider

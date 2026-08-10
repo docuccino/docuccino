@@ -223,9 +223,10 @@ return [
     */
 
     'engine' => [
-        // 'in-process' runs PHPStan; 'null' skips inference entirely ('orchestrated' and 'caching'
-        // select the worker compositions). Inference needs the dev-only docuccino/inference-phpstan
-        // package — without it every mode but 'null' warns and falls back.
+        // 'in-process' runs PHPStan; 'null' skips inference entirely. Inference needs the dev-only
+        // docuccino/inference-phpstan package — without it 'in-process' warns and falls back.
+        // (The engine's 'orchestrated' and 'caching' worker compositions are not plumbed through the
+        // adapter yet: picking one warns and runs in-process, so don't reach for them.)
         'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
         // Directories the engine descends into for interprocedural analysis (throw classification,
         // inline `Validator::make(...)` rules). Every PSR-4 source root in your composer.json — a
