@@ -13,9 +13,10 @@
 //
 //   * the monorepo (spec/ present) — full drift guard, so a stale copy fails the build instead of
 //     silently shipping;
-//   * a standalone deploy of website/ alone (Laravel Cloud checks the site out as the document root,
-//     so there is no ../spec) — the drift guard has nothing to compare against, so it verifies the
-//     committed copy is present and parseable and moves on.
+//   * a standalone checkout of website/ alone (no ../spec) — the drift guard has nothing to compare
+//     against, so it verifies the committed copy is present and parseable and moves on. The GitHub
+//     Pages deploy checks out the whole monorepo and so gets the full guard; this branch exists for
+//     anyone building the site on its own.
 //
 // The guard's real home is therefore monorepo CI (.github/workflows/ci.yml runs this --check on every
 // push and PR, unfiltered), NOT the deploy: drift can never ship green just because a deploy had
