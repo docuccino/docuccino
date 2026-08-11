@@ -6,10 +6,6 @@
   </picture>
 </p>
 
-<!--
-  The CI, Docs and Packagist badges resolve once this repository is public and the packages are
-  registered on Packagist; they render as "invalid"/404 while the repository is private.
--->
 <p align="center">
   <a href="https://github.com/docuccino/docuccino/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/docuccino/docuccino/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/docuccino/docuccino/actions/workflows/website.yml"><img alt="Docs" src="https://github.com/docuccino/docuccino/actions/workflows/website.yml/badge.svg?branch=main"></a>
@@ -26,8 +22,8 @@ Docuccino compiles your application into a **UIR** — a Universal Intermediate 
 OpenAPI 3.2-shaped, deterministic, identity-carrying JSON document — and emits OpenAPI 3.2/3.1 from
 it. Because every operation, schema, and parameter carries a stable identity and per-node
 provenance, and because output is byte-deterministic, the UIR answers *what changed* and *why is it
-documented this way* — not merely *what are the endpoints*. It's the input a downstream SaaS turns
-into changelogs, mock servers, and agent-facing tool schemas.
+documented this way* — not merely *what are the endpoints*. That makes it a clean input for tooling
+you build on top: changelogs, mock servers, and agent-facing tool schemas.
 
 ## Quickstart
 
@@ -70,15 +66,16 @@ optional — the defaults are live either way. Full walkthrough:
   identities and enforces a versioning policy (semver / date / none); a breaking change without the
   right version bump fails the build.
 - **Determinism as a feature** — byte-identical output for identical code (canonical ordering, no
-  timestamps, no absolute paths), verified by committed golden files and cold/warm & 1/8-worker
-  byte-diff invariants in CI.
-- **Tier-3 inference, no type system** — PHPStan + Larastan embedded behind a `TypeEngine` boundary;
-  your own PHPStan extensions improve your docs with zero Docuccino-specific API.
+  timestamps, no absolute paths), asserted by byte-diff invariants in CI so a regeneration can never
+  drift unnoticed.
+- **Real static analysis, no bespoke type system** — PHPStan + Larastan embedded behind a `TypeEngine`
+  boundary; your own PHPStan extensions improve your docs with zero Docuccino-specific API.
 - **MCP-ready UIR** — a JSON-Schema-defined document (published at `spec.docuccino.app`) carrying the
   provenance and identities downstream tooling needs.
 
-**Coming from Scramble?** [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
-compares the two fairly and maps your attributes, config, and extensions across.
+**Already using another generator?** [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
+and [Docuccino vs Scribe](https://docs.docuccino.app/guides/vs-scribe/) compare the tools fairly and
+map your attributes, config, and extensions across.
 
 ## Packages
 
@@ -103,8 +100,9 @@ Full documentation is at **[docs.docuccino.app](https://docs.docuccino.app)**:
   [Commands](https://docs.docuccino.app/laravel/reference/commands/) ·
   [Attributes](https://docs.docuccino.app/laravel/reference/attributes/)
 - [Package support](https://docs.docuccino.app/laravel/packages/)
-- [Extension authoring](https://docs.docuccino.app/extending/extension-authoring/) ·
-  [Docuccino vs Scramble](https://docs.docuccino.app/guides/vs-scramble/)
+- [Extension authoring](https://docs.docuccino.app/extending/extension-authoring/)
+- Comparisons: [vs Scramble](https://docs.docuccino.app/guides/vs-scramble/) ·
+  [vs Scribe](https://docs.docuccino.app/guides/vs-scribe/)
 - [UIR spec](https://docs.docuccino.app/uir/)
 
 The docs site source lives in [`website/`](website/README.md) (Astro + Starlight).

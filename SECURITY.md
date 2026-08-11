@@ -29,9 +29,11 @@ are read-only splits of this monorepo.
 
 ## Scope
 
-Docuccino is a development-time tool: it reads your application's source code and
-emits an OpenAPI document. It is not intended to run in production, and
-`docuccino/inference-phpstan` is a dev-only install.
+Docuccino reads your application's source code and emits an OpenAPI document.
+Analysis is a build-time job: `docuccino/inference-phpstan` is a dev-only install
+and never belongs on a production host. `docuccino/laravel` may be installed in
+production, where its only runtime job is serving an already-generated document
+through the bundled viewer.
 
 In scope:
 
