@@ -24,7 +24,7 @@ diffing and a bundled Scalar viewer.
   coverage thrashes for many minutes at 1G). CI runs the same scripts, so they cannot drift.
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Golden files under
-  `packages/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
+  `php/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
   sanctioned regeneration is an ISOLATED commit explaining exactly why bytes changed.
   (`DOCUCCINO_UPDATE_GOLDEN=1` regenerates locally; CI guards it is unset.)
 - **Conventional commits** (`feat(laravel): …`, `fix(core): …`), NO Co-Authored-By trailers.
@@ -32,18 +32,18 @@ diffing and a bundled Scalar viewer.
 ## Monorepo layout
 
 ```
-packages/core/               docuccino/core        — UIR model, canonicalizer, identities,
+php/core/               docuccino/core        — UIR model, canonicalizer, identities,
                                                      drafts+PatchGuard, emitters, diff+policies,
                                                      overlays, Lint, TypeGrammar (phpdoc/type
                                                      string readers), extension contracts.
                                                      Framework-agnostic (arch-test enforced: no
                                                      Illuminate/engine imports, and no PHPStan
                                                      but the standalone PhpDocParser).
-packages/attributes/         docuccino/attributes  — dep-free PHP attributes only.
-packages/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine behind
+php/attributes/         docuccino/attributes  — dep-free PHP attributes only.
+php/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine behind
                                                      core's TypeEngine/TypeEngineBuilder contracts
                                                      (workers, cache). DEV-ONLY install.
-packages/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
+php/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
 spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).
 tests/fixture-app/           the real-engine fixture app: tracked overlay sources in src/,
@@ -56,7 +56,7 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
 
 - **Placement rule**: input = UIR document → core; input = Laravel code → adapter.
   Framework-neutral machinery in core, framework vocabulary + recovery in the adapter.
-- **Integrations**: `packages/laravel/src/Integrations/<Name>/` — self-contained, ONE
+- **Integrations**: `php/laravel/src/Integrations/<Name>/` — self-contained, ONE
   `<Name>Integration` registrar via the public Registrar API, `class_exists` conditional
   registration, imports only the public surface (`IntegrationsArchTest` is the definition;
   extend its allow-list only with justification — never duplicate a core utility to dodge it).
@@ -84,7 +84,7 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   instead. See `docs/testing.md` §"Fixture honesty".
 - **Fragment cache soundness**: anything an extension reads that affects output must flow
   into `RouteContext::dependencies()` (files) or the descriptor cache inputs.
-- **Config surface**: `packages/laravel/config/docuccino.php` is framework-config style — every
+- **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
   option present, optional ones commented out, one short comment each. A key the code reads must
   appear there, and the website's configuration reference must stay in sync with it. It must also stay
   **pure data** — no imports, no class references, `env()` the only call — so a dev-only install
@@ -116,7 +116,7 @@ Paratest process splitting; shared helpers live in `tests/Pest.php`. If a covera
 run hangs (stale pcov state, rare), kill it and re-run fresh.
 
 Laravel adapter feature tests run on orchestra/testbench with the workbench app under
-`packages/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
+`php/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
 `tests/fixture-app/app`. The workbench app and `tests/Fixtures/**` are test INPUT the product
 parses — their docblocks and attributes are data, so edit them only to change what a test proves.
 

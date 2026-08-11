@@ -10,20 +10,20 @@
 # static-analysis dependency surface to phar + nikic/php-parser + phpstan/phpdoc-parser,
 # all present in the root vendor. No sweeping ignores.
 #
-# packages/laravel is the framework adapter: it `use`s illuminate/* classes, which are
+# php/laravel is the framework adapter: it `use`s illuminate/* classes, which are
 # autoloadable from the root vendor, so plain PHPStan analyses it without larastan (whose
 # global include perturbs the inference package's analysis). Facade magic is declared with
 # `@method` docblocks rather than resolved by larastan.
 parameters:
     level: max
-    # The monorepo root now installs laravel/framework (for packages/laravel), so some of the
+    # The monorepo root now installs laravel/framework (for php/laravel), so some of the
     # inference package's environment-dependent `@phpstan-ignore` hints (written for its
     # illuminate-free standalone CI, where an FQCN string is unprovable) no longer match. Tolerate
     # unmatched ignores rather than delete a hint the split package still needs; real errors still fail.
     reportUnmatchedIgnoredErrors: false
     paths:
-        - packages/core/src
-        - packages/attributes/src
-        - packages/inference-phpstan/src
-        - packages/laravel/src
+        - php/core/src
+        - php/attributes/src
+        - php/inference-phpstan/src
+        - php/laravel/src
     tmpDir: build/phpstan

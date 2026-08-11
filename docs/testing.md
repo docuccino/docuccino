@@ -57,13 +57,13 @@ composer test:types
 ```
 
 `tools/coverage-floors.php` is the gate: it sums `coveredstatements`/`statements` per
-`packages/<pkg>/src/` out of the clover report and fails any package under its floor.
+`php/<pkg>/src/` out of the clover report and fails any package under its floor.
 
 ### Why the coverage job excludes the `fixture` group
 
 The inference engine's real analysis (`PhpStanTypeEngine`, `ThrowAnalyzer`, the
 `Runtime/V2_2` adapter, the `Trace` tracer) runs **inside a separate PHP subprocess**
-(`packages/inference-phpstan/tests/Support/FixtureRunner` → `bin/engine-runner.php`),
+(`php/inference-phpstan/tests/Support/FixtureRunner` → `bin/engine-runner.php`),
 against the provisioned Laravel + Larastan fixture app. pcov instruments only the parent
 Pest process, so **that subprocess execution is invisible to line coverage regardless of
 whether the fixture group runs**. Confirmed empirically: including vs excluding the

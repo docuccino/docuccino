@@ -2,16 +2,16 @@
 #
 # update-scalar.sh — refresh the vendored Scalar API-reference standalone bundle.
 #
-# Docuccino's bundled viewer (packages/laravel/src/Viewer/ScalarViewer.php) serves the
+# Docuccino's bundled viewer (php/laravel/src/Viewer/ScalarViewer.php) serves the
 # Scalar standalone browser build LOCALLY from its own asset route, so the docs page never
 # reaches a runtime CDN by default. That build is vendored at:
 #
-#     packages/laravel/resources/js/scalar.standalone.js
+#     php/laravel/resources/js/scalar.standalone.js
 #
 # It is the pristine, byte-for-byte `dist/browser/standalone.js` from the npm package
 # `@scalar/api-reference` (the same file jsDelivr serves for the CDN opt-in). It is a single,
 # self-contained ~3.6 MB minified file — no code-split chunks — and is marked non-diffable /
-# vendored in packages/laravel/.gitattributes.
+# vendored in php/laravel/.gitattributes.
 #
 # Currently vendored: @scalar/api-reference@1.64.0
 #
@@ -26,7 +26,7 @@ set -euo pipefail
 VERSION="${1:-1.64.0}"
 PKG="@scalar/api-reference@${VERSION}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="${REPO_ROOT}/packages/laravel/resources/js/scalar.standalone.js"
+DEST="${REPO_ROOT}/php/laravel/resources/js/scalar.standalone.js"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
@@ -59,4 +59,4 @@ echo "    sha256: $(shasum -a 256 "${DEST}" | cut -d' ' -f1)"
 echo
 echo "Next: run the viewer feature tests and commit the bundle in an isolated commit:"
 echo "    vendor/bin/pest --filter=Viewer"
-echo "    git add packages/laravel/resources/js/scalar.standalone.js"
+echo "    git add php/laravel/resources/js/scalar.standalone.js"

@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/docuccino/docuccino/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/docuccino/docuccino/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/docuccino/docuccino/actions/workflows/website.yml"><img alt="Docs" src="https://github.com/docuccino/docuccino/actions/workflows/website.yml/badge.svg?branch=main"></a>
-  <a href="https://packagist.org/packages/docuccino/laravel"><img alt="Latest version" src="https://img.shields.io/packagist/v/docuccino/laravel"></a>
+  <a href="https://packagist.org/php/docuccino/laravel"><img alt="Latest version" src="https://img.shields.io/packagist/v/docuccino/laravel"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
   <img alt="PHP 8.3+" src="https://img.shields.io/badge/php-8.3%2B-777bb4">
   <img alt="Laravel 12 and 13" src="https://img.shields.io/badge/laravel-12%20%7C%2013-ff2d20">
@@ -83,10 +83,10 @@ This is a monorepo, subtree-split into individual packages on release.
 
 | Package | Directory | Role |
 | --- | --- | --- |
-| `docuccino/laravel` | [`packages/laravel`](packages/laravel/README.md) | The Laravel adapter: provider, config, commands, viewer, integrations. |
-| `docuccino/core` | [`packages/core`](packages/core/README.md) | Framework-agnostic UIR model, canonicalizer, identities, emitters, diff, contracts. |
-| `docuccino/inference-phpstan` | [`packages/inference-phpstan`](packages/inference-phpstan/README.md) | PHPStan + Larastan embedded behind core's `TypeEngine`. Install as a **dev** dependency. |
-| `docuccino/attributes` | [`packages/attributes`](packages/attributes/README.md) | Dependency-free PHP attribute classes. |
+| `docuccino/laravel` | [`php/laravel`](php/laravel/README.md) | The Laravel adapter: provider, config, commands, viewer, integrations. |
+| `docuccino/core` | [`php/core`](php/core/README.md) | Framework-agnostic UIR model, canonicalizer, identities, emitters, diff, contracts. |
+| `docuccino/inference-phpstan` | [`php/inference-phpstan`](php/inference-phpstan/README.md) | PHPStan + Larastan embedded behind core's `TypeEngine`. Install as a **dev** dependency. |
+| `docuccino/attributes` | [`php/attributes`](php/attributes/README.md) | Dependency-free PHP attribute classes. |
 
 The versioned UIR JSON Schema lives in [`spec/uir/`](spec/uir/) and is served at its `$id` URLs from
 `spec.docuccino.app`.
