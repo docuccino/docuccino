@@ -2,7 +2,7 @@
 # `docuccino/<name>`. The monorepo stays the only place anyone commits.
 #
 # Two kinds of target, same machinery:
-#   * `packages/<name>` → the four Composer packages, which is what Composer/Packagist
+#   * `php/<name>` → the four Composer packages, which is what Composer/Packagist
 #     installs from. Repository name and Composer package name are NOT always equal: a
 #     repository whose name would be language-generic carries a `php-` prefix, so
 #     docuccino/php-core is the repository behind the docuccino/core package. That keeps
@@ -84,14 +84,14 @@ jobs:
       matrix:
         # `package` is the target repository name (and this job's check name); `directory` is
         # where its contents live here. They are spelled out separately because neither is
-        # derivable from the other: `spec` does not sit under packages/, and a repository
+        # derivable from the other: `spec` does not sit under php/, and a repository
         # whose name would be language-generic carries a `php-` prefix that its Composer
         # package name does not (docuccino/php-core ships docuccino/core).
         include:
-          - { package: php-core, directory: packages/core }
-          - { package: php-attributes, directory: packages/attributes }
-          - { package: inference-phpstan, directory: packages/inference-phpstan }
-          - { package: laravel, directory: packages/laravel }
+          - { package: php-core, directory: php/core }
+          - { package: php-attributes, directory: php/attributes }
+          - { package: inference-phpstan, directory: php/inference-phpstan }
+          - { package: laravel, directory: php/laravel }
           - { package: spec, directory: spec }
 
     steps:

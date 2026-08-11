@@ -5,7 +5,7 @@ declare(strict_types=1);
 /*
  * Per-package line-coverage gate.
  *
- * Sums `statements` / `coveredstatements` per `packages/<pkg>/src/` out of a clover report (the method
+ * Sums `statements` / `coveredstatements` per `php/<pkg>/src/` out of a clover report (the method
  * documented in docs/testing.md) and fails when a package is under its floor. Replaces the single global
  * `pest --min=N`, which was structurally fragile: `inference-phpstan`'s real path executes in a
  * subprocess pcov cannot observe, so every engine feature diluted the GLOBAL ratio even as genuine
@@ -22,7 +22,7 @@ declare(strict_types=1);
  */
 
 /**
- * Per-package floors, keyed by the `packages/<key>/src/` path segment.
+ * Per-package floors, keyed by the `php/<key>/src/` path segment.
  *
  * `attributes` has no entry: it is dep-free attribute classes with no branching logic and is not in the
  * coverage `<source>` set, so it contributes no statements to measure.
@@ -65,7 +65,7 @@ foreach (array_keys(FLOORS) as $package) {
 foreach ($xml->xpath('//file') ?: [] as $file) {
     $path = (string) $file['name'];
     foreach (array_keys(FLOORS) as $package) {
-        if (! str_contains($path, '/packages/'.$package.'/src/')) {
+        if (! str_contains($path, '/php/'.$package.'/src/')) {
             continue;
         }
         $metrics = $file->metrics;

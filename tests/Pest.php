@@ -12,12 +12,12 @@ use Docuccino\Laravel\Tests\TestCase;
 
 /*
  * Monorepo Pest bootstrap. Test files live alongside their package
- * (packages/<pkg>/tests); this root file binds Pest's test case to them and exposes
+ * (php/<pkg>/tests); this root file binds Pest's test case to them and exposes
  * shared fixture helpers.
  */
 
-uses()->in(dirname(__DIR__).'/packages/core/tests');
-uses(TestCase::class)->in(dirname(__DIR__).'/packages/laravel/tests');
+uses()->in(dirname(__DIR__).'/php/core/tests');
+uses(TestCase::class)->in(dirname(__DIR__).'/php/laravel/tests');
 
 /**
  * Bind the deterministic workbench stub {@see TypeEngine} the Laravel feature tests build against.
@@ -102,7 +102,7 @@ function paramsByName(array $operation): array
  */
 function loadFixture(string $name): array
 {
-    $path = dirname(__DIR__).'/packages/core/tests/Fixtures/'.$name;
+    $path = dirname(__DIR__).'/php/core/tests/Fixtures/'.$name;
     $contents = file_get_contents($path);
 
     if ($contents === false) {
@@ -141,7 +141,7 @@ function kitchenSink(): array
  */
 function loadGolden(string $name): string
 {
-    $path = dirname(__DIR__).'/packages/core/tests/Fixtures/golden/'.$name;
+    $path = dirname(__DIR__).'/php/core/tests/Fixtures/golden/'.$name;
     $contents = file_get_contents($path);
 
     if ($contents === false) {
@@ -156,7 +156,7 @@ function loadGolden(string $name): string
  */
 function golden(string $name): string
 {
-    return dirname(__DIR__).'/packages/laravel/tests/Fixtures/golden/'.$name;
+    return dirname(__DIR__).'/php/laravel/tests/Fixtures/golden/'.$name;
 }
 
 /**
@@ -326,7 +326,7 @@ function diagnosticsCoded(array $diagnostics, string $code): array
  */
 function importsMatching(string $package, string $pattern): array
 {
-    $src = dirname(__DIR__).'/packages/'.$package.'/src';
+    $src = dirname(__DIR__).'/php/'.$package.'/src';
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS));
 
     $found = [];

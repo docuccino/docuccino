@@ -44,7 +44,7 @@ that actually lands. Rebase if `main` has moved.
 Two things CI cannot check for you, so check them yourself before opening a PR:
 
 - The docs site's configuration reference stays in sync with
-  `packages/laravel/config/docuccino.php` when you add or change an option.
+  `php/laravel/config/docuccino.php` when you add or change an option.
 - A golden regeneration is an isolated commit — never bundled with the change that caused it.
 
 ### Release tags are immutable
@@ -61,7 +61,7 @@ GitHub's private vulnerability reporting.
 
 ## Repository layout
 
-This is a monorepo. Each `packages/*` directory is subtree-split into a read-only repository of its
+This is a monorepo. Each `php/*` directory is subtree-split into a read-only repository of its
 own (`docuccino/php-core`, `docuccino/php-attributes`, `docuccino/inference-phpstan`,
 `docuccino/laravel`) — that is what Packagist serves, and the split happens on every push to `main`
 (see [RELEASING.md](RELEASING.md)). Repository names and Composer package names differ where a bare
@@ -73,19 +73,19 @@ happens here.
 
 What lives where:
 
-- `packages/core` — `docuccino/core`, framework-agnostic UIR model, canonicalizer, identity,
+- `php/core` — `docuccino/core`, framework-agnostic UIR model, canonicalizer, identity,
   validator, emitters, semantic diff, extension contracts.
-- `packages/attributes` — `docuccino/attributes`, dependency-free attribute classes.
-- `packages/inference-phpstan` — `docuccino/inference-phpstan`, PHPStan/Larastan inference behind
+- `php/attributes` — `docuccino/attributes`, dependency-free attribute classes.
+- `php/inference-phpstan` — `docuccino/inference-phpstan`, PHPStan/Larastan inference behind
   core's `TypeEngine`.
-- `packages/laravel` — `docuccino/laravel`, the Laravel adapter (provider, config, commands, viewer,
+- `php/laravel` — `docuccino/laravel`, the Laravel adapter (provider, config, commands, viewer,
   integrations).
 - `spec/` — `docuccino/spec`, the versioned UIR JSON Schemas, served at spec.docuccino.app by that
   repository's GitHub Pages site. Its `CNAME`, `.nojekyll`, `index.html` and `README.md` are part of
   the split payload, so they live here — anything added directly to `docuccino/spec` is wiped on the
-  next release. This is the **canonical authoring copy** of each schema. `packages/core` ships its
+  next release. This is the **canonical authoring copy** of each schema. `php/core` ships its
   own package-relative copy
-  under `packages/core/resources/spec/` (so `Validator` resolves the schema from a vendor install,
+  under `php/core/resources/spec/` (so `Validator` resolves the schema from a vendor install,
   not from a monorepo-relative path). Edit the canonical copy under `spec/`, then run
   `composer sync-schema` to refresh the package copy; a byte-equality drift guard (`SchemaShippingTest`)
   fails CI if they diverge.
@@ -111,7 +111,7 @@ Everything must be **green on all checks, always** — Pest, PHPStan at level ma
 
 ### The fixture app (real-engine tests)
 
-The Laravel adapter's feature tests run against the workbench under `packages/laravel/workbench/`.
+The Laravel adapter's feature tests run against the workbench under `php/laravel/workbench/`.
 The inference engine's real-analysis tests (the `fixture` group) run out-of-process against a
 provisioned Laravel + Larastan app at `tests/fixture-app/app`, which is **gitignored** — recreate
 it per `tests/fixture-app/setup.md` (or let CI's cached provisioning do it). Then:
@@ -130,7 +130,7 @@ absolute paths, no randomness in any emitted document. This is a hard, tested gu
 cold-vs-warm cache, 1-vs-8-worker, and re-run byte-diffs, plus a UIR→OAS round-trip losslessness
 test).
 
-Golden files under `packages/*/tests/Fixtures/golden/` are **byte-locked**. Never regenerate them
+Golden files under `php/*/tests/Fixtures/golden/` are **byte-locked**. Never regenerate them
 casually:
 
 - A sanctioned regeneration is an **isolated commit** that explains exactly why the bytes changed.
@@ -167,7 +167,7 @@ coverage rises, never lowered without a documented justification (see `docs/test
 
 ## Writing an integration
 
-Built-in integrations live in `packages/laravel/src/Integrations/<Name>/` — self-contained, with one
+Built-in integrations live in `php/laravel/src/Integrations/<Name>/` — self-contained, with one
 `<Name>Integration` registrar (a static `extensions()` list, plus a `class_exists`-guarded
 `installed()` for conditional ones), importing only the public extension surface. An arch test
 (`IntegrationsArchTest`) enforces this — they use the *same public API* a third party would. See the

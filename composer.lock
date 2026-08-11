@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5ebbcc294b57f239a367e0582be3821c",
+    "content-hash": "58f88966c462780d65e7dfe91d4ceda8",
     "packages": [
         {
             "name": "brick/math",
@@ -382,7 +382,7 @@
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "packages/attributes",
+                "url": "php/attributes",
                 "reference": "cdf9ba75875d3c2c976e95d5eec5a2cd6bb242ba"
             },
             "require": {
@@ -426,7 +426,7 @@
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "packages/core",
+                "url": "php/core",
                 "reference": "5e39ff2720f888917d1ecc6d1dd200afc7ce6549"
             },
             "require": {
@@ -482,7 +482,7 @@
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "packages/inference-phpstan",
+                "url": "php/inference-phpstan",
                 "reference": "1108328cd2c235b254aa70976b6c02d80a1e44ec"
             },
             "require": {
@@ -543,7 +543,7 @@
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "packages/laravel",
+                "url": "php/laravel",
                 "reference": "6444c2a22da4d28c3f8a4b25dbc9ef6329611f49"
             },
             "require": {

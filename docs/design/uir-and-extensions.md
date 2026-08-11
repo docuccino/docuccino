@@ -89,7 +89,7 @@ Producers: `inference`, `attribute`, `docblock`, `integration:<name>`, `overlay`
 `config`, `fallback`. `source.file` is project-root-relative. Emit levels:
 
 **Integration producer-name convention (frozen at v1).** `<name>` is the integration's
-directory name (`packages/laravel/src/Integrations/<Dir>/`) kebab-cased — the one canonical
+directory name (`php/laravel/src/Integrations/<Dir>/`) kebab-cased — the one canonical
 string, used identically whether the contribution is built via `Contribution::integration('<name>')`
 or an `ExceptionToResponse::producer()` returning `'integration:<name>'`. The full set:
 
@@ -288,7 +288,7 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
   imports nothing from `Docuccino\Laravel` or `Illuminate`. Absent engine → `NullTypeEngine` plus one
   `engine.not-installed` warning per document.
 - **Dogfooding rule (arch-test enforced)**: built-in integrations live in
-  `packages/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
+  `php/laravel/src/Integrations/*` and may import only `Docuccino\Core\Extensions\
   Contracts\*` — never `Docuccino\Core\Internal\*`.
 - **Per-document enable/disable (`integrations.<name>.enabled`)**: each integration bag carries an
   `enabled` bool, resolved at **per-document extension-resolution time** (the late-bound registry

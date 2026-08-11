@@ -17,7 +17,7 @@ It is a subtree split of the `spec/` directory of
 serve `spec.docuccino.app`. Commits pushed here are overwritten on the next release.
 
 Open issues and pull requests on the monorepo. The schema's authoring copy lives at
-`spec/uir/<version>/schema.json` there, and `packages/core` ships a byte-identical package-relative
+`spec/uir/<version>/schema.json` there, and `php/core` ships a byte-identical package-relative
 copy so `Validator` resolves it from a `vendor/` install rather than over the network — the `$id`
 above is an identifier, not a runtime fetch.
 

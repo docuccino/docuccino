@@ -44,10 +44,10 @@ jobs:
       - name: Validate composer files
         run: |
           composer validate --no-check-publish
-          composer validate --strict packages/core/composer.json
-          composer validate --strict packages/attributes/composer.json
-          composer validate --strict packages/inference-phpstan/composer.json
-          composer validate --strict packages/laravel/composer.json
+          composer validate --strict php/core/composer.json
+          composer validate --strict php/attributes/composer.json
+          composer validate --strict php/inference-phpstan/composer.json
+          composer validate --strict php/laravel/composer.json
 
       - name: Install dependencies
         run: |
@@ -81,7 +81,7 @@ jobs:
     # website/ has no ../spec to compare against and legitimately skips the check — so the guard's
     # home is here, in the workflow that always runs on every push and PR, unfiltered. Drift can
     # therefore never ship green just because a deploy had nothing to check.
-    # (The packages/core/resources copy has its own drift guard: core's SchemaShippingTest.)
+    # (The php/core/resources copy has its own drift guard: core's SchemaShippingTest.)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 

@@ -107,7 +107,7 @@ interface TypeScope {
 `PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
 
 **Public surface (`@internal` convention).** The only classes in
-`packages/inference-phpstan/src` that are part of this package's supported API are the ones a
+`php/inference-phpstan/src` that are part of this package's supported API are the ones a
 consumer legitimately imports to configure and build the engine: `Analysis\PhpStanTypeEngineBuilder`
 (the entry point an adapter probes for by string — core's `Inference\TypeEngineBuilder` seam),
 `Analysis\EngineConfig`, `Analysis\PhpStanEngineFactory` and `Runtime\RuntimeConfig`. The phpdoc

@@ -25,10 +25,10 @@ There are five split targets — the four Composer packages, plus the UIR spec:
 
 | Source | Split repository | Composer package |
 | --- | --- | --- |
-| `packages/core` | `docuccino/php-core` | `docuccino/core` |
-| `packages/attributes` | `docuccino/php-attributes` | `docuccino/attributes` |
-| `packages/inference-phpstan` | `docuccino/inference-phpstan` | `docuccino/inference-phpstan` |
-| `packages/laravel` | `docuccino/laravel` | `docuccino/laravel` |
+| `php/core` | `docuccino/php-core` | `docuccino/core` |
+| `php/attributes` | `docuccino/php-attributes` | `docuccino/attributes` |
+| `php/inference-phpstan` | `docuccino/inference-phpstan` | `docuccino/inference-phpstan` |
+| `php/laravel` | `docuccino/laravel` | `docuccino/laravel` |
 | `spec/` | `docuccino/spec` | none — its GitHub Pages site serves `spec.docuccino.app` at the schemas' exact `$id` URLs |
 
 ### Repository naming
