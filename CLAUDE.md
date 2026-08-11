@@ -123,7 +123,10 @@ parses — their docblocks and attributes are data, so edit them only to change 
 ## Project status
 
 Feature-complete and green: core, attributes, the inference engine, the Laravel adapter, the
-content layer and the docs site. The monorepo and all five split repositories are public on GitHub
-with the subtree-split CI live, and all four packages are registered on Packagist at `v0.1.0`.
-Roadmap and decision history live outside this repo — the binding conventions are the ones in this
-file and under `docs/`.
+content layer and the docs site. The subtree split publishes the packages and the spec on every
+push to `main` ([`RELEASING.md`](./RELEASING.md)).
+
+Release state — repository visibility, which versions are tagged, what Packagist is serving — is
+whatever GitHub and Packagist currently say. Do not restate it here; check it, because a stale
+claim in this file has already misled the work. Roadmap and decision history live outside this
+repo — the binding conventions are the ones in this file and under `docs/`.
