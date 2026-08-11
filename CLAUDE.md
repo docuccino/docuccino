@@ -68,6 +68,11 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   `engine.not-installed` warning. `AdapterBoundaryArchTest` / `EngineBoundaryArchTest` enforce both
   directions — note a Pest arch layer can only see PSR-4-autoloaded namespaces, so a phar dependency
   like phpstan/phpstan needs the `importsMatching()` import scan instead.
+- **Split repo names ≠ package names**: a split repository whose name would be language-generic
+  carries a language prefix (`docuccino/php-core` ships the `docuccino/core` package); one already
+  naming its language or framework does not (`docuccino/laravel`). Composer package names never
+  carry the prefix. GitHub's org is one flat namespace across every language we may add; Packagist
+  is PHP-only. Rule and rationale in [`RELEASING.md`](./RELEASING.md).
 - **Precedence**: fallback(5) < inference(10) < integration(20) < docblock(30) <
   attribute(40) < overlay(45) < config(50); field-level patch semantics via PatchGuard.
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over
@@ -118,7 +123,7 @@ parses — their docblocks and attributes are data, so edit them only to change 
 ## Project status
 
 Feature-complete and green: core, attributes, the inference engine, the Laravel adapter, the
-content layer and the docs site. The repository is private on GitHub with the subtree-split CI
-live; the public flip and Packagist registration are pending and are Tom's call. Roadmap and
-decision history live outside this repo — the binding conventions are the ones in this file and
-under `docs/`.
+content layer and the docs site. The monorepo and all five split repositories are public on GitHub
+with the subtree-split CI live, and all four packages are registered on Packagist at `v0.1.0`.
+Roadmap and decision history live outside this repo — the binding conventions are the ones in this
+file and under `docs/`.

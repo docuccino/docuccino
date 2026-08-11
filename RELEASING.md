@@ -23,13 +23,29 @@ current `main`.
 
 There are five split targets — the four Composer packages, plus the UIR spec:
 
-| Source | Target | What it is |
+| Source | Split repository | Composer package |
 | --- | --- | --- |
-| `packages/core` | `docuccino/core` | Composer package |
-| `packages/attributes` | `docuccino/attributes` | Composer package |
-| `packages/inference-phpstan` | `docuccino/inference-phpstan` | Composer package |
-| `packages/laravel` | `docuccino/laravel` | Composer package |
-| `spec/` | `docuccino/spec` | Not a package — its GitHub Pages site serves `spec.docuccino.app` at the schemas' exact `$id` URLs |
+| `packages/core` | `docuccino/php-core` | `docuccino/core` |
+| `packages/attributes` | `docuccino/php-attributes` | `docuccino/attributes` |
+| `packages/inference-phpstan` | `docuccino/inference-phpstan` | `docuccino/inference-phpstan` |
+| `packages/laravel` | `docuccino/laravel` | `docuccino/laravel` |
+| `spec/` | `docuccino/spec` | none — its GitHub Pages site serves `spec.docuccino.app` at the schemas' exact `$id` URLs |
+
+### Repository naming
+
+Repository names and Composer package names are deliberately allowed to differ. Packagist reads the
+package name out of `composer.json`, so the two are independent, and each language ecosystem already
+namespaces its own registry — `docuccino/core` on Packagist can only ever be PHP. GitHub has no such
+separation: the `docuccino` org is one flat namespace shared by every language we may add.
+
+So the rule is: **a repository whose name would be language-generic carries a language prefix; one
+that already names its language or framework does not.** `core` and `attributes` are generic, hence
+`docuccino/php-core` and `docuccino/php-attributes`. `laravel` and `inference-phpstan` already say
+PHP, so they stay unprefixed, as does `spec`, which is language-neutral by definition. A future
+Python implementation would be `docuccino/python-core` plus `docuccino/fastapi`.
+
+The Composer package names never carry the prefix — `composer require docuccino/core` is unchanged
+by any of this, and renaming a repository does not affect it.
 
 All five are **read-only mirrors**. Never commit to them — the next split overwrites whatever is
 there. All work happens in this repository.
@@ -44,9 +60,10 @@ The split pushes to *other* repositories, which the automatic `GITHUB_TOKEN` can
 fine-grained PAT stored as the `SPLIT_TOKEN` Actions secret:
 
 - Resource owner: the `docuccino` organization
-- Repository access: only `docuccino/core`, `docuccino/attributes`,
+- Repository access: only `docuccino/php-core`, `docuccino/php-attributes`,
   `docuccino/inference-phpstan`, `docuccino/laravel`, `docuccino/spec` (this repository does **not**
-  need to be included)
+  need to be included). The selection is stored by repository ID, so renaming a target does not
+  invalidate an existing token
 - Permissions: **Contents: Read and write**, nothing else
 
 **It expires.** Put the expiry in a calendar. An expired token fails only the split workflow — the

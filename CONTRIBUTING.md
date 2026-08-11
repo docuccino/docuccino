@@ -62,8 +62,11 @@ GitHub's private vulnerability reporting.
 ## Repository layout
 
 This is a monorepo. Each `packages/*` directory is subtree-split into a read-only repository of its
-own (`docuccino/core`, `docuccino/attributes`, …) — that is what Composer installs, and the split
-happens on every push to `main` (see [RELEASING.md](RELEASING.md)). `spec/` is split the same way to
+own (`docuccino/php-core`, `docuccino/php-attributes`, `docuccino/inference-phpstan`,
+`docuccino/laravel`) — that is what Packagist serves, and the split happens on every push to `main`
+(see [RELEASING.md](RELEASING.md)). Repository names and Composer package names differ where a bare
+name would be language-generic: the `docuccino/php-core` repository ships the `docuccino/core`
+package, and the package names below are the ones you `composer require`. `spec/` is split the same way to
 `docuccino/spec`, which is not a Composer package: it exists so GitHub Pages has a repository from
 which to serve `spec.docuccino.app`. Never commit to a split repository: it is overwritten. All work
 happens here.
