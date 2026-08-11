@@ -25,6 +25,22 @@ npm run build   # static site → website/dist/
 `npm run build` runs a `prebuild` hook (`node scripts/sync-schema.mjs --check`) that fails if the
 published UIR schema under `public/uir/` has drifted from the canonical `spec/uir/` at the repo root.
 
+## Machine-readable output
+
+Two Starlight plugins publish the docs for readers that aren't browsers — an AI assistant asked about
+Docuccino, or anything that would rather parse Markdown than HTML. Both run at build time only:
+
+| Plugin | Produces | Notes |
+| --- | --- | --- |
+| [`starlight-llms-txt`](https://delucis.github.io/starlight-llms-txt/) | `/llms.txt`, `/llms-full.txt`, `/llms-small.txt` | `llms.txt` is the index; `-full` is every page concatenated, `-small` the same with the comparison pages and spec-hosting detail dropped for tight context windows. Its `description`, `details`, `promote` and `exclude` options are set in `astro.config.mjs`. |
+| [`starlight-md-txt`](https://max-ostapenko.github.io/starlight-md-txt/) | A `.md` twin beside every page (`/laravel/getting-started.md`) | The rule is "page URL + `.md`". GitHub Pages serves these as `text/markdown`, so a browser downloads rather than renders them; switch the plugin's `format` to `'.md.txt'` if you'd rather they display inline. |
+
+The landing page is the one exception to the URL rule: the plugin routes twins as `[...slug].md`, and
+the index slug is empty, so its twin is the hidden `/.md`. A small `astro:build:done` integration in
+`astro.config.mjs` copies it to `/index.md` too.
+
+Both are regenerated on every build, so neither needs committing — like the rest of `dist/`.
+
 ## Deploy
 
 The site is **static** — no adapter, no server. `.github/workflows/deploy.yml` builds it with
@@ -74,12 +90,19 @@ the brand changes.
 ```
 src/content/docs/
 ├── index.mdx                 # splash landing page
-├── getting-started/          # install, first export
-├── reference/                # configuration, commands, attributes
-├── integrations/             # one page group per concern (schemas, requests, errors, …)
-├── guides/                   # writing an integration, Docuccino vs Scramble
+├── laravel/                  # everything framework-specific
+│   ├── getting-started/      # install, first export
+│   ├── documenting/          # one page per concern (requests, responses, errors, …)
+│   ├── packages/             # one page per supported ecosystem package
+│   ├── guides/               # how it works, production, viewer, multiple documents, …
+│   └── reference/            # configuration, commands, attributes
+├── extending/                # writing an integration (framework-agnostic)
+├── guides/                   # the comparison pages (vs Scramble, vs Scribe)
 └── uir/                      # UIR format + spec hosting
 ```
+
+The `laravel/` scoping is deliberate and invisible to readers — framework-specific pages live under
+it so a second framework can be added without moving a URL. `STYLE.md` has the reasoning.
 
 The navigation is defined in `astro.config.mjs`. Content follows the editorial direction in
 [`STYLE.md`](./STYLE.md): written for developers adopting Docuccino, sourced from the real behavior
