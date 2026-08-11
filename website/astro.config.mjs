@@ -1,6 +1,26 @@
 // @ts-check
+import { copyFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightLlmsTxt from 'starlight-llms-txt';
+import starlightMdTxt from 'starlight-md-txt';
+
+// starlight-md-txt routes its Markdown twins as `[...slug].md`, so the landing page — whose slug is
+// empty — lands on the hidden path `/.md`. Copy it to the conventional `/index.md` as well, so the
+// root page is reachable by the name a reader (or a crawler) would actually try. Every other page
+// already follows "page URL + .md".
+const indexMarkdownAlias = {
+	name: 'docuccino-index-markdown-alias',
+	hooks: {
+		'astro:build:done': ({ dir }) => {
+			const hidden = fileURLToPath(new URL('./.md', dir));
+			if (existsSync(hidden)) {
+				copyFileSync(hidden, fileURLToPath(new URL('./index.md', dir)));
+			}
+		},
+	},
+};
 
 // https://astro.build/config
 export default defineConfig({
@@ -18,10 +38,37 @@ export default defineConfig({
 		build: { chunkSizeWarningLimit: 3000 },
 	},
 	integrations: [
+		indexMarkdownAlias,
 		starlight({
 			title: 'Docuccino',
 			description:
-				'UIR-based API documentation generator for Laravel: tier-3 inference, deterministic output, semantic diffing and a bundled Scalar viewer.',
+				'UIR-based API documentation generator for Laravel: deep type inference, deterministic output, semantic diffing and a bundled Scalar viewer.',
+			// Machine-readable copies of the docs, for readers who arrive as an AI assistant rather
+			// than in a browser: llms-txt builds the /llms*.txt digests, md-txt writes a .md twin
+			// beside every page. Both are build-time only — no runtime, no request-time work.
+			plugins: [
+				starlightLlmsTxt({
+					description:
+						'Docuccino is an open-source (MIT) API documentation generator for Laravel. It compiles an application into a UIR (Universal Intermediate Representation — an OpenAPI-3.2-shaped, deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1/3.0, with semantic diffing and a bundled Scalar viewer.',
+					details: [
+						'## Key facts',
+						'',
+						'- Install: `composer require docuccino/laravel` plus `composer require --dev docuccino/inference-phpstan` (the analysis engine is a dev dependency; the adapter degrades to no inference without it).',
+						'- Requirements: PHP 8.3+, Laravel 12 or 13.',
+						'- Commands: `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`.',
+						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
+						'- Docuccino never executes application code — it reads types with an embedded PHPStan/Larastan engine.',
+						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',
+						'- Precedence, lowest to highest: fallback, inference, integration, docblock, attribute, overlay, config. Higher layers win field by field.',
+					].join('\n'),
+					// Pages ordered for a reader starting from zero.
+					promote: ['index*', 'laravel/getting-started*', 'laravel/guides/how-it-works*'],
+					// The small variant is for tight context windows: keep the task-shaped pages, drop
+					// the migration/comparison material and the spec-hosting detail.
+					exclude: ['guides/vs-*', 'uir/hosting*'],
+				}),
+				starlightMdTxt(),
+			],
 			logo: {
 				// The task-specified mapping: light theme → logo-light.svg, dark theme → logo.svg.
 				light: './src/assets/logo-light.svg',

@@ -1,7 +1,7 @@
 # Contributing to Docuccino
 
-Thanks for your interest in Docuccino. This is an open-core project (MIT); a paid SaaS later
-consumes the UIR artifacts the open packages produce.
+Thanks for your interest in Docuccino. It's an open-source project, MIT licensed — see
+[LICENSE](LICENSE).
 
 ## Developer Certificate of Origin (DCO)
 
@@ -93,11 +93,15 @@ What lives where:
 ```bash
 composer install
 
-vendor/bin/pest --parallel              # full suite (the `fixture` group auto-skips without the fixture app)
-vendor/bin/phpstan analyse --no-progress  # level max — NO baselines, no blanket ignores
-vendor/bin/pint --test                  # code style (drop --test to fix)
-composer validate --strict              # per package
+composer test               # full suite, parallel (the `fixture` group auto-skips without the fixture app)
+composer analyse            # PHPStan level max — NO baselines, no blanket ignores
+composer lint               # code style (composer fix to apply)
+composer validate --strict  # per package
 ```
+
+Use the composer scripts rather than calling `vendor/bin/*` directly: they carry the flags the gates
+need (`--parallel`, and the 2G memory limits PHPStan and type coverage want), and CI runs the same
+scripts, so the two cannot drift.
 
 Everything must be **green on all checks, always** — Pest, PHPStan at level max, Pint, and
 `composer validate`. `declare(strict_types=1)` is required in every PHP file.
@@ -110,7 +114,7 @@ provisioned Laravel + Larastan app at `tests/fixture-app/app`, which is **gitign
 it per `tests/fixture-app/setup.md` (or let CI's cached provisioning do it). Then:
 
 ```bash
-vendor/bin/pest --parallel --group=fixture   # real-engine integration tests
+composer test:inference-fixture   # real-engine integration tests
 ```
 
 Set `DOCUCCINO_REQUIRE_FIXTURE=1` to turn a missing/broken fixture app into a hard failure instead
@@ -129,7 +133,7 @@ casually:
 - A sanctioned regeneration is an **isolated commit** that explains exactly why the bytes changed.
 - Regenerate locally with `DOCUCCINO_UPDATE_GOLDEN=1`:
   ```bash
-  DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --filter=<golden test>
+  DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --parallel --filter=<golden test>
   ```
 - **CI guards that `DOCUCCINO_UPDATE_GOLDEN` is unset**, so a drifting document can never masquerade
   as green.
@@ -150,13 +154,13 @@ Coverage protects the paths goldens never traverse. Summarised (full detail in
 Run coverage locally (needs pcov):
 
 ```bash
-vendor/bin/pest --coverage --exclude-group=fixture --min=<floor>   # line coverage
-vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G  # declared types
+composer test:coverage   # line coverage, gated per package
+composer test:types      # declared types, 100%
 ```
 
-The enforced floors live in `.github/workflows/ci.yml` (the `coverage` job). The line floor is an
-**honest ratchet** — raised as coverage rises, never lowered without a documented justification
-(see `docs/testing.md`).
+Line coverage is gated **per package** by `tools/coverage-floors.php`, which `composer test:coverage`
+runs over the clover report. Those floors are an **honest ratchet** — measured-now values, raised as
+coverage rises, never lowered without a documented justification (see `docs/testing.md`).
 
 ## Writing an integration
 
