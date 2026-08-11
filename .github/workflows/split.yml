@@ -3,7 +3,10 @@
 #
 # Two kinds of target, same machinery:
 #   * `packages/<name>` → the four Composer packages, which is what Composer/Packagist
-#     installs from.
+#     installs from. Repository name and Composer package name are NOT always equal: a
+#     repository whose name would be language-generic carries a `php-` prefix, so
+#     docuccino/php-core is the repository behind the docuccino/core package. That keeps
+#     the org's unprefixed names free for other languages. See RELEASING.md.
 #   * `spec` → docuccino/spec, whose GitHub Pages site serves spec.docuccino.app at the
 #     schemas' exact `$id` URLs. Not a Composer package; it is split so that Pages has a
 #     repository to serve from, since one Pages site carries only one custom domain and the
@@ -20,10 +23,11 @@
 #   1. GitHub → Settings → Developer settings → Personal access tokens →
 #      Fine-grained tokens → Generate new token
 #   2. Resource owner: the `docuccino` organization
-#   3. Repository access: "Only select repositories" → docuccino/core,
-#      docuccino/attributes, docuccino/inference-phpstan, docuccino/laravel,
+#   3. Repository access: "Only select repositories" → docuccino/php-core,
+#      docuccino/php-attributes, docuccino/inference-phpstan, docuccino/laravel,
 #      docuccino/spec
-#      (this repository does NOT need to be included)
+#      (this repository does NOT need to be included; the selection is stored by
+#      repository ID, so renaming a target does not invalidate an existing token)
 #   4. Repository permissions: Contents → Read and write   (nothing else)
 #   5. Expiry: set a calendar reminder — an expired token fails this workflow only,
 #      never the monorepo's own CI
@@ -79,12 +83,13 @@ jobs:
       fail-fast: false
       matrix:
         # `package` is the target repository name (and this job's check name); `directory` is
-        # where its contents live here. They are spelled out separately because `spec` does
-        # not sit under packages/ — deriving one from the other only worked while every
-        # target was a Composer package.
+        # where its contents live here. They are spelled out separately because neither is
+        # derivable from the other: `spec` does not sit under packages/, and a repository
+        # whose name would be language-generic carries a `php-` prefix that its Composer
+        # package name does not (docuccino/php-core ships docuccino/core).
         include:
-          - { package: core, directory: packages/core }
-          - { package: attributes, directory: packages/attributes }
+          - { package: php-core, directory: packages/core }
+          - { package: php-attributes, directory: packages/attributes }
           - { package: inference-phpstan, directory: packages/inference-phpstan }
           - { package: laravel, directory: packages/laravel }
           - { package: spec, directory: spec }
