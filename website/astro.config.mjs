@@ -128,6 +128,7 @@ export default defineConfig({
 						{ label: 'Customizing the output', slug: 'laravel/guides/customizing-output' },
 						{ label: 'Guides, pages & prose', slug: 'laravel/guides/narrative-content' },
 						{ label: 'The viewer', slug: 'laravel/guides/viewer' },
+						{ label: 'Troubleshooting', slug: 'laravel/guides/troubleshooting' },
 					],
 				},
 				{
