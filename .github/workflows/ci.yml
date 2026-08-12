@@ -11,7 +11,7 @@ permissions:
 jobs:
   quality:
     name: >-
-      Quality PHP ${{ matrix.php }}${{ matrix.deps == 'lowest' && ' (prefer-lowest)' || '' }}${{ matrix.phpstan && format(' (phpstan {0})', matrix.phpstan) || '' }}
+      Quality PHP ${{ matrix.php }}${{ matrix.deps == 'lowest' && ' (prefer-lowest)' || '' }}${{ matrix.phpstan && format(' (phpstan {0})', matrix.phpstan) || '' }}${{ matrix.testbench && format(' (testbench {0})', matrix.testbench) || '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -29,7 +29,15 @@ jobs:
           # only 2.2 is exercised — a `~2.3.0` leg cannot resolve and would fail the
           # build on a dependency that does not exist yet. Add the second entry the
           # day PHPStan 2.3 ships; the seam stays either way.
-          - { php: '8.4', deps: 'locked', phpstan: '~2.2.0' }
+          #
+          # Pinned to the exact FLOOR, not `~2.2.0`: that range resolves to the same
+          # newest 2.2.x the lock already holds, so it re-ran the base job and proved
+          # nothing. 2.2.0 and the newest patch wire NodeScopeResolver differently
+          # (fiber vs plain scopes) — see the fixture job's phpstan axis.
+          - { php: '8.4', deps: 'locked', phpstan: '2.2.0' }
+          # Laravel axis: `docuccino/laravel` allows `illuminate/*: ^12.0 || ^13.0`,
+          # so both majors must run. testbench ^10 is Laravel 12, ^11 is Laravel 13.
+          - { php: '8.4', deps: 'locked', testbench: '^11.0' }
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -55,6 +63,8 @@ jobs:
             composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
           elif [ -n "${{ matrix.phpstan }}" ]; then
             composer update --with "phpstan/phpstan:${{ matrix.phpstan }}" --no-interaction --no-progress
+          elif [ -n "${{ matrix.testbench }}" ]; then
+            composer update --with "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-progress
           else
             composer install --no-interaction --no-progress
           fi
@@ -127,11 +137,23 @@ jobs:
         run: composer test:types
 
   fixture:
-    name: Fixture suite (PHP 8.3)
+    name: Fixture suite (PHP 8.3, laravel ${{ matrix.laravel }}, phpstan ${{ matrix.phpstan }})
     runs-on: ubuntu-latest
-    # Runs ONCE (not across the quality matrix): it provisions a full Laravel +
-    # Larastan app, which is the slow part, and the fixture behaviour is
-    # PHP-version-agnostic.
+    # Not run across the PHP axis — provisioning a full Laravel + Larastan app is the
+    # slow part and the fixture behaviour is PHP-version-agnostic. It IS run across
+    # phpstan and Laravel, because the fixture app carries its OWN vendor: the quality
+    # job's phpstan axis cannot reach it, so without these legs the only real-engine
+    # coverage we have is whatever single phpstan the provisioning happens to resolve.
+    # 2.2.0 hands `getByType(NodeScopeResolver::class)` the fiber-driven resolver and
+    # the newest 2.2.x hands over the plain one, which is a live behavioural fork —
+    # both must be exercised. Laravel 13 matches `illuminate/*: ^12.0 || ^13.0`.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { laravel: '^12.0', phpstan: '2.2.0' }
+          - { laravel: '^12.0', phpstan: '*' }
+          - { laravel: '^13.0', phpstan: '*' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -147,16 +169,19 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: tests/fixture-app/app
-          # Re-provision only when the setup recipe or any fixture source changes.
-          key: docuccino-fixture-${{ hashFiles('tests/fixture-app/setup.md', 'tests/fixture-app/src/**') }}
+          # Re-provision only when the setup recipe or any fixture source changes. The
+          # laravel/phpstan legs each get their own app, so both are part of the key.
+          key: docuccino-fixture-l${{ matrix.laravel }}-p${{ matrix.phpstan }}-${{ hashFiles('tests/fixture-app/setup.md', 'tests/fixture-app/src/**') }}
 
       - name: Provision fixture app
         if: steps.fixture-cache.outputs.cache-hit != 'true'
         # Mirrors tests/fixture-app/setup.md — keep the two in lockstep.
         run: |
           set -euo pipefail
-          composer create-project laravel/laravel tests/fixture-app/app "^12.0" --no-interaction --no-progress
+          composer create-project laravel/laravel tests/fixture-app/app "${{ matrix.laravel }}" --no-interaction --no-progress
           composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --no-interaction --no-progress
+          # The fixture app's own phpstan is what the real engine actually loads, so pin it per leg.
+          composer require --working-dir=tests/fixture-app/app --dev -W "phpstan/phpstan:${{ matrix.phpstan }}" --no-interaction --no-progress
           composer require --working-dir=tests/fixture-app/app spatie/laravel-query-builder spatie/laravel-data --no-interaction --no-progress
           # Integration packages (JSON:API + laravel-actions real-engine tests):
           composer require --working-dir=tests/fixture-app/app -W "timacdonald/json-api:^1.0@beta" "spatie/laravel-json-api-paginate:^2.0" "lorisleiva/laravel-actions:^2.0" --no-interaction --no-progress

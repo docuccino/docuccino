@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "58f88966c462780d65e7dfe91d4ceda8",
+    "content-hash": "d4b8424c2139a3fa2434ed1452bac6c5",
     "packages": [
         {
             "name": "brick/math",
@@ -427,7 +427,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/core",
-                "reference": "5e39ff2720f888917d1ecc6d1dd200afc7ce6549"
+                "reference": "19d5e79c1c7f8de1fae29410bca96a0333fc643a"
             },
             "require": {
                 "composer-runtime-api": "^2",
@@ -437,7 +437,7 @@
                 "php": "^8.3",
                 "phpstan/phpdoc-parser": "^2",
                 "psr/container": "^1.1 || ^2.0",
-                "symfony/yaml": "^7.0"
+                "symfony/yaml": "^7.0 || ^8.0"
             },
             "type": "library",
             "autoload": {
@@ -544,7 +544,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/laravel",
-                "reference": "6444c2a22da4d28c3f8a4b25dbc9ef6329611f49"
+                "reference": "2ca2a4545c2f70d93224d62483cacc00e6523046"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -559,7 +559,7 @@
             "require-dev": {
                 "docuccino/inference-phpstan": "self.version",
                 "lorisleiva/laravel-actions": "^2.0",
-                "orchestra/testbench": "^10.0",
+                "orchestra/testbench": "^10.0 || ^11.0",
                 "pestphp/pest": "^4.0",
                 "spatie/laravel-data": "^4.0",
                 "spatie/laravel-json-api-paginate": "^2.0",
