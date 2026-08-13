@@ -51,8 +51,8 @@ const CHANGELOG_USER_FACING_TYPES = ['feat', 'fix', 'perf'];
 /**
  * Turn raw commit records into changelog entries, plus the warnings a human should see.
  *
- * Merge commits are skipped silently (squash-only merging means new ones are history's, not
- * ours). A subject that does not parse is skipped loudly. A scope outside the allow-list still
+ * Merge commits and the release pull request's own `Release vX.Y.Z` squash are skipped silently;
+ * any other subject that does not parse is skipped loudly. A scope outside the allow-list still
  * renders on the aggregate page but ships with no package.
  *
  * @param  list<array{subject: string, body?: string, parents?: int}>  $commits
@@ -67,7 +67,7 @@ function changelog_collect(array $commits): array
         $subject = $commit['subject'];
         $body = $commit['body'] ?? '';
 
-        if (conventional_is_merge($subject, $commit['parents'] ?? 1)) {
+        if (conventional_is_merge($subject, $commit['parents'] ?? 1) || conventional_is_release_subject($subject)) {
             continue;
         }
 

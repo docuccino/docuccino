@@ -106,6 +106,18 @@ function conventional_is_merge(string $subject, int $parents = 1): bool
 }
 
 /**
+ * The standing release pull request's own squash subject, `Release v1.2.3`. Deliberately not a
+ * conventional message — it lands nothing user-facing — so the changelog skips it in silence
+ * instead of warning about it once per release, forever.
+ */
+function conventional_is_release_subject(string $subject): bool
+{
+    [$bare] = conventional_split_reference($subject);
+
+    return preg_match('/^Release v\d+\.\d+\.\d+$/', $bare) === 1;
+}
+
+/**
  * The text of a `BREAKING CHANGE:` footer, `''` when the footer is present but empty, null when
  * there is no footer. Continuation lines fold into one paragraph.
  */

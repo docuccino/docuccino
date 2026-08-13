@@ -135,6 +135,18 @@ it('skips merge commits, by parent count and by subject', function () {
         ->and($collected['warnings'])->toBe([]);
 });
 
+it('skips the release pull request its own squash commit, silently', function (string $subject, bool $silent) {
+    $collected = changelog_collect([['subject' => $subject]]);
+
+    expect($collected['changes'])->toBe([])
+        ->and($collected['warnings'])->toHaveCount($silent ? 0 : 1);
+})->with([
+    // Otherwise every release would leave a warning behind for good.
+    'squashed' => ['Release v0.1.3 (#104)', true],
+    'unsquashed' => ['Release v1.2.3', true],
+    'not a release at all' => ['Release the kraken', false],
+]);
+
 it('emits every file for an empty range, saying there is nothing yet', function () {
     $collected = changelog_collect([]);
     $documents = changelog_documents([], 'v0.1.2');
