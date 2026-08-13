@@ -40,7 +40,14 @@ jobs:
       github.event.pull_request.head.repo.full_name != github.repository
       || github.event.pull_request.head.ref != 'release/next'
     steps:
+      # The BASE commit, not the pull request's merge commit: a `pull_request` workflow otherwise
+      # runs the contributor's copy of the linter, and a fork could weaken the grammar in the very
+      # pull request it is meant to gate. A change to the grammar is therefore judged by the
+      # grammar already on `main`, which is the right way round.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
