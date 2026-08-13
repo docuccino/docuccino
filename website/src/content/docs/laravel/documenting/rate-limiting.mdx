@@ -72,8 +72,25 @@ enforced independently but not separately represented.
 
 `X-RateLimit-Limit` carries the allowance as its example and `Retry-After` carries the window length in
 seconds; the two runtime-varying headers are documented as integers with no example, because there is no
-honest static value for them. The body is always the small `{ "message": string }` JSON payload
-Laravel's `ThrottleRequests` returns.
+honest static value for them.
+
+## The body follows your error style
+
+Middleware synthesizes the `429`, so no `throw` announces it — Docuccino asks the
+[error-response chain](/laravel/documenting/errors/) about `ThrottleRequestsException` anyway, and the body
+matches the rest of the document:
+
+| `error_responses` | The `429` body |
+| --- | --- |
+| `default` | Laravel's `{ "message": string }`, which is what `ThrottleRequests` returns. |
+| `problem-details` | The same `ProblemDetails` shape as every other error, under `application/problem+json`. |
+| Your own handler covers throttling | Whatever that handler builds. |
+| `none`, or nothing in the chain answers | The stock `{ "message": string }`. |
+
+The body is copied in rather than `$ref`'d, because a shared response can't carry this route's
+`X-RateLimit-*` values. The finished `429` is then
+[hoisted like any other error response](/laravel/documenting/errors/#repeated-bodies-become-shared-components):
+routes sharing a limit share one `Error429`, a route with its own numbers keeps its own.
 
 ## Named limiters
 

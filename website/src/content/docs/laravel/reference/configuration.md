@@ -238,6 +238,12 @@ from "API changed".
 | `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
 | `enums.naming` | `none` \| `x-enumNames` \| `x-enum-varnames` | `none` | Codegen name hints on enum schemas (off by default); read by the [Enum integration](/laravel/documenting/schemas/#enums). |
 | `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
+| `errors.components` | `true` \| `false` | `true` | Whether an error body repeated across operations hoists to one shared `#/components/responses` entry each operation `$ref`s (`true`), or every copy is inlined (`false`). |
+
+The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
+already a `$ref` — and [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references
+on both sides, so moving a body between inline and shared is not a change. Worked output and the exact
+rules: [repeated bodies become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components).
 
 ### `integrations`
 
@@ -364,20 +370,43 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
 ],
 ```
 
-The data-leakage pass is a diagnostics-only `DocumentTransformer` (it never mutates output). It
-warns on schema properties whose names look sensitive (`password`/`token`/`secret`/`api_key`/…).
+The data-leakage pass is diagnostics-only — it never mutates the document — and checks two things.
+
+**Property names.** A name that looks sensitive (`password`, `token`, `secret`, `api_key`, …) warns with
+its JSON pointer. Names normalize to lowercase alphanumerics, so `api_key`, `apiKey` and `API-KEY` are
+one token.
+
+**Published values.** Every leaf under `example`, `examples`, `const`, `enum` and `default` is matched
+against known credential shapes — the check that catches a real secret folded out of a class constant
+under an innocent member name:
+
+| Recognized shape | Matches |
+| --- | --- |
+| A PEM private key | `-----BEGIN PRIVATE KEY-----` and its labelled variants |
+| An AWS access key id | `AKIA…`, `ASIA…` |
+| A GitHub token | `ghp_…`, `github_pat_…` |
+| A live Stripe secret key | `sk_live_…`, `rk_live_…` |
+| A Slack token | `xoxb-…`, `xoxp-…` |
+| A JWT | `eyJ….….…` |
+| A URL with embedded credentials | `postgres://user:password@host/db` |
+
+The warning names the member and pointer, never the matched text — echoing the secret would only move it
+into your build log. Shapes only: there is deliberately no entropy scoring (UUIDs, hashes and base64
+payloads are what good examples look like) and no internal-hostname heuristic (a private domain is a
+legitimate server URL).
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `true` | Turn the pass on/off. |
-| `allow` | `[]` | Safelist known-good properties by name or JSON pointer. |
-| `patterns` | built-in table | Extra token → human-label heuristics merged over the built-in table (key = normalized token, matched when a property name *contains* it). |
+| `allow` | `[]` | Safelist by property name or JSON pointer. Silences both kinds of finding; for a value, use the pointer. |
+| `patterns` | built-in table | Extra token → label heuristics for **names**, merged over the built-in table (key = normalized token, matched when a name *contains* it). |
 
 ## Engine
 
 ```php
 'engine' => [
     'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
+    // 'memory_limit' => '2G',
     'project_paths' => ['app'],
 ],
 ```
@@ -385,7 +414,12 @@ warns on schema properties whose names look sensitive (`password`/`token`/`secre
 | Key | Default | Effect |
 | --- | --- | --- |
 | `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two working modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
+| `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
+
+PHP cannot catch memory exhaustion, so it's the one failure that kills a build instead of degrading —
+`memory_limit` and `--memory-limit` exist to prevent it. Full walkthrough:
+[the export runs out of memory](/laravel/guides/troubleshooting/#the-export-runs-out-of-memory).
 
 Inference needs the dev-only `docuccino/inference-phpstan` package. Without it, every mode but `null`
 degrades to no inference and each export carries one `engine.not-installed` warning naming the

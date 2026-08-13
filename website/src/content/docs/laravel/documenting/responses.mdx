@@ -145,13 +145,16 @@ explicit. An explicit `201` always wins.
 
 ### Spatie Data success status
 
-A [Spatie Data](/laravel/packages/spatie-data/) response class that overrides `calculateResponseStatus()`
-has that status documented in place of the default `200`. Anything that folds to constant ints is read:
-`return 201;`, a class constant like `Response::HTTP_CREATED`, or a conditional whose arms are *all*
-constants (`return $invoice->isPaid() ? 200 : 202;`) — a conditional documents the same body under
-**each** status, matching runtime truth. A genuinely computed status (a widened `int`, a non-constant
-expression) leaves the response at `200` and records a
-`spatie-data.response-status-unresolved` info diagnostic rather than guessing.
+A [Spatie Data](/laravel/packages/spatie-data/) class returned from a `POST` documents **`201 Created`**,
+from spatie's own `ResponsableData` default; any other verb documents `200`. A class that **overrides**
+`calculateResponseStatus()` documents that instead — `return 201;`, a class constant like
+`Response::HTTP_CREATED`, or a conditional whose arms are *all* constants
+(`return $invoice->isPaid() ? 200 : 202;` documents the same body under **each** status). A computed
+status falls back to `200` with a `spatie-data.response-status-unresolved` info diagnostic rather than
+guessing.
+
+The `201` is new: earlier releases read only the override. See the
+[upgrade note](/laravel/packages/spatie-data/#success-statuses).
 
 ## Empty responses
 

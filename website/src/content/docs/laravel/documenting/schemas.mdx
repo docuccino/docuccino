@@ -69,8 +69,9 @@ tracks — so a class rename isn't reported as a removal plus an addition — wi
 [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
 
 **Wrapping.** A top-level resource is wrapped under `data` (Laravel's default); nested resources are
-not, so they can be shared by reference. `withoutWrapping()` is a runtime call Docuccino can't see, so
-`api_resources.wrap` is the escape hatch:
+not, so they can be shared by reference. `JsonResource::withoutWrapping()` is a global runtime call —
+made in a service provider, not on the class — so Docuccino can't see it, and `api_resources.wrap` is
+the escape hatch:
 
 | `wrap` | Result |
 | --- | --- |
@@ -78,6 +79,10 @@ not, so they can be shared by reference. `withoutWrapping()` is a runtime call D
 | `false` | Never wrap. |
 | `true` | Wrap under `data`. |
 | `'result'` (any string) | Wrap under that key. |
+
+Spatie Data classes are the exception: there, `withoutWrapping()` is written **on the class**, so it's
+read statically and needs no config — see
+[classes that unwrap themselves](/laravel/packages/spatie-data/#classes-that-unwrap-themselves).
 
 Laravel 13's first-party JSON:API resources are supported too: `toAttributes()`,
 `toRelationships()`, `toLinks()` and `toMeta()` build the resource object, and the `include` and
@@ -225,6 +230,29 @@ present. A case with neither is simply absent from the map. To also emit codegen
 
 A **pure** enum — one with no backing type — has no values to publish, so it's documented as a string
 schema listing its case names.
+
+## Arrays: lists and maps
+
+PHP spells both with `array`; the emitted schema keeps them apart.
+
+| The resolved type | Documented as |
+| --- | --- |
+| `list<string>`, or anything else known to be a list | `{ "type": "array", "items": { "type": "string" } }` |
+| `array<string, list<string>>` — a keyed collection, like validation `errors` | `{ "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } }` |
+| A literal shape, `['id' => int, 'total' => float]` | An object with those named properties |
+| A bare `array` with nothing to refine it | Permissive — no `type` claimed |
+
+Since `array` says nothing about its elements, Docuccino reads the tag that does:
+
+```php
+/** @property list<string> $tags */                 // an ide-helper model column
+/** @var list<LineItem> */                          // a declared property
+/** @param  list<string>  $codes */                 // a promoted constructor property
+```
+
+The declaration wins wherever it's specific, so a native `string` is never second-guessed and a vague
+`@var array` never displaces a precise type. Short class names resolve through that file's `use`
+statements, and an accessor's `@return list<string>` types its property the same way.
 
 ## When it can't tell
 
