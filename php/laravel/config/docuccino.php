@@ -116,6 +116,10 @@ return [
                 //     'naming' => 'none',      // none | x-enumNames | x-enum-varnames (codegen name hints)
                 //     'components' => true,    // true hoists each enum to a $ref'd component; false inlines it
                 // ],
+                // 'errors' => [
+                //     'components' => true,    // true hoists an error body repeated across operations to one
+                //                              // $ref'd components.responses entry; false inlines every copy
+                // ],
             ],
 
             // The policy `docuccino:diff --enforce` holds a changeset to.

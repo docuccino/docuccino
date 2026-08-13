@@ -21,12 +21,13 @@ use Workbench\App\Http\Controllers\FormController;
  * route middleware through the pipeline and contributes a 429 with rate headers. A numeric throttle
  * documents the numbers; a named limiter degrades to a numberless 429 + an info diagnostic.
  */
+/** @return array{array<string, mixed>, array<string, mixed>} the emitted document and the GET operation */
 function throttledOperation(string $path): array
 {
     bindStubEngine();
     $document = generateDocument()->document->toArray();
 
-    return $document['paths']['/'.$path]['get'] ?? [];
+    return [$document, $document['paths']['/'.$path]['get'] ?? []];
 }
 
 it('adds a 429 with Retry-After + X-RateLimit-* headers for a numeric throttle', function (): void {
@@ -34,10 +35,12 @@ it('adds a 429 with Retry-After + X-RateLimit-* headers for a numeric throttle',
     $router = app('router');
     $router->get('api/throttled', [FormController::class, 'index'])->middleware('throttle:60,1');
 
-    $operation = throttledOperation('api/throttled');
+    [$document, $operation] = throttledOperation('api/throttled');
 
     expect($operation['responses'])->toHaveKey('429');
-    $response = $operation['responses']['429'];
+    // Two throttled routes sharing an identical 429 — headers included — collapse into one shared
+    // component, so the headers resolve through the $ref along with the body.
+    $response = resolveResponse($document, $operation['responses']['429']);
     expect($response['headers'])->toHaveKeys(['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'])
         ->and($response['headers']['X-RateLimit-Limit']['schema']['example'])->toBe(60)
         ->and($response['content']['application/json']['schema']['properties'])->toHaveKey('message');
@@ -110,7 +113,7 @@ it('folds a registered named limiter to concrete numbers with no diagnostic', fu
 });
 
 it('adds no 429 to an unthrottled route', function (): void {
-    $operation = throttledOperation('api/forms');
+    [, $operation] = throttledOperation('api/forms');
 
     expect($operation['responses'] ?? [])->not->toHaveKey('429');
 });
