@@ -131,7 +131,8 @@ jobs:
           body="$RUNNER_TEMP/release-body.md"
           {
             printf '%s\n' "$notes"
-            printf -- '---\n\n'
+            # The blank line matters: `---` directly under a line is a Markdown heading, not a rule.
+            printf -- '\n---\n\n'
             printf 'Merging this pull request **is** the release. The squash lands the regenerated\n'
             printf 'changelogs on `main`; then tag that commit:\n\n'
             printf '```bash\ngit switch main && git pull\ngit tag %s && git push origin %s\n```\n\n' "$VERSION" "$VERSION"
