@@ -1,0 +1,163 @@
+# The standing release pull request.
+#
+# On every push to `main` this regenerates every changelog from the commit history and keeps one
+# open `Release vX.Y.Z` pull request current. MERGING that pull request is the release: the squash
+# lands the changelogs on `main`, and the version tag then goes on a commit that already contains
+# its own changelog.
+#
+# Generating on TAG push would be the wrong way round. The changelog would land after the tag, and
+# split.yml — which fires on branch pushes AND on tags — would carry a pre-changelog tree into
+# every package repository, so `docuccino/core@v1.2.3` on Packagist would ship a CHANGELOG.md
+# missing the release it is.
+#
+# Tagging stays a human step (RELEASING.md). It is not automated here because a tag pushed with
+# `GITHUB_TOKEN` triggers no further workflows, so split.yml would never see it — and SPLIT_TOKEN
+# deliberately has no access to this repository.
+#
+# Loop safety: this workflow pushes only to `release/next`, never to `main`, so its own pushes
+# cannot re-trigger it. When the generated files already match `main` — the state right after the
+# release pull request merges — it closes the pull request and stops, which is also what keeps a
+# just-merged release from immediately re-opening one.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# REQUIRED SECRET: `RELEASE_TOKEN`
+#
+# `secrets.GITHUB_TOKEN` cannot be used, and not for a permissions reason: a branch pushed or a
+# pull request opened with it triggers NO further workflow runs. The release pull request would sit
+# with no CI at all, its required `CI gate` check would never report, and it could never be merged.
+# A fine-grained PAT does trigger them, so it must be one:
+#
+#   1. GitHub → Settings → Developer settings → Personal access tokens →
+#      Fine-grained tokens → Generate new token
+#   2. Resource owner: the `docuccino` organization
+#   3. Repository access: "Only select repositories" → docuccino/docuccino
+#      (the opposite selection from SPLIT_TOKEN, which needs the five split targets and
+#      NOT this repository)
+#   4. Repository permissions: Contents → Read and write, Pull requests → Read and write
+#      (nothing else)
+#   5. Expiry: set a calendar reminder. An expired token fails only this workflow — CI stays
+#      green and no changelog is regenerated, so watch for the failing run rather than
+#      trusting a green CI badge
+#   6. Save it as an Actions secret named `RELEASE_TOKEN`:
+#        gh secret set RELEASE_TOKEN --repo docuccino/docuccino
+#
+# `main` is protected with no admin bypass, which is exactly why this workflow pushes to
+# `release/next` and opens a pull request rather than committing to `main`.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+name: Release PR
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel: a run interrupted between the push and the pull request update would leave the
+  # branch and the pull request title disagreeing about the version.
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Standing release pull request
+    runs-on: ubuntu-latest
+    # Forks have no RELEASE_TOKEN and must never open a pull request on the org.
+    if: github.repository == 'docuccino/docuccino'
+    steps:
+      - name: Require RELEASE_TOKEN
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::RELEASE_TOKEN is not set. Create a fine-grained PAT with" \
+                 "contents:write and pull-requests:write on this repository and save it as" \
+                 "the RELEASE_TOKEN Actions secret (see the header of this workflow)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The generator walks tag-to-tag ranges, so it needs the tags and the full history.
+          fetch-depth: 0
+          # Also the credential the later push uses.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Regenerate every changelog
+        id: changelog
+        run: |
+          set -euo pipefail
+          version="$(php tools/changelog.php --print-version)"
+          php tools/changelog.php
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # No version means nothing user-facing since the last tag; no diff means `main` already
+          # carries these files (the state between merging the release and pushing the tag).
+          if [ -n "$version" ] && [ -n "$(git status --porcelain)" ]; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refresh the release pull request
+        if: steps.changelog.outputs.pending == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.changelog.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name docuccino-bot
+          git config user.email me@tjmartin.info
+
+          # `release/next` is a generated artifact rebuilt from `main` every run, never a branch
+          # anyone commits to, so it is reset and force-pushed rather than merged forward.
+          git switch -C release/next
+          git add php/*/CHANGELOG.md website/src/content/docs/changelog.md
+          git commit -m "docs(repo): regenerate the changelogs for $VERSION"
+          git push --force origin HEAD:release/next
+
+          # The pending section of the aggregate page, as the pull request's own release notes.
+          notes="$(awk -v heading="## $VERSION" '$0 == heading {found = 1; next} /^## v/ {if (found) exit} found' website/src/content/docs/changelog.md)"
+
+          # Built with printf rather than a heredoc: a YAML block scalar cannot carry the
+          # column-zero terminator a heredoc needs, and an indented body would render as code.
+          body="$RUNNER_TEMP/release-body.md"
+          {
+            printf '%s\n' "$notes"
+            printf -- '---\n\n'
+            printf 'Merging this pull request **is** the release. The squash lands the regenerated\n'
+            printf 'changelogs on `main`; then tag that commit:\n\n'
+            printf '```bash\ngit switch main && git pull\ngit tag %s && git push origin %s\n```\n\n' "$VERSION" "$VERSION"
+            printf 'Pushing the tag fans it out to the package repositories through `split.yml`,\n'
+            printf 'which is what Packagist serves. See [RELEASING.md](RELEASING.md).\n\n'
+            printf 'Regenerated by `.github/workflows/release-pr.yml` on every push to `main` — the\n'
+            printf 'branch is a generated artifact, so do not commit to it by hand.\n'
+          } > "$body"
+
+          number="$(gh pr list --head release/next --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "Release $VERSION" --body-file "$body"
+          else
+            gh pr create --base main --head release/next --title "Release $VERSION" --body-file "$body"
+          fi
+
+      - name: Close the release pull request (nothing to release)
+        if: steps.changelog.outputs.pending != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          number="$(gh pr list --head release/next --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr close "$number" --comment "Nothing user-facing is pending, or these changelogs are already on main." --delete-branch
+          elif git ls-remote --exit-code --heads origin release/next >/dev/null 2>&1; then
+            # Left behind by a merged release pull request.
+            git push origin --delete release/next
+          fi
