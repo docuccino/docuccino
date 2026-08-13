@@ -64,8 +64,8 @@ export default defineConfig({
 					// Pages ordered for a reader starting from zero.
 					promote: ['index*', 'laravel/getting-started*', 'laravel/guides/how-it-works*'],
 					// The small variant is for tight context windows: keep the task-shaped pages, drop
-					// the migration/comparison material and the spec-hosting detail.
-					exclude: ['guides/vs-*', 'uir/hosting*'],
+					// the migration/comparison material, the spec-hosting detail and the changelog.
+					exclude: ['guides/vs-*', 'uir/hosting*', 'changelog*'],
 				}),
 				starlightMdTxt(),
 			],
@@ -154,6 +154,8 @@ export default defineConfig({
 					label: 'UIR spec',
 					items: [{ autogenerate: { directory: 'uir' } }],
 				},
+				// Generated from the commit history by tools/changelog.php — one page, not a section.
+				{ label: 'Changelog', slug: 'changelog' },
 			],
 		}),
 	],
