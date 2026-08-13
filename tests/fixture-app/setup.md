@@ -25,6 +25,13 @@ composer create-project laravel/laravel tests/fixture-app/app "^12.0" --no-inter
 # 2. Larastan (dev) — pulls phpstan/phpstan as a transitive dep.
 composer require --working-dir=tests/fixture-app/app --dev larastan/larastan --no-interaction
 
+# 2b. OPTIONAL, and the one knob worth knowing about. This app's own vendor is the phpstan the
+#     real engine loads, so whatever lands here is the only version the fixture group proves.
+#     2.2.0 and the newest 2.2.x resolve NodeScopeResolver differently — the floor hands out
+#     fiber-driven scopes, the newest hands out plain ones — so CI runs both. To reproduce the
+#     fiber leg locally:
+#     composer require --working-dir=tests/fixture-app/app --dev -W phpstan/phpstan:2.2.0 --no-interaction
+
 # 3. Spatie packages (Query Builder trace + Data class recovery).
 composer require --working-dir=tests/fixture-app/app \
   spatie/laravel-query-builder spatie/laravel-data --no-interaction
@@ -69,7 +76,7 @@ require-dev:
 | Package | Version |
 |---|---|
 | laravel/framework | v12.64.0 |
-| phpstan/phpstan | 2.2.7 |
+| phpstan/phpstan | 2.2.8 |
 | larastan/larastan | v3.10.0 |
 | nikic/php-parser | v5.8.0 |
 | phpstan/phpdoc-parser | 2.3.3 |

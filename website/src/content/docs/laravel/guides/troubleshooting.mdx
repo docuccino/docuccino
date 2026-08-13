@@ -1,0 +1,232 @@
+---
+title: Troubleshooting
+description: The failures you're most likely to hit — an export that runs out of memory, a document with no response bodies, an app that won't boot in CI — with the symptom, the cause, and the fix.
+sidebar:
+  order: 7
+---
+
+import { Steps, Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Most Docuccino problems announce themselves twice: once as a diagnostic in the command output, and
+once as something missing from the document. This page starts from what you can see and works back
+to the cause.
+
+## Start here
+
+Run the export with diagnostics visible and read the first warning, not the last:
+
+```bash
+php -d memory_limit=2G artisan docuccino:export --provenance=full
+```
+
+Then match the symptom:
+
+| What you see | Where to go |
+|---|---|
+| `Allowed memory size of … exhausted` | [The export runs out of memory](#the-export-runs-out-of-memory) |
+| Every operation has parameters but no `200` body | [Responses are missing](#responses-are-missing-everywhere) |
+| `engine.not-installed` | [The document is thin](#the-document-is-thin) |
+| A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
+| Composer refuses to install on Laravel 13 | [Dependency conflicts](#dependency-conflicts) |
+| `inference.action-failed` on one or two actions | [Reading diagnostics](#reading-diagnostics) |
+
+---
+
+## The export runs out of memory
+
+**Symptom.** The command dies with a PHP fatal error, often pointing at a file inside PHPStan's phar:
+
+```
+PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
+  (tried to allocate 20480 bytes) in .../phpstan.phar/resources/functionMap.php on line 59
+```
+
+**Cause.** Docuccino's inference runs a real static analyzer over your codebase, and analyzers are
+memory-hungry. PHP's default `memory_limit` of 128M is nowhere near enough for an app of any size.
+This has nothing to do with your app's runtime memory use — the analysis is a separate, much heavier
+workload.
+
+**Fix.** Give the command room. 2G is a sensible starting point:
+
+<Tabs>
+<TabItem label="One-off">
+
+```bash
+php -d memory_limit=2G artisan docuccino:export
+```
+
+</TabItem>
+<TabItem label="CI">
+
+```yaml
+- name: Export API docs
+  run: php -d memory_limit=2G artisan docuccino:export --fail-on=warning
+```
+
+</TabItem>
+<TabItem label="php.ini">
+
+```ini
+; Only worth doing on a dev machine or a CI image — never on a production web box,
+; which serves the committed artifact and runs no analysis at all.
+memory_limit = 2G
+```
+
+</TabItem>
+</Tabs>
+
+<Aside type="caution" title="A partial document is the worse failure">
+If the fatal lands late in the run you can be left with a document that was written before the
+crash — structurally valid, quietly incomplete. Treat any memory error as invalidating the whole
+export, and re-run it with a higher limit rather than shipping what you got.
+</Aside>
+
+---
+
+## Responses are missing everywhere
+
+**Symptom.** The document looks structurally right — every path, method, parameter and request body
+is present — but no operation has a success response body. The output carries one warning per action:
+
+```
+[warning] inference.action-failed: Type analysis of App\Http\Controllers\OrderController::update
+          failed: Cannot suspend outside of a fiber
+```
+
+**Cause.** A version mismatch between Docuccino's inference engine and PHPStan. PHPStan changed how
+it hands scopes to code that walks your source; on the affected versions every response-type lookup
+throws, so each action degrades to "analysis failed" and loses its response shape. Requests and
+error responses come from different paths, which is why they survive and make the document look
+deceptively healthy.
+
+**Fix.** Update both packages:
+
+```bash
+composer update docuccino/laravel docuccino/inference-phpstan phpstan/phpstan
+```
+
+Then confirm the warnings are gone:
+
+```bash
+php -d memory_limit=2G artisan docuccino:export 2>&1 | grep -c 'Cannot suspend'
+```
+
+Zero is the expected answer. If it isn't, the installed `docuccino/inference-phpstan` predates the
+fix — check the version you actually resolved with `composer show docuccino/inference-phpstan`.
+
+---
+
+## The document is thin
+
+**Symptom.** A single warning, and a document built almost entirely from your annotations:
+
+```
+[warning] engine.not-installed
+```
+
+**Cause.** `docuccino/inference-phpstan` isn't installed. The adapter is designed to work without
+it — it degrades to reading docblocks, attributes, config and overlays rather than failing — so
+this is a warning, not an error.
+
+**Fix.** Install the engine as a development dependency:
+
+```bash
+composer require --dev docuccino/inference-phpstan
+```
+
+<Aside type="tip">
+This is the intended arrangement, not a workaround: the engine is a dev-only dependency so that
+`composer install --no-dev` ships your app without an analyzer. Generate in CI, commit the
+artifact, and serve that. See [Deploying to production](/laravel/guides/production).
+</Aside>
+
+---
+
+## The app won't boot during export
+
+**Symptom.** An exception from a driver or service, thrown before any analysis output appears:
+
+```
+RedisClusterException: Couldn't map cluster keyspace using any provided seed
+```
+
+…or the equivalent for a database, cache or queue connection.
+
+**Cause.** Generating a document boots your Laravel application, because Docuccino reads your real
+route table. Anything your app connects to at boot must therefore be reachable — and in a CI
+container, usually isn't.
+
+**Fix.** Point the connecting services at drivers that need no network. Analysis itself makes no
+queries, sends no mail and dispatches no jobs, so this costs you nothing:
+
+```bash
+CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null \
+  php -d memory_limit=2G artisan docuccino:export
+```
+
+For a permanent CI setup, put those in the environment file your pipeline uses.
+
+---
+
+## Dependency conflicts
+
+**Symptom.** Composer refuses to resolve, naming a transitive package rather than Docuccino:
+
+```
+Problem 1
+  - docuccino/core … requires symfony/yaml ^7.0 -> found symfony/yaml[v8.0.0, …]
+    but it conflicts with your root composer.json require
+```
+
+**Cause.** A framework upgrade moved a shared dependency to a new major version ahead of the
+constraint Docuccino declared for it. Laravel 13 pulling Symfony 8 is the common case.
+
+**Fix.** Update Docuccino first — the constraint is usually already widened in a newer release:
+
+```bash
+composer update "docuccino/*"
+```
+
+If that doesn't resolve it, the version you need isn't published yet.
+[Open an issue](https://github.com/docuccino/docuccino/issues) with the conflict block; a
+constraint widening is a small, fast release. Prefer that over a permanent `conflict` or
+`replace` entry in your own `composer.json`, which will outlive the problem.
+
+---
+
+## Reading diagnostics
+
+Diagnostics are how Docuccino tells you it recovered less than it wanted to. A handful on a large
+codebase is normal and usually not worth chasing; the same code on every action is a signal.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `engine.not-installed` | No analyzer present; annotation-only output | [Install the engine](#the-document-is-thin) |
+| `inference.action-failed` | One action's analysis threw | One or two: annotate that action. All of them: [version mismatch](#responses-are-missing-everywhere) |
+| `inferred-handler.too-dynamic` | An exception handler's response couldn't be folded to a fixed shape | Describe the error response explicitly — see [Error responses](/laravel/documenting/errors) |
+
+Two flags make diagnostics more useful:
+
+<Steps>
+
+1. **See what won each field.** `--provenance=full` records which source — inference, docblock,
+   attribute, overlay, config — produced every value in the document, so you can tell "inference
+   never ran" from "inference ran and lost to something else".
+
+   ```bash
+   php artisan docuccino:export --format=uir --provenance=full
+   ```
+
+2. **Make CI care.** `--fail-on=warning` turns diagnostics into a non-zero exit, so a regression
+   in inference coverage breaks the build instead of quietly thinning your docs.
+
+   ```bash
+   php artisan docuccino:export --fail-on=warning
+   ```
+
+</Steps>
+
+<Aside type="tip" title="Pin the shape you already have">
+Once an export is good, commit it and add `docuccino:diff` to CI. A document that silently loses
+its response bodies is hard to notice by eye and trivial to catch as a diff.
+</Aside>
