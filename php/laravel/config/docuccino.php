@@ -236,6 +236,10 @@ return [
         // (The engine's 'orchestrated' and 'caching' worker compositions are not plumbed through the
         // adapter yet: picking one warns and runs in-process, so don't reach for them.)
         'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
+        // PHP memory limit for inference, which runs PHPStan inside the calling process. Applied on
+        // console builds only, and only ever RAISES — an already-higher (or unlimited) process is left
+        // alone, and `-1` isn't accepted here. `--memory-limit` on the build commands overrides it.
+        // 'memory_limit' => '2G',
         // Directories the engine descends into for interprocedural analysis (throw classification,
         // inline `Validator::make(...)` rules). Every PSR-4 source root in your composer.json — a
         // modular `Modules\…` root included — is already loaded so helpers there resolve; widen this
