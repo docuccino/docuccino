@@ -3,10 +3,24 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
+use Docuccino\Core\Extensions\Context\AttributeSet;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
+use Docuccino\Laravel\Integrations\RateLimit\RateLimitResponsesExtension;
 use Docuccino\Laravel\Tests\Support\StubTraceScope;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -117,3 +131,123 @@ it('adds no 429 to an unthrottled route', function (): void {
 
     expect($operation['responses'] ?? [])->not->toHaveKey('429');
 });
+
+// --- The 429 body comes from the error-response chain -----------------------
+
+/**
+ * Run the extension over a throttled route with the given error style and mapper chain, and hand back the
+ * frozen 429's content plus whatever response components the run left registered.
+ *
+ * @param  list<ExceptionToResponse>  $mappers
+ * @return array{content: array<string, mixed>, responses: array<string, array<string, mixed>>, schemas: array<string, array<string, mixed>>}
+ */
+function rateLimited429(string $errorResponses, array $mappers): array
+{
+    $components = new ComponentRegistry;
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/throttled', middleware: ['throttle:60,1']),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet,
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], errorResponses: $errorResponses),
+        exceptionMappers: $mappers,
+        components: $components,
+    );
+
+    $operation = new OperationDraft;
+    (new RateLimitResponsesExtension(app(RateLimiter::class)))->handle($operation, $context);
+
+    return [
+        'content' => $operation->freeze()->responses['429']->content ?? [],
+        'responses' => $components->responses(),
+        'schemas' => $components->schemas(),
+    ];
+}
+
+/** A mapper that always answers, with whatever the callback puts on the draft. */
+function chainAnswering(Closure $build): ExceptionToResponse
+{
+    return new class($build) implements ExceptionToResponse
+    {
+        public function __construct(private readonly Closure $build) {}
+
+        public function supports(ThrownException $exception, RouteContext $context): bool
+        {
+            return true;
+        }
+
+        public function producer(): string
+        {
+            return 'integration:test-chain';
+        }
+
+        public function toResponse(ThrownException $exception, RouteContext $context, ComponentRegistry $components): ?ResponseDraft
+        {
+            $draft = new ResponseDraft('429');
+            ($this->build)($draft, $components);
+
+            return $draft;
+        }
+    };
+}
+
+it('takes the 429 media type from the problem-details chain', function (): void {
+    // The 429 is synthesized from middleware, not from a throw the engine saw, so the chain is never asked
+    // about it unless this extension asks — and hardcoding Laravel's `{message}` would contradict a
+    // document whose whole error contract is application/problem+json.
+    $result = rateLimited429('problem-details', [new ProblemDetailsExceptionToResponse]);
+
+    expect(array_keys($result['content']))->toBe(['application/problem+json'])
+        ->and($result['content']['application/problem+json']['schema']['$ref'] ?? null)
+        ->toBe('#/components/schemas/ProblemDetails');
+});
+
+it('leaves no response component behind after asking the chain, but keeps the schema it points at', function (): void {
+    // The chain registers a shared `Problem429`, but this response inlines the content (its per-route
+    // X-RateLimit-* headers can't ride a shared response), so nothing would ever $ref it — and an
+    // unreferenced component makes a cold build's bytes differ from a warm-cache one's. The schema the
+    // copied content DOES point at has to survive, or that $ref dangles.
+    $result = rateLimited429('problem-details', [new ProblemDetailsExceptionToResponse]);
+
+    expect($result['responses'])->toBe([])
+        ->and($result['schemas'])->toHaveKey('ProblemDetails');
+});
+
+it('keeps the stock {message} body when the document documents no errors', function (): void {
+    $result = rateLimited429('none', [new ProblemDetailsExceptionToResponse]);
+
+    expect(array_keys($result['content']))->toBe(['application/json'])
+        ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
+});
+
+it('uses a chain answer that carries inline content verbatim', function (): void {
+    $result = rateLimited429('problem-details', [chainAnswering(static function (ResponseDraft $draft): void {
+        $draft->content('application/vnd.acme+json')->set('type', 'object', Contribution::integration('test-chain'));
+    })]);
+
+    expect(array_keys($result['content']))->toBe(['application/vnd.acme+json'])
+        ->and($result['content']['application/vnd.acme+json']['schema']['type'] ?? null)->toBe('object');
+});
+
+it('falls back to the stock body when the chain answer cannot be read', function (?Closure $build): void {
+    $result = rateLimited429('problem-details', $build === null ? [] : [chainAnswering($build)]);
+
+    expect(array_keys($result['content']))->toBe(['application/json'])
+        ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
+})->with([
+    // Nothing in the chain supports the throttle exception at all.
+    'no mapper answers' => [null],
+    // A pointer at a response component nobody registered.
+    'a ref to an unregistered response' => [static function (ResponseDraft $draft): void {
+        $draft->setRef('#/components/responses/NeverRegistered', Contribution::integration('test-chain'));
+    }],
+    // A pointer that isn't a response component at all.
+    'a ref outside components.responses' => [static function (ResponseDraft $draft): void {
+        $draft->setRef('#/components/schemas/ProblemDetails', Contribution::integration('test-chain'));
+    }],
+    // A registered response that carries no body to copy.
+    'a ref to a bodiless response' => [static function (ResponseDraft $draft, ComponentRegistry $components): void {
+        $components->referenceResponse('Bodiless', ['description' => 'Too Many Requests']);
+        $draft->setRef('#/components/responses/Bodiless', Contribution::integration('test-chain'));
+    }],
+]);
