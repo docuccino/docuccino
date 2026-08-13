@@ -28,6 +28,14 @@ diffing and a bundled Scalar viewer.
   sanctioned regeneration is an ISOLATED commit explaining exactly why bytes changed.
   (`DOCUCCINO_UPDATE_GOLDEN=1` regenerates locally; CI guards it is unset.)
 - **Conventional commits** (`feat(laravel): …`, `fix(core): …`), NO Co-Authored-By trailers.
+  Merges are **squash-only and the PR title is the message that lands**, so the title is gated
+  (`.github/workflows/pr-title.yml` → `tools/pr-title-lint.php`): a conventional type, an optional
+  `!` that must be paired with a `BREAKING CHANGE:` body footer (both halves, or neither), and a
+  scope from the allow-list in `tools/conventional-commit.php` — `core`, `attributes`, `laravel`,
+  `inference-phpstan` are packages, `repo`, `website`, `ci` map to none. The changelogs are
+  **generated** from those messages (`composer changelog`, and automatically on every push to
+  `main`): never hand-edit `php/*/CHANGELOG.md` or `website/src/content/docs/changelog.md`, fix the
+  commit message instead. Release flow in [`RELEASING.md`](./RELEASING.md).
 
 ## Monorepo layout
 
