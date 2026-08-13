@@ -23,6 +23,7 @@ enum InvoiceProblem: string
     case Forbidden = 'https://errors.test/problems/forbidden';
     case NotFound = 'https://errors.test/problems/missing';
     case Conflict = 'https://errors.test/problems/conflict';
+    case Unprocessable = 'https://errors.test/problems/unprocessable';
 
     public function status(): int
     {
@@ -30,6 +31,7 @@ enum InvoiceProblem: string
             self::Forbidden => 403,
             self::NotFound => 404,
             self::Conflict => 409,
+            self::Unprocessable => 422,
         };
     }
 
@@ -39,6 +41,7 @@ enum InvoiceProblem: string
             self::Forbidden => 'Forbidden',
             self::NotFound => 'Not Found',
             self::Conflict => 'Conflict',
+            self::Unprocessable => 'Unprocessable Content',
         };
     }
 
