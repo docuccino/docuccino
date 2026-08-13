@@ -202,7 +202,8 @@ return [
     */
 
     'lint' => [
-        // Warns when a schema property name looks sensitive (password/token/secret/api_key…).
+        // Warns when a schema property name looks sensitive (password/token/secret/api_key…), and
+        // when a published example, const, enum or default value looks like a credential.
         'leakage' => [
             'enabled' => true,
             // Property names or JSON pointers to accept, e.g.
