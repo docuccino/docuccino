@@ -1,0 +1,61 @@
+# Pull-request title gate.
+#
+# Merges here are SQUASH-ONLY and the squash subject is the pull request title, so the title is
+# the commit message that lands on `main` — and the only thing tools/changelog.php will ever read.
+# A malformed title is therefore a permanently malformed history entry: the pre-gate history holds
+# `chore(fix) website production build` (the type typed into the scope slot) and
+# `Update symfony/yaml version constraint` (no type at all), both of which this gate rejects.
+#
+# The grammar lives in tools/conventional-commit.php, shared with the changelog generator, so the
+# thing that validates a title and the thing that renders it cannot disagree.
+#
+# `edited` is not optional in the trigger list: without it a corrected title would never re-run,
+# and a red check on a title that has since been fixed can never go green.
+#
+# Needs no secret and no `composer install` — the linter is dependency-free PHP.
+
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per pull request: a title edited three times in a row only needs the last verdict.
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    # The standing release pull request is opened by release-pr.yml as `Release vX.Y.Z`, which is
+    # deliberately not a conventional subject: it lands nothing user-facing and the generator skips
+    # it. Exempt exactly that branch of THIS repository — a fork branch of the same name is still
+    # gated, so the exemption cannot be borrowed.
+    if: >-
+      github.event.pull_request.head.repo.full_name != github.repository
+      || github.event.pull_request.head.ref != 'release/next'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Validate the title against the conventional-commit grammar
+        env:
+          # Through the environment, never interpolated into the script: a pull request title is
+          # attacker-controlled text, and `${{ … }}` inside a `run:` block would execute it.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if ! php tools/pr-title-lint.php; then
+            echo "::error title=Pull request title::Not a valid conventional commit message — see this step's log."
+            exit 1
+          fi

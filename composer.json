@@ -75,6 +75,7 @@
         }
     },
     "scripts": {
+        "lint:pr-title": "@php tools/pr-title-lint.php",
         "test": "pest --parallel",
         "test:inference-fixture": "pest --parallel --group=fixture",
         "test:coverage": [

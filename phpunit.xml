@@ -22,6 +22,11 @@
         <testsuite name="laravel">
             <directory>php/laravel/tests</directory>
         </testsuite>
+        <!-- The repo's own scripts under tools/ — no package, so deliberately outside the
+             <source> set below: they ship to nobody and carry no per-package coverage floor. -->
+        <testsuite name="tools">
+            <directory>tests/tools</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
