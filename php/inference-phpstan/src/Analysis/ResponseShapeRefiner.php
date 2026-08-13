@@ -334,10 +334,26 @@ final class ResponseShapeRefiner
                 continue;
             }
 
-            return $refined; // first documentable return wins (a helper's single response)
+            // first documentable return wins (a helper's single response)
+            return $refined->contentType === null
+                ? self::labelledContentType($refined, $expr, $node->getStatements())
+                : $refined;
         }
 
         return $delegation;
+    }
+
+    /**
+     * The media type read off a `Content-Type` header write on the returned variable — see
+     * {@see ContentTypeLabel} for the window that keeps one branch's label off another branch's body.
+     *
+     * @param  array<Node\Stmt>  $statements
+     */
+    private static function labelledContentType(RefinedResponse $refined, Node\Expr $returned, array $statements): RefinedResponse
+    {
+        $label = ContentTypeLabel::of($statements, $returned);
+
+        return $label === null ? $refined : $refined->withContentType($label);
     }
 
     /**
