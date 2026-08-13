@@ -416,12 +416,13 @@ final class ResponseShapeRefiner
 
     /**
      * An identity accessor folds a constant-scalar argument directly; an enum accessor folds only when the
-     * argument is a concrete enum case, via {@see EnumAccessorFolder}. Null when nothing folds.
+     * argument is a concrete enum case, via {@see EnumAccessorFolder}. Null when nothing folds — which
+     * includes a constant named like a credential ({@see SensitiveConstant}).
      */
     private function foldAccessorArgument(Node\Expr $argExpr, ParamAccessor $accessor, Scope $scope): ?LiteralT
     {
         if ($accessor->kind === AccessorKind::Identity) {
-            return $this->constLiteralOf($argExpr, $scope);
+            return SensitiveConstant::label($argExpr) === null ? $this->constLiteralOf($argExpr, $scope) : null;
         }
 
         $case = $this->enumCaseOf($argExpr, $scope);
