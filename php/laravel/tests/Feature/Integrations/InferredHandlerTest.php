@@ -221,9 +221,10 @@ it('assembles a media-type example from folded literals and const-pins each memb
         ->and($media['schema']['properties']['status']['const'])->toBe(403);
 });
 
-it('fills a status-provenance member with the response status, omits non-folding members, and is deterministic', function (): void {
-    // A StatusMarkerT member echoes the response status; a widened `detail` didn't fold. The example
-    // carries the concrete status and the folded type, and omits detail rather than fabricating it.
+it('fills a status-provenance member with the response status, completes the example, and is deterministic', function (): void {
+    // A StatusMarkerT member echoes the response status; a widened `detail` didn't fold. `detail` is still
+    // required, so it gets a type-derived placeholder rather than being left out — a partial example would
+    // fail validation against the very schema it sits beside. The schema itself claims nothing extra.
     $script = static fn (): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(
         new ClassT('Illuminate\\Http\\JsonResponse', [
             new ArrayShapeT([
@@ -249,17 +250,20 @@ it('fills a status-provenance member with the response status, omits non-folding
 
     $media = $build();
 
-    expect($media['example'])->toBe(['type' => 'about:blank', 'status' => 403])
+    expect($media['example'])->toBe(['type' => 'about:blank', 'detail' => 'string', 'status' => 403])
         ->and($media['schema']['properties']['status']['const'])->toBe(403)
-        ->and($media['schema']['properties']['detail'])->not->toHaveKey('const');
+        ->and($media['schema']['properties']['detail'])->not->toHaveKey('const')
+        ->and($media['schema']['required'])->toBe(['type', 'detail', 'status']);
 
     // Determinism is a product feature: a second build is byte-identical.
-    expect(json_encode($build()['example']))->toBe(json_encode($media['example']));
+    expect(json_encode($build()))->toBe(json_encode($media));
 });
 
-it('emits no example for a non-shape (object-typed) body — nothing statically known to assemble', function (): void {
-    // A handler rendering an object-typed body (not a keyed array literal) has no folded members, so
-    // there's nothing to example: the schema is still documented, no example is invented.
+it('examples an object-typed body from the component its $ref points at', function (): void {
+    // A handler rendering a Data object (not a keyed array literal) folds no members at all, so the example
+    // is built from the hoisted component's own required properties. This is the shape that matters most in
+    // practice: one shared error component, `$ref`'d, with a per-response example beside it so a viewer has
+    // something to render.
     $symbol = registerRenderCallback(
         static fn (ModelNotFoundException $e) => response()->json(['ignored' => true], 403),
         MODEL_NOT_FOUND,
@@ -276,9 +280,12 @@ it('emits no example for a non-shape (object-typed) body — nothing statically 
     ]);
     app()->instance(TypeEngine::class, $engine);
 
-    $media = generateDocument()->document->toArray()['paths']['/api/forms/{form}']['get']['responses']['403']['content']['application/json'];
+    $media = mediaOf(generateDocument()->document->toArray(), '403', 'application/json');
 
-    expect($media)->toHaveKey('schema')->and($media)->not->toHaveKey('example');
+    // The schema stays a bare $ref — the example is its sibling, so the shared component is reused as-is
+    // rather than wrapped in an allOf that would make codegen emit a distinct type per status.
+    expect($media['schema'])->toBe(['$ref' => '#/components/schemas/FormData'])
+        ->and($media['example'])->toBe(['id' => 0, 'title' => 'string']);
 });
 
 it('falls back to the exception status hint when the recovered status did not fold', function (): void {
