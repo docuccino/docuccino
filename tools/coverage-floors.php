@@ -40,21 +40,11 @@ const FLOORS = [
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
     // number — read the figure as "mostly proven out-of-process", never as "untested".
-    // Was 41 until the phpdoc type grammar (fully unit-tested in-process, 141/161 statements) moved to
-    // core: the remaining package is more subprocess-only than before, so the honest floor fell with the
-    // denominator. No test was lost — 41.64% over the pre-move file set is the same number.
-    // Ratcheted 37 → 38 when the reflection type table (NativeTypeMapper, 28 statements, previously 0
-    // in-process) got its dataset test: that lands +27 covered, which more than absorbed the refiner's
-    // 61-statement construction-site descent — Scope- and reflection-driven, so pcov-invisible either way,
-    // and proven out-of-process by the fixture group instead.
-    // Ratcheted 38 → 41 when ClassMetadataFactory learned to read a promoted property's `@param`: the class
-    // grew 24 statements and went from zero in-process coverage to 66/66 under a real-reflection test, so
-    // 717/1881 (38.12%) became 783/1905 (41.10%).
-    // Ratcheted 41 → 42 when the response refiner's `Content-Type` re-label read moved out into
-    // ContentTypeLabel: pure php-parser over parsed source, so it is unit-testable IN-PROCESS where the
-    // refiner around it never will be. That plus the fully-covered SensitiveConstant predicate took
-    // 783/1905 (41.10%) to 824/1929 (42.72%).
-    'inference-phpstan' => 42,
+    // The split that produces it: what merely parses source runs well above the package average —
+    // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
+    // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
+    // floor means moving more of the package into the first half; docs/testing.md records each move.
+    'inference-phpstan' => 43,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';
