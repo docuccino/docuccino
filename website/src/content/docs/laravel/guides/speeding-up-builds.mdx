@@ -1,0 +1,173 @@
+---
+title: Speeding up builds
+description: Turn on the fragment cache so a rebuild costs what changed — what invalidates a fragment, when a warm build skips the analyzer entirely, and when the cache isn't worth it.
+---
+
+import { Steps, Aside, Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+
+Reading types is the expensive part of a build. By default Docuccino analyzes every route on every
+run, which is the right default for a one-shot export and the wrong one for the tenth rebuild of an
+afternoon.
+
+The **fragment cache** fixes the second case. It stores each operation's finished fragment and
+serves it back when nothing that shaped it has changed — no analysis, and if *every* route hits, no
+analyzer at all.
+
+## Turn it on
+
+```php
+// config/docuccino.php
+'cache' => [
+    'enabled' => true,
+],
+```
+
+That's the whole setup. Fragments are written to `storage/docuccino/fragments` as one small JSON file
+per operation; set `cache.path` to move them. The output doesn't change — a warm build emits the same
+bytes as a cold one, which is what makes the cache safe to leave on.
+
+<Aside type="note" title="Two different caches">
+`cache.enabled` is the build-time **fragment** cache described here. `cache.store` belongs to the
+runtime **document** cache that [`docuccino:cache`](/laravel/reference/commands/#docuccinocache) warms
+for the viewer. They share a config block and nothing else — you can run either, both, or neither.
+</Aside>
+
+## A warm build never starts the analyzer
+
+The type engine is built on the first question asked of it, and a fully warm build asks none. Every
+route answered from cache means PHPStan is never booted, never loads your codebase, and never
+compiles a container. That startup is a fixed cost paid before a single route is looked at — on a
+fully warm build it would be nearly all of the work.
+
+What doesn't change when the engine stays asleep: the emitted bytes, and the build's report on the
+state of inference. If the engine package isn't installed, a warm build still warns
+`engine.not-installed` — that verdict comes from reading your environment, not from asking the
+analyzer.
+
+## What makes a fragment rebuild
+
+A fragment is keyed on everything that could change its output, and checked against the files that
+produced it. Change any of the following and the affected operations are re-analyzed:
+
+| Change | What rebuilds |
+| --- | --- |
+| A route's method, URI, name, action or middleware | That route |
+| A file the analysis actually read — controller, form request, resource, model, DTO, custom rule | Every operation that read it |
+| Anything under `documents.<key>` in your config | Every operation in that document |
+| Your app's boot-time registrations: `Relation::morphMap()`, `RateLimiter::for()`, exception `render` callbacks, `app.url` | Every operation |
+| Which engine resolved, whether it's installed, and its `engine` config | Every operation |
+| Your `composer.lock` — a package or analyzer upgrade | Every operation |
+| Docuccino's own version | Everything |
+
+Two of those rows deserve the detail:
+
+- **"A file the analysis read" means every file, however deep.** Docuccino records the files an
+  action's analysis touched and re-hashes each one on the next build. Edit a DTO three calls down from
+  the controller and the operation that returns it rebuilds. Files are compared by **content**, not
+  timestamp, so `touch` or a branch switch that restores the same bytes costs nothing — while a
+  dependency that was deleted invalidates immediately.
+- **Boot-time registrations count because Docuccino reads them.** A morph map or a rate limiter name
+  shapes the document without living in any file the analysis opened, so those facts are folded into
+  the key directly.
+
+Two things deliberately stay *out* of the key, because rebuilding for them would cost far more than
+they're worth:
+
+- **`engine.memory_limit`** (and `--memory-limit`). A process ceiling can't change a documented byte,
+  so raising it doesn't throw away your cache.
+- **Your [narrative content](/laravel/guides/narrative-content/) pages.** Fragments never read them.
+  A typo fix in a Markdown page re-assembles the document without re-analyzing a single route.
+
+## What the win actually looks like
+
+Two savings stack, and they scale differently:
+
+<Steps>
+
+1. **The analyzer boot** — a fixed cost, paid once per build, and skipped entirely when every route
+   is warm. This is the bigger of the two on a small app and it doesn't grow with your route count.
+
+2. **Per-route analysis** — proportional to how many operations the edit invalidated. Editing one
+   controller action rebuilds its operations. Editing a base controller, a widely-used API resource
+   or a shared DTO rebuilds everything that reads it. Upgrading a package rebuilds all of it.
+
+</Steps>
+
+So the honest answer to "how much faster?" is: it depends on your route count and on how much of the
+app your edit touches. Measure it on your own application rather than trusting a number from someone
+else's:
+
+```bash
+time php artisan docuccino:export   # cold
+time php artisan docuccino:export   # warm
+```
+
+The first run after turning the cache on is a normal full build — it has a store to fill.
+
+## When to leave it off
+
+The fragment cache is off by default, and that default is right for a build that runs once:
+
+| Situation | Worth it? |
+| --- | --- |
+| Local iteration — export, read, tweak, export | **Yes.** This is what it's for. |
+| CI on every pull request, with the store restored between runs | **Yes** — see [caching the build in CI](/laravel/guides/production/#caching-the-build-in-ci). |
+| A release or deploy pipeline that builds once on a fresh machine | No. Every lookup misses; you pay the bookkeeping and save nothing. |
+| A one-off export you run twice a year | No. |
+
+The cost when it doesn't help is small but real: a hash per dependency file, and a directory of JSON
+that grows. Nothing evicts old entries — a route you deleted leaves its fragment behind forever — so
+empty the store occasionally on a long-lived machine.
+
+## Clearing the store
+
+```bash
+php artisan docuccino:clear --fragments
+```
+
+It prints `Cleared N cached operation fragment(s).` and empties the store for **every** document —
+fragments are shared across documents, so naming one still clears all of them. It works whether or not
+`cache.enabled` is currently true, and `docuccino:clear` is the one command with no
+[enabled guard](/laravel/reference/commands/), so it runs even in an installation you've switched off.
+
+Prefer it to deleting `storage/docuccino/fragments` by hand: the command leaves the directory and its
+`.gitignore` in place, and cleans up temp files a crashed write left behind. Full signature in the
+[commands reference](/laravel/reference/commands/#docuccinoclear).
+
+<Aside type="tip" title="You don't have to clear it after an upgrade">
+Upgrading Docuccino, the analyzer, or any package changes the key on its own — the old entries simply
+stop matching. Clearing is for a store you no longer trust, or one you want to shrink.
+</Aside>
+
+## Generated directories ignore themselves
+
+Everything Docuccino writes for its own use lives under `storage/docuccino`: the fragment cache in
+`fragments/`, and the analyzer's compiled container and scratch files beside it. Into each directory
+it creates, Docuccino drops a `.gitignore` containing `*` and `!.gitignore` — the same trick Laravel
+ships inside `storage/` — so none of it ever turns up in `git status`. A `.gitignore` you wrote there
+yourself is never overwritten.
+
+The exported spec is the deliberate exception. `export.path` is a reviewable artifact meant to be
+committed, so it is never ignored on your behalf — see
+[what to commit](/laravel/guides/production/#what-to-commit).
+
+<CardGrid>
+	<Card title="Same bytes, less work" icon="approve-check">
+		A warm build is byte-identical to a cold one. Determinism is what makes an incremental build
+		trustworthy in the first place.
+	</Card>
+	<Card title="Sound by construction" icon="seti:lock">
+		A fragment that can't prove it's current is discarded, not served. A stale cache costs you a
+		rebuild — never a wrong document.
+	</Card>
+</CardGrid>
+
+## Where to go next
+
+- [Cache configuration](/laravel/reference/configuration/#cache) — `enabled`, `store` and `path` in the
+  reference.
+- [Caching the build in CI](/laravel/guides/production/#caching-the-build-in-ci) — restoring the store
+  between workflow runs.
+- [How it works](/laravel/guides/how-it-works/) — what a build does with the time it spends.
+- [The export runs out of memory](/laravel/guides/troubleshooting/#the-export-runs-out-of-memory) — if
+  builds are failing rather than merely slow.

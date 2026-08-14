@@ -452,6 +452,6 @@ modular helpers resolvable, which priming already handles.
 
 | Key | Effect |
 | --- | --- |
-| `enabled` | Turns on the `OperationFragment` cache for incremental builds. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. |
+| `enabled` | Turns on the `OperationFragment` cache for incremental builds. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
 | `store` | Laravel cache store name for the runtime document cache warmed by `docuccino:cache`. |
-| `path` | Fragment cache directory (defaults to `storage_path('docuccino/fragments')`). |
+| `path` | Fragment cache directory (defaults to `storage_path('docuccino/fragments')`). Docuccino drops a `.gitignore` into the directory it creates — the same `*` / `!.gitignore` pair Laravel ships inside `storage/` — so cached fragments stay out of your repository. An existing `.gitignore` is never overwritten. |

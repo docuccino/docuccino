@@ -247,13 +247,22 @@ diagnostics never affect the exit code. Fails only on a disabled install or an u
 Clear the cached runtime API document(s).
 
 ```
-docuccino:clear {document? : The configured document key (defaults to every document)}
+docuccino:clear
+    {document? : The configured document key (defaults to every document)}
+    {--fragments : Also empty the per-operation fragment cache}
 ```
 
 The inverse of `docuccino:cache`: forgets each selected document's cached payload and prints
 `Cleared cached document "<key>".` It is the one command with **no enabled guard**, so it runs even
 when `docuccino.enabled` is `false` — you can always flush a stale payload out of an installation
 you've just switched off. Fails only on an unknown document key.
+
+`--fragments` additionally empties the [fragment cache](/laravel/reference/configuration/#cache) —
+the per-operation store behind `cache.enabled` — and prints
+`Cleared N cached operation fragment(s).` That store is shared by every document, so naming one
+document still empties all of it (an unknown key fails the command before anything is cleared), and it
+is emptied whether or not the fragment cache is currently enabled — it is the supported way to recover
+from a fragment store you no longer trust, instead of deleting `storage/docuccino/fragments` by hand.
 
 ## Exit codes
 

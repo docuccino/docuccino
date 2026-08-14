@@ -648,9 +648,32 @@ path, so the machine dependence is stated rather than silently baked into the ou
 
 Unit = OperationFragment (operation + registered components + diagnostics + provenance,
 serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
-doc configHash ‖ resolved extension list (FQCNs + package versions) ‖ route signature ‖
-sha256 of each file in `ActionAnalysis::$dependencyFiles`). Assembly → canonicalize →
-validate always run fresh. Watch mode later = loop incremental build + SSE push.
+doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
+package versions) ‖ route cache-signature ‖ sha256 of each file in
+`ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
+Watch mode later = loop incremental build + SSE push.
+
+The route cache-signature (`RouteDescriptor::cacheSignature()`) is method + URI + NAME + resolved
+action + normalised middleware + any scalar `cacheInputs` a resolver folds in — the name is in
+because it is the default `operationId` and a rename touches no file the fragment depends on. The
+build fingerprint (`Laravel\Pipeline\BuildFingerprint`) is the environment the engine runs in:
+which engine resolved, whether the engine package is installed, the output-shaping half of
+the `engine` config (everything but `memory_limit`, a process ceiling that reaches no emitted byte),
+and the app's `composer.lock` hash — installing the engine or upgrading the analyser changes what
+inference recovers without touching one analysed file. Tool ver additionally carries this package's
+own installed source reference where Composer can answer for it, so a `path`/dev checkout edited in
+place — the maintainer's loop, invisible to the app's lock file — doesn't share fragments with the
+release it was checked out from. The store itself is emptied by `docuccino:clear --fragments`.
+
+Two consequences of the cache being the fast path. A build resolves its `TypeEngine` before it
+starts, but a fully warm one asks it nothing, so the adapter hands out an `Engine\LazyTypeEngine`
+that builds the real engine on the first question — the analyser boots exactly where it did, ahead
+of any analysis, and not at all for a build that recovers nothing. That is why the fingerprint names
+the engine (`TypeEngineFactory::engineIdentity()`) instead of reading the class off an instance: the
+key is computed before the first route, and asking would cost the boot it exists to avoid. And
+freshness hashing goes through `Core\Pipeline\FileDigests`: one build hashes each dependency file
+once — the same file sits in many routes' lists — and sees one view of it, and the memo dies with
+the build.
 
 ## 11. Worked example (one operation)
 
