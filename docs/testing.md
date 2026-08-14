@@ -73,7 +73,7 @@ Consequences:
 
 - The `fixture` group is the **behavioural proof** for the inference engine's real path
   (return types, throw analysis, QB trace, determinism). It is *not* a line-coverage
-  contributor. Do not read `inference-phpstan`'s ~37% line figure as "untested" — read it
+  contributor. Do not read `inference-phpstan`'s ~41% line figure as "untested" — read it
   as "mostly proven out-of-process".
 - The CI **coverage** job therefore runs `--exclude-group=fixture` (fast, no app to
   provision) and the separate **fixture** job keeps proving the engine behaviourally.
@@ -81,18 +81,18 @@ Consequences:
   unit tests for its pure/parent-process classes (translators, registries, protocol,
   orchestration bookkeeping) — not more subprocess fixture tests.
 
-## Measured coverage (2026-08-09)
+## Measured coverage (2026-08-13)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **92.21%** | 92    | fully in-process-measurable                      |
-| `laravel`           | **91.90%** | 91    | fully in-process-measurable                      |
-| `inference-phpstan` | **37.35%** | 37    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **93.26%** | 93    | fully in-process-measurable                      |
+| `laravel`           | **91.98%** | 91    | fully in-process-measurable                      |
+| `inference-phpstan` | **42.72%** | 42    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 82.29%     | —     | informational only; no longer a gate             |
+| Overall             | 84.70%     | —     | informational only; no longer a gate             |
 
 `inference-phpstan`'s floor dropped from 41 to 37 in the same change set that moved the phpdoc type
 grammar into core. Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and
@@ -101,10 +101,39 @@ ratio without losing a single test: 41.64% over the pre-move file set is the old
 absorbed them at a slightly lower rate than its own average (92.39% → 92.21%), which is why its floor
 holds at 92 rather than ratcheting. A floor drop is only ever this: a documented denominator change.
 
+`inference-phpstan` then ratcheted 37 → 38, and the arithmetic is worth recording because both halves
+moved at once. The response refiner gained a 61-statement construction-site descent (reading which
+constructor arguments a payload object was built with) that is Scope-, reflection- and
+file-analysis-driven, so pcov cannot observe a line of it — on its own that took the package to
+36.68% (690/1881), below the floor. The fix was **not** to lower the floor but to close a real gap the
+standards already required: `NativeTypeMapper`, the reflection type table behind `classMetadata()`'s
+property types, had **zero** in-process coverage despite being a lookup table. Its dataset test lands
++27 covered, taking the package to 38.12% (717/1881) — genuinely higher than before the refiner work.
+That test also pinned a surprise worth keeping: PHP resolves `self`/`parent` to real FQCNs before
+reflection reports them, so only `static` ever reaches the mapper as a relative name.
+
+It then ratcheted 38 → 41 on the same move again: `ClassMetadataFactory` learned to type a promoted
+constructor property from the constructor's `@param` tag, which grew the class by 24 statements and — with
+a real-reflection dataset test over an autoloaded spatie-shaped probe — took it from **zero** in-process
+coverage to 66/66. So 717/1881 (38.12%) became 783/1905 (41.10%). `core` ratcheted 92 → 93 in the same
+change: the shared-error transformer shed its example-reconciliation methods and picked up its
+malformed-document negative paths (97/97), and the docblock reader's new `@param`/`@var` readers landed
+fully covered (64/64).
+
+It then ratcheted 41 → 42, and this one is the pattern to copy when the engine gains work: instead of
+funding new subprocess-only statements from somewhere else, *move the measurable part out*. The response
+refiner's `Content-Type` re-label read — match the returned variable, find its last assignment, accept
+only header writes between that and the return — needs php-parser and file positions but no PHPStan
+`Scope`, so it left the refiner for `ContentTypeLabel` and is now driven in-process by parsing snippets
+(the position window is the mechanism, so hand-built nodes would prove nothing). That took ~20 statements
+out of the invisible half and put ~25 covered ones back, and the fully-covered `SensitiveConstant` name
+predicate added more: 783/1905 (41.10%) → 824/1929 (42.72%).
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
-for its pure/parent-process classes, never more subprocess fixture tests.
+for its pure/parent-process classes, never more subprocess fixture tests — the ratchet above is
+exactly that move, and it is the preferred answer whenever a subprocess-only subsystem lands.
 
 ## The CI coverage gate & ratchet policy
 
@@ -112,7 +141,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **92**, `laravel` **91**, `inference-phpstan` **37**.
+  an aspiration. Current floors: `core` **93**, `laravel` **91**, `inference-phpstan` **42**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

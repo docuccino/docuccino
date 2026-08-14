@@ -148,7 +148,7 @@ The engine recovers a response shape that the DECLARED return type erased. A ren
 response through a helper — `__invoke` → `renderNotFound()` → `ProblemResponse::make(…): JsonResponse` —
 and the bare `JsonResponse` hint erases the payload/status generic at every call site, so PHPStan hands
 the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection and substitutes a richer
-`JsonResponse<payload, status, contentType>`. Four composed mechanisms, in the order they run:
+`JsonResponse<payload, status, contentType, members>`. Five composed mechanisms, in the order they run:
 
 1. **Helper-indirection descent.** At each harvested return site whose translated type is a bare
    response class: fold `new JsonResponse($body, $status, [headers])` arguments directly; read an
@@ -169,7 +169,23 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    computed body, a vendor enum's method, or an un-pinnable argument folds NOTHING — honest-permissive,
    never guessed. A folded `->status()` supplies the response status as a literal, which the response
    builder prefers over the exception's throw-status hint.
-4. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
+4. **Object-payload constructor arguments.** When the body is an OBJECT rather than an array shape
+   (`(new ProblemData(type: $p->value, errors: $errors ?? new Optional))->toResponse($request)`), there are
+   no shape fields to pin a folded value into, so the arguments are recorded beside the class type: one
+   member per argument the call site actually WROTE, folded by mechanisms 2–3 exactly as a shape member is.
+   The construction site is either the receiver of the response-producing call or one project hop away
+   through a factory that returns the object (`ProblemData::make(…)->toResponse(…)`); a deeper chain is a
+   guess about which `new` produced it, so it declines. `??` reads through its left side, which is how an
+   app spells "absent unless supplied".
+
+   Being SUPPLIED is the fact this exists to carry, and it cuts both ways: an argument passed here puts the
+   member in this response even where the class declares it optional, and an argument this call site did not
+   pass leaves the map entirely rather than widening — it took its default, so it is not in this body. The
+   adapter's response seam reads the map for exactly that (§6): it decides the example's membership, while
+   the schema still decides what each member looks like. Nothing here expands the object — property
+   semantics, name mappers and `Optional`/`Lazy` markers are the adapter's business, and the engine only
+   ever says "this response carries that object, built with these arguments".
+5. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
    reused verbatim (default 4 / 40). Memoisation is per callee `class::method` (and per
    `(enum-case, method)` for folds) and is sound because the memoised shape is call-independent — with
    one rule: a computation whose descent hit a depth/budget CUTOFF is returned for the current analysis
@@ -251,6 +267,13 @@ first**, split across the placement boundary:
    grammar in `Core\TypeGrammar`: the tag is a general PHP/phpstan convention (Data/Resource classes
    documented this way benefit too), not Eloquent vocabulary. This is the primary, high-confidence
    source.
+   The same factory also refines a **declared** property from a docblock, which is what a spatie Data
+   class needs: `array` and `array|Optional` are the most a promoted constructor property can say
+   natively, and the element type lives in the constructor's `@param` tag (`@var` for a plain
+   property). The refinement is one-directional — a docblock is read only where the reflected type is
+   already vague (bare `array`, `mixed`, no type at all) and is taken only when it is itself precise —
+   so `@var array` never displaces a better native type and a native `string` is never second-guessed.
+   Unqualified names in the tag resolve through the declaring file's `ImportContext`.
 2. **Floor sources** — `$casts` keys (a cast key IS a column, typed by its cast via `CastSchema`),
    `$dates` entries (date-time), and `$fillable`-only names (permissive `{}` at lowered confidence).
    These are Eloquent vocabulary, so they live **in the adapter** (`ModelSchema` unions them over the

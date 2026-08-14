@@ -30,7 +30,10 @@ declare(strict_types=1);
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff,
     // the phpdoc type grammar.
-    'core' => 92,
+    // Ratcheted 92 → 93 at 93.18% (4384/4705): the shared-error transformer lost its example-reconciliation
+    // methods and gained its malformed-document negative paths (97/97), and the docblock reader's `@param`
+    // and `@var` readers landed fully covered (64/64).
+    'core' => 93,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
     'laravel' => 91,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
@@ -40,7 +43,18 @@ const FLOORS = [
     // Was 41 until the phpdoc type grammar (fully unit-tested in-process, 141/161 statements) moved to
     // core: the remaining package is more subprocess-only than before, so the honest floor fell with the
     // denominator. No test was lost — 41.64% over the pre-move file set is the same number.
-    'inference-phpstan' => 37,
+    // Ratcheted 37 → 38 when the reflection type table (NativeTypeMapper, 28 statements, previously 0
+    // in-process) got its dataset test: that lands +27 covered, which more than absorbed the refiner's
+    // 61-statement construction-site descent — Scope- and reflection-driven, so pcov-invisible either way,
+    // and proven out-of-process by the fixture group instead.
+    // Ratcheted 38 → 41 when ClassMetadataFactory learned to read a promoted property's `@param`: the class
+    // grew 24 statements and went from zero in-process coverage to 66/66 under a real-reflection test, so
+    // 717/1881 (38.12%) became 783/1905 (41.10%).
+    // Ratcheted 41 → 42 when the response refiner's `Content-Type` re-label read moved out into
+    // ContentTypeLabel: pure php-parser over parsed source, so it is unit-testable IN-PROCESS where the
+    // refiner around it never will be. That plus the fully-covered SensitiveConstant predicate took
+    // 783/1905 (41.10%) to 824/1929 (42.72%).
+    'inference-phpstan' => 42,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

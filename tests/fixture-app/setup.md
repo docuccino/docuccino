@@ -144,6 +144,19 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
 - `app/Data/ArticleData.php` — a `spatie/laravel-data` Data class with typed public promoted
   properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine recovers precise
   property types by reflection.
+- `app/Data/ProblemDocumentData.php` — a Data class that is both the runtime carrier and the documented
+  schema of an error body, rendered through `withoutWrapping()->toResponse()` with the media type
+  re-labelled by a header set on the returned response. Neither half is visible to a naive read:
+  `toResponse()` declares a bare `JsonResponse`, and the `Content-Type` is a mutation rather than a
+  constructor argument. Its `instance`/`errors` members are `Optional`, so only the arguments a branch
+  passed can say whether that branch's response carries them. It also carries
+  `toNegotiatedResponse()`, whose two branches build into the same `$response` variable with only the
+  second labelling its media type — the shape that catches a header write being attributed to the wrong
+  branch's body.
+- `app/Data/OwnResponseProblemData.php` — the same idea one step further: it OVERRIDES `toResponse()`
+  and builds `new JsonResponse($this->transform(…WrapExecutionType::Disabled), $status, [headers])`
+  itself. The engine must decline to model spatie's own `toResponse()` here and let the constructor
+  fold win, or the app's real status and media type are thrown away.
 - `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
   (magic attributes) and documenting its columns the ide-helper way, via class-level
   `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,
@@ -161,6 +174,20 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
   (`if (! ($e instanceof OutOfStockException))`) putting the broad default ahead of the specific
   branch, so narrowing to `OutOfStockException` raises the `inference.ambiguous-narrowing` info
   diagnostic.
+- `app/Exceptions/DataProblemRenderer.php` — a renderer that documents its errors through a spatie Data
+  object rather than an array literal, so every problem response shares one component. Its arms differ in
+  how far the `new` sits from the response: the validation arm goes through
+  `DataProblemDocument::make()` (a factory hop) and supplies both optional members; the `HttpException`
+  arm reaches the Data through two hops and supplies neither; one arm goes to the class that writes its
+  own response (`OwnResponseProblemData`); the `ArithmeticError` arm passes a class constant named like a
+  credential (`self::SUPPORT_API_KEY`) and renders through `toNegotiatedResponse()`, pinning both refusals
+  — no folded secret in a published example, and no media-type label borrowed from the helper's other
+  branch; and the fallback writes every argument as a literal at the call site.
+- `app/Exceptions/DataProblemDocument.php` — the Data-object counterpart of
+  `ProblemResponse::fromProblem()`: a factory answering the DTO rather than a response, so the
+  constructor is a call hop away from the response and every member reads off one of the factory's
+  parameters — a bound `InvoiceProblem` case's accessors, a plain string, or an `?? new Optional` tail
+  whose member only exists when the caller passed it.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.

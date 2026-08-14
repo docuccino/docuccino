@@ -98,6 +98,47 @@ function paramsByName(array $operation): array
 }
 
 /**
+ * A response as documented, following a `$ref` into `components.responses`. An error body repeated across
+ * operations is hoisted to a shared component (see {@see SharedErrorResponses}), so a test asserting on the
+ * body has to resolve the reference; the operation's own `x-docuccino` wins over the component's, since
+ * provenance stays per-route.
+ *
+ * @param  array<string, mixed>  $document  the emitted document
+ * @return array<string, mixed>
+ */
+function resolveResponse(array $document, mixed $response): array
+{
+    if (! is_array($response)) {
+        return [];
+    }
+
+    $prefix = '#/components/responses/';
+    $ref = $response['$ref'] ?? null;
+    if (! is_string($ref) || ! str_starts_with($ref, $prefix)) {
+        return $response;
+    }
+
+    $component = $document['components']['responses'][substr($ref, strlen($prefix))] ?? null;
+
+    return is_array($component) ? $response + $component : $response;
+}
+
+/**
+ * One media type of the workbench form route's response at `$status`, through {@see resolveResponse()} —
+ * the shape most error-response assertions want.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, mixed>
+ */
+function mediaOf(array $document, string $status, string $mediaType, string $path = '/api/forms/{form}', string $method = 'get'): array
+{
+    $response = $document['paths'][$path][$method]['responses'][$status] ?? [];
+    $media = resolveResponse($document, $response)['content'][$mediaType] ?? [];
+
+    return is_array($media) ? $media : [];
+}
+
+/**
  * @return array<string, mixed>
  */
 function loadFixture(string $name): array

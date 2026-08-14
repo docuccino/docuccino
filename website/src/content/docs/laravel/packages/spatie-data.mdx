@@ -190,18 +190,65 @@ presence. Only an `Optional` or `Lazy` marker in the property type makes a key g
 therefore non-required.
 </Aside>
 
-### Success statuses from `calculateResponseStatus()`
+### Element types from the docblock
 
-A Data response class that overrides `calculateResponseStatus()` has its status documented in place of
-the default `200`. A single constant folds — a plain `return 201;`, a class constant like
-`Response::HTTP_CREATED`, or an enum constant. A **conditional whose arms are all constants** folds too
-and documents **every** status (a `$recent ? 201 : 200` yields both a `201` and a `200`, each carrying
-the response body) — matching what the endpoint actually returns.
+PHP can't type an array's elements, so Docuccino reads the tag that can: a promoted property's `@param`
+on the constructor, a plain property's own `@var`.
 
-When an action returns a **union of Data classes** — `AuthSuccessData|MfaChallengeData` from one
-method — each member is documented under its own `calculateResponseStatus()` (the challenge member at
-`422`, the success member at `200`), so a single action correctly documents several statuses. A
-genuinely computed status can't be read statically, so that member stays `200` with a
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	class InvoiceData extends Data
+	{
+	    /** @var list<string> */
+	    public array $tags = [];
+
+	    /**
+	     * @param  list<LineItemData>|Optional  $lines
+	     */
+	    public function __construct(
+	        public int $id,
+	        public array|Optional $lines = new Optional,
+	    ) {}
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"tags":  { "type": "array", "items": { "type": "string" } },
+	"lines": { "type": "array", "items": { "$ref": "#/components/schemas/LineItemData" } }
+	```
+	</TabItem>
+</Tabs>
+
+The tag is consulted only where the declaration is vague — a bare `array`, a `mixed`, nothing at all —
+and only if the tag itself is precise, so a native `string` is never second-guessed and a `@var array`
+never displaces a real declaration. Short class names resolve through that file's `use` statements. The
+same types feed the [request rules](#request-bodies-from-data-classes), so `lines.*` validates as
+`LineItemData` too.
+
+### Success statuses
+
+<Aside type="caution" title="Upgrade note: create endpoints now document 201">
+A Data class returned from a `POST` is documented **`201 Created`**, from spatie's own
+`ResponsableData` default (`$request->isMethod('POST') ? 201 : 200`). Earlier releases read only a
+`calculateResponseStatus()` override and missed it, so those endpoints were documented `200`.
+
+Regenerate before your enforcing diff step: `docuccino:diff` sees a removed `200` plus an added `201`,
+and a removed response is breaking under every policy.
+</Aside>
+
+| The class | Documented status |
+| --- | --- |
+| Takes spatie's concern, `POST` route | `201` |
+| Takes spatie's concern, any other verb | `200` |
+| Overrides `calculateResponseStatus()` | Whatever that returns — an override answering `200` on a `POST` documents `200` |
+| Satisfies the response contract by hand | `200`; there's no vendor default to inherit, and assuming one would invent a status |
+
+An override folds a single constant (`return 201;`, `Response::HTTP_CREATED`, an enum constant) and a
+conditional whose arms are *all* constants — `$recent ? 201 : 200` documents both statuses, each carrying
+the response body. A **union of Data classes** (`AuthSuccessData|MfaChallengeData`) resolves each member's
+status separately. A computed status falls back to `200` with a
 `spatie-data.response-status-unresolved` info diagnostic — see
 [Responses](/laravel/documenting/responses/#spatie-data-success-status).
 
@@ -229,6 +276,23 @@ returns:
 `defaultWrap()` on the class takes precedence over the global key, and it's read as a literal string
 return — a computed wrap key falls back to the global one. Only the **response root** is wrapped: a
 nested Data property stays an unwrapped, shared `$ref`.
+
+#### Classes that unwrap themselves
+
+A class that strips the envelope on its own way out is documented **unwrapped**, whatever
+`config('data.wrap')` says — the RFC 9457 case, since a problem document has to sit at the root. Both of
+spatie's spellings are read, statically:
+
+```php
+$this->withoutWrapping()->toResponse($request);
+
+$this->transform(
+    TransformationContextFactory::create()->withWrapExecutionType(WrapExecutionType::Disabled)
+);
+```
+
+The receiver decides it: `$this->authors->withoutWrapping()` unwraps that nested collection, not this
+class's root. Precedence is an explicit unwrap, then `defaultWrap()`, then `data.wrap`, then unwrapped.
 
 ### Collections and paginators
 
@@ -282,6 +346,60 @@ surfaced, because spatie's own base implementations allow nothing:
 The allow-list itself isn't enumerated — reading it would mean running your method — so each parameter
 is documented as a free comma-separated string.
 
+### Data classes as error bodies
+
+`Data::toResponse()` declares a bare `JsonResponse` and `transform()` a bare `array`, so a renderer that
+hands its error body to spatie would lose the whole schema on the way out. Both are modelled, so it
+doesn't:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Exceptions/ProblemRenderer.php
+	public function __invoke(Throwable $e, Request $request): ?JsonResponse
+	{
+	    return match (true) {
+	        $e instanceof ModelNotFoundException => ProblemDocumentData::notFound($e)->toProblemResponse($request),
+	        default => null,
+	    };
+	}
+
+	// app/Data/ProblemDocumentData.php
+	public function toProblemResponse(Request $request): JsonResponse
+	{
+	    $response = $this->withoutWrapping()->toResponse($request);
+
+	    $response->headers->set('Content-Type', 'application/problem+json');
+
+	    return $response;
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"404": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/problem+json": {
+	      "schema": { "$ref": "#/components/schemas/ProblemDocumentData" }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The `withoutWrapping()` keeps the body at the root, and the media type comes from the header write —
+[a mutation, not a constructor argument](/laravel/documenting/errors/#responses-built-through-a-helper).
+
+Where the class **overrides** `toResponse()` or `transform()`, Docuccino reads your own
+`new JsonResponse($payload, $status, $headers)` instead: your status, headers and `Content-Type` win. The
+payload is still the Data class — a transformed array and the documented schema are the same body.
+
+Constructor arguments decide the [example](/laravel/documenting/errors/#examples-are-completed-not-withheld):
+a member passed at that call site is in that body even where the schema marks it `Optional`, and one
+nobody passed is absent even where the schema requires it.
+
 ## Conventions Docuccino honors
 
 Docuccino respects Spatie Data's own attributes and conventions, so the documented schema matches the
@@ -303,6 +421,10 @@ JSON your app actually produces and accepts:
 | `DataCollection` / `#[DataCollectionOf]` | Becomes an array of the item schema. |
 | Paginated Data collections | Produce spatie's own paginator envelope (above), not Laravel's. |
 | `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
+| `$this->withoutWrapping()` / `WrapExecutionType::Disabled` | Documents this class's response root **unwrapped**, whatever `data.wrap` says. |
+| A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
+| `calculateResponseStatus()`, or spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it. |
+| An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | Documents the property as an integer Unix timestamp. |
 | `rules()` | Overrides the inferred request rules per field. |
 | `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |

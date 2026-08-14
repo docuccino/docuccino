@@ -16,7 +16,7 @@ to the cause.
 Run the export with diagnostics visible and read the first warning, not the last:
 
 ```bash
-php -d memory_limit=2G artisan docuccino:export --provenance=full
+php artisan docuccino:export --memory-limit=2G --provenance=full
 ```
 
 Then match the symptom:
@@ -34,12 +34,23 @@ Then match the symptom:
 
 ## The export runs out of memory
 
-**Symptom.** The command dies with a PHP fatal error, often pointing at a file inside PHPStan's phar:
+**Symptom.** The command dies with a PHP fatal error, often pointing at a file inside PHPStan's phar,
+followed by Docuccino's own note naming the two levers to reach for:
 
 ```
 PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
   (tried to allocate 20480 bytes) in .../phpstan.phar/resources/functionMap.php on line 59
+
+Docuccino ran out of memory while analysing your code.
+…
+  * Raise the ceiling — set docuccino.engine.memory_limit (e.g. '2G'), or pass
+    --memory-limit=2G to this command.
+  * Narrow the analysis — docuccino.engine.project_paths decides how far interprocedural
+    descent goes, and a wide value costs memory. Vendor code is never analysed.
 ```
+
+PHP can't catch memory exhaustion, so this is the one failure Docuccino explains on the way out instead
+of degrading around.
 
 **Cause.** Docuccino's inference runs a real static analyzer over your codebase, and analyzers are
 memory-hungry. PHP's default `memory_limit` of 128M is nowhere near enough for an app of any size.
@@ -52,21 +63,37 @@ workload.
 <TabItem label="One-off">
 
 ```bash
-php -d memory_limit=2G artisan docuccino:export
+php artisan docuccino:export --memory-limit=2G
 ```
+
+</TabItem>
+<TabItem label="Every build">
+
+```php
+// config/docuccino.php
+'engine' => [
+    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
+    'memory_limit' => '2G',
+    'project_paths' => ['app'],
+],
+```
+
+Every console entry point picks it up — `export`, `validate`, `diff`, `cache` — so nobody has to
+remember the flag.
 
 </TabItem>
 <TabItem label="CI">
 
 ```yaml
 - name: Export API docs
-  run: php -d memory_limit=2G artisan docuccino:export --fail-on=warning
+  run: php artisan docuccino:export --memory-limit=2G --fail-on=warning
 ```
 
 </TabItem>
 <TabItem label="php.ini">
 
 ```ini
+; Still works, and still the right answer if you'd rather not touch config.
 ; Only worth doing on a dev machine or a CI image — never on a production web box,
 ; which serves the committed artifact and runs no analysis at all.
 memory_limit = 2G
@@ -74,6 +101,11 @@ memory_limit = 2G
 
 </TabItem>
 </Tabs>
+
+Both levers only ever **raise** the ceiling — a process already running with more is left alone, and `-1`
+is rejected — and `--memory-limit` wins over `engine.memory_limit`. Neither touches a web request, so a
+viewer whose `source` is `generate` runs under whatever the server gives it; on a large codebase serve it
+from `artifact` or a warm [`cache`](/laravel/guides/viewer/#source-modes) instead.
 
 <Aside type="caution" title="A partial document is the worse failure">
 If the fatal lands late in the run you can be left with a document that was written before the
@@ -108,7 +140,7 @@ composer update docuccino/laravel docuccino/inference-phpstan phpstan/phpstan
 Then confirm the warnings are gone:
 
 ```bash
-php -d memory_limit=2G artisan docuccino:export 2>&1 | grep -c 'Cannot suspend'
+php artisan docuccino:export --memory-limit=2G 2>&1 | grep -c 'Cannot suspend'
 ```
 
 Zero is the expected answer. If it isn't, the installed `docuccino/inference-phpstan` predates the
@@ -161,7 +193,7 @@ queries, sends no mail and dispatches no jobs, so this costs you nothing:
 
 ```bash
 CACHE_STORE=array SESSION_DRIVER=array QUEUE_CONNECTION=sync BROADCAST_CONNECTION=null \
-  php -d memory_limit=2G artisan docuccino:export
+  php artisan docuccino:export --memory-limit=2G
 ```
 
 For a permanent CI setup, put those in the environment file your pipeline uses.

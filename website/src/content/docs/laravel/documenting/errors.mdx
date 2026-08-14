@@ -109,13 +109,22 @@ public static function make(string $title, int $status, string $detail): JsonRes
 ```
 
 Docuccino follows that indirection. It reads each `match`/`if` arm, steps into the helper the arm
-calls, and recovers the shape the helper actually builds — the payload keys, the status, and the
-media type when the helper sets an explicit `Content-Type` (so an `application/problem+json` factory
-is documented under `application/problem+json`, not `application/json`). A constant status passed to
-the helper (`make('Not Found', 404, …)`) is recovered as that literal; a status the helper derives from
-a value it can't see statically (`$e->getStatusCode()`) can't be read, so the response falls back to the
-status Docuccino inferred for the exception itself rather than guessing. When the status comes from an
-**enum case** the arm names explicitly, Docuccino folds it — see [enum-backed problem types](#enum-backed-problem-types) below.
+calls, and recovers the shape the helper actually builds — the payload keys, the status, and the media
+type. A constant status passed to the helper (`make('Not Found', 404, …)`) is recovered as that literal;
+a status the helper derives from a value it can't see statically (`$e->getStatusCode()`) can't be read,
+so the response falls back to the status Docuccino inferred for the exception itself rather than
+guessing. When the status comes from an **enum case** the arm names explicitly, Docuccino folds it — see
+[enum-backed problem types](#enum-backed-problem-types) below.
+
+An `application/problem+json` factory is documented under `application/problem+json`, whether the helper
+passes the label as a constructor argument or writes it onto the response it returns:
+
+```php
+$response->headers->set('Content-Type', 'application/problem+json');
+```
+
+Only writes between the returned variable's last assignment and the `return` are read, so a helper that
+negotiates two branches into the same `$response` can't lend one branch's label to the other.
 
 Because the literal values are recovered too, each response carries a concrete **example** alongside
 the schema, and every member whose value is a constant is pinned with a JSON-Schema `const`:
@@ -139,9 +148,15 @@ the schema, and every member whose value is a constant is pinned with a JSON-Sch
 	          "title":  { "type": "string",  "const": "Forbidden" },
 	          "status": { "type": "integer", "const": 403 },
 	          "detail": { "type": "string" }
-	        }
+	        },
+	        "required": ["type", "title", "status", "detail"]
 	      },
-	      "example": { "type": "https://errors.example/forbidden", "title": "Forbidden", "status": 403 }
+	      "example": {
+	        "type": "https://errors.example/forbidden",
+	        "title": "Forbidden",
+	        "status": 403,
+	        "detail": "string"
+	      }
 	    }
 	  }
 	}
@@ -149,13 +164,32 @@ the schema, and every member whose value is a constant is pinned with a JSON-Sch
 	</TabItem>
 </Tabs>
 
-Notice what the `403` shows and what it doesn't: the per-arm `type` URL, the `title`, and the `403`
-are all constants read from the arm, so they appear as both `const`s and in the example. A `status`
-member that simply carries the response's status code is filled with **this response's** status — the
-`403` arm says `403`, a `404` arm says `404` — even when the status itself was computed dynamically.
-The `detail` here is `$e->getMessage()`, which has no static value, so it is **omitted from the
-example rather than invented**. Docuccino never fabricates an example value: only what actually flows
-into the body is shown, and the example is deterministic — identical code always produces identical bytes.
+Constants read from the arm appear as both `const`s and example values. A `status` member that carries
+the response's status code is filled with **this response's** — the `403` arm says `403`, a `404` arm says
+`404` — even when the status itself was computed dynamically.
+
+### Examples are completed, not withheld
+
+`detail` is `$e->getMessage()` — no static value, and **required**, so an example omitting it would fail
+validation against the schema printed beside it. Docuccino fills it from the declared type instead. The
+fill is confined to examples; nothing invented ever reaches a schema.
+
+| Member | In the example |
+| --- | --- |
+| Folded to a literal, or pinned by a `const` | Its real value, verbatim. |
+| Required, didn't fold | A placeholder for its type. An object gets its own required members; an array with `items` gets one element, built the same way. |
+| Optional, and the code didn't supply it | Left out — the example is *this* branch's body, not the union of every branch's. |
+| Supplied by the code, optional in the schema | Included: being passed here is the stronger fact. |
+| Optional, supplied, no type stated | Left out. `"string"` for what may well be a list would state what the code never said. |
+| Required, no type stated | Filled with `"string"` anyway — dropping an otherwise-complete example is worse. |
+
+Nullable members are illustrated through their non-null branch, `$ref`s are followed, and placeholders
+stop at a small depth so a self-referential problem document can't unroll forever.
+
+One refusal is deliberate: a constructor argument written as a **credential-named** constant
+(`self::SIGNING_KEY`) is never folded, because a folded literal becomes a published example. Its
+neighbors still fold, and [the leakage lint](/laravel/reference/configuration/#lint) covers values that
+reach the document another way.
 
 ### Enum-backed problem types
 
@@ -220,6 +254,14 @@ An arm that `return`s `null` (or has no return) is treated as "delegate to the f
 error — the next source documents those exception types. When a renderer genuinely can't be read,
 Docuccino emits one summary diagnostic per renderer (naming the exception types it skipped), not one
 per exception.
+
+### When the error body is a Data class
+
+A renderer that hands the body to `spatie/laravel-data` —
+`ProblemDocumentData::notFound($e)->toProblemResponse($request)` — is read through: `toResponse()` and
+`transform()` are modelled, so the response is documented as that Data class rather than losing its
+schema to a bare `JsonResponse`. See
+[Data classes as error bodies](/laravel/packages/spatie-data/#data-classes-as-error-bodies).
 
 ## The Problem Details preset (opt-in)
 
@@ -350,13 +392,69 @@ signals and runs each through the same resolution above, so the body matches you
 
 If your action *also* throws one of these explicitly, the two merge into a single response for that
 status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
-integration. Set `error_responses` to `none` to turn all of this off.
+integration, and takes its body from this same resolution, so a `problem-details` app gets a problem
+document there too. Set `error_responses` to `none` to turn all of this off.
 
 :::note
 CSRF (`419`), maintenance mode (`503`), and exceptions thrown from arbitrary custom middleware are
 deliberately not inferred — a middleware's name doesn't tell Docuccino what status it produces.
 Declare those with a [`#[Response]`](/laravel/reference/attributes/#response) attribute.
 :::
+
+## Repeated bodies become shared components
+
+Error contracts repeat by nature: the same `404` shape sits under every show route, the same `422` under
+every write. Docuccino states each repeated body **once**, in `components.responses`, and `$ref`s it from
+every operation that produces it:
+
+<Tabs>
+	<TabItem label="On the operations">
+	```json
+	// GET /api/invoices/{invoice}
+	"404": { "$ref": "#/components/responses/Error404" }
+
+	// GET /api/customers/{customer}
+	"404": { "$ref": "#/components/responses/Error404" }
+	```
+	</TabItem>
+	<TabItem label="Shared component">
+	```json
+	// components.responses
+	"Error404": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "type": "object",
+	        "properties": { "message": { "type": "string" } },
+	        "required": ["message"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+On an app with a uniform error contract, that's most of the document's bytes — and most of its churn.
+
+| Hoisted | Not hoisted |
+| --- | --- |
+| A `4xx`/`5xx` body two or more operations state identically | A body no other operation shares |
+| A response carrying `content` | A description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
+
+Examples and headers count as part of the body: two `403`s differing only in their example become
+`Error403` and `Error403_2`, and a [`429`](/laravel/documenting/rate-limiting/) is shared only with routes
+carrying the same rate limit.
+
+Where a body lives is representation, not contract, so
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
+moving between inline and shared reports nothing, while a real edit to a shared body is reported against
+every operation referencing it. In the UIR document each operation also keeps its own response id and
+provenance in `x-docuccino` beside the `$ref`.
+
+Set [`representation.errors.components`](/laravel/reference/configuration/#representation) to `false` to
+keep every copy inline.
 
 ## Configuration
 

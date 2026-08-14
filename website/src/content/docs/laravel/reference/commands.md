@@ -19,6 +19,11 @@ Shared behavior:
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
   deterministic order; `diff` and `clear` print none.
+- **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
+  `diff`, `cache` — since inference runs a static analyzer inside the artisan process. Raise-only: a
+  process already running with a higher limit is left alone, and `-1` is rejected. Same lever as
+  [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins. `clear` builds
+  nothing, so it doesn't take it.
 
 ## `docuccino:export`
 
@@ -32,6 +37,7 @@ docuccino:export
     {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
     {--yaml : Emit YAML instead of JSON}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 | Flag | Values / default | Effect |
@@ -42,6 +48,7 @@ docuccino:export
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. Unrecognized values fall back to `winners`. Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--yaml` | flag / off | Emit YAML instead of JSON. Applies to the OpenAPI formats only; `--format=uir` always writes canonical UIR JSON. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
 The command prints `Wrote <path> (<format>).` per document, then any diagnostics.
 
@@ -65,12 +72,14 @@ Validate the generated document(s) against the bundled UIR schema.
 docuccino:validate
     {document? : The configured document key (defaults to every document)}
     {--fail-on=none : none | warning | error — extra diagnostic severity that also fails (a schema violation always fails)}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | configured key / all | Which document(s) to validate. Unknown → exit 1. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | *Additional* severity that also fails. Independent of the schema check. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit; validation generates the document first, so it needs `export`'s headroom. |
 
 **A schema violation always fails**, even with the default `--fail-on=none` — `--fail-on` only adds
 warning/error gating on top. A valid document prints `<key>: valid against UIR <version>.`; an
@@ -88,11 +97,16 @@ docuccino:diff
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--enforce : Enforce the document's versioning policy; exit non-zero on a violation}
     {--format=terminal : terminal | json}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 The diff is computed over stable `x-docuccino.id`s, so a path-param rename reads as "no change"
 while a URI change reads as remove + add. Prefer a UIR artifact for `old` — it carries the
 identities.
+
+Responses are read through `components.responses` on **both** sides, so a body that moved between
+inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
+a change, while an edit to a shared body is reported against every operation that `$ref`s it.
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
@@ -101,6 +115,7 @@ identities.
 | `--against` | git ref, e.g. `HEAD` / unset | Reads `old` via `git show <ref>:<old>` (so `old` must be repo-relative) instead of from disk. Refs/paths starting with `-` are rejected; git failure → exit 1. |
 | `--enforce` | flag / off | Enforce the document's [`versioning`](/laravel/reference/configuration/#versioning) policy; a violation exits non-zero. Without it, the diff is informational and exits 0 even with changes. |
 | `--format` | `terminal` \| `json` / `terminal` | `terminal` renders a human changeset (+ a satisfied/violated policy line when enforced); `json` prints a machine payload. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit; the "new" side is generated, so the diff needs `export`'s headroom. |
 
 ### Output
 
@@ -195,7 +210,9 @@ request changes about your API.
 Build and cache the API document(s) for the runtime endpoint.
 
 ```
-docuccino:cache {document? : The configured document key (defaults to every document)}
+docuccino:cache
+    {document? : The configured document key (defaults to every document)}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 Builds each selected document and stores its OpenAPI 3.2 payload — JSON, default emit options — under
@@ -206,6 +223,7 @@ forever: re-run the command to refresh it, typically as a deploy step.
 
 Prints `Cached document "<key>".` per document, then any diagnostics. There is no `--fail-on` here —
 diagnostics never affect the exit code. Fails only on a disabled install or an unknown document key.
+`--memory-limit` applies here too — worth knowing, since warming the cache is usually a deploy step.
 
 ## `docuccino:clear`
 
