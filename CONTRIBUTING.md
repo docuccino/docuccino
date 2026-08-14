@@ -148,8 +148,7 @@ of a silent skip.
 
 **Determinism is a product feature:** byte-identical output for identical code — no timestamps, no
 absolute paths, no randomness in any emitted document. This is a hard, tested guarantee (CI asserts
-cold-vs-warm cache, 1-vs-8-worker, and re-run byte-diffs, plus a UIR→OAS round-trip losslessness
-test).
+cold-vs-warm cache and re-run byte-diffs, plus a UIR→OAS round-trip losslessness test).
 
 Golden files under `php/*/tests/Fixtures/golden/` are **byte-locked**. Never regenerate them
 casually:

@@ -483,22 +483,18 @@
             "dist": {
                 "type": "path",
                 "url": "php/inference-phpstan",
-                "reference": "1108328cd2c235b254aa70976b6c02d80a1e44ec"
+                "reference": "2a2bed7d02ab04c5888f267be6f270840282a516"
             },
             "require": {
                 "docuccino/core": "self.version",
                 "larastan/larastan": "^3.10",
                 "nikic/php-parser": "^5",
                 "php": "^8.3",
-                "phpstan/phpstan": "~2.2.0 || ~2.3.0",
-                "symfony/process": "^6.4 || ^7.0 || ^8.0"
+                "phpstan/phpstan": "~2.2.0 || ~2.3.0"
             },
             "require-dev": {
                 "pestphp/pest": "^4.0"
             },
-            "bin": [
-                "bin/worker.php"
-            ],
             "type": "library",
             "autoload": {
                 "psr-4": {

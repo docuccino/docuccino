@@ -20,8 +20,10 @@ diffing and a bundled Scalar viewer.
   CI also gates line coverage **per package** (`composer test:coverage` →
   `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
   coverage (`composer test:types`, 100%). **Use the composer scripts** — they carry the flags
-  the gates need (`--parallel`, and the 2G memory limits PHPStan and type coverage want; type
-  coverage thrashes for many minutes at 1G). CI runs the same scripts, so they cannot drift.
+  the gates need (`--parallel`, and the 2G memory limits). CI runs the same scripts, so they
+  cannot drift. The 2G is headroom, not a requirement: type coverage peaks near 120 MB and
+  times the same at PHP's default limit as at 4G, so a type-coverage run that appears to hang
+  for minutes is stale pcov state — kill it and re-run rather than reaching for more memory.
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Golden files under
   `php/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
@@ -49,8 +51,9 @@ php/core/               docuccino/core        — UIR model, canonicalizer, iden
                                                      but the standalone PhpDocParser).
 php/attributes/         docuccino/attributes  — dep-free PHP attributes only.
 php/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine behind
-                                                     core's TypeEngine/TypeEngineBuilder contracts
-                                                     (workers, cache). DEV-ONLY install.
+                                                     core's TypeEngine/TypeEngineBuilder contracts.
+                                                     In-process, one container per build.
+                                                     DEV-ONLY install.
 php/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
 spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).
