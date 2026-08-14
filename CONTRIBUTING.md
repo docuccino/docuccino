@@ -22,6 +22,26 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 package or area: `feat(laravel): …`, `fix(core): …`, `refactor(inference-phpstan): …`,
 `docs(website): …`, `chore(repo): …`. Do **not** add `Co-Authored-By` trailers.
 
+Pull requests are **squash-merged, and the squash subject is the pull request title** — so the title,
+not your individual commits, is the message that lands on `main`, and the only thing the changelog
+generator ever reads. A `Conventional PR title` check validates it on every edit:
+
+- A type from `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
+  `test`.
+- A scope from the allow-list, or none at all: `core`, `attributes`, `laravel`,
+  `inference-phpstan` are the packages; `repo`, `website` and `ci` map to no package. Anything else
+  fails — the scope decides which package's changelog an entry lands in, so it cannot be freeform.
+- A breaking change needs **both** halves: `!` before the colon *and* a `BREAKING CHANGE:` footer in
+  the body saying what breaks. Either alone fails, because either alone is how a breaking change
+  lands as a routine entry.
+
+Fix a red check by editing the title (or body) — it re-runs itself. Check a title before you open
+anything with `composer lint:pr-title -- --title='feat(core): …'`.
+
+`feat`, `fix`, `perf` and anything breaking become changelog entries. `php/*/CHANGELOG.md` and the
+site's [changelog page](website/src/content/docs/changelog.md) are **generated** by
+`tools/changelog.php` — never edit them; fix the commit message.
+
 ## Submitting changes
 
 `main` is protected: **every change lands through a pull request**, including a maintainer's own.
@@ -29,8 +49,9 @@ Direct pushes to `main` are rejected by a repository ruleset, and there is no ad
 
 1. Branch from `main` (fork first if you do not have write access).
 2. Commit your work — conventional message, signed off (`git commit -s`).
-3. Open a pull request against `docuccino/docuccino`.
-4. Wait for the **`CI gate`** check to pass, then merge.
+3. Open a pull request against `docuccino/docuccino`, with a **conventional title**: it is the
+   message that lands.
+4. Wait for the **`CI gate`** and **`Conventional PR title`** checks to pass, then squash-merge.
 
 `CI gate` is a single aggregate check that fails unless *every* CI job succeeded — the quality
 matrix across PHP 8.3/8.4/8.5 plus the prefer-lowest and PHPStan-minor legs, the UIR schema drift
