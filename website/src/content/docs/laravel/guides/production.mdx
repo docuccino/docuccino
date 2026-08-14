@@ -151,6 +151,8 @@ upload step reads from, and add that upload after the checks below pass.
 	      - uses: shivammathur/setup-php@v2
 	        with:
 	          php-version: '8.4'
+
+	      # Dev dependencies included, deliberately: the analysis engine is one of them.
 	      - run: composer install --no-interaction --prefer-dist
 	      - run: cp .env.example .env && php artisan key:generate
 
@@ -178,6 +180,64 @@ The [changelog](/changelog/) records what each release altered, per package.
 Ship a breaking change without the version bump your `versioning` policy requires, and `--enforce`
 fails the build — so your spec and your version number never drift apart. With `versioning: 'none'`
 the diff still prints, it just never fails.
+</Aside>
+
+### Caching the build in CI
+
+A docs job re-analyzes a mostly-unchanged application on every pull request, which is exactly what the
+[fragment cache](/laravel/guides/speeding-up-builds/) is for. Restore one directory between runs and
+the job rebuilds only the operations the branch touched — and when the branch touches none of them, it
+never starts the analyzer.
+
+**Getting the cache key exactly right doesn't matter here**, which is unusual enough to say plainly.
+Every stored fragment carries a content hash of each file it was built from, and every lookup
+re-verifies all of them. A restored cache that turns out not to match the checkout produces *misses* —
+never a wrong document — so a generous `restore-keys` prefix is safe. Reuse yesterday's cache, another
+branch's cache, or nothing at all: the worst case is the full build you'd have run anyway.
+
+<Steps>
+
+1. **Let the environment turn it on**, so only CI (and whoever wants it locally) pays for a store:
+
+   ```php
+   // config/docuccino.php
+   'cache' => [
+       'enabled' => env('DOCUCCINO_CACHE', false),
+   ],
+   ```
+
+2. **Cache `storage/docuccino`.** That one directory holds everything Docuccino writes for its own
+   use — the fragments, and the analyzer's compiled container and scratch files — so one cache entry
+   covers the lot:
+
+   ```yaml
+   # .github/workflows/api-docs.yml → jobs.spec, alongside the steps above
+   env:
+     DOCUCCINO_CACHE: true
+
+   steps:
+     # Restore before the artisan commands; the post-job step saves it again.
+     - uses: actions/cache@v4
+       with:
+         path: storage/docuccino
+         key: docuccino-${{ hashFiles('composer.lock') }}-${{ github.sha }}
+         restore-keys: |
+           docuccino-${{ hashFiles('composer.lock') }}-
+           docuccino-
+   ```
+
+   Folding `composer.lock` into the key is a convenience, not a correctness measure: a dependency
+   upgrade invalidates every fragment anyway, so this just avoids carrying a store that can no longer
+   hit.
+
+</Steps>
+
+<Aside type="caution" title="Don't prune dev dependencies in this job">
+The example above runs a plain `composer install` on purpose. `--no-dev` removes
+`docuccino/inference-phpstan`, and without the engine the job produces a **thin** document — no
+inferred request or response schemas — plus an `engine.not-installed` warning. The saving is a few
+seconds of `composer install`; the cost is most of your spec. Keep `--fail-on=warning` and that
+mistake fails the build instead of landing quietly.
 </Aside>
 
 ### What to commit

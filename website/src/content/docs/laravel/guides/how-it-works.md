@@ -150,7 +150,13 @@ there it's yours to commit, diff, and publish — see [Deploying to production](
 ## Rebuilds
 
 A full build re-analyzes every route, which on a large application is the slow part. Turn on the
-fragment cache (`cache.enabled`) and Docuccino stores each operation's result keyed by the route,
-your config, the resolved extensions, and a content hash of every file the analysis actually read.
-Edit one controller and only that operation is rebuilt; change a file it depends on three hops away
-and the key changes too, so a stale fragment can't survive.
+fragment cache (`cache.enabled`) and Docuccino stores each operation's result keyed by the route —
+its name, URI, action and middleware — your config, the resolved extensions, the build environment
+(which engine is installed and how it's configured, plus your `composer.lock`), and a content hash of
+every file the analysis actually read. Edit one controller and only that operation is rebuilt; rename
+a route, install the engine, upgrade a package, or change a file the analysis reached three hops away,
+and the key changes too, so a stale fragment can't survive. If you ever want to start over,
+[`docuccino:clear --fragments`](/laravel/reference/commands/#docuccinoclear) empties the store.
+
+[Speeding up builds](/laravel/guides/speeding-up-builds/) has the rest: what a warm build skips, what
+invalidates a fragment, and when the cache isn't worth turning on.

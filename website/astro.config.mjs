@@ -135,7 +135,8 @@ export default defineConfig({
 				},
 				{
 					// Ordered by when a reader needs them: fix the output, look at it, split it, add
-					// prose, ship it, and — when it goes wrong — troubleshoot.
+					// prose, ship it, make it fast, and — when it goes wrong — troubleshoot. Build
+					// speed follows production because its CI recipe extends the job that page builds.
 					label: 'Guides',
 					items: [
 						{ label: 'Customizing the output', slug: 'laravel/guides/customizing-output' },
@@ -143,6 +144,7 @@ export default defineConfig({
 						{ label: 'Multiple documents', slug: 'laravel/guides/multiple-documents' },
 						{ label: 'Adding your own pages', slug: 'laravel/guides/narrative-content' },
 						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
+						{ label: 'Speeding up builds', slug: 'laravel/guides/speeding-up-builds' },
 						{ label: 'Troubleshooting', slug: 'laravel/guides/troubleshooting' },
 					],
 				},
