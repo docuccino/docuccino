@@ -1,8 +1,6 @@
 ---
 title: Customizing the generated documentation
 description: When inference isn't quite right, choose the right tool — an attribute at the source, a standards-based OpenAPI Overlay, or a document-wide policy — and apply it with worked examples.
-sidebar:
-  order: 4
 ---
 
 import { Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
@@ -287,6 +285,94 @@ properties everywhere they appear, rather than one target at a time.
 [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) is better: it can't be forgotten when
 the field moves, and it applies to every document at once.
 </Aside>
+
+### Vary one response from a shared component
+
+One error Data class serving every status is a good design, and Docuccino documents it as one
+component every error response `$ref`s. That's exactly what you want — right up to the status that
+carries a little more. A `ProblemDetailsData` used for `403`, `404` and `422` has an `errors` member
+that only `422` ever fills, so it's `#[Hidden]`; now `422` under-documents itself.
+
+`#[Hidden]` can't help here: it's document-wide, because a class is one component (see
+[`#[Hidden]`](/laravel/reference/attributes/#hidden) for the alternatives, and prefer them when you own
+the class — the [Problem Details preset](/laravel/documenting/errors/#the-problem-details-preset-opt-in)
+already emits this exact shape, and a dedicated `ValidationProblemData` is honest on every status). When
+you'd rather keep one class and correct the document, an overlay merges the extra member onto that one
+response:
+
+<Tabs>
+	<TabItem label="Overlay">
+	```yaml
+	overlay: 1.0.0
+	info:
+	  title: Validation errors on 422
+	  version: 1.0.0
+	actions:
+	  - target: "$.paths['/api/v1/invoices'].post.responses['422'].content['application/json']"
+	    description: ProblemDetailsData hides `errors`; only 422 carries it.
+	    update:
+	      schema:
+	        properties:
+	          errors:
+	            type: object
+	            additionalProperties: { type: array, items: { type: string } }
+	        required: [errors]
+	  - target: "$.paths['/api/v1/invoices/{invoice}'].put.responses['422'].content['application/json']"
+	    description: Same, for the update endpoint.
+	    update:
+	      schema:
+	        properties:
+	          errors:
+	            type: object
+	            additionalProperties: { type: array, items: { type: string } }
+	        required: [errors]
+	```
+	</TabItem>
+	<TabItem label="Result">
+	```json
+	"422": {
+	  "description": "Unprocessable Entity",
+	  "content": {
+	    "application/json": {
+	      "schema": {
+	        "$ref": "#/components/schemas/ProblemDetailsData",
+	        "properties": {
+	          "errors": {
+	            "type": "object",
+	            "additionalProperties": { "type": "array", "items": { "type": "string" } }
+	          }
+	        },
+	        "required": ["errors"]
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The shared component is untouched — every other status still documents the class exactly as written.
+The members sitting beside the `$ref` intersect with it, which is how OpenAPI 3.2 and 3.1 read a
+schema (they're JSON Schema 2020-12). Emitting **OpenAPI 3.0** — where a `$ref` sibling is ignored —
+Docuccino moves the `$ref` into an `allOf` wrapper so the added member survives, and tells you it did
+with a `downlevel.ref-siblings` info diagnostic.
+
+Two limits to plan around, both from the [target selector](#the-target-selector):
+
+- **One action per operation.** There are no wildcards and no recursive descent, so ten operations
+  that can `422` need ten actions. That's deliberate — every target names exactly what it changes, and
+  a target that stops matching warns instead of quietly hitting something else.
+- **Target the operation's response, not the shared error component.** When several operations state
+  the same error body, Docuccino hoists it into `components.responses.Error422` — but that hoist runs
+  *after* overlays, so `$.components.responses.Error422` matches nothing at overlay time and you'd get
+  an `overlay.target-missing` warning. Patch the per-operation response, as above, and let the hoist
+  run on the corrected document: the patched `422`s share one component and the untouched ones another,
+  never one body merged wrong.
+
+Past a handful of operations, stop writing actions and write a
+[`DocumentTransformer`](#document-wide-changes) instead: it runs after assembly *and* after overlays
+with the finished document in hand, so "for every `422` whose schema `$ref`s `ProblemDetailsData`, add
+`errors`" becomes a few lines of PHP that never goes stale as routes come and go.
 
 ## Document-wide changes
 

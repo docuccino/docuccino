@@ -1,8 +1,6 @@
 ---
 title: Error responses
 description: Document 4xx and 5xx responses automatically — from your real exception handling, framework defaults, or the RFC 9457 preset.
-sidebar:
-  order: 5
 ---
 
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
@@ -259,9 +257,16 @@ per exception.
 
 A renderer that hands the body to `spatie/laravel-data` —
 `ProblemDocumentData::notFound($e)->toProblemResponse($request)` — is read through: `toResponse()` and
-`transform()` are modelled, so the response is documented as that Data class rather than losing its
+`transform()` are modeled, so the response is documented as that Data class rather than losing its
 schema to a bare `JsonResponse`. See
 [Data classes as error bodies](/laravel/packages/spatie-data/#data-classes-as-error-bodies).
+
+One class is one component, so a single shared error Data class documents one shape for every status
+that uses it — there's no per-status variant of it, and [`#[Hidden]`](/laravel/reference/attributes/#hidden)
+hides a property everywhere or nowhere. When `422` carries validation errors the other statuses don't,
+either turn on the [Problem Details preset](#the-problem-details-preset-opt-in) — which already grafts
+`errors` onto the shared shape for `422` alone — or give `422` its own Data class and point the actions
+that can raise it at that class with [`#[Response(status: 422, type: …)]`](/laravel/reference/attributes/#response).
 
 ## The Problem Details preset (opt-in)
 

@@ -1,8 +1,6 @@
 ---
 title: Installation
 description: Install Docuccino in a Laravel app, publish its config, and export your first OpenAPI document.
-sidebar:
-  order: 1
 ---
 
 import { Steps, Card, CardGrid, FileTree, Aside, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -58,7 +56,12 @@ accurate document — with no annotations to start.
    </Tabs>
 
    The engine is the same package either way: it runs PHPStan with Larastan's model and container
-   knowledge to read the real types in your code — a build-time job, like your test suite.
+   knowledge to read the real types in your code — a build-time job, like your test suite. It never
+   executes your application; [How it works](/laravel/guides/how-it-works/) walks the whole pipeline.
+
+   If Composer refuses to resolve here, it's almost always a shared dependency that a framework
+   upgrade moved ahead of Docuccino's constraint —
+   [Dependency conflicts](/laravel/guides/troubleshooting/#dependency-conflicts) has the fix.
 
 2. Publish the config file — optional, but you'll want it soon:
 

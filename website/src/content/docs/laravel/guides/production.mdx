@@ -1,8 +1,6 @@
 ---
 title: Deploying to production
 description: Ship your docs the safe way — generate in CI, commit the artifact, serve it without rebuilding, gate the viewer, and catch breaking changes before they merge.
-sidebar:
-  order: 2
 ---
 
 import { Steps, Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -38,6 +36,10 @@ serve it without re-analyzing, gate who can see it, and let CI catch breaking ch
 
 Generation is safe to run in any environment, including a CI container with no services attached:
 the pipeline reads types, so it makes no database queries, sends no mail, and dispatches no jobs.
+Booting your app to read its route table is the one thing that does touch your drivers, so if a
+Redis, database or queue exception fires before analysis starts, point those drivers at their
+in-memory equivalents — [the app won't boot during
+export](/laravel/guides/troubleshooting/#the-app-wont-boot-during-export) has the one-line fix.
 
 ## Production needs no analysis toolchain
 
@@ -48,7 +50,7 @@ a JSON-Schema validator, a YAML parser and two small parsing libraries. Serving 
 `cache` then costs one file read.
 
 That is also why the export belongs in CI: the machine that has your dev dependencies is the one that
-can analyse your code. A production box that only serves the committed document never needs to.
+can analyze your code. A production box that only serves the committed document never needs to.
 
 This guide assumes your app serves the viewer. If it doesn't — because you read the docs only in
 development, or you publish the spec to an external host — install the adapter as a dev dependency too
@@ -60,7 +62,8 @@ still applies; only the viewer sections stop mattering. See the
 An export without the engine installed still produces a document — from docblocks, attributes,
 validation rules and middleware — and warns with `engine.not-installed`. If a CI job prunes dev
 dependencies before exporting, that's the warning you'll see. Pair it with `--fail-on=warning` and it
-can't slip through.
+can't slip through, and see [the document is
+thin](/laravel/guides/troubleshooting/#the-document-is-thin) for the install that restores it.
 </Aside>
 
 ## Choosing a viewer source
@@ -166,6 +169,10 @@ upload step reads from, and add that upload after the checks below pass.
 on a clean checkout without a second build. The final `git diff --exit-code` is the step that keeps
 contributors honest: because identical code produces identical bytes, a stale committed spec fails
 the build.
+
+That step is also how a Docuccino upgrade announces itself. Your code hasn't changed, so any byte
+that moves came from the new release — regenerate, read the diff, and commit it as its own change.
+The [changelog](/changelog/) records what each release altered, per package.
 
 <Aside type="tip">
 Ship a breaking change without the version bump your `versioning` policy requires, and `--enforce`

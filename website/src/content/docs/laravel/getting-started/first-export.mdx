@@ -1,8 +1,6 @@
 ---
 title: Your first export
 description: Run docuccino:export, see what it read from your code, open it in the built-in viewer, and gate CI on it.
-sidebar:
-  order: 2
 ---
 
 import { Steps, Tabs, TabItem, Aside, Badge, LinkCard, CardGrid } from '@astrojs/starlight/components';
@@ -146,6 +144,9 @@ Add a `StoreInvoiceRequest` to a `store()` action and its `rules()` become the r
 `InvoiceNotFoundException` and a `404` appears with the shape your handler really returns. That's the
 whole loop — write ordinary Laravel, get documentation.
 
+[How it works](/laravel/guides/how-it-works/) is the mechanism behind that table: what Docuccino
+reads at each stage of the pipeline, and which source wins when two of them describe the same field.
+
 ## Open the viewer
 
 The built-in viewer serves an interactive [Scalar](https://scalar.com) reference straight from your
@@ -276,6 +277,10 @@ php artisan docuccino:export --fail-on=warning
 whose analysis fails still leaves a stub operation and a diagnostic behind rather than aborting the
 run, so one bad controller never costs you the rest of your docs. Set `on_route_error` to `'omit'` if
 you'd rather such a route vanished from the document than appeared as a stub.
+
+If your own export came out thinner than the one above — parameters but no response bodies, an
+`engine.not-installed` warning, or nothing at all — [Troubleshooting](/laravel/guides/troubleshooting/)
+starts from the symptom and works back to the cause.
 
 ## Where to go next
 

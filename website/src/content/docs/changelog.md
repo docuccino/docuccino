@@ -9,9 +9,20 @@ by hand, fix the commit message instead.
 Every user-facing change across the four packages. The bold prefix is the commit's scope:
 **core**, **attributes**, **laravel** and **inference-phpstan** are the packages, and the
 rest (**website**, **repo**, **ci**) ship no package. Entries begin after v0.1.2; older history
-is in the [monorepo](https://github.com/docuccino/docuccino) git log.
+is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
+
+## v0.3.0
+
+### Breaking changes
+
+- **core**: carry node identities into exported OpenAPI so the diff stays semantic ([#18](https://github.com/docuccino/docuccino/pull/18))
+  - `docuccino:export` writes an `x-docuccino-id` member on every node of an OpenAPI artifact. Re-exporting an existing artifact shows that as a one-time diff; pass `--drop-ids` for the previous bytes. Emitting through the library is unaffected — `OpenApi32Emitter::emit()` still drops every Docuccino member by default.
+
+### Bug fixes
+
+- **laravel**: illustrate an error member with the value its schema states ([#16](https://github.com/docuccino/docuccino/pull/16))
 
 ## v0.2.1
 

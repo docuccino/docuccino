@@ -1,8 +1,6 @@
 ---
 title: Laravel Actions
 description: Document lorisleiva/laravel-actions classes used as controllers — the real handle()/asController() signature, request body, authorization response, and jsonResponse() shape.
-sidebar:
-  order: 8
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -22,12 +20,13 @@ method, so everything is read from the real signature rather than the trait's ge
 
 - **The operation summary** comes from the resolved method's docblock.
 - **The request body** comes from the action's own `rules()` method, turned into schema constraints
-  through the same validation pipeline Form Requests use.
+  through the same [validation pipeline](/laravel/documenting/requests/) Form Requests use.
 - **A `403` response** is documented whenever the action defines `authorize()`, rendered in the same
   style as the rest of your error responses (framework defaults, or the Problem Details preset).
-- **The response body** is inferred from the resolved method's return type — or, when the action
-  defines a `jsonResponse()` transformer, from *that* method's return type (see below), because that
-  is what a JSON client actually receives.
+- **The response body** is inferred from the resolved method's return type, by the same rules as
+  [any other action](/laravel/documenting/responses/) — or, when the action defines a
+  `jsonResponse()` transformer, from *that* method's return type (see below), because that is what a
+  JSON client actually receives.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -208,7 +207,7 @@ There's nothing to configure. The only switch is the shared `enabled` opt-out, p
 'laravel_actions' => ['enabled' => false],
 ```
 
-With it off, the `rules()` body, the `authorize()` `403`, the `jsonResponse()` redirect and the
+With it off, the `rules()` body, the `authorize()` `403`, the `jsonResponse()` transformer and the
 `text/html` note are all omitted. Operations still resolve to the dispatched method, so summaries and
 return types stay correct. See the
 [`integrations` reference](/laravel/reference/configuration/#integrations).

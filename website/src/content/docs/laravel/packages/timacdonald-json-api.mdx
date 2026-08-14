@@ -1,8 +1,6 @@
 ---
 title: JSON:API resources (timacdonald/json-api)
 description: Document timacdonald/json-api resources as JSON:API documents — identical output to Laravel's first-party JSON:API resources, plus the include and fields query parameters.
-sidebar:
-  order: 10
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -53,12 +51,13 @@ and `fields` query parameters, and the response is served as the JSON:API media 
 	<TabItem label="Generated OpenAPI">
 	```json
 	"parameters": [
-	  { "name": "fields", "in": "query", "required": false,
+	  { "name": "fields", "in": "query",
 	    "description": "Sparse fieldsets per resource type (fields[TYPE]=field1,field2).",
-	    "style": "deepObject", "explode": true,
+	    "required": false, "style": "deepObject", "explode": true,
 	    "schema": { "type": "object", "additionalProperties": { "type": "string" } } },
-	  { "name": "include", "in": "query", "required": false,
+	  { "name": "include", "in": "query",
 	    "description": "Comma-separated list of relationships to include as compound-document data.",
+	    "required": false,
 	    "schema": { "type": "string" } }
 	],
 	"responses": {

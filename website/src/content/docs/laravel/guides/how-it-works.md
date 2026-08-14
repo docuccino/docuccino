@@ -1,8 +1,6 @@
 ---
 title: How it works
 description: The Docuccino pipeline — route discovery, static analysis that never runs your code, the UIR, emitters, and the viewer — plus the precedence ladder that decides which source wins.
-sidebar:
-  order: 1
 ---
 
 Docuccino turns your application into documentation in five stages. The most important thing to know
@@ -51,7 +49,7 @@ This is the heart of Docuccino, and the reason it's safe to run anywhere. An emb
 engine (PHPStan + Larastan) reads the **types** in your code — controller return types, validation
 rules, resource `toArray()` shapes, exception handlers, query builders — and infers the contract. It
 ships as a separate dev dependency, `docuccino/inference-phpstan`, because analysis is a build-time
-job: production serves the finished document with no analyser installed.
+job: production serves the finished document with no analyzer installed.
 
 It **never runs your code**. No controller is invoked, no database is touched, no queue job fires, no
 email is sent. That's the trust argument: documenting a payment endpoint can't charge a card, and
@@ -66,7 +64,8 @@ own code — `engine.project_paths` says where to descend, and `vendor/` is neve
 
 Each route is analyzed in isolation, so one route that can't be understood never breaks the build.
 It leaves behind a skeleton operation and an error diagnostic (or is dropped entirely, with
-`on_route_error: 'omit'`).
+`on_route_error: 'omit'`). [Reading diagnostics](/laravel/guides/troubleshooting/#reading-diagnostics)
+covers what each code means and which ones are worth chasing.
 
 ## 3. UIR
 
@@ -155,9 +154,3 @@ fragment cache (`cache.enabled`) and Docuccino stores each operation's result ke
 your config, the resolved extensions, and a content hash of every file the analysis actually read.
 Edit one controller and only that operation is rebuilt; change a file it depends on three hops away
 and the key changes too, so a stale fragment can't survive.
-
-:::note
-You never *have* to think about these stages to use Docuccino — install it and export. But knowing the
-pipeline never runs your code is worth the two minutes: it's why the output is trustworthy and
-reproducible.
-:::

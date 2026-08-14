@@ -46,7 +46,7 @@ The tools differ at the root, and it colors everything else:
 | Authoring model | Annotate, with partial inference | Infer from code; attributes are overrides |
 | Executes your application code | Yes, for response calls | Never — static analysis only |
 | Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
-| Query params from query builders | Annotate them | Inferred, traced several calls deep |
+| Query params from query builders | Annotate them | Inferred, traced several calls deep, including into the method that builds each allow-list entry |
 | Example responses | Captured from real calls and factories | Inferred, or authored with `#[Example]` |
 | Postman collection | Yes | No — import the OpenAPI file |
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
@@ -166,7 +166,7 @@ disappears on migration:
 <CardGrid>
 	<Card title="Body & query parameters" icon="puzzle">
 		`@bodyParam` / `@queryParam` covered by your validation rules, plus query parameters read
-		straight out of your Spatie Query Builder calls.
+		straight out of your Spatie Query Builder allow-lists — wherever in your code they are built.
 	</Card>
 	<Card title="Response fields & resources" icon="document">
 		`@responseField`, `@apiResource*` become typed, described fields straight from your API Resources,
@@ -195,7 +195,7 @@ biggest win is deletion.
 | `@hideFromAPIDocumentation` | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Also `#[Internal]` and `#[InDocs]` for finer control. |
 | `@header` / `#[Header]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | Direct swap. |
 | `@urlParam` / `#[UrlParam]` | **Delete** — inferred; [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to add a format | Route-model binding gives the type. |
-| `@queryParam` / `#[QueryParam]` | **Delete** — inferred; [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) to add one | Query builders are traced through your helper methods, not just the action body. |
+| `@queryParam` / `#[QueryParam]` | **Delete** — inferred; [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) to add one | Query builders are traced through your helper methods, into the body of the method that builds each allow-list entry, and into a builder subclass's constructor — not just the action body. |
 | `@bodyParam` / `#[BodyParam]` | **Delete** — inferred; [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) patches one property | FormRequests, inline `validate()`, Spatie Data. |
 | Validation-rule comments (`// … Example: x`) | [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) for the ones worth keeping | The rules themselves are read; the prose beside them isn't. Where a field needs a description or example, patch that one property. (A comment on a Spatie Query Builder `allowedFilters` entry *is* read — see [Query Builder](/laravel/packages/query-builder/#a-comment-becomes-the-description).) |
 | `@response` / `#[Response]` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
@@ -259,7 +259,7 @@ carefully before you switch — for some teams they're the whole reason to stay.
 - **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
   languages. Docuccino's viewer is Scalar: configurable, but not a template layer you own. (Standalone
   prose like Scribe's `intro.md` / `auth.md` *is* covered — Docuccino compiles a folder of Markdown
-  guides into the document; see [Guides, pages & prose](/laravel/guides/narrative-content/).)
+  guides into the document; see [Adding your own pages](/laravel/guides/narrative-content/).)
 - **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch for documenting anything at
   all, including third-party package routes (Passport, Fortify) you have no code access to. In
   Docuccino that's an OpenAPI Overlay or a `DocumentTransformer` — see

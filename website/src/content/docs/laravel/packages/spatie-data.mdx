@@ -1,8 +1,6 @@
 ---
 title: Spatie Data
 description: Document spatie/laravel-data classes as request bodies and reusable response schemas — honoring Hidden, Optional, Lazy, name mapping, wrapping, rules() overrides, request partials, and collections.
-sidebar:
-  order: 1
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -349,7 +347,7 @@ is documented as a free comma-separated string.
 ### Data classes as error bodies
 
 `Data::toResponse()` declares a bare `JsonResponse` and `transform()` a bare `array`, so a renderer that
-hands its error body to spatie would lose the whole schema on the way out. Both are modelled, so it
+hands its error body to spatie would lose the whole schema on the way out. Both are modeled, so it
 doesn't:
 
 <Tabs>
@@ -459,3 +457,12 @@ One case is worth naming: a **custom name mapper** Docuccino doesn't recognize c
 without running it, so those keys are documented unmapped and the build emits a
 `spatie-data.unknown-mapper` info diagnostic naming the class. Rename the keys with an explicit
 `#[MapName('…')]` if it matters.
+
+The other is the **request side of pagination**. A `PaginatedDataCollection` or
+`CursorPaginatedDataCollection` return documents the whole envelope from the type alone — you never
+annotate a paginated response. It says nothing about the request, though: the type tells Docuccino
+what comes back, not which query keys the code that built it read. When the paginating happens inside
+a query builder, [Spatie Query Builder](/laravel/packages/query-builder/) recovers `page` and
+`per_page` from the trace; when it happens anywhere else — a helper paginating an in-memory
+collection, say — declare the parameters with
+[`#[QueryParameter]`](/laravel/documenting/requests/#pagination-docuccino-cant-see).

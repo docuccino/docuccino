@@ -195,7 +195,7 @@ Points at a markdown tree compiled into `x-docuccino.content` (pages + a compile
 Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` +
 `nav.{group,order,hidden,type,ref}`) overrides. `::operation{...}` / `::schema{...}` directives are
 resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
-[Guides, pages & prose](/laravel/guides/narrative-content/) for the full workflow, or the
+[Adding your own pages](/laravel/guides/narrative-content/) for the full workflow, or the
 [UIR content layer](/uir/#content-layer) for how it lives in the raw document.
 
 ### `overlays`
@@ -232,7 +232,7 @@ from "API changed".
 
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). Read at [`RepresentationPolicy`](/laravel/packages/query-builder/), drives the deepObject/bracketed rendering. |
+| `filters` | `bracketed` \| `deepObject` | `bracketed` | Query Builder filter/field style: one flat `filter[status]` / `fields[type]` parameter each (`bracketed`), or a single `filter` / `fields` object parameter with `style: deepObject` (`deepObject`). See [Spatie Query Builder](/laravel/packages/query-builder/). |
 | `lists` | `comma` \| `array` | `comma` | Query Builder `sort` / `include` list style: a single comma-separated string (`comma`), or an exploded array parameter with `style: form, explode: false` and an `items` enum (`array`). |
 | `nullable` | `type-array` \| `anyof` | `type-array` | How nullability is expressed: `type: ["string","null"]` vs a `{type: null}` `anyOf` branch (legacy tooling). |
 | `operation_id` | `route-name` \| `controller-method` | `route-name` | `operationId` strategy. |
@@ -293,7 +293,7 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 | `sanctum` | `modes` | `['token','stateful']` | Which Sanctum schemes to expose. |
 | `sanctum` | `cookie` | `session.cookie` | Stateful cookie name. |
 | `passport` | `url` | `app.url` | oauth2 flow base URL. |
-| `query_builder` | `pagination_terminals` | `[]` | Extra method names that count as paginating terminals during the trace. |
+| `query_builder` | `pagination_terminals` | `[]` | Extra method names that count as paginating terminals during the trace — [on a query-builder receiver only](/laravel/packages/query-builder/#custom-pagination-terminals). |
 | `permission` | `enabled` | `false` | Opt in to document `role:`/`permission:` requirements (`x-permissions`). Off by default so authorization names are not published unintentionally. |
 
 ### `export`
@@ -323,7 +323,7 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
-| `gate` | `null` | Gate ability guarding the HTML + `.json` routes. `null` = available only in the `local` environment. The static asset route is never gated. |
+| `gate` | `null` | Gate ability guarding all three routes — the HTML page, the `.json` spec and the asset. `null` = available only in the `local` environment. |
 | `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
 | `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
 | `cdn` | `false` | `true` loads Scalar from jsDelivr instead of the local bundle. |
@@ -382,7 +382,7 @@ under an innocent member name:
 
 | Recognized shape | Matches |
 | --- | --- |
-| A PEM private key | `-----BEGIN PRIVATE KEY-----` and its labelled variants |
+| A PEM private key | `-----BEGIN PRIVATE KEY-----` and its labeled variants |
 | An AWS access key id | `AKIA…`, `ASIA…` |
 | A GitHub token | `ghp_…`, `github_pat_…` |
 | A live Stripe secret key | `sk_live_…`, `rk_live_…` |

@@ -261,6 +261,18 @@ public string $internalRiskScore;
 accepted in the request is intentional (and the data-leakage lint surfaces it) — to drop a property
 from the documented **request** body, use `#[HiddenFromRequest]` below.
 
+**`#[Hidden]` is document-wide.** A class is one component, so a hidden property is hidden in every
+response that references it — there's no per-status or per-operation form of the attribute, and no
+argument that would add one. If a shared error class carries a property that belongs on `422` but not
+on `403`, hiding it is the wrong lever. Reach for one of these instead:
+
+| You want | Reach for |
+| --- | --- |
+| Laravel's stock `errors` member on `422` only, on a shared error shape | The [Problem Details preset](/laravel/documenting/errors/#the-problem-details-preset-opt-in) — it already emits the `allOf` of the shared problem schema plus `errors`. |
+| Your own class, correct on every status | A dedicated type for the odd status, plus [`#[Response(status: 422, type: …)]`](#response) on the actions that return it. |
+| One class, the property merely not always present | `array\|Optional $errors` on a Data class — documented, but not `required`. |
+| A spec-side one-off you don't want in the code | [Vary one response from a shared component](/laravel/guides/customizing-output/#vary-one-response-from-a-shared-component) with an Overlay. |
+
 ### `#[HiddenFromRequest]`
 
 Targets `PROPERTY`. Marker (no constructor).
@@ -291,7 +303,8 @@ public function debug(): JsonResponse { /* … */ }
 
 Targets `CLASS | METHOD | FUNCTION | PROPERTY`. Marker. On an action or controller it sets
 `x-internal: true` on the operation — the operation stays in the document, flagged, which is the
-convention SDK generators and doc filters read to keep it out of public output.
+convention SDK generators and doc filters read to keep it out of public output. The `PROPERTY` target
+is accepted but has no effect on a schema today; use [`#[Hidden]`](#hidden) to drop a property.
 
 ```php
 #[Internal]
