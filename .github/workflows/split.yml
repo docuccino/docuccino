@@ -78,7 +78,13 @@ jobs:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest
     # Forks have no SPLIT_TOKEN and must never attempt to push to the org.
-    if: github.repository == 'docuccino/docuccino'
+    #
+    # The package targets mirror `main` so a `dev-main` install stays possible; `spec` does not,
+    # because its GitHub Pages site serves spec.docuccino.app to readers — publishing an unreleased
+    # schema there would state a version of the spec nobody can depend on. It splits on tags only.
+    if: >-
+      github.repository == 'docuccino/docuccino'
+      && (matrix.package != 'spec' || startsWith(github.ref, 'refs/tags/'))
     strategy:
       fail-fast: false
       matrix:
