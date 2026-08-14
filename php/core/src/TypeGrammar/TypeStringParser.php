@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\TypeGrammar;
 
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\IntersectionT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
@@ -81,17 +83,38 @@ final class TypeStringParser
             'float', 'double', 'number' => ScalarT::float(),
             'bool', 'boolean', 'true', 'false' => ScalarT::bool(),
             'null' => new NullT,
+            // `array-key` is `int|string` — the honest answer, and what makes the key rule in
+            // mapKeyed() read `array<array-key, V>` as int-capable.
+            'array-key' => UnionT::of([ScalarT::int(), ScalarT::string()]),
             'array', 'iterable', 'list' => new UnknownT('untyped array'),
             'mixed' => new UnknownT('mixed'),
             'object' => new UnknownT('object'),
             'void', 'never', 'callable', 'scalar' => new UnknownT($name),
-            default => new ClassT($this->resolveClass($name, $imports)),
+            default => $this->classOrEnum($this->resolveClass($name, $imports)),
         };
+    }
+
+    /**
+     * An enum written in a docblock answers `EnumT` with its case names, the same as the reflection and
+     * PHPStan-type mappers — otherwise a docblock-only declaration (`@property ListingStatus $status`)
+     * would document as an object of the enum's `name`/`value` members. A name that doesn't resolve to a
+     * loadable enum — a short name with no import context to qualify it, say — stays a `ClassT`.
+     */
+    private function classOrEnum(string $fqcn): DType
+    {
+        return enum_exists($fqcn) ? new EnumT($fqcn, EnumReflection::names($fqcn)) : new ClassT($fqcn);
     }
 
     private function mapGeneric(GenericTypeNode $node, ?ImportContext $imports): DType
     {
         $base = strtolower($node->type->name);
+
+        // A bounded or masked int is still an int, and the bounds document nothing — so settle these
+        // before the arguments are mapped, since `int<0, max>` carries a `max` that means nothing alone.
+        if ($base === 'int' || $base === 'int-mask' || $base === 'int-mask-of') {
+            return ScalarT::int();
+        }
+
         $args = array_map(fn (TypeNode $t): DType => $this->map($t, $imports), $node->genericTypes);
 
         if (($base === 'list' || $base === 'non-empty-list') && count($args) === 1) {
@@ -100,13 +123,40 @@ final class TypeStringParser
 
         if (($base === 'array' || $base === 'iterable' || $base === 'non-empty-array')) {
             return match (count($args)) {
+                // One argument is `array<array-key, V>` written short, which mapKeyed() also calls a list.
                 1 => new ListT($args[0]),
-                2 => new MapT($args[0], $args[1]),
+                2 => $this->mapKeyed($args[0], $args[1]),
                 default => new UnknownT('untyped array'),
             };
         }
 
         return new ClassT($this->resolveClass($node->type->name, $imports), array_values($args));
+    }
+
+    /**
+     * A keyed `array<K, V>`. Only a string key makes a PHP array serialize to a JSON object, so an
+     * int-capable key — `int`, `array-key`, an int literal, `int|string` — is a JSON array and yields a
+     * `ListT`; every other key, including one we can't reason about, stays a `MapT`.
+     */
+    private function mapKeyed(DType $key, DType $value): DType
+    {
+        return self::intKeyed($key) ? new ListT($value) : new MapT($key, $value);
+    }
+
+    private static function intKeyed(DType $key): bool
+    {
+        if ($key instanceof UnionT) {
+            foreach ($key->members as $member) {
+                if (self::intKeyed($member)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return ($key instanceof ScalarT && $key->scalar === ScalarT::INT)
+            || ($key instanceof LiteralT && $key->base() === ScalarT::INT);
     }
 
     /** Resolve a class name against the file's imports + namespace (when given), else strip a leading slash. */

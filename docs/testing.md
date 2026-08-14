@@ -88,7 +88,7 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.27%** | 93    | fully in-process-measurable                      |
+| `core`              | **94.29%** | 94    | fully in-process-measurable                      |
 | `laravel`           | **92.08%** | 91    | fully in-process-measurable                      |
 | `inference-phpstan` | **34.55%** | 34    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
@@ -129,6 +129,13 @@ only header writes between that and the return — needs php-parser and file pos
 out of the invisible half and put ~25 covered ones back, and the fully-covered `SensitiveConstant` name
 predicate added more: 783/1905 (41.10%) → 824/1929 (42.72%).
 
+`core` then ratcheted 93 → 94. Most of that headroom arrived with the worker-pool/result-cache deletion,
+which moved the result model's serialization contract from an incidental proof to a direct one; the
+type-grammar fix (docblock enums answering `EnumT`, the `array<K, V>` key rule, the analyser-prefixed
+`@var`/`@param`/`@property` tags) then added 15 statements and covered all 15, taking 4512/4786 (94.27%) to
+4527/4801 (94.29%). A dataset over every key identifier the grammar can produce, plus the unresolvable-name
+and unaccepted-tag degradations, is what makes that a real 15 rather than a lucky one.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -141,7 +148,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **93**, `laravel` **91**, `inference-phpstan` **42**.
+  an aspiration. Current floors: `core` **94**, `laravel` **91**, `inference-phpstan` **34**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

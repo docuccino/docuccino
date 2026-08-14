@@ -30,10 +30,11 @@ declare(strict_types=1);
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff,
     // the phpdoc type grammar.
-    // Ratcheted 92 → 93 at 93.18% (4384/4705): the shared-error transformer lost its example-reconciliation
-    // methods and gained its malformed-document negative paths (97/97), and the docblock reader's `@param`
-    // and `@var` readers landed fully covered (64/64).
-    'core' => 93,
+    // Ratcheted 93 → 94 at 94.29% (4527/4801): most of that headroom arrived with the engine-cache
+    // deletion, which pinned the result model's serialization contract directly; the type-grammar fix
+    // (docblock enums, the `array<K, V>` key rule, the analyser-prefixed `@var`/`@param`/`@property`
+    // tags) then landed its 15 new statements fully covered.
+    'core' => 94,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
     'laravel' => 91,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
