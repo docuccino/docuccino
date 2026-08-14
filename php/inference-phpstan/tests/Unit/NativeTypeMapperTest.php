@@ -73,12 +73,15 @@ it('degrades honestly for a type that names no shape', function (string $member,
     'no declared type at all' => ['untyped', 'no declared type'],
 ]);
 
-it('sees a resolved class where the source wrote a relative name', function (): void {
-    // PHP resolves `self` and `parent` to the real FQCN before reflection reports them, so the mapper only
-    // ever meets them as class names — `static` alone reaches it verbatim, because it isn't knowable until
-    // the call. Pinned because it's the opposite of what the source text suggests.
-    expect(probeType('self'))->toEqual(new ClassT(NativeTypeProbe::class))
-        ->and(probeType('parent()'))->toEqual(new ClassT(NativeTypeProbeBase::class));
+it('maps a relative class name however reflection reports it', function (): void {
+    // PHP 8.5 resolves `self` and `parent` to the real FQCN before reflection reports them; 8.3 and 8.4 hand
+    // them over verbatim, which is when the mapper's own `self`/`parent` labels fire. Both are correct — the
+    // mapper maps what reflection said — so this pins each version rather than asserting one is the truth.
+    // `static` reaches the mapper verbatim on every version, because it isn't knowable until the call.
+    $resolved = PHP_VERSION_ID >= 80500;
+
+    expect(probeType('self'))->toEqual($resolved ? new ClassT(NativeTypeProbe::class) : new UnknownT('self'))
+        ->and(probeType('parent()'))->toEqual($resolved ? new ClassT(NativeTypeProbeBase::class) : new UnknownT('parent'));
 });
 
 it('folds nullability into a union, and never onto a type that already admits null', function (): void {
