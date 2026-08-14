@@ -78,13 +78,7 @@ jobs:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest
     # Forks have no SPLIT_TOKEN and must never attempt to push to the org.
-    #
-    # The package targets mirror `main` so a `dev-main` install stays possible; `spec` does not,
-    # because its GitHub Pages site serves spec.docuccino.app to readers — publishing an unreleased
-    # schema there would state a version of the spec nobody can depend on. It splits on tags only.
-    if: >-
-      github.repository == 'docuccino/docuccino'
-      && (matrix.package != 'spec' || startsWith(github.ref, 'refs/tags/'))
+    if: github.repository == 'docuccino/docuccino'
     strategy:
       fail-fast: false
       matrix:
@@ -128,6 +122,8 @@ jobs:
       # token's repository list does not include this target, 403 = permission or org
       # policy refusal) instead of an opaque git authentication failure.
       - name: Initialise docuccino/${{ matrix.package }} if empty
+        # `spec` is only ever initialised by a tag run — see the branch-split step below.
+        if: "startsWith(github.ref, 'refs/tags/') || matrix.package != 'spec'"
         env:
           GH_TOKEN: ${{ secrets.SPLIT_TOKEN }}
           PACKAGE: ${{ matrix.package }}
@@ -168,8 +164,13 @@ jobs:
             --field message="chore: initialise split repository" \
             --field content="$(printf '%s' "$readme" | base64 -w0)"
 
+      # The package targets mirror `main` so a `dev-main` install stays possible. `spec` does not:
+      # its Pages site serves spec.docuccino.app to readers, and an unreleased schema there would
+      # state a version of the spec nothing can depend on. It reaches its repository on a tag only,
+      # through the step below. (The condition is per-step because `matrix` is not available to a
+      # job-level `if`.)
       - name: Split ${{ matrix.package }} (branch)
-        if: "!startsWith(github.ref, 'refs/tags/')"
+        if: "!startsWith(github.ref, 'refs/tags/') && matrix.package != 'spec'"
         uses: danharrin/monorepo-split-github-action@14e42e2437f674b8987c1f50ca3689116aea1893 # v2.4.5
         env:
           GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
