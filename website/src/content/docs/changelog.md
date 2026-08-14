@@ -13,6 +13,12 @@ is in the [monorepo](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.2.1
+
+### Bug fixes
+
+- **laravel**: document an error response under the status its body states ([#14](https://github.com/docuccino/docuccino/pull/14))
+
 ## v0.2.0
 
 ### Breaking changes
