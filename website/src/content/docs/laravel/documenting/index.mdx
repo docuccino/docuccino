@@ -1,9 +1,8 @@
 ---
-title: Supported integrations
+title: What Docuccino reads
 description: Every source Docuccino reads — the six documenting concerns, the packages it supports, how each activates, and how contributions combine.
 sidebar:
   label: Overview
-  order: 1
 ---
 
 import { Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
@@ -137,6 +136,8 @@ fallback  <  inference  <  integration  <  docblock  <  attribute  <  overlay  <
 
 So an integration's best guess is always something you can refine with a docblock or an
 [attribute](/laravel/reference/attributes/) — you're never fighting the tool.
+[How it works](/laravel/guides/how-it-works/#3-uir) takes the ladder a rung at a time, with what
+typically arrives at each one.
 
 Every contribution is recorded with its source in the document's provenance (visible in the raw
 [UIR](/uir/)), labeled by the integration that made it — for example `integration:query-builder` or

@@ -14,8 +14,10 @@ gain, what you'd give up, and exactly how to move your annotations, config and e
 <Aside type="note">
 Scramble ships as a core package plus a **Scramble PRO** add-on, and its features and annotation
 names move between versions. The Scramble columns below were read off
-[its own documentation](https://scramble.dedoc.co) in August 2026 — treat them as a map for finding
-the equivalent, not as a spec, and check the version you run. The Docuccino column is exact.
+[its own documentation](https://scramble.dedoc.co) in August 2026, and checked against the document
+Scramble 0.13.30 with Scramble PRO 0.9.5 produces for a Laravel 13 application — treat them as a map
+for finding the equivalent, not as a spec, and check the version you run. The Docuccino column is
+exact.
 </Aside>
 
 ## The shape of the difference
@@ -26,7 +28,7 @@ Both tools read your code. Where they diverge:
 | --- | --- | --- |
 | Primary artifact | An OpenAPI document | A [UIR](/uir/) document, emitted as OpenAPI 3.2, 3.1 or 3.0, JSON or YAML |
 | Analysis engine | Its own type inference over your code | An embedded PHPStan/Larastan engine, installed as a dev dependency |
-| Production install | Ships with the analyser | Adapter only — no static-analysis toolchain in `vendor/` |
+| Production install | Ships with the analyzer | Adapter only — no static-analysis toolchain in `vendor/` |
 | Interactive viewer | Yes | Yes, bundled Scalar |
 | Output stability | Regenerated on demand | Byte-stable for identical code — built to be committed and reviewed |
 | Contract checking | — | `docuccino:diff` over stable node identities, with `--enforce` gating a version policy in CI |
@@ -53,11 +55,31 @@ supported. Everything in the Docuccino column is one package.
 | Laravel Actions | ✓ | — | ✓ |
 | Spatie Query Builder filters, sorts, includes, fields | ✓ | — | ✓ |
 | …recovered when the query is assembled in a helper method | ✓ | — | ✓ |
+| …when the allow-lists live in a `QueryBuilder` subclass's constructor | ✓ | — | — |
+| Validation constraints folded into bracketed `filter[…]` parameters | ✓ | — | — |
 
 Docuccino maps 78 named Laravel rules onto schema constraints, and documents your own rule classes from
 a [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) on the class, with a `RuleTransformer`
-for anything it doesn't know. Query builders are a genuine tie — Scramble PRO follows the builder out
-of the route action too — so if that's what brought you here, expect comparable results from both.
+for anything it doesn't know.
+
+Query builders are close. Scramble PRO follows the builder out of the route action and through a query
+object's `query()` method, so the common shapes land in both. Docuccino goes on to fold the *body* of
+the method that builds an entry: a zero-argument `$this->searchFilter()` names its filter nowhere but
+inside itself, `$this->facetFilter('status', 'status')` names one only once the call site's arguments
+are bound to its parameters, and `...$this->allowedFilters()` spreads one array-returning helper into
+every entry it carries, each keeping the comment written beside it. A method with two arms has no
+single value to fold, so Docuccino declines it and names the entry in a diagnostic rather than picking
+one.
+
+The constructor row covers the shape where the query class *is* the builder: it extends `QueryBuilder`,
+declares every allow-list in its own constructor, and the action is handed it by the container and calls
+nothing but the terminal. No call in that action body leads to the configuration, so Docuccino traces
+the constructor as a root of its own.
+
+The last row is the two halves meeting. Where a `Validator::make()` rule set validates
+`filter.radius_lat` as `numeric|between:-90,90`, those bounds land on the `filter[radius_lat]`
+parameter the allow-list named — one parameter carrying both facts, instead of a bare `filter[…]`
+string beside a validated field.
 
 ### Responses, models and schemas
 
@@ -69,10 +91,18 @@ of the route action too — so if that's what brought you here, expect comparabl
 | Reusable `components/schemas`, deduped and `$ref`'d | ✓ | ✓ | ✓ |
 | Pagination envelopes | ✓ | ✓ | ✓ |
 | Path parameter types from route-model binding | ✓ | ✓ | ✓ |
+| Path parameter names taken from the route definition | ✓ | — | — |
+| Bodyless statuses (`204`, `205`, `304`, `1xx`) documented without a body | ✓ | — | — |
 | JSON:API resources (`timacdonald/json-api`) | ✓ | — | ✓ |
 | …with the `include` and `fields` query parameters | ✓ | — | — |
 | Spatie JSON API Paginate parameters | ✓ | — | ✓ |
 | Polymorphic `MorphTo` → discriminated `oneOf` | ✓ | — | — |
+
+Two of those rows are about matching what the router and HTTP already decided. Where a route declares
+`{token}` and the controller receives it as `$jwt`, the documented parameter is `{token}` — the name a
+client puts in the URL. And a `204`, `205`, `304` or `1xx` response carries no body whatever the
+action's return type folds to, because HTTP forbids one; `response()->json(null, 204)` documents as an
+empty `204`, not as a `null` payload.
 
 ### Authentication and operations
 
@@ -124,7 +154,7 @@ is whether you hand-maintain its shape beside the code that produces it.
 
 Everything down to the build cache you can have either way. The rows below it are the ones worth
 weighing, because they only exist for structural reasons: output is deterministic, every node carries a
-stable identity, and the analyser is a dev dependency the adapter names by string rather than a hard
+stable identity, and the analyzer is a dev dependency the adapter names by string rather than a hard
 requirement. See [what Docuccino doesn't do](#what-docuccino-doesnt-do) for the other side of the ledger.
 
 ## What Docuccino infers for you
@@ -136,8 +166,9 @@ against:
 - **Requests** — Form Requests, inline `validate()`, and Spatie Data objects, with the full Laravel
   rule vocabulary (78 named Laravel rules) mapped to schema constraints.
 - **Query parameters** — Spatie Query Builder filters, sorts, includes, fields and pagination, traced
-  through helper methods several calls deep, so a query assembled across a few methods (or a separate
-  query object) still documents fully.
+  through helper methods several calls deep, folded out of the method that builds each entry, and read
+  from a builder subclass's constructor when the container hands your action its builder. Validation
+  rules over the same bracketed key merge onto the parameter the allow-list named.
 - **Responses** — API Resources (including conditional and closure fields), Eloquent model schemas
   from casts and `@property` docblocks, Data objects, backed enums with case descriptions, pagination
   envelopes, JSON:API resources, and polymorphic `MorphTo` returns as a discriminated `oneOf`.
@@ -272,8 +303,21 @@ on its own route, so nothing collides:
 php artisan docuccino:export --out=docs/openapi.docuccino.json
 ```
 
-Compare it against your existing Scramble output, adopt Docuccino where you're happy with what it
-produces, and remove the annotations it makes redundant as you go.
+Compare it against your existing Scramble output, then migrate in this order:
+
+1. **Move the config** — `api_path` → `documents.default.routes.include`, `info.*` and `ui.title` →
+   `documents.default.info`, `servers`, and the UI options → `documents.default.viewer`. The full map is
+   [above](#migrating-your-config).
+2. **Delete the annotations Docuccino infers** — the parameter and response annotations covered by
+   [what Docuccino infers for you](#what-docuccino-infers-for-you). Export and `docuccino:diff` against
+   the previous export after each pass; the diff tells you whether anything actually left the contract.
+3. **Translate the survivors** — the [attribute map](#migrating-your-annotations), one controller at a
+   time.
+4. **Re-home your extensions** — the [contract map](#migrating-your-extensions). Register them from any
+   service provider, in any order.
+5. **Commit the document** once the output settles, and gate CI on `docuccino:diff --enforce`.
+6. **Decommission Scramble** — remove `dedoc/scramble` (and `dedoc/scramble-pro`), `config/scramble.php`,
+   and any published Scramble views.
 
 <CardGrid>
 	<LinkCard title="Get started" href="/laravel/getting-started/" description="Install and export your first document." />

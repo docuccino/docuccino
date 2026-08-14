@@ -3,7 +3,6 @@ title: Package support
 description: The packages Docuccino understands out of the box, what each one contributes, and how to cover anything else with your own extension.
 sidebar:
   label: Overview
-  order: 0
 ---
 
 import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
@@ -68,6 +67,8 @@ Docuccino is tested against these major versions on PHP 8.3+ and Laravel 12 or 1
 | [`lorisleiva/laravel-actions`](https://laravelactions.com) | `^2.0` |
 | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | `^6.0` |
 | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | `^1.0` |
+| [`laravel/sanctum`](https://laravel.com/docs/sanctum) | `^4.0` |
+| [`laravel/passport`](https://laravel.com/docs/passport) | `^12.0`, `^13.0` |
 
 Docuccino never requires any of them: each integration sits behind a class-presence check, so an app
 without the package pays nothing and sees nothing.

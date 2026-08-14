@@ -278,7 +278,7 @@ function changelog_package_header(string $scope, string $baseline): string
 
         User-facing changes to `%s` — features, fixes, performance work and anything breaking —
         taken from the commit messages scoped `%s`. Entries begin after %s; older history is in
-        the [monorepo](%s) git log.
+        the [repository](%s) git log.
 
 
         MARKDOWN,
@@ -305,7 +305,7 @@ function changelog_aggregate_header(string $baseline): string
         Every user-facing change across the four packages. The bold prefix is the commit's scope:
         **core**, **attributes**, **laravel** and **inference-phpstan** are the packages, and the
         rest (**website**, **repo**, **ci**) ship no package. Entries begin after %s; older history
-        is in the [monorepo](%s) git log.
+        is in the [repository](%s) git log.
 
         Each package repository also carries its own `CHANGELOG.md` with just its entries.
 

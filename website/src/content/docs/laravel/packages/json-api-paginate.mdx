@@ -1,8 +1,6 @@
 ---
 title: Spatie JSON API Paginate
 description: Document spatie/laravel-json-api-paginate's page[number] / page[size] parameters and the matching paginator envelope, from jsonPaginate().
-sidebar:
-  order: 9
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -16,7 +14,7 @@ paginate with `jsonPaginate()`.
 
 Where Laravel's `paginate()` reads `page` and `per_page`, the package's `jsonPaginate()` reads the
 bracketed JSON:API form. Docuccino detects the terminal — several method calls deep, the same way it traces
-Query Builder chains — and adds the matching query parameters:
+[Query Builder](/laravel/packages/query-builder/) chains — and adds the matching query parameters:
 
 - **`page[number]`** — the page to return.
 - **`page[size]`** — items per page, defaulting to your configured `default_size` and capped at
@@ -41,10 +39,10 @@ Query Builder chains — and adds the matching query parameters:
 	<TabItem label="Generated OpenAPI">
 	```json
 	"parameters": [
-	  { "name": "page[number]", "in": "query", "required": false, "description": "Page number.",
+	  { "name": "page[number]", "in": "query", "description": "Page number.", "required": false,
 	    "schema": { "type": "integer", "default": 1, "minimum": 1 } },
-	  { "name": "page[size]", "in": "query", "required": false,
-	    "description": "Number of results per page.",
+	  { "name": "page[size]", "in": "query", "description": "Number of results per page.",
+	    "required": false,
 	    "schema": { "type": "integer", "default": 30, "minimum": 1, "maximum": 30 } }
 	]
 	```
@@ -65,8 +63,9 @@ When the action returns a **resource collection**, the `200` body is also wrappe
 | `use_simple_pagination` | Simple — no `last` link, and `meta` drops `last_page` and `total` (a simple paginator never counts the set) |
 | `use_cursor_pagination` | Cursor — `meta` carries `next_cursor` / `prev_cursor` instead of counters, and `page[cursor]` replaces `page[number]` |
 
-`jsonPaginate()` returns a standard Laravel paginator, so this is Laravel's own resource envelope —
-identical to what `paginate()` produces. The mode comes from the package's config rather than the
+`jsonPaginate()` returns a standard Laravel paginator, so this is Laravel's own
+[resource envelope](/laravel/documenting/responses/#from-your-return-type) — identical to what
+`paginate()` produces. The mode comes from the package's config rather than the
 method name, because `jsonPaginate()` is the terminal in all three cases.
 
 An action that returns something other than a resource collection still gets the query parameters;

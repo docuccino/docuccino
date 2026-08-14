@@ -87,7 +87,7 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
 interface TypeEngine {
     public function analyzeAction(ActionRef $a): ActionAnalysis;
     public function classMetadata(ClassRef $c): ClassMetadata;
-    public function trace(ActionRef $a, TraceVisitor $v): void;
+    public function trace(ActionRef $a, TraceVisitor $v): TraceReport;
 }
 final readonly class ActionRef { public string $file; public ?string $class; public string $method; public int $line; }
 final readonly class ActionAnalysis {
@@ -128,12 +128,52 @@ is `@internal` too — reachability is not the public contract.
   the ENGINE owns bounded depth, per-`class::method` memoization, cycle guard, callee
   resolution, per-file parser priming, deterministic ordering. `enterNode` returning `true`
   is a *request the engine may decline* (vendor/magic/over-budget).
+- The engine gates CALLEES, never the ROOT: an action root may legitimately sit outside `project_paths`
+  or under `vendor/` (`routes.include_vendor`), and `trace()` cannot tell an action root from one an
+  extension seeded through `RouteContext::traceFrom()`. Choosing a sound arbitrary root is the CALLER's
+  job — the adapter, which knows what it picked the root from.
 - `ConstValue` is a closed set that MUST include a **call-descriptor variant**
   `{factory, args: ConstValue[]}` — factory statics (`AllowedFilter::exact('status')`)
   must be folded at the AST level BEFORE PHPStan collapses them to a plain object type.
 - Terminal detection has two separable outputs: "reaches a paginating terminal" =
   name-match on a builder-typed receiver (works at any depth); the per-page value folds
   from the OUTERMOST terminal call's argument (lives at the call site).
+- Two OPTIONAL capabilities widen a trace, both opt-in per visitor and both still bounded by depth/file
+  budget and by "never into vendor" (`Core\Inference\`):
+  - `FollowsReturnType` on the VISITOR — descend into a non-vendor callee OUTSIDE the configured
+    project paths when the visitor recognizes its resolved return type (the modular
+    `$query->query(): InvoiceQueryBuilder` hop).
+  - `FoldsCallReturns` on the `TypeScope` handed to `enterNode` —
+    `deferReturnFold(Node\Expr $call, callable $onFolded): bool`, the value a call RETURNS as opposed
+    to the arguments it is WRITTEN with. `constantValueOf` answers the written half
+    (`AllowedFilter::exact('q')` folds because the name is a literal AT the call site); when the public
+    name lives in the callee BODY (`$this->termFilter()`, `ListFilters::status()`,
+    `...$this->allowedFilters()`) nothing at the call site can be folded and only this can answer. The
+    written-argument fold still wins wherever it succeeds — deferral runs only after it fails.
+  - Only a SINGLE UNCONDITIONAL `return <expr>;` folds (`Trace\ReturnValueFolder`: one return statement
+    AND `getStatementResult()->isAlwaysTerminating()`). A branching body would need an arm CHOSEN and
+    there is no honest choice, so the fold declines and the visitor degrades to its own diagnostic
+    (`query-builder.unresolved-entry`) — honest-permissive, as in §4a. Call-site arguments are bound to
+    parameter names (a parameter's own constant default included) and both paths share one
+    `Trace\ConstantFolder`, so a value folded inside a body reads identically to one folded at a call
+    site. One body only: a call inside it is never chased, which is also why termination needs no cycle
+    guard (`fn () => $this->itself()` simply fails to fold). The fold itself is stateless — the expensive
+    half is the per-file analysis `FileAnalyzer` already memoizes.
+  - Why DEFERRED, not answered in place: the fold has to analyse ANOTHER file, and doing that inside the
+    live `processFile` callback would nest `processNodes` (the trap below — "collect then recurse; never
+    nest `processNodes`", `Trace\Tracer`). Since 2.2 the callback scope is also a `FiberScope` that
+    resolves by suspending its fiber, so it answers only while that fiber is alive — `stableScope()` →
+    `toMutatingScope()` in the V2_2 `RuntimeAdapter`, or a retained scope throws "Cannot suspend outside
+    of a fiber". So `Tracer::queueFold()` folds the call-site arguments THERE, on the live scope, retains
+    nothing of PHPStan's, and `foldPending()` answers every request after the walk returns — inside a
+    `finally`, because a visitor that reserved a slot for the answer is owed one. Contract: `false` =
+    nothing queued (vendor / unresolvable / over budget), degrade now; `true` = EXACTLY ONE `$onFolded`
+    call before the trace returns, possibly with nulls. The returned EXPRESSION handed back belongs to
+    the callee's file: AST-readable only (a closure's `where()` column), never typed against the
+    requesting scope.
+  - Why OPT-IN per visitor: `constantValueOf` is shared. A visitor documenting rule names or rate limits
+    wants `['name' => $this->nameRules()]` to stay honestly unrecovered rather than become a fabricated
+    descriptor, so only a visitor that asks gets an answer.
 - Traps: the parser service is `PHPStan\Parser\Parser` (CachedParser), not
   `PhpParser\Parser`; re-prime `setAnalysedFiles` on both parser+resolver before EVERY
   descended file; collect descent targets and recurse AFTER the walk returns (never nest

@@ -1,8 +1,6 @@
 ---
 title: Spatie Query Builder
 description: Document Spatie Query Builder filters, sorts, includes, sparse fieldsets, and pagination automatically — recovered through your own helper methods, several calls deep.
-sidebar:
-  order: 5
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -197,7 +195,8 @@ stays a plain string. It never guesses.
 ### Filter factories (a `ListFilters`-style helper)
 
 If you funnel the recurring filter idioms through a small factory that returns an `AllowedFilter`,
-Docuccino types the filter from the **call site** — no descent into the factory body needed:
+Docuccino types the filter from the **call site** — the arguments you write there name the filter, so
+the factory body never has to be opened:
 
 ```php
 final class ListFilters
@@ -218,8 +217,64 @@ with that enum's backing values and `#[CaseDescription]` prose directly (a singl
 a scalar enum — not the `whereIn` array). With no enum argument, the filter's key is taken as the
 column and typed off the model cast (so a `boolean`/`uuid` idiom types correctly); a name that isn't a
 column — a multi-column search — stays a plain string. Spatie's own `AllowedFilter::*` factories are
-unaffected. Keep a single unconditional `return AllowedFilter::…()` in each factory method so it stays
-statically resolvable.
+unaffected.
+
+Sometimes the call site names nothing at all: the entry is built by a method, and the filter's public
+name is written inside it. Docuccino then folds what that method **returns**, with the call-site
+arguments bound to its parameters — a parameter's own constant default counts as one. Instance method or
+static, it makes no difference; what matters is where the name is written:
+
+```php
+ListQueryBuilder::for(Invoice::class)
+    ->allowedFilters(
+        $this->searchFilter(),                        // name and closure column live in the body
+        $this->columnFilter('status', 'status_code'), // the arguments bind to the parameters
+        ListFilters::status(),                        // a static helper, called with no name at all
+        ...$this->allowedFilters(),                   // an array helper: one entry per item
+    )
+    ->allowedSorts($this->issuedAtSort());
+```
+
+Each entry arrives with everything its own body says about it: the kind, the
+[internal column](#internal-column-names), the column a `callback` closure filters on, the
+`->default()` and `->nullable()` modifiers applied in there, and the comment written above an entry
+inside an array-returning helper — which becomes that filter's description, exactly as it does at the
+call site. The same fold answers for `allowedSorts`, `allowedIncludes`, `allowedFields`, and
+`defaultSort`.
+
+For that to work, each of those methods needs **a single unconditional `return`**. That's the real
+requirement, not a style preference: Docuccino reads one returned expression, and a method with two arms
+has no honest answer to fold.
+
+```php
+// Folds: one return, and the name is right there.
+private function statusFilter(): AllowedFilter
+{
+    return AllowedFilter::exact('status', 'status_code');
+}
+
+// Doesn't: two returns, and picking one would document a filter your app may never register.
+private function referenceFilter(): AllowedFilter
+{
+    if ($this->exactReferences) {
+        return AllowedFilter::exact('reference');
+    }
+
+    return AllowedFilter::partial('reference');
+}
+```
+
+An entry Docuccino can't fold is never guessed at: it's left out of the spec, you get a
+`query-builder.unresolved-entry` warning naming the file and line, and every other entry on the list is
+documented as usual. Three more shapes stay out of reach:
+
+- **A hand-off to another method.** The fold reads one body; it doesn't step into a second, so
+  `return $this->buildFilter($key);` stays unresolved. A factory *call* in there is fine —
+  `return self::enum($key, OrderStatus::class);` reads exactly as it would at a call site.
+- **Spread arguments into the helper.** `$this->columnFilter(...$args)` breaks the match between
+  arguments and parameters, so nothing binds. Spreading the helper's *result* into `allowedFilters()`,
+  as above, is the supported form.
+- **Vendor code.** A method in `vendor/` is never opened, whatever it returns.
 
 ### Partial filters over an enum column
 
@@ -414,6 +469,56 @@ namespace). Vendor code is never followed. Everything else on this page — enum
 defaults, custom filters — works identically through the hop, and the query class file joins the
 fragment-cache dependency set, so editing it re-documents the endpoint.
 
+### When the query object *is* the builder
+
+The other common shape skips the hop entirely: the query class **extends** `QueryBuilder` and
+configures itself in its own constructor, and the container hands the finished object to the action.
+
+```php
+final class InvoiceListQuery extends QueryBuilder
+{
+    public function __construct()
+    {
+        parent::__construct(Invoice::query()->with(['customer']));
+
+        $this->allowedFilters([AllowedFilter::exact('status'), 'reference'])
+            ->allowedSorts(['issued_at', 'total'])
+            ->allowedIncludes(['customer'])
+            ->defaultSort('issued_at');
+    }
+}
+
+final class InvoiceController
+{
+    public function index(InvoiceListQuery $query): AnonymousResourceCollection
+    {
+        return InvoiceResource::collection($query->paginate());
+    }
+}
+```
+
+Nothing the action body does leads to those allow-lists — the container built the object, and a `new`
+isn't a call Docuccino follows. So it traces the **constructor** of the query class as a root of its
+own, into the same facts as the action's own trace: `filter[status]`, `filter[reference]`, `sort`,
+`include`, `page`, and `per_page` all land. The `parent::__construct(Invoice::query())` call is what
+names the subject model, so filters still type off its casts, and the query class file joins the
+fragment-cache dependency set exactly as the hop's does. A paginating helper of your own on the query
+class behaves as it does anywhere else — see [custom pagination terminals](#custom-pagination-terminals).
+
+<Aside type="caution" title="Type-hint the subclass itself">
+Docuccino reads the constructor of the class **named in the action's signature**, so two things have to
+be true of that type hint:
+
+- **It names a `QueryBuilder` subclass.** An interface the query class implements, or Spatie's own
+  `Spatie\QueryBuilder\QueryBuilder`, leaves no project constructor to read — which class a container
+  binding resolves to is a runtime fact, not a static one.
+- **The subclass declares its own `__construct`.** One that inherits Spatie's constructor configures
+  nothing of its own, so there is nothing to trace.
+
+Neither case is silent: as long as a paginating terminal is reached you still get the pagination
+parameters plus a `query-builder.no-allowlists-recovered` info diagnostic naming the action.
+</Aside>
+
 ## Configuration
 
 ### Custom pagination terminals
@@ -435,6 +540,27 @@ inside it and documents `cursor` correctly.
 
 Only the **outermost** terminal counts, so a page size passed at the call site
 (`->paginateList(50)`) is the one documented.
+
+<Aside type="caution" title="The receiver has to be a query builder">
+This setting extends the *method names* that count as a terminal; it doesn't change **what they're
+called on**. A name in `pagination_terminals` matches only when the receiver is an Eloquent or base
+query builder, an Eloquent relation, or a Spatie `QueryBuilder` (a subclass of any of them counts) —
+plus the static `Invoice::paginate(…)` form on a model. That's what makes `paginateList()` in the
+example above match: it's called on `ListQueryBuilder`.
+
+A helper that paginates something else — an in-memory `Collection`, a search-engine result set, a
+value object of your own — never matches, whatever you name here:
+
+```php
+// $catalogQuery is an AbstractCatalogQuery, not a query builder — `paginate` is not a terminal here.
+return $catalogQuery->paginate($request, $entries, InvoiceData::class);
+```
+
+Docuccino has nothing to read there: which request keys that helper honors is a fact about its body,
+not its name. Document the parameters yourself with
+[`#[QueryParameter]`](/laravel/documenting/requests/#pagination-docuccino-cant-see) — a few lines, and
+they're right.
+</Aside>
 
 ### Renamed parameter keys
 
@@ -458,17 +584,21 @@ the build:
 
 | Situation | Diagnostic | What lands in the spec |
 | --- | --- | --- |
-| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
+| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
 | A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | Pagination parameters only |
 | A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
 | Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
 
-Two things are outside what the trace models today, and neither produces a diagnostic:
+Three things are outside what the trace models today, and none produces a diagnostic:
 
 - **`allowedAppends`** — no `append` parameter is documented. Add one with
   `#[QueryParameter('append')]` if your clients use it.
 - **Relationship-path columns** (`customer.name`) — the filter is documented, but as a plain string;
   only the subject model's own columns are typed from casts.
+- **Pagination that doesn't run through a query builder** — a terminal called on anything but a
+  builder isn't recognized, and `pagination_terminals` doesn't change that (see
+  [the receiver rule](#custom-pagination-terminals)). Declare `page` and `per_page` with
+  [`#[QueryParameter]`](/laravel/documenting/requests/#pagination-docuccino-cant-see).
 
 For anything on this list, document the parameter yourself with
 [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), addressing it by name:

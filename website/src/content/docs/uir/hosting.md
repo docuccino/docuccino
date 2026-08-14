@@ -1,8 +1,6 @@
 ---
 title: Spec hosting
 description: Where the UIR JSON Schema lives, how it's versioned, and how to validate a document against it online or offline.
-sidebar:
-  order: 2
 ---
 
 Every UIR document declares its schema with a `$schema` URL:

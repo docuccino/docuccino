@@ -35,9 +35,12 @@ final class InvoiceFilters
         });
     }
 
-    /** A convenience alias exercising that a non-enum factory still resolves through the model cast. */
-    public static function status(string $key = 'status'): AllowedFilter
+    /**
+     * The publication-status filter under its conventional name — a zero-argument alias whose filter name
+     * and column are written nowhere but this signature's defaults, so only the callee's body names it.
+     */
+    public static function state(string $key = 'state', string $column = 'status'): AllowedFilter
     {
-        return self::enum($key, ListingStatus::class);
+        return self::enum($key, ListingStatus::class, $column);
     }
 }

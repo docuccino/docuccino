@@ -1,8 +1,6 @@
 ---
 title: Responses
 description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, and 204s.
-sidebar:
-  order: 4
 ---
 
 import { Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -13,7 +11,7 @@ type and return statements. You write the code you'd write anyway; the response 
 <CardGrid>
 	<Card title="Return-type inference" icon="magnifier">A resource, model, or enum return becomes its schema.</Card>
 	<Card title="Status codes" icon="list-format">`response()->json($x, 201)` folds the payload under `201`.</Card>
-	<Card title="Empty responses" icon="approve-check">`response()->noContent()` documents a `204` with no body.</Card>
+	<Card title="Empty responses" icon="approve-check">A `204`, `205`, `304`, or `1xx` is documented with no body.</Card>
 	<Card title="Headers & overrides" icon="setting">Add headers and extra statuses with attributes.</Card>
 </CardGrid>
 
@@ -158,9 +156,54 @@ The `201` is new: earlier releases read only the override. See the
 
 ## Empty responses
 
-`response()->noContent()` is documented as a `204 No Content` with no response body. A bare `void` or
-`never` return (with no `JsonResponse` wrapper) documents nothing on its own — annotate it with
-`#[Response]` if it should appear.
+HTTP forbids a body on `204`, `205`, `304`, and every `1xx` status, so Docuccino documents a response
+under one of those with no content — whatever the action hands back:
+
+```php
+return response()->noContent();                  // 204, no body
+return response()->json(null, 204);              // 204, no body
+return response()->json(['deleted' => 1], 204);  // 204, no body — that payload never reaches a client
+```
+
+The last line is the one worth knowing about. The spec describes what goes over the wire, not what the
+code passes, so a payload aimed at a bodyless status is left out rather than documented as a body your
+consumers will never receive:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	public function destroy(Invoice $invoice): JsonResponse
+	{
+	    $invoice->delete();
+
+	    return response()->json(['deleted' => true], 204);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"204": {
+	  "description": "No Content"
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The status keeps its reason phrase, and a schema dropped this way is never hoisted into `components`
+either — so you don't end up with an orphaned component nothing references. The rule is about the
+status alone: `response()->json(null, 200)` really does send `null`, so that `200` is still documented
+as `{ "type": "null" }`.
+
+Every producer goes through the same gate, so `#[Response(status: 204, type: InvoiceResource::class)]`
+documents the status and its description, not a body — and because that attribute is something you
+asked for rather than something Docuccino inferred, it also reports an
+`attribute.body-on-bodyless-status` warning so the drop never happens quietly. If you genuinely need content on a bodyless
+status — describing a proxy that rewrites it, say — an
+[OpenAPI Overlay](/laravel/guides/customizing-output/) applies to the assembled document after the
+pipeline has finished, and writes what you tell it to.
+
+A bare `void` or `never` return (with no `JsonResponse` wrapper) documents nothing on its own —
+annotate it with `#[Response]` if it should appear.
 
 ## Adding and refining responses
 

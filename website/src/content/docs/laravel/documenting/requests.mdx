@@ -1,8 +1,6 @@
 ---
 title: Requests
 description: Document path, query, header and cookie parameters, request bodies, and file uploads — read statically from your routes and validation rules.
-sidebar:
-  order: 3
 ---
 
 import { Card, CardGrid, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
@@ -73,6 +71,70 @@ description (`in:` on an enum class, a `required_if`, a date format) puts it on 
 List endpoints also get their filters, sorts, includes, and pagination inferred straight from
 [Spatie Query Builder](/laravel/packages/query-builder/) — no annotation needed. To add or patch one
 parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
+
+### Pagination Docuccino can't see
+
+Pagination parameters are inferred from a paginating call on a **query builder** — `paginate()`,
+`simplePaginate()` or `cursorPaginate()` on an Eloquent or base query builder, a relation, or a Spatie
+`QueryBuilder`. Plenty of applications paginate something else: an in-memory `Collection`, a
+search-engine result set, a list assembled from several services. A helper like this reads `page` and
+`per_page` off the request, but nothing about it says so statically:
+
+```php
+public function index(Request $request, CatalogQuery $catalog): PaginatedDataCollection
+{
+    return $catalog->paginate($request, $this->entries(), InvoiceData::class);
+}
+```
+
+The **response** is fine — a paginator-shaped return type documents its envelope from the type alone.
+It's the request half that's missing, and no configuration recovers it: which keys that helper honors
+is a fact about its body, not its name. Declare them, once, where they belong:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	use Docuccino\Attributes\QueryParameter;
+
+	#[QueryParameter('page', type: 'int', description: 'Page number.', default: 1, example: 2)]
+	#[QueryParameter('per_page', type: 'int', description: 'Results per page (max 100).', default: 25)]
+	public function index(Request $request, CatalogQuery $catalog): PaginatedDataCollection { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "page", "in": "query", "description": "Page number.", "required": false,
+	    "schema": { "type": "integer", "default": 1 }, "example": 2 },
+	  { "name": "per_page", "in": "query", "description": "Results per page (max 100).",
+	    "required": false, "schema": { "type": "integer", "default": 25 } }
+	]
+	```
+	</TabItem>
+</Tabs>
+
+`type` takes a PHP type string, so `'int'` lands as `{"type": "integer"}`. Set `required: true` for a
+key clients must send.
+
+Most applications paginate the same way everywhere, so put the pair where it covers the most actions:
+
+| Where you put it | Applies to |
+| --- | --- |
+| The action method | That one operation. |
+| The controller class | Every action on that controller. |
+| A trait method | Every class using the trait — trait methods flatten into the using class. |
+| An **action method** on an abstract base controller | Every child that inherits that action. |
+| The **class** of an abstract base controller | **Nothing.** PHP class attributes don't inherit. |
+
+That last row is the one to watch: `#[QueryParameter]` on `abstract class ApiController` is silently
+inert for the controllers extending it. Put the attributes in a trait those controllers use instead —
+it reads the same and it works.
+
+<Aside type="tip" title="Once, for a whole document">
+If the pair belongs on every list endpoint in the API, an
+[`OperationExtension`](/extending/extension-authoring/) adds them in one place, with your own rule for
+which operations qualify.
+</Aside>
 
 ## Request bodies
 
@@ -434,11 +496,28 @@ them where they matter. [`#[HeaderParameter]`](/laravel/reference/attributes/#he
 [`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) are repeatable and take the same
 shape:
 
-```php
-#[HeaderParameter(name: 'X-Idempotency-Key', type: 'string', required: true, description: 'Replay guard for retries')]
-#[CookieParameter(name: 'invoice_preview', type: 'string', description: 'Signed preview token')]
-public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	#[HeaderParameter(name: 'X-Idempotency-Key', type: 'string', required: true, description: 'Replay guard for retries')]
+	#[CookieParameter(name: 'invoice_preview', type: 'string', description: 'Signed preview token')]
+	public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "X-Idempotency-Key", "in": "header", "description": "Replay guard for retries",
+	    "required": true, "schema": { "type": "string" } },
+	  { "name": "invoice_preview", "in": "cookie", "description": "Signed preview token",
+	    "required": false, "schema": { "type": "string" } }
+	]
+	```
+	</TabItem>
+</Tabs>
+
+Parameters are emitted in a fixed order — path, then query, then header, then cookie, each group sorted
+by name — so adding one never reshuffles the rest of the list.
 
 To drop a parameter Docuccino inferred but you don't want published, use
 [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) — optionally scoped to one location,

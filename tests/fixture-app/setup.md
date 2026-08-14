@@ -129,6 +129,42 @@ The enum-cast filter proof (feature 1) uses its own inline chain + a cast-target
   round-2 proof that scope value-parameter typing and callback closure column recovery work through
   the real engine (`trace-qb-enrich`).
 
+The method-built allow-list shapes (a filter whose public name is never written at the call site) live
+under `modules/` too, so the same recovery has to work through the out-of-project `$query->query()` hop:
+
+- `modules/Billing/PositionSearchQuery.php` — every entry is built by an instance method:
+  `->allowedFilters($this->termFilter(), $this->facetFilter('status', 'status'))`,
+  `->allowedSorts($this->titleSort())`, `->defaultSort($this->titleSort())`. `termFilter()` takes no
+  arguments (its name `q` and its `where('title', …)` column exist only in its body); `facetFilter()`
+  names a filter only once the call site's arguments are bound to its parameters. Recovering these means
+  folding what each method RETURNS, not what the call site writes.
+- `modules/Billing/PositionFacetQuery.php` — the array form: `->allowedFilters(...$this->allowedFilters())`
+  and `->allowedIncludes(...$this->allowedIncludes())`, so one folded return has to expand into every
+  entry it carries (with each item's own leading comment, written inside the helper). Its
+  `configuredSort()` BRANCHES, pinning the fold's honest limit: one `query-builder.unresolved-entry`
+  diagnostic, never a guess at one of the arms.
+- `modules/Billing/PositionController.php` — the two trace entries (`index()`, `facets()`), each just
+  `$query->query()->paginateList(15)`.
+
+The shape where the query object IS the builder and configures itself in its own CONSTRUCTOR — so nothing
+in the action body leads to the allow-lists at all, and the constructor has to be traced as a root of its
+own (seeded from the action's parameter type):
+
+- `modules/Billing/ChargeListQuery.php` — `final class ChargeListQuery extends QueryBuilder` whose
+  `__construct()` calls `parent::__construct(Listing::query()->with([...]))` (the subject model origin a
+  self-configuring subclass writes instead of `for()`) and then `allowedFilters(...)`/`allowedSorts(...)`/
+  `allowedIncludes(...)`/`defaultSort(...)`, with its own `paginateList()` terminal. Its entries are
+  deliberately mixed: an `InvoiceFilters::enum(...)` project factory, a non-enum factory typing off its key
+  column, `AllowedFilter::callback('tag', $this->tagFilter(...))` (a first-class callable, so the column
+  stays out of reach — pinned as a plain-string filter, not a guess),
+  `AllowedFilter::custom('title_search', new ListingTitleSearchFilter)` (the parenless instance form, whose
+  class only the typed `new` at the call site can name), `$this->stateFilter()` (name AND internal column
+  live only in its body) and a BRANCHING `configuredFilter()` — one honest diagnostic.
+- `modules/Billing/ChargeController.php` — `index(ChargeListQuery $query)`: the container hands the action
+  its builder and the body is nothing but `$query->paginateList(25)`.
+- `app/Filters/ListingTitleSearchFilter.php` — the custom `Spatie\QueryBuilder\Filters\Filter` the entry
+  above instantiates.
+
 ### Exception-flow analysis
 
 - `app/Http/Controllers/ThrowsController.php` — eight actions covering abort/abort_if,

@@ -187,6 +187,12 @@ interface ExceptionToResponse {
 // built-in inferred-handler tier attaches its literal-carrying error examples through exactly this
 // method, and the "no privileged back door" promise means a third-party ExceptionToResponse must be
 // able to do the same. (`guard()`, by contrast, IS `@internal`.)
+// Public READ side: isBodyless() — HTTP forbids content on 1xx/204/205/304 (RFC 9110), so content()
+// under one of those hands back a DETACHED SchemaDraft and the response freezes body-less whichever
+// producer aimed one at it (inference folding `response()->json(null, 204)`, an attribute, an
+// integration). Enforced once at the write so no producer can bypass it, and asked BEFORE building a
+// body — InferredResponsesExtension skips payload conversion, which is what keeps a dropped body's
+// schema out of components. An overlay (layer 45, applied post-freeze) can still write content there.
 // Error-response resolution chain (first supports() wins; Phase 4):
 //   1. InferredHandlerExceptionToResponse — analyses the APP'S REAL exception handling:
 //      render callbacks discovered by reflecting the BOOTED app's handler (catches
@@ -440,6 +446,21 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     (length-aware), not only the QB page parameters — the terminal set is config-shared, so a resource
     collection paginated by a custom terminal is documented consistently with its page params instead of
     getting parameters but a bare-array body.
+  - Paginating-terminal scope boundary (2026-08-14). The terminal table names METHODS, but the real
+    predicate is the RECEIVER: `PaginationTerminalVisitor::receiverIsBuilder()` (Eloquent/Query builder,
+    relation, Spatie `QueryBuilder`, subclasses included) plus `classIsModel()` for the magic
+    `Model::paginate()` static. **Decision: the receiver gate stays**, and
+    `integrations.query_builder.pagination_terminals` is scoped as "extra method names ON those
+    receivers", never a general "my app paginates here" hook. A paginator over an in-memory collection
+    (`$catalogQuery->paginate($request, $entries, InvoiceData::class)` on a plain query object) carries
+    no static evidence of WHICH request keys it reads; `per_page` in particular is app wiring —
+    Laravel's `paginate($perPage)` reads no request key on its own — so inferring page params from a
+    paginator-shaped return type would document a parameter that may do nothing, which is worse than
+    documenting none. Supported answers: `#[QueryParameter]` (layer 40) or an app-registered
+    `OperationExtension` (layer 20). Response side is unaffected and stays type-driven where it can be:
+    a spatie `PaginatedDataCollection`/`CursorPaginatedDataCollection` return documents its envelope
+    from the type; only the Laravel resource-collection envelope needs the trace (its
+    `AnonymousResourceCollection<T>` return type is identical paginated or not).
   - Enum + request-body component hoisting (Tom, 2026-08-07 — the last engine delta from the
     dogfood run, closing the named-component gap vs Scramble). Both are representation moves — the semantic
     facts (an enum's cases/descriptions; a request's rule set) are unchanged; only their OAS *location*
@@ -463,6 +484,20 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
       patch silently discard the whole shared component (or mutate it for every other op). Dereferencing
       keeps the `$ref` honest. Call-site partials (`include`/`exclude`/`only`/`except`) shape the
       *response* via query parameters, not the request body, so they never force the body inline.
+    - **Per-response property visibility is OUT OF SCOPE (2026-08-14).** `#[Hidden]` is document-wide and
+      stays that way: the property contribution happens during type→schema conversion, where no operation
+      and no status are in scope, and a class is ONE component because component identity is pinned to the
+      FQCN (`IdentityGenerator::namedSchemaId`). Making visibility status-aware would make component
+      identity status-dependent, breaking both the FQCN pin and the registry's structural dedupe — one
+      class would fan out into a component per status it appears under. The capability itself already
+      exists where it can be stated honestly: the problem-details preset emits `allOf: [{$ref ProblemDetails},
+      {properties: {errors}}]` for validation entries (`ProblemDetailsSchema::response()`), because there
+      the 422 shape is the preset's own fact, not a property of the app's class. App-side answers, in order:
+      the preset; a per-status type + `#[Response(status:, type:)]`; `array|Optional` (in `properties`, out of
+      `required`); an overlay on the one operation's response; a `DocumentTransformer` for many at once.
+      **If ever revisited**, the only sound shape is the existing DEVIATION rule — dereference the component
+      inline for THAT response and patch the inline copy (precedent: `#[BodyParameter]` forcing a hoisted
+      request body inline, above) — never a status-aware converter.
     - **Both-sides naming.** Request- and response-side components of the same class carry DISTINCT diff
       identities (the request body's is `<FQCN>#request`), so a request rules-shape never dedupes into a
       response property-shape by identity. Structurally-identical shapes still collapse to ONE component
@@ -503,9 +538,18 @@ leakage lint keeps catching a genuinely-leaking hidden field.
 interface TypeEngine {
     public function analyzeAction(ActionRef $a): ActionAnalysis;   // ReturnSite[], ThrownException[], diagnostics, dependencyFiles
     public function classMetadata(ClassRef $c): ClassMetadata;
-    public function trace(ActionRef $a, TraceVisitor $v): void;
+    public function trace(ActionRef $a, TraceVisitor $v): TraceReport;
 }
+// Optional trace capabilities (Docuccino\Core\Inference), opt-in per visitor, each degrading by declining:
+interface FollowsReturnType { public function followsReturnType(DType $t): bool; }                       // on the VISITOR: descend past project paths (never vendor)
+interface FoldsCallReturns  { public function deferReturnFold(Node\Expr $c, callable $onFolded): bool; } // on the SCOPE: fold what a call RETURNS, not what it is written with
 ```
+
+`FoldsCallReturns` is what recovers an allow-list entry whose public name lives in the callee's BODY
+(`$this->termFilter()`, `ListFilters::status()`, `...$this->allowedFilters()`) rather than in the
+arguments at the call site: a DEFERRED fold of a single unconditional `return`, answered after the walk.
+Opt-in because `constantValueOf` is shared and a fabricated descriptor is worse than an unrecovered one —
+mechanics, limits and the FiberScope reason for deferring are in the inference doc §4.
 
 `DType` closed set: `ScalarT, LiteralT, ArrayShapeT, ListT/MapT, UnionT, IntersectionT,
 ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
