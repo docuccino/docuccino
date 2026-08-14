@@ -25,8 +25,19 @@ Pushing the tag fires [`.github/workflows/split.yml`](.github/workflows/split.ym
 split target into `docuccino/<name>` and tags it `v1.2.3`. Packagist picks the new tags up from its
 GitHub webhook.
 
-Every push to `main` runs the same split without a tag, so the package repositories always mirror the
-current `main`.
+Every push to `main` runs the same split without a tag, so the **package** repositories always mirror
+the current `main` — which is what makes a `dev-main` install possible.
+
+Two targets deliberately publish on a tag only, because both are read by people rather than by
+Composer, and between a merge and a tag `main` describes a version nobody can install:
+
+- `docuccino/spec`, whose Pages site serves `spec.docuccino.app`. Publishing an unreleased schema
+  there would state a version of the spec nothing can depend on.
+- the docs site ([`deploy.yml`](.github/workflows/deploy.yml)), so the prose matches the release a
+  reader is running.
+
+A docs-only fix produces no changelog entry, so it opens no release pull request and has nothing to
+merge. Republish it with `gh workflow run "Deploy docs"` rather than waiting for an unrelated feature.
 
 The ordering is the point: the tag lands on a commit that **already contains its own changelog**.
 Generating on tag push would put the changelog after the tag, and the split would carry a

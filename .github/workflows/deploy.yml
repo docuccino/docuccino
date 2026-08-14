@@ -13,13 +13,15 @@
 name: Deploy docs
 
 on:
+  # Publishes on a RELEASE, not on merge: the site documents behaviour a reader is running, and
+  # between a merge and a tag `main` describes a version Packagist doesn't serve yet. No paths
+  # filter — a release republishes whatever the tag carries, since the prose describes code that
+  # just moved even when no page did.
   push:
-    branches: [main]
-    paths:
-      - 'website/**'
-      - 'spec/uir/**'
-      - '.github/workflows/deploy.yml'
-  # Lets a deploy be re-run without an empty commit — useful when only DNS changed.
+    tags: ['v*']
+  # The escape hatch, and it is load-bearing: a docs-only fix is `docs(website)`, which the
+  # changelog generator filters out, so it produces no release pull request to merge. Without this
+  # a typo could not be published until an unrelated feature shipped.
   workflow_dispatch:
 
 # `pages: write` + `id-token: write` are what actions/deploy-pages needs to mint its
