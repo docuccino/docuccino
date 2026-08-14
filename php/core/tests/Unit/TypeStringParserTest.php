@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
+use Docuccino\Core\Tests\Fixtures\SampleStatus;
 use Docuccino\Core\TypeGrammar\ImportContext;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
 
@@ -92,6 +93,25 @@ it('maps generic list and array forms to List/Map DTypes', function (): void {
 
 it('maps the square-bracket array shorthand to a List DType', function (): void {
     expect(parseType('int[]'))->toEqual(new ListT(ScalarT::int()));
+});
+
+it('DEGRADED: maps an int-keyed array generic to a Map rather than a List', function (string $type): void {
+    // KNOWN GAP. `array<int, string>` and `array<array-key, string>` are how a great many real docblocks
+    // write a plain list, but both come back as a MapT keyed by the literal key type — so the emitted
+    // schema is an object with additionalProperties instead of an array of strings. Harmless while the
+    // promoted-property `@var` reader drops these types anyway; actively wrong the moment it stops.
+    expect(parseType($type))->toBeInstanceOf(MapT::class);
+})->with([
+    'array<int, string>' => ['array<int, string>'],
+    'array<array-key, string>' => ['array<array-key, string>'],
+]);
+
+it('DEGRADED: maps a backed-enum name to a plain ClassT, never an EnumT', function (): void {
+    // KNOWN GAP. The identifier table's default arm builds a ClassT without asking whether the name is
+    // an enum, unlike the reflection and PHPStan-type mappers, which both answer EnumT. A column or
+    // property whose only declaration is a docblock (`@property ListingStatus $status`) therefore
+    // documents as an object with the enum's `name`/`value` members instead of a string enum.
+    expect(parseType(SampleStatus::class))->toEqual(new ClassT(SampleStatus::class));
 });
 
 it('degrades an over-parameterised array generic', function (): void {

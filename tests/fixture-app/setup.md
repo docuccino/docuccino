@@ -193,6 +193,28 @@ own (seeded from the action's parameter type):
   and builds `new JsonResponse($this->transform(…WrapExecutionType::Disabled), $status, [headers])`
   itself. The engine must decline to model spatie's own `toResponse()` here and let the constructor
   fold win, or the app's real status and media type are thrown away.
+- `app/Data/SnapshotData.php` + `app/Data/SnapshotFormData.php` — a response Data class typed the way a
+  real one is: every array member's generic lives in the PROMOTED PARAMETER's own `@var`, beside the prose
+  describing it, except `context`, whose generic is written once in the constructor's `@param` block. Only
+  `context` survives today; the rest pin the degraded output (see
+  `php/inference-phpstan/tests/Integration/PromotedPropertyDocblockTest.php`). The members cover a map, a
+  nested map, a `list<SnapshotFormData>`, an `array<int, string>` and a `@phpstan-var` tag.
+  `SnapshotFormData` carries a NATIVE backed-enum property, the working half of the enum contrast against
+  `Listing`'s docblock-only `@property ListingStatus $status`.
+- `app/Data/MfaChallengeData.php` — a `DataCollection` with no `#[DataCollectionOf]` whose item class is
+  named only by the constructor `@param` generic: a bare `DataCollection` reflects as a precise class, so
+  that generic is never consulted.
+- `app/Data/SaveAnswersData.php` — a request DTO whose map/list generics ARE recovered (they are in the
+  `@param` block) and are then collapsed to a bare `array` by the validation-rule vocabulary.
+- `app/Data/UpdateNodeData.php` — a static `rules()` naming `label`, a field the class has no property
+  for, only to `prohibit` it, plus a dotted `metadata.retention.mode` key constraining one member of the
+  metadata blob.
+- `app/Data/UploadPolicyData.php` + `app/Support/MediaCollections.php` — a static `rules()` allow-listing a
+  natively typed `#[StringType]` property with `Rule::in(MediaCollections::validNames())`: the values are
+  not statically knowable, and the override still replaces what the property type inferred.
+- `app/Http/Controllers/SsoRedirectController.php` + `app/Services/SsoGateway.php` — a `RedirectResponse`
+  action and a `JsonResponse` action whose payloads are named nowhere, the two shapes the response side
+  degrades on.
 - `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
   (magic attributes) and documenting its columns the ide-helper way, via class-level
   `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,

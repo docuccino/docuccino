@@ -105,3 +105,14 @@ it('reads the first @var type, and null when there is none', function (): void {
         ->and($reader->varType("/**\n * Just prose.\n */"))->toBeNull()
         ->and($reader->varType(null))->toBeNull();
 });
+
+it('DEGRADED: sees no type in an analyser-prefixed @phpstan-var / @psalm-var tag', function (string $tag): void {
+    // KNOWN GAP. The reader matches `@var` exactly, so a team that standardises on the prefixed form
+    // (a real and common convention — it is how you state a type the runtime doesn't have) gets a
+    // property with no recovered type at all. Update this expectation, don't delete it, when the reader
+    // learns the prefixed tags.
+    expect((new DocBlockReader)->varType("/**\n * ".$tag." list<ErrorDetailData>\n */"))->toBeNull();
+})->with([
+    '@phpstan-var' => ['@phpstan-var'],
+    '@psalm-var' => ['@psalm-var'],
+]);
