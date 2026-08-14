@@ -44,7 +44,13 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    'inference-phpstan' => 43,
+    // Dropped 43 → 34 when the worker pool and the engine result cache were deleted: both were in the
+    // first half, unit-tested in process at near-full coverage, so removing them took ~300 well-covered
+    // statements out of the numerator and left a remainder that is proven out-of-process. 889/2033
+    // (43.73%) became 538/1557 (34.55%) without losing a proof — the same denominator move documented
+    // for the 41 → 37 drop. Core rose in the same change: the result model's serialization contract,
+    // previously covered only as a side effect of the deleted cache tests, is now pinned directly.
+    'inference-phpstan' => 34,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

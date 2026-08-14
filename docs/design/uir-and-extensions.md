@@ -559,9 +559,9 @@ ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarke
 meaning "this body member echoes the response's own HTTP status", synthesised by the engine's response
 refinement (never translated from a PHPStan type) and resolved to a `LiteralT` at the response-building
 seam before schema conversion. It lives in the closed DType set rather than in a transient side-channel
-because it must survive the CACHE and WORKER boundaries: the marker sits inside the `ArrayShapeT`
-payload of a `JsonResponse<…>` `ClassT` that is cached in an `ActionAnalysis`, while resolution happens
-later, in the adapter — a side-channel could not cross that boundary. DType consumers are `supports()`
+because it must survive SERIALIZATION: the marker sits inside the `ArrayShapeT` payload of a
+`JsonResponse<…>` `ClassT` carried in an `ActionAnalysis`, while resolution happens later, in the
+adapter — a side-channel could not cross that boundary. DType consumers are `supports()`
 chains rather than exhaustive `match`es over kind, so adding it broke no totality; the fallback mapper
 maps it honestly to a bare `integer` (no fabricated `const`/example) for the case where nothing resolves
 it.

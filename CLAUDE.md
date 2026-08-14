@@ -49,8 +49,9 @@ php/core/               docuccino/core        — UIR model, canonicalizer, iden
                                                      but the standalone PhpDocParser).
 php/attributes/         docuccino/attributes  — dep-free PHP attributes only.
 php/inference-phpstan/  docuccino/inference-phpstan — PHPStan+Larastan engine behind
-                                                     core's TypeEngine/TypeEngineBuilder contracts
-                                                     (workers, cache). DEV-ONLY install.
+                                                     core's TypeEngine/TypeEngineBuilder contracts.
+                                                     In-process, one container per build.
+                                                     DEV-ONLY install.
 php/laravel/            docuccino/laravel     — adapter: provider, late-bound registry,
                                                      pipeline, commands, viewer, Integrations/.
 spec/uir/1.0/schema.json     the UIR JSON Schema (the long-term product).

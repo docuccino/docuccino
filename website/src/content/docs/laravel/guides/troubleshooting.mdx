@@ -260,6 +260,7 @@ codebase is normal and usually not worth chasing; the same code on every action 
 | Code | Meaning | What to do |
 |---|---|---|
 | `engine.not-installed` | No analyzer present; annotation-only output | [Install the engine](#the-document-is-thin) |
+| `engine.mode-unknown` | `engine.mode` isn't a mode Docuccino has; it ran in-process | Set `DOCUCCINO_ENGINE` to `in-process` or `null` — see [Engine](/laravel/reference/configuration/#engine) |
 | `inference.action-failed` | One action's analysis threw | One or two: annotate that action. All of them: [version mismatch](#responses-are-missing-everywhere) |
 | `inferred-handler.too-dynamic` | An exception handler's response couldn't be folded to a fixed shape | Describe the error response explicitly — see [Error responses](/laravel/documenting/errors/) |
 

@@ -413,7 +413,7 @@ legitimate server URL).
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two working modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
+| `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
 
@@ -425,9 +425,8 @@ Inference needs the dev-only `docuccino/inference-phpstan` package. Without it, 
 degrades to no inference and each export carries one `engine.not-installed` warning naming the
 install command — `null` is the explicit opt-out and stays silent.
 
-The engine also carries `orchestrated` and `caching` worker compositions, but the adapter does not
-plumb them through yet: setting either warns (`engine.mode-not-wired`) and runs in-process. Stay on
-`in-process` or `null`.
+Any other value warns (`engine.mode-unknown`) and runs in-process — a typo in `DOCUCCINO_ENGINE`
+costs you a diagnostic, never a failed build.
 
 :::note[`project_paths` is the descend scope, not everything the engine can reach]
 There are two scopes, and only this one is configured. `project_paths` bounds **descent**. The wider

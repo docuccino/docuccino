@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
  * shape is only rich once the descent into {@see BudgetLeaf} succeeds — so under a tiny budget the deep
  * path recovers a TRUNCATED shape for `make()` and the direct path recovers the full 418 shape. The
  * refiner must never memoise the truncation and reuse it on the direct path (that would make the result
- * route-/worker-order dependent, breaking determinism).
+ * route-order dependent, breaking determinism).
  */
 final class BudgetShared
 {

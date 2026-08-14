@@ -64,22 +64,29 @@ All internal-API touches live in ONE adapter class per supported PHPStan minor
 (`Scope`, `Type`, dynamic return types) ARE covered by PHPStan's BC promise.
 Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; deterministic.
 
-## 3. Scoped analysis / parallelism / containment
+## 3. Scoped analysis / containment
 
 - Entry set = route-referenced action files only; everything else lazy via
   `ReflectionProvider` (autoloader-backed). On-demand descent into callee bodies,
   memoized per file, bounded (depth default 4, per-action file budget 40).
-- Parent orchestrator + K workers (Symfony Process, NDJSON of already-translated results);
-  recycle workers after N routes (50) or RSS watermark (1 GiB). Parent sorts results by
-  canonical action id — scheduling never affects bytes.
-- Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Worker fatal → re-queue
-  batch with size 1 (bisection isolates the poison action). Engine boot failure → fatal
+- Analysis runs in the calling process, one container per build. Order never affects bytes:
+  every result is canonically serialized and the pipeline consumes routes in canonical order.
+- Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Engine boot failure → fatal
   diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build).
 - **Two scopes, not one.** The bounds above (depth 4, file budget 40) are shared by every
   descending analysis, but the *scope* is not. Throw classification and the Query-Builder trace
   descend only into `engine.project_paths`; the response-shape refiner and its enum folder run on
   the wider PRIME scope — every primed app PSR-4 root, a modular `Modules\…` root included (§4a
   step 4). Vendor code is in neither, so it is never followed.
+
+**Removed: the parent/worker pool.** A parent orchestrator plus K worker processes (Symfony
+Process, NDJSON of already-translated results, recycling on route count and RSS watermark,
+bisection on a poison action) was built and never wired into a build. It does not pay: each worker
+cold-compiles its own PHPStan container (~500 ms) and keeps its own memo, so a callee reached on
+two workers is analysed twice — on the fixture app, total analysis is 814 ms, less than one extra
+container boot. Parallelism only wins somewhere north of a few hundred routes, and the fragment
+cache plus the lazy engine already cover the incremental case that motivated it. Reach for git
+history, not a rewrite, if route counts ever make it pay.
 
 ## 4. Boundary (contract in docuccino/core; zero PHPStan imports)
 
@@ -113,14 +120,14 @@ consumer legitimately imports to configure and build the engine: `Analysis\PhpSt
 `Analysis\EngineConfig`, `Analysis\PhpStanEngineFactory` and `Runtime\RuntimeConfig`. The phpdoc
 grammar readers that used to sit here (`DocBlockReader`, `TypeStringParser`, `ImportContext` and the
 shared parser stack) now live in `Docuccino\Core\TypeGrammar` — see the type-grammar entry in
-`uir-and-extensions.md`. Everything else — the Analysis engine implementations
-behind the factory, the whole `Orchestration`/`Runtime` (bar `RuntimeConfig`) worker machinery, and
-the `Trace`/`Throwing`/`Translation`/`Support`/`Cache`/`Metadata`-factory/PHPStan-extension internals
+`uir-and-extensions.md`. Everything else — the Analysis engine implementations behind the factory,
+`Runtime` (bar `RuntimeConfig`), and the
+`Trace`/`Throwing`/`Translation`/`Support`/`Metadata`-factory/PHPStan-extension internals
 — carries an `@internal` marker: it is an engine implementation detail, free to change between
-releases, and no adapter extension imports it (the Laravel adapter reaches only the six public
+releases, and no adapter extension imports it (the Laravel adapter reaches only the four public
 classes above; the engine's own test harness may of course use the internals). A type reachable only
-as a construction detail of a public class (e.g. an `OrchestrationConfig` folded inside `EngineConfig`)
-is `@internal` too — reachability is not the public contract.
+as a construction detail of a public class is `@internal` too — reachability is not the public
+contract.
 
 **Trace contract refinements (verified in the Phase 0 spike, all-PASS — the
 2-deep-helper-chain constant recovery + custom-terminal pagination case):**
@@ -230,7 +237,7 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    `(enum-case, method)` for folds) and is sound because the memoised shape is call-independent — with
    one rule: a computation whose descent hit a depth/budget CUTOFF is returned for the current analysis
    but NOT memoised, since its richness would otherwise depend on how much budget was already spent
-   before that callee was first reached (worker-/route-order dependent → nondeterminism). Containment is
+   before that callee was first reached (route-order dependent → nondeterminism). Containment is
    the PRIME scope, not the descend scope: helpers in ANY primed app source root fold (including a
    modular `Modules\…` root), while vendor — never a primed root — is never followed. Cache soundness:
    every descended helper file and every folded enum's file is reported into `dependencyFiles`,
@@ -280,9 +287,9 @@ StatusMarkerT, UnknownT(reason — always carries why)`. Nullability = `UnionT[.
 `StatusMarkerT` is the sole non-language member: a resolution SIGNAL ("this body member echoes the
 response's own HTTP status") synthesised by the response refinement (§4a) and resolved to a `LiteralT`
 by the adapter's response builder. The translator NEVER produces it — PHPStan has no such type. It is a
-DType rather than a transient side-channel because it must survive the CACHE and WORKER boundaries: it
-rides inside the `ArrayShapeT` payload of a `JsonResponse<…>` `ClassT` cached in an `ActionAnalysis`,
-while resolution happens later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
+DType rather than a transient side-channel because it must survive SERIALIZATION: it rides inside the
+`ArrayShapeT` payload of a `JsonResponse<…>` `ClassT` in an `ActionAnalysis`, while resolution happens
+later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
 
 Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
 ConstantArrayType → ArrayShapeT (optional keys honored, isList from accessory);
@@ -290,7 +297,7 @@ Constant scalars → LiteralT; UnionType → flatten + canonical sort; Intersect
 strip accessory types, collapse single survivor; GenericObjectType/ObjectType →
 ClassT/EnumT via ClassReflection (source location = provenance); TemplateType → its bound,
 else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason).
-Translation is EAGER at query time (serializable across workers/cache); class expansion
+Translation is EAGER at query time (the result must be serializable); class expansion
 is LAZY via `classMetadata()` (memoized per class per run).
 
 ### Eloquent column source (Wave A, 2026-08-05)
@@ -371,14 +378,24 @@ are the pipeline's ExceptionToResponse job. Known limitation (accepted): an inco
 - User's own PHPStan extensions (via `docuccino.neon` include) improve their docs with
   zero Docuccino-specific API — headline feature.
 
-## 8. Engine result cache & determinism
+## 8. Determinism
 
-PHPStan's own result cache is CLI-rule-oriented — unusable; we point its temp dirs into
-our cache dir and build our own: per-ActionRef serialized ActionAnalysis + per-ClassRef
-ClassMetadata. Key = sha256(engine ver ‖ phpstan ver ‖ larastan ver ‖ generated neon hash ‖
-composer.lock hash ‖ action file hash ‖ each descended-file hash). Canonical member
-ordering everywhere; no absolute paths in payloads. CI invariants: 1-vs-8 workers
-byte-diff; cold-vs-warm byte-diff.
+PHPStan's own result cache is CLI-rule-oriented — unusable; we point its temp dirs into our cache
+dir and leave it at that. Every engine result is canonically serialized (canonical member ordering
+everywhere, no absolute paths in payloads), which is what makes the adapter's fragment cache sound.
+CI invariant: cold-vs-warm byte-diff.
+
+**Removed: the engine's own result cache.** A filesystem cache of serialized `ActionAnalysis` per
+`ActionRef` and `ClassMetadata` per `ClassRef` — keyed on sha256(engine ver ‖ phpstan ver ‖
+larastan ver ‖ generated neon hash ‖ composer.lock hash ‖ action file hash ‖ each descended-file
+hash) — was built and never wired in. Its one benefit over the adapter's fragment cache was
+surviving a tool upgrade, and that collapsed once the fragment cache's `BuildFingerprint` also
+folded the app's `composer.lock` hash: a `composer update` now invalidates both, together. What
+survives is narrow — a config edit (or a route rename, which `RouteDescriptor::cacheSignature()`
+folds in) drops fragments whose analyses are still valid — but the container boot and the
+uncacheable `trace()` calls (live nodes, stateful visitor; the majority of engine calls) are paid
+either way, so the win is a fraction of one build for the price of a second on-disk cache with its
+own invalidation rules sitting beside the one we do trust. Git history holds it if that changes.
 
 ## 9. Risks
 
@@ -386,7 +403,7 @@ byte-diff; cold-vs-warm byte-diff.
 |---|---|
 | PHPStan internal churn | tested-minor allowlist; adapter-per-minor; CI matrix lowest+highest patch |
 | Larastan can't boot user app (env issues) | fatal diagnostic + NullTypeEngine fallback; document a docuccino env |
-| Memory growth | worker recycling (count + RSS watermark); scoped entry set; file budget |
+| Memory growth | scoped entry set; file budget; `engine.memory_limit` + the out-of-memory notice |
 | Dynamic chains defeat constant tracking | UnknownT(reason) + diagnostic at exact expression; attribute escape hatch |
 | Throw-point noise | drop any-throwable; registry + @throws + bounded project-only descent |
 | Determinism regressions | canonical serialization + the two CI diff tests |

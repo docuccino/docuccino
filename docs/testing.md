@@ -73,13 +73,13 @@ Consequences:
 
 - The `fixture` group is the **behavioural proof** for the inference engine's real path
   (return types, throw analysis, QB trace, determinism). It is *not* a line-coverage
-  contributor. Do not read `inference-phpstan`'s ~41% line figure as "untested" — read it
+  contributor. Do not read `inference-phpstan`'s ~35% line figure as "untested" — read it
   as "mostly proven out-of-process".
 - The CI **coverage** job therefore runs `--exclude-group=fixture` (fast, no app to
   provision) and the separate **fixture** job keeps proving the engine behaviourally.
 - Improving `inference-phpstan`'s *measurable* line coverage means adding **in-process**
-  unit tests for its pure/parent-process classes (translators, registries, protocol,
-  orchestration bookkeeping) — not more subprocess fixture tests.
+  unit tests for its pure classes (translators, registries, config objects) — not more
+  subprocess fixture tests.
 
 ## Measured coverage (2026-08-14)
 
@@ -88,9 +88,9 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **93.37%** | 93    | fully in-process-measurable                      |
-| `laravel`           | **91.92%** | 91    | fully in-process-measurable                      |
-| `inference-phpstan` | **43.59%** | 43    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **94.27%** | 93    | fully in-process-measurable                      |
+| `laravel`           | **92.08%** | 91    | fully in-process-measurable                      |
+| `inference-phpstan` | **34.55%** | 34    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 84.70%     | —     | informational only; no longer a gate             |
 
