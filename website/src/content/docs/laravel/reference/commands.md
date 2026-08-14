@@ -36,6 +36,7 @@ docuccino:export
     {--out= : Output path (defaults to the document export path)}
     {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
+    {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
     {--yaml : Emit YAML instead of JSON}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
@@ -47,6 +48,7 @@ docuccino:export
 | `--out` | path / document's [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when you configure more than one document and pass no `document` argument, since every document would clobber the same file: name a document, or configure a per-document `export.path`. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. Unrecognized values fall back to `winners`. Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
+| `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
 | `--yaml` | flag / off | Emit YAML instead of JSON. Applies to the OpenAPI formats only; `--format=uir` always writes canonical UIR JSON. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
@@ -63,6 +65,12 @@ byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) a
 [`docuccino:diff`](#docuccinodiff). For the committed artifact, `--provenance=none` (or `winners`,
 accepting that source line numbers churn as code moves — churn is cosmetic and never alters
 identities or the content hash) is the recommendation.
+
+An OpenAPI artifact carries its node identities by default, which is what keeps that diff semantic —
+without them it pairs nodes by method + path like any other OpenAPI differ, so renaming a path
+parameter reads as a removal plus an addition rather than the no-op it is. `--drop-ids` opts out. The
+diff says so when it has to fall back, and never guesses: it will not pair one side's identities
+against the other side's paths.
 
 ## `docuccino:validate`
 
@@ -102,7 +110,16 @@ docuccino:diff
 
 The diff is computed over stable `x-docuccino.id`s, so a path-param rename reads as "no change"
 while a URI change reads as remove + add. Prefer a UIR artifact for `old` — it carries the
-identities.
+identities natively, and an OpenAPI artifact carries them unless it was exported with
+[`--drop-ids`](#docuccinoexport).
+
+When either side has no identities the diff pairs nodes by method + path on **both** sides, like any
+other OpenAPI differ, and says so in its output (`pairing: "structural"` in the JSON payload). What
+you lose is rename detection: a renamed path parameter reads as a removal plus an addition. What you
+never get is a guess — the differ will not pair one side's identities against the other side's paths,
+because the two key spaces don't overlap and every operation would read as removed *and* re-added.
+Note that content pages live under the document `x-docuccino` and so cannot survive OpenAPI emission
+at all; diffing an OpenAPI artifact against a document that has them reports each as added.
 
 Responses are read through `components.responses` on **both** sides, so a body that moved between
 inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
