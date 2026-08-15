@@ -95,7 +95,7 @@ floors are set from — measure, then set the floor to the measured integer.
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **94.66%** | 94    | fully in-process-measurable                      |
 | `laravel`           | **92.42%** | 92    | fully in-process-measurable                      |
-| `inference-phpstan` | **36.32%** | 36    | real path is subprocess-only → `fixture`-proven  |
+| `inference-phpstan` | **37.90%** | 37    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
 
@@ -177,6 +177,15 @@ discriminated name, and the two shapes one *inline*-schema identity would have c
 figures still round DOWN to the floors already in place, so neither ratchets: a floor is the measured
 integer, and 94.66 and 92.42 are still 94 and 92.
 
+`inference-phpstan` then ratcheted 36 → 37, and it is the "move the measurable part out" pattern again. Fixing the
+response refiner's memo — an entry may only be served to a caller with the depth and file budget to have computed it
+itself, or a route's body depends on which unrelated route ran first — grew the refiner by bound arithmetic that
+PHPStan's `Scope` never touches. So that arithmetic left the refiner for `DescentBudget`: what the analysis in
+flight has spent, what each memoised shape cost, and whether the caller can afford it. It is pure, so a unit suite
+drives every branch in process — the depth bound, the free revisit, the drain contracts, a memoised "nothing
+recoverable" told apart from a miss, both refusal paths, and a nested descent costed to its parent with replayed
+levels included. 576/1586 (36.32%) became 622/1641 (37.90%): 55 new statements in the package, 46 of them covered.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -189,7 +198,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **36**.
+  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **37**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

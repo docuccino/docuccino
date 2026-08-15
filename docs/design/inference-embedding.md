@@ -234,10 +234,21 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    ever says "this response carries that object, built with these arguments".
 5. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
    reused verbatim (default 4 / 40). Memoisation is per callee `class::method` (and per
-   `(enum-case, method)` for folds) and is sound because the memoised shape is call-independent — with
-   one rule: a computation whose descent hit a depth/budget CUTOFF is returned for the current analysis
-   but NOT memoised, since its richness would otherwise depend on how much budget was already spent
-   before that callee was first reached (route-order dependent → nondeterminism). Containment is
+   `(enum-case, method)` for folds). A recovered shape is call-independent but NOT bound-independent, so
+   the memo is gated in BOTH directions, or a route's body would depend on which unrelated route ran
+   first:
+   - a computation whose descent hit a depth/budget CUTOFF is returned for the current analysis but NOT
+     memoised, since its richness would otherwise depend on how much budget was already spent before that
+     callee was first reached;
+   - and an entry is only SERVED to a caller that could have computed it: each entry records what its
+     descent cost — every file it touched and how many depth levels it used below the callee — and a
+     caller without that much headroom left recomputes instead, which truncates honestly. Cheap entries
+     (the common case: a helper one hop from a leaf) stay hits everywhere; only a callee reached at
+     genuinely different remaining budgets pays.
+
+   A truncation is reported, not swallowed: the analysis carries an `inference.response-shape-truncated`
+   info diagnostic counting the bound hits, since a response that quietly lost its body reads as a
+   deliberate bare `JsonResponse`. Containment is
    the PRIME scope, not the descend scope: helpers in ANY primed app source root fold (including a
    modular `Modules\…` root), while vendor — never a primed root — is never followed. Cache soundness:
    every descended helper file and every folded enum's file is reported into `dependencyFiles`,
