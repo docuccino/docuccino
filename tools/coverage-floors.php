@@ -28,11 +28,11 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar. Measured 95.18% (4992/5245).
+    // phpdoc type grammar. Measured 95.22% (5036/5289).
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
-    // Measured 92.99% (5766/6201).
-    'laravel' => 92,
+    // Measured 93.01% (5790/6225).
+    'laravel' => 93,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -41,7 +41,7 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Measured 38.48% (638/1658).
+    // Measured 38.73% (646/1668).
     'inference-phpstan' => 38,
 ];
 
