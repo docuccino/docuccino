@@ -133,12 +133,11 @@ jobs:
       - name: Pest line coverage (per-package honest floors — ratchet upward, never down)
         run: composer test:coverage
 
-      # The type-coverage plugin writes its own cache non-atomically and re-reads it, so a run can
-      # die parsing a file it truncated itself. Clearing the directory first is not enough — the
-      # retry is. A genuine shortfall fails both attempts; only the parse error survives one.
+      # The plugin writes its cache non-atomically and re-reads it, so a run can die parsing a file
+      # it truncated itself. Clear it only on failure — clearing first forces the cold path, which
+      # is the slow one. A genuine shortfall fails both attempts; only the parse error survives one.
       - name: Pest type coverage
         run: |
-          rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
           composer test:types || {
             rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
             composer test:types

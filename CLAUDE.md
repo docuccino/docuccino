@@ -24,10 +24,11 @@ diffing and a bundled Scalar viewer.
   cannot drift. The 2G is headroom, not a requirement: type coverage peaks near 120 MB and
   times the same at PHP's default limit as at 4G, so a type-coverage run that appears to hang
   for minutes is stale pcov state — kill it and re-run rather than reaching for more memory.
-  The plugin writes that cache non-atomically and re-reads it, so a run can also die parsing a
-  file it truncated itself — a `ParseError` inside `vendor/pestphp/pest-plugin-type-coverage/.temp/`
-  is never your code. Delete the directory and re-run; it completes in seconds once warm. CI
-  clears it and retries once, because clearing alone does not prevent it.
+  **Leave that cache alone.** Warm, the run takes seconds; cold, it can stall for many minutes
+  with idle workers, so clearing it is what makes the run expensive, not what fixes it. Clear it
+  for one reason only — a `ParseError` inside `vendor/pestphp/pest-plugin-type-coverage/.temp/`,
+  which the plugin causes by writing that file non-atomically and is never your code — then
+  re-run. CI does the same: run, and only on failure clear and retry once.
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Determinism is
   necessary but not sufficient — output must also be **local**: adding, removing, renaming or
