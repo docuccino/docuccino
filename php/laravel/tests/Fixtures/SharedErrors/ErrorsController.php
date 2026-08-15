@@ -44,4 +44,21 @@ final class ErrorsController
     {
         return [];
     }
+
+    /**
+     * A third shape on the same status, so a status carrying two is not the only case tested. Its
+     * property sorts before the other two, so a positional name would renumber them both.
+     */
+    #[Response(status: 403, type: 'array{alert: string}', description: 'Refused')]
+    public function refused(): array
+    {
+        return [];
+    }
+
+    /** …and its second occurrence, which is what takes the third shape over the sharing threshold. */
+    #[Response(status: 403, type: 'array{alert: string}', description: 'Refused')]
+    public function refusedAgain(): array
+    {
+        return [];
+    }
 }

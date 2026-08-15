@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -23,8 +24,11 @@ use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
+use Illuminate\Routing\RouteCollection;
+use Illuminate\Routing\Router;
 
 /*
  * Monorepo Pest bootstrap. Test files live alongside their package
@@ -521,4 +525,241 @@ function importsMatching(string $package, string $pattern): array
 function claim(string $base, ?string $identity, string $content = '{"type":"object"}'): array
 {
     return ['base' => $base, 'identity' => $identity, 'content' => $content];
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Locality harnesses
+ * ---------------------------------------------------------------------------
+ *
+ * Determinism — the same code emits the same bytes — is only half the promise. The other half is
+ * LOCALITY: adding, removing or reordering one route may add and remove operations, and may never
+ * change the emitted representation of a route it did not touch. A build can be perfectly repeatable
+ * and still fail that, and every defect of this class found so far was silent and green.
+ *
+ * The two harnesses below are the guard. They own their route set — the workbench's is the goldens',
+ * so a harness that added to it would move a golden to prove a point about something else.
+ */
+
+/**
+ * Reset the router to exactly the routes a row declares, and bind the analyser it builds against.
+ *
+ * @param  callable(Router): void  $routes
+ * @param  callable(): TypeEngine|null  $engine  a FRESH engine per build (the harnesses count calls)
+ */
+function localityBuild(callable $routes, ?callable $engine = null, ?TypeEngine &$bound = null): GenerationResult
+{
+    /** @var Router $router */
+    $router = app('router');
+    $router->setRoutes(new RouteCollection);
+    $routes($router);
+
+    $bound = new CountingTypeEngine(($engine ?? static fn (): TypeEngine => WorkbenchEngine::make())());
+    app()->instance(TypeEngine::class, $bound);
+
+    return generateDocument();
+}
+
+/**
+ * A generation result as CANONICAL bytes, decoded back to an array.
+ *
+ * Read through the emitter rather than `toArray()` on purpose: `components.schemas` keeps INSERTION
+ * order there, which legitimately differs between two builds and is sorted away only by the
+ * canonicalizer. Comparing `toArray()` would fail on order alone.
+ *
+ * @return array<string, mixed>
+ */
+function emittedArray(GenerationResult $result): array
+{
+    /** @var array<string, mixed> $document */
+    $document = json_decode((new UirEmitter)->emit($result->document), true, flags: JSON_THROW_ON_ERROR);
+
+    return $document;
+}
+
+/**
+ * Every `#/components/...` pointer a node reaches, transitively. A locality break usually shows up as
+ * a component moving under an operation's feet rather than in the operation node itself, so "this
+ * route's emitted representation" has to mean the closure, not just the node.
+ *
+ * @param  array<string, mixed>  $document
+ * @param  array<string, mixed>  $seen
+ * @return array<string, mixed> pointer => component node, sorted
+ */
+function referencedComponents(array $document, mixed $node, array $seen = []): array
+{
+    foreach (pointersIn($node) as $pointer) {
+        if (array_key_exists($pointer, $seen)) {
+            continue;
+        }
+
+        [, , $bucket, $name] = explode('/', $pointer);
+        $components = $document['components'][$bucket] ?? [];
+
+        // A dangling reference is a defect in its own right, and silently recording null for one
+        // would let two builds agree by both being broken.
+        expect($components)->toBeArray()->toHaveKey($name);
+
+        $seen[$pointer] = $components[$name];
+        $seen = referencedComponents($document, $components[$name], $seen);
+    }
+
+    ksort($seen);
+
+    return $seen;
+}
+
+/**
+ * The `#/components/...` pointers stated anywhere under a node.
+ *
+ * @return list<string>
+ */
+function pointersIn(mixed $node): array
+{
+    if (! is_array($node)) {
+        return [];
+    }
+
+    $found = [];
+    foreach ($node as $key => $value) {
+        if ($key === '$ref' && is_string($value) && str_starts_with($value, '#/components/')) {
+            $found[] = $value;
+
+            continue;
+        }
+
+        $found = array_merge($found, pointersIn($value));
+    }
+
+    return $found;
+}
+
+/**
+ * One operation's emitted representation as bytes: its own canonical node plus every component it
+ * transitively `$ref`s. `$subject` is a `METHOD /path` pair.
+ */
+function operationBytes(GenerationResult $result, string $subject): string
+{
+    [$method, $path] = explode(' ', $subject, 2);
+    $method = strtolower($method);
+
+    $document = emittedArray($result);
+    $paths = $document['paths'] ?? [];
+
+    // The subject has to BE there — a projection of a missing operation compares equal to itself.
+    expect($paths)->toBeArray()->toHaveKey($path);
+    expect($paths[$path])->toBeArray()->toHaveKey($method);
+
+    $operation = $paths[$path][$method];
+
+    return (string) json_encode(
+        ['operation' => $operation, 'components' => referencedComponents($document, $operation)],
+        JSON_THROW_ON_ERROR,
+    );
+}
+
+/**
+ * Diagnostics as comparable data. Codes alone would miss a message that names the wrong class, and
+ * the list is already deterministically ordered.
+ *
+ * @param  list<Diagnostic>  $diagnostics
+ * @return list<array<string, mixed>>
+ */
+function diagnosticRecords(array $diagnostics): array
+{
+    return array_map(static fn (Diagnostic $d): array => $d->toArray(), $diagnostics);
+}
+
+/**
+ * LOCALITY. Build `$baseline`, then `$baseline` + `$extra`, and hold `$subject` — an operation the
+ * extra route has nothing to do with — to byte-identical output across the two.
+ *
+ * @param  callable(Router): void  $baseline
+ * @param  callable(Router): void  $extra  routes added beside the baseline, never touching the subject
+ * @param  string  $subject  `METHOD /path` of the operation that must not move
+ * @param  callable(): TypeEngine|null  $engine
+ */
+function assertUnaffectedByUnrelatedRoute(callable $baseline, callable $extra, string $subject, ?callable $engine = null): void
+{
+    $before = localityBuild($baseline, $engine);
+    $after = localityBuild(static function (Router $router) use ($baseline, $extra): void {
+        $baseline($router);
+        $extra($router);
+    }, $engine);
+
+    // A row whose extra route changes nothing at all is decoration: it would stay green with the
+    // whole naming layer deleted. The extra route must reach the build somehow — as output, or as a
+    // diagnostic when OpenAPI has no slot for what it asked for.
+    expect([(new UirEmitter)->emit($after->document), diagnosticRecords($after->diagnostics)])
+        ->not->toBe([(new UirEmitter)->emit($before->document), diagnosticRecords($before->diagnostics)]);
+
+    expect(operationBytes($after, $subject))->toBe(operationBytes($before, $subject));
+}
+
+/**
+ * Point the fragment cache at a fresh directory and return it.
+ */
+function fragmentCacheDir(string $slug): string
+{
+    $dir = sys_get_temp_dir().'/docuccino-locality-'.$slug.'-'.uniqid('', true);
+
+    config()->set('docuccino.cache.enabled', true);
+    config()->set('docuccino.cache.path', $dir);
+
+    return $dir;
+}
+
+/** Take a fragment-cache directory away again, whether or not the row that used it passed. */
+function removeFragmentCacheDir(string $dir): void
+{
+    array_map('unlink', glob($dir.'/*') ?: []);
+    @unlink($dir.'/.gitignore');
+    @rmdir($dir);
+}
+
+/**
+ * WARM == COLD. Warm the fragment cache on `$before`, document `$after` against that warm cache, then
+ * document `$after` again in a fresh cache directory, and hold the two to the same bytes AND the same
+ * diagnostics.
+ *
+ * Both directions of the diagnostic comparison matter: a warm build reporting FEWER diagnostics is
+ * the silent-degradation form, and one reporting MORE is just as wrong.
+ *
+ * @param  callable(Router): void  $before  the route set the cache is warmed on
+ * @param  callable(Router): void  $after  the route set both builds document
+ * @param  callable(): TypeEngine|null  $engine
+ */
+function assertWarmEqualsCold(callable $before, callable $after, ?callable $engine = null): void
+{
+    $warmDir = fragmentCacheDir('warm');
+    $coldDir = null;
+
+    try {
+        localityBuild($before, $engine);
+
+        // An unwritten cache makes the "warm" build a second cold one, and the row proves nothing.
+        expect(glob($warmDir.'/*.json') ?: [])->not->toBeEmpty();
+
+        $warm = localityBuild($after, $engine, $warmEngine);
+
+        $coldDir = fragmentCacheDir('cold');
+        $cold = localityBuild($after, $engine, $coldEngine);
+
+        // A build that documented nothing would agree with any other build that documented nothing.
+        expect($warm->document->toArray())->toHaveKey('paths')
+            ->and($warm->document->toArray()['paths'])->not->toBeEmpty()
+            ->and((new UirEmitter)->emit($warm->document))->toBe((new UirEmitter)->emit($cold->document))
+            ->and(diagnosticRecords($warm->diagnostics))->toBe(diagnosticRecords($cold->diagnostics));
+
+        // …and the warm build really was warm. Every row shares at least one route with `$before`, so
+        // it must reach the engine strictly less often than the cold build does.
+        expect($warmEngine)->toBeInstanceOf(CountingTypeEngine::class)
+            ->and($coldEngine)->toBeInstanceOf(CountingTypeEngine::class)
+            ->and($warmEngine->analyzeCount)->toBeLessThan($coldEngine->analyzeCount);
+    } finally {
+        removeFragmentCacheDir($warmDir);
+        if ($coldDir !== null) {
+            removeFragmentCacheDir($coldDir);
+        }
+    }
 }
