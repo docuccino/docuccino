@@ -24,6 +24,8 @@ Every `{param}` in a route's URI becomes a path parameter. Docuccino types it fr
   a `uuid`- or `ulid`-formatted string for a `HasUuids` / `HasUlids` model, an `integer` for the default
   incrementing key, or a plain `string` for a non-incrementing string key — so a UUID- or ULID-keyed
   model is documented correctly with no annotation.
+- A binding that names its own column — `{post:slug}` — is typed from **that** column instead: its
+  `$casts` entry, or the `@property` type the analyzer recovered for it.
 - An **unbound** segment is a required `string`.
 - An optional segment (`{param?}`) is documented as optional.
 - A route that resolves soft-deleted records (`->withTrashed()`) notes it on the parameter, so
@@ -35,7 +37,20 @@ A model binding also documents the implicit `404` the binding produces when the 
 ```php
 // routes/api.php
 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']); // {invoice} typed from Invoice's route key
+Route::get('/posts/{post:slug}', [PostController::class, 'show']);    // {post} typed from Post::$slug
 ```
+
+When nothing types the named column — no cast, no `@property` tag, no analyzer installed — the
+parameter falls back to a plain `string` and the build reports `route-binding.column-untyped` naming
+it. It never falls back to the model's route key: an endpoint that takes a slug documented as an
+`integer` id is a wrong answer, and a plain `string` is at least a true one.
+
+## Fallback routes
+
+`Route::fallback()` answers whatever no other route matched, so its URI is a placeholder rather than a
+path a client can call — and OpenAPI has no way to say "any unmatched path". A fallback route is
+therefore left out of the document, with a `route.fallback-omitted` note saying so. Document what a
+client gets for an unknown path as a `404` response on the operations that can produce one.
 
 Reach for [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to refine a parameter — set
 an OpenAPI `format`, a description, or an example, or give an unbound segment a non-string type:

@@ -97,6 +97,12 @@ final class DocumentGenerator
 
         $fragments = [];
         foreach ($this->descriptors($resolved, $document) as $descriptor) {
+            if ($descriptor->fallback) {
+                $bag->add(self::fallbackOmitted($descriptor));
+
+                continue;
+            }
+
             // A route registered for several verbs documents one operation per method.
             foreach ($descriptor->documentableMethods() as $method) {
                 $fragment = $this->processRoute($descriptor, $method, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
@@ -129,6 +135,25 @@ final class DocumentGenerator
         }
 
         return new GenerationResult(UirDocument::fromArray($assembly->document), $bag->sorted());
+    }
+
+    /**
+     * A catch-all route answers whatever no other route matched, so its template is a placeholder
+     * (`/{fallbackPlaceholder}`) rather than a path any client can call. Publishing it would hand a code
+     * generator a method for an endpoint that does not exist, and OpenAPI has no "any unmatched path"
+     * to publish it as honestly — so it is omitted, and said out loud rather than dropped in silence.
+     */
+    private static function fallbackOmitted(RouteDescriptor $descriptor): Diagnostic
+    {
+        $signature = $descriptor->signature();
+
+        return new Diagnostic(
+            severity: Severity::Info,
+            code: 'route.fallback-omitted',
+            message: sprintf('%s is a fallback route, so it is omitted: its path is a placeholder for every unmatched request, not an endpoint.', $signature),
+            routeSignature: $signature,
+            help: 'Document what a client gets for an unknown path as a 404 response on the operations that can produce one, rather than as an operation of its own.',
+        );
     }
 
     /**

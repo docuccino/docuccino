@@ -84,3 +84,24 @@ it('documents one operation per documentable method, dropping HEAD', function ()
         ->and((new RouteDescriptor(['GET', 'POST'], '/api/x'))->documentableMethods())->toBe(['get', 'post'])
         ->and((new RouteDescriptor(['HEAD'], '/api/x'))->documentableMethods())->toBe(['head']);
 });
+
+it('leaves the fallback flag out of the cache signature', function (): void {
+    // A catch-all is reported and omitted, so it never reaches a fragment and has nothing to key. The
+    // flag being in the signature would only make an unrelated route's key depend on it.
+    $ordinary = new RouteDescriptor(['GET'], '/api/{fallbackPlaceholder}', action: 'A@i');
+    $catchAll = new RouteDescriptor(['GET'], '/api/{fallbackPlaceholder}', action: 'A@i', fallback: true);
+
+    expect($catchAll->fallback)->toBeTrue()
+        ->and($ordinary->fallback)->toBeFalse()
+        ->and($catchAll->cacheSignature())->toBe($ordinary->cacheSignature());
+});
+
+it('folds a resolver\'s scalar cache inputs in, so a binding column busts the fragment', function (): void {
+    // Laravel parses `:slug` out of the URI it reports, so the two descriptors below agree on
+    // everything a key is otherwise made of.
+    $key = new RouteDescriptor(['GET'], '/api/posts/{post}', action: 'A@show');
+    $column = new RouteDescriptor(['GET'], '/api/posts/{post}', action: 'A@show', cacheInputs: ['binding:post=slug']);
+
+    expect($key->signature())->toBe($column->signature())
+        ->and($key->cacheSignature())->not->toBe($column->cacheSignature());
+});
