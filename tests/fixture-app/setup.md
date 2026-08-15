@@ -180,6 +180,13 @@ own (seeded from the action's parameter type):
 - `app/Data/ArticleData.php` — a `spatie/laravel-data` Data class with typed public promoted
   properties (`id: int`, `title: string`, `subtitle: ?string`), so the engine recovers precise
   property types by reflection.
+- `app/Data/ListingSummaryData.php` + `app/Data/BaseListingData.php` + `app/Data/Concerns/HasRevision.php`
+  — a Data class whose shape is written across four files: it declares `title`, inherits `id`/`status`
+  from the base class, picks up `revision` from a trait the BASE class uses (PHP reports it as the
+  base's, so only a trait walk names the file), and copies `ListingStatus`'s cases into `status`. The
+  fragment-cache proof that `dependencyFiles` names every file the shape came from, not just the class
+  the question was asked about
+  (`php/inference-phpstan/tests/Integration/ClassMetadataDependencyTest.php`).
 - `app/Data/ProblemDocumentData.php` — a Data class that is both the runtime carrier and the documented
   schema of an error body, rendered through `withoutWrapping()->toResponse()` with the media type
   re-labelled by a header set on the returned response. Neither half is visible to a naive read:

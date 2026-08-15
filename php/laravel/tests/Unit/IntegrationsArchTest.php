@@ -19,6 +19,11 @@ arch('built-in integrations consume only the public extension surface')
         // not silently expose. Adding a class here widens the public surface — never add an @internal one.
         'Docuccino\Core\Extensions\Schema\ComponentHoist',
         'Docuccino\Core\Extensions\Schema\ComponentRegistry',
+        // Same exemption as EnumReflection beside it, and for the same reason: the one answer to "which
+        // files does this class's declaration span", which an integration needs whenever it records a
+        // fact inheritance decided (a static `$wrap`, a `render()` on a parent, an action trait). Every
+        // integration inlining its own hierarchy walk is precisely what this list exists to prevent.
+        'Docuccino\Core\Extensions\Schema\DeclarationFiles',
         'Docuccino\Core\Extensions\Schema\EnumReflection',
         'Docuccino\Core\Extensions\Schema\SchemaIdentity',
         'Docuccino\Core\Extensions\Schema\SchemaResult',

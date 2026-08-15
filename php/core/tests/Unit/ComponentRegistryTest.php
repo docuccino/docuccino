@@ -19,6 +19,8 @@ it('dedupes a class by its schemaId across references', function (): void {
 });
 
 it('dedupes structurally-equal anonymous schemas under one name', function (): void {
+    // A schema that names no identity IS its bytes, so two equal ones are one claim — the same-thing
+    // case dedupe exists for, and the one place equal bytes are enough to merge on.
     $registry = new ComponentRegistry;
 
     $registry->registerSchema('Thing', ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]]);
@@ -27,6 +29,49 @@ it('dedupes structurally-equal anonymous schemas under one name', function (): v
     expect($name)->toBe('Thing')
         ->and($registry->schemas())->toHaveCount(1);
 });
+
+it('gives two identities two components even when their bodies are byte-equal', function (bool $reverse): void {
+    // Dedupe exists to collapse ONE class registered twice. Collapsing two classes instead dropped the
+    // newcomer's identity, so the surviving component carried whichever id registered first — route
+    // order deciding what a component MEANS, under a `$ref` name that never moved to say so. The
+    // published names have to be a function of the two claims and nothing else, either way round.
+    $body = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
+    $ids = ['App\\Billing\\ReceiptData', 'App\\Support\\ReceiptData'];
+
+    $registry = new ComponentRegistry;
+    foreach ($reverse ? array_reverse($ids) : $ids as $id) {
+        $registry->registerSchema('ReceiptData', $body, $id);
+    }
+
+    $renames = $registry->schemaRenames();
+    $published = [];
+    foreach ($registry->schemaIds() as $slot => $id) {
+        $published[$id] = $renames[$slot] ?? $slot;
+    }
+    ksort($published);
+
+    expect($registry->schemas())->toHaveCount(2)
+        ->and($published)->toBe([
+            'App\\Billing\\ReceiptData' => 'BillingReceiptData',
+            'App\\Support\\ReceiptData' => 'SupportReceiptData',
+        ])
+        ->and($registry->nameCollisions())->toHaveCount(1);
+})->with([false, true]);
+
+it('never merges an identified schema into an anonymous one, or the reverse', function (bool $reverse): void {
+    // The rule has to be symmetric. Merging one way only would make "one component or two" — and which
+    // identity it carries — a question of which route the build met first.
+    $body = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
+
+    $registry = new ComponentRegistry;
+    foreach ($reverse ? [null, 'App\\Thing'] : ['App\\Thing', null] as $id) {
+        $registry->registerSchema('Thing', $body, $id);
+    }
+
+    expect($registry->schemas())->toHaveCount(2)
+        ->and($registry->schemaIds())->toHaveCount(1)
+        ->and(array_values($registry->schemaIds()))->toBe(['App\\Thing']);
+})->with([false, true]);
 
 it('suffixes a genuine name collision, provisionally and silently', function (): void {
     // Registration order is route order, so the name it hands out is only ever provisional and it says

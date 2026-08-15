@@ -38,6 +38,10 @@ final class LocalityEngine
 
     public const WORKING_GIZMO = 'Docuccino\\Laravel\\Tests\\Fixtures\\ComponentNames\\Working\\Gizmo';
 
+    public const BILLING_RECEIPT = 'Docuccino\\Laravel\\Tests\\Fixtures\\ComponentNames\\Billing\\ReceiptData';
+
+    public const SUPPORT_RECEIPT = 'Docuccino\\Laravel\\Tests\\Fixtures\\ComponentNames\\Support\\ReceiptData';
+
     public static function make(): StubTypeEngine
     {
         $returns = static fn (string $fqcn): ActionAnalysis => new ActionAnalysis(
@@ -62,6 +66,9 @@ final class LocalityEngine
                 self::API_USER => new ClassMetadata(self::API_USER, [new PropertyMetadata('handle', ScalarT::string())]),
                 self::ADMIN_USER => new ClassMetadata(self::ADMIN_USER, [new PropertyMetadata('email', ScalarT::string())]),
                 self::WORKING_GIZMO => new ClassMetadata(self::WORKING_GIZMO, [new PropertyMetadata('id', ScalarT::int())]),
+                // The same members on both, so the two registrations are byte-equal.
+                self::BILLING_RECEIPT => new ClassMetadata(self::BILLING_RECEIPT, [new PropertyMetadata('id', ScalarT::int())]),
+                self::SUPPORT_RECEIPT => new ClassMetadata(self::SUPPORT_RECEIPT, [new PropertyMetadata('id', ScalarT::int())]),
                 // Broken\Gizmo is deliberately absent: an unknown class is what the analyser giving
                 // nothing back looks like from here.
             ],
@@ -73,6 +80,8 @@ final class LocalityEngine
                 ClaimController::class.'::adminUser' => $returns(self::ADMIN_USER),
                 ClaimController::class.'::brokenGizmo' => $returns(self::BROKEN_GIZMO),
                 ClaimController::class.'::workingGizmo' => $returns(self::WORKING_GIZMO),
+                ClaimController::class.'::billingReceipt' => $returns(self::BILLING_RECEIPT),
+                ClaimController::class.'::supportReceipt' => $returns(self::SUPPORT_RECEIPT),
             ],
         );
     }

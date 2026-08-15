@@ -93,9 +93,9 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.81%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.70%** | 92    | fully in-process-measurable                      |
-| `inference-phpstan` | **37.90%** | 37    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **94.85%** | 94    | fully in-process-measurable                      |
+| `laravel`           | **92.73%** | 92    | fully in-process-measurable                      |
+| `inference-phpstan` | **38.48%** | 38    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
 
@@ -194,6 +194,22 @@ the column typer's dataset covers every scalar it accepts AND every shape it ref
 does not exist), and the chain that drives it is unit-tested for a resolver that cannot answer the column
 question at all. Neither figure ratchets a floor — 94.81 and 92.70 are still 94 and 92.
 
+`inference-phpstan` then ratcheted 37 → 38, and it is the "the work landed in the measurable half" pattern
+again rather than a move. Teaching `ClassMetadataFactory` which files a shape was actually recovered
+across — the declaration hierarchy, traits included, plus every enum whose cases it copied into a property
+type — is native reflection and `toArray()` walking, so PHPStan's `Scope` never enters it and the existing
+in-process factory suite drives every branch. The engine's source-order sentinel moved out to
+`SourceOrder` in the same change for the same reason: it is a php-parser position and nothing else, and a
+hand-built unpositioned node is the only way to reach the branch that matters. 622/1641 (37.90%) became
+638/1658 (38.48%): 17 new statements, 16 of them covered. `core` (94.81% → 94.85%) and `laravel`
+(92.70% → 92.73%) both rose without reaching the next integer, so their floors hold at 94 and 92.
+
+The real-path half of that dependency work is where it has to be: `dependencyFiles` is what the engine
+answers, so `php/inference-phpstan/tests/Integration/ClassMetadataDependencyTest.php` runs the provisioned
+app's own class hierarchy through the real engine and then through the real `FragmentCache`, editing each
+inherited source in turn. A stub engine cannot say which file declared a property, so a stub-driven test
+of this would have pinned its own fixture data.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -206,7 +222,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **37**.
+  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **38**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

@@ -11,7 +11,7 @@ use Docuccino\Core\Support\Json;
 
 /**
  * Accumulates the reusable schema/response components hoisted during a build: structurally-equal
- * registrations dedupe and a genuine name collision gets a deterministic suffix. The `schemaId` hint
+ * registrations of ONE identity dedupe and a genuine name collision gets a deterministic suffix. The `schemaId` hint
  * (an FQCN) is remembered per component so the assembler can pin its diff identity via
  * {@see IdentityGenerator::namedSchemaId()}.
  *
@@ -88,7 +88,8 @@ final class ComponentRegistry
 
     /**
      * Register a named schema, returning the final component name (suffixed on genuine collision).
-     * A structurally-identical re-registration under the same name is deduped.
+     * A structurally-identical re-registration of the same identity is deduped; see {@see mergesInto()}
+     * for why two identities are never merged, however alike their bytes.
      *
      * @param  array<string, mixed>  $schema
      */
@@ -123,14 +124,14 @@ final class ComponentRegistry
             return $base;
         }
 
-        if (isset($this->schemas[$base]) && self::structurallyEqual($this->schemas[$base], $schema)) {
+        if (isset($this->schemas[$base]) && $this->mergesInto($base, $schema, $schemaId)) {
             return $base;
         }
 
         $suffixed = $base;
         $n = 1;
         while (
-            (isset($this->schemas[$suffixed]) && ! self::structurallyEqual($this->schemas[$suffixed], $schema))
+            (isset($this->schemas[$suffixed]) && ! $this->mergesInto($suffixed, $schema, $schemaId))
             || isset($this->reservedIds[$suffixed])
         ) {
             $n++;
@@ -142,6 +143,29 @@ final class ComponentRegistry
         }
 
         return $suffixed;
+    }
+
+    /**
+     * Whether a registration may collapse into the schema already occupying a slot: same identity, same
+     * bytes. Equal bytes alone are not enough — two DISTINCT classes whose shapes happen to coincide get
+     * two components, at the cost of one redundant component in the rare case that they do.
+     *
+     * The alternatives are both worse. Identifying a merged component by its CONTENT would stop the
+     * differ tracking a class across a body change, so every edit would read as remove + add; identifying
+     * it by the SET of contributors would mutate an existing id whenever another class joined — a
+     * distant part of the application renaming one it never touched. Dropping the newcomer's identity
+     * (what this used to do) is the same defect a step further on: the surviving component carried
+     * whichever id registered first, which is route order.
+     *
+     * A schema that names no identity has none to lose, so two of those with equal bytes are one claim
+     * and still merge — that is the same-class case, which is what dedupe is for.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    private function mergesInto(string $slot, array $schema, ?string $schemaId): bool
+    {
+        return ($this->schemaIds[$slot] ?? null) === $schemaId
+            && self::structurallyEqual($this->schemas[$slot], $schema);
     }
 
     /**
