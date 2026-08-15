@@ -476,6 +476,19 @@ A status names more than one component only when the bodies genuinely differ. Wh
 plain `Error403` is retired rather than handed to one of them, and each takes a name derived from its own
 content (`Error403_kzvq2m4a`) — so adding a route can never change which body an existing `$ref` means.
 
+**Retiring the plain name is a rename, and it is announced.** A document publishing `Error404` today
+loses it the moment one unrelated endpoint introduces a second `404` shape: both bodies move to
+content-derived names and every operation that referenced `Error404` is repointed. Nothing about either
+body changed and no client is reading the wrong shape — that is exactly what the rename prevents — but a
+name a generated type is called after did move, so the build reports it as a
+`components.name-collision` warning naming the retired name and both replacements. The same warning
+fires when a component from elsewhere in your app already holds the name (a class of your own called
+`Error404`), in which case the shared body climbs past it.
+
+The alternative — always discriminating, so `Error404` never exists — would name the overwhelmingly
+common single-shape case `Error404_a1b2c3d4` for everybody, to spare a few documents a one-time rename.
+The trade is deliberate, and it is the same one component names make.
+
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
 moving between inline and shared reports nothing, while a real edit to a shared body is reported against

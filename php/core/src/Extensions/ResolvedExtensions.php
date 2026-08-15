@@ -35,6 +35,12 @@ use UnitEnum;
  */
 final readonly class ResolvedExtensions
 {
+    /** How deep {@see readable()} descends into a property before it stops. */
+    private const MAX_DEPTH = 64;
+
+    /** What stands in for a value below {@see MAX_DEPTH}. */
+    private const TRUNCATED = '@docuccino:depth';
+
     /**
      * Grouped by phase once, up front, so a build iterating phases per route doesn't re-filter the
      * whole list every time.
@@ -167,6 +173,12 @@ final readonly class ResolvedExtensions
      * fields — this deliberately does not descend into one, since an injected container would be an
      * unbounded walk and a collaborator is a dependency rather than a setting. Two instances differing
      * only inside such an object therefore still key alike; holding the setting itself is the fix.
+     *
+     * The digest leans on {@see Json::stable()} being TOTAL over what a property can hold. It used to
+     * answer `''` for anything `json_encode` refused — a binary blob, a resource, an INF — and `''` is
+     * one digest shared by every configuration holding one, which silently reopened the very cache
+     * collision this method closes. That is fixed at the sink, so an unencodable value now fingerprints
+     * as itself rather than as nothing.
      */
     private static function configurationDigest(object $extension): string
     {
@@ -208,11 +220,17 @@ final readonly class ResolvedExtensions
      *
      * A closure's source position is an absolute path, which never leaves this method: the signature is
      * a fragment-cache key and nothing else, so it is local to the machine that built the cache.
+     *
+     * The descent is bounded because a property may hold anything at all, `$a['self'] = &$a` included —
+     * and that is a stack overflow, which is SIGSEGV with no message. `Json::stable()` bounds its own
+     * walk for the same reason, but this one reaches the value first.
      */
-    private static function readable(mixed $value): mixed
+    private static function readable(mixed $value, int $depth = 0): mixed
     {
         if (is_array($value)) {
-            return array_map(self::readable(...), $value);
+            return $depth >= self::MAX_DEPTH
+                ? self::TRUNCATED
+                : array_map(static fn (mixed $item): mixed => self::readable($item, $depth + 1), $value);
         }
 
         if ($value instanceof Closure) {
@@ -221,7 +239,7 @@ final readonly class ResolvedExtensions
             return [
                 'closure' => $function->getFileName().':'.$function->getStartLine().'-'.$function->getEndLine(),
                 'bound' => $function->getClosureScopeClass()?->getName(),
-                'captured' => self::readable($function->getStaticVariables()),
+                'captured' => self::readable($function->getStaticVariables(), $depth + 1),
             ];
         }
 

@@ -11,7 +11,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
-use Docuccino\Laravel\Integrations\Support\MachineDependentValue;
+use Docuccino\Laravel\Support\MachineDependentValue;
 use Illuminate\Contracts\Config\Repository;
 
 /**

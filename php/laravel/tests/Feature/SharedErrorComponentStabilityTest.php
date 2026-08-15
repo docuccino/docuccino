@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ErrorsController;
+use Illuminate\Routing\Router;
 
 /**
  * The shared error shape, proven through the whole adapter rather than over a hand-built document.
@@ -128,19 +128,19 @@ it('does not move an existing component when an unrelated route is added', funct
 it('publishes the same bytes and the same diagnostics on a warm fragment-cache build', function (): void {
     // The hoist runs over the finished document, so a warm hit — where no route re-runs — has to land on
     // the same names from the same shapes. Fewer diagnostics on a warm build would be a silent loss too.
-    $dir = sys_get_temp_dir().'/docuccino-shared-errors-'.uniqid('', true);
-    config()->set('docuccino.cache.enabled', true);
-    config()->set('docuccino.cache.path', $dir);
+    //
+    // Through `assertWarmEqualsCold()` rather than by building twice and comparing: two builds against a
+    // cache nobody proved was written or hit are two COLD builds, and they agree whether the cache works
+    // or is inert. The helper checks the cache file exists and that the warm build really did reach the
+    // type engine less often than the cold one.
+    $routes = static function (Router $router): void {
+        $router->get('api/zz-denied', [ErrorsController::class, 'denied']);
+        $router->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
+        $router->get('api/zz-blocked', [ErrorsController::class, 'blocked']);
+        $router->get('api/zz-blocked-again', [ErrorsController::class, 'blockedAgain']);
+    };
 
-    $cold = sharedErrorDocument();
-    $warm = sharedErrorDocument();
+    $warm = assertWarmEqualsCold($routes, $routes);
 
-    expect((new UirEmitter)->emit($warm->document))->toBe((new UirEmitter)->emit($cold->document))
-        ->and(array_map(static fn ($d): string => $d->code, $warm->diagnostics))
-        ->toBe(array_map(static fn ($d): string => $d->code, $cold->diagnostics))
-        ->and(errorSchemaNames($warm->document->toArray()))->toHaveCount(2);
-
-    array_map('unlink', glob($dir.'/*') ?: []);
-    @unlink($dir.'/.gitignore');
-    @rmdir($dir);
+    expect(errorSchemaNames($warm->document->toArray()))->toHaveCount(2);
 });

@@ -31,6 +31,14 @@ reference:
 | `passport` | `oauth2` | Passport, on a Passport-protected route |
 | whatever you called it | anything | Your `security.schemes` config |
 
+A scheme keeps its plain name while one definition holds it. If a build produces two different
+definitions under one name — an app that never called `Passport::tokensCan()` builds a `passport`
+scheme per distinct scope set — the plain name is retired and each takes a name derived from its own
+definition (`passport_kzvq2m4a`), with a `components.name-collision` warning naming both. That keeps
+the name a `security` requirement points at a function of the definitions rather than of which route
+sorted first; calling `Passport::tokensCan()` with your real scope catalogue gives every route one
+definition and one plain `passport`.
+
 ## Sanctum
 
 Activates when [Laravel Sanctum](https://laravel.com/docs/sanctum) is installed. Docuccino documents
@@ -254,9 +262,8 @@ publishes `http://localhost/oauth/token` as the endpoint every client should get
 
 Docuccino always publishes what it finds: OpenAPI requires a `tokenUrl` on every flow object, and a
 cookie scheme with the wrong `name` makes clients send the wrong cookie, so withholding either would be
-worse than a value that needs checking. Instead the build warns, once per operation, with a
-`config.machine-dependent-value` diagnostic naming the value, the config key it came from, and the
-option that pins it:
+worse than a value that needs checking. Instead the build warns with a `config.machine-dependent-value`
+diagnostic naming the value, the config key it came from, and the option that pins it:
 
 ```php
 // config/docuccino.php → documents.default.integrations
@@ -264,12 +271,25 @@ option that pins it:
 'sanctum'  => ['cookie' => 'example_session'],       // instead of your session.cookie
 ```
 
-Pin them and the warning goes away, because the document no longer depends on where it was built. A
-Passport base URL a client can actually reach — anything but `localhost`, `127.0.0.1`, `0.0.0.0`, `::1`,
-or a name under `.localhost` / `.test` / `.local` / `.example` — is taken at face value and reported on
-only if the key it came from was empty, so a real deployment builds quietly. Run
-[`docuccino:export --fail-on=warning`](/laravel/reference/commands/#docuccinoexport) in CI to stop a document
-built against the wrong environment from ever being released.
+Pin them and the warning goes away, because the document no longer depends on where it was built.
+
+**Neither warning fires on an application that chose the value itself.** A Passport base URL a client
+can actually reach — anything but the loopback range in any of its spellings (`localhost`,
+`127.0.0.1`, `127.1`, `2130706433`, `0.0.0.0`, `::1`, `::ffff:127.0.0.1`) or a name under
+`.localhost` / `.test` / `.local` / `.example` / `.localdomain` — is taken at face value, and reported
+on only if the key it came from was empty. A Sanctum cookie name is reported only when it is exactly
+what `Str::slug(config('app.name'), '_').'_session'` produces, which is Laravel's shipped
+environment-derived default; a `config/session.php` that names the cookie itself has pinned it, and is
+left alone. The cookie warning is also raised **once for the document**, not once per route: one cookie
+name reaches every stateful operation, so a stateful app would otherwise be told the same thing several
+hundred times.
+
+A route bound to a host — `Route::domain(config('app.admin_domain'))` — publishes that host in the
+operation's `servers`, and gets the same rule for the same reason: an admin domain read out of the
+environment sends every client to a URL only the build machine can reach.
+
+Run [`docuccino:export --fail-on=warning`](/laravel/reference/commands/#docuccinoexport) in CI to stop a
+document built against the wrong environment from ever being released.
 
 ## Implicit `401`
 

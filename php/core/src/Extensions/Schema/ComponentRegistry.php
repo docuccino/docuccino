@@ -22,7 +22,7 @@ use Docuccino\Core\Support\Json;
  *
  * @phpstan-import-type Claim from ComponentNames
  *
- * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, schemaBases: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+ * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, schemaBases: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, responseBases: array<string, string>, securitySchemes: array<string, array<string, mixed>>, securitySchemeBases: array<string, string>, diagnostics: list<Diagnostic>}
  */
 final class ComponentRegistry
 {
@@ -62,6 +62,14 @@ final class ComponentRegistry
     private array $responses = [];
 
     /**
+     * The name each response registration asked for, before any collision suffix: final slot → base.
+     * Same job as {@see $schemaBases}, one bucket over.
+     *
+     * @var array<string, string>
+     */
+    private array $responseBases = [];
+
+    /**
      * Security schemes contributed by integrations, e.g. Sanctum `bearer` or Passport `oauth2` when
      * the package is installed and config set no scheme. The assembler merges these under the config
      * schemes, so explicit config wins.
@@ -69,6 +77,13 @@ final class ComponentRegistry
      * @var array<string, array<string, mixed>>
      */
     private array $securitySchemes = [];
+
+    /**
+     * The name each security-scheme registration asked for: final slot → base.
+     *
+     * @var array<string, string>
+     */
+    private array $securitySchemeBases = [];
 
     /**
      * @var list<Diagnostic>
@@ -264,15 +279,29 @@ final class ComponentRegistry
     }
 
     /**
-     * One diagnostic per name two or more schemas contested, naming every claimant and the name it was
-     * published under. A namespace-derived name is only ever the automatic answer, so the warning's job
-     * is to offer the better one: `#[SchemaName]`, where the author says what each shape actually is.
+     * One diagnostic per name two or more registrations contested, in any bucket, naming every claimant
+     * and the name it was published under. A namespace- or content-derived name is only ever the
+     * automatic answer, so the warning's job is to offer the better one: `#[SchemaName]` for a schema,
+     * or a distinct registrar-chosen name for the other two.
      *
      * @return list<Diagnostic>
      */
     public function nameCollisions(): array
     {
-        $contests = ComponentNames::contests($this->schemaClaims());
+        return [
+            ...$this->collisionsIn($this->schemaClaims(), 'schemas', 'Those names are stable but automatic — name the shapes yourself with #[SchemaName] on the source classes.'),
+            ...$this->collisionsIn($this->namedClaims($this->responses, $this->responseBases), 'responses', 'Those names are stable but automatic — register the distinct ones under names of their own.'),
+            ...$this->collisionsIn($this->namedClaims($this->securitySchemes, $this->securitySchemeBases), 'securitySchemes', 'Those names are stable but automatic — two definitions under one scheme name usually means one document is describing two audiences.'),
+        ];
+    }
+
+    /**
+     * @param  array<string, Claim>  $claims
+     * @return list<Diagnostic>
+     */
+    private function collisionsIn(array $claims, string $bucket, string $help): array
+    {
+        $contests = ComponentNames::contests($claims);
         ksort($contests);
 
         $out = [];
@@ -287,8 +316,8 @@ final class ComponentRegistry
             $out[] = new Diagnostic(
                 severity: Severity::Warning,
                 code: 'components.name-collision',
-                message: sprintf('Component name "%s" is claimed by distinct schemas; each was published under its own name (%s).', $contested, implode(', ', $named)),
-                help: 'Those names are stable but automatic — name the shapes yourself with #[SchemaName] on the source classes.',
+                message: sprintf('Component name "%s" is claimed by distinct entries of components.%s; each was published under its own name (%s).', $contested, $bucket, implode(', ', $named)),
+                help: $help,
             );
         }
 
@@ -308,26 +337,26 @@ final class ComponentRegistry
     }
 
     /**
-     * Register a named response component, returning the final component name (suffixed on genuine
-     * collision). A shared response like `ProblemUnauthenticated` dedupes to one hoist however many
-     * operations reference it.
+     * Register a named response component, returning the SLOT it landed in. A shared response like
+     * `ProblemUnauthenticated` dedupes to one hoist however many operations reference it.
      *
      * @param  array<string, mixed>  $response
      */
-    public function registerResponse(string $name, array $response): string
+    public function registerResponse(string $name, array $response, ?string $base = null): string
     {
-        return $this->registerNamed($this->responses, $name, $response, 'responses');
+        return $this->registerNamed($this->responses, $this->responseBases, $name, $response, $base);
     }
 
     /**
-     * Register a security scheme an integration auto-configured; the returned name is what an
-     * operation's `security` requirement references. Dedupes, so a shared `sanctum` hoists once.
+     * Register a security scheme an integration auto-configured; the returned name is the SLOT, and
+     * what an operation's `security` requirement references until {@see securitySchemeRenames()}
+     * settles it. Dedupes, so a shared `sanctum` hoists once.
      *
      * @param  array<string, mixed>  $definition
      */
-    public function registerSecurityScheme(string $name, array $definition): string
+    public function registerSecurityScheme(string $name, array $definition, ?string $base = null): string
     {
-        return $this->registerNamed($this->securitySchemes, $name, $definition, 'security schemes');
+        return $this->registerNamed($this->securitySchemes, $this->securitySchemeBases, $name, $definition, $base);
     }
 
     /**
@@ -335,41 +364,81 @@ final class ComponentRegistry
      * genuine collision. Schemas need name reservation for self-reference cycles, so they keep their
      * own variant in {@see registerSchema()}.
      *
+     * The suffix is a SLOT and never a published name — see {@see ComponentNames} for why first-come
+     * cannot be the answer, and {@see namedRenames()} for what settles it. `$base` is what the
+     * registration asked to be called, which is the slot itself unless a warm cache hit is putting
+     * back a component that was cached under a suffix a since-deleted route pushed it onto.
+     *
      * @param  array<string, array<string, mixed>>  $bucket
+     * @param  array<string, string>  $bases
      * @param  array<string, mixed>  $body
      */
-    private function registerNamed(array &$bucket, string $name, array $body, string $kind): string
+    private function registerNamed(array &$bucket, array &$bases, string $name, array $body, ?string $base): string
     {
         $name = self::sanitize($name);
+        $base = $base === null ? $name : self::sanitize($base);
 
-        if (! isset($bucket[$name])) {
-            $bucket[$name] = $body;
-
-            return $name;
-        }
-
-        if (self::structurallyEqual($bucket[$name], $body)) {
-            return $name;
-        }
-
-        $suffixed = $name;
+        $slot = $name;
         $n = 1;
-        while (isset($bucket[$suffixed]) && ! self::structurallyEqual($bucket[$suffixed], $body)) {
+        while (isset($bucket[$slot]) && ! self::structurallyEqual($bucket[$slot], $body)) {
             $n++;
-            $suffixed = $name.'_'.$n;
+            $slot = $name.'_'.$n;
         }
 
-        if (! isset($bucket[$suffixed])) {
-            $bucket[$suffixed] = $body;
-            $this->diagnostics[] = new Diagnostic(
-                severity: Severity::Warning,
-                code: 'components.name-collision',
-                message: sprintf('Distinct %s claimed component name "%s"; the later one was hoisted as "%s".', $kind, $name, $suffixed),
-                help: 'Disambiguate the source of one of them.',
-            );
+        if (! isset($bucket[$slot])) {
+            $bucket[$slot] = $body;
+            $bases[$slot] = $base;
         }
 
-        return $suffixed;
+        return $slot;
+    }
+
+    /**
+     * The name each response is published under, where that differs from the slot it registered in.
+     * Same derivation as {@see schemaRenames()}: a response has no class identity, so what tells two
+     * of them apart is the bytes they publish.
+     *
+     * @return array<string, string>
+     */
+    public function responseRenames(): array
+    {
+        return ComponentNames::resolve($this->namedClaims($this->responses, $this->responseBases));
+    }
+
+    /**
+     * The same for `components.securitySchemes`. A registrar-chosen literal like `passport` looks
+     * exempt and is not: an app that never called `Passport::tokensCan()` builds a different `passport`
+     * definition per distinct scope set, so first-come handed the plain name to whichever route sorted
+     * first — and adding an endpoint above it renumbered every operation below.
+     *
+     * @return array<string, string>
+     */
+    public function securitySchemeRenames(): array
+    {
+        return ComponentNames::resolve($this->namedClaims($this->securitySchemes, $this->securitySchemeBases));
+    }
+
+    /**
+     * What every registration in a named bucket claims. There is no identity to carry, so the bytes it
+     * publishes stand in for one — which is what makes the ladder degenerate to the plain name and a
+     * hash of the body.
+     *
+     * @param  array<string, array<string, mixed>>  $bucket
+     * @param  array<string, string>  $bases
+     * @return array<string, Claim>
+     */
+    private function namedClaims(array $bucket, array $bases): array
+    {
+        $claims = [];
+        foreach ($bucket as $name => $body) {
+            $claims[(string) $name] = [
+                'base' => $bases[$name] ?? (string) $name,
+                'identity' => null,
+                'content' => Json::stable($body),
+            ];
+        }
+
+        return $claims;
     }
 
     /**
@@ -387,7 +456,9 @@ final class ComponentRegistry
             'schemaBases' => $this->schemaBases,
             'reservedIds' => $this->reservedIds,
             'responses' => $this->responses,
+            'responseBases' => $this->responseBases,
             'securitySchemes' => $this->securitySchemes,
+            'securitySchemeBases' => $this->securitySchemeBases,
             'diagnostics' => $this->diagnostics,
         ];
     }
@@ -402,7 +473,9 @@ final class ComponentRegistry
         $this->schemaBases = $snapshot['schemaBases'];
         $this->reservedIds = $snapshot['reservedIds'];
         $this->responses = $snapshot['responses'];
+        $this->responseBases = $snapshot['responseBases'];
         $this->securitySchemes = $snapshot['securitySchemes'];
+        $this->securitySchemeBases = $snapshot['securitySchemeBases'];
         $this->diagnostics = $snapshot['diagnostics'];
     }
 
@@ -435,6 +508,7 @@ final class ComponentRegistry
     public function restoreResponses(array $snapshot): void
     {
         $this->responses = $snapshot['responses'];
+        $this->responseBases = $snapshot['responseBases'];
     }
 
     /**
@@ -473,11 +547,30 @@ final class ComponentRegistry
     }
 
     /**
+     * The name each registered response asked for. A fragment carries these for the same reason it
+     * carries {@see schemaBases()}: a warm hit must re-register off the ask, not off a slot.
+     *
+     * @return array<string, string>
+     */
+    public function responseBases(): array
+    {
+        return $this->responseBases;
+    }
+
+    /**
      * @return array<string, array<string, mixed>>
      */
     public function securitySchemes(): array
     {
         return $this->securitySchemes;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function securitySchemeBases(): array
+    {
+        return $this->securitySchemeBases;
     }
 
     /**

@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\BuiltIn;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
-use Docuccino\Core\Identity\Base32;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Json;
@@ -70,9 +71,6 @@ final class SharedErrorResponses implements DocumentTransformer
      */
     private const MIN_OCCURRENCES = 2;
 
-    /** Characters of the content hash a contested name is discriminated by — 40 bits, as a node id's is. */
-    private const DISCRIMINATOR = 8;
-
     public function transform(UirDocumentDraft $document, DocumentContext $context): void
     {
         if (! RepresentationPolicy::fromConfig($context->config->representation)->errorComponents) {
@@ -87,8 +85,12 @@ final class SharedErrorResponses implements DocumentTransformer
 
         $components = is_array($doc['components'] ?? null) ? $doc['components'] : [];
 
-        [$paths, $schemas] = self::shareShapes($paths, self::bucket($components, 'schemas'));
-        [$paths, $responses] = self::shareResponses($paths, self::bucket($components, 'responses'));
+        [$paths, $schemas, $schemaContests] = self::shareShapes($paths, self::bucket($components, 'schemas'));
+        [$paths, $responses, $responseContests] = self::shareResponses($paths, self::bucket($components, 'responses'));
+
+        foreach ([...$schemaContests, ...$responseContests] as $collision) {
+            $context->report($collision);
+        }
 
         if ($schemas === null && $responses === null) {
             return;
@@ -122,21 +124,25 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * @param  array<array-key, mixed>  $paths
      * @param  array<string, mixed>  $existing
-     * @return array{array<array-key, mixed>, array<string, mixed>|null}
+     * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>}
      */
     private static function shareShapes(array $paths, array $existing): array
     {
         $shapes = self::shareable(self::collect($paths, self::schemaSites(...)));
         if ($shapes === []) {
-            return [$paths, null];
+            return [$paths, null, []];
         }
 
         $identity = new IdentityGenerator;
-        [$names, $schemas] = self::mint($shapes, $existing, static fn (array $body, string $status): array => [
+        [$names, $schemas, $contests] = self::mint($shapes, $existing, static fn (array $body, string $status): array => [
             self::PROVENANCE => ['id' => $identity->publishedSchemaId($status, Arr::stringKeyed($body))],
         ] + $body);
 
-        return [self::rewrite($paths, $names, self::schemaSites(...), '#/components/schemas/'), $schemas];
+        return [
+            self::rewrite($paths, $names, self::schemaSites(...), '#/components/schemas/'),
+            $schemas,
+            self::collisions($contests, $names, 'schemas'),
+        ];
     }
 
     /**
@@ -144,18 +150,22 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * @param  array<array-key, mixed>  $paths
      * @param  array<string, mixed>  $existing
-     * @return array{array<array-key, mixed>, array<string, mixed>|null}
+     * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>}
      */
     private static function shareResponses(array $paths, array $existing): array
     {
         $responses = self::shareable(self::collect($paths, self::responseSites(...)));
         if ($responses === []) {
-            return [$paths, null];
+            return [$paths, null, []];
         }
 
-        [$names, $bucket] = self::mint($responses, $existing, static fn (array $body, string $status): array => $body);
+        [$names, $bucket, $contests] = self::mint($responses, $existing, static fn (array $body, string $status): array => $body);
 
-        return [self::rewrite($paths, $names, self::responseSites(...), '#/components/responses/'), $bucket];
+        return [
+            self::rewrite($paths, $names, self::responseSites(...), '#/components/responses/'),
+            $bucket,
+            self::collisions($contests, $names, 'responses'),
+        ];
     }
 
     /**
@@ -242,85 +252,93 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * The published name of every shared body, plus the bucket it was hoisted into.
+     * The published name of every shared body, the bucket it was hoisted into, and the names that were
+     * contested.
      *
-     * `Error<status>` belongs to a status only while ONE body claims it. Two retire it and each takes a
-     * name discriminated by its own content, so a third arriving later disturbs neither — see
-     * {@see ComponentNames} for why a first-come suffix cannot be the answer. A component already
-     * holding the plain name with a different body retires it just the same; an identical one is reused,
-     * so a rebuild over a restored document stays byte-identical.
+     * The naming is {@see ComponentNames}'s, not this transformer's: every path that mints a component
+     * name owes it that invariant, and a second implementation of "plain name, then content hash, then
+     * a numeric tail" is how the two would come to disagree. Each body states a claim with no identity
+     * to carry — the bytes stand in for one — which is exactly the two-rung ladder this used to
+     * hand-roll.
+     *
+     * So `Error<status>` belongs to a status only while ONE body claims it: two make it contested and
+     * each takes a name derived from its own content, and a third arriving later disturbs neither. A
+     * component already holding a name with a DIFFERENT body is `$taken` and cannot move — this pass
+     * runs after the registry's names are published — so the shared body climbs past it instead. One
+     * holding an IDENTICAL body is not taken, which is what keeps a rebuild over a restored document
+     * byte-identical.
      *
      * @param  array<string, array{status: string, body: array<array-key, mixed>, count: int}>  $bodies
      * @param  array<string, mixed>  $existing
      * @param  callable(array<array-key, mixed>, string): array<array-key, mixed>  $publish
-     * @return array{array<string, string>, array<string, mixed>}
+     * @return array{array<string, string>, array<string, mixed>, array<string, list<string>>}
      */
     private static function mint(array $bodies, array $existing, callable $publish): array
     {
-        $bucket = $existing;
-        $names = [];
+        $claims = [];
+        $published = [];
+        foreach ($bodies as $key => $body) {
+            $claims[$key] = ['base' => 'Error'.$body['status'], 'identity' => null, 'content' => $key];
+            $published[$key] = $publish($body['body'], $body['status']);
+        }
 
-        foreach (self::byStatus($bodies) as $status => $keys) {
-            sort($keys);
-            $plain = ComponentNames::sanitize('Error'.$status);
-
-            foreach ($keys as $key) {
-                $body = $publish($bodies[$key]['body'], (string) $status);
-
-                $name = count($keys) === 1 && self::free($bucket, $plain, $body)
-                    ? $plain
-                    : self::discriminated($bucket, $plain, $key, $body);
-
-                $bucket[$name] = $body;
-                $names[$key] = $name;
+        $taken = [];
+        foreach ($existing as $name => $body) {
+            if (! in_array($body, $published, true)) {
+                $taken[] = $name;
             }
         }
 
-        return [$names, $bucket];
+        [$names, $contests] = ComponentNames::mint($claims, $taken);
+
+        // Filed in content order, so even the bucket's INSERTION order — which survives `toArray()`
+        // and is only sorted away on emit — is a function of the bodies rather than of the order the
+        // document walk met them.
+        $ordered = $names;
+        ksort($ordered);
+
+        $bucket = $existing;
+        foreach ($ordered as $key => $name) {
+            $bucket[$name] = $published[$key];
+        }
+
+        return [$names, $bucket, $contests];
     }
 
     /**
-     * @param  array<string, array{status: string, body: array<array-key, mixed>, count: int}>  $bodies
-     * @return array<string, list<string>>
+     * One warning per name more than one thing asked for. `Error404` is a name a client's generated
+     * type is called after, and a second 404 shape retires it and repoints every operation that
+     * referenced it — a real change to what the document publishes, and the trade this transformer
+     * makes deliberately (naming the common single-shape case `Error404_a1b2c3d4` to spare a few
+     * documents a one-time rename would be worse for everyone). What it must not be is silent.
+     *
+     * @param  array<string, list<string>>  $contests  asked name → the bodies that asked for it
+     * @param  array<string, string>  $names  body → the name it was published under
+     * @return list<Diagnostic>
      */
-    private static function byStatus(array $bodies): array
+    private static function collisions(array $contests, array $names, string $bucket): array
     {
+        ksort($contests);
+
         $out = [];
-        foreach ($bodies as $key => $body) {
-            $out[$body['status']][] = $key;
+        foreach ($contests as $asked => $claimants) {
+            $published = array_map(static fn (string $key): string => $names[$key] ?? $key, $claimants);
+            sort($published);
+
+            $out[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'components.name-collision',
+                message: sprintf(
+                    'Component name "%s" is claimed by more than one shape, so each shared error body that asked for it was published under a name derived from its own content (%s) in components.%s.',
+                    $asked,
+                    implode(', ', $published),
+                    $bucket,
+                ),
+                help: 'The plain name belongs to a status while one shape holds it and is retired when a second arrives. Nothing to do if the shapes really do differ; otherwise have the operations state one body and the plain name comes back.',
+            );
         }
 
         return $out;
-    }
-
-    /**
-     * The contested name for one body: the plain name plus a prefix of its content hash, in the same
-     * base32 alphabet as a node id and so already `$ref`-safe. Anything else already holding that name
-     * pushes it to a numeric suffix — bodies are named in sorted-key order, so which one takes the
-     * suffix is a function of the contesting set rather than of the order the document met them.
-     *
-     * @param  array<string, mixed>  $bucket
-     * @param  array<array-key, mixed>  $body
-     */
-    private static function discriminated(array $bucket, string $plain, string $key, array $body): string
-    {
-        $base = $plain.'_'.substr(Base32::encode(hash('sha256', $key, binary: true)), 0, self::DISCRIMINATOR);
-
-        $name = $base;
-        for ($n = 2; ! self::free($bucket, $name, $body); $n++) {
-            $name = $base.'_'.$n;
-        }
-
-        return $name;
-    }
-
-    /**
-     * @param  array<string, mixed>  $bucket
-     * @param  array<array-key, mixed>  $body
-     */
-    private static function free(array $bucket, string $name, array $body): bool
-    {
-        return ! array_key_exists($name, $bucket) || $bucket[$name] === $body;
     }
 
     /**

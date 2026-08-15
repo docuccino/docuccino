@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
-use Docuccino\Laravel\Integrations\Support\MachineDependentValue;
+use Docuccino\Laravel\Support\MachineDependentValue;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\FormController;
 
@@ -92,13 +92,17 @@ it('publishes its own fallback base URL when app.url holds nothing, and warns', 
         ->and($reports[0]->help)->toContain('integrations.passport.url');
 });
 
-it('publishes the environment-derived session cookie name, and warns', function (): void {
+it('publishes the environment-derived session cookie name, and warns once', function (): void {
     /** @var Router $router */
     $router = app('router');
-    $router->get('api/mdv-sanctum', [FormController::class, 'index'])
-        ->middleware(['auth:sanctum', 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful']);
+    foreach (['api/mdv-sanctum', 'api/mdv-sanctum-two', 'api/mdv-sanctum-three'] as $uri) {
+        $router->get($uri, [FormController::class, 'index'])
+            ->middleware(['auth:sanctum', 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful']);
+    }
 
-    // What `Str::slug(env('APP_NAME'), '_').'_session'` gives an app that renamed itself.
+    // Exactly what `Str::slug(env('APP_NAME'), '_').'_session'` — Laravel's shipped config/session.php —
+    // gives an app that renamed itself and never set SESSION_COOKIE.
+    config()->set('app.name', 'Acme CRM');
     config()->set('session.cookie', 'acme_crm_session');
     bindStubEngine();
     $result = generateDocument();
@@ -108,12 +112,37 @@ it('publishes the environment-derived session cookie name, and warns', function 
 
     expect($scheme['name'])->toBe('acme_crm_session')
         ->and($scheme['description'])->toContain('acme_crm_session')
+        // One cookie name is one fact, however many operations it reaches. Three routes, one report.
         ->and($reports)->toHaveCount(1)
         ->and($reports[0]->severity)->toBe(Severity::Warning)
         ->and($reports[0]->message)->toContain('acme_crm_session')
         ->and($reports[0]->message)->toContain('session.cookie')
-        ->and($reports[0]->routeSignature)->toBe('GET /api/mdv-sanctum')
+        ->and($reports[0]->routeSignature)->toBeNull()
         ->and($reports[0]->help)->toContain('integrations.sanctum.cookie');
+});
+
+/**
+ * The defect this gate closes: an app whose `config/session.php` states a cookie name of its own has
+ * pinned it, so the document says the same thing wherever it is built — and warning about that made
+ * `--fail-on=warning` red-light a correct production build. A diagnostic that fires on correct code is
+ * a defect, not a stricter setting.
+ */
+it('says nothing when config/session.php names the cookie itself', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/mdv-sanctum-pinned-config', [FormController::class, 'index'])
+        ->middleware(['auth:sanctum', 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful']);
+
+    // The app is called Acme CRM, so the environment-derived default would be `acme_crm_session`.
+    config()->set('app.name', 'Acme CRM');
+    config()->set('session.cookie', 'myapp_session');
+    bindStubEngine();
+    $result = generateDocument();
+
+    $scheme = $result->document->toArray()['components']['securitySchemes']['sanctumStateful'];
+
+    expect($scheme['name'])->toBe('myapp_session')
+        ->and(diagnosticsCoded($result->diagnostics, MachineDependentValue::CODE))->toBe([]);
 });
 
 it('says nothing when the document pins the stateful cookie name itself', function (): void {

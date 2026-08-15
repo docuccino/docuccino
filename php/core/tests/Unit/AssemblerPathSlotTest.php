@@ -79,9 +79,34 @@ it('reports a shared identity and a taken slot as the two different problems the
     'renamed path parameter' => ['/api/users/{id}', 'op:v1:aaaaaaaaaaaaaaaa', ['identity.duplicate-operation']],
     // One slot, two identities: the document loses an operation, and nothing about identity is wrong.
     'two hosts on one URI' => ['/api/users/{user}', 'op:v1:bbbbbbbbbbbbbbbb', ['paths.operation-collision']],
-    // One slot, one identity: both are true at once, and both are said.
-    'one slot and one identity' => ['/api/users/{user}', 'op:v1:aaaaaaaaaaaaaaaa', ['identity.duplicate-operation', 'paths.operation-collision']],
+    // One slot AND one identity is ONE event: the identity repeats because the path and method do, so
+    // the collision report already names it. Saying it twice, thirteen lines apart, is one defect
+    // reported as two.
+    'one slot and one identity' => ['/api/users/{user}', 'op:v1:aaaaaaaaaaaaaaaa', ['paths.operation-collision']],
 ]);
+
+it('does not advise a plain duplicate about hosts it does not have', function (): void {
+    // The same route registered twice is one signature twice. The host advice is right for two hosts on
+    // one URI and nonsense for this, and it used to be unconditional.
+    [, $duplicate] = ($this->assemble)([
+        ($this->fragment)('/api/reports', 'get', 'GET /api/reports', 'op:v1:aaaaaaaaaaaaaaaa'),
+        ($this->fragment)('/api/reports', 'get', 'GET /api/reports', 'op:v1:aaaaaaaaaaaaaaaa'),
+    ]);
+
+    [, $hosts] = ($this->assemble)([
+        ($this->fragment)('/api/reports', 'get', 'GET a.example.com/api/reports', 'op:v1:aaaaaaaaaaaaaaaa'),
+        ($this->fragment)('/api/reports', 'get', 'GET b.example.com/api/reports', 'op:v1:bbbbbbbbbbbbbbbb'),
+    ]);
+
+    $help = static fn (array $diagnostics): ?string => array_values(array_filter(
+        $diagnostics,
+        static fn (Diagnostic $d): bool => $d->code === 'paths.operation-collision',
+    ))[0]->help;
+
+    expect($help($duplicate))->toContain('registered twice')
+        ->and($help($duplicate))->not->toContain('host')
+        ->and($help($hosts))->toContain('host');
+});
 
 it('reports nothing when every fragment holds a slot of its own', function (): void {
     // The negative path decides whether this is usable: a collision report on an ordinary app is noise

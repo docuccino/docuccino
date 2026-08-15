@@ -83,15 +83,39 @@ final class ComponentNames
     }
 
     /**
+     * The published name of every claim, plus the names two or more of them asked for.
+     *
+     * For a caller that MINTS names rather than renaming registration slots — the shared-error hoist,
+     * which builds its components out of the finished document and has no registry to rename. It states
+     * the same claims a registry does and gets the same answers, so the two paths cannot drift apart:
+     * an identity-less claim's ladder is exactly the plain-name-then-content-hash pair such a caller
+     * would otherwise hand-roll, and {@see deepen()} is already the rule that moves two equal claimants
+     * off a name neither may keep.
+     *
+     * `$taken` names components this pass cannot move — ones already published by the time it runs. A
+     * claim proposing one climbs past it, and the name counts as contested so the move is reported
+     * rather than silent.
+     *
+     * @param  array<string, Claim>  $claims
+     * @param  list<string>  $taken
+     * @return array{array<string, string>, array<string, list<string>>}
+     */
+    public static function mint(array $claims, array $taken = []): array
+    {
+        return self::settle($claims, $taken);
+    }
+
+    /**
      * The published name of every claim, plus the claims that asked for a name someone else asked for.
      *
      * @param  array<string, Claim>  $claims
+     * @param  list<string>  $taken
      * @return array{array<string, string>, array<string, list<string>>}
      */
-    private static function settle(array $claims): array
+    private static function settle(array $claims, array $taken = []): array
     {
         $ladders = array_map(self::ladder(...), $claims);
-        $names = self::award($ladders, self::deepen($ladders), $claims);
+        $names = self::award($ladders, self::deepen($ladders, $taken), $claims, $taken);
 
         /** @var array<string, list<string>> $asked */
         $asked = [];
@@ -99,7 +123,11 @@ final class ComponentNames
             $asked[$ladder[0]][] = (string) $name;
         }
 
-        return [$names, array_filter($asked, static fn (array $claimants): bool => count($claimants) > 1)];
+        return [$names, array_filter(
+            $asked,
+            static fn (array $claimants, int|string $name): bool => count($claimants) > 1 || in_array((string) $name, $taken, true),
+            ARRAY_FILTER_USE_BOTH,
+        )];
     }
 
     /**
@@ -134,13 +162,17 @@ final class ComponentNames
      * ONTO a name someone else asked for plainly keeps climbing alone: the incumbent asked for it
      * without contest, and renaming it would let one part of an application move an unrelated one.
      *
+     * A `$taken` name is that same incumbent, one that this pass cannot move at all — so everybody on
+     * it climbs and it keeps what it has.
+     *
      * Climbing lands claims on new names, so this runs to a fixed point; a rung only ever rises and
      * every ladder is finite, so it terminates.
      *
      * @param  array<string, list<string>>  $ladders
+     * @param  list<string>  $taken
      * @return array<string, int>
      */
-    private static function deepen(array $ladders): array
+    private static function deepen(array $ladders, array $taken = []): array
     {
         $rungs = array_map(static fn (): int => 0, $ladders);
 
@@ -153,7 +185,18 @@ final class ComponentNames
                 $proposals[$ladder[$rungs[$name]]][] = (string) $name;
             }
 
-            foreach ($proposals as $claimants) {
+            foreach ($proposals as $proposal => $claimants) {
+                if (in_array((string) $proposal, $taken, true)) {
+                    foreach ($claimants as $name) {
+                        if ($rungs[$name] < count($ladders[$name]) - 1) {
+                            $rungs[$name]++;
+                            $climbed = true;
+                        }
+                    }
+
+                    continue;
+                }
+
                 if (count($claimants) < 2) {
                     continue;
                 }
@@ -184,14 +227,15 @@ final class ComponentNames
      * @param  array<string, list<string>>  $ladders
      * @param  array<string, int>  $rungs
      * @param  array<string, Claim>  $claims
+     * @param  list<string>  $taken
      * @return array<string, string>
      */
-    private static function award(array $ladders, array $rungs, array $claims): array
+    private static function award(array $ladders, array $rungs, array $claims, array $taken = []): array
     {
         $order = array_map(strval(...), array_keys($ladders));
         usort($order, static fn (string $a, string $b): int => self::discriminant($claims[$a]) <=> self::discriminant($claims[$b]));
 
-        $used = [];
+        $used = array_fill_keys($taken, true);
         $names = [];
         foreach ($order as $name) {
             $proposal = $ladders[$name][$rungs[$name]];

@@ -68,6 +68,11 @@ arch('built-in integrations consume only the public extension surface')
         // unwrappers do), and the Extensions side cannot reach into Integrations — so it lives under
         // Laravel\Support and is allow-listed here rather than existing twice.
         'Docuccino\Laravel\Support\FrameworkClasses',
+        // And again: the one rule for "this value came from the build machine, say so". Its callers sit
+        // on both sides of the line — a route's host-bound `servers` URL is an adapter extension's, the
+        // OAuth and cookie values are integrations' — and an extension may not import an integration, so
+        // the rule lives under Laravel\Support and is allow-listed here rather than existing twice.
+        'Docuccino\Laravel\Support\MachineDependentValue',
     ]);
 
 arch('built-in integrations never reach into core internals or adapter wiring')

@@ -632,6 +632,11 @@ function referencedComponents(array $document, mixed $node, array $seen = []): a
 /**
  * The `#/components/...` pointers stated anywhere under a node.
  *
+ * A `security` requirement names its scheme as a KEY and not through a `$ref`, so a `$ref`-only walk
+ * left both the scheme definition and every change to it outside the subject's projection — which is
+ * how a first-come `components.securitySchemes` name went uncaught. It is a component the operation
+ * depends on by name, so it is collected as one.
+ *
  * @return list<string>
  */
 function pointersIn(mixed $node): array
@@ -644,6 +649,16 @@ function pointersIn(mixed $node): array
     foreach ($node as $key => $value) {
         if ($key === '$ref' && is_string($value) && str_starts_with($value, '#/components/')) {
             $found[] = $value;
+
+            continue;
+        }
+
+        if ($key === 'security' && is_array($value)) {
+            foreach ($value as $requirement) {
+                foreach (is_array($requirement) ? array_keys($requirement) : [] as $scheme) {
+                    $found[] = '#/components/securitySchemes/'.$scheme;
+                }
+            }
 
             continue;
         }
@@ -745,11 +760,14 @@ function removeFragmentCacheDir(string $dir): void
  * Both directions of the diagnostic comparison matter: a warm build reporting FEWER diagnostics is
  * the silent-degradation form, and one reporting MORE is just as wrong.
  *
+ * Hands back the WARM result, so a caller can go on to pin what that build actually published —
+ * equal-and-both-empty is equality that proves nothing.
+ *
  * @param  callable(Router): void  $before  the route set the cache is warmed on
  * @param  callable(Router): void  $after  the route set both builds document
  * @param  callable(): TypeEngine|null  $engine
  */
-function assertWarmEqualsCold(callable $before, callable $after, ?callable $engine = null): void
+function assertWarmEqualsCold(callable $before, callable $after, ?callable $engine = null): GenerationResult
 {
     $warmDir = fragmentCacheDir('warm');
     $coldDir = null;
@@ -776,6 +794,8 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
         expect($warmEngine)->toBeInstanceOf(CountingTypeEngine::class)
             ->and($coldEngine)->toBeInstanceOf(CountingTypeEngine::class)
             ->and($warmEngine->analyzeCount)->toBeLessThan($coldEngine->analyzeCount);
+
+        return $warm;
     } finally {
         removeFragmentCacheDir($warmDir);
         if ($coldDir !== null) {
