@@ -724,6 +724,35 @@ freshness hashing goes through `Core\Pipeline\FileDigests`: one build hashes eac
 once — the same file sits in many routes' lists — and sees one view of it, and the memo dies with
 the build.
 
+**A dependency file is where a fact was WRITTEN, not where it was asked for.** Almost everything the
+build recovers about a class is answered by inheritance: public properties and their docblocks, a
+promoted property's constructor `@param`, a static `$wrap`, a `render()`, an action's traits, a model's
+`$casts`. PHP reports a trait-imported member as the USING class's, so the file that actually holds it
+is reachable only by walking the trait list. `Core\Extensions\Schema\DeclarationFiles` is the one answer
+to that question — own file, every parent, every trait flattened into any of them — and every recovery
+site that records a hierarchy-derived fact goes through it, including `ClassMetadataFactory`, which
+folds it into the `dependencyFiles` every consumer already forwards. An enum counts separately: its
+CASES are copied into the recovered type and into any rule quoting its backing values, so
+`EnumReflection::file()` joins the list wherever a case list is read. Erring upward here is deliberate —
+a file too many costs a rebuild, a file too few serves a stale schema — and it stays proportional, since
+a parent invalidates its subclasses and nothing else.
+
+**The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
+there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and
+`mode: 'b'` are two different builds under one class name. `ResolvedExtensions::cacheSignature()`
+therefore emits one entry per resolved instance — class, owning package version, and a digest of the
+instance's own properties, reading enum cases as cases and a closure as where it was written plus what
+it captured. Its honest limit: it does not descend into a collaborator OBJECT a property holds (an
+injected container would be an unbounded walk, and a collaborator is a dependency rather than a
+setting), so two instances differing only inside one still key alike — hold the setting itself.
+
+**Auth config is keyed unconditionally.** `Integrations\Support\AuthConfigDigestContributor` feeds
+`auth.guards` and `auth.defaults.guard` into the environment digest whether or not Sanctum or Passport
+is installed, because the guard→driver map is the framework's and is what decides which security
+integration owns a route. Left to the per-package contributors, an app running only one of them was
+covered by accident of which one that was; the package-specific contributors now carry only what is
+genuinely theirs (Sanctum's `session.cookie`, Passport's URLs, scopes and grants).
+
 ## 11. Worked example (one operation)
 
 ```json

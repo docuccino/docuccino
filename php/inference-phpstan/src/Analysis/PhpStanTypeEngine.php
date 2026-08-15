@@ -27,6 +27,7 @@ use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Support\SourceOrder;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
@@ -317,7 +318,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $type = $this->siteType($expr, $scope);
             $guard = $param === null ? [] : $this->classFqcns($this->translator->translate($scope->getType(new Variable($param))));
             $sites[] = [
-                'pos' => $this->sourcePos($returnNode),
+                'pos' => SourceOrder::of($returnNode),
                 'line' => $returnNode->getStartLine(),
                 'type' => $type,
                 'guard' => $guard,
@@ -383,7 +384,7 @@ final class PhpStanTypeEngine implements TypeEngine
         foreach ($match->arms as $arm) {
             $type = $this->siteType($arm->body, $scope);
             $sites[] = [
-                'pos' => $this->sourcePos($arm->body),
+                'pos' => SourceOrder::of($arm->body),
                 'line' => $arm->body->getStartLine(),
                 'type' => $type,
                 'guard' => $arm->conds === null ? [] : $this->armInstanceofGuards($arm->conds, $param, $scope),
@@ -435,13 +436,6 @@ final class PhpStanTypeEngine implements TypeEngine
     private function isDelegation(DType $type): bool
     {
         return $type instanceof VoidT || $type instanceof NullT;
-    }
-
-    private function sourcePos(Node $node): int
-    {
-        $pos = $node->getStartFilePos();
-
-        return $pos >= 0 ? $pos : $node->getStartLine();
     }
 
     /**

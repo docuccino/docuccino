@@ -45,6 +45,19 @@ it('does not move a route it did not touch', function (callable $baseline, calla
         LocalityEngine::factory(),
     ],
 
+    // Two classes of one short name whose shapes COINCIDE. Structural dedupe used to collapse them into
+    // one component, dropping the newcomer's identity — so the surviving `x-docuccino.id` was whichever
+    // route ran first, under a `$ref` name that never moved to say so.
+    'two same-short-name classes whose bodies are byte-equal' => [
+        static function (Router $r): void {
+            $r->get('api/zz-receipt-billing', [ClaimController::class, 'billingReceipt']);
+            $r->get('api/zz-receipt-support', [ClaimController::class, 'supportReceipt']);
+        },
+        static fn (Router $r) => $r->get('api/aaa-receipt', [ClaimController::class, 'supportReceipt']),
+        'GET /api/zz-receipt-billing',
+        LocalityEngine::factory(),
+    ],
+
     // Both pins carry no namespace, so there is nothing to walk and both fall to the hash rung — which
     // has to be derived from the pin, not from the order the routes arrived in.
     'a #[SchemaId]-pinned pair whose pins carry no namespace' => [

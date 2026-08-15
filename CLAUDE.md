@@ -121,7 +121,10 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   into `RouteContext::dependencies()` (files) or the descriptor cache inputs. A warm build must
   also **report** what a cold one reports — a diagnostic raised while building is lost on a warm
   hit unless it travels on the operation fragment, and fewer diagnostics on a warm build is a
-  silent degradation, not a saving.
+  silent degradation, not a saving. The file to record is where a fact was **written**, not where it
+  was asked for: inheritance and traits answer most of what the build recovers, so a class's own file
+  is only the start (`DeclarationFiles`), and an enum whose cases were copied is a file of its own.
+  Under-keying is a correctness bug and over-keying only a cost — key more when in doubt.
 - **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
   option present, optional ones commented out, one short comment each. A key the code reads must
   appear there, and the website's configuration reference must stay in sync with it. It must also stay

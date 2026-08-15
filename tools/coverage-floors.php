@@ -60,7 +60,11 @@ const FLOORS = [
     // the first half, so every statement they added is unit-tested in process.
     // Ratcheted 36 → 37 at 37.90% (622/1641): the response refiner's memo/bound accounting moved into
     // `DescentBudget`, which needs no Scope and is driven entirely in process.
-    'inference-phpstan' => 37,
+    // Ratcheted 37 → 38 at 38.48% (638/1658): the metadata factory's dependency list — the declaration
+    // hierarchy a shape was recovered across, and the enums whose cases it copied — plus the engine's one
+    // source-order sentinel. Both are native reflection and php-parser positions, no Scope, so the
+    // existing in-process suites drive every statement they added.
+    'inference-phpstan' => 38,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';
