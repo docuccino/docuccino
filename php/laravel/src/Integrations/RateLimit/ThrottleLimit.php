@@ -8,7 +8,10 @@ namespace Docuccino\Laravel\Integrations\RateLimit;
  * A parsed `throttle` declaration, either numeric (`throttle:60,1`) or named (`throttle:api`, its limit
  * defined by a `RateLimiter::for` closure). A named limiter the engine manages to fold becomes numeric and
  * carries {@see $decaySeconds}, since per-second/hour/day windows don't fit the middleware's whole-minute
- * {@see $decayMinutes}; one it can't fold stays named and documents the 429 without numbers.
+ * {@see $decayMinutes}.
+ *
+ * The recovered numbers no longer reach the document — the 429 is value-free for every route, see
+ * {@see RateLimitResponse} — so only {@see isNamed} and whether a fold succeeded still have consequences.
  */
 final readonly class ThrottleLimit
 {
@@ -23,14 +26,5 @@ final readonly class ThrottleLimit
     public function isNamed(): bool
     {
         return $this->name !== null;
-    }
-
-    /**
-     * The `Retry-After` example, in whole seconds. A folded named limiter has its window directly; the
-     * inline form derives it from the (possibly fractional) minute decay.
-     */
-    public function retryAfterSeconds(): int
-    {
-        return $this->decaySeconds ?? (int) round(($this->decayMinutes ?? 1.0) * 60);
     }
 }

@@ -1,6 +1,6 @@
 ---
 title: Rate limiting
-description: Document 429 responses and rate-limit headers from throttle middleware — including the real numbers from a named limiter.
+description: Document 429 responses and rate-limit headers from throttle middleware, by what each header means rather than what today's limit happens to be.
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
@@ -11,27 +11,20 @@ configuration required.
 
 ## What it documents
 
-Docuccino reads the throttle configuration from the middleware:
+Every throttle form Laravel accepts is recognized, and every one of them produces the same `429`:
 
-| Middleware | Documented limit |
+| Middleware | Recognized |
 | --- | --- |
-| `throttle:60,1` | 60 requests per 1 minute. |
-| `throttle:60` | 60 requests per minute (Laravel's default decay). |
-| `throttle:60,0.5` | 60 per 30 seconds — a fractional decay resolves to whole seconds. |
-| `throttle` (bare, no arguments) | Laravel's middleware default — 60 requests per minute. |
-| `throttle:10\|60` (guest\|authenticated) | The authenticated allowance (60) is documented; the response description records the lower unauthenticated limit (10 per window). |
-| `throttle:api` (a named limiter with a single limit) | The concrete numbers, read from the limiter's `RateLimiter::for` closure — e.g. `fn () => Limit::perMinute(60)` documents 60 per minute. |
-| `throttle:api` (a dynamic, conditional, or custom-response limiter) | The `429` response and headers, without concrete numbers — plus an info diagnostic. |
+| `throttle:60,1`, `throttle:60`, `throttle:60,0.5` | ✓ |
+| `throttle` (bare, no arguments) | ✓ |
+| `throttle:10\|60` (guest\|authenticated) | ✓ |
+| `throttle:api` (a named limiter) | ✓ — and its `RateLimiter::for` closure is read, see [Named limiters](#named-limiters) |
+| `ThrottleRequests::using('api')` / `::with(...)`, including the FQCN strings they render to | ✓ |
+| `ThrottleRequestsWithRedis` (the Redis variant) | ✓ |
 
-A `guest|authenticated` limit is documented at its authenticated allowance, which lines up with the
-operation's own [security requirement](/laravel/documenting/authentication/) — both are read from the
-same middleware stack.
-
-Both the short `throttle` alias and the `ThrottleRequests::using('api')` / `::with(...)` forms are
-recognized, including the FQCN strings they render to and the Redis variant
-(`ThrottleRequestsWithRedis`). When a route stacks **several** throttle middlewares, a single `429` is
-documented from the first, with a `rate-limit.multiple-throttles` info diagnostic noting the others are
-enforced independently but not separately represented.
+When a route stacks **several** throttle middlewares, a single `429` is documented from the first, with
+a `rate-limit.multiple-throttles` info diagnostic noting the others are enforced independently but not
+separately represented.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -47,11 +40,11 @@ enforced independently but not separately represented.
 	  "headers": {
 	    "Retry-After": {
 	      "description": "Seconds to wait before making another request.",
-	      "schema": { "type": "integer", "example": 60 }
+	      "schema": { "type": "integer" }
 	    },
 	    "X-RateLimit-Limit": {
 	      "description": "The maximum number of requests permitted in the current window.",
-	      "schema": { "type": "integer", "example": 60 }
+	      "schema": { "type": "integer" }
 	    },
 	    "X-RateLimit-Remaining": {
 	      "description": "The number of requests remaining in the current window.",
@@ -72,9 +65,30 @@ enforced independently but not separately represented.
 	</TabItem>
 </Tabs>
 
-`X-RateLimit-Limit` carries the allowance as its example and `Retry-After` carries the window length in
-seconds; the two runtime-varying headers are documented as integers with no example, because there is no
-honest static value for them.
+## Headers describe meaning, not numbers
+
+Every header is documented by what it *means* — no `example`, no allowance baked into the description,
+whatever the route throttles at. That's deliberate:
+
+- **A number in the spec goes stale silently.** Nothing fails when somebody edits `throttle:60,1` to
+  `throttle:120,1` and the published spec keeps saying 60.
+- **It duplicates your own prose.** Your API's docs are where a reader looks for "100 requests a minute
+  on the free plan" — with the tiers and the exceptions that go with it, which a single `example` can
+  never carry.
+- **It churns the document.** Baked-in numbers make a rate-limit tweak rewrite bytes across every
+  operation that route touches, so [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff)
+  reports a change on operations whose contract did not move.
+- **The live headers are authoritative anyway.** A client reads the real limit, the real remaining
+  count and the real reset time from its very first response, and a generated SDK reads them from the
+  same place.
+
+The payoff is a smaller, calmer document. Because every `429` is byte-identical, all of your throttled
+routes [share one `Error429` component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+instead of an `Error429`, `Error429_2`, `Error429_3` … one per distinct limit.
+
+If your published spec genuinely needs a documented number, state it yourself with an
+[Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) — a deliberate claim you
+maintain and review, rather than a build artifact that drifts.
 
 ## The body follows your error style
 
@@ -89,28 +103,28 @@ matches the rest of the document:
 | Your own handler covers throttling | Whatever that handler builds. |
 | `none`, or nothing in the chain answers | The stock `{ "message": string }`. |
 
-The body is copied in rather than `$ref`'d, because a shared response can't carry this route's
-`X-RateLimit-*` values. The finished `429` is then
-[hoisted like any other error response](/laravel/documenting/errors/#repeated-bodies-become-shared-components):
-routes sharing a limit share one `Error429`, a route with its own numbers keeps its own.
+The body is copied in rather than `$ref`'d, because the chain's own shared response carries none of the
+`X-RateLimit-*` headers this `429` needs. The finished response — headers and all — is then
+[hoisted like any other error response](/laravel/documenting/errors/#repeated-bodies-become-shared-components),
+which it can be, because every throttled route states it identically.
 
 ## Named limiters
 
 A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`.
-Docuccino never *executes* that closure, but it reads it: when the limiter returns a single `Limit`, its
-numbers flow straight into the `429`.
+Docuccino never *executes* that closure, but it does read it, to tell a limiter it understands from one
+it doesn't:
 
 ```php
-// A limiter Docuccino folds — the 429 documents 60 requests per minute.
+// A limiter Docuccino reads cleanly — no diagnostic.
 RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
 ```
 
-All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognized (note
-`perMinutes($decayMinutes, $maxAttempts)` takes its decay first), and a trailing `->by(...)` partition
-key is ignored — it changes who the limit applies to, not what the limit is.
+All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognized, and a
+trailing `->by(...)` partition key is ignored — it changes who the limit applies to, not what the limit
+is.
 
-Docuccino keeps the numberless `429` — plus a `rate-limit.dynamic-limit` info diagnostic — when the limit
-can't be read statically, rather than guessing. That covers a limiter that:
+A `rate-limit.dynamic-limit` info diagnostic names any limiter Docuccino can't read statically. That
+covers a limiter that:
 
 - returns different limits down different branches (a conditional or multi-`return` closure);
 - computes its rate from a non-literal value (`Limit::perMinute($request->user()->rate)`);
@@ -120,7 +134,8 @@ can't be read statically, rather than guessing. That covers a limiter that:
 The same diagnostic fires — naming the limiter — when a route throttles on a name that has no
 `RateLimiter::for` registration at all, which is a genuinely useful thing to find out at build time.
 
-Inline limits (`throttle:60,1`) always carry their numbers straight through.
+The `429` itself is the same either way: what a limiter looks like never changes what the response
+documents.
 
 ## Configuration
 

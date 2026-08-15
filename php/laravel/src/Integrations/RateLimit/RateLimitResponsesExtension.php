@@ -24,10 +24,11 @@ use Throwable;
  * Documents a `429 Too Many Requests` (with `Retry-After` + `X-RateLimit-*` headers) on any operation
  * whose route carries a `throttle` middleware. Always on — `throttle` ships with Laravel.
  *
- * Numeric throttles (`throttle:60,1`) document the concrete limit. A named limiter (`throttle:api`) is
- * looked up in the booted app's `RateLimiter::for` registrations, its closure located by
- * `ReflectionFunction` and folded by {@see RateLimiterLimitVisitor}. A limiter that won't fold (dynamic,
- * conditional, custom-response) still gets a 429, just without numbers, plus an info diagnostic.
+ * The 429 itself is the same for every throttled route, limit values included — see
+ * {@see RateLimitResponse} for why. A named limiter (`throttle:api`) is still looked up in the booted
+ * app's `RateLimiter::for` registrations, its closure located by `ReflectionFunction` and folded by
+ * {@see RateLimiterLimitVisitor}, but only to decide whether to report: a limiter that won't fold
+ * (dynamic, conditional, custom-response) or isn't registered at all raises an info diagnostic.
  *
  * The body comes from the error-response chain rather than this integration — see {@see body()} for why a
  * middleware-synthesized response has to ask, and why it stays inline.
@@ -62,13 +63,13 @@ final class RateLimitResponsesExtension implements OperationExtension
         }
 
         if ($limit->isNamed()) {
-            $limit = $this->resolveNamedLimiter($limit, $context);
+            $this->checkNamedLimiter($limit, $context);
         }
 
         $contribution = Contribution::integration('rate-limit', $context->actionSource());
         $response = $operation->response('429');
 
-        $built = $this->response->build($limit);
+        $built = $this->response->build();
 
         $description = $built['description'];
         if (is_string($description)) {
@@ -100,9 +101,11 @@ final class RateLimitResponsesExtension implements OperationExtension
      * This 429 is synthesized from middleware rather than from a throw the engine saw, so the
      * error-response chain never gets asked about it — and hardcoding Laravel's shape would contradict an
      * app whose handler renders `application/problem+json` for the very same exception. Asking the chain
-     * fixes that. The response stays inline rather than `$ref`-ing a shared component, because the
-     * `X-RateLimit-*` headers alongside it are per-route values a shared response can't carry; when a
-     * preset answers with a reference, the referenced component's content is copied in instead.
+     * fixes that. The response stays inline rather than `$ref`-ing the chain's component, because that
+     * component carries none of the `X-RateLimit-*` headers this 429 needs; when a preset answers with a
+     * reference, the referenced component's content is copied in instead. The finished 429 — headers and
+     * all — is then hoisted into its own shared component by `SharedErrorResponses`, which it can be
+     * because the headers are identical for every throttled route.
      *
      * Asking is a read, so the shared response the mapper registers is rolled back — this operation
      * `$ref`s nothing, and an unreferenced component would make a cold build's bytes differ from a
@@ -193,24 +196,18 @@ final class RateLimitResponsesExtension implements OperationExtension
     }
 
     /**
-     * Folds a named limiter's `RateLimiter::for` closure to concrete numbers; if it's missing,
-     * unregistered or too dynamic, keeps the numberless named limit and reports a diagnostic.
+     * Reports a named limiter whose `RateLimiter::for` closure is missing, unregistered or too dynamic to
+     * read. The fold is attempted purely for that verdict now that the numbers don't reach the document.
      */
-    private function resolveNamedLimiter(ThrottleLimit $limit, RouteContext $context): ThrottleLimit
+    private function checkNamedLimiter(ThrottleLimit $limit, RouteContext $context): void
     {
-        $name = (string) $limit->name;
-        $closure = $this->limiters->limiter($name);
+        $closure = $this->limiters->limiter((string) $limit->name);
 
-        if ($closure instanceof Closure) {
-            $folded = $this->foldLimiter($closure, $context);
-            if ($folded !== null) {
-                return $folded; // numbers recovered, so no diagnostic
-            }
+        if ($closure instanceof Closure && $this->foldLimiter($closure, $context) !== null) {
+            return; // the limit reads statically, so there's nothing to report
         }
 
         $this->reportNamedLimiter($limit, $context, $closure !== null);
-
-        return $limit;
     }
 
     /**

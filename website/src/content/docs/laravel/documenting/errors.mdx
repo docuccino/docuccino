@@ -449,8 +449,9 @@ On an app with a uniform error contract, that's most of the document's bytes —
 | A response carrying `content` | A description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
 Examples and headers count as part of the body: two `403`s differing only in their example become
-`Error403` and `Error403_2`, and a [`429`](/laravel/documenting/rate-limiting/) is shared only with routes
-carrying the same rate limit.
+`Error403` and `Error403_2`. Every [`429`](/laravel/documenting/rate-limiting/) in the document is
+identical — rate-limit headers are documented by meaning, never by value — so all of your throttled
+routes share a single `Error429`, whatever they each throttle at.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
