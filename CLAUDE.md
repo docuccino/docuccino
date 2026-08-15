@@ -24,11 +24,23 @@ diffing and a bundled Scalar viewer.
   cannot drift. The 2G is headroom, not a requirement: type coverage peaks near 120 MB and
   times the same at PHP's default limit as at 4G, so a type-coverage run that appears to hang
   for minutes is stale pcov state — kill it and re-run rather than reaching for more memory.
+  Killing it mid-write truncates the type-coverage plugin's own cache, and the *next* run then
+  dies on a parse error inside `vendor/pestphp/pest-plugin-type-coverage/.temp/` — delete that
+  directory and re-run. CI does so before every type-coverage run for the same reason.
 - **Determinism is a product feature**: byte-identical output for identical code. No
-  timestamps, no absolute paths, no randomness in any emitted document. Golden files under
+  timestamps, no absolute paths, no randomness in any emitted document. Determinism is
+  necessary but not sufficient — output must also be **local**: adding, removing, renaming or
+  reordering one part of an application must never change the emitted representation of an
+  unrelated part, and a **warm build must equal a cold one**, bytes and diagnostics both. A
+  name, an id or a `$ref` that depends on encounter order satisfies determinism and still
+  silently changes what a generated client means. Golden files under
   `php/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
   sanctioned regeneration is an ISOLATED commit explaining exactly why bytes changed.
   (`DOCUCCINO_UPDATE_GOLDEN=1` regenerates locally; CI guards it is unset.)
+- **A degraded answer must still be true**: prefer a valid vague schema over a precise false
+  one. An unconstrained-but-honest shape costs a client some type safety; a confidently wrong
+  one costs them a runtime failure. When recovery is partial, widen rather than guess — and say
+  so with a diagnostic rather than degrading quietly.
 - **Conventional commits** (`feat(laravel): …`, `fix(core): …`), NO Co-Authored-By trailers.
   Merges are **squash-only and the PR title is the message that lands**, so the title is gated
   (`.github/workflows/pr-title.yml` → `tools/pr-title-lint.php`): a conventional type, an optional
@@ -86,6 +98,16 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   is PHP-only. Rule and rationale in [`RELEASING.md`](./RELEASING.md).
 - **Precedence**: fallback(5) < inference(10) < integration(20) < docblock(30) <
   attribute(40) < overlay(45) < config(50); field-level patch semantics via PatchGuard.
+- **A minted name is a function of the thing, never of the order it was met**: any name, id or
+  `$ref` the document publishes must be derivable from the set of things contesting it — their
+  identities, their content — and never from registration, discovery or route order. A
+  first-come counter (`Foo_2`) is the anti-pattern: deterministic per build, and it still
+  reassigns meaning when an unrelated route is added. `ComponentNames` owns the invariant;
+  every path that mints a name owes it.
+- **The emitted document is read by API consumers, not by the app's authors**: descriptions,
+  summaries and examples address someone who cannot see the codebase, so they never carry
+  tooling advice, attribute names or "pin this with…" guidance. Guidance for the author is a
+  diagnostic, which is where they will actually see it.
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over
   EVERY entry + unknown-entry degradation; stub-engine tests prove mechanics only — the
   parsing/recovery half needs real-path tests (fixture group). Negative paths are coverage.
@@ -94,7 +116,10 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   a fixture shaped to satisfy the analyzer proves nothing — pin the degraded output + diagnostic
   instead. See `docs/testing.md` §"Fixture honesty".
 - **Fragment cache soundness**: anything an extension reads that affects output must flow
-  into `RouteContext::dependencies()` (files) or the descriptor cache inputs.
+  into `RouteContext::dependencies()` (files) or the descriptor cache inputs. A warm build must
+  also **report** what a cold one reports — a diagnostic raised while building is lost on a warm
+  hit unless it travels on the operation fragment, and fewer diagnostics on a warm build is a
+  silent degradation, not a saving.
 - **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
   option present, optional ones commented out, one short comment each. A key the code reads must
   appear there, and the website's configuration reference must stay in sync with it. It must also stay
