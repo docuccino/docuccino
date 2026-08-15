@@ -40,6 +40,30 @@ it('rebuilds a renamed route rather than serving its old operationId', function 
         ->and($warm['paths']['/api/renamable']['get']['operationId'] ?? null)->toBe('forms.beta');
 });
 
+it('rebuilds a route that gained withTrashed rather than serving its untrashed answer', function (): void {
+    config()->set('docuccino.cache.enabled', true);
+    config()->set('docuccino.cache.path', sys_get_temp_dir().'/docuccino-staleness-'.uniqid('', true));
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+
+    app('router')->get('api/trashable/{form}', [FormController::class, 'show']);
+    $cold = generateDocument()->document->toArray();
+
+    // `->withTrashed()` puts a note and a fact on every bound parameter, and — like the rename above —
+    // changes nothing else the key already carries and no file the fragment depends on.
+    app('router')->get('api/trashable/{form}', [FormController::class, 'show'])->withTrashed();
+    $warm = generateDocument()->document->toArray();
+
+    $coldParameter = $cold['paths']['/api/trashable/{form}']['get']['parameters'][0];
+    $warmParameter = $warm['paths']['/api/trashable/{form}']['get']['parameters'][0];
+
+    expect($coldParameter['x-docuccino'])->not->toHaveKey('facts')
+        ->and($coldParameter)->not->toHaveKey('description')
+        ->and($warmParameter['x-docuccino'])->toHaveKey('facts')
+        ->and($warmParameter['x-docuccino']['facts']['routeBinding']['withTrashed'])->toBeTrue()
+        ->and($warmParameter)->toHaveKey('description')
+        ->and($warmParameter['description'])->toContain('trashed');
+});
+
 it('never serves inference-free fragments once the engine package is installed', function (): void {
     config()->set('docuccino.cache.enabled', true);
     config()->set('docuccino.cache.path', sys_get_temp_dir().'/docuccino-staleness-'.uniqid('', true));
