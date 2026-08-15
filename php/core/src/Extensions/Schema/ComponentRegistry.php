@@ -123,16 +123,12 @@ final class ComponentRegistry
         }
 
         if (! isset($this->schemas[$suffixed])) {
+            $claimants = $this->claimants($name, $schemaId);
             $this->schemas[$suffixed] = $schema;
             if ($schemaId !== null) {
                 $this->schemaIds[$suffixed] = $schemaId;
             }
-            $this->diagnostics[] = new Diagnostic(
-                severity: Severity::Warning,
-                code: 'components.name-collision',
-                message: sprintf('Two distinct schemas claimed component name "%s"; the second was hoisted as "%s".', $name, $suffixed),
-                help: 'Disambiguate with #[SchemaName] on one of the source classes.',
-            );
+            $this->diagnostics[] = self::collision($name, $suffixed, $claimants);
         }
 
         return $suffixed;
@@ -168,17 +164,35 @@ final class ComponentRegistry
         // A reserved schema is always its own component — something references it — so a suffix here
         // means a genuine collision. Warn like the register path does.
         if ($final !== $name) {
-            $this->diagnostics[] = new Diagnostic(
-                severity: Severity::Warning,
-                code: 'components.name-collision',
-                message: sprintf('Two distinct schemas claimed component name "%s"; the second was hoisted as "%s".', $name, $final),
-                help: 'Disambiguate with #[SchemaName] on one of the source classes.',
-            );
+            $this->diagnostics[] = self::collision($name, $final, $this->claimants($name, $schemaId));
         }
 
         $this->reservedIds[$final] = $schemaId;
 
         return $final;
+    }
+
+    /**
+     * The two classes contesting `$name`, for the collision message. Naming them is the whole point of
+     * the diagnostic — "two schemas collided" is unactionable in an app with hundreds of DTOs, and the
+     * short name the author sees in the document is exactly the one that does not identify either. A
+     * schema with no identity (an inline shape rather than a hoisted class) has no FQCN to name.
+     */
+    private function claimants(string $name, ?string $incoming): string
+    {
+        $held = $this->schemaIds[$name] ?? $this->reservedIds[$name] ?? null;
+
+        return ($held ?? 'an unidentified schema').' and '.($incoming ?? 'an unidentified schema');
+    }
+
+    private static function collision(string $name, string $suffixed, string $claimants): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'components.name-collision',
+            message: sprintf('Component name "%s" is claimed by two distinct schemas (%s); the second was hoisted as "%s".', $name, $claimants, $suffixed),
+            help: 'Disambiguate with #[SchemaName] on one of the source classes.',
+        );
     }
 
     /**
@@ -288,6 +302,23 @@ final class ComponentRegistry
         $this->responses = $snapshot['responses'];
         $this->securitySchemes = $snapshot['securitySchemes'];
         $this->diagnostics = $snapshot['diagnostics'];
+    }
+
+    /**
+     * Take the diagnostics recorded since a snapshot, removing them from the registry so the assembler
+     * cannot report them twice. A route's component diagnostics belong to its fragment: that is what
+     * replays them on a warm cache hit, where nothing re-registers and a registration-time report —
+     * a name collision above all — would otherwise vanish from a build whose bytes still carry it.
+     *
+     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @return list<Diagnostic>
+     */
+    public function takeDiagnosticsSince(array $snapshot): array
+    {
+        $taken = array_slice($this->diagnostics, count($snapshot['diagnostics']));
+        $this->diagnostics = $snapshot['diagnostics'];
+
+        return $taken;
     }
 
     /**

@@ -504,9 +504,21 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
       via the registry's structural dedupe; genuinely different shapes (the input/output asymmetry — e.g.
       a `HiddenFromRequest` field, or validation-shape vs property-shape) yield two components. Because
       the Request phase precedes Responses, the request keeps the base name and the response is
-      deterministically suffixed (`Name_2`) with the existing `components.name-collision` info — proven
+      deterministically suffixed (`Name_2`) with the existing `components.name-collision` warning — proven
       live by the workbench `ArticleData` (`#[SchemaName('Article')]`) fixture, used on both sides with
       divergent shapes.
+    - **Collisions stay Warning, and stay actionable.** Nothing is lost to a collision — both shapes are
+      published, and each reference site keeps its own class's `$ref` — so it is not the Error tier, which
+      is for a document that is wrong or unbuildable (`route.build-failed`, `document.schema-invalid`,
+      `identity.duplicate-operation`). Warning is also the tier CI can already enforce with
+      `--fail-on=warning`, so a team that wants a collision to break the build has the lever without one
+      being forced on a team whose collision lives in a vendor package. What the tier does demand is that
+      the message be actionable: it names BOTH FQCNs and the contested name, because the short name in it
+      identifies neither claimant. Because the escape hatch is an attribute, a collision is settled per
+      class rather than per document — and two classes claiming the same `#[SchemaName]` is still a
+      collision. Registry diagnostics ride the route's `OperationFragment` (`takeDiagnosticsSince()`), so a
+      warm fragment-cache build — which restores components without re-registering them — reports the
+      collision its bytes still carry.
 
 ## 7. Precedence / patch semantics
 

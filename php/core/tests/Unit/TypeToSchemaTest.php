@@ -21,6 +21,7 @@ use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\PropertyMetadata;
+use Docuccino\Core\Tests\Fixtures\AttributedNode;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 
 /**
@@ -153,6 +154,35 @@ it('points a self-reference at the suffixed name when the short name collides', 
         ->and($registry->schemaIds()['Node_2'])->toBe('App\\B\\Node')
         ->and($registry->diagnostics())->toHaveCount(1)
         ->and($registry->diagnostics()[0]->code)->toBe('components.name-collision');
+});
+
+it('honours #[SchemaName] and #[SchemaId] on a plain class the fallback mapper handles', function (): void {
+    // A plain DTO reaches no integration mapper, so this is the only place its attributes can be read
+    // — and the only escape hatch its author has when a short name collides with another namespace's.
+    $fqcn = AttributedNode::class;
+    $engine = new StubTypeEngine(classes: [
+        $fqcn => new ClassMetadata($fqcn, [new PropertyMetadata('id', ScalarT::int())]),
+    ]);
+
+    $registry = new ComponentRegistry;
+    $result = (new SchemaConverter(DefaultTypeMappers::all(), $engine, $registry))->toSchema(new ClassT($fqcn));
+
+    expect($result->schema)->toBe(['$ref' => '#/components/schemas/RenamedNode'])
+        ->and($registry->schemaIds())->toBe(['RenamedNode' => 'node.v1'])
+        ->and($registry->diagnostics())->toBe([]);
+});
+
+it('falls back to the short name and the FQCN for a class carrying neither attribute', function (): void {
+    // The unattributed contract the rename must not disturb.
+    $engine = new StubTypeEngine(classes: [
+        'App\\A\\Node' => new ClassMetadata('App\\A\\Node', [new PropertyMetadata('id', ScalarT::int())]),
+    ]);
+
+    $registry = new ComponentRegistry;
+    $result = (new SchemaConverter(DefaultTypeMappers::all(), $engine, $registry))->toSchema(new ClassT('App\\A\\Node'));
+
+    expect($result->schema)->toBe(['$ref' => '#/components/schemas/Node'])
+        ->and($registry->schemaIds())->toBe(['Node' => 'App\\A\\Node']);
 });
 
 it('degrades an unexpandable class to a bare object at low confidence', function (): void {

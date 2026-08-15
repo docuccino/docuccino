@@ -236,6 +236,10 @@ final class DocumentGenerator
             $frozen = $operation->freeze();
             [$referencedSchemas, $referencedSchemaIds, $referencedResponses] = $this->componentClosure($frozen->toArray(), $components);
 
+            // What this route's component work reported moves onto the fragment, so a warm hit — which
+            // restores components without re-registering anything — still replays it.
+            $diagnostics = [...$diagnostics, ...$components->takeDiagnosticsSince($snapshot)];
+
             $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses);
             // Trace-derived dependency files widen the key, so a deep chain invalidates when any file
             // it walked changes (design §10 seam).

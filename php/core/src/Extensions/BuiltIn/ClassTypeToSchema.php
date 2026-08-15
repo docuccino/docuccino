@@ -12,15 +12,14 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
-use Docuccino\Core\Support\Fqcn;
 
 /**
  * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`.
- * Properties come from {@see TypeEngine::classMetadata()}; the component is named by the short class
- * name and pinned by the FQCN. This is the framework-agnostic fallback mapper, and it ignores
- * `#[SchemaName]`/`#[SchemaId]` on purpose — the mappers that supersede it (spatie Data,
- * Eloquent, resources) resolve those, so this one passes name and id explicitly to suppress
- * {@see ComponentHoist}'s attribute fallback.
+ * Properties come from {@see TypeEngine::classMetadata()}; the component is named by `#[SchemaName]`
+ * else the short class name, and pinned by `#[SchemaId]` else the FQCN. This is the
+ * framework-agnostic fallback mapper, so it is the ONLY mapper a plain PHP DTO reaches — passing the
+ * short name explicitly here would make the attributes dead exactly where two classes sharing a short
+ * name have no other way out, so it leaves both to {@see ComponentHoist}.
  */
 final class ClassTypeToSchema implements TypeToSchema
 {
@@ -73,6 +72,6 @@ final class ClassTypeToSchema implements TypeToSchema
             }
 
             return $object;
-        }, Fqcn::short($fqcn), $fqcn);
+        });
     }
 }

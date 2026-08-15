@@ -263,6 +263,7 @@ codebase is normal and usually not worth chasing; the same code on every action 
 | `engine.mode-unknown` | `engine.mode` isn't a mode Docuccino has; it ran in-process | Set `DOCUCCINO_ENGINE` to `in-process` or `null` — see [Engine](/laravel/reference/configuration/#engine) |
 | `inference.action-failed` | One action's analysis threw | One or two: annotate that action. All of them: [version mismatch](#responses-are-missing-everywhere) |
 | `inferred-handler.too-dynamic` | An exception handler's response couldn't be folded to a fixed shape | Describe the error response explicitly — see [Error responses](/laravel/documenting/errors/) |
+| `components.name-collision` | Two classes share a short name, so the second component was published suffixed (`Thing_2`) | Give one of the two FQCNs the message names a distinct name with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) |
 
 Two flags make diagnostics more useful:
 

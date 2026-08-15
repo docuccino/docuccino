@@ -522,6 +522,12 @@ Sets a class's component display name — distinct from its diff identity.
 class UserResource extends JsonResource {}
 ```
 
+A component is named after its class's **short** name, so two classes in different namespaces that
+share one contest the same `#/components/schemas/…` slot. Both shapes are still published — the
+second takes a `_2` suffix — and the build reports a `components.name-collision` warning naming both
+FQCNs. `#[SchemaName]` on either class is how you settle it. Two classes choosing the *same*
+`#[SchemaName]` collide in exactly the same way, and are reported the same way.
+
 ## Content & examples
 
 ### `#[Example]`
