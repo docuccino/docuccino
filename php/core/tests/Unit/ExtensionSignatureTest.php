@@ -117,6 +117,47 @@ it('reads a closure by where it was written and what it captured', function (): 
         ->and($signature($same()))->toBe($signature($same()));
 });
 
+/**
+ * A configuration value is whatever an extension author put in a property, and one that `json_encode`
+ * refuses used to take the whole instance's digest down with it: `Json::stable()` answered `''`, so
+ * every configuration holding such a value keyed alike — the exact cache collision this signature
+ * exists to close, reopened by a binary blob.
+ */
+it('still separates two configurations when one of them holds a value json_encode refuses', function (Closure $make): void {
+    $signature = static fn (string $mode): array => (new ResolvedExtensions(
+        documentTransformers: [new ConfiguredTransformer($mode, $make())],
+    ))->cacheSignature();
+
+    expect($signature('a'))->not->toBe($signature('b'));
+})->with([
+    'a binary blob' => [fn (): array => ["\xB1\x31"]],
+    'INF' => [fn (): array => [INF]],
+    'a resource' => [fn (): array => [fopen('php://memory', 'r')]],
+]);
+
+it('separates two configurations that differ only in a value json_encode refuses', function (): void {
+    $signature = static fn (array $only): array => (new ResolvedExtensions(
+        documentTransformers: [new ConfiguredTransformer('a', $only)],
+    ))->cacheSignature();
+
+    expect($signature(["\xB1\x31"]))->not->toBe($signature(["\xB1\x32"]))
+        ->and($signature(["\xB1\x31"]))->toBe($signature(["\xB1\x31"]));
+});
+
+it('answers a self-referential array property instead of crashing the build', function (): void {
+    // A property may hold anything, `$a['self'] = &$a` included, and an unbounded walk over that is a
+    // stack overflow: SIGSEGV, exit 139, no message and no diagnostic.
+    $cycle = ['x' => 1];
+    $cycle['self'] = &$cycle;
+
+    $signature = (new ResolvedExtensions(documentTransformers: [new ConfiguredTransformer('a', $cycle)]))->cacheSignature();
+
+    expect($signature)->toHaveCount(1)
+        ->and($signature[0])->not->toBe(
+            (new ResolvedExtensions(documentTransformers: [new ConfiguredTransformer('b', $cycle)]))->cacheSignature()[0],
+        );
+});
+
 it('reads what a closure captured, when two of them were written in one place', function (): void {
     // The same source position twice, differing only in what each closed over.
     $signature = static function (string $mode): array {

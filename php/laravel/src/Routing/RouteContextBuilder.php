@@ -135,15 +135,20 @@ final class RouteContextBuilder
 
     /**
      * The degraded lookup for a descriptor the shared index never saw. A URI and a method name one
-     * route only until two hosts share them, so the host decides between them — and a descriptor from
-     * a resolver that reports no host still gets the first match rather than a skeleton.
+     * route only until two hosts share them, so the host decides between them.
+     *
+     * The fallback below applies ONLY to a descriptor that names no host, which is what a resolver that
+     * doesn't model hosts produces: it has said nothing to choose by, so the first candidate is the best
+     * answer available. A descriptor that DOES name a host and finds no route on it gets a skeleton —
+     * handing it a sibling bound elsewhere would document that sibling's middleware, bindings and action
+     * under a host it does not answer on, which is worse than saying nothing.
      */
     private function locate(RouteDescriptor $descriptor): ?Route
     {
         /** @var iterable<Route> $routes */
         $routes = $this->router->getRoutes();
 
-        $hostless = null;
+        $fallback = null;
         foreach ($routes as $route) {
             if ('/'.ltrim($route->uri(), '/') !== $descriptor->uri) {
                 continue;
@@ -158,10 +163,10 @@ final class RouteContextBuilder
                 return $route;
             }
 
-            $hostless ??= $route;
+            $fallback ??= $route;
         }
 
-        return $hostless;
+        return $descriptor->domain === null ? $fallback : null;
     }
 
     /**

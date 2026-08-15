@@ -30,6 +30,8 @@ final readonly class OperationFragment
      * @param  ?string  $actionClass  the controller/action class this route dispatches to, if any
      * @param  array<string, string>  $componentSchemaBases  name → the name that schema asked for, so a warm hit re-registers off the ask and not off a slot the build it was cached in happened to give it
      * @param  array<string, array<string, mixed>>  $componentSecuritySchemes  name → the security scheme this operation's `security` requirement names
+     * @param  array<string, string>  $componentResponseBases  name → the name that response asked for, for the same reason the schema bases exist
+     * @param  array<string, string>  $componentSecuritySchemeBases  name → the name that scheme asked for
      */
     public function __construct(
         public string $path,
@@ -43,6 +45,8 @@ final readonly class OperationFragment
         public ?string $actionClass = null,
         public array $componentSchemaBases = [],
         public array $componentSecuritySchemes = [],
+        public array $componentResponseBases = [],
+        public array $componentSecuritySchemeBases = [],
     ) {}
 
     /**
@@ -90,6 +94,8 @@ final readonly class OperationFragment
             actionClass: $this->actionClass,
             componentSchemaBases: $bases,
             componentSecuritySchemes: ComponentNames::rekey($this->componentSecuritySchemes, $securitySchemes),
+            componentResponseBases: ComponentNames::rekey($this->componentResponseBases, $responses),
+            componentSecuritySchemeBases: ComponentNames::rekey($this->componentSecuritySchemeBases, $securitySchemes),
         );
     }
 
@@ -134,6 +140,8 @@ final readonly class OperationFragment
             'actionClass' => $this->actionClass,
             'componentSchemaBases' => $this->componentSchemaBases,
             'componentSecuritySchemes' => $this->componentSecuritySchemes,
+            'componentResponseBases' => $this->componentResponseBases,
+            'componentSecuritySchemeBases' => $this->componentSecuritySchemeBases,
         ];
     }
 
@@ -157,6 +165,8 @@ final readonly class OperationFragment
             actionClass: Hydrate::stringOrNull($data['actionClass'] ?? null),
             componentSchemaBases: Hydrate::stringMap($data['componentSchemaBases'] ?? null),
             componentSecuritySchemes: Hydrate::mapOfArrays($data['componentSecuritySchemes'] ?? null),
+            componentResponseBases: Hydrate::stringMap($data['componentResponseBases'] ?? null),
+            componentSecuritySchemeBases: Hydrate::stringMap($data['componentSecuritySchemeBases'] ?? null),
         );
     }
 }

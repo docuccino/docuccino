@@ -285,9 +285,22 @@ paths:
         - url: https://admin.example.com
 ```
 
-The URL scheme is taken from the first of your configured [`servers`](/laravel/reference/configuration/#servers)
-that states one, so a local `http://` app documents its hosted routes over `http`. A templated host
-(`{tenant}.example.com`) becomes a server variable, the same shape as the document-level example above.
+Binding a host swaps the **host** out of your document's server URL and nothing else. The first of your
+configured [`servers`](/laravel/reference/configuration/#servers) that states a scheme supplies the
+scheme, the port and the base path — so `https://api.example.com/v1` beside the group above publishes
+`https://admin.example.com/v1`, not `https://admin.example.com`. That matters because an
+operation-level `servers` array *replaces* the document-level one rather than adding to it: a base path
+dropped here is dropped for that operation, and a generated client calls a URL your API does not serve.
+A local `http://` app documents its hosted routes over `http` for the same reason.
+
+A templated host (`{tenant}.example.com`) becomes a server variable, the same shape as the
+document-level example above; any variable your base path still names is carried over beside it, since
+an operation-level server has to define every variable in its own URL.
+
+If the host itself comes from the environment — `Route::domain(config('app.admin_domain'))` with
+`ADMIN_DOMAIN=admin.myapp.test` — the build reports it as a
+[`config.machine-dependent-value`](/laravel/documenting/authentication/#pin-the-values-your-clients-act-on)
+warning, exactly as it does for an unpinned `app.url`.
 
 <Aside type="caution" title="One path and method is one operation">
 OpenAPI addresses an operation by path and method — there is nowhere to put a second `GET /api/invoices`

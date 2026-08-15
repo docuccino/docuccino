@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Emit\UirEmitter;
+use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Laravel\Support\MachineDependentValue;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Admin\ReportController as AdminReportController;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Api\ReportController as ApiReportController;
 use Illuminate\Routing\RouteCollection;
+use Illuminate\Routing\Router;
 
 /**
  * `Route::domain('admin.example.com')->group(...)` is ordinary Laravel, and `{tenant}.example.com` is
@@ -132,7 +134,13 @@ it('turns a templated host into server variables, optional marker dropped', func
         ->and($server['variables']['region']['default'])->toBe('region');
 });
 
-it('takes the host URL scheme from the document servers, and says https when they state none', function (array $servers, string $expected): void {
+/**
+ * Binding a host swaps the HOST out of the document's server URL and nothing else. Operation-level
+ * `servers` overrides the root array outright in every OAS version, so anything dropped here is
+ * dropped for that operation: a base path left behind sends a generated client to a URL the API does
+ * not serve, and it is still valid OpenAPI while it does it.
+ */
+it('swaps only the host out of the document server URL, keeping its scheme, port and path', function (array $servers, string $expected): void {
     [$document] = ($this->hostedDocument)(
         static function ($router): void {
             $router->domain('admin.example.com')->get('api/zz-scheme', [AdminReportController::class, 'index']);
@@ -145,36 +153,87 @@ it('takes the host URL scheme from the document servers, and says https when the
     );
 
     expect($document['paths']['/api/zz-scheme']['get'])->toHaveKey('servers')
-        ->and($document['paths']['/api/zz-scheme']['get']['servers'][0]['url'])->toBe($expected.'://admin.example.com');
+        ->and($document['paths']['/api/zz-scheme']['get']['servers'][0]['url'])->toBe($expected);
 })->with([
-    'none configured' => [[], 'https'],
-    'an https server' => [[['url' => 'https://api.example.com']], 'https'],
-    // Binding a host swaps the host out of the app URL and nothing else, so a local http app documents
-    // its hosted routes over http rather than a confident, wrong https.
-    'a local http server' => [[['url' => 'http://localhost:8000']], 'http'],
-    'a relative server, then an absolute one' => [[['url' => '/api'], ['url' => 'http://localhost']], 'http'],
-    'a relative server only' => [[['url' => '/api']], 'https'],
-    'a url that is not a string' => [[['url' => ['https://api.example.com']]], 'https'],
-    'a server with no url at all' => [[['description' => 'Production']], 'https'],
+    'none configured' => [[], 'https://admin.example.com'],
+    'an https server' => [[['url' => 'https://api.example.com']], 'https://admin.example.com'],
+    // A local http app documents its hosted routes over http rather than a confident, wrong https.
+    'a local http server on a port' => [[['url' => 'http://localhost:8000']], 'http://admin.example.com:8000'],
+    'a base path' => [[['url' => 'https://api.example.com/v1']], 'https://admin.example.com/v1'],
+    'a deep base path' => [[['url' => 'https://api.example.com/api/v2']], 'https://admin.example.com/api/v2'],
+    'a port and a base path together' => [[['url' => 'https://api.example.com:8443/v1']], 'https://admin.example.com:8443/v1'],
+    // `https://host/` is the empty base path spelled out, not a path segment to carry.
+    'a trailing slash only' => [[['url' => 'https://api.example.com/']], 'https://admin.example.com'],
+    'a relative server, then an absolute one' => [[['url' => '/api'], ['url' => 'http://localhost/v1']], 'http://admin.example.com/v1'],
+    'a relative server only' => [[['url' => '/api']], 'https://admin.example.com'],
+    'a url that is not a string' => [[['url' => ['https://api.example.com']]], 'https://admin.example.com'],
+    'a server with no url at all' => [[['description' => 'Production']], 'https://admin.example.com'],
 ]);
 
-it('serves a warm build the same bytes and the same diagnostics as a cold one', function (): void {
-    ($this->cacheInto)('hosts-warm');
+it('carries over a variable the inherited base path still names, and drops the rest', function (): void {
+    // An operation-level server overrides the root one, so it has to define every variable in its own
+    // URL — the document's definition of `{version}` does not reach it.
+    [$document] = ($this->hostedDocument)(
+        static function ($router): void {
+            $router->domain('{tenant}.example.com')->get('api/zz-inherit', [ApiReportController::class, 'index']);
+        },
+        static function (array $raw): array {
+            $raw['servers'] = [[
+                'url' => 'https://api.example.com/{version}',
+                'variables' => [
+                    'version' => ['default' => 'v1', 'enum' => ['v1', 'v2']],
+                    'unused' => ['default' => 'nothing names me'],
+                ],
+            ]];
 
-    $routes = static function ($router): void {
+            return $raw;
+        },
+    );
+
+    $server = $document['paths']['/api/zz-inherit']['get']['servers'][0] ?? [];
+
+    expect($server['url'])->toBe('https://{tenant}.example.com/{version}')
+        ->and(array_keys($server['variables']))->toBe(['tenant', 'version'])
+        ->and($server['variables']['version'])->toBe(['default' => 'v1', 'enum' => ['v1', 'v2']]);
+});
+
+/**
+ * `Route::domain(config('app.admin_domain'))` is ordinary Laravel, and the value behind it is env. The
+ * published server URL is then exactly as unreachable as an unpinned `app.url`, so it gets the same
+ * rule — a host-bound URL was the one path around it.
+ */
+it('warns when the host a route binds itself to names the build machine', function (): void {
+    [, $diagnostics] = ($this->hostedDocument)(static function ($router): void {
+        $router->domain('admin.myapp.test')->get('api/zz-local-host', [AdminReportController::class, 'index']);
+        $router->domain('admin.example.com')->get('api/zz-public-host', [ApiReportController::class, 'index']);
+    });
+
+    $reports = diagnosticsCoded($diagnostics, MachineDependentValue::CODE);
+
+    expect($reports)->toHaveCount(1)
+        ->and($reports[0]->severity)->toBe(Severity::Warning)
+        ->and($reports[0]->message)->toContain('https://admin.myapp.test')
+        ->and($reports[0]->routeSignature)->toBe('GET admin.myapp.test/api/zz-local-host');
+});
+
+it('serves a warm build the same bytes and the same diagnostics as a cold one', function (): void {
+    // Through `assertWarmEqualsCold()` rather than by building twice into one cache directory: nothing
+    // in that shape checked the cache was written OR hit, so both builds could be cold and agree — the
+    // test would stay green with the fragment cache entirely inert. The helper proves the cache file
+    // exists and that the warm build reached the type engine strictly less often.
+    $routes = static function (Router $router): void {
         $router->domain('a.example.com')->get('api/zz-hosts', [ApiReportController::class, 'index']);
         $router->domain('b.example.com')->get('api/zz-hosts', [AdminReportController::class, 'index']);
         $router->domain('{tenant}.example.com')->get('api/zz-tenant', [ApiReportController::class, 'index']);
     };
 
-    [, $coldDiagnostics, $coldDocument] = ($this->hostedDocument)($routes);
-    [$warm, $warmDiagnostics, $warmDocument] = ($this->hostedDocument)(static function (): void {});
+    $warm = assertWarmEqualsCold($routes, $routes);
+    $document = $warm->document->toArray();
 
-    expect((new UirEmitter)->emit($warmDocument))->toBe((new UirEmitter)->emit($coldDocument))
-        ->and($warm['paths']['/api/zz-tenant']['get'])->toHaveKey('servers')
-        ->and(diagnosticsCoded($warmDiagnostics, 'paths.operation-collision'))
-        ->toEqual(diagnosticsCoded($coldDiagnostics, 'paths.operation-collision'))
-        ->not->toBeEmpty();
+    // Equal diagnostics that are equally EMPTY would prove nothing, so the two facts this build is
+    // supposed to carry are pinned outright.
+    expect($document['paths']['/api/zz-tenant']['get'])->toHaveKey('servers')
+        ->and(diagnosticsCoded($warm->diagnostics, 'paths.operation-collision'))->toHaveCount(1);
 });
 
 it('never serves one host the fragment cached for its sibling on the same URI', function (): void {

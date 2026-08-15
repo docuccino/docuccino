@@ -93,8 +93,8 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **95.15%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **92.86%** | 92    | fully in-process-measurable                      |
+| `core`              | **95.17%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **92.98%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **38.48%** | 38    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
@@ -215,6 +215,18 @@ hand-assembled fragment would have pinned that arrangement instead of earning it
 4888/5137 (95.15%). `laravel` rose 92.73% → 92.86% in the same change — the machine-dependent-value rule
 and both extensions' resolution order are covered over every branch, the "nothing to report" ones included
 — but 92.86 is still 92, so its floor holds.
+
+The review-correctness pass then moved both measurable packages up without either reaching the next
+integer: `core` 4888/5137 (95.15%) → 4985/5238 (95.17%), `laravel` 5548/5985 (92.86%) → 5763/6198
+(92.98%). Both floors hold at 95 and 92 — a floor is the measured integer, and 95.17 and 92.98 are still
+95 and 92. Worth recording is WHERE the new statements came from, because most of them are the pattern
+the standards ask for rather than incidental growth: the machine-dependent-value rule gained a full IPv4
+address parser (every spelling a resolver accepts — dotted, two- and three-part, integer, hex, octal,
+IPv4-mapped IPv6) and a userinfo redactor, both driven by a dataset over every accepted spelling AND
+every negative row that must stay silent; `Json::stable()` became total over the values `json_encode`
+refuses, with a dataset over each kind plus the cycle and depth bounds; and the two named component
+buckets picked up their claim/settle path, whose branches the locality and warm/cold suites drive
+end-to-end rather than from hand-built registries.
 
 The real-path half of that dependency work is where it has to be: `dependencyFiles` is what the engine
 answers, so `php/inference-phpstan/tests/Integration/ClassMetadataDependencyTest.php` runs the provisioned

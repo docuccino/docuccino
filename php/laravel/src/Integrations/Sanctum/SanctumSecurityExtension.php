@@ -11,7 +11,6 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\Support\AuthGuardDrivers;
-use Docuccino\Laravel\Integrations\Support\MachineDependentValue;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 
 /**
@@ -27,9 +26,6 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 final class SanctumSecurityExtension implements OperationExtension
 {
     private const DEFAULT_MODES = [SanctumDetector::TOKEN, SanctumDetector::STATEFUL];
-
-    /** What a machine-dependent-value report names, since the scheme's own slot isn't settled yet. */
-    private const PUBLISHED = "The Sanctum stateful scheme's cookie name";
 
     public function __construct(
         private readonly SanctumDetector $detector = new SanctumDetector,
@@ -106,38 +102,17 @@ final class SanctumSecurityExtension implements OperationExtension
     }
 
     /**
-     * Sanctum's stateful cookie *is* the Laravel session cookie, so: per-document override, else the app's
-     * real `session.cookie`, else Laravel's default name.
-     *
-     * Everything below the override is reported. A cookie name carries no signal a URL's host does, and
-     * Laravel's shipped `config/session.php` reads `env('SESSION_COOKIE', Str::slug(env('APP_NAME'), '_')
-     * .'_session')` — so the published name is whatever the build machine's environment happened to say,
-     * and renaming the app changes the document. It is emitted anyway because it is contract-bearing:
-     * an `apiKey`-in-cookie scheme naming the wrong cookie makes every client send the wrong one.
+     * The cookie the stateful scheme names — {@see SanctumCookie}, which also decides whether the value
+     * is one anybody chose. That report is raised once for the document by {@see SanctumCookieReport},
+     * not here: one cookie name reaches every stateful operation, so reporting it per route said the
+     * same thing once per route.
      */
     private function sessionCookie(RouteContext $context): string
     {
-        $cookie = $context->document->integration('sanctum')['cookie'] ?? null;
-        if (is_string($cookie) && $cookie !== '') {
-            return $cookie;
-        }
-
-        $signature = $context->route->signature($context->httpMethod());
-        $sessionCookie = $this->config?->get('session.cookie');
-
-        if (! is_string($sessionCookie) || $sessionCookie === '') {
-            $context->components->addDiagnostic(MachineDependentValue::forDefault(
-                self::PUBLISHED, 'laravel_session', 'session.cookie', 'integrations.sanctum.cookie', $signature,
-            ));
-
-            return 'laravel_session';
-        }
-
-        $context->components->addDiagnostic(MachineDependentValue::forValue(
-            self::PUBLISHED, $sessionCookie, 'session.cookie', 'integrations.sanctum.cookie', $signature,
-        ));
-
-        return $sessionCookie;
+        return SanctumCookie::resolve(
+            $context->document->integration('sanctum')['cookie'] ?? null,
+            $this->config?->get('session.cookie'),
+        );
     }
 
     /** The app's default auth guard, for resolving bare `auth`. */

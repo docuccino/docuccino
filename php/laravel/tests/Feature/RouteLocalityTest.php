@@ -145,4 +145,80 @@ it('does not move a route it did not touch', function (callable $baseline, calla
         'GET /api/zz-hosts',
         null,
     ],
+
+    // An app that never called `Passport::tokensCan()` builds a different `passport` scheme per scope
+    // set, and a `security` requirement names its scheme by KEY — so a first-come name renumbered every
+    // operation below the route that arrived. The baseline already contests the name, so the third
+    // scope set has to be additive.
+    'a third Passport scope set on a scheme name two already contest' => [
+        static function (Router $r): void {
+            $r->get('api/zz-scope-read', [ApiReportController::class, 'index'])->middleware('scope:read');
+            $r->get('api/zz-scope-write', [ApiReportController::class, 'index'])->middleware('scope:write');
+        },
+        static fn (Router $r) => $r->get('api/aaa-scope-admin', [ApiReportController::class, 'index'])->middleware('scope:admin'),
+        'GET /api/zz-scope-read',
+        null,
+    ],
 ]);
+
+it('counts an operation\'s named security schemes as part of its emitted representation', function (): void {
+    // What every row above compares is the operation's node plus the components it reaches. A `security`
+    // requirement names its scheme by KEY and not through a `$ref`, so a ref-only walk left the scheme
+    // DEFINITION outside the projection altogether — the blind spot that let a first-come
+    // `components.securitySchemes` name go uncaught for a whole layer.
+    $document = emittedArray(localityBuild(static function (Router $r): void {
+        $r->get('api/zz-scoped', [ApiReportController::class, 'index'])->middleware('scope:read');
+    }));
+
+    $operation = $document['paths']['/api/zz-scoped']['get'];
+    $scheme = (string) array_key_first($operation['security'][0]);
+    $projection = referencedComponents($document, $operation);
+
+    expect($projection)->toHaveKey('#/components/securitySchemes/'.$scheme)
+        ->and($projection['#/components/securitySchemes/'.$scheme])
+        ->toBe($document['components']['securitySchemes'][$scheme]);
+});
+
+/**
+ * The ONE case where an unrelated route does move an existing operation, stated here rather than left
+ * out: `Error404` belongs to a status while a single shape holds it, and a second shape retires it for
+ * both. The rows above all start from an already-contested status, so they are shaped around the case
+ * that passes — this one starts from a document that publishes the plain name and takes it away.
+ *
+ * The rename is accepted (always discriminating would name the common single-shape case
+ * `Error404_a1b2c3d4` for everybody), so what has to hold is that it is ANNOUNCED. A silent rename is
+ * the defect; a reported one is a decision the reader can act on.
+ */
+it('retires a plain shared-error name when a second shape arrives, and says so', function (): void {
+    $before = localityBuild(static function (Router $r): void {
+        $r->get('api/zz-denied', [ErrorsController::class, 'denied']);
+        $r->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
+    });
+
+    $after = localityBuild(static function (Router $r): void {
+        $r->get('api/zz-denied', [ErrorsController::class, 'denied']);
+        $r->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
+        $r->get('api/aaa-blocked', [ErrorsController::class, 'blocked']);
+        $r->get('api/aaa-blocked-again', [ErrorsController::class, 'blockedAgain']);
+    });
+
+    $names = static fn ($result): array => array_values(array_filter(
+        array_map(strval(...), array_keys(emittedArray($result)['components']['schemas'] ?? [])),
+        static fn (string $name): bool => str_starts_with($name, 'Error403'),
+    ));
+
+    $collisions = diagnosticsCoded($after->diagnostics, 'components.name-collision');
+
+    expect($names($before))->toBe(['Error403'])
+        // Both shapes moved off it; neither kept a name the other had asked for.
+        ->and($names($after))->toHaveCount(2)
+        ->and($names($after))->not->toContain('Error403')
+        ->and($names($after))->each->toMatch('/^Error403_[a-z2-7]{8}$/')
+        // …and the build said so, naming the retired name and both replacements.
+        ->and($collisions)->not->toBeEmpty()
+        ->and($collisions[0]->message)->toContain('"Error403"')
+        ->and($collisions[0]->message)->toContain($names($after)[0])
+        ->and($collisions[0]->message)->toContain($names($after)[1])
+        // The document that still publishes the plain name is not warned about anything.
+        ->and(diagnosticsCoded($before->diagnostics, 'components.name-collision'))->toBe([]);
+});

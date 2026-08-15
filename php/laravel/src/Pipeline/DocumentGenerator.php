@@ -266,13 +266,13 @@ final class DocumentGenerator
             $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
 
             $frozen = $operation->freeze();
-            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases, $referencedSecuritySchemes] = $this->componentClosure($frozen->toArray(), $components);
+            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases, $referencedSecuritySchemes, $referencedResponseBases, $referencedSchemeBases] = $this->componentClosure($frozen->toArray(), $components);
 
             // What this route's component work reported moves onto the fragment, so a warm hit — which
             // restores components without re-registering anything — still replays it.
             $diagnostics = [...$diagnostics, ...$components->takeDiagnosticsSince($snapshot)];
 
-            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases, $referencedSecuritySchemes);
+            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases, $referencedSecuritySchemes, $referencedResponseBases, $referencedSchemeBases);
             // Trace-derived dependency files widen the key, so a deep chain invalidates when any file
             // it walked changes (design §10 seam).
             $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
@@ -295,7 +295,7 @@ final class DocumentGenerator
      * schemes its operations authenticate with.
      *
      * @param  array<string, mixed>  $operation
-     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>, 4: array<string, array<string, mixed>>}
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>, 4: array<string, array<string, mixed>>, 5: array<string, string>, 6: array<string, string>}
      */
     private function componentClosure(array $operation, ComponentRegistry $components): array
     {
@@ -303,11 +303,15 @@ final class DocumentGenerator
         $schemaIdMap = $components->schemaIds();
         $schemaBaseMap = $components->schemaBases();
         $responseRegistry = $components->responses();
+        $responseBaseMap = $components->responseBases();
+        $schemeBaseMap = $components->securitySchemeBases();
 
         $schemas = [];
         $schemaIds = [];
         $schemaBases = [];
         $responses = [];
+        $responseBases = [];
+        $schemeBases = [];
         $seenSchema = [];
         $seenResponse = [];
         $schemaQueue = $this->refs($operation, 'schemas');
@@ -321,6 +325,9 @@ final class DocumentGenerator
             }
             $seenResponse[$name] = true;
             $responses[$name] = $responseRegistry[$name];
+            if (isset($responseBaseMap[$name])) {
+                $responseBases[$name] = $responseBaseMap[$name];
+            }
 
             foreach ($this->refs($responseRegistry[$name], 'responses') as $nested) {
                 if (! isset($seenResponse[$nested])) {
@@ -359,10 +366,13 @@ final class DocumentGenerator
         foreach (self::securityNames($operation) as $name) {
             if (isset($registered[$name])) {
                 $securitySchemes[$name] = $registered[$name];
+                if (isset($schemeBaseMap[$name])) {
+                    $schemeBases[$name] = $schemeBaseMap[$name];
+                }
             }
         }
 
-        return [$schemas, $schemaIds, $responses, $schemaBases, $securitySchemes];
+        return [$schemas, $schemaIds, $responses, $schemaBases, $securitySchemes, $responseBases, $schemeBases];
     }
 
     /**
@@ -440,7 +450,7 @@ final class DocumentGenerator
 
         $responses = [];
         foreach ($fragment->componentResponses as $name => $response) {
-            $actual = $components->registerResponse($name, $response);
+            $actual = $components->registerResponse($name, $response, $fragment->componentResponseBases[$name] ?? null);
             if ($actual !== $name) {
                 $responses[$name] = $actual;
             }
@@ -452,7 +462,7 @@ final class DocumentGenerator
         // build two different `passport` definitions — so a slot that moved is repointed too.
         $securitySchemes = [];
         foreach ($fragment->componentSecuritySchemes as $name => $scheme) {
-            $actual = $components->registerSecurityScheme((string) $name, $scheme);
+            $actual = $components->registerSecurityScheme((string) $name, $scheme, $fragment->componentSecuritySchemeBases[$name] ?? null);
             if ($actual !== (string) $name) {
                 $securitySchemes[(string) $name] = $actual;
             }
