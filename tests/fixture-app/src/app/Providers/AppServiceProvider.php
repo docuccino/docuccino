@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Real-engine fixture (Wave D item 4): named rate limiters in their idiomatic shapes, the analysis
- * targets the `trace-rate-limiter` mode folds. Nothing boots — the engine only parses these closures
- * by file+line (from `ReflectionFunction`), exactly as the RateLimit integration does at generation.
+ * Real-engine fixture: closures in their three shapes — an arrow function, a full closure, and a
+ * conditional — for the `trace-closure` mode, which locates a closure by start line exactly as the
+ * engine does for a closure route. Nothing boots; these are only ever parsed.
  */
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,15 +27,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Laravel 11+ skeleton default: an arrow closure partitioned by user id / ip. Folds to 60/min.
+        // Laravel 11+ skeleton default: an arrow closure — the InArrowFunctionNode path, one implicit
+        // return handed over on a lazy fiber scope.
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
 
-        // A full-closure limiter on a per-hour window — the ClosureReturnStatementsNode path. Folds to 100/hour.
+        // A full closure — the ClosureReturnStatementsNode path.
         RateLimiter::for('uploads', function (Request $request) {
             return Limit::perHour(100)->by($request->ip());
         });
 
-        // A conditional limiter (a ternary is not a single Limit call): must stay numberless.
+        // A conditional: the whole ternary is the one return expression.
         RateLimiter::for('dynamic', fn (Request $request) => $request->user() ? Limit::none() : Limit::perMinute(10));
     }
 }

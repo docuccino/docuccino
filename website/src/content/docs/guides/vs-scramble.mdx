@@ -116,7 +116,7 @@ empty `204`, not as a `null` payload.
 | Per-operation scheme override (`#[Security]`, `#[OptionallyAuthenticated]`) | ✓ | — | — |
 | Role / permission requirements (`x-permissions`) | ✓ | — | — |
 | Rate-limit `429` responses + `Retry-After` / `X-RateLimit-*` headers | ✓ | — | — |
-| `429` numbers folded out of `RateLimiter::for` closures | ✓ | — | — |
+| A build-time warning for a `throttle:` name with no `RateLimiter::for` registration | ✓ | — | — |
 
 Both tools read the middleware stack to decide *whether* an operation is protected. Docuccino goes on
 to read *how*: it resolves the guard's driver, so a custom guard name still lands on the right scheme,
@@ -180,8 +180,9 @@ against:
   flows, and role/permission requirements as `x-permissions`.
 - **Errors** — the framework's own `401` / `403` / `404` / `422` shapes, plus your *real* error bodies
   read out of your exception handling, and an RFC 9457 Problem Details preset behind one config line.
-- **Rate limits** — `429` responses with `Retry-After` and `X-RateLimit-*` headers, the numbers folded
-  out of your `RateLimiter::for` closures.
+- **Rate limits** — `429` responses with `Retry-After` and `X-RateLimit-*` headers, documented by what
+  each header means so every throttled route shares one component, plus a build-time warning for a
+  `throttle:` name nothing registered.
 
 Error handling deserves a closer look, because it's where inference goes furthest. Docuccino reads
 render callbacks, exception `render()` methods and `Responsable` exceptions — and where a member of
