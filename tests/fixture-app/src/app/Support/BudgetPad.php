@@ -8,8 +8,8 @@ use Illuminate\Http\JsonResponse;
 
 /**
  * Real-engine determinism-guard fixture: an extra hop that exists purely to SPEND one unit of the
- * per-analysis file budget before {@see BudgetShared} is reached, so the descent into {@see BudgetLeaf}
- * is cut off on the deep path. See {@see BudgetRenderer}.
+ * per-analysis file budget (and one level of descent depth) before {@see BudgetShared} is reached, so the
+ * descent into {@see BudgetLeaf} is cut off on the deep path. See {@see BudgetRenderer}.
  */
 final class BudgetPad
 {

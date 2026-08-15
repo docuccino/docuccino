@@ -58,7 +58,9 @@ const FLOORS = [
     // Ratcheted 34 → 36 at 36.07% (575/1594): the docblock/reflection metadata rules — the promoted
     // `@var` fallback and the class-parameterisation rule, with its refuse-to-refine branches — live in
     // the first half, so every statement they added is unit-tested in process.
-    'inference-phpstan' => 36,
+    // Ratcheted 36 → 37 at 37.90% (622/1641): the response refiner's memo/bound accounting moved into
+    // `DescentBudget`, which needs no Scope and is driven entirely in process.
+    'inference-phpstan' => 37,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';
