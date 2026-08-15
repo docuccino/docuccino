@@ -94,6 +94,7 @@ final class RouteContextBuilder
             pathParameters: $pathParameters,
             optionalPathParameters: $optional,
             routeBindings: $this->routeBindings($reflected, $pathParameters),
+            routeBindingFields: self::bindingFields($route, $pathParameters),
             summary: $prose['summary'],
             description: $prose['description'],
             components: $components,
@@ -182,6 +183,22 @@ final class RouteContextBuilder
         }
 
         return [$names, $optional];
+    }
+
+    /**
+     * The binding fields restricted to parameters the template actually declares — nothing else could
+     * consume one.
+     *
+     * @param  list<string>  $pathParameters
+     * @return array<string, string>
+     */
+    private static function bindingFields(Route $route, array $pathParameters): array
+    {
+        return array_filter(
+            RouteBindingFields::of($route),
+            static fn (string $parameter): bool => in_array($parameter, $pathParameters, true),
+            ARRAY_FILTER_USE_KEY,
+        );
     }
 
     /**

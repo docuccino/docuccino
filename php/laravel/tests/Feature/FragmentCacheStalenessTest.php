@@ -64,6 +64,23 @@ it('rebuilds a route that gained withTrashed rather than serving its untrashed a
         ->and($warmParameter['description'])->toContain('trashed');
 });
 
+it('rebuilds a route that named a binding column rather than serving its route-key answer', function (): void {
+    config()->set('docuccino.cache.enabled', true);
+    config()->set('docuccino.cache.path', sys_get_temp_dir().'/docuccino-staleness-'.uniqid('', true));
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+
+    app('router')->get('api/bindable/{form}', [FormController::class, 'show']);
+    $cold = generateDocument()->document->toArray();
+
+    // Laravel parses `:slug` OUT of `uri()`, so this route has the same method, URI, name, action and
+    // middleware as the one above while typing its parameter off a different column entirely.
+    app('router')->get('api/bindable/{form:slug}', [FormController::class, 'show']);
+    $warm = generateDocument()->document->toArray();
+
+    expect($cold['paths']['/api/bindable/{form}']['get']['parameters'][0]['schema']['type'])->toBe('integer')
+        ->and($warm['paths']['/api/bindable/{form}']['get']['parameters'][0]['schema']['type'])->toBe('string');
+});
+
 it('never serves inference-free fragments once the engine package is installed', function (): void {
     config()->set('docuccino.cache.enabled', true);
     config()->set('docuccino.cache.path', sys_get_temp_dir().'/docuccino-staleness-'.uniqid('', true));

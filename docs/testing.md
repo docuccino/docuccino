@@ -93,8 +93,8 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.66%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.42%** | 92    | fully in-process-measurable                      |
+| `core`              | **94.81%** | 94    | fully in-process-measurable                      |
+| `laravel`           | **92.70%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **37.90%** | 37    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
@@ -185,6 +185,14 @@ flight has spent, what each memoised shape cost, and whether the caller can affo
 drives every branch in process — the depth bound, the free revisit, the drain contracts, a memoised "nothing
 recoverable" told apart from a miss, both refusal paths, and a nested descent costed to its parent with replayed
 levels included. 576/1586 (36.32%) became 622/1641 (37.90%): 55 new statements in the package, 46 of them covered.
+
+Route-feature recovery — the column a `{post:slug}` binding names, and the catch-all route that is
+reported rather than published — then took `core` 4753/5021 (94.66%) → 4805/5068 (94.81%) and `laravel`
+5414/5858 (92.42%) → 5548/5985 (92.70%). Both are almost entirely degradation paths, which is the point:
+the column typer's dataset covers every scalar it accepts AND every shape it refuses (a class, an enum, an
+`array` cast, a two-scalar union, a column no source mentions, a class that is not a model, a class that
+does not exist), and the chain that drives it is unit-tested for a resolver that cannot answer the column
+question at all. Neither figure ratchets a floor — 94.81 and 92.70 are still 94 and 92.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the

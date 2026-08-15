@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Tests\Fixtures\ComponentNames\ClaimController;
 use Docuccino\Laravel\Tests\Fixtures\ComponentNames\SsoController;
+use Docuccino\Laravel\Tests\Fixtures\RouteBindings\BindingController;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ErrorsController;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Admin\ReportController as AdminReportController;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Api\ReportController as ApiReportController;
@@ -94,6 +95,31 @@ it('does not move a route it did not touch', function (callable $baseline, calla
         },
         static fn (Router $r) => $r->get('api/aaa-refused-again', [ErrorsController::class, 'refusedAgain']),
         'GET /api/zz-denied',
+        null,
+    ],
+
+    // A catch-all contributes a diagnostic and no operation. Nothing it reports may reach the routes it
+    // shares a document with — least of all the paths, which it would otherwise claim all of.
+    'a fallback route arriving beside an ordinary one' => [
+        static fn (Router $r) => $r->get('api/zz-catch', [ApiReportController::class, 'index']),
+        static fn (Router $r) => $r->prefix('api')->group(static function (Router $g): void {
+            $g->fallback([ApiReportController::class, 'index']);
+        }),
+        'GET /api/zz-catch',
+        null,
+    ],
+
+    // `{blank:slug}` types its parameter off a column and reports the one it cannot type. Both are the
+    // arriving route's business: the sibling bound the ordinary way keeps its route-key integer. The
+    // baseline is two bound routes so the implicit 404 they share is already hoisted — otherwise the
+    // row would be re-proving the shared-error threshold above rather than the binding column.
+    'a route naming a binding column beside routes that do not' => [
+        static function (Router $r): void {
+            $r->get('api/zz-bound/{blank}', [BindingController::class, 'blank']);
+            $r->get('api/zz-bound-again/{blank}', [BindingController::class, 'blank']);
+        },
+        static fn (Router $r) => $r->get('api/zz-bound-column/{blank:slug}', [BindingController::class, 'blank']),
+        'GET /api/zz-bound/{blank}',
         null,
     ],
 

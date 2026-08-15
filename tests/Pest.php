@@ -468,6 +468,26 @@ function ensureFixtureAvailable(bool $available): void
 }
 
 /**
+ * One named path parameter of an emitted operation, or null when the operation has no such parameter.
+ *
+ * @param  array<string, mixed>  $operation
+ * @return array<string, mixed>|null
+ */
+function pathParameter(array $operation, string $name): ?array
+{
+    /** @var list<array<string, mixed>> $parameters */
+    $parameters = $operation['parameters'] ?? [];
+
+    foreach ($parameters as $parameter) {
+        if (($parameter['in'] ?? null) === 'path' && ($parameter['name'] ?? null) === $name) {
+            return $parameter;
+        }
+    }
+
+    return null;
+}
+
+/**
  * A generation result's diagnostics with one code, in order — the shape every diagnostic-asserting
  * suite needs.
  *

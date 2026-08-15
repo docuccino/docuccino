@@ -52,6 +52,11 @@ arch('built-in integrations consume only the public extension surface')
         // to a component name exactly as core does, so allow-listing the one class beats every
         // integration inlining a private copy.
         'Docuccino\Core\Support\Fqcn',
+        // Same exemption, same reason: the one PHP-scalar → JSON-Schema `type` table, which the built-in
+        // mappers already share. An integration typing a recovered scalar itself (a route-bound column
+        // becoming a path parameter) must answer exactly what a response body would, and allow-listing
+        // the table is how that stays true — a private copy is how the two drift apart.
+        'Docuccino\Core\Extensions\BuiltIn\JsonTypes',
         // Same shape of exemption, same reason: a constants-and-pure-predicates class naming the
         // framework classes the adapter matches by string. Its consumers span both sides of the
         // Extensions/Integrations line (the response guard needs the same list the JsonResponse

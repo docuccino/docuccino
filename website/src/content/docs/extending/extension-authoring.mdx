@@ -222,6 +222,7 @@ And these cover the rest of the surface:
 | `ResponseStatusResolver` | Override the success status a returned class documents (a `201` from a Data class's `calculateResponseStatus()`, say). | `resolveStatuses(RouteContext $context, string $fqcn): array` |
 | `PayloadMediaTypeResolver` | Classify a payload's media type — `application/vnd.api+json` for a JSON:API resource, for instance. | `mediaTypeFor(DType $payload): ?string` |
 | `RouteBindingSchemaResolver` | Type a route-model-bound path parameter from the bound model's route key. | `keySchemaFor(string $modelFqcn): ?array` |
+| `RouteBindingFieldSchemaResolver` | The same, for a binding that names its own column (`{post:slug}`). Extends the contract above, so one class answers both; returning `null` documents a plain `string` rather than falling back to the route key. | `fieldSchemaFor(RouteContext $context, string $modelFqcn, string $field): ?array` |
 | `EnvironmentDigestContributor` | Fold booted-app state your extension reads (guards, global config) into the cache key. | `digest(): string` |
 | `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
 

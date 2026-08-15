@@ -29,6 +29,11 @@ final readonly class RouteDescriptor
      *                               answers on every host. Part of the route's IDENTITY, not just its
      *                               cache key: one method and URI on two hosts is two operations, and
      *                               keying either without it serves one sibling's answer for the other.
+     * @param  bool  $fallback  whether this is a catch-all route answering any path no other route
+     *                          matched (Laravel's `Route::fallback()`). Its URI is a placeholder rather
+     *                          than an endpoint, so it is reported and omitted rather than published.
+     *                          Deliberately absent from {@see cacheSignature()}: a route that never
+     *                          reaches a fragment has nothing to key.
      */
     public function __construct(
         public array $methods,
@@ -38,6 +43,7 @@ final readonly class RouteDescriptor
         public array $middleware = [],
         public array $cacheInputs = [],
         public ?string $domain = null,
+        public bool $fallback = false,
     ) {}
 
     /** The primary documentable HTTP method (lower-case) — the first non-HEAD method. */

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Tests\Fixtures\ComponentNames\ClaimController;
 use Docuccino\Laravel\Tests\Fixtures\ComponentNames\SsoController;
+use Docuccino\Laravel\Tests\Fixtures\RouteBindings\BindingController;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ErrorsController;
 use Docuccino\Laravel\Tests\Support\LocalityEngine;
 use Illuminate\Routing\Router;
@@ -58,6 +59,43 @@ it('serves a warm build exactly what a cold one would', function (callable $befo
         static function (Router $r) use ($base): void {
             $base($r);
             $r->get('api/zz-named', [ClaimController::class, 'show'])->name('portal.read');
+        },
+    ],
+
+    // Laravel parses `:slug` out of `uri()`, so these two are the same signature down to the byte while
+    // typing their parameter off different columns. A key that leaves the column out serves the first
+    // one's integer for the second's slug.
+    'a route that named a binding column' => [
+        static function (Router $r) use ($base): void {
+            $base($r);
+            $r->get('api/zz-bound/{blank}', [BindingController::class, 'blank']);
+        },
+        static function (Router $r) use ($base): void {
+            $base($r);
+            $r->get('api/zz-bound/{blank:slug}', [BindingController::class, 'blank']);
+        },
+    ],
+
+    // The diagnostic half. An untypable binding column is reported by the route's own fragment, so a
+    // warm hit — which reassembles rather than rebuilds — has to replay it or the warm build is quietly
+    // more confident than the cold one.
+    'a binding column nothing types, twice' => [
+        $untypedColumn = static function (Router $r) use ($base): void {
+            $base($r);
+            $r->get('api/zz-bound/{blank:slug}', [BindingController::class, 'blank']);
+        },
+        $untypedColumn,
+    ],
+
+    // A catch-all reports and emits nothing, and its report is a document-level one — so it must survive
+    // a build where every fragment beside it came back warm.
+    'a fallback route added' => [
+        $base,
+        static function (Router $r) use ($base): void {
+            $base($r);
+            $r->prefix('api')->group(static function (Router $g): void {
+                $g->fallback([ClaimController::class, 'show']);
+            });
         },
     ],
 
