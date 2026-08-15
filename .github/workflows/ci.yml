@@ -133,12 +133,16 @@ jobs:
       - name: Pest line coverage (per-package honest floors — ratchet upward, never down)
         run: composer test:coverage
 
-      # A type-coverage run killed mid-write leaves a truncated cache the next run cannot parse,
-      # and every CI run starts cold, so the directory is cleared rather than trusted.
+      # The type-coverage plugin writes its own cache non-atomically and re-reads it, so a run can
+      # die parsing a file it truncated itself. Clearing the directory first is not enough — the
+      # retry is. A genuine shortfall fails both attempts; only the parse error survives one.
       - name: Pest type coverage
         run: |
           rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
-          composer test:types
+          composer test:types || {
+            rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
+            composer test:types
+          }
 
   fixture:
     name: Fixture suite (PHP 8.3, laravel ${{ matrix.laravel }}, phpstan ${{ matrix.phpstan }})

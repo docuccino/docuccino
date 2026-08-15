@@ -409,49 +409,72 @@ Declare those with a [`#[Response]`](/laravel/reference/attributes/#response) at
 ## Repeated bodies become shared components
 
 Error contracts repeat by nature: the same `404` shape sits under every show route, the same `422` under
-every write. Docuccino states each repeated body **once**, in `components.responses`, and `$ref`s it from
-every operation that produces it:
+every write. Docuccino collapses that repetition in two independent passes.
+
+**The shape goes into `components.schemas`.** A body shape two or more operations state identically is
+stated once, and every response that returns it points at that one entry. One shape means one type in a
+generated client, however many operations return it.
+
+**The whole response goes into `components.responses`.** Where operations state the same response —
+description, headers and example included — that response is hoisted too, and each operation becomes a
+one-line `$ref`.
 
 <Tabs>
 	<TabItem label="On the operations">
 	```json
-	// GET /api/invoices/{invoice}
+	// Two operations returning the same 404, presented the same way
 	"404": { "$ref": "#/components/responses/Error404" }
 
-	// GET /api/customers/{customer}
-	"404": { "$ref": "#/components/responses/Error404" }
-	```
-	</TabItem>
-	<TabItem label="Shared component">
-	```json
-	// components.responses
-	"Error404": {
+	// An operation returning the same shape with its own example keeps its response…
+	"404": {
 	  "description": "Not Found",
 	  "content": {
 	    "application/json": {
-	      "schema": {
-	        "type": "object",
-	        "properties": { "message": { "type": "string" } },
-	        "required": ["message"]
-	      }
+	      "schema": { "$ref": "#/components/schemas/Error404" },
+	      "example": { "message": "No such invoice." }
 	    }
 	  }
 	}
 	```
 	</TabItem>
-</Tabs>
+	<TabItem label="Shared components">
+	```json
+	// components.responses
+	"Error404": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/json": { "schema": { "$ref": "#/components/schemas/Error404" } }
+	  }
+	}
 
-On an app with a uniform error contract, that's most of the document's bytes — and most of its churn.
+	// components.schemas
+	"Error404": {
+	  "type": "object",
+	  "properties": { "message": { "type": "string" } },
+	  "required": ["message"]
+	}
+	```
+	</TabItem>
+</Tabs>
 
 | Hoisted | Not hoisted |
 | --- | --- |
-| A `4xx`/`5xx` body two or more operations state identically | A body no other operation shares |
-| A response carrying `content` | A description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
+| The body shape of a `4xx`/`5xx` two or more operations state identically | A shape no other operation shares |
+| A response two or more operations state identically, in full | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
-Examples and headers count as part of the body: two `403`s differing only in their example become
-`Error403` and `Error403_2`. Every [`429`](/laravel/documenting/rate-limiting/) in the document is
-identical — rate-limit headers are documented by meaning, never by value — so all of your throttled
-routes share a single `Error429`, whatever they each throttle at.
+**How an operation illustrates an error is never part of its shape.** Two `403`s returning the same body
+with different example messaging share one `Error403` schema; only the response, which has to carry the
+example, stays on the operation. That is not a stylistic choice: an OpenAPI Reference Object may carry
+only `$ref`, `summary` and `description`, so a shared *response* cannot hold a per-operation example at
+all. The two passes are independent — a differing example costs you the shared response, never the
+shared shape.
+
+Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
+meaning, never by value — so throttled routes share both.
+
+A status names more than one component only when the bodies genuinely differ. When that happens the
+plain `Error403` is retired rather than handed to one of them, and each takes a name derived from its own
+content (`Error403_kzvq2m4a`) — so adding a route can never change which body an existing `$ref` means.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
