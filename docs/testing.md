@@ -14,6 +14,11 @@ coverage locally and the ratchet policy for the CI gate.
   integration's recovery/parsing half also needs a **real-path** test (real reflection,
   or the real engine via the `fixture` group). Ask of every test: which half does this
   prove, and where is the other half proven?
+- **An assertion that cannot fail proves nothing.** `expect($response['content']['schema'] ?? [])`
+  passes whether or not the key is there, and a test that hand-builds a value the real recovery
+  path cannot produce pins a shape the product cannot reach. Ask of every pin: if the feature
+  were absent entirely, would this still be green? Assert that the key is present, not only what
+  is inside it, and build fixtures through the real path rather than constructing them.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
