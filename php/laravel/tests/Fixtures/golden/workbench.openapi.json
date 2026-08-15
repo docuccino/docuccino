@@ -1209,6 +1209,38 @@
           "email"
         ]
       },
+      "Error404": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Error422": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "errors"
+        ]
+      },
       "FormData": {
         "type": "object",
         "properties": {
@@ -1356,15 +1388,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "message"
-              ]
+              "$ref": "#/components/schemas/Error404"
             }
           }
         }
@@ -1374,25 +1398,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "type": "object",
-              "properties": {
-                "errors": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "message",
-                "errors"
-              ]
+              "$ref": "#/components/schemas/Error422"
             }
           }
         }

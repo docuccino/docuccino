@@ -3192,6 +3192,44 @@
           "email"
         ]
       },
+      "Error404": {
+        "x-docuccino": {
+          "id": "sch:v1:b5f2vpxbxyjqvu27"
+        },
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Error422": {
+        "x-docuccino": {
+          "id": "sch:v1:ez2xsveykvmdgo67"
+        },
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "errors"
+        ]
+      },
       "FormData": {
         "x-docuccino": {
           "id": "sch:v1:6iocn62c7ru5zutw"
@@ -3357,15 +3395,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "message"
-              ]
+              "$ref": "#/components/schemas/Error404"
             }
           }
         }
@@ -3375,25 +3405,7 @@
         "content": {
           "application/json": {
             "schema": {
-              "type": "object",
-              "properties": {
-                "errors": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "message",
-                "errors"
-              ]
+              "$ref": "#/components/schemas/Error422"
             }
           }
         }
@@ -3404,7 +3416,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "8903b4f374c3b972a3a11d8a690e06e636d06c9b2de2951807f6be4b1a0e7536",
-      "contentHash": "8de34d623a5a70a8c33f01bc04159a8a0df58a9b4f3d7022b931e6b7bfbdbe38"
+      "contentHash": "7b38469bf12791fee07833d3646f67c58a462570f826f48f0473d95ac5366e9c"
     },
     "generator": {
       "name": "docuccino/laravel",
