@@ -48,9 +48,9 @@ function bindStubEngine(): void
 }
 
 /**
- * Build the `default` workbench document, optionally mutating its raw config first. The single
- * shared build helper the Laravel feature tests use instead of each re-rolling the config →
- * generator wiring (and coupling across files via a peer test's global function).
+ * Build the `default` workbench document, optionally mutating its raw config first. The one shared
+ * build helper the Laravel feature tests use, so none of them re-rolls the config → generator wiring
+ * or reaches for a peer test's file-level function.
  *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  */
@@ -69,9 +69,8 @@ function generateDocument(?callable $mutateConfig = null): GenerationResult
 
 /**
  * The full round-trip the feature suites lean on: bind the deterministic stub engine, generate the
- * `default` document (optionally mutating its raw config), and return the emitted array — so suites
- * stop each re-rolling the bindStubEngine + generate + toArray wiring (or coupling to a peer test's
- * file-level global).
+ * `default` document (optionally mutating its raw config), and return the emitted array — so no suite
+ * re-rolls the bindStubEngine + generate + toArray wiring.
  *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  * @return array<string, mixed>
@@ -135,9 +134,8 @@ function validationSchema(RuleSet $rules, SchemaConverter $context, bool $normal
 }
 
 /**
- * Index a list of {@see QueryParameterSpec} by parameter name
- * — the shared helper the query-builder and json-api-paginate parameter unit suites both need
- * (promoted here so neither couples to the other's file-level global).
+ * Index a list of {@see QueryParameterSpec} by parameter name — the shared helper the query-builder
+ * and json-api-paginate parameter unit suites both need.
  *
  * @param  list<QueryParameterSpec>  $specs
  * @return array<string, QueryParameterSpec>
@@ -153,8 +151,8 @@ function specsByName(array $specs): array
 }
 
 /**
- * Index an emitted operation's parameters by name (the shape every parameter-asserting feature test
- * needs). Promoted here so suites don't couple to a peer test's file-level global.
+ * Index an emitted operation's parameters by name — the shape every parameter-asserting feature test
+ * needs.
  *
  * @return array<string, array<string, mixed>>
  */
@@ -555,7 +553,7 @@ function claim(string $base, ?string $identity, string $content = '{"type":"obje
  * Determinism — the same code emits the same bytes — is only half the promise. The other half is
  * LOCALITY: adding, removing or reordering one route may add and remove operations, and may never
  * change the emitted representation of a route it did not touch. A build can be perfectly repeatable
- * and still fail that, and every defect of this class found so far was silent and green.
+ * and still fail that, and a build that fails it is green.
  *
  * The two harnesses below are the guard. They own their route set — the workbench's is the goldens',
  * so a harness that added to it would move a golden to prove a point about something else.
@@ -633,9 +631,9 @@ function referencedComponents(array $document, mixed $node, array $seen = []): a
  * The `#/components/...` pointers stated anywhere under a node.
  *
  * A `security` requirement names its scheme as a KEY and not through a `$ref`, so a `$ref`-only walk
- * left both the scheme definition and every change to it outside the subject's projection — which is
- * how a first-come `components.securitySchemes` name went uncaught. It is a component the operation
- * depends on by name, so it is collected as one.
+ * leaves both the scheme definition and every change to it outside the subject's projection — and a
+ * first-come `components.securitySchemes` name goes uncaught. It is a component the operation depends
+ * on by name, so it is collected as one.
  *
  * @return list<string>
  */
@@ -732,11 +730,12 @@ function assertUnaffectedByUnrelatedRoute(callable $baseline, callable $extra, s
 }
 
 /**
- * Point the fragment cache at a fresh directory and return it.
+ * Point the fragment cache at a fresh directory and return it. Enables the cache too — a row that set
+ * only the path would document itself against a disabled store and prove nothing.
  */
 function fragmentCacheDir(string $slug): string
 {
-    $dir = sys_get_temp_dir().'/docuccino-locality-'.$slug.'-'.uniqid('', true);
+    $dir = sys_get_temp_dir().'/docuccino-'.$slug.'-'.uniqid('', true);
 
     config()->set('docuccino.cache.enabled', true);
     config()->set('docuccino.cache.path', $dir);
@@ -750,6 +749,14 @@ function removeFragmentCacheDir(string $dir): void
     array_map('unlink', glob($dir.'/*') ?: []);
     @unlink($dir.'/.gitignore');
     @rmdir($dir);
+}
+
+/** The same for every directory a slug has produced — for a suite sweeping up in `afterEach`. */
+function removeFragmentCacheDirs(string $slug): void
+{
+    foreach (glob(sys_get_temp_dir().'/docuccino-'.$slug.'-*') ?: [] as $dir) {
+        removeFragmentCacheDir($dir);
+    }
 }
 
 /**

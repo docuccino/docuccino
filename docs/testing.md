@@ -64,6 +64,11 @@ composer test:types
 `tools/coverage-floors.php` is the gate: it sums `coveredstatements`/`statements` per
 `php/<pkg>/src/` out of the clover report and fails any package under its floor.
 
+`config.process-timeout` is raised to 1800 in the root `composer.json` for one reason: a COLD
+type-coverage run (an empty `vendor/pestphp/pest-plugin-type-coverage/.temp`) can stall for many
+minutes, and composer's 300-second default kills it mid-run. Warm it takes seconds, so the timeout is
+headroom for the first run after a clean checkout and nothing else.
+
 ### Why the coverage job excludes the `fixture` group
 
 The inference engine's real analysis (`PhpStanTypeEngine`, `ThrowAnalyzer`, the
@@ -93,152 +98,47 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **95.17%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **92.98%** | 92    | fully in-process-measurable                      |
+| `core`              | **95.18%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **92.99%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **38.48%** | 38    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
 
-`inference-phpstan`'s floor dropped from 41 to 37 in the same change set that moved the phpdoc type
-grammar into core. Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and
-sat well above the engine's average, so taking them out of the numerator AND denominator lowered the
-ratio without losing a single test: 41.64% over the pre-move file set is the old 41.83% figure. Core
-absorbed them at a slightly lower rate than its own average (92.39% → 92.21%), which is why its floor
-holds at 92 rather than ratcheting. A floor drop is only ever this: a documented denominator change.
+Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
+waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,
+docblock parsing or php-parser positions, which the in-process suites reach — or **the measurable part
+was moved out** of a subprocess-only class into one of its own, which is the preferred answer whenever
+the engine gains work (`DescentBudget`, `ContentTypeLabel`, `SourceOrder`, core's `ArrayKey` all came
+out that way). The per-ratchet arithmetic lives in git history; what has to be recorded here is the
+other direction.
 
-`inference-phpstan` then ratcheted 37 → 38, and the arithmetic is worth recording because both halves
-moved at once. The response refiner gained a 61-statement construction-site descent (reading which
-constructor arguments a payload object was built with) that is Scope-, reflection- and
-file-analysis-driven, so pcov cannot observe a line of it — on its own that took the package to
-36.68% (690/1881), below the floor. The fix was **not** to lower the floor but to close a real gap the
-standards already required: `NativeTypeMapper`, the reflection type table behind `classMetadata()`'s
-property types, had **zero** in-process coverage despite being a lookup table. Its dataset test lands
-+27 covered, taking the package to 38.12% (717/1881) — genuinely higher than before the refiner work.
-That test also pinned a surprise worth keeping: PHP resolves `self`/`parent` to real FQCNs before
-reflection reports them, so only `static` ever reaches the mapper as a relative name.
+**A floor drop is only ever a documented denominator change**, and there have been two.
 
-It then ratcheted 38 → 41 on the same move again: `ClassMetadataFactory` learned to type a promoted
-constructor property from the constructor's `@param` tag, which grew the class by 24 statements and — with
-a real-reflection dataset test over an autoloaded spatie-shaped probe — took it from **zero** in-process
-coverage to 66/66. So 717/1881 (38.12%) became 783/1905 (41.10%). `core` ratcheted 92 → 93 in the same
-change: the shared-error transformer shed its example-reconciliation methods and picked up its
-malformed-document negative paths (97/97), and the docblock reader's new `@param`/`@var` readers landed
-fully covered (64/64).
+`inference-phpstan` dropped 41 → 37 in the change set that moved the phpdoc type grammar into core.
+Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and sat well above the
+engine's average, so taking them out of the numerator AND denominator lowered the ratio without losing
+a single test: 41.64% over the pre-move file set is the old 41.83% figure. Core absorbed them at a
+slightly lower rate than its own average (92.39% → 92.21%), which is why its floor held at 92 rather
+than ratcheting.
 
-It then ratcheted 41 → 42, and this one is the pattern to copy when the engine gains work: instead of
-funding new subprocess-only statements from somewhere else, *move the measurable part out*. The response
-refiner's `Content-Type` re-label read — match the returned variable, find its last assignment, accept
-only header writes between that and the return — needs php-parser and file positions but no PHPStan
-`Scope`, so it left the refiner for `ContentTypeLabel` and is now driven in-process by parsing snippets
-(the position window is the mechanism, so hand-built nodes would prove nothing). That took ~20 statements
-out of the invisible half and put ~25 covered ones back, and the fully-covered `SensitiveConstant` name
-predicate added more: 783/1905 (41.10%) → 824/1929 (42.72%).
+`inference-phpstan` dropped 43 → 34 when the worker pool and the engine result cache were deleted. Both
+were in the measurable half, unit-tested in process at near-full coverage, so removing them took ~300
+well-covered statements out of the numerator and left a remainder proven out-of-process: 889/2033
+(43.73%) became 538/1557 (34.55%) without losing a proof. Core rose in the same change, the result
+model's serialization contract going from an incidental proof to a direct one.
 
-`core` then ratcheted 93 → 94. Most of that headroom arrived with the worker-pool/result-cache deletion,
-which moved the result model's serialization contract from an incidental proof to a direct one; the
-type-grammar fix (docblock enums answering `EnumT`, the `array<K, V>` key rule, the analyser-prefixed
-`@var`/`@param`/`@property` tags) then added 15 statements and covered all 15, taking 4512/4786 (94.27%) to
-4527/4801 (94.29%). A dataset over every key identifier the grammar can produce, plus the unresolvable-name
-and unaccepted-tag degradations, is what makes that a real 15 rather than a lucky one.
-
-`inference-phpstan` then ratcheted 34 → 36, and it is the same preferred move: the work landed in the
-package's measurable half. `ClassMetadataFactory` learned to fall back to a promoted property's own `@var`
-and to parameterise a generic-blind class type from a docblock, and both rules are native-reflection plus
-docblock parsing — no `Scope`, so the real-reflection probe drives every branch in process, the three
-refuse-to-refine ones included. 538/1557 (34.55%) became 575/1594 (36.07%) — a net 37 statements, all of
-them covered, with the duplicated `EnumCases` helper (now core's `EnumReflection::names()`) leaving the
-covered half in the same move.
-
-`laravel` then ratcheted 91 → 92. The request side stopped throwing away a recovered container type at the
-validation-rule boundary: a `list<V>` synthesises the `key.*` item field, an `array{…}` shape a
-`key.<member>` field per key, and an `array<string, V>` — which Laravel's vocabulary has no rule for —
-carries its value schema on an `additional_properties` rule. That is exactly the shape the standards ask
-for: a dataset over every container kind and every nesting combination, plus the degradations (an
-unusable element type, a positional shape, the depth stop, and no converter at all), and a second dataset
-over the rule-set normaliser's two cross-field passes. 5312/5769 (92.08%) became 5422/5879 (92.23%).
-
-The list-vs-map key rule then moved out of `inference-phpstan` entirely — the translator and the docblock
-grammar carried byte-identical private copies, and core's `ArrayKey` is now the single implementation both
-call. That took a well-covered 7/8 block out of the engine (575/1594, 36.07% → 568/1586, 35.81%) and
-straight below its floor, which is the shape of a denominator change and NOT a reason to lower one. The
-answer was the usual one: `EngineConfig` and `RuntimeConfig` — pure, parent-process value objects whose
-only callers are subprocess-only, so nothing else in the suite could reach them — had 1/9 between them
-and now have 9/9. 576/1586 (36.32%), genuinely higher than before the move. `core` absorbed the rule at
-its own rate or better (94.29% → 94.49%); no floor changed.
-
-The shared-error hoist then became two independent passes — the body SHAPE into `components.schemas`, so
-a presentational difference cannot split it, and the whole RESPONSE into `components.responses` where
-operations state it identically — and both measurable packages rose without a floor moving: `core`
-4527/4801 (94.29%) → 4753/5021 (94.66%), `laravel` 5422/5879 (92.23%) → 5414/5858 (92.42%). The
-transformer roughly doubled in size and every branch of it is driven from the unit suite, negative paths
-included: the malformed media type, the non-numeric status, the response stating both a `$ref` and a
-body, a body already pointing elsewhere, the numeric fallback when something already holds a
-discriminated name, and the two shapes one *inline*-schema identity would have collapsed. Both measured
-figures still round DOWN to the floors already in place, so neither ratchets: a floor is the measured
-integer, and 94.66 and 92.42 are still 94 and 92.
-
-`inference-phpstan` then ratcheted 36 → 37, and it is the "move the measurable part out" pattern again. Fixing the
-response refiner's memo — an entry may only be served to a caller with the depth and file budget to have computed it
-itself, or a route's body depends on which unrelated route ran first — grew the refiner by bound arithmetic that
-PHPStan's `Scope` never touches. So that arithmetic left the refiner for `DescentBudget`: what the analysis in
-flight has spent, what each memoised shape cost, and whether the caller can afford it. It is pure, so a unit suite
-drives every branch in process — the depth bound, the free revisit, the drain contracts, a memoised "nothing
-recoverable" told apart from a miss, both refusal paths, and a nested descent costed to its parent with replayed
-levels included. 576/1586 (36.32%) became 622/1641 (37.90%): 55 new statements in the package, 46 of them covered.
-
-Route-feature recovery — the column a `{post:slug}` binding names, and the catch-all route that is
-reported rather than published — then took `core` 4753/5021 (94.66%) → 4805/5068 (94.81%) and `laravel`
-5414/5858 (92.42%) → 5548/5985 (92.70%). Both are almost entirely degradation paths, which is the point:
-the column typer's dataset covers every scalar it accepts AND every shape it refuses (a class, an enum, an
-`array` cast, a two-scalar union, a column no source mentions, a class that is not a model, a class that
-does not exist), and the chain that drives it is unit-tested for a resolver that cannot answer the column
-question at all. Neither figure ratchets a floor — 94.81 and 92.70 are still 94 and 92.
-
-`inference-phpstan` then ratcheted 37 → 38, and it is the "the work landed in the measurable half" pattern
-again rather than a move. Teaching `ClassMetadataFactory` which files a shape was actually recovered
-across — the declaration hierarchy, traits included, plus every enum whose cases it copied into a property
-type — is native reflection and `toArray()` walking, so PHPStan's `Scope` never enters it and the existing
-in-process factory suite drives every branch. The engine's source-order sentinel moved out to
-`SourceOrder` in the same change for the same reason: it is a php-parser position and nothing else, and a
-hand-built unpositioned node is the only way to reach the branch that matters. 622/1641 (37.90%) became
-638/1658 (38.48%): 17 new statements, 16 of them covered. `core` (94.81% → 94.85%) and `laravel`
-(92.70% → 92.73%) both rose without reaching the next integer, so their floors hold at 94 and 92.
-
-`core` then ratcheted 94 → 95. `components.securitySchemes` is document-level and nothing rebuilds it, so a
-fully warm build published a `security` requirement naming a scheme the document no longer held — the
-requirement names its scheme as a KEY, not through a `$ref`, so the fragment's closure walk never saw it.
-`OperationFragment` now carries those schemes explicitly and repoints the requirement when the name it was
-cached under has since been taken. Both halves are driven from `WarmColdEqualityTest` rather than from
-hand-built fragments, which matters here: the rename branch is only reachable when two routes really do
-build two different `passport` definitions and the one that sorts first takes the plain name, and a
-hand-assembled fragment would have pinned that arrangement instead of earning it. 4805/5068 (94.81%) →
-4888/5137 (95.15%). `laravel` rose 92.73% → 92.86% in the same change — the machine-dependent-value rule
-and both extensions' resolution order are covered over every branch, the "nothing to report" ones included
-— but 92.86 is still 92, so its floor holds.
-
-The review-correctness pass then moved both measurable packages up without either reaching the next
-integer: `core` 4888/5137 (95.15%) → 4985/5238 (95.17%), `laravel` 5548/5985 (92.86%) → 5763/6198
-(92.98%). Both floors hold at 95 and 92 — a floor is the measured integer, and 95.17 and 92.98 are still
-95 and 92. Worth recording is WHERE the new statements came from, because most of them are the pattern
-the standards ask for rather than incidental growth: the machine-dependent-value rule gained a full IPv4
-address parser (every spelling a resolver accepts — dotted, two- and three-part, integer, hex, octal,
-IPv4-mapped IPv6) and a userinfo redactor, both driven by a dataset over every accepted spelling AND
-every negative row that must stay silent; `Json::stable()` became total over the values `json_encode`
-refuses, with a dataset over each kind plus the cycle and depth bounds; and the two named component
-buckets picked up their claim/settle path, whose branches the locality and warm/cold suites drive
-end-to-end rather than from hand-built registries.
-
-The real-path half of that dependency work is where it has to be: `dependencyFiles` is what the engine
-answers, so `php/inference-phpstan/tests/Integration/ClassMetadataDependencyTest.php` runs the provisioned
-app's own class hierarchy through the real engine and then through the real `FragmentCache`, editing each
-inherited source in turn. A stub engine cannot say which file declared a property, so a stub-driven test
-of this would have pinned its own fixture data.
+Two moves are worth keeping as precedent because the denominator went the *other* way and the answer
+was NOT to lower a floor. When the response refiner gained a 61-statement, Scope-driven construction-site
+descent that pcov cannot observe, the package fell to 36.68% — and the fix was closing a real gap the
+standards already required, giving `NativeTypeMapper` (a lookup table with zero in-process coverage) its
+dataset test. When core's `ArrayKey` absorbed the list-vs-map key rule from the engine's two byte-identical
+private copies, a well-covered 7/8 block left the engine and took it below its floor — and the answer was
+`EngineConfig`/`RuntimeConfig`, pure parent-process value objects at 1/9 between them, going to 9/9.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
-for its pure/parent-process classes, never more subprocess fixture tests — the ratchet above is
-exactly that move, and it is the preferred answer whenever a subprocess-only subsystem lands.
+for its pure/parent-process classes, never more subprocess fixture tests.
 
 ## The CI coverage gate & ratchet policy
 

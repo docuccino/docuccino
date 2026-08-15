@@ -59,6 +59,66 @@ Never file paths, line numbers, or array positions as identity inputs (those are
 provenance). `operationId` (human-readable OAS field) is separate: route name by default,
 configurable strategy. Identical tuples (two routes claiming `GET /x`) = error diagnostic.
 
+### Component naming: a minted name is a function of the thing
+
+A component's storage SLOT is handed out first-come — `Foo`, then `Foo_2` — and first-come is route
+order. Published as-is, the plain name goes to whichever route sorts first, so adding an unrelated
+route can swap what two components mean without changing a byte of either shape: deterministic per
+build, and still a silent breaking change for every generated client. So the PUBLISHED name is
+derived from the set of things contesting it and never from the order they were met.
+
+`Core\Extensions\Schema\ComponentNames` owns that rule and every path that mints a name goes through
+it. Each registration states a CLAIM — the name it asked for, the identity behind it, and the bytes
+it publishes — and proposes names off a ladder:
+
+1. the name it asked for plus the facet of its identity, so a class's request shape and its response
+   shape propose different names always, contested or not (`App\Data\Article#request` →
+   `ArticleRequest`, the class's own shape → `Article`);
+2. then the innermost namespace segments of its identity, one at a time —
+   `AuthenticationSSOConnectionData` beside `SSOSSOConnectionData`;
+3. then a prefix of the hash of its identity (of its published bytes, for a claim that names no
+   identity) — for two classes in one namespace, or a `#[SchemaId]` pin with no namespace to walk.
+
+While two claims propose the same name they both take their next rung, so nobody keeps a name two
+claims asked for. A claim that climbs ONTO a name someone else asked for plainly keeps climbing
+alone: the incumbent asked without contest, and renaming it would let one part of an application
+move an unrelated one. A contested name is also reported (`components.name-collision`) — the
+automatic answer is stable but nameless, and the warning's job is to offer the better one.
+
+The same claims settle `components.responses` and `components.securitySchemes`. A registrar-chosen
+literal like `passport` looks exempt and is not: an app that never called `Passport::tokensCan()`
+builds a different `passport` definition per distinct scope set.
+
+### Shared error components
+
+`Extensions\BuiltIn\SharedErrorResponses` collapses a repeated 4xx/5xx body, in two passes whose
+order is load-bearing.
+
+**Shapes first** (`components.schemas`): a body SHAPE two or more operations state identically is
+hoisted and each `content[<media type>].schema` becomes a `$ref`. This is the pass that decides what
+a generated client gets — one error type instead of one per operation — and it must not care how an
+operation ILLUSTRATES the error, so `description`, `headers` and the media type's own `example` stay
+on the operation. They have to: an OAS Reference Object may carry none of them beside a `$ref` (OAS
+3.2 §4.23.1), while the Media Type Object's `example` sits outside the schema and is legal in 3.0,
+3.1 and 3.2 alike — nothing is lost and nothing downlevels.
+
+**Responses second**, over the rewritten document: a whole response — description, headers, examples,
+and by now a schema `$ref` — that two or more operations state identically is hoisted too. Second so
+the response it hoists points at the shared shape instead of carrying its own anonymous copy; a code
+generator names an inline schema after whatever encloses it, so the other order hands back exactly
+the per-response types the first pass exists to prevent. The passes are independent, never
+alternatives: a response differing by example simply does not join an identical-response group, while
+the operations that DO match still share one — and all of them still share one shape.
+
+**The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
+the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not
+do is change what anything MEANS: same body, same generated type, same contract. That is the whole
+distinction, and it is why names here are derived from content alone while the inline/`$ref` boundary
+is allowed to move — the defect worth preventing is a NAME that quietly comes to mean a different
+shape, which a client keeps compiling against and silently gets wrong. Hoisting singletons would make
+the boundary local at the cost of a `components` bucket holding one entry per one-off error body:
+more indirection, more names to collide, a worse document for reader and generator both.
+
 ## 3. Canonicalization (normative in the spec)
 
 1. Fixed member order per object type (published as `x-canonicalOrder` in the meta-schema);
@@ -699,9 +759,20 @@ rule for those: a URL whose host is loopback or a reserved local-development nam
 key answered for, or an opaque value nothing pins that the framework derives from the environment, all
 raise `config.machine-dependent-value` — same family, same fix (pin it), but **Warning**, because what
 was published is arbitrary rather than merely spelled oddly, and `--fail-on=warning` should stop it
-reaching a release. The value is always emitted anyway: Passport's flow URLs and Sanctum's cookie name
-are contract-bearing, and OAS requires the former. The report is raised through the component registry
-so it rides the operation fragment and a warm build replays it (§10).
+reaching a release. Nothing is unbuildable or malformed, which is why it is not an Error; the sibling
+`config.machine-dependent-path` stays **Info** because an absolute path only churns the `configHash`
+while these are published for a client to act on. The value is always emitted anyway: Passport's flow
+URLs and Sanctum's cookie name are contract-bearing, and OAS requires the former. The report is raised
+through the component registry so it rides the operation fragment and a warm build replays it (§10).
+
+Each kind of value is judged on the strongest signal available for it. A URL has a host, and a
+loopback or reserved local-development host is positive evidence that no consumer of the published
+document can reach it — while a public host is equally positive evidence the value is fine, so it is
+not reported. A value no config key answered for is arbitrary by construction: a hard-coded default
+stood in. An opaque value (a cookie name) offers neither signal, so the only thing left to go on is
+that nothing pinned it and the framework key it came from is one the environment supplies. The rule
+lives under `Laravel\Support` rather than beside its callers because those sit on both sides of the
+Extensions/Integrations line and an extension may not import an integration.
 
 ## 10. Fragment caching
 

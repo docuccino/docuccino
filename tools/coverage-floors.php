@@ -6,12 +6,11 @@ declare(strict_types=1);
  * Per-package line-coverage gate.
  *
  * Sums `statements` / `coveredstatements` per `php/<pkg>/src/` out of a clover report (the method
- * documented in docs/testing.md) and fails when a package is under its floor. Replaces the single global
- * `pest --min=N`, which was structurally fragile: `inference-phpstan`'s real path executes in a
- * subprocess pcov cannot observe, so every engine feature diluted the GLOBAL ratio even as genuine
- * in-process coverage rose — putting the whole gate one refactor from red for reasons unrelated to test
- * quality. Per-package floors localise that: the engine package carries its own honest low floor and the
- * fully-measurable packages carry high ones.
+ * documented in docs/testing.md) and fails when a package is under its floor. Per-package rather than one
+ * global `--min=N`, because `inference-phpstan`'s real path executes in a subprocess pcov cannot observe:
+ * every engine feature dilutes a GLOBAL ratio even as genuine in-process coverage rises, which puts the
+ * whole gate one refactor from red for reasons unrelated to test quality. The engine package carries its
+ * own honest low floor instead, and the fully-measurable packages carry high ones.
  *
  * Floors are HONEST measured-now values (the measured percentage rounded DOWN to an integer), never
  * aspirations — see docs/testing.md §"The CI coverage gate & ratchet policy" for the ratchet rules.
@@ -28,21 +27,11 @@ declare(strict_types=1);
  * coverage `<source>` set, so it contributes no statements to measure.
  */
 const FLOORS = [
-    // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff,
-    // the phpdoc type grammar.
-    // Ratcheted 93 → 94 at 94.29% (4527/4801): most of that headroom arrived with the engine-cache
-    // deletion, which pinned the result model's serialization contract directly; the type-grammar fix
-    // (docblock enums, the `array<K, V>` key rule, the analyser-prefixed `@var`/`@param`/`@property`
-    // tags) then landed its 15 new statements fully covered.
-    // Ratcheted 94 → 95 at 95.15% (4888/5137): the operation fragment learned to carry the security
-    // schemes its `security` requirement names, and both halves of that — the restore and the rename a
-    // taken slot forces — are driven by the warm-equals-cold rows.
+    // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
+    // phpdoc type grammar. Measured 95.18% (4992/5245).
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
-    // Ratcheted 91 → 92 at 92.23% (5422/5879): the request side learned to carry a recovered container's
-    // shape through the rule vocabulary, and every branch of it — the map carrier, the synthesised list
-    // and array-shape child paths, the depth stop, the no-converter degradation, and the rule-set
-    // normaliser's prohibited/array-vs-object passes — is driven by in-process datasets.
+    // Measured 92.99% (5766/6201).
     'laravel' => 92,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
@@ -52,21 +41,7 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Dropped 43 → 34 when the worker pool and the engine result cache were deleted: both were in the
-    // first half, unit-tested in process at near-full coverage, so removing them took ~300 well-covered
-    // statements out of the numerator and left a remainder that is proven out-of-process. 889/2033
-    // (43.73%) became 538/1557 (34.55%) without losing a proof — the same denominator move documented
-    // for the 41 → 37 drop. Core rose in the same change: the result model's serialization contract,
-    // previously covered only as a side effect of the deleted cache tests, is now pinned directly.
-    // Ratcheted 34 → 36 at 36.07% (575/1594): the docblock/reflection metadata rules — the promoted
-    // `@var` fallback and the class-parameterisation rule, with its refuse-to-refine branches — live in
-    // the first half, so every statement they added is unit-tested in process.
-    // Ratcheted 36 → 37 at 37.90% (622/1641): the response refiner's memo/bound accounting moved into
-    // `DescentBudget`, which needs no Scope and is driven entirely in process.
-    // Ratcheted 37 → 38 at 38.48% (638/1658): the metadata factory's dependency list — the declaration
-    // hierarchy a shape was recovered across, and the enums whose cases it copied — plus the engine's one
-    // source-order sentinel. Both are native reflection and php-parser positions, no Scope, so the
-    // existing in-process suites drive every statement they added.
+    // Measured 38.48% (638/1658).
     'inference-phpstan' => 38,
 ];
 
