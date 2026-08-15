@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ValidatedData;
 
@@ -93,8 +94,9 @@ it('drives the supported tokens through the shared chain to the expected schema'
         ->and($props['max'])->toBe(['type' => 'string', 'maxLength' => 500])
         ->and($props['between'])->toBe(['type' => 'integer', 'minimum' => 1, 'maximum' => 10])
         ->and($props['regex'])->toBe(['type' => 'string', 'pattern' => '^[a-z]+$'])
-        // The request schema is built from rules (not the DType), so #[ArrayType] yields a bare array.
-        ->and($props['arrayType'])->toBe(['type' => 'array']);
+        // `#[ArrayType]` alone says only "an array"; the recovered `list<string>` synthesises the
+        // `arrayType.*` item field Laravel would write by hand, so the items survive it.
+        ->and($props['arrayType'])->toBe(['type' => 'array', 'items' => ['type' => 'string']]);
 
     // Non-nullable, non-optional properties are required.
     expect($result->schema['required'])->toContain('email', 'required');
@@ -122,17 +124,17 @@ it('makes a #[Nullable] property null-admitting', function (): void {
 
 /**
  * Build the request schema for a subset of {@see ValidatedData}'s properties through the real
- * DataValidationRules recovery + the shared Laravel validation chain.
+ * DataValidationRules recovery + the shared normalise/order/convert sequence the extension runs.
  *
  * @param  list<PropertyMetadata>  $properties
  */
 function buildValidatedSchema(array $properties): ValidationSchema
 {
     $metadata = new ClassMetadata(ValidatedData::class, $properties);
-    $ruleSet = (new DataValidationRules)->build(ValidatedData::class, $metadata, new NullTypeEngine);
-    $ordered = (new RuleOrdering)->order($ruleSet);
-
     $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+
+    $ruleSet = (new DataValidationRules)->build(ValidatedData::class, $metadata, new NullTypeEngine, null, $context);
+    $ordered = (new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet));
 
     return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
 }

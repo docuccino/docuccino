@@ -89,7 +89,7 @@ floors are set from — measure, then set the floor to the measured integer.
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **94.29%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.08%** | 91    | fully in-process-measurable                      |
+| `laravel`           | **92.23%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **34.55%** | 34    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 84.70%     | —     | informational only; no longer a gate             |
@@ -144,6 +144,14 @@ refuse-to-refine ones included. 538/1557 (34.55%) became 575/1594 (36.07%) — a
 them covered, with the duplicated `EnumCases` helper (now core's `EnumReflection::names()`) leaving the
 covered half in the same move.
 
+`laravel` then ratcheted 91 → 92. The request side stopped throwing away a recovered container type at the
+validation-rule boundary: a `list<V>` synthesises the `key.*` item field, an `array{…}` shape a
+`key.<member>` field per key, and an `array<string, V>` — which Laravel's vocabulary has no rule for —
+carries its value schema on an `additional_properties` rule. That is exactly the shape the standards ask
+for: a dataset over every container kind and every nesting combination, plus the degradations (an
+unusable element type, a positional shape, the depth stop, and no converter at all), and a second dataset
+over the rule-set normaliser's two cross-field passes. 5312/5769 (92.08%) became 5422/5879 (92.23%).
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -156,7 +164,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **94**, `laravel` **91**, `inference-phpstan` **36**.
+  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **36**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

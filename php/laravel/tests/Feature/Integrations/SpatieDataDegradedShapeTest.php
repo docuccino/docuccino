@@ -19,9 +19,11 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\MfaChallengeData;
@@ -36,7 +38,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\UploadPolicyData;
  * comes from the fixture app through the real engine; only the class the mapper reflects is a loadable
  * in-process twin, since the mapper's guards reflect the FQCN they are handed.
  *
- * Several expectations below pin behaviour that is WRONG on purpose, each marked DEGRADED with the gap
+ * A few expectations below still pin behaviour that is WRONG on purpose, each marked DEGRADED with the gap
  * named. They pass today; closing a gap means updating its expectation deliberately, rather than
  * discovering it in a published document.
  */
@@ -77,15 +79,16 @@ function degradedDataComponent(string $fixtureFqcn, string $twinFqcn, string ...
 }
 
 /**
- * A rule set through the shared validation chain, as a JSON Schema object.
+ * A rule set through the shared validation chain, as a JSON Schema object — the same normalise → order →
+ * convert sequence {@see DataRequestExtension} runs.
  *
  * @return array<string, mixed>
  */
 function degradedRequestSchema(string $twinFqcn, ClassMetadata $metadata, ?RuleSet $override = null): array
 {
-    $ruleSet = (new DataValidationRules)->build($twinFqcn, $metadata, new NullTypeEngine, $override);
-    $ordered = (new RuleOrdering)->order($ruleSet);
     $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+    $ruleSet = (new DataValidationRules)->build($twinFqcn, $metadata, new NullTypeEngine, $override, $context);
+    $ordered = (new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet));
 
     return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema;
 }
@@ -211,75 +214,69 @@ it('emits a referenced item for a DataCollection whose generic only the docblock
         ->and(array_keys($schemas))->toBe(['SnapshotFormData', 'MfaChallengeData']);
 })->group('fixture');
 
-it('DEGRADED: collapses a recovered map and list to a bare array on the request side', function (): void {
-    // KNOWN GAP, and the highest-volume one: the types ARE recovered here (PromotedPropertyDocblockTest
-    // pins that), and the request path then routes them through validation rules, whose vocabulary has
-    // one word for every array shape. `answers` loses its keys, `touched_fields` loses its items — the
-    // client is told "an array" and nothing more.
+it('carries a recovered map and list through the rule vocabulary intact', function (): void {
+    // The request path routes types through validation rules, whose vocabulary has one word for every
+    // array shape — so each recovered container states its own structure instead: the map as a value
+    // schema, the list as the `touched_fields.*` item field Laravel writes by hand.
     $metadata = realMetadataAs('App\\Data\\SaveAnswersData', SaveAnswersData::class);
     $schema = degradedRequestSchema(SaveAnswersData::class, $metadata);
 
-    expect($schema['properties']['answers'])->toBe(['type' => ['array', 'null']])
-        ->and($schema['properties']['touched_fields'])->toBe(['type' => 'array'])
-        // The scalar beside them is documented in full, so the loss is the array vocabulary, not the path.
+    // `array<string, mixed>|null` — an OBJECT with open values, not an array a JSON object fails against.
+    expect($schema['properties']['answers'])->toBe(['type' => ['object', 'null'], 'additionalProperties' => []])
+        ->and($schema['properties']['touched_fields'])->toBe(['type' => 'array', 'items' => ['type' => 'string']])
         ->and($schema['properties']['zone_key'])->toBe(['type' => 'string'])
-        // And a defaulted property is still demanded — `touched_fields = []` may legitimately be omitted.
-        ->and($schema['required'])->toBe(['zone_key', 'touched_fields']);
+        // `touched_fields = []` has a default, so it may legitimately be omitted.
+        ->and($schema['required'])->toBe(['zone_key']);
 })->group('fixture');
 
-it('DEGRADED: emits a keywordless property for a rules() override it could not fold', function (): void {
-    // KNOWN GAP, three of them stacked. `Rule::in(MediaCollections::validNames())` folds to an `in` rule
-    // with EMPTY parameters rather than to nothing; the override then OVERWRITES the property inference
-    // that would have said `string`; and the choice transformer returns early on an empty value set. The
-    // property survives with zero keywords — strictly worse than never having written the override.
+it('leaves property inference standing when a rules() override cannot be folded', function (): void {
+    // `Rule::in(MediaCollections::validNames())` names a list only the runtime knows. An `in` rule with
+    // EMPTY parameters would be worth less than nothing — it wins the merge over property inference and
+    // then contributes no keyword — so the descriptor folds to nothing at all and the field stays
+    // unrecovered, which is what lets `#[StringType]` survive.
     $metadata = realMetadataAs('App\\Data\\UploadPolicyData', UploadPolicyData::class);
     $override = tracedOverride('app/Data/UploadPolicyData.php', 'App\\Data\\UploadPolicyData');
 
-    expect($override->fields['collection'][0]->name)->toBe('in')
-        ->and($override->fields['collection'][0]->parameters)->toBe([]);
-
-    // What property inference alone would have documented, for contrast…
-    expect(degradedRequestSchema(UploadPolicyData::class, $metadata)['properties']['collection'])
+    expect($override->fields)->toBe([])
+        ->and(degradedRequestSchema(UploadPolicyData::class, $metadata)['properties']['collection'])
+        ->toBe(['type' => 'string'])
+        ->and(degradedRequestSchema(UploadPolicyData::class, $metadata, $override)['properties']['collection'])
         ->toBe(['type' => 'string']);
-
-    // …and what the override replaces it with.
-    expect(degradedRequestSchema(UploadPolicyData::class, $metadata, $override)['properties']['collection'])->toBe([]);
 })->group('fixture');
 
-it('DEGRADED: raises no diagnostic for the override it silently dropped', function (): void {
-    // KNOWN GAP, and the reason the one above ships unnoticed: `collection` IS among the traced fields,
-    // so it is never reported unrecoverable, and the shared rules analysis suppresses its
-    // `validation.rule-unrecoverable` on exactly that test. The failure is completely silent.
+it('reports the unfoldable override as unrecoverable rather than dropping it silently', function (): void {
+    // The other half: `collection` is no longer among the traced fields, so the shared rules analysis
+    // sees it as unrecoverable and diagnoses it. What was lost is the allow-list, not the field.
     $trace = FixtureRunner::traceRules('app/Data/UploadPolicyData.php', 'App\\Data\\UploadPolicyData', 'rules');
 
-    expect($trace['unrecoverable'])->toBe([])
-        ->and(array_keys($trace['fields']))->toBe(['collection']);
+    // …which is what RulesFromClass turns into the diagnostic (RuleUnrecoverableSuppressionTest drives
+    // that half in-process, where the diagnostic channel is observable).
+    expect($trace['unrecoverable'])->toBe(['collection'])
+        ->and($trace['fields'])->toBe([]);
 })->group('fixture');
 
-it('DEGRADED: documents a request property for a field the API prohibits', function (): void {
-    // KNOWN GAP. `label` has no property at all — the override names it only to reject it. `prohibited`
-    // is deliberately a no-op in the rule vocabulary, so the field lands in the request body as an
-    // optional, shapeless property: the documentation invites exactly what the API refuses.
+it('omits a request property for a field the API prohibits outright', function (): void {
+    // `label` has no property at all — the override names it only to reject it. An unconditional
+    // `prohibited` therefore drops the field from the documented body: an optional, shapeless property
+    // would invite exactly what the API refuses.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
     $schema = degradedRequestSchema(UpdateNodeData::class, $metadata, $override);
 
-    expect(array_keys($schema['properties']))->toBe(['name', 'metadata', 'label'])
-        ->and($schema['properties']['label'])->toBe([])
+    expect(array_keys($schema['properties']))->toBe(['name', 'metadata'])
         ->and($schema)->not->toHaveKey('required');
 })->group('fixture');
 
-it('DEGRADED: emits an array type alongside object properties for a dotted rule key', function (): void {
-    // KNOWN GAP, and the same root as the array-vocabulary collapse: `metadata` gets `{"type": "array"}`
-    // from its own rule and `properties` from its dotted children, and the assembler only defaults a
-    // missing type rather than reconciling the one already there. The result is not a coherent schema —
-    // no `array` has `properties` — and a validator handed this rejects sound documents.
+it('resolves a dotted rule key to an object rather than an array with properties', function (): void {
+    // `metadata` gets `array` from its own rule and `properties` from its dotted child. Both would be
+    // `{"type": "array", "properties": …}`, which no document validates against — so the named child
+    // wins and the `array` rule is dropped: a dotted key means the field is an object.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
     $schema = degradedRequestSchema(UpdateNodeData::class, $metadata, $override);
 
     expect($schema['properties']['metadata'])->toBe([
-        'type' => 'array',
+        'type' => 'object',
         'properties' => [
             'retention' => [
                 'type' => 'object',
@@ -292,6 +289,15 @@ it('DEGRADED: emits an array type alongside object properties for a dotted rule 
             ],
         ],
     ]);
+})->group('fixture');
+
+it('documents the recovered metadata map when no rules() override replaces it', function (): void {
+    // Without the override the same `@param array<string, mixed>|Optional|null $metadata` documents as
+    // an object with open values — the shape the override then narrows.
+    $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
+
+    expect(degradedRequestSchema(UpdateNodeData::class, $metadata)['properties']['metadata'])
+        ->toBe(['type' => ['object', 'null'], 'additionalProperties' => []]);
 })->group('fixture');
 
 it('DEGRADED: emits an empty 200 body for a bare JsonResponse', function (): void {

@@ -227,9 +227,10 @@ Within a rules array, Docuccino reads pipe strings (`'required|integer'`), array
 (`['required', 'integer']`), the `Rule::` factories `Rule::enum()`, `Rule::in()`, `Rule::exists()` and
 `Rule::unique()`, and your own rule objects — `new SortCode` documents from the rule class's
 [`#[RuleSchema]`](#documenting-a-custom-rule). A field whose rules are a closure, a rule object with no
-`#[RuleSchema]`, or a conditional descriptor can't be read statically: it's omitted from the schema and
-raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing disappears
-silently.
+`#[RuleSchema]`, or a values-at-runtime factory like `Rule::in(MediaCollections::names())` can't be read
+statically. It raises a `validation.rule-unrecoverable` info diagnostic naming the field, so nothing
+disappears silently: the field is omitted from the schema, or — when something else documents it, such
+as a Data property's own type — kept without the constraints those rules stated.
 
 ### Nested and array fields
 
@@ -286,6 +287,11 @@ Notice `min:1` on `items`: size rules are applied **type-aware**, so the same ru
 on an array, `minimum` on a number, and `minLength` on anything else. Rule order in your array
 doesn't matter — Docuccino sorts each field's rules into Laravel's own effect order first, so
 `['max:100', 'integer']` and `['integer', 'max:100']` produce identical output.
+
+Laravel's `array` rule covers both JSON arrays and JSON objects, so a **named** child key settles which
+one you meant: writing `'billing' => ['array']` beside `billing.email` still documents `billing` as an
+object, never `{ "type": "array", "properties": … }` — a shape no document validates against. A `*`
+child is the array case and keeps the rule.
 
 ### Documenting a custom rule
 
@@ -436,11 +442,19 @@ These three aren't Laravel rules, so don't put them in a rules array — Laravel
 exist so a [`#[RuleSchema]`](#documenting-a-custom-rule) reaches the schema through the same chain as
 every other rule, and they're applied last, so they see the finished property.
 
+### Prohibitions
+
+| Rule | Documented as |
+| --- | --- |
+| `prohibited` | The field is **omitted** from the documented body. It can never be sent, so documenting it would invite exactly what the API rejects. Any nested key under it goes too. |
+| `prohibited_if:other,value` / `prohibited_unless:other,value` | The field stays documented and optional — it's sendable in some states — with the condition as a description ("Must not be sent when …"). |
+| `prohibits:other` | Documented and optional: this rule constrains the *other* field, and says so in the description. |
+
 ### Recognized with no schema effect
 
 `bail`, `exclude`, `exclude_if`, `exclude_unless`, `exclude_with`, `exclude_without`,
-`current_password`, `prohibited`, `prohibits`. These are consumed deliberately — they're valid rules
-that say nothing about the wire shape, so they never raise an unhandled-rule diagnostic.
+`current_password`. These are consumed deliberately — they're valid rules that say nothing about the
+wire shape, so they never raise an unhandled-rule diagnostic.
 
 ## File uploads
 

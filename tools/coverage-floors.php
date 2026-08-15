@@ -36,7 +36,11 @@ const FLOORS = [
     // tags) then landed its 15 new statements fully covered.
     'core' => 94,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
-    'laravel' => 91,
+    // Ratcheted 91 → 92 at 92.23% (5422/5879): the request side learned to carry a recovered container's
+    // shape through the rule vocabulary, and every branch of it — the map carrier, the synthesised list
+    // and array-shape child paths, the depth stop, the no-converter degradation, and the rule-set
+    // normaliser's prohibited/array-vs-object passes — is driven by in-process datasets.
+    'laravel' => 92,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this

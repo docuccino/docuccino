@@ -60,7 +60,21 @@ the same way it would from a Form Request's `rules()`:
 
 The body carries `customerId`, `currency`, and `dueAt` — `internalNote` is dropped from the request by
 `#[HiddenFromRequest]`, and the nullable `dueAt` isn't required (its type admits `null`). A property
-with a constructor default isn't required either, and its value is documented as the schema `default`.
+with a constructor default isn't required either, and a scalar default is documented as the schema
+`default`.
+
+An array property keeps the shape its [docblock tag](#element-types-from-the-docblock) states, even
+though Laravel's rule vocabulary has one word — `array` — for all of them:
+
+| Property type | Documented as |
+| --- | --- |
+| `list<string>` | `{ "type": "array", "items": { "type": "string" } }` |
+| `array<string, mixed>` | `{ "type": "object", "additionalProperties": {} }` — a keyed array is a JSON **object**, which would fail `type: array` outright |
+| `array<string, array<string, string\|null>>` | Nested `additionalProperties`, matching the response side exactly |
+| `array{width: int, label?: string}` | An object with `properties`, the optional key left out of `required` |
+
+A static `rules()` still wins per field, so a dotted key inside one of these (`metadata.retention.mode`)
+documents that key and settles the container as an object.
 
 Because a Data class is a single named source class, the body is **hoisted to a `#/components/schemas`
 component and the operation `$ref`s it** — so the same Data class accepted by several endpoints becomes
