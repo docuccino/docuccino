@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Extensions;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -22,6 +24,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Support\FrameworkClasses;
 
 /**
  * Infers the success response(s) from the action's return paths (design §5): each return type is
@@ -30,6 +33,10 @@ use Docuccino\Core\Patch\Contribution;
  * shape (never a generic `{type: object}`) under the folded status — an `int` literal second type
  * arg, else the default 200; `noContent()` arrives as `JsonResponse<void, 204>`; bare `void`/`never`
  * contributes nothing.
+ *
+ * A framework response class the analyser could not parameterise gets only what the class itself
+ * proves ({@see frameworkResponse()}), never a reflection of the response object — see
+ * {@see FrameworkResponseTypeToSchema} for why that matters and where the refusal is enforced.
  *
  * Being a built-in, it imports no integration: the three integration-aware decisions arrive through
  * gated context chains ({@see ResponseAnalysisTarget} redirects the analysed method,
@@ -40,16 +47,29 @@ use Docuccino\Core\Patch\Contribution;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class InferredResponsesExtension implements OperationExtension
 {
-    /** Matched by string so this extension carries no Illuminate import. */
-    private const JSON_RESPONSE = 'Illuminate\\Http\\JsonResponse';
-
     private const DEFAULT_STATUS = '200';
 
     /**
+     * The OAS range key a redirect documents under. Laravel's `RedirectResponse` defaults to 302 but
+     * takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and the return site names
+     * none of them — so the range is what the code proves, and picking 302 would be a guess.
+     */
+    private const REDIRECT_STATUS = '3XX';
+
+    /** Every redirect sets `Location`; that much the response class itself proves. */
+    private const LOCATION_HEADER = [
+        'Location' => [
+            'description' => 'The URL to follow.',
+            'schema' => ['type' => 'string', 'format' => 'uri-reference'],
+        ],
+    ];
+
+    /**
      * RFC reason phrases for the statuses this extension emits; unlisted falls back to `OK`. 422 is
-     * here because a `calculateResponseStatus()` override can re-home a body outside 2xx.
+     * here because a `calculateResponseStatus()` override can re-home a body outside 2xx, and the
+     * `3XX` range key gets a sentence instead of a phrase since no RFC names one.
      *
-     * @var array<int, string>
+     * @var array<int|string, string>
      */
     private const REASONS = [
         '200' => 'OK',
@@ -59,6 +79,7 @@ final class InferredResponsesExtension implements OperationExtension
         '204' => 'No Content',
         '205' => 'Reset Content',
         '206' => 'Partial Content',
+        '3XX' => 'Redirect. The exact 3xx status is not stated at the return site — pin it with #[Response] when this endpoint always answers with one code.',
         '422' => 'Unprocessable Entity',
     ];
 
@@ -71,11 +92,19 @@ final class InferredResponsesExtension implements OperationExtension
     {
         [$analysis, $producer] = $this->responseAnalysis($context);
 
-        /** @var array<string, array{payloads: list<DType>, location: ?SourceLocation, empty: bool}> $byStatus */
+        /** @var array<string, array{payloads: list<DType>, location: ?SourceLocation, empty: bool, headers: ?array<string, mixed>}> $byStatus */
         $byStatus = [];
 
+        /** @var array<string, true> $unrecovered */
+        $unrecovered = [];
+
         foreach ($analysis->returns as $return) {
-            [$status, $payload, $empty] = $this->unwrap($return->type);
+            $bare = $this->unrecoveredResponse($return->type);
+            if ($bare !== null) {
+                $unrecovered[$bare] = true;
+            }
+
+            [$status, $payload, $empty, $headers] = $this->unwrap($return->type);
 
             // A bare void/never return (no JsonResponse wrapper) documents nothing.
             if ($payload === null && ! $empty) {
@@ -83,15 +112,18 @@ final class InferredResponsesExtension implements OperationExtension
             }
 
             foreach ($this->placeReturn($status, $payload, $return->type, $context) as [$placedStatus, $placedPayload]) {
-                $bucket = $byStatus[$placedStatus] ??= ['payloads' => [], 'location' => null, 'empty' => false];
+                $bucket = $byStatus[$placedStatus] ??= ['payloads' => [], 'location' => null, 'empty' => false, 'headers' => null];
                 $bucket['location'] ??= $return->location;
                 if ($placedPayload !== null) {
                     $bucket['payloads'][] = $placedPayload;
                 }
                 $bucket['empty'] = $bucket['empty'] || ($placedPayload === null && $empty);
+                $bucket['headers'] ??= $headers;
                 $byStatus[$placedStatus] = $bucket;
             }
         }
+
+        $this->reportUnrecovered($context, array_keys($unrecovered));
 
         if ($byStatus === []) {
             return;
@@ -102,7 +134,31 @@ final class InferredResponsesExtension implements OperationExtension
 
         foreach ($byStatus as $status => $bucket) {
             // PHP coerced the '200' key to int; the draft API and reason table want the string back.
-            $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer);
+            $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer, $bucket['headers']);
+        }
+    }
+
+    /**
+     * One diagnostic per framework response class the analyser handed back bare. Degrading here is
+     * unavoidable — nothing in the app names the body — but degrading QUIETLY isn't: without this the
+     * only signal is a response that documents no body, which reads like a deliberate empty one.
+     *
+     * @param  list<string>  $fqcns
+     */
+    private function reportUnrecovered(RouteContext $context, array $fqcns): void
+    {
+        foreach ($fqcns as $fqcn) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Info,
+                code: 'inferred-response.payload-unrecoverable',
+                message: sprintf(
+                    '%s returns a bare %s, so nothing names the response body and its shape could not be recovered.',
+                    $context->actionRef->symbol(),
+                    $fqcn,
+                ),
+                routeSignature: $context->route->signature(),
+                help: 'Build the payload where the analyser can see it (return response()->json($payload) from the action itself rather than handing back a collaborator\'s response), or declare the body with #[Response(type: YourPayload::class)].',
+            ));
         }
     }
 
@@ -177,30 +233,74 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * Unwrap a return type to `(status, payloadType, isEmptyBody)`. A `JsonResponse<payload, status>`
-     * yields the payload under its folded status (void payload = empty body); anything else yields
-     * itself under 200.
+     * Unwrap a return type to `(status, payloadType, isEmptyBody, headers)`. A
+     * `JsonResponse<payload, status>` yields the payload under its folded status (void payload =
+     * empty body); an unparameterised framework response goes to {@see frameworkResponse()};
+     * anything else yields itself under 200.
      *
-     * @return array{0: string, 1: ?DType, 2: bool}
+     * @return array{0: string, 1: ?DType, 2: bool, 3: ?array<string, mixed>}
      */
     private function unwrap(DType $type): array
     {
         if ($type instanceof VoidT || $type instanceof NeverT) {
-            return [self::DEFAULT_STATUS, null, false];
+            return [self::DEFAULT_STATUS, null, false, null];
         }
 
-        if ($type instanceof ClassT && $type->fqcn === self::JSON_RESPONSE) {
+        if ($type instanceof ClassT && $type->fqcn === FrameworkClasses::JSON_RESPONSE && $type->typeArgs !== []) {
             $status = $this->foldStatus($type->typeArgs[1] ?? null);
-            $payload = $type->typeArgs[0] ?? null;
+            $payload = $type->typeArgs[0];
 
-            if ($payload === null || $payload instanceof VoidT || $payload instanceof NeverT) {
-                return [$status, null, true];
+            if ($payload instanceof VoidT || $payload instanceof NeverT) {
+                return [$status, null, true, null];
             }
 
-            return [$status, $payload, false];
+            return [$status, $payload, false, null];
         }
 
-        return [self::DEFAULT_STATUS, $type, false];
+        if ($type instanceof ClassT && FrameworkClasses::isResponse($type->fqcn)) {
+            return $this->frameworkResponse($type);
+        }
+
+        return [self::DEFAULT_STATUS, $type, false, null];
+    }
+
+    /**
+     * A framework response object the analyser handed back with no payload generic. It is transport,
+     * not a body, so only what the class itself proves gets documented — never its own members.
+     *
+     * A redirect proves a 3xx with a `Location` header and no body. A bare `JsonResponse` proves a
+     * JSON body of a shape this build could not recover, so it converts through the mapper chain to
+     * an open `{}` under `application/json` — an unconstrained body is true, whereas no body at all
+     * would be a claim the class contradicts. Every other framework response (a file, a stream, a
+     * plain string) proves neither media type nor shape, so only the status is documented.
+     *
+     * @return array{0: string, 1: ?DType, 2: bool, 3: ?array<string, mixed>}
+     */
+    private function frameworkResponse(ClassT $type): array
+    {
+        if (FrameworkClasses::isRedirect($type->fqcn)) {
+            return [self::REDIRECT_STATUS, null, true, self::LOCATION_HEADER];
+        }
+
+        if ($type->fqcn === FrameworkClasses::JSON_RESPONSE) {
+            return [self::DEFAULT_STATUS, $type, false, null];
+        }
+
+        return [self::DEFAULT_STATUS, null, true, null];
+    }
+
+    /**
+     * The FQCN of a framework response class handed back with no payload generic — the case that
+     * costs the document a body, and so the case worth a diagnostic. A redirect is not one of them:
+     * it proves everything a redirect has.
+     */
+    private function unrecoveredResponse(DType $type): ?string
+    {
+        if (! $type instanceof ClassT || ! FrameworkClasses::isResponse($type->fqcn) || FrameworkClasses::isRedirect($type->fqcn)) {
+            return null;
+        }
+
+        return $type->fqcn === FrameworkClasses::JSON_RESPONSE && $type->typeArgs !== [] ? null : $type->fqcn;
     }
 
     /** A constant `int` literal status arg folds; anything dynamic falls back to 200. */
@@ -215,9 +315,11 @@ final class InferredResponsesExtension implements OperationExtension
 
     /**
      * One response: the unioned payload schema under its resolved media type, or an empty body when
-     * there's no payload (`noContent()`).
+     * there's no payload (`noContent()`). Headers are the ones the return type itself proves — a
+     * redirect's `Location` — and are written as inference, not fallback, since the code stated them.
      *
      * @param  list<DType>  $payloads
+     * @param  ?array<string, mixed>  $headers
      */
     private function emit(
         OperationDraft $operation,
@@ -226,9 +328,14 @@ final class InferredResponsesExtension implements OperationExtension
         array $payloads,
         ?SourceLocation $location,
         ?string $producer,
+        ?array $headers = null,
     ): void {
         $response = $operation->response($status);
         $response->setDescription(self::REASONS[$status] ?? 'OK', Contribution::fallback());
+
+        if ($headers !== null) {
+            $response->set('headers', $headers, Contribution::inference($context->actionSource()));
+        }
 
         if ($payloads === [] || $response->isBodyless()) {
             return;
@@ -244,9 +351,13 @@ final class InferredResponsesExtension implements OperationExtension
             ? Contribution::forProducer($producer, $source, $result->confidence)
             : Contribution::inference($source, $result->confidence);
 
+        // The media type is registered even when the payload converted to an open `{}` — inference
+        // decided this response HAS a body, and "a JSON body of an unrecovered shape" is truer than
+        // the "no body at all" an absent content entry reads as.
         $mediaType = $this->mediaType($context, $payloads);
+        $content = $response->content($mediaType);
         foreach ($result->schema as $keyword => $value) {
-            $response->content($mediaType)->set($keyword, $value, $contribution);
+            $content->set($keyword, $value, $contribution);
         }
     }
 

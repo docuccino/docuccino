@@ -9,23 +9,17 @@ use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
-use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\NullTypeEngine;
-use Docuccino\Core\Inference\ReturnSite;
-use Docuccino\Core\Inference\SourceLocation;
-use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
-use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
-use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\MfaChallengeData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\SaveAnswersData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\SnapshotData;
@@ -33,14 +27,13 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\UpdateNodeData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\UploadPolicyData;
 
 /**
- * What the real engine's recovery — and its gaps — actually emit for a spatie Data class and for the two
- * framework response classes a route hands back when nothing names a payload. Every type and rule here
- * comes from the fixture app through the real engine; only the class the mapper reflects is a loadable
- * in-process twin, since the mapper's guards reflect the FQCN they are handed.
+ * What the real engine's recovery — and its gaps — actually emit for a spatie Data class. Every type and
+ * rule here comes from the fixture app through the real engine; only the class the mapper reflects is a
+ * loadable in-process twin, since the mapper's guards reflect the FQCN they are handed.
  *
- * A few expectations below still pin behaviour that is WRONG on purpose, each marked DEGRADED with the gap
- * named. They pass today; closing a gap means updating its expectation deliberately, rather than
- * discovering it in a published document.
+ * Nothing here is pinned as DEGRADED any more. Should a shape below turn out to be wrong, pin it as
+ * DEGRADED with the gap named rather than quietly correcting the expectation — a gap discovered in a
+ * published document is the failure this file exists to prevent.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -105,35 +98,6 @@ function tracedOverride(string $relPath, string $fixtureFqcn): RuleSet
         ),
         $trace['fields'],
     ));
-}
-
-/**
- * `[the emitted 200 schema, the components it hoisted]` for a recovered return type. The framework
- * class's own metadata comes from the real engine — reflecting that class is what produces the members.
- *
- * @return array{0: array<string, mixed>, 1: array<string, mixed>}
- */
-function degradedResponseSchema(ClassT $returnType, string $frameworkFqcn): array
-{
-    $engine = new StubTypeEngine(
-        analyses: [
-            'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(
-                returns: [new ReturnSite($returnType, new SourceLocation(''))],
-            ),
-        ],
-        classes: [$frameworkFqcn => ClassMetadata::fromArray(FixtureRunner::classMetadata($frameworkFqcn))],
-    );
-    app()->instance(TypeEngine::class, $engine);
-
-    /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
-    $document = app(DocumentGenerator::class)->generate($config, $engine)->document->toArray();
-
-    return [
-        $document['paths']['/api/forms']['get']['responses']['200']['content']['application/json']['schema'] ?? [],
-        $document['components']['schemas'] ?? [],
-    ];
 }
 
 it('emits a constructor-@param map as an object with additionalProperties', function (): void {
@@ -298,58 +262,4 @@ it('documents the recovered metadata map when no rules() override replaces it', 
 
     expect(degradedRequestSchema(UpdateNodeData::class, $metadata)['properties']['metadata'])
         ->toBe(['type' => ['object', 'null'], 'additionalProperties' => []]);
-})->group('fixture');
-
-it('DEGRADED: emits an empty 200 body for a bare JsonResponse', function (): void {
-    // KNOWN GAP. Nothing at the call site names a payload, so the recovered type is a bare
-    // `Illuminate\Http\JsonResponse`. The pipeline unwraps it and finds no payload generic, and the 200
-    // ends up with a content entry whose schema is empty — a documented JSON body that says nothing.
-    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
-        'app/Http/Controllers/SsoRedirectController.php',
-        'App\\Http\\Controllers\\SsoRedirectController',
-        'reset',
-    ));
-    $returnType = $analysis->returns[0]->type ?? null;
-    expect($returnType)->toBeInstanceOf(ClassT::class)
-        ->and($returnType->fqcn)->toBe('Illuminate\\Http\\JsonResponse')
-        ->and($returnType->typeArgs)->toBe([]);
-
-    [$schema, $components] = degradedResponseSchema($returnType, 'Illuminate\\Http\\JsonResponse');
-
-    expect($schema)->toBe([])
-        ->and($components)->toBe([]);
-})->group('fixture');
-
-it('DEGRADED: gives a 302 a JSON body of RedirectResponse internals', function (): void {
-    // KNOWN GAP, and worse than the JsonResponse one above: `RedirectResponse` gets no unwrapping, so it
-    // is documented the only way a bare class can be — by reflecting it. The response object's own
-    // `original`/`exception`/`headers` members are hoisted as a component and referenced as the body,
-    // two of them REQUIRED. A 302 carries no JSON at all, so every keyword here is fiction.
-    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
-        'app/Http/Controllers/SsoRedirectController.php',
-        'App\\Http\\Controllers\\SsoRedirectController',
-        'connection',
-    ));
-    $returnType = $analysis->returns[0]->type ?? null;
-    expect($returnType)->toBeInstanceOf(ClassT::class)
-        ->and($returnType->fqcn)->toBe('Illuminate\\Http\\RedirectResponse');
-
-    [$schema, $components] = degradedResponseSchema($returnType, 'Illuminate\\Http\\RedirectResponse');
-
-    expect($schema['$ref'] ?? null)->toBe('#/components/schemas/RedirectResponse');
-
-    $component = $components['RedirectResponse'];
-    unset($component['x-docuccino']);
-    expect($component)->toBe([
-        'type' => 'object',
-        'properties' => [
-            'original' => ['description' => 'The original content of the response.'],
-            'exception' => [
-                'type' => ['object', 'null'],
-                'description' => 'The exception that triggered the error response (if applicable).',
-            ],
-            'headers' => ['type' => 'object'],
-        ],
-        'required' => ['original', 'headers'],
-    ]);
 })->group('fixture');

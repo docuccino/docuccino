@@ -215,6 +215,10 @@ own (seeded from the action's parameter type):
 - `app/Http/Controllers/SsoRedirectController.php` + `app/Services/SsoGateway.php` — a `RedirectResponse`
   action and a `JsonResponse` action whose payloads are named nowhere, the two shapes the response side
   degrades on.
+- `app/Http/Controllers/FileDeliveryController.php` — the rest of the framework response family, declared
+  the way a real controller declares it: `BinaryFileResponse` from `response()->download()`,
+  `StreamedResponse` from `response()->stream()`, and the plain `Illuminate\Http\Response` from
+  `response()`. Each is proof that the class the response guard names is one the engine really recovers.
 - `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
   (magic attributes) and documenting its columns the ide-helper way, via class-level
   `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,

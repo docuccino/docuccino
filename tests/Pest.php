@@ -2,8 +2,14 @@
 
 declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
@@ -61,6 +67,37 @@ function stubDocumentArray(?callable $mutateConfig = null): array
     bindStubEngine();
 
     return generateDocument($mutateConfig)->document->toArray();
+}
+
+/**
+ * `[the GET /api/forms responses, the schemas the build hoisted, the diagnostics it raised, the whole
+ * result]` for one stubbed action return type. The framework-response suites pin a status, a header
+ * and — above all — an ABSENT component, so they need the whole response rather than one schema.
+ *
+ * @param  array<string, ClassMetadata>  $classes  what the engine answers `classMetadata()` with, by FQCN
+ * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: list<Diagnostic>, 3: GenerationResult}
+ */
+function documentForReturn(DType $returnType, array $classes = []): array
+{
+    $engine = new StubTypeEngine(
+        analyses: [
+            'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(
+                returns: [new ReturnSite($returnType, new SourceLocation(''))],
+            ),
+        ],
+        classes: $classes,
+    );
+    app()->instance(TypeEngine::class, $engine);
+
+    $result = generateDocument();
+    $document = $result->document->toArray();
+
+    return [
+        $document['paths']['/api/forms']['get']['responses'] ?? [],
+        $document['components']['schemas'] ?? [],
+        $result->diagnostics,
+        $result,
+    ];
 }
 
 /**
