@@ -12,7 +12,8 @@ use Spatie\LaravelData\Optional;
 
 /**
  * An in-process twin of the fixture app's `App\Data\UpdateNodeData`: a partial-update DTO whose static
- * `rules()` names `label`, a field the class deliberately has no property for. Only ever reflected.
+ * `rules()` names `label`, a field the class deliberately has no property for, and which carries a
+ * positional `array{float, float}` tuple. Only ever reflected.
  */
 final class UpdateNodeData extends Data
 {
@@ -21,5 +22,6 @@ final class UpdateNodeData extends Data
         public readonly Optional|string $name = new Optional,
         #[Nullable]
         public readonly Optional|array|null $metadata = new Optional,
+        public readonly Optional|array $position = new Optional,
     ) {}
 }

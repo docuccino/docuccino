@@ -140,9 +140,9 @@ it('maps a general keyed array to MapT', function (): void {
 
 it('settles a keyed array on its key type, the same rule the docblock grammar uses', function (Type $key, string $expected): void {
     // `isList()` is only MAYBE for an int-keyed ArrayType, so it cannot be the whole answer: only a
-    // string-capable-only key makes a PHP array serialize to a JSON object. TypeStringParser::mapKeyed()
-    // owns the rule, and reading `array<int, V>` two ways depending on which path found it would be a
-    // non-determinism between refactors.
+    // string-capable-only key makes a PHP array serialize to a JSON object. Core's ArrayKey owns the
+    // rule and BOTH paths call it, so `array<int, V>` cannot read two ways depending on which one found
+    // it; this dataset pins the answers this path actually reaches it with.
     expect(translate(new ArrayType($key, new StringType)))->toBeInstanceOf($expected);
 })->with([
     'an int key' => [new IntegerType, ListT::class],

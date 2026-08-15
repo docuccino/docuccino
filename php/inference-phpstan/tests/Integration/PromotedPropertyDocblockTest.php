@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
@@ -64,6 +65,22 @@ it('types a promoted array property from the @var it wrote beside the prose', fu
     // @phpstan-var list<SnapshotFormData> — the analyser-prefixed tag is read like the plain one
     'an analyser-prefixed tag' => ['attachments', new ListT(new ClassT('App\\Data\\SnapshotFormData'))],
 ])->group('fixture');
+
+it('reads a positional tuple out of a constructor @param as a LIST shape', function (): void {
+    // `@param array{float, float} $position`. The grammar has only the KEYS to go on — no PHPStan list
+    // accessory reaches it — so the `0..n` sequence is what has to make this a JSON array. A shape read
+    // as an object would be documented with `"0"`/`"1"` property names, which no JSON payload has.
+    $declared = metadataTypes('App\\Data\\UpdateNodeData')['position'];
+
+    // `|Optional` is a spatie presence marker unioned into the declared type; the shape is the member.
+    expect($declared)->toBeInstanceOf(UnionT::class);
+    $position = array_values(array_filter($declared->members, static fn (DType $m): bool => $m instanceof ArrayShapeT))[0] ?? null;
+
+    expect($position)->toBeInstanceOf(ArrayShapeT::class)
+        ->and($position->isList)->toBeTrue()
+        ->and(array_map(static fn ($f) => $f->key, $position->fields))->toBe([0, 1])
+        ->and(array_map(static fn ($f) => $f->type, $position->fields))->toEqual([ScalarT::float(), ScalarT::float()]);
+})->group('fixture');
 
 it('keeps the prose of the property it takes the type from', function (): void {
     // The summary, the example and the type all come off the one docComment.

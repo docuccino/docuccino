@@ -63,13 +63,14 @@ final class DataRequestExtension implements OperationExtension
         $overrides = $this->rulesOverride->analyse($context, $fqcn, $documentedByProperties);
 
         $converter = $context->converter();
-        $ruleSet = $this->normalizer->normalize($this->rules->build($fqcn, $metadata, $context->engine, $overrides, $converter));
+        $validation = $context->validation();
+        $ruleSet = $this->normalizer->normalize($this->rules->build($fqcn, $metadata, $context->engine, $overrides, $converter, $validation));
         $context->recordDependencyFiles($this->rules->dependencyFiles());
         if ($ruleSet->isEmpty()) {
             return;
         }
 
-        $result = $context->validation()->convert($this->ordering->order($ruleSet), $converter);
+        $result = $validation->convert($this->ordering->order($ruleSet), $converter);
         if ($result->isEmpty()) {
             return;
         }

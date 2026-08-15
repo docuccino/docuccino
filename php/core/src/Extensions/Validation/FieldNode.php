@@ -67,10 +67,13 @@ final class FieldNode
             $schema['type'] ??= 'object';
             $properties = [];
             $required = [];
+            // A numeric path segment (`coords.0`) is an array key to PHP, so it arrives here as an INT —
+            // hence the casts: `required` carries strings only, and the canonicaliser keeps the
+            // properties map an object whatever its keys look like.
             foreach ($this->properties as $name => $node) {
-                $properties[$name] = $node->build($policy);
+                $properties[(string) $name] = $node->build($policy);
                 if ($node->required && ! $node->presenceOptional) {
-                    $required[] = $name;
+                    $required[] = (string) $name;
                 }
             }
             $schema['properties'] = $properties;

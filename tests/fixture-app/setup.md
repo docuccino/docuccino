@@ -208,7 +208,9 @@ own (seeded from the action's parameter type):
   `@param` block) and are then collapsed to a bare `array` by the validation-rule vocabulary.
 - `app/Data/UpdateNodeData.php` — a static `rules()` naming `label`, a field the class has no property
   for, only to `prohibit` it, plus a dotted `metadata.retention.mode` key constraining one member of the
-  metadata blob.
+  metadata blob, plus a POSITIONAL `array{float, float} $position` tuple: the docblock grammar has only
+  the keys to tell it that is a JSON array, and a shape it read as an object would document `"0"`/`"1"`
+  property names.
 - `app/Data/UploadPolicyData.php` + `app/Support/MediaCollections.php` — a static `rules()` allow-listing a
   natively typed `#[StringType]` property with `Rule::in(MediaCollections::validNames())`: the values are
   not statically knowable, and the override still replaces what the property type inferred.

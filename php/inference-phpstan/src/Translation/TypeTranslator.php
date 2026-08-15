@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Translation;
 
 use Docuccino\Core\Extensions\Schema\EnumReflection;
+use Docuccino\Core\Inference\DType\ArrayKey;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\CallableT;
@@ -14,7 +15,6 @@ use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\IntersectionT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
-use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
@@ -107,12 +107,9 @@ final class TypeTranslator
                 return new ListT($value);
             }
 
-            // `isList()` is only MAYBE for `array<int, V>`, so the key decides: an int-capable key is a JSON
-            // array, and only a string-capable-only one is a JSON object. Same rule, same answer as the
-            // docblock path — see TypeStringParser::mapKeyed(), which owns it.
-            $key = $this->translate($type->getIterableKeyType(), $budget->descend());
-
-            return self::intKeyed($key) ? new ListT($value) : new MapT($key, $value);
+            // `isList()` is only MAYBE for `array<int, V>`, so the key decides. Same rule, same answer as
+            // the docblock path — core's ArrayKey is the one implementation both call.
+            return ArrayKey::arrayOf($this->translate($type->getIterableKeyType(), $budget->descend()), $value);
         }
 
         if ($type->isCallable()->yes()) {
@@ -133,22 +130,6 @@ final class TypeTranslator
         }
 
         return new UnknownT($this->describe($type));
-    }
-
-    private static function intKeyed(DType $key): bool
-    {
-        if ($key instanceof UnionT) {
-            foreach ($key->members as $member) {
-                if (self::intKeyed($member)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return ($key instanceof ScalarT && $key->scalar === ScalarT::INT)
-            || ($key instanceof LiteralT && $key->base() === ScalarT::INT);
     }
 
     private function constantLiteral(Type $type): ?LiteralT

@@ -67,7 +67,8 @@ final class InferredResponsesExtension implements OperationExtension
     /**
      * RFC reason phrases for the statuses this extension emits; unlisted falls back to `OK`. 422 is
      * here because a `calculateResponseStatus()` override can re-home a body outside 2xx, and the
-     * `3XX` range key gets a sentence instead of a phrase since no RFC names one.
+     * `3XX` range key gets the plain word since no RFC names one — a description is read by the API's
+     * consumers, so how to pin the status down belongs in a diagnostic, not in the document.
      *
      * @var array<int|string, string>
      */
@@ -79,7 +80,7 @@ final class InferredResponsesExtension implements OperationExtension
         '204' => 'No Content',
         '205' => 'Reset Content',
         '206' => 'Partial Content',
-        '3XX' => 'Redirect. The exact 3xx status is not stated at the return site — pin it with #[Response] when this endpoint always answers with one code.',
+        '3XX' => 'Redirect',
         '422' => 'Unprocessable Entity',
     ];
 
@@ -136,6 +137,29 @@ final class InferredResponsesExtension implements OperationExtension
             // PHP coerced the '200' key to int; the draft API and reason table want the string back.
             $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer, $bucket['headers']);
         }
+
+        if (isset($byStatus['3XX'])) {
+            $this->reportUnpinnedRedirect($context);
+        }
+    }
+
+    /**
+     * The return site redirects but doesn't say to what code, so the response lands on the `3XX` range.
+     * That's the honest document; the way to make it exact is advice for the API's AUTHOR, which is why
+     * it's a diagnostic rather than a sentence in a description the API's consumers read.
+     */
+    private function reportUnpinnedRedirect(RouteContext $context): void
+    {
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'inferred-response.unpinned-redirect',
+            message: sprintf(
+                '%s returns a redirect whose exact 3xx status is not stated at the return site, so it is documented as the 3XX range.',
+                $context->actionRef->symbol(),
+            ),
+            routeSignature: $context->route->signature(),
+            help: 'Pin it with #[Response(302)] (or the code this endpoint always answers with) when the redirect is not conditional.',
+        ));
     }
 
     /**

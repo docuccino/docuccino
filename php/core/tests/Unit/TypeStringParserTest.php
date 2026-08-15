@@ -100,7 +100,8 @@ it('maps the square-bracket array shorthand to a List DType', function (): void 
 it('decides list vs map on the key type of every keyed array form', function (string $type, mixed $expected): void {
     // Only a string key makes a PHP array serialize to a JSON object, so an int-capable key is a JSON
     // array. Every key identifier the grammar can produce is here, plus the unreasonable ones, which
-    // degrade to a map rather than guess a list.
+    // degrade to a map rather than guess a list. The rule itself is core's ArrayKey, which the engine's
+    // translator calls too (ArrayKeyTest); this dataset pins what the GRAMMAR hands it.
     expect(parseType($type))->toEqual($expected);
 })->with([
     // int-capable keys → a list, and the value type is what survives.

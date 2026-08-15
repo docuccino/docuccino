@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\BuiltIn;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
+use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -15,8 +16,10 @@ use Docuccino\Core\Inference\DType\UnionT;
 
 /**
  * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`.
- * Properties come from {@see TypeEngine::classMetadata()}; the component is named by `#[SchemaName]`
- * else the short class name, and pinned by `#[SchemaId]` else the FQCN. This is the
+ * Properties come from {@see TypeEngine::classMetadata()} less whatever `#[Hidden]` denies, read through
+ * {@see SchemaIdentity} so a plain DTO hides a property exactly as a Data class or a model does; the
+ * component is named by `#[SchemaName]` else the short class name, and pinned by `#[SchemaId]` else the
+ * FQCN. This is the
  * framework-agnostic fallback mapper, so it is the ONLY mapper a plain PHP DTO reaches — passing the
  * short name explicitly here would make the attributes dead exactly where two classes sharing a short
  * name have no other way out, so it leaves both to {@see ComponentHoist}.
@@ -53,9 +56,15 @@ final class ClassTypeToSchema implements TypeToSchema
                 return null;
             }
 
+            $hidden = SchemaIdentity::hidden($fqcn);
+
             $properties = [];
             $required = [];
             foreach ($metadata->properties as $property) {
+                if (in_array($property->name, $hidden, true) || SchemaIdentity::hidesProperty($fqcn, $property->name)) {
+                    continue;
+                }
+
                 $schema = $context->convert($property->type);
                 if ($property->summary !== null) {
                     $schema['description'] = $property->summary;
@@ -64,6 +73,11 @@ final class ClassTypeToSchema implements TypeToSchema
                 if (! ($property->type instanceof UnionT && $property->type->containsNull())) {
                     $required[] = $property->name;
                 }
+            }
+
+            if ($properties === []) {
+                // Everything the class exposes is hidden — same degradation as an unexpandable class.
+                return null;
             }
 
             $object = ['type' => 'object', 'properties' => $properties];

@@ -26,6 +26,7 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Core\TypeGrammar\TypeStringParser;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
@@ -130,15 +131,53 @@ it('documents every recovered container shape', function (string $property, DTyp
         'properties' => ['meta' => ['type' => 'object', 'additionalProperties' => ['type' => 'string']]],
         'required' => ['meta'],
     ]],
-    // Degradations. An element type nothing can say anything about contributes no child rather than an
-    // `items: {}` that documents nothing…
-    'list<mixed>' => ['tags', new ListT(new UnknownT('mixed')), ['type' => 'array']],
+    // Degradations. An element type nothing can say anything about still gets its item node, so the
+    // request says the same `items: {}` the response side says for the same type…
+    'list<mixed>' => ['tags', new ListT(new UnknownT('mixed')), ['type' => 'array', 'items' => []]],
+    // …and a shape member nothing can be said about keeps its key and its requiredness, which is more
+    // than the type says on its own — dropping it would document an optional member the shape requires.
+    'array{meta: mixed}' => ['box', new ArrayShapeT([
+        new ArrayShapeField('meta', new UnknownT('mixed')),
+    ]), [
+        'type' => 'object',
+        'properties' => ['meta' => []],
+        'required' => ['meta'],
+    ]],
     // …and a positional shape, whose members differ per index, keeps the bare array rule.
     'array{0: int, 1: string}' => ['box', new ArrayShapeT([
         new ArrayShapeField(0, ScalarT::int()),
         new ArrayShapeField(1, ScalarT::string()),
-    ], isList: true), ['type' => 'array']],
+    ]), ['type' => 'array']],
 ]);
+
+it('keeps a positional shape an array all the way from the docblock that declared it', function (string $declared): void {
+    // The stub above hands the shape in ready-made; this is the half that actually happens — the
+    // grammar reads the tuple out of a `@param`/`@var` and has only the KEYS to go on. A shape whose
+    // keys are the `0..n` sequence is a JSON array, so it must never synthesise `box.0`/`box.1` child
+    // paths: those read as an object's property names and emit `properties` as a JSON ARRAY.
+    $type = (new TypeStringParser)->parse($declared);
+
+    expect($type)->toBeInstanceOf(ArrayShapeT::class)
+        ->and($type->isList)->toBeTrue()
+        ->and(containerProperty('box', $type))->toBe(['type' => 'array']);
+})->with([
+    'array{string, int}' => ['array{string, int}'],
+    'array{0: string, 1: int}' => ['array{0: string, 1: int}'],
+]);
+
+it('documents a sparse int-keyed shape as the object PHP renders it', function (): void {
+    // `array{1: string, 5: int}` is NOT a `0..n` sequence, so PHP renders it as a JSON object with
+    // numeric-string keys — and the synthesised child paths are the honest answer for it.
+    $type = (new TypeStringParser)->parse('array{1: string, 5: int}');
+
+    expect($type)->toBeInstanceOf(ArrayShapeT::class)
+        ->and($type->isList)->toBeFalse()
+        ->and(containerProperty('box', $type))->toBe([
+            'type' => 'object',
+            'properties' => ['1' => ['type' => 'string'], '5' => ['type' => 'integer']],
+            'required' => ['1', '5'],
+        ]);
+});
 
 it('carries the spatie markers and nullability the property states', function (): void {
     // `array<string, mixed>|Optional` — the Optional marker is stripped, and makes the field optional.
@@ -184,12 +223,13 @@ it('reaches the request body through the extension itself', function (): void {
         ->and($component['properties']['tags'])->toBe(['type' => 'array', 'items' => ['type' => 'string']]);
 });
 
-it('stops descending before a pathologically deep container runs away', function (): void {
-    // Four levels of list is as far as the synthesised child paths go; the fifth is left as a bare array.
+it('descends a deep container all the way down', function (): void {
+    // The descent needs no cap of its own: a DType is a finite acyclic tree, and the engine's own
+    // translation budget stops long before this. A cap here could only ever truncate a legitimate type.
     $deep = new ListT(new ListT(new ListT(new ListT(new ListT(ScalarT::string())))));
 
     expect(containerProperty('tags', $deep))->toBe([
         'type' => 'array',
-        'items' => ['type' => 'array', 'items' => ['type' => 'array', 'items' => ['type' => 'array', 'items' => ['type' => 'array']]]],
+        'items' => ['type' => 'array', 'items' => ['type' => 'array', 'items' => ['type' => 'array', 'items' => ['type' => 'array', 'items' => ['type' => 'string']]]]],
     ]);
 });

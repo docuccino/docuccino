@@ -227,8 +227,19 @@ it('omits a request property for a field the API prohibits outright', function (
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
     $schema = degradedRequestSchema(UpdateNodeData::class, $metadata, $override);
 
-    expect(array_keys($schema['properties']))->toBe(['name', 'metadata'])
+    expect(array_keys($schema['properties']))->toBe(['name', 'metadata', 'position'])
         ->and($schema)->not->toHaveKey('required');
+})->group('fixture');
+
+it('documents a positional tuple as an array, never as an object with numeric property names', function (): void {
+    // `@param array{float, float} $position`, straight out of the fixture app through the real engine.
+    // Synthesising `position.0`/`position.1` child paths here would drop the `array` rule (a named child
+    // means an object) and emit `properties` as a JSON ARRAY — not a shape any JSON Schema has. A vague
+    // `{"type": "array"}` is the honest answer for a tuple the rule vocabulary cannot describe.
+    $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
+    $schema = degradedRequestSchema(UpdateNodeData::class, $metadata);
+
+    expect($schema['properties']['position'])->toBe(['type' => 'array']);
 })->group('fixture');
 
 it('resolves a dotted rule key to an object rather than an array with properties', function (): void {

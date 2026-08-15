@@ -7,19 +7,25 @@ use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
+use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
+use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\ImmutableNodeData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ValidatedData;
 
 /**
@@ -120,6 +126,56 @@ it('makes a #[Nullable] property null-admitting', function (): void {
     $result = buildValidatedSchema([new PropertyMetadata('nullable', UnionT::of([ScalarT::string(), new NullT]))]);
 
     expect($result->schema['properties']['nullable']['type'])->toBe(['string', 'null']);
+});
+
+it('drops a #[Prohibited] property, and a prohibited NESTED Data object with its whole subtree', function (): void {
+    // `#[Prohibited]` has to mean the same thing whatever the property's type. It used to mean two
+    // things: a scalar reached the `prohibited` TOKEN and the rule set's cross-field pass dropped it,
+    // while a nested Data object took the recursion branch, which appends no attribute rules at all —
+    // so the field survived AND every one of its children stayed, still required. The attribute is now
+    // read where the field is decided, so neither the object nor `registered_address.city` is documented.
+    $engine = new StubTypeEngine(classes: [
+        AddressData::class => new ClassMetadata(AddressData::class, [
+            new PropertyMetadata('city', ScalarT::string()),
+            new PropertyMetadata('postcode', ScalarT::string()),
+        ]),
+    ]);
+    $metadata = new ClassMetadata(ImmutableNodeData::class, [
+        new PropertyMetadata('name', ScalarT::string()),
+        new PropertyMetadata('slug', ScalarT::string()),
+        new PropertyMetadata('registered_address', new ClassT(AddressData::class)),
+    ]);
+    $converter = new SchemaConverter(DefaultTypeMappers::all(), $engine, new ComponentRegistry, new RepresentationPolicy);
+
+    $rules = (new DataValidationRules)->build(ImmutableNodeData::class, $metadata, $engine, null, $converter);
+
+    expect(array_keys($rules->fields))->toBe(['name']);
+
+    $schema = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
+        ->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($rules)), $converter)->schema;
+
+    expect($schema['properties'])->toBe(['name' => ['type' => 'string']])
+        ->and($schema['required'])->toBe(['name']);
+});
+
+it('still lets a rules() override prohibit a field property inference documented', function (): void {
+    // The other route to the same word, unchanged: a `prohibited` entry in the override reaches the rule
+    // set's cross-field pass, which drops the field and everything under it.
+    $engine = new StubTypeEngine(classes: [
+        AddressData::class => new ClassMetadata(AddressData::class, [new PropertyMetadata('city', ScalarT::string())]),
+    ]);
+    $metadata = new ClassMetadata(ImmutableNodeData::class, [
+        new PropertyMetadata('name', ScalarT::string()),
+        new PropertyMetadata('registered_address', new ClassT(AddressData::class)),
+    ]);
+    $converter = new SchemaConverter(DefaultTypeMappers::all(), $engine, new ComponentRegistry, new RepresentationPolicy);
+    $override = new RuleSet(['registered_address' => [ValidationRule::of('prohibited')]]);
+
+    $rules = (new RuleSetNormalizer)->normalize(
+        (new DataValidationRules)->build(ImmutableNodeData::class, $metadata, $engine, $override, $converter),
+    );
+
+    expect(array_keys($rules->fields))->toBe(['name']);
 });
 
 /**

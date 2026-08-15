@@ -129,8 +129,33 @@ it('documents a redirect as a 3xx with a Location header and no body', function 
                 'schema' => ['type' => 'string', 'format' => 'uri-reference'],
             ],
         ])
-        ->and($responses['3XX']['description'])->toStartWith('Redirect.')
+        ->and($responses['3XX']['description'])->toBe('Redirect')
         ->and($components)->toBe([]);
+});
+
+it('raises the pin-the-status advice as a diagnostic, never in the published description', function (): void {
+    // A description is read by the API's CONSUMERS, who cannot act on advice about a codebase they
+    // can't see; the author can, so the advice is a diagnostic.
+    [$responses, , $diagnostics] = documentForReturn(new ClassT(FrameworkClasses::REDIRECT_RESPONSE));
+
+    expect($responses['3XX']['description'])->not->toContain('#[Response');
+
+    $raised = array_values(array_filter(
+        $diagnostics,
+        static fn ($d): bool => $d->code === 'inferred-response.unpinned-redirect' && $d->routeSignature === 'GET /api/forms',
+    ));
+
+    expect($raised)->toHaveCount(1)
+        ->and($raised[0]->severity->value)->toBe('info')
+        ->and($raised[0]->message)->toContain('3XX')
+        ->and($raised[0]->help)->toContain('#[Response(302)]');
+});
+
+it('raises no unpinned-redirect diagnostic for a route that never redirects', function (): void {
+    [, , $diagnostics] = documentForReturn(new ClassT(FrameworkClasses::JSON_RESPONSE));
+
+    expect(array_map(static fn ($d): string => $d->code, $diagnostics))
+        ->not->toContain('inferred-response.unpinned-redirect');
 });
 
 it('carries the 3XX range key through validation and every OpenAPI version', function (): void {

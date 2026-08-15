@@ -292,11 +292,12 @@ DType rather than a transient side-channel because it must survive SERIALIZATION
 later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
 
 Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
-ConstantArrayType → ArrayShapeT (optional keys honored, isList from accessory);
+ConstantArrayType → ArrayShapeT (optional keys honored, isList from the accessory OR derived from a
+`0..n` key sequence, which is what makes a docblock tuple an array too);
 Constant scalars → LiteralT; UnionType → flatten + canonical sort; IntersectionType →
 strip accessory types, collapse single survivor; ArrayType → ListT or MapT on its KEY, since
-`isList()` is only MAYBE for `array<int, V>` — an int-capable key is a JSON array, the rule
-`TypeStringParser::mapKeyed()` owns and both paths must answer alike; GenericObjectType/ObjectType →
+`isList()` is only MAYBE for `array<int, V>` — an int-capable key is a JSON array, the rule core's
+`ArrayKey` owns and BOTH paths call (uir-and-extensions.md §8); GenericObjectType/ObjectType →
 ClassT/EnumT via ClassReflection (source location = provenance); TemplateType → its bound,
 else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason).
 Translation is EAGER at query time (the result must be serializable); class expansion

@@ -152,6 +152,15 @@ for: a dataset over every container kind and every nesting combination, plus the
 unusable element type, a positional shape, the depth stop, and no converter at all), and a second dataset
 over the rule-set normaliser's two cross-field passes. 5312/5769 (92.08%) became 5422/5879 (92.23%).
 
+The list-vs-map key rule then moved out of `inference-phpstan` entirely — the translator and the docblock
+grammar carried byte-identical private copies, and core's `ArrayKey` is now the single implementation both
+call. That took a well-covered 7/8 block out of the engine (575/1594, 36.07% → 568/1586, 35.81%) and
+straight below its floor, which is the shape of a denominator change and NOT a reason to lower one. The
+answer was the usual one: `EngineConfig` and `RuntimeConfig` — pure, parent-process value objects whose
+only callers are subprocess-only, so nothing else in the suite could reach them — had 1/9 between them
+and now have 9/9. 576/1586 (36.32%), genuinely higher than before the move. `core` absorbed the rule at
+its own rate or better (94.29% → 94.49%); no floor changed.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests

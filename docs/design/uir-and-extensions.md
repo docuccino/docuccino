@@ -567,6 +567,43 @@ mechanics, limits and the FiberScope reason for deferring are in the inference d
 ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
 `NullTypeEngine` in core answers UnknownT for everything (keeps pipeline total).
 
+### The `array<K, V>` key rule (`ListT` vs `MapT`)
+
+PHP renders an array as a JSON **array** only while its keys are the `0..n` int sequence, and as a JSON
+**object** otherwise. `Docuccino\Core\Inference\DType\ArrayKey` owns the one rule both recovery paths
+apply — the docblock grammar (`TypeStringParser`) and the engine's `TypeTranslator` — because both reach
+it with the key already mapped to a `DType`, so a second copy could only ever drift:
+
+- an **int-capable** key (`int`, an int literal, `array-key`, `int|string`) → `ListT`
+- anything else, including a key we can't reason about → `MapT`, which carries the key type
+
+The uncomfortable half is deliberate and worth stating. `array-key` and `int|string` are exactly the keys
+that *may* be strings, so an `array<array-key, V>` may well arrive as a JSON object, and `{"type":
+"array", "items": V}` is then a positive false claim. Three things settle it the way it is settled:
+
+1. **PHPStan cannot distinguish the spellings.** `V[]`, `array<V>`, `array<array-key, V>` and (once the
+   list accessory is absent) `array<int, V>` all reach the translator as the same `Type` with an
+   `int|string` key. One rule must cover all four, so calling the ambiguous key an object would document
+   every `string[]` property in every codebase as an object — a far larger and more certain error than
+   the one it avoids.
+2. **The author has a precise way to say either.** `array<string, V>` yields a `MapT` and documents as an
+   object with `additionalProperties`; `list<V>` yields a `ListT` unambiguously. The rule respects both.
+   The ambiguity only survives where the annotation itself was ambiguous.
+3. **The honest third answer costs more than it buys.** `anyOf: [array of V, object of V]` is true for
+   every case, but it would land on the single most common annotation in PHP and turn a precise
+   document into a union everywhere — including for the overwhelming majority of properties that really
+   are lists.
+
+So this is one place the project accepts a precise claim over a vague one, against its usual bias, and
+the reason is that the vague answer here is not cheap: it is paid on almost every array-typed property in
+the document. A `MapT` whose key type is itself int-capable is the recorded escape hatch if that ever
+needs revisiting — the ambiguity survives in the DType, it is only the schema mapper that resolves it.
+
+A constant shape decides the same question from its keys instead: `ArrayShapeT::$isList` is true when the
+keys are the `0..n` sequence, derived in the constructor as well as taken from PHPStan's list accessory,
+so a docblock tuple (`array{string, int}`) can never be documented as an object with `"0"`/`"1"` property
+names — a shape no JSON document has.
+
 `StatusMarkerT` is the one member that is not a language type: it is a pipeline-resolution SIGNAL
 meaning "this body member echoes the response's own HTTP status", synthesised by the engine's response
 refinement (never translated from a PHPStan type) and resolved to a `LiteralT` at the response-building
