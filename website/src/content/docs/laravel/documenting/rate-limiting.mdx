@@ -18,7 +18,7 @@ Every throttle form Laravel accepts is recognized, and every one of them produce
 | `throttle:60,1`, `throttle:60`, `throttle:60,0.5` | ✓ |
 | `throttle` (bare, no arguments) | ✓ |
 | `throttle:10\|60` (guest\|authenticated) | ✓ |
-| `throttle:api` (a named limiter) | ✓ — and its `RateLimiter::for` closure is read, see [Named limiters](#named-limiters) |
+| `throttle:api` (a named limiter) | ✓ — and its `RateLimiter::for` registration is checked, see [Named limiters](#named-limiters) |
 | `ThrottleRequests::using('api')` / `::with(...)`, including the FQCN strings they render to | ✓ |
 | `ThrottleRequestsWithRedis` (the Redis variant) | ✓ |
 
@@ -110,32 +110,26 @@ which it can be, because every throttled route states it identically.
 
 ## Named limiters
 
-A named limiter (`throttle:api`) registers its rate inside a closure — `RateLimiter::for('api', fn () => ...)`.
-Docuccino never *executes* that closure, but it does read it, to tell a limiter it understands from one
-it doesn't:
+A named limiter (`throttle:api`) states its rate inside a closure — `RateLimiter::for('api', fn () => ...)`.
+Docuccino neither runs that closure nor reads it. It doesn't need to: the `429` says the same thing
+whatever the closure returns, so a limiter that computes a rate per user, branches on the plan, or hands
+back `Limit::none()` documents exactly what `Limit::perMinute(60)` documents.
+
+What Docuccino does check is that the limiter is *there*:
 
 ```php
-// A limiter Docuccino reads cleanly — no diagnostic.
-RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
+Route::middleware('throttle:reports')->get('/reports', ReportController::class);
+// …and nothing anywhere calls RateLimiter::for('reports', …)
 ```
 
-All of `Limit::perSecond`, `perMinute`, `perMinutes`, `perHour` and `perDay` are recognized, and a
-trailing `->by(...)` partition key is ignored — it changes who the limit applies to, not what the limit
-is.
+That route is broken. Laravel's named-limiter lookup misses, falls through to reading `reports` as an
+allowance, and casts it to `0` — so every guest request gets a `429`, always. Docuccino reports it as a
+`rate-limit.unregistered-limiter` info diagnostic naming the limiter and the route, which turns a
+production surprise into a line of build output.
 
-A `rate-limit.dynamic-limit` info diagnostic names any limiter Docuccino can't read statically. That
-covers a limiter that:
-
-- returns different limits down different branches (a conditional or multi-`return` closure);
-- computes its rate from a non-literal value (`Limit::perMinute($request->user()->rate)`);
-- is unlimited (`Limit::none()`) or returns an array of limits;
-- attaches a custom response body (`->response(...)`).
-
-The same diagnostic fires — naming the limiter — when a route throttles on a name that has no
-`RateLimiter::for` registration at all, which is a genuinely useful thing to find out at build time.
-
-The `429` itself is the same either way: what a limiter looks like never changes what the response
-documents.
+Nothing else about a throttle raises anything. An inline allowance is never mistaken for a limiter
+name: `throttle:60,1`, bare `throttle`, and the guest|authenticated `throttle:10|60` — whose halves may
+name an attribute on the user rather than a number — all state their own limit and are left alone.
 
 ## Configuration
 

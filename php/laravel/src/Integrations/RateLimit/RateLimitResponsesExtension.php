@@ -4,21 +4,17 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\RateLimit;
 
-use Closure;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Illuminate\Cache\RateLimiter;
-use ReflectionFunction;
-use Throwable;
 
 /**
  * Documents a `429 Too Many Requests` (with `Retry-After` + `X-RateLimit-*` headers) on any operation
@@ -26,9 +22,8 @@ use Throwable;
  *
  * The 429 itself is the same for every throttled route, limit values included — see
  * {@see RateLimitResponse} for why. A named limiter (`throttle:api`) is still looked up in the booted
- * app's `RateLimiter::for` registrations, its closure located by `ReflectionFunction` and folded by
- * {@see RateLimiterLimitVisitor}, but only to decide whether to report: a limiter that won't fold
- * (dynamic, conditional, custom-response) or isn't registered at all raises an info diagnostic.
+ * app's `RateLimiter::for` registrations, but only to check that the registration exists — see
+ * {@see checkRegistered()}.
  *
  * The body comes from the error-response chain rather than this integration — see {@see body()} for why a
  * middleware-synthesized response has to ask, and why it stays inline.
@@ -62,8 +57,8 @@ final class RateLimitResponsesExtension implements OperationExtension
             $this->reportMultiple($limits, $context);
         }
 
-        if ($limit->isNamed()) {
-            $this->checkNamedLimiter($limit, $context);
+        if ($limit->name !== null) {
+            $this->checkRegistered($limit->name, $context);
         }
 
         $contribution = Contribution::integration('rate-limit', $context->actionSource());
@@ -196,70 +191,26 @@ final class RateLimitResponsesExtension implements OperationExtension
     }
 
     /**
-     * Reports a named limiter whose `RateLimiter::for` closure is missing, unregistered or too dynamic to
-     * read. The fold is attempted purely for that verdict now that the numbers don't reach the document.
+     * Reports a route throttling on a name nothing registered. That's an application bug rather than a
+     * documentation one — Laravel's named-limiter lookup misses, `resolveMaxAttempts` falls through and
+     * casts the name to `0` for a guest (so every request 429s) or reads it as a property off the user —
+     * and it changes nothing about the documented 429. Saying so IS the whole point of the check.
+     *
+     * What a registered limiter's closure says is deliberately not read: the response is value-free, so a
+     * dynamic limiter and a literal one document identically and there is nothing to report about either.
      */
-    private function checkNamedLimiter(ThrottleLimit $limit, RouteContext $context): void
+    private function checkRegistered(string $name, RouteContext $context): void
     {
-        $closure = $this->limiters->limiter((string) $limit->name);
-
-        if ($closure instanceof Closure && $this->foldLimiter($closure, $context) !== null) {
-            return; // the limit reads statically, so there's nothing to report
+        if ($this->limiters->limiter($name) !== null) {
+            return;
         }
-
-        $this->reportNamedLimiter($limit, $context, $closure !== null);
-    }
-
-    /**
-     * Reflects the limiter closure, traces it, and builds a numeric {@see ThrottleLimit} from a single
-     * folded `Limit::per*(…)`. The closure's file becomes a fragment-cache dependency so editing the
-     * limiter invalidates the doc. Null when it can't be reflected or doesn't fold cleanly.
-     */
-    private function foldLimiter(Closure $closure, RouteContext $context): ?ThrottleLimit
-    {
-        try {
-            // `RateLimiter::limiter()` hands back a wrapper closure (it dedupes multi-limit keys) over
-            // the app's real callback — unwrap one level so we trace user code, not framework glue.
-            $reflection = new ReflectionFunction($closure);
-            foreach ($reflection->getClosureUsedVariables() as $used) {
-                if ($used instanceof Closure) {
-                    $reflection = new ReflectionFunction($used);
-                    break;
-                }
-            }
-        } catch (Throwable) {
-            return null;
-        }
-
-        $file = $reflection->getFileName();
-        $line = $reflection->getStartLine();
-        if ($file === false || $line === false) {
-            return null;
-        }
-
-        $visitor = new RateLimiterLimitVisitor;
-        $report = $context->engine->trace(new ActionRef($file, null, '{closure}', $line), $visitor);
-        $context->recordDependencyFiles($report->dependencyFiles);
-
-        $folded = $visitor->limit;
-        if (! $folded->resolved()) {
-            return null;
-        }
-
-        return new ThrottleLimit(maxAttempts: $folded->maxAttempts, decaySeconds: $folded->decaySeconds);
-    }
-
-    private function reportNamedLimiter(ThrottleLimit $limit, RouteContext $context, bool $registered): void
-    {
-        $name = (string) $limit->name;
 
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
-            code: 'rate-limit.dynamic-limit',
-            message: $registered
-                ? sprintf('Named rate limiter "%s" is registered but its limit is defined by a closure; the 429 is documented without numeric values.', $name)
-                : sprintf('Rate limiter "%s" has no matching RateLimiter::for registration; the 429 is documented without numeric values.', $name),
+            code: 'rate-limit.unregistered-limiter',
+            message: sprintf('Route throttles on the named rate limiter "%s", but nothing registers it with RateLimiter::for().', $name),
             routeSignature: $context->route->signature(),
+            help: sprintf("Register it in a service provider — RateLimiter::for('%s', fn (Request \$request) => Limit::perMinute(60)) — or state the allowance inline, as throttle:60,1.", $name),
         ));
     }
 }
