@@ -266,13 +266,13 @@ final class DocumentGenerator
             $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
 
             $frozen = $operation->freeze();
-            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases] = $this->componentClosure($frozen->toArray(), $components);
+            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases, $referencedSecuritySchemes] = $this->componentClosure($frozen->toArray(), $components);
 
             // What this route's component work reported moves onto the fragment, so a warm hit — which
             // restores components without re-registering anything — still replays it.
             $diagnostics = [...$diagnostics, ...$components->takeDiagnosticsSince($snapshot)];
 
-            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases);
+            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases, $referencedSecuritySchemes);
             // Trace-derived dependency files widen the key, so a deep chain invalidates when any file
             // it walked changes (design §10 seam).
             $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
@@ -287,12 +287,15 @@ final class DocumentGenerator
 
     /**
      * The transitive closure of schema and response components this operation `$ref`s, following refs
-     * through the components themselves (design §5 hoist). The full closure — not just what this route
-     * registered first — is what makes a cached fragment self-sufficient: deleting the route that
-     * happened to own a shared component can't leave a survivor with a dangling `$ref`.
+     * through the components themselves (design §5 hoist), plus the security schemes its `security`
+     * requirement names — which is a name, not a `$ref`, but self-sufficiency means the same thing for
+     * it. The full closure — not just what this route registered first — is what makes a cached
+     * fragment self-sufficient: deleting the route that happened to own a shared component can't leave
+     * a survivor with a dangling `$ref`, and a build where every fragment came back warm still has the
+     * schemes its operations authenticate with.
      *
      * @param  array<string, mixed>  $operation
-     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>}
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>, 4: array<string, array<string, mixed>>}
      */
     private function componentClosure(array $operation, ComponentRegistry $components): array
     {
@@ -351,7 +354,36 @@ final class DocumentGenerator
             }
         }
 
-        return [$schemas, $schemaIds, $responses, $schemaBases];
+        $registered = $components->securitySchemes();
+        $securitySchemes = [];
+        foreach (self::securityNames($operation) as $name) {
+            if (isset($registered[$name])) {
+                $securitySchemes[$name] = $registered[$name];
+            }
+        }
+
+        return [$schemas, $schemaIds, $responses, $schemaBases, $securitySchemes];
+    }
+
+    /**
+     * The scheme names an operation's `security` requirement lists. A requirement declared in config
+     * rather than registered by an extension is absent from the registry and simply doesn't travel:
+     * the assembler puts those back from config on every build, warm or cold.
+     *
+     * @param  array<string, mixed>  $operation
+     * @return list<string>
+     */
+    private static function securityNames(array $operation): array
+    {
+        $names = [];
+
+        foreach (is_array($operation['security'] ?? null) ? $operation['security'] : [] as $requirement) {
+            foreach (is_array($requirement) ? $requirement : [] as $name => $_scopes) {
+                $names[] = (string) $name;
+            }
+        }
+
+        return array_values(array_unique($names));
     }
 
     /**
@@ -414,7 +446,19 @@ final class DocumentGenerator
             }
         }
 
-        if ($schemas === [] && $responses === []) {
+        // Security schemes go back in under the name they were cached with: unlike a schema name, that
+        // name is vocabulary the registrar chose (`passport`, `sanctumStateful`), never a slot derived
+        // from a class. A suffix is still possible — two routes referencing scopes the other doesn't
+        // build two different `passport` definitions — so a slot that moved is repointed too.
+        $securitySchemes = [];
+        foreach ($fragment->componentSecuritySchemes as $name => $scheme) {
+            $actual = $components->registerSecurityScheme((string) $name, $scheme);
+            if ($actual !== (string) $name) {
+                $securitySchemes[(string) $name] = $actual;
+            }
+        }
+
+        if ($schemas === [] && $responses === [] && $securitySchemes === []) {
             return $fragment;
         }
 
@@ -428,7 +472,7 @@ final class DocumentGenerator
             );
         }
 
-        return $fragment->withRenamedComponents($schemas, $responses);
+        return $fragment->withRenamedComponents($schemas, $responses, $securitySchemes);
     }
 
     private function onFailure(

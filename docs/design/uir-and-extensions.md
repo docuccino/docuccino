@@ -693,6 +693,16 @@ break the read) and emits a `config.machine-dependent-path` info diagnostic nami
 path, so the machine dependence is stated rather than silently baked into the output. `cache.path` and
 `engine.project_paths` are app-level, never part of a document bag, so they reach no emitted byte.
 
+**The same rule for a published value.** A path only churns the `configHash`; a value a producer reads
+out of framework config and PUBLISHES is acted on by the client. `MachineDependentValue` is the one
+rule for those: a URL whose host is loopback or a reserved local-development name, a value no config
+key answered for, or an opaque value nothing pins that the framework derives from the environment, all
+raise `config.machine-dependent-value` — same family, same fix (pin it), but **Warning**, because what
+was published is arbitrary rather than merely spelled oddly, and `--fail-on=warning` should stop it
+reaching a release. The value is always emitted anyway: Passport's flow URLs and Sanctum's cookie name
+are contract-bearing, and OAS requires the former. The report is raised through the component registry
+so it rides the operation fragment and a warm build replays it (§10).
+
 ## 10. Fragment caching
 
 Unit = OperationFragment (operation + registered components + diagnostics + provenance,
@@ -736,6 +746,14 @@ CASES are copied into the recovered type and into any rule quoting its backing v
 `EnumReflection::file()` joins the list wherever a case list is read. Erring upward here is deliberate —
 a file too many costs a rebuild, a file too few serves a stale schema — and it stays proportional, since
 a parent invalidates its subclasses and nothing else.
+
+**A fragment carries the security schemes its operation names.** `components.securitySchemes` is
+document-level, but nothing rebuilds it: on a warm hit no extension runs, so a fragment that carried
+only its `$ref` closure came back holding a `security` requirement for a scheme the document no longer
+had. The requirement names its scheme as a KEY rather than through a `$ref`, so the closure walk misses
+it — `OperationFragment::componentSecuritySchemes` carries it explicitly instead, and the warm restore
+re-registers it under the name it was cached with, repointing the requirement if that name has since
+been taken (two routes referencing scopes the other doesn't build two different `passport` schemes).
 
 **The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
 there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and

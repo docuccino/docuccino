@@ -11,12 +11,12 @@ use Docuccino\Core\Support\Hydrate;
 
 /**
  * The result of processing one route: the frozen operation, its OAS path and HTTP method, the
- * diagnostics raised while building it, and the transitive closure of component schemas and response
- * components it *references* — not just the ones it happened to register first. Carrying that
- * closure plus the diagnostics makes a fragment self-contained, so a warm cache hit reconstructs the
- * operation, restores every component it points at and replays its diagnostics without the type
- * engine — and can't leave a dangling `$ref` when the route that first owned a shared component goes
- * away.
+ * diagnostics raised while building it, and the transitive closure of component schemas, response
+ * components and security schemes it *references* — not just the ones it happened to register first.
+ * Carrying that closure plus the diagnostics makes a fragment self-contained, so a warm cache hit
+ * reconstructs the operation, restores every component it points at and replays its diagnostics
+ * without the type engine — and can't leave a dangling `$ref` when the route that first owned a
+ * shared component goes away.
  *
  * @internal
  */
@@ -29,6 +29,7 @@ final readonly class OperationFragment
      * @param  array<string, array<string, mixed>>  $componentResponses  name → response component this operation references (transitive closure)
      * @param  ?string  $actionClass  the controller/action class this route dispatches to, if any
      * @param  array<string, string>  $componentSchemaBases  name → the name that schema asked for, so a warm hit re-registers off the ask and not off a slot the build it was cached in happened to give it
+     * @param  array<string, array<string, mixed>>  $componentSecuritySchemes  name → the security scheme this operation's `security` requirement names
      */
     public function __construct(
         public string $path,
@@ -41,6 +42,7 @@ final readonly class OperationFragment
         public array $componentResponses = [],
         public ?string $actionClass = null,
         public array $componentSchemaBases = [],
+        public array $componentSecuritySchemes = [],
     ) {}
 
     /**
@@ -51,15 +53,19 @@ final readonly class OperationFragment
      *
      * @param  array<string, string>  $schemas  cached schema name → the name it registered under now
      * @param  array<string, string>  $responses  the same for `components.responses`
+     * @param  array<string, string>  $securitySchemes  the same for `components.securitySchemes`, which a `security` requirement names directly rather than through a `$ref`
      */
-    public function withRenamedComponents(array $schemas, array $responses): self
+    public function withRenamedComponents(array $schemas, array $responses, array $securitySchemes = []): self
     {
-        if ($schemas === [] && $responses === []) {
+        if ($schemas === [] && $responses === [] && $securitySchemes === []) {
             return $this;
         }
 
         $operation = ComponentNames::rename($this->operation->toArray(), $schemas);
         $operation = ComponentNames::rename($operation, $responses, 'responses');
+        if ($securitySchemes !== [] && $this->operation->security !== null) {
+            $operation['security'] = self::renameSecurity($this->operation->security, $securitySchemes);
+        }
 
         $schemaIds = [];
         foreach ($this->componentSchemaIds as $name => $id) {
@@ -83,7 +89,32 @@ final readonly class OperationFragment
             componentResponses: ComponentNames::rekey($this->componentResponses, $responses),
             actionClass: $this->actionClass,
             componentSchemaBases: $bases,
+            componentSecuritySchemes: ComponentNames::rekey($this->componentSecuritySchemes, $securitySchemes),
         );
+    }
+
+    /**
+     * A `security` requirement names its scheme as a KEY, not through a `$ref`, so the schema rewriter
+     * cannot reach it — this is the same repointing for that one shape.
+     *
+     * @param  list<array<string, mixed>>  $security
+     * @param  array<string, string>  $renames
+     * @return list<array<string, mixed>>
+     */
+    private static function renameSecurity(array $security, array $renames): array
+    {
+        $out = [];
+
+        foreach ($security as $requirement) {
+            $renamed = [];
+            foreach ($requirement as $name => $scopes) {
+                $renamed[$renames[(string) $name] ?? (string) $name] = $scopes;
+            }
+
+            $out[] = $renamed;
+        }
+
+        return $out;
     }
 
     /**
@@ -102,6 +133,7 @@ final readonly class OperationFragment
             'componentResponses' => $this->componentResponses,
             'actionClass' => $this->actionClass,
             'componentSchemaBases' => $this->componentSchemaBases,
+            'componentSecuritySchemes' => $this->componentSecuritySchemes,
         ];
     }
 
@@ -124,6 +156,7 @@ final readonly class OperationFragment
             componentResponses: Hydrate::mapOfArrays($data['componentResponses'] ?? null),
             actionClass: Hydrate::stringOrNull($data['actionClass'] ?? null),
             componentSchemaBases: Hydrate::stringMap($data['componentSchemaBases'] ?? null),
+            componentSecuritySchemes: Hydrate::mapOfArrays($data['componentSecuritySchemes'] ?? null),
         );
     }
 }
