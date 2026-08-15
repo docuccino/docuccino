@@ -51,7 +51,10 @@ const FLOORS = [
     // (43.73%) became 538/1557 (34.55%) without losing a proof — the same denominator move documented
     // for the 41 → 37 drop. Core rose in the same change: the result model's serialization contract,
     // previously covered only as a side effect of the deleted cache tests, is now pinned directly.
-    'inference-phpstan' => 34,
+    // Ratcheted 34 → 36 at 36.07% (575/1594): the docblock/reflection metadata rules — the promoted
+    // `@var` fallback and the class-parameterisation rule, with its refuse-to-refine branches — live in
+    // the first half, so every statement they added is unit-tested in process.
+    'inference-phpstan' => 36,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

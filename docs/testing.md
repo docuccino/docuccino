@@ -136,6 +136,14 @@ type-grammar fix (docblock enums answering `EnumT`, the `array<K, V>` key rule, 
 4527/4801 (94.29%). A dataset over every key identifier the grammar can produce, plus the unresolvable-name
 and unaccepted-tag degradations, is what makes that a real 15 rather than a lucky one.
 
+`inference-phpstan` then ratcheted 34 → 36, and it is the same preferred move: the work landed in the
+package's measurable half. `ClassMetadataFactory` learned to fall back to a promoted property's own `@var`
+and to parameterise a generic-blind class type from a docblock, and both rules are native-reflection plus
+docblock parsing — no `Scope`, so the real-reflection probe drives every branch in process, the three
+refuse-to-refine ones included. 538/1557 (34.55%) became 575/1594 (36.07%) — a net 37 statements, all of
+them covered, with the duplicated `EnumCases` helper (now core's `EnumReflection::names()`) leaving the
+covered half in the same move.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -148,7 +156,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **94**, `laravel` **91**, `inference-phpstan` **34**.
+  an aspiration. Current floors: `core` **94**, `laravel` **91**, `inference-phpstan` **36**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

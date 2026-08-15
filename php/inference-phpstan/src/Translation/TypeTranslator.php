@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Translation;
 
+use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\CallableT;
@@ -20,7 +21,6 @@ use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
-use Docuccino\Inference\PhpStan\Support\EnumCases;
 use PHPStan\Type\Accessory\AccessoryType;
 use PHPStan\Type\Constant\ConstantArrayType;
 use PHPStan\Type\Generic\GenericObjectType;
@@ -107,7 +107,12 @@ final class TypeTranslator
                 return new ListT($value);
             }
 
-            return new MapT($this->translate($type->getIterableKeyType(), $budget->descend()), $value);
+            // `isList()` is only MAYBE for `array<int, V>`, so the key decides: an int-capable key is a JSON
+            // array, and only a string-capable-only one is a JSON object. Same rule, same answer as the
+            // docblock path — see TypeStringParser::mapKeyed(), which owns it.
+            $key = $this->translate($type->getIterableKeyType(), $budget->descend());
+
+            return self::intKeyed($key) ? new ListT($value) : new MapT($key, $value);
         }
 
         if ($type->isCallable()->yes()) {
@@ -128,6 +133,22 @@ final class TypeTranslator
         }
 
         return new UnknownT($this->describe($type));
+    }
+
+    private static function intKeyed(DType $key): bool
+    {
+        if ($key instanceof UnionT) {
+            foreach ($key->members as $member) {
+                if (self::intKeyed($member)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return ($key instanceof ScalarT && $key->scalar === ScalarT::INT)
+            || ($key instanceof LiteralT && $key->base() === ScalarT::INT);
     }
 
     private function constantLiteral(Type $type): ?LiteralT
@@ -203,7 +224,7 @@ final class TypeTranslator
     private function translateObject(string $className, array $typeArgs, TranslationBudget $budget): DType
     {
         if (enum_exists($className)) {
-            return new EnumT($className, EnumCases::names($className));
+            return new EnumT($className, EnumReflection::names($className));
         }
 
         return new ClassT(

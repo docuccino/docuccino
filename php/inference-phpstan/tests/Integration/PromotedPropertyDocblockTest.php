@@ -15,11 +15,10 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
- * Where a Data class writes its array generics decides whether they survive. `classMetadata()` reads the
- * constructor's `@param` block; a generic written in the promoted parameter's OWN `@var` — the form a real
- * app reaches for, because that is where the prose describing the member already sits — is not read at
- * all. These tests pin both halves against the real engine, so the working form cannot silently regress
- * and the degraded one cannot quietly stay degraded.
+ * Where a Data class writes its generics, against the real engine. `classMetadata()` reads the constructor's
+ * `@param` block AND the promoted parameter's own `@var` — the form a real app reaches for, because that is
+ * where the prose describing the member already sits — and parameterises a generic-blind class type from
+ * either. These tests pin every form the fixture app writes, so none can silently regress.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -37,9 +36,8 @@ function metadataTypes(string $fqcn): array
 }
 
 it('types a promoted array property from the constructor @param it was documented with', function (): void {
-    // The working form, and the control the fix has to preserve: `@param array<string, mixed> $context`
-    // in the constructor block, no `@var` of its own → a real MapT, which emits
-    // {"type": "object", "additionalProperties": {}}.
+    // `@param array<string, mixed> $context` in the constructor block, no `@var` of its own → a real MapT,
+    // which emits {"type": "object", "additionalProperties": {}}.
     $context = metadataTypes('App\\Data\\SnapshotData')['context'];
 
     expect($context)->toBeInstanceOf(MapT::class)
@@ -47,31 +45,28 @@ it('types a promoted array property from the constructor @param it was documente
         ->and($context->value)->toBeInstanceOf(UnknownT::class);
 })->group('fixture');
 
-it('DEGRADED: drops the generic a promoted property writes in its own @var', function (string $property): void {
-    // KNOWN GAP. For a promoted property only the constructor's `@param` is consulted — the property's
-    // own docComment is already in hand (its summary and @example are read off it two lines earlier) and
-    // then thrown away. The type lands as UnknownT('untyped array'), whose schema has no `type` key at
-    // all, so the emitted document shows a description with nothing beside it.
-    $types = metadataTypes('App\\Data\\SnapshotData');
-
-    expect($types[$property])->toBeInstanceOf(UnknownT::class)
-        ->and($types[$property]->reason)->toBe('untyped array');
+it('types a promoted array property from the @var it wrote beside the prose', function (string $property, DType $expected): void {
+    // Every generic here is written in the promoted parameter's OWN docblock — the one the summary and
+    // `@example` are already read off — so the type and the prose now come out of the same tag block.
+    expect(metadataTypes('App\\Data\\SnapshotData')[$property])->toEqual($expected);
 })->with([
     // @var array<string, mixed>
-    'a map' => ['candidate'],
+    'a map' => ['candidate', new MapT(ScalarT::string(), new UnknownT('mixed'))],
     // @var array<string, array<string, string|null>>
-    'a nested map' => ['theme_data'],
-    // @var list<SnapshotFormData> — the item class never reaches components.schemas either
-    'a list of Data objects' => ['forms'],
-    // @var array<int, string> — see TypeStringParserTest: this parses to a MapT, not a ListT
-    'an int-keyed array' => ['permissions'],
-    // @phpstan-var list<SnapshotFormData> — see DocBlockReaderTest: the prefixed tag is never matched
-    'an analyser-prefixed tag' => ['attachments'],
+    'a nested map' => ['theme_data', new MapT(
+        ScalarT::string(),
+        new MapT(ScalarT::string(), UnionT::of([ScalarT::string(), new NullT])),
+    )],
+    // @var list<SnapshotFormData> — resolved through the declaring file's imports
+    'a list of Data objects' => ['forms', new ListT(new ClassT('App\\Data\\SnapshotFormData'))],
+    // @var array<int, string> — an int-capable key is a JSON array, not an object
+    'an int-keyed array' => ['permissions', new ListT(ScalarT::string())],
+    // @phpstan-var list<SnapshotFormData> — the analyser-prefixed tag is read like the plain one
+    'an analyser-prefixed tag' => ['attachments', new ListT(new ClassT('App\\Data\\SnapshotFormData'))],
 ])->group('fixture');
 
-it('keeps the prose of a property whose type it dropped', function (): void {
-    // Why the gap reads as "a description but no type" rather than as a missing property: the same
-    // docComment the type was never taken from is read for the summary and the example.
+it('keeps the prose of the property it takes the type from', function (): void {
+    // The summary, the example and the type all come off the one docComment.
     $metadata = ClassMetadata::fromArray(FixtureRunner::classMetadata('App\\Data\\SnapshotData'));
 
     $permissions = null;
@@ -83,24 +78,22 @@ it('keeps the prose of a property whose type it dropped', function (): void {
 
     expect($permissions?->summary)->toBe('Flat list of permission strings the candidate held at submit.')
         ->and($permissions?->example)->toBe('["listing.view", "listing.create"]')
-        ->and($permissions?->type)->toBeInstanceOf(UnknownT::class);
+        ->and($permissions?->type)->toEqual(new ListT(ScalarT::string()));
 })->group('fixture');
 
-it('DEGRADED: never consults the generic of a natively-typed DataCollection', function (): void {
-    // KNOWN GAP, and independent of the one above: a bare `DataCollection` reflects to a ClassT, which
-    // counts as precise, so the docblock is not read EVEN THOUGH this generic is written in the
-    // constructor `@param` — the form that works for a native `array`. Fixing the `@var` reader alone
-    // leaves this exactly as it is. The item class is lost, and the property emits
-    // {"type": "array", "items": []}.
+it('parameterises a natively-typed DataCollection from its constructor @param', function (): void {
+    // A bare `DataCollection` reflects to a precise ClassT that still says nothing about its elements, so
+    // the docblock is read for the arguments alone — the class it names is the same one.
     $factors = metadataTypes('App\\Data\\MfaChallengeData')['mfa_factors'];
 
-    expect($factors)->toBeInstanceOf(ClassT::class)
-        ->and($factors->fqcn)->toBe('Spatie\\LaravelData\\DataCollection')
-        ->and($factors->typeArgs)->toBe([]);
+    expect($factors)->toEqual(new ClassT(
+        'Spatie\\LaravelData\\DataCollection',
+        [ScalarT::int(), new ClassT('App\\Data\\SnapshotFormData')],
+    ));
 })->group('fixture');
 
 it('types a natively declared backed-enum property as an EnumT', function (): void {
-    // The working half of the enum contrast below: reflection answers with the enum and its cases.
+    // Reflection answers with the enum and its cases…
     $status = metadataTypes('App\\Data\\SnapshotFormData')['status'];
 
     expect($status)->toBeInstanceOf(EnumT::class)
@@ -108,20 +101,14 @@ it('types a natively declared backed-enum property as an EnumT', function (): vo
         ->and($status->cases)->toBe(['Open', 'Closed', 'Draft']);
 })->group('fixture');
 
-it('DEGRADED: types the SAME enum as a plain class when only a @property tag declares it', function (): void {
-    // KNOWN GAP, and two of them. App\Models\Listing documents its magic `status` column the ide-helper
-    // way — `@property ListingStatus $status` — which routes through the type-string grammar, whose
-    // default arm builds a ClassT without asking whether the name is an enum. So the column documents as
-    // an object with the enum's `name`/`value` members instead of the string enum right above.
-    //
-    // The FQCN is unresolved too: class-level `@property` tags are parsed with no import context, so the
-    // short name written in the docblock is kept verbatim and no enum could be reflected from it even
-    // once the enum check lands.
+it('types the SAME enum the same way when only a @property tag declares it', function (): void {
+    // …and so does the type-string grammar, for App\Models\Listing's magic `status` column documented the
+    // ide-helper way (`@property ListingStatus $status`). Two halves had to meet for this: the grammar
+    // asking whether a name is an enum, and the tag being parsed with the declaring file's imports — a
+    // short name no enum could ever be reflected from otherwise.
     $status = metadataTypes('App\\Models\\Listing')['status'];
 
-    expect($status)->toBeInstanceOf(ClassT::class)
-        ->and($status)->not->toBeInstanceOf(EnumT::class)
-        ->and($status->fqcn)->toBe('ListingStatus');
+    expect($status)->toEqual(new EnumT('App\\Enums\\ListingStatus', ['Open', 'Closed', 'Draft']));
 })->group('fixture');
 
 it('recovers a request DTO\'s map and list generics, so nothing downstream can blame inference', function (): void {

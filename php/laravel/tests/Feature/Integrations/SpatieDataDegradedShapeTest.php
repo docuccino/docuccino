@@ -53,13 +53,20 @@ function realMetadataAs(string $fixtureFqcn, string $twinFqcn): ClassMetadata
 }
 
 /**
- * `[all hoisted components, the twin's own]` from the Data mapper, over the real engine's types.
+ * `[all hoisted components, the twin's own]` from the Data mapper, over the real engine's types. A nested
+ * class the recovered types reference keeps its fixture-app FQCN — nothing in-process can load it — so its
+ * real metadata is seeded under that name, which is what lets it hoist as a component of its own.
  *
  * @return array{0: array<string, mixed>, 1: array<string, mixed>}
  */
-function degradedDataComponent(string $fixtureFqcn, string $twinFqcn): array
+function degradedDataComponent(string $fixtureFqcn, string $twinFqcn, string ...$nested): array
 {
-    $engine = new StubTypeEngine(classes: [$twinFqcn => realMetadataAs($fixtureFqcn, $twinFqcn)]);
+    $classes = [$twinFqcn => realMetadataAs($fixtureFqcn, $twinFqcn)];
+    foreach ($nested as $nestedFqcn) {
+        $classes[$nestedFqcn] = ClassMetadata::fromArray(FixtureRunner::classMetadata($nestedFqcn));
+    }
+
+    $engine = new StubTypeEngine(classes: $classes);
     $components = new ComponentRegistry;
     $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], $engine, $components);
     $converter->toSchema(new ClassT($twinFqcn));
@@ -127,9 +134,9 @@ function degradedResponseSchema(ClassT $returnType, string $frameworkFqcn): arra
 }
 
 it('emits a constructor-@param map as an object with additionalProperties', function (): void {
-    // The control the fixes must preserve: `context` is the only array member of the fixture app's
-    // SnapshotData whose generic is written in the constructor `@param` block.
-    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class);
+    // `context` is the one array member of the fixture app's SnapshotData whose generic is written in the
+    // constructor `@param` block rather than in its own `@var`; both forms have to land the same way.
+    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties']['context'])->toBe([
         'type' => 'object',
@@ -138,53 +145,70 @@ it('emits a constructor-@param map as an object with additionalProperties', func
     ]);
 })->group('fixture');
 
-it('DEGRADED: emits prose and no shape for every array member typed in its own @var', function (string $property, array $expected): void {
-    // KNOWN GAP (the promoted-property `@var` reader). The recovered type is UnknownT, and an unknown
-    // type has no schema at all — not `{"type": "array"}`, not `{"type": "object"}`, nothing. The prose
-    // comes off the SAME docComment the type was never taken from, which is why the symptom reads as a
-    // description with nothing beside it rather than as a missing property.
-    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class);
+it('emits the full shape for every array member typed in its own @var', function (string $property, array $expected): void {
+    // The type and the prose now come off the SAME docComment, so the member that used to document as a
+    // description with nothing beside it carries its shape.
+    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties'][$property])->toBe($expected);
 })->with([
     '@var array<string, mixed>' => ['candidate', [
+        'type' => 'object',
+        'additionalProperties' => [],
         'description' => "Inline candidate profile state as it stood at submit: identity, contact details and whatever\nelse the tenant's profile schema carried.",
     ]],
     '@var array<string, array<string, string|null>>' => ['theme_data', [
+        'type' => 'object',
+        'additionalProperties' => [
+            'type' => 'object',
+            'additionalProperties' => ['type' => ['string', 'null']],
+        ],
         'description' => 'Theme colour and typography values, keyed by mode then by token.',
     ]],
     '@var list<SnapshotFormData>' => ['forms', [
+        'type' => 'array',
+        'items' => ['$ref' => '#/components/schemas/SnapshotFormData'],
         'description' => "One entry per form zone in the pinned blueprint version's candidate-application tab.",
     ]],
+    // An int-capable key is a JSON array, so this is `items`, not `additionalProperties`.
     '@var array<int, string>' => ['permissions', [
+        'type' => 'array',
+        'items' => ['type' => 'string'],
         'description' => 'Flat list of permission strings the candidate held at submit.',
         'example' => '["listing.view", "listing.create"]',
     ]],
     '@phpstan-var list<SnapshotFormData>' => ['attachments', [
+        'type' => 'array',
+        'items' => ['$ref' => '#/components/schemas/SnapshotFormData'],
         'description' => "Attachments carried alongside the snapshot, documented with the analyser-prefixed tag some\nteams standardise on.",
     ]],
 ])->group('fixture');
 
-it('DEGRADED: leaves the item class of a dropped list out of components entirely', function (): void {
-    // KNOWN GAP, and the knock-on that makes it expensive: `forms` is a `list<SnapshotFormData>`, so
-    // losing its type also loses the only reference to that Data class. Nothing hoists it, and a reader
-    // of the document has no way to learn the shape exists.
-    [$schemas] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class);
+it('hoists the item class a recovered list names into components', function (): void {
+    // The knock-on that makes reading the tag worth it: `forms` is a `list<SnapshotFormData>`, so its type
+    // is the only reference to that Data class in the whole document. It hoists with its own members,
+    // enum column included.
+    [$schemas] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
-    expect(array_keys($schemas))->toBe(['SnapshotData']);
+    expect(array_keys($schemas))->toBe(['SnapshotFormData', 'SnapshotData'])
+        ->and($schemas['SnapshotFormData']['properties']['status'])->toBe([
+            'type' => 'string',
+            'enum' => ['Open', 'Closed', 'Draft'],
+            'description' => 'Publication status frozen at submit.',
+        ]);
 })->group('fixture');
 
-it('DEGRADED: emits an untyped item array for a DataCollection whose generic was never read', function (): void {
-    // KNOWN GAP (the bare-ClassT-is-precise rule). This generic IS in the constructor `@param`, so a fix
-    // to the `@var` reader leaves it exactly as it is — the two gaps are independent.
-    [$schemas, $component] = degradedDataComponent('App\\Data\\MfaChallengeData', MfaChallengeData::class);
+it('emits a referenced item for a DataCollection whose generic only the docblock states', function (): void {
+    // A bare `DataCollection` is a precise reflected type that still says nothing about its elements, so
+    // the constructor `@param` is read for its arguments alone.
+    [$schemas, $component] = degradedDataComponent('App\\Data\\MfaChallengeData', MfaChallengeData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties']['mfa_factors'])->toBe([
         'type' => 'array',
-        'items' => [],
+        'items' => ['$ref' => '#/components/schemas/SnapshotFormData'],
         'description' => 'The factors the user can complete the challenge with.',
     ])
-        ->and(array_keys($schemas))->toBe(['MfaChallengeData']);
+        ->and(array_keys($schemas))->toBe(['SnapshotFormData', 'MfaChallengeData']);
 })->group('fixture');
 
 it('DEGRADED: collapses a recovered map and list to a bare array on the request side', function (): void {
