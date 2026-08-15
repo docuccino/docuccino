@@ -241,13 +241,13 @@ final class DocumentGenerator
             $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
 
             $frozen = $operation->freeze();
-            [$referencedSchemas, $referencedSchemaIds, $referencedResponses] = $this->componentClosure($frozen->toArray(), $components);
+            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases] = $this->componentClosure($frozen->toArray(), $components);
 
             // What this route's component work reported moves onto the fragment, so a warm hit — which
             // restores components without re-registering anything — still replays it.
             $diagnostics = [...$diagnostics, ...$components->takeDiagnosticsSince($snapshot)];
 
-            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class);
+            $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases);
             // Trace-derived dependency files widen the key, so a deep chain invalidates when any file
             // it walked changes (design §10 seam).
             $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
@@ -267,16 +267,18 @@ final class DocumentGenerator
      * happened to own a shared component can't leave a survivor with a dangling `$ref`.
      *
      * @param  array<string, mixed>  $operation
-     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>}
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, string>, 2: array<string, array<string, mixed>>, 3: array<string, string>}
      */
     private function componentClosure(array $operation, ComponentRegistry $components): array
     {
         $schemaRegistry = $components->schemas();
         $schemaIdMap = $components->schemaIds();
+        $schemaBaseMap = $components->schemaBases();
         $responseRegistry = $components->responses();
 
         $schemas = [];
         $schemaIds = [];
+        $schemaBases = [];
         $responses = [];
         $seenSchema = [];
         $seenResponse = [];
@@ -313,6 +315,9 @@ final class DocumentGenerator
             if (isset($schemaIdMap[$name])) {
                 $schemaIds[$name] = $schemaIdMap[$name];
             }
+            if (isset($schemaBaseMap[$name])) {
+                $schemaBases[$name] = $schemaBaseMap[$name];
+            }
 
             foreach ($this->refs($schemaRegistry[$name], 'schemas') as $nested) {
                 if (! isset($seenSchema[$nested])) {
@@ -321,7 +326,7 @@ final class DocumentGenerator
             }
         }
 
-        return [$schemas, $schemaIds, $responses];
+        return [$schemas, $schemaIds, $responses, $schemaBases];
     }
 
     /**
@@ -353,20 +358,26 @@ final class DocumentGenerator
 
     /**
      * Put a cached fragment's components back without waking the type engine, and hand back the
-     * fragment on the names they ACTUALLY landed on. A component the fragment recorded as `Foo` can
+     * fragment on the slots they ACTUALLY landed in. A component the fragment recorded as `Foo` can
      * land as `Foo_2` when a route added since this fragment was cached registered a different class
      * under `Foo` first — and then the restored operation's `$ref` would silently point at the other
      * class's shape. So anything that moved is repointed, in the fragment and in the bodies it just
-     * filed. (Which name a contested schema is finally PUBLISHED under is a separate, FQCN-derived
-     * question the assembler settles; see {@see ComponentNames}.)
+     * filed.
+     *
+     * Each schema goes back in under the name it ASKED for rather than the slot it was cached in, so
+     * that a suffix is re-earned against this build's registry: deleting the route that owned the
+     * plain name has to give it back to the survivor, and nothing invalidates the survivor's fragment.
+     * (Which name a schema is finally PUBLISHED under is settled from the finished registry by
+     * {@see ComponentNames}, which is why a warm build names things exactly as a cold one does.)
      */
     private function restoreComponents(OperationFragment $fragment, ComponentRegistry $components): OperationFragment
     {
         $schemas = [];
         foreach ($fragment->componentSchemas as $name => $schema) {
-            $actual = $components->registerSchema($name, $schema, $fragment->componentSchemaIds[$name] ?? null);
-            if ($actual !== $name) {
-                $schemas[$name] = $actual;
+            $asked = $fragment->componentSchemaBases[$name] ?? (string) $name;
+            $actual = $components->registerSchema($asked, $schema, $fragment->componentSchemaIds[$name] ?? null);
+            if ($actual !== (string) $name) {
+                $schemas[(string) $name] = $actual;
             }
         }
 

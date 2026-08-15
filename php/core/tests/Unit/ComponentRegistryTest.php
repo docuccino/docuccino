@@ -78,19 +78,67 @@ it('names both classes and both published names in the collision warning', funct
         ->and($collisions[0]->help)->toContain('#[SchemaName]');
 });
 
-it('leaves a contest an unidentified shape is part of on its positional names, but still reports it', function (): void {
-    // An inline shape has no namespace to derive a name from, so half-renaming the pair would be worse
-    // than the suffix. The author still hears about it, and the message says what it can name.
+it('discriminates a shape that names no identity by the bytes it publishes, and still reports it', function (): void {
+    // An inline shape has no namespace to derive a name from, but it does have content — which is
+    // enough to keep it off the contested plain name without a suffix route order decided.
     $registry = new ComponentRegistry;
 
     $registry->registerSchema('Node', ['type' => 'object']);
     $registry->registerSchema('Node', ['type' => 'string'], 'App\\B\\Node');
 
-    expect($registry->schemaRenames())->toBe([])
+    $renames = $registry->schemaRenames();
+
+    expect($renames)->toHaveKeys(['Node', 'Node_2'])
+        ->and($renames['Node_2'])->toBe('BNode')
+        ->and($renames['Node'])->toStartWith('Node_')
+        ->and($renames['Node'])->not->toBe('Node_2')
         ->and($registry->nameCollisions())->toHaveCount(1)
         ->and($registry->nameCollisions()[0]->message)
-        ->toContain('an unidentified schema as "Node"')
-        ->toContain('App\\B\\Node as "Node_2"');
+        ->toContain('an unidentified schema as "'.$renames['Node'].'"')
+        ->toContain('App\\B\\Node as "BNode"');
+});
+
+it('publishes a schema under the name it asked for even when its slot kept a suffix', function (): void {
+    // What a warm fragment cache hands over once the route that held the plain name is deleted: the
+    // survivor re-registers under `Node`, so a `_2` naming a class no longer in the document is gone.
+    $registry = new ComponentRegistry;
+
+    $registry->registerSchema('Node', ['type' => 'object'], 'App\\A\\Node');
+    $registry->registerSchema('Node', ['type' => 'string'], 'App\\B\\Node');
+    $survivor = new ComponentRegistry;
+    $survivor->registerSchema($registry->schemaBases()['Node_2'], ['type' => 'string'], 'App\\B\\Node');
+
+    expect($registry->schemaBases())->toBe(['Node' => 'Node', 'Node_2' => 'Node'])
+        ->and($survivor->schemas())->toHaveKey('Node')
+        ->and($survivor->schemaRenames())->toBe([]);
+});
+
+it('remembers the name a reserved schema asked for, so materialising it publishes the ask', function (): void {
+    // A self-referential class takes its name before its body exists; the reservation has to carry the
+    // ask across, or the body materialises into a slot with nothing to derive a published name from.
+    $registry = new ComponentRegistry;
+
+    $registry->registerSchema('Node', ['type' => 'object'], 'App\\A\\Node');
+    $slot = $registry->reserveSchemaName('Node', 'App\\B\\Node');
+    $registry->registerSchema('Node', ['type' => 'string'], 'App\\B\\Node');
+
+    expect($slot)->toBe('Node_2')
+        ->and($registry->schemaBases())->toBe(['Node' => 'Node', 'Node_2' => 'Node'])
+        ->and($registry->schemaRenames())->toBe(['Node' => 'ANode', 'Node_2' => 'BNode']);
+});
+
+it('rolls the names a route asked for back with everything else it registered', function (): void {
+    // The snapshot has to cover the asks too: a route that throws after registering must leave no
+    // trace, and a base left behind would name a component the document never got.
+    $registry = new ComponentRegistry;
+    $snapshot = $registry->snapshot();
+
+    $registry->registerSchema('Node', ['type' => 'object'], 'App\\A\\Node');
+    $registry->reserveSchemaName('Other', 'App\\A\\Other');
+    $registry->restore($snapshot);
+
+    expect($registry->schemaBases())->toBe([])
+        ->and($registry->schemas())->toBe([]);
 });
 
 it('hands a snapshot-scoped slice of diagnostics to its caller and keeps none back', function (): void {

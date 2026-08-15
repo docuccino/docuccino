@@ -529,10 +529,18 @@ as far as it takes to tell them apart. An `App\DTOs\Schema\Authentication\SSOCon
 `App\DTOs\Data\SSO\SSOConnectionData` publish as `AuthenticationSSOConnectionData` and
 `SSOSSOConnectionData`.
 
-Those names depend only on the two class names, never on the order your routes happen to be
+Those names depend only on what the schemas are, never on the order your routes happen to be
 discovered in — which matters, because a positional `Foo`/`Foo_2` would hand the plain name to
 whichever route sorted first, and adding an unrelated route later could silently swap what `Foo`
-means in every generated client.
+means in every generated client. Where a namespace walk can't tell two claimants apart — two classes
+in one namespace, or a `#[SchemaId]` pin carrying no namespace to walk — each takes a short hash of
+its own identity instead (`UserData_x7ztb6hq`). Stable, but not descriptive: that is a name to
+replace, and the warning below says so.
+
+One class accepted as a request body and returned as a response is **two shapes**, not one, so they
+never contest a name: the body publishes as `<Name>Request` (a name that already ends in `Request` is
+left alone) and the plain name belongs to the class's own shape. Adding the read endpoint therefore
+can't rename the write endpoint's component, or the other way round.
 
 The build reports a `components.name-collision` warning naming both FQCNs and the name each was
 published under, because an automatic name is rarely the best one. `#[SchemaName]` on either class is
