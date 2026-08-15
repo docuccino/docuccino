@@ -2,17 +2,9 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
-use Docuccino\Core\Extensions\Context\RepresentationPolicy;
-use Docuccino\Core\Extensions\Schema\ComponentRegistry;
-use Docuccino\Core\Extensions\Schema\SchemaConverter;
-use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
-use Docuccino\Core\Inference\NullTypeEngine;
-use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
-use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 
 /**
  * The two cross-field facts a per-field rule transformer cannot see: a field the API prohibits outright,
@@ -92,11 +84,9 @@ it('turns the clashing array-plus-child pair into a coherent object schema', fun
         'metadata' => [ValidationRule::of('array')],
         'metadata.mode' => [ValidationRule::of('string')],
     ]);
-    $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
-    $chain = new DefaultValidationRulesToSchema(ValidationIntegration::transformers());
-
-    $clashing = $chain->convert((new RuleOrdering)->order($set), $context)->schema;
-    $resolved = $chain->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($set)), $context)->schema;
+    $context = schemaConverter();
+    $clashing = validationSchema($set, $context, normalize: false);
+    $resolved = validationSchema($set, $context);
 
     expect($clashing['properties']['metadata']['type'])->toBe('array')
         ->and($resolved['properties']['metadata'])->toBe([

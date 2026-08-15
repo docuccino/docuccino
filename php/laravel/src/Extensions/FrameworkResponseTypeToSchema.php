@@ -14,22 +14,9 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Laravel\Support\FrameworkClasses;
 
 /**
- * Stops a framework response object being documented as a body. It sits ahead of core's
- * `ClassTypeToSchema`, which is correctly framework-agnostic and would otherwise reflect
- * `Illuminate\Http\RedirectResponse` into a component of `original`/`exception`/`headers` — the
- * response object's PHP internals, which no client ever receives.
- *
- * The refusal is an open `{}` at low confidence, not a component: it says "a body of a shape this
- * build could not recover", which is the truth, wherever the type turns up — a bare return, a member
- * of a `JsonResponse|RedirectResponse` union, a property of a class being expanded. Knowing WHICH
- * framework classes count is Laravel vocabulary, so the guard lives here rather than in core
- * ({@see FrameworkClasses::isResponse()} owns the list).
- *
- * The top-level story — a redirect's 3xx, a bare `JsonResponse`'s honest 200 — belongs to
- * {@see InferredResponsesExtension}, which has the route to hang a status and a diagnostic on.
- *
- * `EARLY` is what puts it ahead of the core chain: mappers at equal priority sort by FQCN, and
- * `Docuccino\Core\…\ClassTypeToSchema` sorts before anything of the adapter's.
+ * Refuses a framework response object as a body — an open `{}` at low confidence, never a component of
+ * the response's PHP internals ({@see FrameworkClasses::isResponse()} owns the list). `EARLY` keeps it
+ * ahead of core's class mapper, for the reason recorded where it's registered in `DefaultExtensions`.
  */
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class FrameworkResponseTypeToSchema implements TypeToSchema

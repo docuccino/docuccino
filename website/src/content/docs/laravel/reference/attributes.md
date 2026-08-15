@@ -245,9 +245,9 @@ public function __construct(string ...$properties) // stored as list<string> $pr
 ```
 
 Removes properties from an output schema. On a class it drops the properties you name — the form
-Eloquent models and Data classes use, where the properties are reflected rather than declared one by
-one. On a property it drops that property, for a Data class whose properties you can annotate
-directly.
+Eloquent models use, where the properties are reflected rather than declared one by one. On a property
+it drops that property. Both forms work on any class Docuccino hoists, plain PHP DTOs included. If they
+between them hide every property, the class isn't published at all.
 
 ```php
 #[Hidden('password_hash', 'remember_token')] // on the model: merged with $hidden
@@ -525,8 +525,9 @@ class UserResource extends JsonResource {}
 A component is named after its class's **short** name, so two classes in different namespaces that
 share one contest the same `#/components/schemas/…` slot. Both shapes are still published — the
 second takes a `_2` suffix — and the build reports a `components.name-collision` warning naming both
-FQCNs. `#[SchemaName]` on either class is how you settle it. Two classes choosing the *same*
-`#[SchemaName]` collide in exactly the same way, and are reported the same way.
+FQCNs. `#[SchemaName]` on either class is how you settle it — on a plain PHP DTO as much as on a
+resource, model or Data class. Two classes choosing the *same* `#[SchemaName]` collide in exactly the
+same way, and are reported the same way.
 
 ## Content & examples
 

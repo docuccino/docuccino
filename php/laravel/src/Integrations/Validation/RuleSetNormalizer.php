@@ -9,20 +9,12 @@ use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 
 /**
- * Makes a recovered field map coherent before the chain runs — the two facts that are only visible
- * across fields, which a per-field {@see RuleTransformer} therefore cannot see:
- *
- * - A bare `prohibited` field, and everything under it, is REMOVED. The API rejects the field outright,
- *   so documenting it as an optional property invites exactly what it refuses. The conditional forms
- *   (`prohibited_if`/`prohibited_unless`) and `prohibits` (which constrains other fields) are left alone —
- *   those fields are legitimately sendable.
- * - A field with a dotted child key (`metadata.retention.mode`) IS an object, so its `array` type rule is
- *   dropped: Laravel's `array` covers both JSON arrays and JSON objects, and the child disambiguates.
- *   Leaving both produces `{"type": "array", "properties": …}`, which no document validates against. A
- *   `*` child is the array case and keeps its rule.
- *
- * Shared by every recovery integration (FormRequest, inline validate, laravel-actions, Spatie Data)
- * alongside {@see RuleOrdering}, so every rule set reaches the chain in the same shape.
+ * Makes a recovered field map coherent before the rule chain runs — the two facts only visible ACROSS
+ * fields, which a per-field {@see RuleTransformer} cannot see. A bare `prohibited` field and everything
+ * under it is dropped, since the API refuses it outright (the conditional forms and `prohibits` stay —
+ * those fields are sendable); and a field with a named, non-`*` child key loses its `array`/`list` rule,
+ * because Laravel's `array` covers objects too and `{"type": "array", "properties": …}` validates nothing.
+ * Every recovery integration runs it alongside {@see RuleOrdering}.
  */
 final class RuleSetNormalizer
 {

@@ -130,7 +130,7 @@ it('types the SAME enum the same way when only a @property tag declares it', fun
 
 it('recovers a request DTO\'s map and list generics, so nothing downstream can blame inference', function (): void {
     // The request-side control for the validation-rule collapse pinned in the adapter's
-    // SpatieDataDegradedShapeTest: both generics really are here, in full, before the rule vocabulary
+    // SpatieDataRealShapeTest: both generics really are here, in full, before the rule vocabulary
     // gets them.
     $types = metadataTypes('App\\Data\\SaveAnswersData');
 

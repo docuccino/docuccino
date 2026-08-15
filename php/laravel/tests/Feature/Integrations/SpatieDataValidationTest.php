@@ -129,11 +129,11 @@ it('makes a #[Nullable] property null-admitting', function (): void {
 });
 
 it('drops a #[Prohibited] property, and a prohibited NESTED Data object with its whole subtree', function (): void {
-    // `#[Prohibited]` has to mean the same thing whatever the property's type. It used to mean two
-    // things: a scalar reached the `prohibited` TOKEN and the rule set's cross-field pass dropped it,
-    // while a nested Data object took the recursion branch, which appends no attribute rules at all —
-    // so the field survived AND every one of its children stayed, still required. The attribute is now
-    // read where the field is decided, so neither the object nor `registered_address.city` is documented.
+    // `#[Prohibited]` has to mean the same thing whatever the property's type. Reading it only off the
+    // `prohibited` token would cover a scalar and miss a nested Data object, which takes the recursion
+    // branch and appends no attribute rules at all — the field and every one of its children would
+    // survive, still required. It is read where the FIELD is decided, so neither the object nor
+    // `registered_address.city` is documented.
     $engine = new StubTypeEngine(classes: [
         AddressData::class => new ClassMetadata(AddressData::class, [
             new PropertyMetadata('city', ScalarT::string()),

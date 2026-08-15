@@ -15,8 +15,8 @@ use Docuccino\Core\Inference\DType\UnknownT;
 
 /**
  * The `array<K, V>` list-vs-map rule, owned here so the docblock grammar and the PHPStan translator
- * cannot answer it differently — they call this, they no longer each carry a copy. The tradeoff the rule
- * makes for an ambiguous key is argued in docs/design/uir-and-extensions.md §8.
+ * cannot answer it differently — both call this rather than carrying a copy. The tradeoff the rule makes
+ * for an ambiguous key is argued in docs/design/uir-and-extensions.md §8.
  */
 it('answers whether a key can carry an int, over every DType a key can be', function (DType $key, bool $expected): void {
     expect(ArrayKey::mayBeInt($key))->toBe($expected);

@@ -70,9 +70,9 @@ it('recovers each guarded framework response class from an idiomatic action', fu
 
 it('keeps a really-recovered RedirectResponse out of components and documents it as a redirect', function (): void {
     // The end-to-end version of the guard, over the type the analyser genuinely produced and the
-    // metadata it genuinely reflects — `original`/`exception`/`headers`, which used to be hoisted as a
-    // component and referenced as the 200 body. A redirect carries no JSON at all, so what lands now
-    // is a 3xx with a Location header and nothing else.
+    // metadata it genuinely reflects — `original`/`exception`/`headers`, which is what an unguarded
+    // chain hoists as a component and references as the 200 body. A redirect carries no JSON at all,
+    // so what lands is a 3xx with a Location header and nothing else.
     $analysis = ActionAnalysis::fromArray(FixtureRunner::analyze(
         'app/Http/Controllers/SsoRedirectController.php',
         'App\\Http\\Controllers\\SsoRedirectController',

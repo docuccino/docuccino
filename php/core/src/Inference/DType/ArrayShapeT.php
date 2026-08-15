@@ -6,13 +6,10 @@ namespace Docuccino\Core\Inference\DType;
 
 /**
  * A constant array shape (`array{id: int, name?: string}`, or a positional list-shape). Field order
- * matters and is preserved verbatim — unlike union members, it's never sorted.
- *
- * `isList` records whether the keys are a `0..n` sequence, which is exactly when PHP renders the array
- * as a JSON ARRAY rather than an object — so it is DERIVED from the keys here as well as taken from the
- * caller (PHPStan's list accessory). A recovering path that only knows the keys — `array{string, int}`
- * in a docblock, say — therefore can't leave a tuple looking like an object with `"0"`/`"1"` property
- * names, which is not a shape any JSON document can have.
+ * matters and is preserved verbatim — unlike union members, it's never sorted. `isList` records whether
+ * the keys are a `0..n` sequence, which is exactly when PHP renders the array as a JSON array; it is
+ * derived from the keys here as well as taken from the caller (PHPStan's list accessory), so a path that
+ * only knows the keys can't leave a tuple looking like an object with `"0"`/`"1"` property names.
  */
 final readonly class ArrayShapeT extends DType
 {

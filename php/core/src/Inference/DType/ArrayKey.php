@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace Docuccino\Core\Inference\DType;
 
 /**
- * Owns the `array<K, V>` list-vs-map rule for every path that recovers one — the docblock grammar and
- * the PHPStan translator alike, which both reach here with the key already mapped to a {@see DType},
- * so the predicate has one input vocabulary and one implementation.
- *
- * Only a string key makes a PHP array serialize to a JSON object, so an int-capable key — `int`, an int
- * literal, `array-key`, `int|string` — is documented as a JSON array; every other key, including one we
- * can't reason about, stays a {@see MapT}. The tradeoff that rule makes for an AMBIGUOUS key is set out
- * in docs/design/uir-and-extensions.md §8.
+ * Owns the `array<K, V>` list-vs-map rule for every path that recovers one — the docblock grammar and the
+ * PHPStan translator both arrive here with the key already a {@see DType}, so there is one implementation.
+ * Only a string key makes a PHP array serialize to a JSON object, so an int-capable key (`int`, an int
+ * literal, `array-key`, `int|string`) documents a JSON array and every other key stays a {@see MapT}; the
+ * tradeoff that makes for an ambiguous key is in docs/design/uir-and-extensions.md §8.
  */
 final class ArrayKey
 {

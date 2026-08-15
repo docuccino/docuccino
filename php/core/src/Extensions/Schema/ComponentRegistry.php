@@ -14,6 +14,8 @@ use Docuccino\Core\Support\Json;
  * registrations dedupe, genuine name collisions get a deterministic numeric suffix plus a warning.
  * The `schemaId` hint (an FQCN) is remembered per component so the assembler can pin its diff
  * identity via {@see IdentityGenerator::namedSchemaId()}.
+ *
+ * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
  */
 final class ComponentRegistry
 {
@@ -173,10 +175,8 @@ final class ComponentRegistry
     }
 
     /**
-     * The two classes contesting `$name`, for the collision message. Naming them is the whole point of
-     * the diagnostic — "two schemas collided" is unactionable in an app with hundreds of DTOs, and the
-     * short name the author sees in the document is exactly the one that does not identify either. A
-     * schema with no identity (an inline shape rather than a hoisted class) has no FQCN to name.
+     * The holder of `$name` and the schema now contesting it, named for the collision message — an
+     * inline shape has no FQCN, so it is named as such.
      */
     private function claimants(string $name, ?string $incoming): string
     {
@@ -190,7 +190,7 @@ final class ComponentRegistry
         return new Diagnostic(
             severity: Severity::Warning,
             code: 'components.name-collision',
-            message: sprintf('Component name "%s" is claimed by two distinct schemas (%s); the second was hoisted as "%s".', $name, $claimants, $suffixed),
+            message: sprintf('Component name "%s" is claimed by distinct schemas (%s); the later one was hoisted as "%s".', $name, $claimants, $suffixed),
             help: 'Disambiguate with #[SchemaName] on one of the source classes.',
         );
     }
@@ -264,7 +264,7 @@ final class ComponentRegistry
             $this->diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
                 code: 'components.name-collision',
-                message: sprintf('Two distinct %s claimed component name "%s"; the second was hoisted as "%s".', $kind, $name, $suffixed),
+                message: sprintf('Distinct %s claimed component name "%s"; the later one was hoisted as "%s".', $kind, $name, $suffixed),
                 help: 'Disambiguate the source of one of them.',
             );
         }
@@ -277,7 +277,7 @@ final class ComponentRegistry
      * components rolls back, so it leaves no orphaned components, diagnostics or leaked name
      * reservations behind.
      *
-     * @return array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+     * @return Snapshot
      */
     public function snapshot(): array
     {
@@ -292,7 +292,7 @@ final class ComponentRegistry
     }
 
     /**
-     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @param  Snapshot  $snapshot
      */
     public function restore(array $snapshot): void
     {
@@ -310,7 +310,7 @@ final class ComponentRegistry
      * replays them on a warm cache hit, where nothing re-registers and a registration-time report —
      * a name collision above all — would otherwise vanish from a build whose bytes still carry it.
      *
-     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @param  Snapshot  $snapshot
      * @return list<Diagnostic>
      */
     public function takeDiagnosticsSince(array $snapshot): array
@@ -328,7 +328,7 @@ final class ComponentRegistry
      * re-registers only what an operation references — would never bring it back), while the schemas
      * that inlined content points at must survive.
      *
-     * @param  array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}  $snapshot
+     * @param  Snapshot  $snapshot
      */
     public function restoreResponses(array $snapshot): void
     {

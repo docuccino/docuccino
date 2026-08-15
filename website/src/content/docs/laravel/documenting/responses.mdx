@@ -224,10 +224,11 @@ What gets documented instead is only what the class itself proves:
 
 The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
 302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
-site says which. Pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the
-endpoint always answers with one code.
+site says which. Docuccino says so with an `inferred-response.unpinned-redirect` info diagnostic naming
+the action; pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the endpoint
+always answers with one code.
 
-The other two rows are a real loss of detail, so they are announced rather than silent: each raises an
+The other two rows lose the body itself, so they are announced rather than silent: each raises an
 `inferred-response.payload-unrecoverable` info diagnostic naming the action. The usual cause is a
 collaborator whose own return type is bare —
 

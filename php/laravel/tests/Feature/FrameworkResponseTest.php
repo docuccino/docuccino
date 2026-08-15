@@ -68,9 +68,9 @@ it('recognises an app response subclass the list does not name', function (): vo
     expect($components)->toBe([]);
 });
 
-it('leaves a class that is not a framework response to hoist as it always did', function (): void {
-    // The unknown-entry contract. The guard has to be surgical: anything outside the family is still
-    // reflected into a component exactly as before.
+it('leaves a class that is not a framework response to hoist normally', function (): void {
+    // The unknown-entry contract. The guard has to be surgical: anything outside the family still
+    // reflects into a component of its own.
     $fqcn = 'Workbench\\App\\Data\\ReceiptData';
     expect(FrameworkClasses::isResponse($fqcn))->toBeFalse();
 
@@ -217,8 +217,8 @@ it('documents only the status for a framework response with no provable media ty
 });
 
 it('still documents the payload of a JsonResponse whose generic was recovered', function (): void {
-    // The guard must not cost a recovered body anything: `JsonResponse<payload, status>` is unwrapped
-    // exactly as before, and it is the payload — never the wrapper — that reaches the converter.
+    // The guard must not cost a recovered body anything: `JsonResponse<payload, status>` still unwraps,
+    // and it is the payload — never the wrapper — that reaches the converter.
     $payload = new ArrayShapeT([
         new ArrayShapeField('id', new ScalarT(ScalarT::INT)),
         new ArrayShapeField('name', new ScalarT(ScalarT::STRING)),

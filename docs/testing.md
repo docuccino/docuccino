@@ -81,18 +81,18 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-14)
+## Measured coverage (2026-08-15)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.29%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.23%** | 92    | fully in-process-measurable                      |
-| `inference-phpstan` | **34.55%** | 34    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **94.49%** | 94    | fully in-process-measurable                      |
+| `laravel`           | **92.38%** | 92    | fully in-process-measurable                      |
+| `inference-phpstan` | **36.32%** | 36    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 84.70%     | —     | informational only; no longer a gate             |
+| Overall             | 86.01%     | —     | informational only; no longer a gate             |
 
 `inference-phpstan`'s floor dropped from 41 to 37 in the same change set that moved the phpdoc type
 grammar into core. Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and

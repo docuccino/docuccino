@@ -140,7 +140,7 @@ it('applies the same key rule to every generic array spelling', function (string
 ]);
 
 it('reads array-key as the int|string union it is', function (): void {
-    // Not in the identifier table before, so it used to build a bogus `ClassT('array-key')`.
+    // It has to be in the identifier table, or it falls through and builds a bogus `ClassT('array-key')`.
     expect(parseType('array-key'))->toEqual(UnionT::of([ScalarT::int(), ScalarT::string()]));
 });
 

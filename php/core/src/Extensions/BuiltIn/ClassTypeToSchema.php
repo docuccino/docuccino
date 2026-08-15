@@ -15,14 +15,11 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
 
 /**
- * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`.
- * Properties come from {@see TypeEngine::classMetadata()} less whatever `#[Hidden]` denies, read through
- * {@see SchemaIdentity} so a plain DTO hides a property exactly as a Data class or a model does; the
- * component is named by `#[SchemaName]` else the short class name, and pinned by `#[SchemaId]` else the
- * FQCN. This is the
- * framework-agnostic fallback mapper, so it is the ONLY mapper a plain PHP DTO reaches — passing the
- * short name explicitly here would make the attributes dead exactly where two classes sharing a short
- * name have no other way out, so it leaves both to {@see ComponentHoist}.
+ * A named class → an object schema hoisted to `components.schemas` and referenced by `$ref`. Properties
+ * come from {@see TypeEngine::classMetadata()} less whatever `#[Hidden]` denies, read through
+ * {@see SchemaIdentity} so a plain DTO hides a property exactly as a Data class or a model does. Being
+ * the framework-agnostic fallback, it is the ONLY mapper a plain DTO reaches, so it leaves the component
+ * name and diff identity to {@see ComponentHoist}'s attribute fallback rather than forcing the short name.
  */
 final class ClassTypeToSchema implements TypeToSchema
 {

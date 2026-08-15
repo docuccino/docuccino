@@ -96,10 +96,9 @@ final class TypeStringParser
     }
 
     /**
-     * An enum written in a docblock answers `EnumT` with its case names, the same as the reflection and
-     * PHPStan-type mappers — otherwise a docblock-only declaration (`@property ListingStatus $status`)
-     * would document as an object of the enum's `name`/`value` members. A name that doesn't resolve to a
-     * loadable enum — a short name with no import context to qualify it, say — stays a `ClassT`.
+     * An enum written in a docblock answers `EnumT`, matching the reflection and PHPStan-type mappers —
+     * otherwise `@property ListingStatus $status` would document as an object of the enum's `name`/`value`
+     * members. A name that doesn't resolve to a loadable enum stays a `ClassT`.
      */
     private function classOrEnum(string $fqcn): DType
     {

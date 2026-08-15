@@ -24,17 +24,11 @@ final class FrameworkClasses
     public const RESPONSE_BASE = 'Symfony\\Component\\HttpFoundation\\Response';
 
     /**
-     * The framework response classes an action is declared as returning. A response OBJECT is
-     * transport, not an API contract: its public members are PHP internals (`original`, `exception`,
-     * `headers`), so reflecting one documents the framework instead of the app.
-     *
-     * The first five are the ones the engine really hands back as a bare `ClassT` for an idiomatic
-     * action — proven in `FrameworkResponseReachabilityTest`, over the fixture app's SsoRedirect and
-     * FileDelivery controllers. The last two are the hierarchy roots {@see isResponse()} and
-     * {@see isRedirect()} match subclasses against, and are legal return types themselves.
-     *
-     * Deliberately not exhaustive: a loadable subclass of {@see RESPONSE_BASE} counts too, which is
-     * what catches an app's own `extends JsonResponse` and the Symfony responses an app names direct.
+     * The framework response classes an action is declared as returning. A response OBJECT is transport,
+     * not an API contract — reflecting one documents PHP internals (`original`, `exception`, `headers`)
+     * instead of the app. Deliberately not exhaustive: {@see isResponse()} also matches any loadable
+     * subclass of the two hierarchy roots at the end, which are listed explicitly because
+     * `is_subclass_of` does not match the class itself.
      *
      * @var list<string>
      */

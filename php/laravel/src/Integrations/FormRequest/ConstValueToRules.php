@@ -104,8 +104,8 @@ final class ConstValueToRules
         $method = str_contains($factory, '::') ? substr($factory, strrpos($factory, '::') + 2) : $factory;
 
         // A choice descriptor whose values didn't fold is worth LESS than nothing: it would win the merge
-        // over whatever else documents the field and then contribute no keyword, so it stays unrecovered
-        // and the caller diagnoses it. `exists`/`unique` legitimately carry no values.
+        // and then contribute no keyword, so it stays unrecovered for the caller to diagnose.
+        // `exists`/`unique` legitimately carry no values.
         $choices = $method === 'in' ? $this->scalarArgs($descriptor) : [];
 
         return match (true) {

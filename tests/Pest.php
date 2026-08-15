@@ -2,9 +2,16 @@
 
 declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
+use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
@@ -12,6 +19,9 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
+use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
+use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
@@ -98,6 +108,26 @@ function documentForReturn(DType $returnType, array $classes = []): array
         $result->diagnostics,
         $result,
     ];
+}
+
+/** The plain type→schema chain the validation suites convert against: the core mappers, no engine. */
+function schemaConverter(): SchemaConverter
+{
+    return new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+}
+
+/**
+ * A rule set through the shared validation chain, as a JSON Schema object — the same normalise → order →
+ * convert sequence {@see DataRequestExtension} runs. `normalize: false` gives the un-normalised set, which
+ * is what {@see RuleSetNormalizer} exists to prevent reaching the chain.
+ *
+ * @return array<string, mixed>
+ */
+function validationSchema(RuleSet $rules, SchemaConverter $context, bool $normalize = true): array
+{
+    $ordered = (new RuleOrdering)->order($normalize ? (new RuleSetNormalizer)->normalize($rules) : $rules);
+
+    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema;
 }
 
 /**

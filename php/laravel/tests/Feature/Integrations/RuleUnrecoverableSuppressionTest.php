@@ -23,8 +23,8 @@ use PhpParser\ParserFactory;
  * What was lost differs by whether ANOTHER producer documents the field — a spatie Data property typed
  * `UploadedFile`, say, which documents from its type regardless of its dynamic rules() — so the message
  * differs too: the field is omitted outright, or kept without the constraints its rules stated. What is
- * never right is silence, which is how an unfoldable `Rule::in()` used to erase a field's allow-list
- * with nothing said (SpatieDataDegradedShapeTest pins that recovery half against the real engine).
+ * never right is silence — an unfoldable `Rule::in()` erases a field's allow-list, and the build has to
+ * say so (SpatieDataRealShapeTest pins that recovery half against the real engine).
  */
 function unrecoverableDiagnostics(array $documentedElsewhere): array
 {

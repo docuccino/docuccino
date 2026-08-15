@@ -109,13 +109,10 @@ final class ClassMetadataFactory
     }
 
     /**
-     * The declared type, refined by a docblock in the two places reflection cannot speak for itself.
-     *
-     * Where the reflected type is vague — a bare `array`, `mixed`, no declared type at all — a docblock type
-     * REPLACES it, and only if it is itself precise, so `@var array` never displaces a native `list`-carrying
-     * declaration and a native `string` is never second-guessed. Where the reflected type is precise but
-     * generic-blind (a bare `ClassT`: `DataCollection`, `Collection`, …) a docblock may only PARAMETERISE it —
-     * {@see self::parameterise()} grafts the arguments on and changes nothing else.
+     * The declared type, refined by a docblock in the two places reflection cannot speak for itself: where
+     * the reflected type is vague (bare `array`, `mixed`, undeclared) a docblock type REPLACES it, and only
+     * if itself precise, so a native `string` is never second-guessed; where it is precise but generic-blind
+     * (a bare `ClassT`) a docblock may only PARAMETERISE it, via {@see self::parameterise()}.
      */
     private function propertyType(ReflectionProperty $property, ?string $docComment): DType
     {
@@ -142,8 +139,7 @@ final class ClassMetadataFactory
 
     /**
      * The docblock types that may speak for a property, most authoritative first. A promoted constructor
-     * property is documented either in the constructor's `@param` or — the commoner form, since that is where
-     * the prose describing the member already sits — in its own `@var`, so both are candidates and the
+     * property may be documented in the constructor's `@param` or in its own `@var`, so both count and the
      * `@param` wins; a plain property has only its `@var`.
      *
      * @return list<string>
@@ -168,11 +164,10 @@ final class ClassMetadataFactory
     }
 
     /**
-     * A docblock parameterising a precise native type: for every bare `ClassT` the reflected type carries,
-     * the type arguments the docblock states FOR THAT SAME CLASS are grafted on. Null when the docblock adds
-     * nothing — it names another class, a subclass, or nothing parseable. Deliberately one-directional: a
-     * docblock can say what generics reflection has no syntax for, and nothing else, so it can neither swap
-     * the class nor add a nullability the declaration doesn't have.
+     * A docblock parameterising a precise native type: for every bare `ClassT` the reflected type carries, the
+     * type arguments the docblock states FOR THAT SAME CLASS are grafted on; null when it adds nothing.
+     * One-directional on purpose — a docblock can supply the generics reflection has no syntax for and nothing
+     * else, so it can neither swap the class nor add a nullability the declaration doesn't have.
      */
     private static function parameterise(DType $native, DType $written): ?DType
     {

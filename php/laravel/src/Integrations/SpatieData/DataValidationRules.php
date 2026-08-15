@@ -39,12 +39,10 @@ use Docuccino\Laravel\Integrations\Validation\Transformers\AdditionalPropertiesR
  * `#[WithoutValidation]`, `#[FromRouteParameter]`, `#[HiddenFromRequest]`, `#[Prohibited]` — contributes
  * no field and no subtree.
  *
- * The rule vocabulary has one word — `array` — for every array shape, so a recovered container states
- * its own structure instead: a `list<V>` synthesises the `key.*` item field Laravel itself uses (the
- * same trick as the uploaded-file list below), an `array{…}` shape synthesises a `key.<member>` field
- * per key, and an `array<string, V>` — which Laravel has no rule for at all — carries its value schema
- * on an `additional_properties` rule ({@see AdditionalPropertiesRuleTransformer}). A Data class reached as
- * a map's VALUE is documented from its own request fields, never through the response mapper.
+ * The rule vocabulary has one word — `array` — for every array shape, so a recovered container states its
+ * own structure instead: a `list<V>` synthesises the `key.*` item field Laravel itself uses, an `array{…}`
+ * shape a `key.<member>` field per key, and an `array<string, V>` carries its value schema on an
+ * `additional_properties` rule ({@see AdditionalPropertiesRuleTransformer}).
  *
  * A static `rules()` override wins per field: spatie's `DataValidationRulesResolver` `add`s it at the
  * field key, REPLACING the inferred set rather than merging. {@see DataRequestExtension} recovers it
@@ -150,9 +148,8 @@ final class DataValidationRules
     {
         $fields = [];
         foreach ($metadata->properties as $property) {
-            // A prohibited property is never sendable, so it contributes no field — and, crucially, no
-            // subtree either. Leaving it to the rule set's `prohibited` pass would only work for the
-            // properties that reach the token, which the nested-Data branch below never does.
+            // A prohibited property contributes no field and no subtree. The rule set's `prohibited` pass
+            // can't cover it: the nested-Data branch below never reaches the token.
             if ($this->reflector->isExcludedFromRequest($fqcn, $property->name)
                 || $this->reflector->isProhibited($fqcn, $property->name)) {
                 continue;
@@ -204,10 +201,8 @@ final class DataValidationRules
     /**
      * The child field paths a recovered container contributes: `key.*` for a list's items, `key.<member>`
      * for an array shape's keys, recursing so a nested container keeps its shape too. A map needs none —
-     * its values are a schema, not a path.
-     *
-     * The descent is bounded by the type itself: a {@see DType} is a finite acyclic tree (immutable values
-     * built bottom-up), and the engine caps its own translation depth long before this runs.
+     * its values are a schema, not a path. The descent terminates because a {@see DType} is a finite
+     * acyclic tree.
      *
      * @param  list<string>  $visiting
      * @return array<string, list<ValidationRule>>
@@ -282,11 +277,10 @@ final class DataValidationRules
     }
 
     /**
-     * The value schema a map carries. A Data-class value is built from the value class's OWN request
-     * fields: the type→schema chain would run the RESPONSE mapper, which keys by `#[MapOutputName]` and
-     * publishes exactly the properties `#[HiddenFromRequest]` exists to keep out of a request body. A Data
-     * class anywhere else in the value type gets an unconstrained schema for the same reason — vague, but
-     * never a response shape published as a request one.
+     * The value schema a map carries. A Data-class value is built from the value class's OWN request fields
+     * — the type→schema chain would run the RESPONSE mapper, which keys by `#[MapOutputName]` and publishes
+     * exactly what `#[HiddenFromRequest]` exists to keep out of a request body — and a Data class anywhere
+     * else in the value type gets an unconstrained schema for the same reason.
      *
      * @param  list<string>  $visiting
      * @return array<array-key, mixed>
@@ -375,7 +369,7 @@ final class DataValidationRules
 
     /**
      * Rules from a `#[Rule(new Iban)]` object's `#[RuleSchema]`, alongside the string tokens. An
-     * unannotated rule object contributes nothing, exactly as before.
+     * unannotated rule object contributes nothing.
      *
      * @return list<ValidationRule>
      */

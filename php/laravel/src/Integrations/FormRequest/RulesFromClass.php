@@ -82,9 +82,8 @@ final class RulesFromClass
                 continue;
             }
 
-            // Another producer documenting the field changes what was lost — its shape survives, its
-            // CONSTRAINTS don't — but not that something was lost, so the fact is reported either way.
-            // Claiming the field is omitted when it isn't is the one thing that would be untrue.
+            // Another producer documenting the field changes WHAT was lost — its shape survives, its
+            // constraints don't — but not that something was lost, so it's reported either way.
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Info,
                 code: 'validation.rule-unrecoverable',

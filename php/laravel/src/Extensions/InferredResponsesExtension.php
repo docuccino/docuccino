@@ -32,11 +32,8 @@ use Docuccino\Laravel\Support\FrameworkClasses;
  * statuses become different responses. A `JsonResponse<TPayload, TStatus>` contributes its payload
  * shape (never a generic `{type: object}`) under the folded status — an `int` literal second type
  * arg, else the default 200; `noContent()` arrives as `JsonResponse<void, 204>`; bare `void`/`never`
- * contributes nothing.
- *
- * A framework response class the analyser could not parameterise gets only what the class itself
- * proves ({@see frameworkResponse()}), never a reflection of the response object — see
- * {@see FrameworkResponseTypeToSchema} for why that matters and where the refusal is enforced.
+ * contributes nothing; and an unparameterised framework response gets only what the class itself proves
+ * ({@see frameworkResponse()}).
  *
  * Being a built-in, it imports no integration: the three integration-aware decisions arrive through
  * gated context chains ({@see ResponseAnalysisTarget} redirects the analysed method,
@@ -50,9 +47,8 @@ final class InferredResponsesExtension implements OperationExtension
     private const DEFAULT_STATUS = '200';
 
     /**
-     * The OAS range key a redirect documents under. Laravel's `RedirectResponse` defaults to 302 but
-     * takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and the return site names
-     * none of them — so the range is what the code proves, and picking 302 would be a guess.
+     * The OAS range key a redirect documents under: `RedirectResponse` takes any 3xx and the return site
+     * names none of them, so the range is what the code proves and 302 would be a guess.
      */
     private const REDIRECT_STATUS = '3XX';
 
@@ -65,10 +61,9 @@ final class InferredResponsesExtension implements OperationExtension
     ];
 
     /**
-     * RFC reason phrases for the statuses this extension emits; unlisted falls back to `OK`. 422 is
-     * here because a `calculateResponseStatus()` override can re-home a body outside 2xx, and the
-     * `3XX` range key gets the plain word since no RFC names one — a description is read by the API's
-     * consumers, so how to pin the status down belongs in a diagnostic, not in the document.
+     * RFC reason phrases for the statuses this extension emits; unlisted falls back to `OK`. 422 is here
+     * because a `calculateResponseStatus()` override can re-home a body outside 2xx, and the `3XX` range
+     * key gets a plain word since no RFC names one.
      *
      * @var array<int|string, string>
      */
@@ -145,8 +140,7 @@ final class InferredResponsesExtension implements OperationExtension
 
     /**
      * The return site redirects but doesn't say to what code, so the response lands on the `3XX` range.
-     * That's the honest document; the way to make it exact is advice for the API's AUTHOR, which is why
-     * it's a diagnostic rather than a sentence in a description the API's consumers read.
+     * Pinning it is advice for the API's author, hence a diagnostic rather than a description consumers read.
      */
     private function reportUnpinnedRedirect(RouteContext $context): void
     {
@@ -163,9 +157,8 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * One diagnostic per framework response class the analyser handed back bare. Degrading here is
-     * unavoidable — nothing in the app names the body — but degrading QUIETLY isn't: without this the
-     * only signal is a response that documents no body, which reads like a deliberate empty one.
+     * One diagnostic per framework response class the analyser handed back bare. The degradation is
+     * unavoidable, but silence isn't — a body-less response otherwise reads as a deliberate empty one.
      *
      * @param  list<string>  $fqcns
      */
@@ -289,14 +282,10 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * A framework response object the analyser handed back with no payload generic. It is transport,
-     * not a body, so only what the class itself proves gets documented — never its own members.
-     *
-     * A redirect proves a 3xx with a `Location` header and no body. A bare `JsonResponse` proves a
-     * JSON body of a shape this build could not recover, so it converts through the mapper chain to
-     * an open `{}` under `application/json` — an unconstrained body is true, whereas no body at all
-     * would be a claim the class contradicts. Every other framework response (a file, a stream, a
-     * plain string) proves neither media type nor shape, so only the status is documented.
+     * A framework response object handed back with no payload generic: transport, not a body, so only what
+     * the class itself proves is documented. A redirect proves a 3xx plus `Location` and no body; a bare
+     * `JsonResponse` proves a JSON body of an unrecovered shape, which converts to an open `{}` rather than
+     * the no-body claim the class contradicts; anything else proves neither media type nor shape.
      *
      * @return array{0: string, 1: ?DType, 2: bool, 3: ?array<string, mixed>}
      */
@@ -314,9 +303,8 @@ final class InferredResponsesExtension implements OperationExtension
     }
 
     /**
-     * The FQCN of a framework response class handed back with no payload generic — the case that
-     * costs the document a body, and so the case worth a diagnostic. A redirect is not one of them:
-     * it proves everything a redirect has.
+     * The FQCN of a framework response handed back with no payload generic — the case that costs the
+     * document a body, so the one worth a diagnostic. A redirect isn't one: it proves all a redirect has.
      */
     private function unrecoveredResponse(DType $type): ?string
     {
@@ -375,9 +363,8 @@ final class InferredResponsesExtension implements OperationExtension
             ? Contribution::forProducer($producer, $source, $result->confidence)
             : Contribution::inference($source, $result->confidence);
 
-        // The media type is registered even when the payload converted to an open `{}` — inference
-        // decided this response HAS a body, and "a JSON body of an unrecovered shape" is truer than
-        // the "no body at all" an absent content entry reads as.
+        // Registered even when the payload converted to an open `{}` — an absent content entry would read
+        // as "no body at all", which is the one thing inference has ruled out.
         $mediaType = $this->mediaType($context, $payloads);
         $content = $response->content($mediaType);
         foreach ($result->schema as $keyword => $value) {

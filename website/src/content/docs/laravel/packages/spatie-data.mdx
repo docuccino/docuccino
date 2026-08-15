@@ -204,8 +204,9 @@ therefore non-required.
 
 ### Element types from the docblock
 
-PHP can't type an array's elements, so Docuccino reads the tag that can: a promoted property's `@param`
-on the constructor, a plain property's own `@var`.
+PHP can't type an array's elements, so Docuccino reads the tag that can. A plain property is typed by
+its own `@var`; a promoted constructor property by either the constructor's `@param` or its own `@var`,
+whichever you write — the `@param` wins where both are present.
 
 <Tabs>
 	<TabItem label="Your code">
@@ -233,9 +234,14 @@ on the constructor, a plain property's own `@var`.
 	</TabItem>
 </Tabs>
 
-The tag is consulted only where the declaration is vague — a bare `array`, a `mixed`, nothing at all —
-and only if the tag itself is precise, so a native `string` is never second-guessed and a `@var array`
-never displaces a real declaration. Short class names resolve through that file's `use` statements. The
+The tag *replaces* the declaration only where that declaration is vague — a bare `array`, a `mixed`,
+nothing at all — and only if the tag itself is precise, so a native `string` is never second-guessed and
+a `@var array` never displaces a real declaration. Where the declaration is specific but generic-less,
+the tag may add its type arguments and nothing else: `DataCollection $lines` with
+`@param DataCollection<int, LineItemData> $lines` recovers the element type, while the class itself and
+its nullability stay exactly as declared. Short class names resolve through that file's `use`
+statements, and the `@phpstan-`/`@psalm-` prefixed forms of each tag are read too, winning over the
+plain one where both are present. The
 same types feed the [request rules](#request-bodies-from-data-classes), so `lines.*` validates as
 `LineItemData` too.
 
@@ -423,7 +429,7 @@ JSON your app actually produces and accepts:
 | `#[HiddenFromRequest]` (Docuccino) | Drops the property from the **request** body only; the response schema is untouched. |
 | `#[Computed]` / `#[WithoutValidation]` | Excluded from the request body — a computed/server-derived value is never a sendable field. |
 | `#[FromRouteParameter]` | Excluded from the request body — populated from the route binding, not the payload. |
-| `#[Prohibited]` (spatie validation) | Documented as never sendable. |
+| `#[Prohibited]` (spatie validation) | Excluded from the request body — documenting a field the API refuses would invite exactly that. |
 | `Optional` / `Lazy` | Makes the property non-required. |
 | A constructor default | Makes the property non-required, and documents the value as `default`. |
 | `#[MapName]` / `#[MapInputName]` / `#[MapOutputName]` | Renames the property key to the mapped name, per direction. |

@@ -14,10 +14,9 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 final class DocBlockReader
 {
     /**
-     * Tag precedence, most authoritative first, and the same order for every family below so a docblock
-     * always reads the same way. An analyser-prefixed tag wins because it exists precisely to state what
-     * the generic one couldn't; `@phpstan-*` wins over `@psalm-*` because PHPStan is the engine behind
-     * this project. Within a family the first tag that yields a type wins, as it always has.
+     * Tag precedence, most authoritative first, and the same order for every family below — an
+     * analyser-prefixed tag exists to state what the generic one couldn't, and `@phpstan-` wins over
+     * `@psalm-` because PHPStan is the engine behind this project.
      */
     private const VAR_TAGS = ['@phpstan-var', '@psalm-var', '@var'];
 
@@ -55,9 +54,8 @@ final class DocBlockReader
 
     /**
      * The `@property`/`@property-read` tags a class declares (the ide-helper model-column convention), as an
-     * ordered `name => {type, description}` map. Read forms count too — a serialized attribute is readable —
-     * and a duplicate name keeps its first declaration, in {@see self::PROPERTY_TAGS} order. Write-only
-     * forms are left out: they aren't readable, so they don't document a response.
+     * ordered `name => {type, description}` map. Write-only forms are left out — not readable, so they don't
+     * document a response — and a duplicate name keeps its first declaration.
      *
      * @return array<string, array{type: string, description: ?string}>
      */
@@ -90,8 +88,7 @@ final class DocBlockReader
     /**
      * The `@param` tags a docblock declares, as an ordered `name => {type, description}` map. A promoted
      * constructor property writes its precise type here rather than in a `@var`, so this is where a `list<T>`
-     * behind a native `array` is found. A duplicate name keeps its first declaration, in
-     * {@see self::PARAM_TAGS} order.
+     * behind a native `array` is found; a duplicate name keeps its first declaration.
      *
      * @return array<string, array{type: string, description: ?string}>
      */

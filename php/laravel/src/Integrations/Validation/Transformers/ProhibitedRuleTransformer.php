@@ -11,15 +11,9 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 
 /**
- * The prohibition family, split by whether the field may EVER be sent.
- *
- * A bare `prohibited` never may, so the field is dropped from the rule set before the chain runs
- * ({@see RuleSetNormalizer}) — documenting it would invite exactly the value the API rejects. Reaching a
- * chain that wasn't normalised, it stays a no-op rather than inventing a keyword.
- *
- * `prohibited_if`/`prohibited_unless` reject the field only under a runtime condition, and `prohibits`
- * constrains OTHER fields entirely. Those are all legitimately sendable, so they stay documented and
- * optional, with the condition as a description note.
+ * The prohibition family, split by whether the field may EVER be sent. A bare `prohibited` never may, and
+ * {@see RuleSetNormalizer} has already dropped the field, so it stays a no-op here; the conditional forms
+ * and `prohibits` describe a sendable field, so they add a description note.
  */
 final class ProhibitedRuleTransformer implements RuleTransformer
 {

@@ -3,10 +3,8 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
-use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
-use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ClassMetadata;
@@ -14,12 +12,8 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
-use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
-use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
-use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
-use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\MfaChallengeData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\SaveAnswersData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\SnapshotData;
@@ -31,9 +25,8 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\UploadPolicyData;
  * rule here comes from the fixture app through the real engine; only the class the mapper reflects is a
  * loadable in-process twin, since the mapper's guards reflect the FQCN they are handed.
  *
- * Nothing here is pinned as DEGRADED any more. Should a shape below turn out to be wrong, pin it as
- * DEGRADED with the gap named rather than quietly correcting the expectation — a gap discovered in a
- * published document is the failure this file exists to prevent.
+ * Should a shape below turn out to be wrong, pin it as DEGRADED with the gap named rather than quietly
+ * correcting the expectation — a gap discovered in a published document is what this file prevents.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -54,7 +47,7 @@ function realMetadataAs(string $fixtureFqcn, string $twinFqcn): ClassMetadata
  *
  * @return array{0: array<string, mixed>, 1: array<string, mixed>}
  */
-function degradedDataComponent(string $fixtureFqcn, string $twinFqcn, string ...$nested): array
+function realDataComponent(string $fixtureFqcn, string $twinFqcn, string ...$nested): array
 {
     $classes = [$twinFqcn => realMetadataAs($fixtureFqcn, $twinFqcn)];
     foreach ($nested as $nestedFqcn) {
@@ -72,18 +65,18 @@ function degradedDataComponent(string $fixtureFqcn, string $twinFqcn, string ...
 }
 
 /**
- * A rule set through the shared validation chain, as a JSON Schema object — the same normalise → order →
- * convert sequence {@see DataRequestExtension} runs.
+ * One Data class's request schema, over the real engine's metadata.
  *
  * @return array<string, mixed>
  */
-function degradedRequestSchema(string $twinFqcn, ClassMetadata $metadata, ?RuleSet $override = null): array
+function realRequestSchema(string $twinFqcn, ClassMetadata $metadata, ?RuleSet $override = null): array
 {
-    $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
-    $ruleSet = (new DataValidationRules)->build($twinFqcn, $metadata, new NullTypeEngine, $override, $context);
-    $ordered = (new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet));
+    $context = schemaConverter();
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context)->schema;
+    return validationSchema(
+        (new DataValidationRules)->build($twinFqcn, $metadata, new NullTypeEngine, $override, $context),
+        $context,
+    );
 }
 
 /** A traced `rules()` override from the fixture app, as the RuleSet the extension would pass on. */
@@ -103,7 +96,7 @@ function tracedOverride(string $relPath, string $fixtureFqcn): RuleSet
 it('emits a constructor-@param map as an object with additionalProperties', function (): void {
     // `context` is the one array member of the fixture app's SnapshotData whose generic is written in the
     // constructor `@param` block rather than in its own `@var`; both forms have to land the same way.
-    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
+    [, $component] = realDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties']['context'])->toBe([
         'type' => 'object',
@@ -113,9 +106,8 @@ it('emits a constructor-@param map as an object with additionalProperties', func
 })->group('fixture');
 
 it('emits the full shape for every array member typed in its own @var', function (string $property, array $expected): void {
-    // The type and the prose now come off the SAME docComment, so the member that used to document as a
-    // description with nothing beside it carries its shape.
-    [, $component] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
+    // Each of these carries its shape from its own `@var`, alongside the prose in the same docblock.
+    [, $component] = realDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties'][$property])->toBe($expected);
 })->with([
@@ -155,8 +147,13 @@ it('hoists the item class a recovered list names into components', function (): 
     // The knock-on that makes reading the tag worth it: `forms` is a `list<SnapshotFormData>`, so its type
     // is the only reference to that Data class in the whole document. It hoists with its own members,
     // enum column included.
-    [$schemas] = degradedDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
+    [$schemas] = realDataComponent('App\\Data\\SnapshotData', SnapshotData::class, 'App\\Data\\SnapshotFormData');
 
+    // The `enum` below is CASE NAMES, which is a harness artifact: this converter has no EnumSchema and
+    // `App\Enums\ListingStatus` isn't autoloadable in-process, so neither route to reflection is open and
+    // the DType's case names show through. The product emits the backing values (`open`/`closed`/`draft`)
+    // plus x-enumDescriptions — pinned on the real engine in QueryBuilderRealEngineTest. What this
+    // assertion is for is the HOIST: that the item class becomes a component of its own at all.
     expect(array_keys($schemas))->toBe(['SnapshotFormData', 'SnapshotData'])
         ->and($schemas['SnapshotFormData']['properties']['status'])->toBe([
             'type' => 'string',
@@ -168,7 +165,7 @@ it('hoists the item class a recovered list names into components', function (): 
 it('emits a referenced item for a DataCollection whose generic only the docblock states', function (): void {
     // A bare `DataCollection` is a precise reflected type that still says nothing about its elements, so
     // the constructor `@param` is read for its arguments alone.
-    [$schemas, $component] = degradedDataComponent('App\\Data\\MfaChallengeData', MfaChallengeData::class, 'App\\Data\\SnapshotFormData');
+    [$schemas, $component] = realDataComponent('App\\Data\\MfaChallengeData', MfaChallengeData::class, 'App\\Data\\SnapshotFormData');
 
     expect($component['properties']['mfa_factors'])->toBe([
         'type' => 'array',
@@ -183,7 +180,7 @@ it('carries a recovered map and list through the rule vocabulary intact', functi
     // array shape — so each recovered container states its own structure instead: the map as a value
     // schema, the list as the `touched_fields.*` item field Laravel writes by hand.
     $metadata = realMetadataAs('App\\Data\\SaveAnswersData', SaveAnswersData::class);
-    $schema = degradedRequestSchema(SaveAnswersData::class, $metadata);
+    $schema = realRequestSchema(SaveAnswersData::class, $metadata);
 
     // `array<string, mixed>|null` — an OBJECT with open values, not an array a JSON object fails against.
     expect($schema['properties']['answers'])->toBe(['type' => ['object', 'null'], 'additionalProperties' => []])
@@ -202,15 +199,15 @@ it('leaves property inference standing when a rules() override cannot be folded'
     $override = tracedOverride('app/Data/UploadPolicyData.php', 'App\\Data\\UploadPolicyData');
 
     expect($override->fields)->toBe([])
-        ->and(degradedRequestSchema(UploadPolicyData::class, $metadata)['properties']['collection'])
+        ->and(realRequestSchema(UploadPolicyData::class, $metadata)['properties']['collection'])
         ->toBe(['type' => 'string'])
-        ->and(degradedRequestSchema(UploadPolicyData::class, $metadata, $override)['properties']['collection'])
+        ->and(realRequestSchema(UploadPolicyData::class, $metadata, $override)['properties']['collection'])
         ->toBe(['type' => 'string']);
 })->group('fixture');
 
 it('reports the unfoldable override as unrecoverable rather than dropping it silently', function (): void {
-    // The other half: `collection` is no longer among the traced fields, so the shared rules analysis
-    // sees it as unrecoverable and diagnoses it. What was lost is the allow-list, not the field.
+    // The other half: `collection` is absent from the traced fields, so the shared rules analysis sees it
+    // as unrecoverable and diagnoses it. What was lost is the allow-list, not the field.
     $trace = FixtureRunner::traceRules('app/Data/UploadPolicyData.php', 'App\\Data\\UploadPolicyData', 'rules');
 
     // …which is what RulesFromClass turns into the diagnostic (RuleUnrecoverableSuppressionTest drives
@@ -225,7 +222,7 @@ it('omits a request property for a field the API prohibits outright', function (
     // would invite exactly what the API refuses.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
-    $schema = degradedRequestSchema(UpdateNodeData::class, $metadata, $override);
+    $schema = realRequestSchema(UpdateNodeData::class, $metadata, $override);
 
     expect(array_keys($schema['properties']))->toBe(['name', 'metadata', 'position'])
         ->and($schema)->not->toHaveKey('required');
@@ -237,7 +234,7 @@ it('documents a positional tuple as an array, never as an object with numeric pr
     // means an object) and emit `properties` as a JSON ARRAY — not a shape any JSON Schema has. A vague
     // `{"type": "array"}` is the honest answer for a tuple the rule vocabulary cannot describe.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
-    $schema = degradedRequestSchema(UpdateNodeData::class, $metadata);
+    $schema = realRequestSchema(UpdateNodeData::class, $metadata);
 
     expect($schema['properties']['position'])->toBe(['type' => 'array']);
 })->group('fixture');
@@ -248,7 +245,7 @@ it('resolves a dotted rule key to an object rather than an array with properties
     // wins and the `array` rule is dropped: a dotted key means the field is an object.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
-    $schema = degradedRequestSchema(UpdateNodeData::class, $metadata, $override);
+    $schema = realRequestSchema(UpdateNodeData::class, $metadata, $override);
 
     expect($schema['properties']['metadata'])->toBe([
         'type' => 'object',
@@ -271,6 +268,6 @@ it('documents the recovered metadata map when no rules() override replaces it', 
     // an object with open values — the shape the override then narrows.
     $metadata = realMetadataAs('App\\Data\\UpdateNodeData', UpdateNodeData::class);
 
-    expect(degradedRequestSchema(UpdateNodeData::class, $metadata)['properties']['metadata'])
+    expect(realRequestSchema(UpdateNodeData::class, $metadata)['properties']['metadata'])
         ->toBe(['type' => ['object', 'null'], 'additionalProperties' => []]);
 })->group('fixture');

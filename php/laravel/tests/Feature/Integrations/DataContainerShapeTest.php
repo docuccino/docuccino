@@ -6,12 +6,8 @@ use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
-use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
-use Docuccino\Core\Extensions\Schema\ComponentRegistry;
-use Docuccino\Core\Extensions\Schema\SchemaConverter;
-use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
@@ -29,8 +25,6 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
-use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
-use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeData;
@@ -42,7 +36,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeData;
  * no rule for at all, carries its value schema on an `additional_properties` rule.
  *
  * Mechanics only: the types are fed in as metadata. Their recovery from real source is proven against
- * the real engine in SpatieDataDegradedShapeTest.
+ * the real engine in SpatieDataRealShapeTest.
  */
 
 /**
@@ -54,7 +48,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeData;
 function containerProperty(string $name, DType $type, bool $withConverter = true): array
 {
     $metadata = new ClassMetadata(ContainerShapeData::class, [new PropertyMetadata($name, $type)]);
-    $context = new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+    $context = schemaConverter();
 
     $ruleSet = (new DataValidationRules)->build(
         ContainerShapeData::class,
@@ -63,10 +57,8 @@ function containerProperty(string $name, DType $type, bool $withConverter = true
         null,
         $withConverter ? $context : null,
     );
-    $ordered = (new RuleOrdering)->order((new RuleSetNormalizer)->normalize($ruleSet));
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
-        ->convert($ordered, $context)->schema['properties'][$name];
+    return validationSchema($ruleSet, $context)['properties'][$name];
 }
 
 it('documents every recovered container shape', function (string $property, DType $type, array $expected): void {
