@@ -305,7 +305,7 @@ warning, exactly as it does for an unpinned `app.url`.
 <Aside type="caution" title="One path and method is one operation">
 OpenAPI addresses an operation by path and method — there is nowhere to put a second `GET /api/invoices`
 for a different host. If two of your routes collide that way, Docuccino documents the first host
-alphabetically and reports the other as a `paths.operation-collision` error, naming both. The fix is to
+alphabetically and reports the other as a `route.operation-collision` error, naming both. The fix is to
 give each host a [document of its own](/laravel/reference/configuration/#documents) and filter its routes
 in with `routes.closure`.
 </Aside>
