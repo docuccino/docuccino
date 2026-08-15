@@ -11,9 +11,13 @@ use Docuccino\Core\Support\Json;
 
 /**
  * Accumulates the reusable schema/response components hoisted during a build: structurally-equal
- * registrations dedupe, genuine name collisions get a deterministic numeric suffix plus a warning.
- * The `schemaId` hint (an FQCN) is remembered per component so the assembler can pin its diff
- * identity via {@see IdentityGenerator::namedSchemaId()}.
+ * registrations dedupe and a genuine name collision gets a deterministic suffix. The `schemaId` hint
+ * (an FQCN) is remembered per component so the assembler can pin its diff identity via
+ * {@see IdentityGenerator::namedSchemaId()}.
+ *
+ * The name a schema registers under is PROVISIONAL: it goes to whoever asked first, which is route
+ * order. {@see schemaRenames()} is where a class-identified schema learns the name it is actually
+ * published under — see {@see ComponentNames} for why first-come cannot be the answer.
  *
  * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
  */
@@ -125,15 +129,27 @@ final class ComponentRegistry
         }
 
         if (! isset($this->schemas[$suffixed])) {
-            $claimants = $this->claimants($name, $schemaId);
             $this->schemas[$suffixed] = $schema;
             if ($schemaId !== null) {
                 $this->schemaIds[$suffixed] = $schemaId;
             }
-            $this->diagnostics[] = self::collision($name, $suffixed, $claimants);
         }
 
         return $suffixed;
+    }
+
+    /**
+     * Replace a registered schema's body, but only where the name still holds the identity the caller
+     * expects. The pipeline uses it to re-file a warm cache hit's bodies once it knows which of the
+     * names it recorded moved; nothing else should need it.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    public function replaceSchema(string $name, array $schema, ?string $schemaId): void
+    {
+        if (isset($this->schemas[$name]) && ($this->schemaIds[$name] ?? null) === $schemaId) {
+            $this->schemas[$name] = $schema;
+        }
     }
 
     /**
@@ -163,36 +179,55 @@ final class ComponentRegistry
             $final = $name.'_'.$n;
         }
 
-        // A reserved schema is always its own component — something references it — so a suffix here
-        // means a genuine collision. Warn like the register path does.
-        if ($final !== $name) {
-            $this->diagnostics[] = self::collision($name, $final, $this->claimants($name, $schemaId));
-        }
-
         $this->reservedIds[$final] = $schemaId;
 
         return $final;
     }
 
     /**
-     * The holder of `$name` and the schema now contesting it, named for the collision message — an
-     * inline shape has no FQCN, so it is named as such.
+     * The name each class-identified schema is published under, where that differs from the
+     * provisional one registration handed it: provisional name → published name. Derived from the
+     * contesting FQCNs alone, so it survives a build whose routes were discovered in another order —
+     * and, being computed from the finished registry, it is the same on a warm cache hit, where
+     * nothing re-registers.
+     *
+     * @return array<string, string>
      */
-    private function claimants(string $name, ?string $incoming): string
+    public function schemaRenames(): array
     {
-        $held = $this->schemaIds[$name] ?? $this->reservedIds[$name] ?? null;
-
-        return ($held ?? 'an unidentified schema').' and '.($incoming ?? 'an unidentified schema');
+        return ComponentNames::resolve($this->schemaIds, array_map(strval(...), array_keys($this->schemas)));
     }
 
-    private static function collision(string $name, string $suffixed, string $claimants): Diagnostic
+    /**
+     * One diagnostic per name two or more schemas contested, naming every claimant and the name it was
+     * published under. A namespace-derived name is only ever the automatic answer, so the warning's job
+     * is to offer the better one: `#[SchemaName]`, where the author says what each shape actually is.
+     *
+     * @return list<Diagnostic>
+     */
+    public function nameCollisions(): array
     {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'components.name-collision',
-            message: sprintf('Component name "%s" is claimed by distinct schemas (%s); the later one was hoisted as "%s".', $name, $claimants, $suffixed),
-            help: 'Disambiguate with #[SchemaName] on one of the source classes.',
-        );
+        $contests = ComponentNames::contests($this->schemaIds, array_map(strval(...), array_keys($this->schemas)));
+        ksort($contests);
+
+        $out = [];
+        foreach ($contests as $contested => $claimants) {
+            ksort($claimants);
+
+            $named = [];
+            foreach ($claimants as $published => $identity) {
+                $named[] = $identity.' as "'.$published.'"';
+            }
+
+            $out[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'components.name-collision',
+                message: sprintf('Component name "%s" is claimed by distinct schemas; each was published under its own name (%s).', $contested, implode(', ', $named)),
+                help: 'Those names are stable but automatic — name the shapes yourself with #[SchemaName] on the source classes.',
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -386,10 +421,7 @@ final class ComponentRegistry
 
     private static function sanitize(string $name): string
     {
-        $clean = preg_replace('/[^A-Za-z0-9_.-]/', '', $name);
-        $clean = is_string($clean) ? $clean : '';
-
-        return $clean === '' ? 'Schema' : $clean;
+        return ComponentNames::sanitize($name);
     }
 
     /**

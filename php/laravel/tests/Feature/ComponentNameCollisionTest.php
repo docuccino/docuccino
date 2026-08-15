@@ -20,9 +20,9 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 /**
  * A component name is a class's SHORT name, so two classes sharing one contest the same
  * `#/components/schemas/…` slot. These pin what the build does about it: both shapes survive under
- * deterministic names, the warning names the two FQCNs so the author can act on it, `#[SchemaName]`
- * settles it, and an author-chosen name is still just a claim — two classes choosing the same one
- * collide like any other pair.
+ * names derived from their namespaces, the warning names the two FQCNs so the author can act on it,
+ * `#[SchemaName]` settles it, and an author-chosen name is still just a claim — two classes choosing
+ * the same one contest it like any other pair.
  *
  * The classes are real and the `#[SchemaName]` reads are real reflection; only the engine that would
  * report their properties is stubbed.
@@ -83,17 +83,17 @@ function collisionRefs(GenerationResult $result, string $path): array
     return array_map(static fn (array $property): string => (string) ($property['$ref'] ?? ''), $properties);
 }
 
-it('keeps both shapes, under deterministic names, when two classes share a short name', function (): void {
+it('keeps both shapes, under names naming their namespaces, when two classes share a short name', function (): void {
     // The outcome that matters: nothing is overwritten and nothing is merged. Two classes, two
     // components, and each reference site points at its OWN class's shape.
     $result = collisionDocument();
     $schemas = $result->document->toArray()['components']['schemas'] ?? [];
 
-    expect($schemas)->toHaveKeys(['InvoiceData', 'InvoiceData_2'])
-        ->and($schemas['InvoiceData']['properties']['member']['type'] ?? null)->toBe('integer')
-        ->and($schemas['InvoiceData_2']['properties']['member']['type'] ?? null)->toBe('string')
-        ->and(collisionRefs($result, '/api/zz-billing')['invoice'] ?? null)->toBe('#/components/schemas/InvoiceData')
-        ->and(collisionRefs($result, '/api/zz-support')['invoice'] ?? null)->toBe('#/components/schemas/InvoiceData_2');
+    expect($schemas)->toHaveKeys(['BillingInvoiceData', 'SupportInvoiceData'])
+        ->and($schemas['BillingInvoiceData']['properties']['member']['type'] ?? null)->toBe('integer')
+        ->and($schemas['SupportInvoiceData']['properties']['member']['type'] ?? null)->toBe('string')
+        ->and(collisionRefs($result, '/api/zz-billing')['invoice'] ?? null)->toBe('#/components/schemas/BillingInvoiceData')
+        ->and(collisionRefs($result, '/api/zz-support')['invoice'] ?? null)->toBe('#/components/schemas/SupportInvoiceData');
 });
 
 it('names both classes and the contested name in the collision warning', function (): void {
@@ -108,15 +108,14 @@ it('names both classes and the contested name in the collision warning', functio
         ->and($invoice[0]->severity->value)->toBe('warning')
         ->and($invoice[0]->message)
         ->toContain('"InvoiceData"')
-        ->toContain(COLLISION_BILLING_NS.'InvoiceData')
-        ->toContain(COLLISION_SUPPORT_NS.'InvoiceData')
-        ->toContain('"InvoiceData_2"')
+        ->toContain(COLLISION_BILLING_NS.'InvoiceData as "BillingInvoiceData"')
+        ->toContain(COLLISION_SUPPORT_NS.'InvoiceData as "SupportInvoiceData"')
         ->and($invoice[0]->help)->toContain('#[SchemaName]');
 });
 
 it('settles a collision when #[SchemaName] renames one of the classes', function (): void {
     // The escape hatch, proven through real attribute reflection: the attributed class takes its
-    // chosen name and the twin keeps the plain one, so neither is suffixed and neither warns.
+    // chosen name and the twin keeps the plain one, so neither is qualified and neither warns.
     $result = collisionDocument();
     $schemas = $result->document->toArray()['components']['schemas'] ?? [];
     $warned = array_filter(
@@ -126,6 +125,7 @@ it('settles a collision when #[SchemaName] renames one of the classes', function
 
     expect($schemas)->toHaveKeys(['BillingLedger', 'LedgerData'])
         ->and($schemas)->not->toHaveKey('LedgerData_2')
+        ->and($schemas)->not->toHaveKey('SupportLedgerData')
         ->and($warned)->toBeEmpty()
         ->and(collisionRefs($result, '/api/zz-billing')['ledger'] ?? null)->toBe('#/components/schemas/BillingLedger');
 });
@@ -139,21 +139,22 @@ it('still collides when two classes claim the SAME #[SchemaName]', function (): 
         static fn ($d): bool => str_contains($d->message, '"Statement"'),
     ));
 
-    expect($schemas)->toHaveKeys(['Statement', 'Statement_2'])
+    expect($schemas)->toHaveKeys(['BillingStatement', 'SupportStatement'])
+        ->and($schemas)->not->toHaveKey('Statement')
         ->and($warning)->toHaveCount(1)
         ->and($warning[0]->message)
-        ->toContain(COLLISION_BILLING_NS.'StatementData')
-        ->toContain(COLLISION_SUPPORT_NS.'StatementData');
+        ->toContain(COLLISION_BILLING_NS.'StatementData as "BillingStatement"')
+        ->toContain(COLLISION_SUPPORT_NS.'StatementData as "SupportStatement"');
 });
 
 it('names the components the same way however the routes were registered', function (): void {
-    // Routes are processed in sorted "METHOD uri" order, so the suffix cannot depend on which route
-    // the router happened to hold first. Two full exports, byte for byte.
+    // The names come off the FQCNs, so neither route order nor the router's own ordering can reach
+    // them. Two full exports, byte for byte.
     $forwards = (new UirEmitter)->emit(collisionDocument()->document);
     $backwards = (new UirEmitter)->emit(collisionDocument(reverseRegistration: true)->document);
 
     expect($backwards)->toBe($forwards)
-        ->and($forwards)->toContain('InvoiceData_2');
+        ->and($forwards)->toContain('SupportInvoiceData');
 });
 
 it('still reports the collision on a warm fragment-cache build', function (): void {

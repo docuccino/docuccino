@@ -154,8 +154,9 @@ it('points a self-reference at the suffixed name when the short name collides', 
         ->and($registry->schemas())->toHaveKeys(['Node', 'Node_2'])
         ->and($registry->schemas()['Node_2']['properties']['parent'])->toBe(['$ref' => '#/components/schemas/Node_2'])
         ->and($registry->schemaIds()['Node_2'])->toBe('App\\B\\Node')
-        ->and($registry->diagnostics())->toHaveCount(1)
-        ->and($registry->diagnostics()[0]->code)->toBe('components.name-collision');
+        // The suffix is provisional; the name each class is PUBLISHED under comes off the FQCNs.
+        ->and($registry->schemaRenames())->toEqual(['Node' => 'ANode', 'Node_2' => 'BNode'])
+        ->and($registry->nameCollisions()[0]->code)->toBe('components.name-collision');
 });
 
 it('honours #[SchemaName] and #[SchemaId] on a plain class the fallback mapper handles', function (): void {
