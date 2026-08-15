@@ -193,6 +193,34 @@ own (seeded from the action's parameter type):
   and builds `new JsonResponse($this->transform(…WrapExecutionType::Disabled), $status, [headers])`
   itself. The engine must decline to model spatie's own `toResponse()` here and let the constructor
   fold win, or the app's real status and media type are thrown away.
+- `app/Data/SnapshotData.php` + `app/Data/SnapshotFormData.php` — a response Data class typed the way a
+  real one is: every array member's generic lives in the PROMOTED PARAMETER's own `@var`, beside the prose
+  describing it, except `context`, whose generic is written once in the constructor's `@param` block. Only
+  `context` survives today; the rest pin the degraded output (see
+  `php/inference-phpstan/tests/Integration/PromotedPropertyDocblockTest.php`). The members cover a map, a
+  nested map, a `list<SnapshotFormData>`, an `array<int, string>` and a `@phpstan-var` tag.
+  `SnapshotFormData` carries a NATIVE backed-enum property, the working half of the enum contrast against
+  `Listing`'s docblock-only `@property ListingStatus $status`.
+- `app/Data/MfaChallengeData.php` — a `DataCollection` with no `#[DataCollectionOf]` whose item class is
+  named only by the constructor `@param` generic: a bare `DataCollection` reflects as a precise class, so
+  that generic is never consulted.
+- `app/Data/SaveAnswersData.php` — a request DTO whose map/list generics ARE recovered (they are in the
+  `@param` block) and are then collapsed to a bare `array` by the validation-rule vocabulary.
+- `app/Data/UpdateNodeData.php` — a static `rules()` naming `label`, a field the class has no property
+  for, only to `prohibit` it, plus a dotted `metadata.retention.mode` key constraining one member of the
+  metadata blob, plus a POSITIONAL `array{float, float} $position` tuple: the docblock grammar has only
+  the keys to tell it that is a JSON array, and a shape it read as an object would document `"0"`/`"1"`
+  property names.
+- `app/Data/UploadPolicyData.php` + `app/Support/MediaCollections.php` — a static `rules()` allow-listing a
+  natively typed `#[StringType]` property with `Rule::in(MediaCollections::validNames())`: the values are
+  not statically knowable, and the override still replaces what the property type inferred.
+- `app/Http/Controllers/SsoRedirectController.php` + `app/Services/SsoGateway.php` — a `RedirectResponse`
+  action and a `JsonResponse` action whose payloads are named nowhere, the two shapes the response side
+  degrades on.
+- `app/Http/Controllers/FileDeliveryController.php` — the rest of the framework response family, declared
+  the way a real controller declares it: `BinaryFileResponse` from `response()->download()`,
+  `StreamedResponse` from `response()->stream()`, and the plain `Illuminate\Http\Response` from
+  `response()`. Each is proof that the class the response guard names is one the engine really recovers.
 - `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
   (magic attributes) and documenting its columns the ide-helper way, via class-level
   `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,

@@ -205,6 +205,45 @@ pipeline has finished, and writes what you tell it to.
 A bare `void` or `never` return (with no `JsonResponse` wrapper) documents nothing on its own —
 annotate it with `#[Response]` if it should appear.
 
+## Framework response objects
+
+A response object — `JsonResponse`, `RedirectResponse`, `Illuminate\Http\Response`, Symfony's
+`BinaryFileResponse` and `StreamedResponse` — is transport, not a body. Its public members are PHP
+internals (`original`, `exception`, `headers`) that no client ever receives, so Docuccino never
+reflects one into `components.schemas`. That holds wherever the type turns up: a bare return, one arm
+of a `JsonResponse|RedirectResponse` union, a property of a class being expanded. Your own subclass
+(`class ApiResponse extends JsonResponse`) is covered too.
+
+What gets documented instead is only what the class itself proves:
+
+| Return type | Documented as |
+| --- | --- |
+| `RedirectResponse` | `3XX` with a `Location` header and no body |
+| `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
+| `Response`, `BinaryFileResponse`, `StreamedResponse` | the status alone — neither media type nor shape is stated anywhere |
+
+The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
+302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
+site says which. Docuccino says so with an `inferred-response.unpinned-redirect` info diagnostic naming
+the action; pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the endpoint
+always answers with one code.
+
+The other two rows lose the body itself, so they are announced rather than silent: each raises an
+`inferred-response.payload-unrecoverable` info diagnostic naming the action. The usual cause is a
+collaborator whose own return type is bare —
+
+```php
+public function reset(Request $request): JsonResponse
+{
+    return $this->gateway->exchange($request);  // SsoGateway::exchange(): JsonResponse
+}
+```
+
+— so build the payload where the analyser can see it, or name it with
+`#[Response(type: ResetResultData::class)]`. A `JsonResponse` whose payload *is* recoverable is
+documented in full, exactly as [above](#status-codes-and-jsonresponse); the guard only ever refuses
+the wrapper, never a payload.
+
 ## Adding and refining responses
 
 Where the code can't say everything, attributes step in — field by field, so they patch inferred

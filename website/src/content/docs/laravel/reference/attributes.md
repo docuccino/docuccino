@@ -245,9 +245,9 @@ public function __construct(string ...$properties) // stored as list<string> $pr
 ```
 
 Removes properties from an output schema. On a class it drops the properties you name — the form
-Eloquent models and Data classes use, where the properties are reflected rather than declared one by
-one. On a property it drops that property, for a Data class whose properties you can annotate
-directly.
+Eloquent models use, where the properties are reflected rather than declared one by one. On a property
+it drops that property. Both forms work on any class Docuccino hoists, plain PHP DTOs included. If they
+between them hide every property, the class isn't published at all.
 
 ```php
 #[Hidden('password_hash', 'remember_token')] // on the model: merged with $hidden
@@ -521,6 +521,24 @@ Sets a class's component display name — distinct from its diff identity.
 #[SchemaName('User')]
 class UserResource extends JsonResource {}
 ```
+
+A component is named after its class's **short** name, so two classes in different namespaces that
+share one contest the same `#/components/schemas/…` slot. Both shapes are still published, and
+neither keeps the contested name: each takes a name derived from its own namespace, walking up only
+as far as it takes to tell them apart. An `App\DTOs\Schema\Authentication\SSOConnectionData` and an
+`App\DTOs\Data\SSO\SSOConnectionData` publish as `AuthenticationSSOConnectionData` and
+`SSOSSOConnectionData`.
+
+Those names depend only on the two class names, never on the order your routes happen to be
+discovered in — which matters, because a positional `Foo`/`Foo_2` would hand the plain name to
+whichever route sorted first, and adding an unrelated route later could silently swap what `Foo`
+means in every generated client.
+
+The build reports a `components.name-collision` warning naming both FQCNs and the name each was
+published under, because an automatic name is rarely the best one. `#[SchemaName]` on either class is
+how you settle it — on a plain PHP DTO as much as on a resource, model or Data class. Two classes
+choosing the *same* `#[SchemaName]` contest that name in exactly the same way, and are reported the
+same way.
 
 ## Content & examples
 

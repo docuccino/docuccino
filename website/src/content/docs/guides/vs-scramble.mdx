@@ -224,7 +224,7 @@ Most annotations map across cleanly.
 | Exclude a route / controller | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Method or class target. |
 | `@unauthenticated` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
 | `@response {status}` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
-| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level on Data classes; class-level list on models; your model's `$hidden` / `$visible` are read anyway. Hides from **output**. |
+| Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level or a class-level list, on any class Docuccino hoists; your model's `$hidden` / `$visible` are read anyway. Hides from **output**. |
 | A field hidden from a request schema | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a Data-class property from the **request** body only, leaving the response schema alone. |
 | Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
 | Markdown description file | [`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile) | Loads a symbol-anchored Markdown file into `description`. |
@@ -291,8 +291,9 @@ against how you work before you commit:
   alongside the whole string-rule vocabulary; your own rule classes document from a
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the class; and a
   `RuleTransformer` teaches Docuccino any rule you invent. But a closure rule, a `Rule::when()`
-  conditional, or a rule class carrying no attribute has opaque logic, so Docuccino raises a diagnostic
-  naming the field rather than guessing at its shape.
+  conditional, a rule class carrying no attribute, or a `Rule::in()`/`Rule::enum()` whose values only
+  the runtime knows has opaque logic, so Docuccino raises a diagnostic naming the field rather than
+  guessing at its shape.
 
 ## Running them side by side
 

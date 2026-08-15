@@ -249,8 +249,12 @@ Since `array` says nothing about its elements, Docuccino reads the tag that does
 ```
 
 The declaration wins wherever it's specific, so a native `string` is never second-guessed and a vague
-`@var array` never displaces a precise type. Short class names resolve through that file's `use`
-statements, and an accessor's `@return list<string>` types its property the same way.
+`@var array` never displaces a precise type. The one thing a tag may add to a specific declaration is
+its missing generics: `DataCollection $lines` plus `@param DataCollection<int, LineItemData> $lines`
+recovers the element type, and nothing else — a tag can't swap the class or make it nullable. Short
+class names resolve through that file's `use` statements, and an accessor's `@return list<string>`
+types its property the same way. The `@phpstan-`/`@psalm-` prefixed forms of each tag are read too,
+and win over the plain one where both are present.
 
 ## When it can't tell
 

@@ -81,18 +81,18 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-14)
+## Measured coverage (2026-08-15)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.27%** | 93    | fully in-process-measurable                      |
-| `laravel`           | **92.08%** | 91    | fully in-process-measurable                      |
-| `inference-phpstan` | **34.55%** | 34    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **94.49%** | 94    | fully in-process-measurable                      |
+| `laravel`           | **92.38%** | 92    | fully in-process-measurable                      |
+| `inference-phpstan` | **36.32%** | 36    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 84.70%     | —     | informational only; no longer a gate             |
+| Overall             | 86.01%     | —     | informational only; no longer a gate             |
 
 `inference-phpstan`'s floor dropped from 41 to 37 in the same change set that moved the phpdoc type
 grammar into core. Those four classes are fully unit-tested in-process (141/161 statements, 87.6%) and
@@ -129,6 +129,38 @@ only header writes between that and the return — needs php-parser and file pos
 out of the invisible half and put ~25 covered ones back, and the fully-covered `SensitiveConstant` name
 predicate added more: 783/1905 (41.10%) → 824/1929 (42.72%).
 
+`core` then ratcheted 93 → 94. Most of that headroom arrived with the worker-pool/result-cache deletion,
+which moved the result model's serialization contract from an incidental proof to a direct one; the
+type-grammar fix (docblock enums answering `EnumT`, the `array<K, V>` key rule, the analyser-prefixed
+`@var`/`@param`/`@property` tags) then added 15 statements and covered all 15, taking 4512/4786 (94.27%) to
+4527/4801 (94.29%). A dataset over every key identifier the grammar can produce, plus the unresolvable-name
+and unaccepted-tag degradations, is what makes that a real 15 rather than a lucky one.
+
+`inference-phpstan` then ratcheted 34 → 36, and it is the same preferred move: the work landed in the
+package's measurable half. `ClassMetadataFactory` learned to fall back to a promoted property's own `@var`
+and to parameterise a generic-blind class type from a docblock, and both rules are native-reflection plus
+docblock parsing — no `Scope`, so the real-reflection probe drives every branch in process, the three
+refuse-to-refine ones included. 538/1557 (34.55%) became 575/1594 (36.07%) — a net 37 statements, all of
+them covered, with the duplicated `EnumCases` helper (now core's `EnumReflection::names()`) leaving the
+covered half in the same move.
+
+`laravel` then ratcheted 91 → 92. The request side stopped throwing away a recovered container type at the
+validation-rule boundary: a `list<V>` synthesises the `key.*` item field, an `array{…}` shape a
+`key.<member>` field per key, and an `array<string, V>` — which Laravel's vocabulary has no rule for —
+carries its value schema on an `additional_properties` rule. That is exactly the shape the standards ask
+for: a dataset over every container kind and every nesting combination, plus the degradations (an
+unusable element type, a positional shape, the depth stop, and no converter at all), and a second dataset
+over the rule-set normaliser's two cross-field passes. 5312/5769 (92.08%) became 5422/5879 (92.23%).
+
+The list-vs-map key rule then moved out of `inference-phpstan` entirely — the translator and the docblock
+grammar carried byte-identical private copies, and core's `ArrayKey` is now the single implementation both
+call. That took a well-covered 7/8 block out of the engine (575/1594, 36.07% → 568/1586, 35.81%) and
+straight below its floor, which is the shape of a denominator change and NOT a reason to lower one. The
+answer was the usual one: `EngineConfig` and `RuntimeConfig` — pure, parent-process value objects whose
+only callers are subprocess-only, so nothing else in the suite could reach them — had 1/9 between them
+and now have 9/9. 576/1586 (36.32%), genuinely higher than before the move. `core` absorbed the rule at
+its own rate or better (94.29% → 94.49%); no floor changed.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -141,7 +173,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **93**, `laravel` **91**, `inference-phpstan` **42**.
+  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **36**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

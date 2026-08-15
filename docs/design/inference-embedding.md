@@ -292,9 +292,12 @@ DType rather than a transient side-channel because it must survive SERIALIZATION
 later, in the adapter. Same rationale as `uir-and-extensions.md` §8.
 
 Translator (`TypeTranslator::translate(PHPStan\Type\Type, TranslationBudget): DType`):
-ConstantArrayType → ArrayShapeT (optional keys honored, isList from accessory);
+ConstantArrayType → ArrayShapeT (optional keys honored, isList from the accessory OR derived from a
+`0..n` key sequence, which is what makes a docblock tuple an array too);
 Constant scalars → LiteralT; UnionType → flatten + canonical sort; IntersectionType →
-strip accessory types, collapse single survivor; GenericObjectType/ObjectType →
+strip accessory types, collapse single survivor; ArrayType → ListT or MapT on its KEY, since
+`isList()` is only MAYBE for `array<int, V>` — an int-capable key is a JSON array, the rule core's
+`ArrayKey` owns and BOTH paths call (uir-and-extensions.md §8); GenericObjectType/ObjectType →
 ClassT/EnumT via ClassReflection (source location = provenance); TemplateType → its bound,
 else UnknownT; MixedType/unknown/budget-exhausted (depth 12) → UnknownT(reason).
 Translation is EAGER at query time (the result must be serializable); class expansion
@@ -316,11 +319,23 @@ first**, split across the placement boundary:
    source.
    The same factory also refines a **declared** property from a docblock, which is what a spatie Data
    class needs: `array` and `array|Optional` are the most a promoted constructor property can say
-   natively, and the element type lives in the constructor's `@param` tag (`@var` for a plain
-   property). The refinement is one-directional — a docblock is read only where the reflected type is
-   already vague (bare `array`, `mixed`, no type at all) and is taken only when it is itself precise —
-   so `@var array` never displaces a better native type and a native `string` is never second-guessed.
-   Unqualified names in the tag resolve through the declaring file's `ImportContext`.
+   natively. The element type is written either in the constructor's `@param` tag or in the promoted
+   parameter's **own `@var`** — PHP exposes that docblock through `ReflectionProperty::getDocComment()`,
+   and it is the commoner form, because it is where the prose describing the member already sits. Both
+   are read, the `@param` first; a plain property has only its `@var`.
+
+   Refinement is one-directional, in two shapes:
+   - Where the reflected type is **vague** (bare `array`, `mixed`, no type at all) a docblock type
+     REPLACES it, and only when it is itself precise — so `@var array` never displaces a better native
+     type and a native `string` is never second-guessed.
+   - Where the reflected type is **precise but generic-blind** (a bare class: `DataCollection`,
+     `Collection`, …) a docblock may only PARAMETERISE it: the arguments it states for that same class
+     are grafted on and nothing else changes. A tag naming a different class — a subclass included — a
+     different shape, or nothing parseable adds no arguments, and a `|null` in the tag never makes a
+     non-nullable declaration nullable.
+
+   Unqualified names in the tag resolve through the declaring file's `ImportContext`, class-level
+   `@property` tags included — a short name parsed without it can never be recognised as an enum.
 2. **Floor sources** — `$casts` keys (a cast key IS a column, typed by its cast via `CastSchema`),
    `$dates` entries (date-time), and `$fillable`-only names (permissive `{}` at lowered confidence).
    These are Eloquent vocabulary, so they live **in the adapter** (`ModelSchema` unions them over the

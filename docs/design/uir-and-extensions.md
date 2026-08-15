@@ -504,9 +504,21 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
       via the registry's structural dedupe; genuinely different shapes (the input/output asymmetry — e.g.
       a `HiddenFromRequest` field, or validation-shape vs property-shape) yield two components. Because
       the Request phase precedes Responses, the request keeps the base name and the response is
-      deterministically suffixed (`Name_2`) with the existing `components.name-collision` info — proven
+      deterministically suffixed (`Name_2`) with the existing `components.name-collision` warning — proven
       live by the workbench `ArticleData` (`#[SchemaName('Article')]`) fixture, used on both sides with
       divergent shapes.
+    - **Collisions stay Warning, and stay actionable.** Nothing is lost to a collision — both shapes are
+      published, and each reference site keeps its own class's `$ref` — so it is not the Error tier, which
+      is for a document that is wrong or unbuildable (`route.build-failed`, `document.schema-invalid`,
+      `identity.duplicate-operation`). Warning is also the tier CI can already enforce with
+      `--fail-on=warning`, so a team that wants a collision to break the build has the lever without one
+      being forced on a team whose collision lives in a vendor package. What the tier does demand is that
+      the message be actionable: it names BOTH FQCNs and the contested name, because the short name in it
+      identifies neither claimant. Because the escape hatch is an attribute, a collision is settled per
+      class rather than per document — and two classes claiming the same `#[SchemaName]` is still a
+      collision. Registry diagnostics ride the route's `OperationFragment` (`takeDiagnosticsSince()`), so a
+      warm fragment-cache build — which restores components without re-registering them — reports the
+      collision its bytes still carry.
 
 ## 7. Precedence / patch semantics
 
@@ -554,6 +566,43 @@ mechanics, limits and the FiberScope reason for deferring are in the inference d
 `DType` closed set: `ScalarT, LiteralT, ArrayShapeT, ListT/MapT, UnionT, IntersectionT,
 ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
 `NullTypeEngine` in core answers UnknownT for everything (keeps pipeline total).
+
+### The `array<K, V>` key rule (`ListT` vs `MapT`)
+
+PHP renders an array as a JSON **array** only while its keys are the `0..n` int sequence, and as a JSON
+**object** otherwise. `Docuccino\Core\Inference\DType\ArrayKey` owns the one rule both recovery paths
+apply — the docblock grammar (`TypeStringParser`) and the engine's `TypeTranslator` — because both reach
+it with the key already mapped to a `DType`, so a second copy could only ever drift:
+
+- an **int-capable** key (`int`, an int literal, `array-key`, `int|string`) → `ListT`
+- anything else, including a key we can't reason about → `MapT`, which carries the key type
+
+The uncomfortable half is deliberate and worth stating. `array-key` and `int|string` are exactly the keys
+that *may* be strings, so an `array<array-key, V>` may well arrive as a JSON object, and `{"type":
+"array", "items": V}` is then a positive false claim. Three things settle it the way it is settled:
+
+1. **PHPStan cannot distinguish the spellings.** `V[]`, `array<V>`, `array<array-key, V>` and (once the
+   list accessory is absent) `array<int, V>` all reach the translator as the same `Type` with an
+   `int|string` key. One rule must cover all four, so calling the ambiguous key an object would document
+   every `string[]` property in every codebase as an object — a far larger and more certain error than
+   the one it avoids.
+2. **The author has a precise way to say either.** `array<string, V>` yields a `MapT` and documents as an
+   object with `additionalProperties`; `list<V>` yields a `ListT` unambiguously. The rule respects both.
+   The ambiguity only survives where the annotation itself was ambiguous.
+3. **The honest third answer costs more than it buys.** `anyOf: [array of V, object of V]` is true for
+   every case, but it would land on the single most common annotation in PHP and turn a precise
+   document into a union everywhere — including for the overwhelming majority of properties that really
+   are lists.
+
+So this is one place the project accepts a precise claim over a vague one, against its usual bias, and
+the reason is that the vague answer here is not cheap: it is paid on almost every array-typed property in
+the document. A `MapT` whose key type is itself int-capable is the recorded escape hatch if that ever
+needs revisiting — the ambiguity survives in the DType, it is only the schema mapper that resolves it.
+
+A constant shape decides the same question from its keys instead: `ArrayShapeT::$isList` is true when the
+keys are the `0..n` sequence, derived in the constructor as well as taken from PHPStan's list accessory,
+so a docblock tuple (`array{string, int}`) can never be documented as an object with `"0"`/`"1"` property
+names — a shape no JSON document has.
 
 `StatusMarkerT` is the one member that is not a language type: it is a pipeline-resolution SIGNAL
 meaning "this body member echoes the response's own HTTP status", synthesised by the engine's response
