@@ -15,11 +15,14 @@ use Docuccino\Core\Support\Json;
  * (an FQCN) is remembered per component so the assembler can pin its diff identity via
  * {@see IdentityGenerator::namedSchemaId()}.
  *
- * The name a schema registers under is PROVISIONAL: it goes to whoever asked first, which is route
- * order. {@see schemaRenames()} is where a class-identified schema learns the name it is actually
- * published under — see {@see ComponentNames} for why first-come cannot be the answer.
+ * The name a schema registers under is a PROVISIONAL slot: it goes to whoever asked first, which is
+ * route order. What each registration ASKED to be called is kept beside it, because that — with the
+ * identity — is what {@see schemaRenames()} derives the published name from. See {@see ComponentNames}
+ * for why the slot cannot be the answer.
  *
- * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
+ * @phpstan-import-type Claim from ComponentNames
+ *
+ * @phpstan-type Snapshot array{schemas: array<string, array<string, mixed>>, schemaIds: array<string, string>, schemaBases: array<string, string>, reservedIds: array<string, string>, responses: array<string, array<string, mixed>>, securitySchemes: array<string, array<string, mixed>>, diagnostics: list<Diagnostic>}
  */
 final class ComponentRegistry
 {
@@ -32,6 +35,15 @@ final class ComponentRegistry
      * @var array<string, string>
      */
     private array $schemaIds = [];
+
+    /**
+     * The name each registration asked to be called, before any collision suffix: final name → base.
+     * A warm cache hit re-registers off this rather than off the name it was cached under, so a
+     * suffix a since-deleted route once pushed it onto cannot outlive that route.
+     *
+     * @var array<string, string>
+     */
+    private array $schemaBases = [];
 
     /**
      * Names reserved for a schema identity before its body exists, so a self-reference found
@@ -82,6 +94,8 @@ final class ComponentRegistry
      */
     public function registerSchema(string $name, array $schema, ?string $schemaId = null): string
     {
+        $base = self::sanitize($name);
+
         if ($schemaId !== null) {
             // Same identity (same class FQCN) already registered — reuse it, so one class is one
             // component however often it's referenced.
@@ -103,39 +117,45 @@ final class ComponentRegistry
             }
         }
 
-        $name = self::sanitize($name);
+        if (! isset($this->schemas[$base]) && ! isset($this->reservedIds[$base])) {
+            $this->store($base, $base, $schema, $schemaId);
 
-        if (! isset($this->schemas[$name]) && ! isset($this->reservedIds[$name])) {
-            $this->schemas[$name] = $schema;
-            if ($schemaId !== null) {
-                $this->schemaIds[$name] = $schemaId;
-            }
-
-            return $name;
+            return $base;
         }
 
-        if (isset($this->schemas[$name]) && self::structurallyEqual($this->schemas[$name], $schema)) {
-            return $name;
+        if (isset($this->schemas[$base]) && self::structurallyEqual($this->schemas[$base], $schema)) {
+            return $base;
         }
 
-        $suffixed = $name;
+        $suffixed = $base;
         $n = 1;
         while (
             (isset($this->schemas[$suffixed]) && ! self::structurallyEqual($this->schemas[$suffixed], $schema))
             || isset($this->reservedIds[$suffixed])
         ) {
             $n++;
-            $suffixed = $name.'_'.$n;
+            $suffixed = $base.'_'.$n;
         }
 
         if (! isset($this->schemas[$suffixed])) {
-            $this->schemas[$suffixed] = $schema;
-            if ($schemaId !== null) {
-                $this->schemaIds[$suffixed] = $schemaId;
-            }
+            $this->store($suffixed, $base, $schema, $schemaId);
         }
 
         return $suffixed;
+    }
+
+    /**
+     * File a schema in the slot it landed on, remembering the name it asked for.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    private function store(string $slot, string $base, array $schema, ?string $schemaId): void
+    {
+        $this->schemas[$slot] = $schema;
+        $this->schemaBases[$slot] = $base;
+        if ($schemaId !== null) {
+            $this->schemaIds[$slot] = $schemaId;
+        }
     }
 
     /**
@@ -180,22 +200,43 @@ final class ComponentRegistry
         }
 
         $this->reservedIds[$final] = $schemaId;
+        $this->schemaBases[$final] = $name;
 
         return $final;
     }
 
     /**
-     * The name each class-identified schema is published under, where that differs from the
-     * provisional one registration handed it: provisional name → published name. Derived from the
-     * contesting FQCNs alone, so it survives a build whose routes were discovered in another order —
-     * and, being computed from the finished registry, it is the same on a warm cache hit, where
-     * nothing re-registers.
+     * The name each schema is published under, where that differs from the provisional slot
+     * registration handed it: slot → published name. Derived from what the claims say about
+     * themselves, so it survives a build whose routes were discovered in another order — and, being
+     * computed from the finished registry, it is the same on a warm cache hit, where nothing
+     * re-registers.
      *
      * @return array<string, string>
      */
     public function schemaRenames(): array
     {
-        return ComponentNames::resolve($this->schemaIds, array_map(strval(...), array_keys($this->schemas)));
+        return ComponentNames::resolve($this->schemaClaims());
+    }
+
+    /**
+     * What every registered schema claims: the name it asked for, the identity behind it, and the
+     * bytes it publishes — the last standing in for the identity a schema that names none doesn't have.
+     *
+     * @return array<string, Claim>
+     */
+    private function schemaClaims(): array
+    {
+        $claims = [];
+        foreach ($this->schemas as $name => $schema) {
+            $claims[(string) $name] = [
+                'base' => $this->schemaBases[$name] ?? (string) $name,
+                'identity' => $this->schemaIds[$name] ?? null,
+                'content' => Json::stable($schema),
+            ];
+        }
+
+        return $claims;
     }
 
     /**
@@ -207,7 +248,7 @@ final class ComponentRegistry
      */
     public function nameCollisions(): array
     {
-        $contests = ComponentNames::contests($this->schemaIds, array_map(strval(...), array_keys($this->schemas)));
+        $contests = ComponentNames::contests($this->schemaClaims());
         ksort($contests);
 
         $out = [];
@@ -319,6 +360,7 @@ final class ComponentRegistry
         return [
             'schemas' => $this->schemas,
             'schemaIds' => $this->schemaIds,
+            'schemaBases' => $this->schemaBases,
             'reservedIds' => $this->reservedIds,
             'responses' => $this->responses,
             'securitySchemes' => $this->securitySchemes,
@@ -333,6 +375,7 @@ final class ComponentRegistry
     {
         $this->schemas = $snapshot['schemas'];
         $this->schemaIds = $snapshot['schemaIds'];
+        $this->schemaBases = $snapshot['schemaBases'];
         $this->reservedIds = $snapshot['reservedIds'];
         $this->responses = $snapshot['responses'];
         $this->securitySchemes = $snapshot['securitySchemes'];
@@ -384,6 +427,17 @@ final class ComponentRegistry
     public function schemaIds(): array
     {
         return $this->schemaIds;
+    }
+
+    /**
+     * The name each registered schema asked to be called. A fragment carries these so a warm hit
+     * re-registers off the ask rather than off the slot it was cached in.
+     *
+     * @return array<string, string>
+     */
+    public function schemaBases(): array
+    {
+        return $this->schemaBases;
     }
 
     /**

@@ -42,10 +42,10 @@ the same way it would from a Form Request's `rules()`:
 	// A Data class is a single named source class, so the body hoists to a component the operation $refs.
 	"requestBody": {
 	  "required": true,
-	  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInvoiceData" } } }
+	  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInvoiceDataRequest" } } }
 	},
 	// components.schemas
-	"CreateInvoiceData": {
+	"CreateInvoiceDataRequest": {
 	  "type": "object",
 	  "properties": {
 	    "customerId": { "type": "integer" },
@@ -81,6 +81,12 @@ component and the operation `$ref`s it** — so the same Data class accepted by 
 one shared, deduped component. The hoisting rules are the same as for a Form Request, including the
 `#[BodyParameter]` deviation that keeps one operation's body inline; see
 [Request bodies](/laravel/documenting/requests/#request-bodies) for the full detail.
+
+The component is named `CreateInvoiceDataRequest`, not `CreateInvoiceData`: a Data class returned as a
+response is a **different shape** from the same class accepted as a body — different names, different
+fields, different optionality — so each gets a name of its own and the plain name belongs to the
+class's own shape. See [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) for the naming
+rules. A name that already ends in `Request` is left alone.
 
 Two shapes follow from the HTTP verb, exactly as they do for a Form Request:
 

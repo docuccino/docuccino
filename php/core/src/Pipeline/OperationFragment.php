@@ -28,6 +28,7 @@ final readonly class OperationFragment
      * @param  array<string, string>  $componentSchemaIds  name → schemaId (FQCN) for diff identity
      * @param  array<string, array<string, mixed>>  $componentResponses  name → response component this operation references (transitive closure)
      * @param  ?string  $actionClass  the controller/action class this route dispatches to, if any
+     * @param  array<string, string>  $componentSchemaBases  name → the name that schema asked for, so a warm hit re-registers off the ask and not off a slot the build it was cached in happened to give it
      */
     public function __construct(
         public string $path,
@@ -39,6 +40,7 @@ final readonly class OperationFragment
         public array $componentSchemaIds = [],
         public array $componentResponses = [],
         public ?string $actionClass = null,
+        public array $componentSchemaBases = [],
     ) {}
 
     /**
@@ -64,6 +66,11 @@ final readonly class OperationFragment
             $schemaIds[$schemas[$name] ?? $name] = $id;
         }
 
+        $bases = [];
+        foreach ($this->componentSchemaBases as $name => $base) {
+            $bases[$schemas[$name] ?? $name] = $base;
+        }
+
         /** @var array<string, mixed> $operation */
         return new self(
             path: $this->path,
@@ -75,6 +82,7 @@ final readonly class OperationFragment
             componentSchemaIds: $schemaIds,
             componentResponses: ComponentNames::rekey($this->componentResponses, $responses),
             actionClass: $this->actionClass,
+            componentSchemaBases: $bases,
         );
     }
 
@@ -93,6 +101,7 @@ final readonly class OperationFragment
             'componentSchemaIds' => $this->componentSchemaIds,
             'componentResponses' => $this->componentResponses,
             'actionClass' => $this->actionClass,
+            'componentSchemaBases' => $this->componentSchemaBases,
         ];
     }
 
@@ -114,6 +123,7 @@ final readonly class OperationFragment
             componentSchemaIds: Hydrate::stringMap($data['componentSchemaIds'] ?? null),
             componentResponses: Hydrate::mapOfArrays($data['componentResponses'] ?? null),
             actionClass: Hydrate::stringOrNull($data['actionClass'] ?? null),
+            componentSchemaBases: Hydrate::stringMap($data['componentSchemaBases'] ?? null),
         );
     }
 }

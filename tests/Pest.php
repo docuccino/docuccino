@@ -510,3 +510,15 @@ function importsMatching(string $package, string $pattern): array
 
     return $found;
 }
+
+/**
+ * One schema's claim on a component name, as ComponentNames reads it: the name it asked for,
+ * the identity behind it, and the bytes it publishes — the last standing in for the identity a schema
+ * that names none doesn't have.
+ *
+ * @return array{base: string, identity: string|null, content: string}
+ */
+function claim(string $base, ?string $identity, string $content = '{"type":"object"}'): array
+{
+    return ['base' => $base, 'identity' => $identity, 'content' => $content];
+}

@@ -200,6 +200,11 @@ request class used across several endpoints is one shared, deduped component. Re
 with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin its diff identity across a
 class rename with [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
 
+The component name says it is a body: a class named `StoreInvoiceRequest` already does, so it is left
+alone, and one that doesn't — a Data class, an action — takes a `Request` suffix. That keeps the plain
+name free for the class's own shape, so a class you both accept and return publishes two components
+neither of which can come to mean the other.
+
 An **inline** `validate()` / `Validator::make()` body has no source class to name honestly, so it
 stays inline at the operation. To patch a single property of the inferred body — a description, an
 example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying

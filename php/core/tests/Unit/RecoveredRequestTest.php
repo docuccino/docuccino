@@ -108,7 +108,11 @@ it('emits two distinct components when a class is used as both request and respo
 
     expect($op->resolvedField('requestBody')['content']['application/json']['schema'])->toBe(['$ref' => '#/components/schemas/Thing'])
         ->and($responseName)->toBe('Thing_2')
-        ->and(array_keys($components->schemas()))->toBe(['Thing', 'Thing_2']);
+        ->and(array_keys($components->schemas()))->toBe(['Thing', 'Thing_2'])
+        // Which slot each landed in is route order; what they PUBLISH as is not. `Thing` is the class's
+        // own shape whichever side registered first, and the sent shape says that it is one.
+        ->and($components->schemaRenames())->toBe(['Thing' => 'ThingRequest', 'Thing_2' => 'Thing'])
+        ->and($components->nameCollisions())->toBe([]);
 });
 
 it('suffixes a THIRD distinct claimant past _2 (collision ordering beyond N=2)', function (): void {
@@ -127,8 +131,9 @@ it('suffixes a THIRD distinct claimant past _2 (collision ordering beyond N=2)',
         ->and(array_keys($components->schemas()))->toBe(['Thing', 'Thing_2', 'Thing_3'])
         // Re-registering an existing identity dedupes onto its own suffixed name, not a fourth.
         ->and($components->registerSchema('Thing', ['type' => 'object', 'properties' => ['slug' => ['type' => 'string']]], 'App\\Third\\Thing'))->toBe('Thing_3')
-        // All three publish under a namespace-derived name, under ONE warning for the contested name.
-        ->and($components->schemaRenames())->toEqual(['Thing' => 'AppThing', 'Thing_2' => 'OtherThing', 'Thing_3' => 'ThirdThing'])
+        // The request shape says it is one, so only the two response shapes contested a name — and they
+        // publish off their namespaces, under ONE warning naming both.
+        ->and($components->schemaRenames())->toEqual(['Thing' => 'ThingRequest', 'Thing_2' => 'OtherThing', 'Thing_3' => 'ThirdThing'])
         ->and($components->nameCollisions())->toHaveCount(1);
 });
 
