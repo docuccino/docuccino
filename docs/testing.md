@@ -93,8 +93,8 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.85%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.73%** | 92    | fully in-process-measurable                      |
+| `core`              | **95.15%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **92.86%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **38.48%** | 38    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
@@ -204,6 +204,18 @@ hand-built unpositioned node is the only way to reach the branch that matters. 6
 638/1658 (38.48%): 17 new statements, 16 of them covered. `core` (94.81% → 94.85%) and `laravel`
 (92.70% → 92.73%) both rose without reaching the next integer, so their floors hold at 94 and 92.
 
+`core` then ratcheted 94 → 95. `components.securitySchemes` is document-level and nothing rebuilds it, so a
+fully warm build published a `security` requirement naming a scheme the document no longer held — the
+requirement names its scheme as a KEY, not through a `$ref`, so the fragment's closure walk never saw it.
+`OperationFragment` now carries those schemes explicitly and repoints the requirement when the name it was
+cached under has since been taken. Both halves are driven from `WarmColdEqualityTest` rather than from
+hand-built fragments, which matters here: the rename branch is only reachable when two routes really do
+build two different `passport` definitions and the one that sorts first takes the plain name, and a
+hand-assembled fragment would have pinned that arrangement instead of earning it. 4805/5068 (94.81%) →
+4888/5137 (95.15%). `laravel` rose 92.73% → 92.86% in the same change — the machine-dependent-value rule
+and both extensions' resolution order are covered over every branch, the "nothing to report" ones included
+— but 92.86 is still 92, so its floor holds.
+
 The real-path half of that dependency work is where it has to be: `dependencyFiles` is what the engine
 answers, so `php/inference-phpstan/tests/Integration/ClassMetadataDependencyTest.php` runs the provisioned
 app's own class hierarchy through the real engine and then through the real `FragmentCache`, editing each
@@ -222,7 +234,7 @@ exactly that move, and it is the preferred answer whenever a subprocess-only sub
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **94**, `laravel` **92**, `inference-phpstan` **38**.
+  an aspiration. Current floors: `core` **95**, `laravel` **92**, `inference-phpstan` **38**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

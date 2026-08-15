@@ -34,6 +34,22 @@ $survivor = static function (Router $r): void {
     $r->post('api/zz-sso-a', [SsoController::class, 'store']);
 };
 
+// The base set plus a Sanctum-protected route: one `components.securitySchemes` entry an operation
+// names by key, not by `$ref`.
+$secured = static function (Router $r) use ($base): void {
+    $base($r);
+    $r->get('api/zz-secured', [ClaimController::class, 'show'])->middleware('auth:sanctum');
+};
+
+// The same, in both modes, so the stateful scheme publishes the app's session cookie name — and both
+// schemes publish something the build environment chose.
+$environmentDerived = static function (Router $r) use ($base): void {
+    $base($r);
+    $r->get('api/zz-stateful', [ClaimController::class, 'show'])
+        ->middleware(['auth:sanctum', 'Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful']);
+    $r->get('api/zz-scoped', [ClaimController::class, 'show'])->middleware('scope:read');
+};
+
 it('serves a warm build exactly what a cold one would', function (callable $before, callable $after): void {
     assertWarmEqualsCold($before, $after, LocalityEngine::factory());
 })->with([
@@ -96,6 +112,43 @@ it('serves a warm build exactly what a cold one would', function (callable $befo
             $r->prefix('api')->group(static function (Router $g): void {
                 $g->fallback([ClaimController::class, 'show']);
             });
+        },
+    ],
+
+    // Security lives in `components.securitySchemes`, which the operation names as a KEY rather than
+    // reaching through a `$ref` — so a fragment that carried only its `$ref` closure came back warm
+    // holding a `security` requirement for a scheme no longer in the document. Both rows below are
+    // fully warm on the secured route, which is precisely when nothing re-registers it.
+    'a secured route, twice' => [$secured, $secured],
+
+    // …and the secured fragment coming back warm into a build that is NOT fully warm, since an added
+    // route re-registers everything around it and could hide the loss.
+    'a secured route kept while another is added' => [
+        $secured,
+        static function (Router $r) use ($secured): void {
+            $secured($r);
+            $r->get('api/zz-extra', [ClaimController::class, 'show']);
+        },
+    ],
+
+    // The diagnostic half of the same thing. Both schemes publish a value taken from the environment
+    // (`app.url`, `session.cookie`), so both report one — and a warm build reporting fewer of those is
+    // the silent degradation that makes `--fail-on=warning` useless.
+    'a route whose scheme is environment-derived, twice' => [$environmentDerived, $environmentDerived],
+
+    // A scheme name is a slot too. Two routes referencing scopes the other doesn't build two DIFFERENT
+    // `passport` definitions, and the second takes `passport_2` — so a fragment cached while its route
+    // held the plain name has to come back as `passport_2` when a route that sorts before it takes it,
+    // requirement and all. Warming on the later route alone is what puts it in that position.
+    'a security scheme another route takes the name of' => [
+        static function (Router $r) use ($base): void {
+            $base($r);
+            $r->get('api/zz-scope-b', [ClaimController::class, 'show'])->middleware('scope:beta');
+        },
+        static function (Router $r) use ($base): void {
+            $base($r);
+            $r->get('api/zz-scope-a', [ClaimController::class, 'show'])->middleware('scope:alpha');
+            $r->get('api/zz-scope-b', [ClaimController::class, 'show'])->middleware('scope:beta');
         },
     ],
 

@@ -34,7 +34,10 @@ const FLOORS = [
     // deletion, which pinned the result model's serialization contract directly; the type-grammar fix
     // (docblock enums, the `array<K, V>` key rule, the analyser-prefixed `@var`/`@param`/`@property`
     // tags) then landed its 15 new statements fully covered.
-    'core' => 94,
+    // Ratcheted 94 → 95 at 95.15% (4888/5137): the operation fragment learned to carry the security
+    // schemes its `security` requirement names, and both halves of that — the restore and the rename a
+    // taken slot forces — are driven by the warm-equals-cold rows.
+    'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
     // Ratcheted 91 → 92 at 92.23% (5422/5879): the request side learned to carry a recovered container's
     // shape through the rule vocabulary, and every branch of it — the map carrier, the synthesised list
