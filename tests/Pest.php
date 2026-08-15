@@ -191,8 +191,34 @@ function resolveResponse(array $document, mixed $response): array
 }
 
 /**
+ * A schema as documented, following a `$ref` into `components.schemas`. An error SHAPE repeated across
+ * operations is hoisted to a shared component (see {@see SharedErrorResponses}), so a test asserting on
+ * the shape has to resolve the reference; members stated beside the `$ref` win.
+ *
+ * @param  array<string, mixed>  $document  the emitted document
+ * @return array<string, mixed>
+ */
+function resolveSchema(array $document, mixed $schema): array
+{
+    if (! is_array($schema)) {
+        return [];
+    }
+
+    $prefix = '#/components/schemas/';
+    $ref = $schema['$ref'] ?? null;
+    if (! is_string($ref) || ! str_starts_with($ref, $prefix)) {
+        return $schema;
+    }
+
+    $component = $document['components']['schemas'][substr($ref, strlen($prefix))] ?? null;
+
+    return is_array($component) ? $schema + $component : $schema;
+}
+
+/**
  * One media type of the workbench form route's response at `$status`, through {@see resolveResponse()} —
- * the shape most error-response assertions want.
+ * the shape most error-response assertions want. Its `schema` is left as documented, so a test that
+ * cares which component it points at can still see the `$ref`; {@see errorSchemaOf()} reads through it.
  *
  * @param  array<string, mixed>  $document
  * @return array<string, mixed>
@@ -203,6 +229,35 @@ function mediaOf(array $document, string $status, string $mediaType, string $pat
     $media = resolveResponse($document, $response)['content'][$mediaType] ?? [];
 
     return is_array($media) ? $media : [];
+}
+
+/**
+ * The body shape one operation's error response states, with both hoists resolved — the shared error
+ * shape may sit in `components.schemas` and the response itself in `components.responses`.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, mixed>
+ */
+function errorSchemaOf(array $document, string $status, string $mediaType, string $path = '/api/forms/{form}', string $method = 'get'): array
+{
+    return resolveSchema($document, mediaOf($document, $status, $mediaType, $path, $method)['schema'] ?? null);
+}
+
+/**
+ * The schema components a document hoisted for the types its routes name, with the shared error shapes
+ * {@see SharedErrorResponses} lifts out of the framework's own 4xx excluded — those belong to the error
+ * contract rather than to whatever a route returns.
+ *
+ * @param  array<string, mixed>  $components
+ * @return array<string, mixed>
+ */
+function typeSchemas(array $components): array
+{
+    return array_filter(
+        $components,
+        static fn (string $name): bool => preg_match('/^Error\d{3}(_[a-z2-7]+)?$/', $name) !== 1,
+        ARRAY_FILTER_USE_KEY,
+    );
 }
 
 /**

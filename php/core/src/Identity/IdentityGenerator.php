@@ -6,6 +6,7 @@ namespace Docuccino\Core\Identity;
 
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Support\Json;
 
 /**
  * Computes stable UIR identities. Format: `<kind>:<algoVersion>:<hash>`, where `<hash>` is the first
@@ -64,6 +65,23 @@ final readonly class IdentityGenerator
         $structural = $this->canonicalizer->canonicalizeSchemaForIdentity($schema);
 
         return $this->id('sch', ['inline', $this->serializer->serialize($structural)]);
+    }
+
+    /**
+     * The identity of a schema published verbatim under a component name of its own, where the exact
+     * bytes are the thing being published: `$scope` is whatever else distinguishes this publication from
+     * another carrying the same bytes.
+     *
+     * {@see inlineSchemaId()} cannot serve here. It normalises annotations and `required` order away so
+     * an inline schema keeps its identity across a cosmetic edit — which is right for an inline schema
+     * and wrong for a component, because two components that differ at all are two published nodes and
+     * a differ that pairs components by id would otherwise see only one of them.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    public function publishedSchemaId(string $scope, array $schema): string
+    {
+        return $this->id('sch', [$scope, Json::stable($schema)]);
     }
 
     public function responseId(string $operationId, string $status, string $mediaType): string

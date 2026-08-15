@@ -93,8 +93,8 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **94.49%** | 94    | fully in-process-measurable                      |
-| `laravel`           | **92.38%** | 92    | fully in-process-measurable                      |
+| `core`              | **94.66%** | 94    | fully in-process-measurable                      |
+| `laravel`           | **92.42%** | 92    | fully in-process-measurable                      |
 | `inference-phpstan` | **36.32%** | 36    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 86.01%     | —     | informational only; no longer a gate             |
@@ -165,6 +165,17 @@ answer was the usual one: `EngineConfig` and `RuntimeConfig` — pure, parent-pr
 only callers are subprocess-only, so nothing else in the suite could reach them — had 1/9 between them
 and now have 9/9. 576/1586 (36.32%), genuinely higher than before the move. `core` absorbed the rule at
 its own rate or better (94.29% → 94.49%); no floor changed.
+
+The shared-error hoist then became two independent passes — the body SHAPE into `components.schemas`, so
+a presentational difference cannot split it, and the whole RESPONSE into `components.responses` where
+operations state it identically — and both measurable packages rose without a floor moving: `core`
+4527/4801 (94.29%) → 4753/5021 (94.66%), `laravel` 5422/5879 (92.23%) → 5414/5858 (92.42%). The
+transformer roughly doubled in size and every branch of it is driven from the unit suite, negative paths
+included: the malformed media type, the non-numeric status, the response stating both a `$ref` and a
+body, a body already pointing elsewhere, the numeric fallback when something already holds a
+discriminated name, and the two shapes one *inline*-schema identity would have collapsed. Both measured
+figures still round DOWN to the floors already in place, so neither ratchets: a floor is the measured
+integer, and 94.66 and 92.42 are still 94 and 92.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
