@@ -13,6 +13,31 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.4.0
+
+### Breaking changes
+
+- **core**: name the thing a diagnostic's reader must go and change ([#37](https://github.com/docuccino/docuccino/pull/37))
+  - `identity.duplicate-operation` is renamed to `route.duplicate-operation`. Anything matching that code by name must be updated. The other two renames were added after v0.3.0 and have never shipped.
+- **core**: mint every component name from what it is, and stop warning about correct code ([#35](https://github.com/docuccino/docuccino/pull/35))
+  - two contested definitions in `components.responses` or `components.securitySchemes` now take content-derived names instead of a first-come `_2` suffix, and the `security` requirements naming them are repointed. A host-bound operation's `servers` URL now carries the port and base path of the document server it inherits from.
+- **core**: publish a component under the name its schema earns, not the slot it landed in ([#30](https://github.com/docuccino/docuccino/pull/30))
+  - a class-derived request body now publishes under a `Request`-suffixed component name. The facet applies whether or not the name is contested — that is what makes it local, since adding a read endpoint can then only ever *add* a name rather than reassign one. A Spatie `ArticleData` used only as a request body publishes as `ArticleDataRequest` where it published as `ArticleData`, so a generated client renames that type once. Pin the old name with `#[SchemaName]` if you need it unchanged.
+- **inference-phpstan**: delete the worker pool and the engine result cache ([#21](https://github.com/docuccino/docuccino/pull/21))
+  - docuccino/inference-phpstan no longer ships the bin/worker.php binary or depends on symfony/process, and the @internal Orchestration and Cache namespaces are gone along with PhpStanEngineFactory::createOrchestrated() and ::createCaching(). The docuccino/laravel engine.mode values "orchestrated" and "caching" are removed; setting either now degrades to in-process with an engine.mode-unknown warning in place of engine.mode-not-wired.
+
+### Bug fixes
+
+- **laravel**: warn when a published value came from the build machine ([#34](https://github.com/docuccino/docuccino/pull/34))
+- **core**: key a fragment on where a fact was written, and give two identities two components ([#33](https://github.com/docuccino/docuccino/pull/33))
+- **laravel**: type a bound parameter from the column it names, and stop publishing the catch-all ([#32](https://github.com/docuccino/docuccino/pull/32))
+- **laravel**: document a route bound to a host as an operation of its own ([#29](https://github.com/docuccino/docuccino/pull/29))
+- **inference-phpstan**: serve a memoised response shape only to a caller that could have earned it ([#27](https://github.com/docuccino/docuccino/pull/27))
+- **core**: share an error body by its shape, not by its wording ([#26](https://github.com/docuccino/docuccino/pull/26))
+- **laravel**: document rate-limit headers by meaning, not by value ([#24](https://github.com/docuccino/docuccino/pull/24))
+- **laravel**: emit real types where the schemas documented nothing ([#23](https://github.com/docuccino/docuccino/pull/23))
+- **laravel**: make the fragment cache safe to turn on, and warm builds cheap ([#20](https://github.com/docuccino/docuccino/pull/20))
+
 ## v0.3.0
 
 ### Breaking changes
