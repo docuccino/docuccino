@@ -35,13 +35,24 @@ final readonly class IdentityGenerator
         return 'doc:'.$configKey;
     }
 
-    public function operationId(string $documentId, string $method, string $pathTemplate): string
+    /**
+     * Two routes on one method and path but different hosts are two operations, so the host is part of
+     * the identity — but only when there is one, so a route that answers on every host keeps the id it
+     * has always had. A templated host normalises its `{param}` segments the same way a path does.
+     */
+    public function operationId(string $documentId, string $method, string $pathTemplate, ?string $host = null): string
     {
-        return $this->id('op', [
+        $tuple = [
             $documentId,
             strtoupper($method),
             $this->normalizePathTemplate($pathTemplate),
-        ]);
+        ];
+
+        if ($host !== null && $host !== '') {
+            $tuple[] = $this->normalizePathTemplate($host);
+        }
+
+        return $this->id('op', $tuple);
     }
 
     public function parameterId(string $operationId, string $in, string $name): string

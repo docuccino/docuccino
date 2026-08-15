@@ -132,22 +132,35 @@ final class RouteContextBuilder
         return null;
     }
 
+    /**
+     * The degraded lookup for a descriptor the shared index never saw. A URI and a method name one
+     * route only until two hosts share them, so the host decides between them — and a descriptor from
+     * a resolver that reports no host still gets the first match rather than a skeleton.
+     */
     private function locate(RouteDescriptor $descriptor): ?Route
     {
         /** @var iterable<Route> $routes */
         $routes = $this->router->getRoutes();
 
+        $hostless = null;
         foreach ($routes as $route) {
             if ('/'.ltrim($route->uri(), '/') !== $descriptor->uri) {
                 continue;
             }
 
-            if (array_values(array_filter($route->methods(), 'is_string')) === $descriptor->methods) {
+            if (array_values(array_filter($route->methods(), 'is_string')) !== $descriptor->methods) {
+                continue;
+            }
+
+            $domain = $route->getDomain();
+            if (($domain === null || $domain === '' ? null : strtolower($domain)) === $descriptor->domain) {
                 return $route;
             }
+
+            $hostless ??= $route;
         }
 
-        return null;
+        return $hostless;
     }
 
     /**

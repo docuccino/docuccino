@@ -157,6 +157,11 @@ final class DocumentGenerator
     }
 
     /**
+     * The discovered routes, deduped by everything that makes one route a different route: method, URI
+     * and the host it is bound to. Two resolvers reporting the same route collapse; two routes that
+     * differ only by host do NOT — they are two operations, and the host-less one sorts first so which
+     * of them a reader meets first is a fact about the routes, never about registration order.
+     *
      * @return list<RouteDescriptor>
      */
     private function descriptors(ResolvedExtensions $resolved, DocumentConfig $document): array
@@ -164,7 +169,10 @@ final class DocumentGenerator
         $descriptors = [];
         foreach ($resolved->routeResolvers as $resolver) {
             foreach ($resolver->resolve($document) as $descriptor) {
-                $descriptors[$descriptor->primaryMethod().' '.$descriptor->uri] ??= $descriptor;
+                // NUL sorts below every printable byte, so appending the host leaves the host-less
+                // routes' order exactly as it was.
+                $key = $descriptor->primaryMethod().' '.$descriptor->uri."\0".($descriptor->domain ?? '');
+                $descriptors[$key] ??= $descriptor;
             }
         }
 
@@ -190,7 +198,7 @@ final class DocumentGenerator
     ): ?OperationFragment {
         $path = $this->oasPath($descriptor->uri);
         // Naming the specific method keeps multi-method routes' diagnostics distinct.
-        $signature = strtoupper($method).' '.$descriptor->uri;
+        $signature = $descriptor->signature($method);
 
         // The method is part of the cache key: GET query vs POST body are different fragments with
         // different operation identities.
@@ -230,7 +238,7 @@ final class DocumentGenerator
             $operation = new OperationDraft;
             $this->pipeline->run($operation, $context, $resolved);
             $diagnostics = $this->analysisDiagnostics($context, $signature);
-            $this->assignIds($operation, $documentId, $method, $path);
+            $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
 
             $frozen = $operation->freeze();
             [$referencedSchemas, $referencedSchemaIds, $referencedResponses] = $this->componentClosure($frozen->toArray(), $components);
@@ -396,7 +404,7 @@ final class DocumentGenerator
         string $reason,
         DiagnosticCollector $bag,
     ): ?OperationFragment {
-        $signature = strtoupper($method).' '.$descriptor->uri;
+        $signature = $descriptor->signature($method);
 
         $bag->add(new Diagnostic(
             severity: Severity::Error,
@@ -412,14 +420,14 @@ final class DocumentGenerator
 
         $operation = new OperationDraft;
         $operation->setDescription('Documentation could not be generated for this route.', Contribution::fallback());
-        $this->assignIds($operation, $documentId, $method, $path);
+        $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
 
         return new OperationFragment($path, $method, $operation->freeze(), $signature);
     }
 
-    private function assignIds(OperationDraft $operation, string $documentId, string $method, string $path): void
+    private function assignIds(OperationDraft $operation, string $documentId, string $method, string $path, ?string $host = null): void
     {
-        $operationId = $this->identity->operationId($documentId, $method, $path);
+        $operationId = $this->identity->operationId($documentId, $method, $path, $host);
         $operation->assignId($operationId);
         $operation->assignChildIds(
             fn (string $in, string $name): string => $this->identity->parameterId($operationId, $in, $name),

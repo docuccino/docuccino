@@ -265,6 +265,38 @@ The viewer renders the variable as an editable field, and the value flows into t
 Server variables are emitted verbatim — see [`servers`](/laravel/reference/configuration/#servers) in
 the configuration reference.
 
+### Routes bound to a host
+
+Routes registered under `Route::domain()` answer on that host and no other, so they carry it into the
+document as an operation-level `servers` entry. A generated client then calls them where they live
+instead of on the document's base URL.
+
+```php
+Route::domain('admin.example.com')->group(function () {
+    Route::get('api/invoices', [Admin\InvoiceController::class, 'index']);
+});
+```
+
+```yaml
+paths:
+  /api/invoices:
+    get:
+      servers:
+        - url: https://admin.example.com
+```
+
+The URL scheme is taken from the first of your configured [`servers`](/laravel/reference/configuration/#servers)
+that states one, so a local `http://` app documents its hosted routes over `http`. A templated host
+(`{tenant}.example.com`) becomes a server variable, the same shape as the document-level example above.
+
+<Aside type="caution" title="One path and method is one operation">
+OpenAPI addresses an operation by path and method — there is nowhere to put a second `GET /api/invoices`
+for a different host. If two of your routes collide that way, Docuccino documents the first host
+alphabetically and reports the other as a `paths.operation-collision` error, naming both. The fix is to
+give each host a [document of its own](/laravel/reference/configuration/#documents) and filter its routes
+in with `routes.closure`.
+</Aside>
+
 <Aside type="caution" title="Multi-tenant apps: check `viewer.middleware`">
 The viewer's routes are registered without a domain. If your `web` middleware group resolves a tenant
 from the hostname, those routes can't satisfy it and the viewer 404s. Override `viewer.middleware` for

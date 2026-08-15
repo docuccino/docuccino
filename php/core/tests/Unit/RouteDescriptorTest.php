@@ -6,9 +6,10 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 
 /**
  * RouteDescriptor identity + cache-signature soundness (design §10 / arch A1): the human signature
- * is method + URI, while the cache signature additionally folds the route name, the resolved action
- * target, normalised middleware and any scalar cache inputs so a change to any of them busts the
- * fragment cache even when the human signature is unchanged.
+ * is method + URI (plus the host, when the route is bound to one), while the cache signature
+ * additionally folds the route name, the resolved action target, normalised middleware and any scalar
+ * cache inputs so a change to any of them busts the fragment cache even when the human signature is
+ * unchanged.
  */
 it('keeps the human signature to method + URI', function (): void {
     $descriptor = new RouteDescriptor(['GET', 'HEAD'], '/api/forms', action: 'App\\FormController@index', middleware: ['web', 'auth']);
@@ -53,6 +54,28 @@ it('folds extra scalar cache inputs into the signature', function (): void {
     $tagged = new RouteDescriptor(['GET'], '/api/forms', action: 'A@i', cacheInputs: ['locale:en']);
 
     expect($plain->cacheSignature())->not->toBe($tagged->cacheSignature());
+});
+
+it('names the host in the human signature, and names one verb of a multi-method route on request', function (): void {
+    $bound = new RouteDescriptor(['GET', 'HEAD'], '/api/forms', domain: 'admin.example.com');
+    $several = new RouteDescriptor(['PUT', 'PATCH'], '/api/forms/{form}');
+
+    expect($bound->signature())->toBe('GET admin.example.com/api/forms')
+        ->and($several->signature('patch'))->toBe('PATCH /api/forms/{form}')
+        // A host-less route reads exactly as it always has.
+        ->and((new RouteDescriptor(['GET'], '/api/forms'))->signature())->toBe('GET /api/forms');
+});
+
+it('folds the host into the cache signature, so two hosts never share a fragment', function (): void {
+    $admin = new RouteDescriptor(['GET'], '/api/forms', action: 'A@i', domain: 'admin.example.com');
+    $public = new RouteDescriptor(['GET'], '/api/forms', action: 'A@i', domain: 'www.example.com');
+    $anyHost = new RouteDescriptor(['GET'], '/api/forms', action: 'A@i');
+
+    expect($admin->cacheSignature())->not->toBe($public->cacheSignature())
+        ->and($admin->cacheSignature())->not->toBe($anyHost->cacheSignature())
+        // …and the two hosts are still one URI, which is the whole reason the key had to widen.
+        ->and($admin->uri)->toBe($public->uri)
+        ->and($admin->primaryMethod())->toBe($public->primaryMethod());
 });
 
 it('documents one operation per documentable method, dropping HEAD', function (): void {

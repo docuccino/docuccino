@@ -20,6 +20,7 @@ use Docuccino\Laravel\Extensions\FrameworkResponseTypeToSchema;
 use Docuccino\Laravel\Extensions\ImplicitResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
+use Docuccino\Laravel\Extensions\RouteServersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
@@ -64,6 +65,7 @@ final class DefaultExtensions
             SecurityExtension::class,
             AttributeSecurityExtension::class,
             AttributeOverridesExtension::class,
+            RouteServersExtension::class,
             // Error-response chain, first supports() wins (design §6): the app's real error shapes,
             // then the Problem Details preset (self-gated on error_responses), then framework defaults,
             // then a generic fallback.

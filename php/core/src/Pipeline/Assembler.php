@@ -22,8 +22,9 @@ use Docuccino\Core\Overlay\OverlayDocument;
 /**
  * Merges operation fragments into a UIR document array: places operations under their path/method,
  * hoists and identifies components, stamps document identity + generator metadata, applies overlays
- * and document transformers, then computes the content hash. Duplicate operation identities (two
- * routes claiming one `GET /x`) are error diagnostics, never silent overwrites.
+ * and document transformers, then computes the content hash. Two operations contesting one slot —
+ * duplicate identities, or a path and method a fragment already holds — are error diagnostics, and the
+ * first claimant keeps the slot; nothing is ever silently overwritten.
  *
  * @internal
  */
@@ -194,6 +195,8 @@ final class Assembler
     {
         $paths = [];
         $seenIds = [];
+        /** @var array<string, array<string, string>> $claimed */
+        $claimed = [];
 
         foreach ($fragments as $fragment) {
             $operationId = $fragment->operation->docuccino?->id;
@@ -210,6 +213,25 @@ final class Assembler
                 $seenIds[$operationId] = true;
             }
 
+            $holder = $claimed[$fragment->path][$fragment->method] ?? null;
+            if ($holder !== null) {
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Error,
+                    code: 'paths.operation-collision',
+                    message: sprintf(
+                        'OpenAPI documents one operation per path and method, and %s %s is already held by %s; this route is not in the document.',
+                        strtoupper($fragment->method),
+                        $fragment->path,
+                        $holder,
+                    ),
+                    routeSignature: $fragment->routeSignature,
+                    help: 'Routes that differ only by host are separate APIs to a reader: give each host its own document and filter the routes into it.',
+                );
+
+                continue;
+            }
+
+            $claimed[$fragment->path][$fragment->method] = $fragment->routeSignature;
             $paths[$fragment->path][$fragment->method] = $fragment->operation->toArray();
         }
 
