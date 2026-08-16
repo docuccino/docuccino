@@ -189,6 +189,29 @@ claim at `integration`, so an application's own integration breaks the tie on `s
 cannot: overlays are applied before the transformers, so `components.responses.*` does not exist yet
 when one runs.
 
+**`#[ErrorComponent]` is the short way in, and it is not a second naming path.** The paragraph above
+says the throw site cannot name an error, and that still holds: what the attribute declares is not
+"call this exception X" but "the error this class stands for is X", and the adapter turns that into the
+same `claimComponentName()` on the same response — `Extensions\ErrorResponsesExtension` is the one
+place that reads it, and `Exceptions\DeclaredErrorComponent` the one place that resolves it. The ladder
+is then the ordinary one, with one rule the guard's layers cannot express. It contributes at
+`attribute`, above the `integration`/`fallback` the tiers claim their status-derived default at, so the
+declaration wins there. It must LOSE to a registered mapper, though, and a mapper contributes at
+`integration` — below `attribute` — so precedence alone would invert the answer. The rule that settles
+it is stated once, on `DeclaredErrorComponent::replaces()`: a declaration replaces the status DEFAULT
+and nothing a producer named itself. That is the honest statement of why, too — the mapper saw this
+body and the class did not, and one exception class can render several.
+
+Inheritance is deliberate: `ReflectionClass::getAttributes()` does not walk parents, but an application
+base (`ApiException`) naming its errors once is the shape worth serving, so the reader walks and the
+nearest declaration wins. That makes the answer depend on a file the throwing route never mentions, so
+every signalled throw records `DeclarationFiles::of()` for its exception hierarchy on the route's
+fragment dependencies — otherwise an attribute added to a base would leave warm builds publishing the
+old name. Two exceptions declaring DIFFERENT names for one operation's one status is the case layers
+cannot settle either: the response carries one name, and awarding it to whichever throw the engine
+reported first would make a published type name a function of encounter order. Neither takes it, the
+status default stands, and `attribute.error-component-contested` names both classes.
+
 Contests route through the machinery that already exists: two DIFFERENT bodies claiming one name climb
 `ComponentNames`' ladder and are reported as `components.name-collision`.
 

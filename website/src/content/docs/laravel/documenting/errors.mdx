@@ -507,12 +507,6 @@ document's contract is unchanged — same statuses, same bodies — but a `catch
 client code needs updating once.
 :::
 
-**Renaming them is a supported path**, either by registering your own exception mapper or by renaming
-the component a built-in claimed. Both are in [naming the component an error publishes
-under](/extending/extension-authoring/#naming-the-component-an-error-publishes-under); an overlay is
-*not* one of them, because overlays run before the hoist and there is nothing at
-`components.responses.*` to target yet.
-
 A name goes to more than one component only when two bodies genuinely contest it. When that happens the
 plain `NotFound` is retired rather than handed to one of them, and each takes a name derived from its own
 content (`NotFound_kzvq2m4a`) — so adding a route can never change which body an existing `$ref` means.
@@ -529,6 +523,89 @@ fires when a component from elsewhere in your app already holds the name (a clas
 The alternative — always discriminating, so `NotFound` never exists — would name the overwhelmingly
 common single-shape case `NotFound_a1b2c3d4` for everybody, to spare a few documents a one-time rename.
 The trade is deliberate, and it is the same one component names make.
+
+### Name your own errors with `#[ErrorComponent]`
+
+Your exceptions get the same treatment, and you say what they are called by marking the class:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	use Docuccino\Attributes\ErrorComponent;
+
+	#[ErrorComponent('ResourceMissing')]
+	final class InvoiceNotFoundException extends RuntimeException {}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	// The operation
+	"404": { "$ref": "#/components/responses/ResourceMissing" }
+
+	// components.responses
+	"ResourceMissing": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/json": { "schema": { "$ref": "#/components/schemas/ResourceMissing" } }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+That is the whole of it. Same status, same body, same description — only the name a generated client
+gives the type changes, and now it says what went wrong.
+
+**It is inherited**, unlike PHP's own attribute lookup. A base your API errors already extend names them
+all at once, and a subclass that carries its own attribute wins over the base:
+
+```php
+#[ErrorComponent('ApiFailure')]
+abstract class ApiException extends RuntimeException {}
+
+// Published as ApiFailure…
+final class InvoiceNotFoundException extends ApiException {}
+
+// …and this one as PolicyRefused.
+#[ErrorComponent('PolicyRefused')]
+final class PolicyDeniedException extends ApiException {}
+```
+
+**It names a status that has no name of its own.** A `410` is `Error410` by default, because nothing in
+the table above speaks for it. The attribute is the only way that body gets called something a client
+can read.
+
+**Two exceptions may share one name.** Different classes raising the same error is normal, and where
+their bodies match under one status they publish one component. Where the bodies differ the name is
+contested and retired exactly as above, each body taking a name derived from its own content.
+
+#### When the attribute isn't enough
+
+It names the exception *class*, so it says one thing per class. Two cases need the longer route:
+
+| | |
+| --- | --- |
+| One exception class, several different bodies | An attribute cannot tell them apart. Register an `ExceptionToResponse` and name each body as you build it — a mapper's name always wins over an attribute, which is what makes it the escape hatch. |
+| An exception you didn't write | You can't mark a framework or vendor class. Rename the component a built-in claimed from an `OperationExtension` instead. |
+
+Both are in [naming the component an error publishes
+under](/extending/extension-authoring/#naming-the-component-an-error-publishes-under). An overlay is
+*not* one of them, because overlays run before the hoist and there is nothing at
+`components.responses.*` to target yet.
+
+**Precedence, in order:** the name a mapper gave the body it built, then `#[ErrorComponent]` on the
+exception, then the status default in the table above.
+
+:::caution[Two names for one response]
+Two exceptions that name one operation's one status differently describe a response that can only carry
+one name. Rather than hand it to whichever the analyzer met first — which would make a published type
+name depend on encounter order — the response keeps its default name and the build reports
+`attribute.error-component-contested` naming both classes. Give the errors statuses of their own, or
+keep the attribute on the one the response really is.
+:::
+
+A name outside `^[a-zA-Z0-9._-]+$` is refused with a `components.name-invalid` warning and the body falls
+back to `Error<status>`, so a typo costs you a name and never a valid document.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body

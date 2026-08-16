@@ -398,7 +398,10 @@ whole test.
 three exception types routinely render one body, and one exception can render two. Pick one of the three
 class names and deleting an unrelated route can change which name survives; let one exception claim one
 name for two bodies and it contests itself. The name has to come from the thing you are documenting, not
-from whichever class happened to throw.
+from whichever class happened to throw. (An application marking its own exception with
+[`#[ErrorComponent]`](/laravel/reference/attributes/#errorcomponent) is saying the opposite thing —
+that *this class is* that one error — and its claim still rides the response, so it settles by the same
+rules. Yours, speaking for a body you built, outranks it.)
 
 **Don't claim a name you can't speak for.** A generic fallback that hands every unrecognized exception
 a `{message}` body knows the status and nothing else, so a status with no meaning of its own is better
@@ -424,12 +427,29 @@ The rest of the rules:
 #### Overriding a built-in name
 
 Docuccino's own tiers name Laravel's errors `NotFound`, `Unauthorized`, `Forbidden`,
-`UnprocessableEntity`, `TooManyRequests` and `BadRequest`. Two supported ways to change that, depending
-on whether you want a different body too.
+`UnprocessableEntity`, `TooManyRequests` and `BadRequest`. Three supported ways to change that, in the
+order to reach for them.
 
 <Steps>
 
-1. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
+1. **Mark the exception.** For your own exception classes this is the whole job — no extension, no
+   registration:
+
+   ```php
+   use Docuccino\Attributes\ErrorComponent;
+
+   #[ErrorComponent('ResourceMissing')]
+   final class InvoiceNotFoundException extends RuntimeException {}
+   ```
+
+   It reaches the response through the same `claimComponentName()` you would call yourself, contributed
+   at the `attribute` layer, so it outranks the status name a built-in tier claimed and loses to a mapper
+   that named the body. It is inherited, nearest declaring class first, so a base your errors extend can
+   name them all at once. Reach past it when the class can't say enough — one exception rendering several
+   different bodies needs the mapper below, which sees each body as it builds it — or when the exception
+   isn't yours to mark. Full behavior: [`#[ErrorComponent]`](/laravel/reference/attributes/#errorcomponent).
+
+2. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
    the first mapper that both supports the throw and answers, and an unannotated extension sorts at
    `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
    (`LAST`) — so yours simply wins, body and name together. No `#[ExtensionOrder]` needed.
@@ -461,7 +481,7 @@ on whether you want a different body too.
    }
    ```
 
-2. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
+3. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
    name over whatever the built-in claimed. The claim is guarded like every other write, so
    [precedence](#every-write-carries-a-contribution) decides — and the built-in tiers claim at
    `integration`, the same layer your extension writes at. An equal contribution is shadowed, so break
@@ -482,6 +502,8 @@ on whether you want a different body too.
    ```
 
    Only the name changes; the built-in's body, description and provenance stay exactly as they were.
+   An `#[ErrorComponent]` on the exception is a rung above, at the `attribute` layer, so this path
+   renames what a built-in claimed and not what an application declared for itself.
 
 </Steps>
 

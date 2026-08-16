@@ -8,6 +8,7 @@ use Docuccino\Attributes\CaseDescription;
 use Docuccino\Attributes\CookieParameter;
 use Docuccino\Attributes\DeprecatedOperation;
 use Docuccino\Attributes\DescriptionFromFile;
+use Docuccino\Attributes\ErrorComponent;
 use Docuccino\Attributes\Example;
 use Docuccino\Attributes\ExcludeFromDocs;
 use Docuccino\Attributes\Group;
@@ -84,6 +85,7 @@ function attributeCatalogue(): array
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
         'DescriptionFromFile' => [DescriptionFromFile::class, $classFn | Attribute::TARGET_PROPERTY],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
+        'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS],
     ];
 }
 
@@ -134,7 +136,7 @@ function defaultArgs(string $class): array
         CookieParameter::class, BodyParameter::class, Group::class,
         IgnoreParam::class, ResponseHeader::class => ['name'],
         OperationId::class, SchemaId::class => ['id'],
-        SchemaName::class, Security::class => ['name'],
+        SchemaName::class, Security::class, ErrorComponent::class => ['name'],
         CaseDescription::class => ['a description'],
         IgnoreResponse::class => [200],
         DescriptionFromFile::class => ['docs/x.md'],
