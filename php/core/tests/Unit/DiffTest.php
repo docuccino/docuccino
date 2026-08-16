@@ -7,6 +7,7 @@ use Docuccino\Core\Diff\Changeset;
 use Docuccino\Core\Diff\ChangesetRenderer;
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\FieldChange;
+use Docuccino\Core\Diff\IdentityKeys;
 use Docuccino\Core\Diff\IncomparableDocumentsException;
 use Docuccino\Core\Diff\Pairing;
 use Docuccino\Core\Document\UirDocument;
@@ -1104,6 +1105,34 @@ it('reports a removed parameter that shared both its id and its label with the o
         ->and($changes)->not->toHaveKey('parameter.added');
 });
 
+it('keeps every node when a qualifier spells a key another node claims outright', function (array $entries): void {
+    // Stated in the keys themselves, because this is the one thing the class exists to guarantee and the
+    // crafted collision is invisible from the document side. Qualifying used to write further into the key
+    // space it was escaping: `X` qualified with `S` spells the id `X#S`, and the last qualifier is never
+    // re-checked, so the node it landed on left the comparison and its removal was reported as no change.
+    [$keyed] = IdentityKeys::pair($entries, []);
+
+    $nodes = array_values($keyed);
+    sort($nodes);
+
+    expect($nodes)->toBe(['A', 'B', 'C', 'D']);
+})->with([
+    'ids spelling the qualifiers' => [[
+        ['X', 'S', 'F', 'A'],
+        ['X', 'T', 'G', 'B'],
+        ['X#S', 'U', 'H', 'C'],
+        ['X#S#F', 'V', 'I', 'D'],
+    ]],
+    // And an artifact that writes the qualified form outright: whatever mark it spells, the qualified space
+    // starts one `#` past the longest run any of these ids opens with.
+    'an id spelling the qualified form' => [[
+        ['X', 'S', 'F', 'A'],
+        ['X', 'T', 'G', 'B'],
+        ['#i1#1#X#1#S', 'U', 'H', 'C'],
+        ['#i1#1#X#1#T', 'V', 'I', 'D'],
+    ]],
+]);
+
 // --- Pages with no slug to key on -------------------------------------------
 
 /**
@@ -1492,6 +1521,25 @@ it('survives a securitySchemes section that is not what it claims', function (mi
     'a scheme that is a string' => [['apiKey' => 'see the wiki']],
     'a scheme that is null' => [['apiKey' => null]],
 ]);
+
+it('escapes a scheme member name it reads straight off the artifact', function (): void {
+    // Every other field name in a changeset is a literal of ours; a scheme's members are whatever keys the
+    // artifact wrote. Left raw, one of them erases and rewrites the line that just called it BREAKING.
+    $member = "scheme\x1B[2K\rNON-BREAKING: nothing to review\n";
+
+    $changeset = diffOf(
+        diffSecured(['type' => 'http', 'scheme' => 'bearer', $member => 'before']),
+        diffSecured(['type' => 'http', 'scheme' => 'bearer', $member => 'after']),
+    );
+    $rendered = (new ChangesetRenderer)->render($changeset);
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($rendered)->not->toContain("\x1B")
+        ->and($rendered)->not->toContain("\r")
+        ->and($rendered)->toContain('scheme\x1B[2K\x0DNON-BREAKING: nothing to review\x0A: before -> after')
+        // The forged verdict is text inside the one field line, not a line of its own.
+        ->and(substr_count($rendered, "\n"))->toBe(5);
+});
 
 it('invents no churn from the order a document lists its schemes in', function (): void {
     $old = diffSecured();

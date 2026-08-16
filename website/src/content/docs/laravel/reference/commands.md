@@ -158,9 +158,12 @@ Webhooks are diffed as the operations they are, under `webhooks.<name>` in place
 call the API promises to make, and a consumer writes an endpoint against it, so removing one or narrowing
 what it sends is breaking on the same terms as an operation under `paths`.
 
-A parameter or response written as a `$ref` is compared as the component it points at. Per OpenAPI, every
-member stated beside the pointer other than `summary` and `description` is ignored — so a `required: false`
+A parameter or response written as a `$ref` is compared as the component it points at. The contract comes
+from the component and never from the pointer's neighbours: a parameter takes its `name`, `in`, `required`,
+`deprecated` and `schema` from there, and a response its `headers` and `content` — so a `required: false`
 next to a pointer at a component that says `required: true` changes nothing, and the diff reports nothing.
+A `description` beside the pointer still wins, and anything else stated there — `style`, `explode`,
+`example`, an `x-` extension — is read as written.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino

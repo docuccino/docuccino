@@ -13,7 +13,8 @@ use Docuccino\Core\Support\PlainText;
  * a CI log or a PR comment.
  *
  * A removed node is described from the old side, which is whatever document the operator pointed at, so
- * every value that came out of one goes through {@see PlainText} on the way to the terminal.
+ * every value that came out of one goes through {@see PlainText} on the way to the terminal — a field
+ * NAME as much as a field value, since a security scheme's members are the artifact's own keys.
  */
 final class ChangesetRenderer
 {
@@ -120,7 +121,7 @@ final class ChangesetRenderer
         $line = sprintf('  %s [%s] %s  (%s)', $mark, $change->target->value, PlainText::of($change->path), $change->code);
 
         foreach ($change->fields as $field) {
-            $line .= sprintf("\n      %s: %s -> %s", $field->field, self::scalar($field->old), self::scalar($field->new));
+            $line .= sprintf("\n      %s: %s -> %s", PlainText::of($field->field), self::scalar($field->old), self::scalar($field->new));
         }
 
         return $line;

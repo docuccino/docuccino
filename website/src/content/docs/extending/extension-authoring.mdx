@@ -418,7 +418,7 @@ The rest of the rules:
 
 | | |
 | --- | --- |
-| Legal names | `^[a-zA-Z0-9._-]+$`. Anything else is refused at the call — read as no name at all, so the body falls back to `Error<status>` and the document is never emitted invalid. |
+| Legal names | `^[a-zA-Z0-9._-]+$`. Anything else is refused at the call — read as no declaration at all, so it never displaces one already standing. The response keeps whatever else named it, or the status default where nothing did, and the document is never emitted invalid. |
 | Two producers, one response | Guarded like every other write, so the higher-precedence contribution's name wins and the other is shadowed. |
 | One name, two bodies you meant to differ | Claim a distinct name from each producer. Two names sharing a body publish two components on purpose — that is what makes each name a function of its own declarer. |
 | A name already taken | A component published before the hoist runs keeps it, and your body climbs past to a discriminated name. |
@@ -483,9 +483,10 @@ order to reach for them.
 
 3. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
    name over whatever the built-in claimed. The claim is guarded like every other write, so
-   [precedence](#every-write-carries-a-contribution) decides — and the built-in tiers claim at
-   `integration`, the same layer your extension writes at. An equal contribution is shadowed, so break
-   the tie the way every other field breaks one, with specificity:
+   [precedence](#every-write-carries-a-contribution) decides — and the tiers do not all claim at one
+   layer. The generic fallback claims at `fallback`; the framework-error and rate-limit tiers claim at
+   `integration`, the same layer your extension writes at, and an equal contribution is shadowed. So
+   break the tie the way every other field breaks one, with specificity, which clears both:
 
    ```php
    public function handle(OperationDraft $operation, RouteContext $context): void
@@ -510,7 +511,7 @@ order to reach for them.
 :::caution
 An overlay cannot do this. Overlays are applied *before* the shared-error hoist runs, so at overlay
 time `components.responses.*` does not exist yet and targeting it raises `overlay.target-missing`. Use
-one of the two paths above — see [Overlays](/laravel/guides/customizing-output/) for what overlays are
+one of the three paths above — see [Overlays](/laravel/guides/customizing-output/) for what overlays are
 for.
 :::
 
