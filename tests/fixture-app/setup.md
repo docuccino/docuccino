@@ -56,6 +56,11 @@ composer dump-autoload --working-dir=tests/fixture-app/app
 CI provisions the same way (`.github/workflows/ci.yml`, "Provision fixture app") — keep the
 two in lockstep.
 
+Nothing re-copies the overlay afterwards, so editing anything under `src/` leaves the install behind
+and the fixture group then analyses the old code. `composer test` and `composer test:inference-fixture`
+both run `tools/fixture-app-drift.php` first, which names the stale files and points back at steps 5-6
+above; it is inert when there is no install.
+
 ## Resulting composer.json constraints (as resolved on this host)
 
 ```

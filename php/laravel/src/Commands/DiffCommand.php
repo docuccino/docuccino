@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Support\Paths;
+use Docuccino\Laravel\Support\TerminalText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 use JsonException;
@@ -23,6 +24,10 @@ use JsonException;
  * Semantically diffs a committed artifact against the freshly-generated document. The diff runs over
  * stable `x-docuccino.id`s ({@see DocumentDiffer}), so a path-param rename is no change while a URI
  * change is remove + add.
+ *
+ * Everything printed here was read off an artifact nobody re-read first. Core already ran each such value
+ * through `PlainText`, so what this still owes the terminal is the markup half — see
+ * {@see TerminalText::markupOnly()}.
  *
  * `old` is a path to a committed UIR (preferred — it carries identities) or OpenAPI artifact, read from
  * the working tree unless `--against=<git-ref>` reads it via `git show <ref>:<old>`, in which case the
@@ -71,7 +76,7 @@ final class DiffCommand extends Command
         try {
             $changeset = $this->differ->diff($old, $new);
         } catch (IncomparableDocumentsException $exception) {
-            $this->error($exception->getMessage());
+            $this->error(TerminalText::markupOnly($exception->getMessage()));
 
             return self::FAILURE;
         }
@@ -193,17 +198,17 @@ final class DiffCommand extends Command
             return;
         }
 
-        $this->output->write($this->renderer->render($changeset));
+        $this->output->write(TerminalText::markupOnly($this->renderer->render($changeset)));
 
         if ($verdict === null) {
             return;
         }
 
         if ($verdict->satisfied) {
-            $this->info(sprintf('Versioning policy "%s" satisfied.', $verdict->policy));
+            $this->info(TerminalText::markupOnly(sprintf('Versioning policy "%s" satisfied.', $verdict->policy)));
         } else {
             $suffix = $verdict->requiredVersion !== null ? sprintf(' (require ≥ %s)', $verdict->requiredVersion) : '';
-            $this->error(sprintf('Versioning policy "%s" violated: %s%s', $verdict->policy, $verdict->message, $suffix));
+            $this->error(TerminalText::markupOnly(sprintf('Versioning policy "%s" violated: %s%s', $verdict->policy, $verdict->message, $suffix)));
         }
     }
 }
