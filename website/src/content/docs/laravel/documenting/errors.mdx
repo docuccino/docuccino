@@ -416,34 +416,29 @@ stated once, and every response that returns it points at that one entry. One sh
 generated client, however many operations return it.
 
 **The whole response goes into `components.responses`.** Where operations state the same response —
-description, headers and example included — that response is hoisted too, and each operation becomes a
-one-line `$ref`.
+description and headers included — that response is hoisted too, and each operation becomes a one-line
+`$ref`.
 
 <Tabs>
 	<TabItem label="On the operations">
 	```json
-	// Two operations returning the same 404, presented the same way
+	// Every operation returning this 404, however each one illustrates it
 	"404": { "$ref": "#/components/responses/NotFound" }
-
-	// An operation returning the same shape with its own example keeps its response…
-	"404": {
-	  "description": "Not Found",
-	  "content": {
-	    "application/json": {
-	      "schema": { "$ref": "#/components/schemas/NotFound" },
-	      "example": { "message": "No such invoice." }
-	    }
-	  }
-	}
 	```
 	</TabItem>
 	<TabItem label="Shared components">
 	```json
-	// components.responses
+	// components.responses — one contract, every operation's illustration of it
 	"NotFound": {
 	  "description": "Not Found",
 	  "content": {
-	    "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } }
+	    "application/json": {
+	      "schema": { "$ref": "#/components/schemas/NotFound" },
+	      "examples": {
+	        "example_2obip4vj": { "value": { "message": "No such invoice." } },
+	        "example_hq4wxk7d": { "value": { "message": "No such customer." } }
+	      }
+	    }
 	  }
 	}
 
@@ -460,14 +455,15 @@ one-line `$ref`.
 | Hoisted | Not hoisted |
 | --- | --- |
 | The body shape of a `4xx`/`5xx` two or more operations state identically | A shape no other operation shares |
-| A response two or more operations state identically, in full | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
+| A response two or more operations state identically, however each illustrates it | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
-**How an operation illustrates an error is never part of its shape.** Two `403`s returning the same body
-with different example messaging share one `Forbidden` schema; only the response, which has to carry the
-example, stays on the operation. That is not a stylistic choice: an OpenAPI Reference Object may carry
-only `$ref`, `summary` and `description`, so a shared *response* cannot hold a per-operation example at
-all. The two passes are independent — a differing example costs you the shared response, never the
-shared shape.
+**How an operation illustrates an error is never part of its contract.** Two `403`s returning the same
+body with different example messaging are one `Forbidden`, and the shared response carries both examples
+rather than splitting into two types nobody can name. Where the operations agree on one illustration it
+stays the media type's single `example`; where they don't, they become an `examples` map keyed from each
+body's own content, so adding or removing an endpoint never renames another one's example. A difference
+in `description`, though, *does* keep two responses apart: that is what the response says, not how it is
+illustrated.
 
 Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
 meaning, never by value — so throttled routes share both.

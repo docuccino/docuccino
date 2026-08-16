@@ -123,18 +123,52 @@ order is load-bearing.
 **Shapes first** (`components.schemas`): a body SHAPE two or more operations state identically is
 hoisted and each `content[<media type>].schema` becomes a `$ref`. This is the pass that decides what
 a generated client gets — one error type instead of one per operation — and it must not care how an
-operation ILLUSTRATES the error, so `description`, `headers` and the media type's own `example` stay
-on the operation. They have to: an OAS Reference Object may carry none of them beside a `$ref` (OAS
-3.2 §4.23.1), while the Media Type Object's `example` sits outside the schema and is legal in 3.0,
-3.1 and 3.2 alike — nothing is lost and nothing downlevels.
+operation DESCRIBES or ILLUSTRATES the error, so `description`, `headers` and the media type's own
+examples stay outside it and are the response pass's business.
 
-**Responses second**, over the rewritten document: a whole response — description, headers, examples,
-and by now a schema `$ref` — that two or more operations state identically is hoisted too. Second so
-the response it hoists points at the shared shape instead of carrying its own anonymous copy; a code
-generator names an inline schema after whatever encloses it, so the other order hands back exactly
-the per-response types the first pass exists to prevent. The passes are independent, never
-alternatives: a response differing by example simply does not join an identical-response group, while
-the operations that DO match still share one — and all of them still share one shape.
+**Responses second**, over the rewritten document: a whole response — description, headers, and by now
+a schema `$ref` — that two or more operations state identically is hoisted too. Second so the response
+it hoists points at the shared shape instead of carrying its own anonymous copy; a code generator names
+an inline schema after whatever encloses it, so the other order hands back exactly the per-response
+types the first pass exists to prevent. The passes are independent, never alternatives.
+
+**A media type's `example` is illustration, and stays out of the key.** Two renderer arms that answer
+one status with one schema and one description, differing only in the words they fill in, are one
+contract shown twice — and keying on the example made them two components. Both then asked for the same
+name, neither could keep it, and an SDK consumer was handed `BadRequest_uvscdete` and
+`BadRequest_zpjxajqg`: two structurally identical types for one concept, neither named after anything.
+So the response pass strips `content[<media type>].example` before it groups, and republishes every
+arm's body on the one shared component — as the media type's `example` where the arms agreed on one,
+and as an `examples` MAP where they did not. Both members sit outside the schema and both are defined
+in 3.0, 3.1 and 3.2, so the `$ref` beside them stays bare (an OAS Reference Object may carry no
+siblings, OAS 3.2 §4.23.1) and nothing downlevels — where the 2020-12 alternative, `examples` INSIDE
+the schema, would cost 3.0 an `allOf` wrapper and then be flattened back to a single `example`, silently
+dropping all but one. A single illustration therefore keeps the singular member: a one-entry map would
+mint a key nobody asked for, and the bytes an unmerged document already published are the simplest
+thing that says it.
+
+Two limits, both about not claiming more than is true. An example only illustrates something when a
+schema is there to be illustrated, so a media type stating an example and NO shape keeps it in the key
+— that example is the only claim the media type makes. And a media type already carrying an `examples`
+map is left whole: those keys were chosen by whoever wrote them and a document has published them, so
+rewriting one would be exactly the failure this area exists to prevent.
+
+Nothing merged this way can become false. The key still holds every media type and every `schema` in
+it, so each example goes on sitting beside precisely the schema it was written against — the merge
+widens no contract and there is nothing to re-validate. What it does cost is that one operation's
+illustration is now offered on every operation sharing the contract, including one that illustrated
+nothing. That is the honest reading of responses the document already stated identically, and it is the
+price of one type instead of one per arm.
+
+**Example keys are minted by `ComponentNames`, from the example's own content.** A key is
+`example_<hash>`, opaque on purpose. For a COMPONENT name opacity is a real cost — a generated client
+is written against it — but no code generator turns an example key into a type, so this is the one
+place the naming invariant can be paid for in readability rather than in meaning. In exchange the
+locality is absolute: every key is a function of its own body alone, so an arm arriving or leaving adds
+or removes its own key and renames none of the others. (Going from one arm to two does swap the
+singular `example` for a map, which is the same ranked trade `MIN_OCCURRENCES` makes when a second
+occurrence moves the first from inline to `$ref`: the shared component's NAME never moves, and the name
+is what a client is written against.)
 
 **The name is declared by whoever built the body.** Both passes publish under a name a code generator
 turns into a type, so `Error404` — or `Error404_2obip4vj` where a status carries two bodies — is what an
