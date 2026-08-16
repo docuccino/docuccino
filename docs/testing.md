@@ -57,17 +57,41 @@ vendor/bin/pest --coverage --exclude-group=fixture
 # Full text report (per-class line %), written for inspection
 vendor/bin/pest --coverage-text=build/coverage.txt --exclude-group=fixture
 
-# Type coverage (declared types over the src set) — 2G, it thrashes for minutes at 1G
+# Type coverage (declared types over the src set)
 composer test:types
 ```
 
 `tools/coverage-floors.php` is the gate: it sums `coveredstatements`/`statements` per
 `php/<pkg>/src/` out of the clover report and fails any package under its floor.
 
-`config.process-timeout` is raised to 1800 in the root `composer.json` for one reason: a COLD
-type-coverage run (an empty `vendor/pestphp/pest-plugin-type-coverage/.temp`) can stall for many
-minutes, and composer's 300-second default kills it mid-run. Warm it takes seconds, so the timeout is
-headroom for the first run after a clean checkout and nothing else.
+### The cold type-coverage hang, and why the script passes a grpc flag
+
+A COLD type-coverage run — one with an empty `vendor/pestphp/pest-plugin-type-coverage/.temp` —
+used to hang indefinitely on some machines with every process pinned at 0% CPU. It is not memory
+and it is not pcov, so raising limits and clearing caches both do nothing. The mechanism:
+
+- the plugin only forks on the cold path. Warm, every file is a cache hit, `analyseChunks()` is
+  never reached, and nothing forks — which is why the hang looked like a cache problem.
+- cold, it fans the files out over `pcntl_fork()` children (via `nunomaduro/pokio`).
+- `fork()` copies one thread. An extension that runs background threads therefore wakes up in
+  the child believing in threads that no longer exist. `grpc` is one: its module shutdown waits
+  on a condition variable those threads would have signalled, so the child never finishes
+  exiting, and the parent blocks forever in `pcntl_waitpid()`.
+
+Reproducible with no Pest involved at all — a bare `fork()` plus `exit(0)` child never gets
+reaped when the `grpc` extension is loaded with its default `grpc.enable_fork_support=0`:
+
+```bash
+php -r '$p=pcntl_fork(); if($p===0){exit(0);} pcntl_waitpid($p,$s); echo "reaped\n";'
+```
+
+So `composer test:types` runs pest under `-d grpc.enable_fork_support=1`, which is grpc's own
+supported answer for processes that fork. It costs nothing where grpc is absent (PHP ignores an
+unknown `-d` directive, and CI has no grpc), and it takes the cold run from "never finishes" to
+about five seconds. Any other command that forks under an extension like this owes the same flag.
+
+`config.process-timeout` is raised to 1800 in the root `composer.json` as headroom for slow first
+runs after a clean checkout; it was never what rescued a hang, since the hang had no timeout.
 
 ### Why the coverage job excludes the `fixture` group
 
