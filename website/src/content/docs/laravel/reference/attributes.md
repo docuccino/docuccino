@@ -574,8 +574,8 @@ The name replaces the [default one derived from the
 status](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). A registered
 `ExceptionToResponse` that names the body it builds outranks it, because one exception class can render
 several different bodies and only the mapper that built one can tell them apart. A name outside
-`^[a-zA-Z0-9._-]+$` is refused with a `components.name-invalid` warning and the body falls back to
-`Error<status>`.
+`^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming the class that
+declared it, and the response keeps the name it would have had.
 
 ## Content & examples
 

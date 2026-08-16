@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Exceptions;
 
 use Docuccino\Attributes\ErrorComponent;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
+use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use ReflectionClass;
 
@@ -23,6 +25,19 @@ final readonly class DeclaredErrorComponent
         public ?string $file = null,
         public ?int $line = null,
     ) {}
+
+    /**
+     * Whether the declared name is one a component key could carry.
+     *
+     * `claimComponentName()` reads an illegal name as no declaration at all, silently — sound for core,
+     * which has no channel to say otherwise, but the author who typed the attribute would never learn
+     * why it did nothing. This adapter has a channel, so it asks first and reports instead
+     * ({@see ErrorResponsesExtension}). The character class stays {@see ComponentNames::isLegal()}'s.
+     */
+    public function isNameLegal(): bool
+    {
+        return ComponentNames::isLegal($this->name);
+    }
 
     /**
      * Whether this declaration may take the name a response already carries.

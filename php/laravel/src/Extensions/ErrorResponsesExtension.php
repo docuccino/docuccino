@@ -47,6 +47,8 @@ final class ErrorResponsesExtension implements OperationExtension
 
         /** @var array<string, array<string, DeclaredErrorComponent>> $declared */
         $declared = [];
+        /** @var array<string, DeclaredErrorComponent> $illegal */
+        $illegal = [];
 
         foreach ($context->analysis()->throws as $throw) {
             if ($throw->disposition !== ThrowDisposition::Signal) {
@@ -67,9 +69,25 @@ final class ErrorResponsesExtension implements OperationExtension
             $this->applier->apply($operation, $mapped->draft, $mapped->mapper->producer(), $this->throwSource($context, $throw));
 
             $declaration = DeclaredErrorComponent::on($throw->exceptionFqcn);
-            if ($declaration !== null) {
-                $declared[$mapped->draft->status][$declaration->name] = $declaration;
+            if ($declaration === null) {
+                continue;
             }
+
+            // A name no key could carry is not a name, so it neither claims a response nor contests one.
+            // Keyed by the mistake rather than the throw, so a class signalled from two sites is one
+            // report, and sorted below so what the route says never depends on which site came first.
+            if (! $declaration->isNameLegal()) {
+                $illegal[$declaration->declaredBy."\0".$declaration->name] = $declaration;
+
+                continue;
+            }
+
+            $declared[$mapped->draft->status][$declaration->name] = $declaration;
+        }
+
+        ksort($illegal);
+        foreach ($illegal as $declaration) {
+            $this->reportIllegalName($context, $declaration);
         }
 
         $this->applyDeclarations($operation, $context, $declared);
@@ -117,6 +135,42 @@ final class ErrorResponsesExtension implements OperationExtension
         return $context->sourceAt(
             new SourceLocation($declaration->file ?? '', $declaration->line),
             $declaration->declaredBy,
+        );
+    }
+
+    /**
+     * One warning per class that declared a name no `$ref` could point at. `claimComponentName()` drops
+     * such a name at the write and says nothing, which leaves the author of the attribute with a line of
+     * code that does nothing and no reason why — so the adapter, which unlike a draft has somewhere to
+     * say it, catches it where it reads it and names the class, the file and the name it read.
+     */
+    private function reportIllegalName(RouteContext $context, DeclaredErrorComponent $declaration): void
+    {
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Warning,
+            code: 'attribute.error-component-invalid',
+            message: sprintf(
+                '%s declares #[ErrorComponent("%s")], which is not a name an OpenAPI component key can carry, so the attribute names nothing and the response keeps the name it would have had.',
+                $declaration->declaredBy,
+                self::printable($declaration->name),
+            ),
+            source: $this->declarationSource($context, $declaration),
+            routeSignature: $context->route->signature(),
+            help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
+        ));
+    }
+
+    /**
+     * The declared name as a diagnostic may quote it. Nothing validated the string an attribute carries,
+     * and a diagnostic is read on a terminal, so a control character in it would move the cursor rather
+     * than be read. Everything else passes through — the author has to recognise what they wrote.
+     */
+    private static function printable(string $value): string
+    {
+        return (string) preg_replace_callback(
+            '/[\x00-\x1F\x7F]/',
+            static fn (array $match): string => sprintf('\x%02X', ord($match[0])),
+            $value,
         );
     }
 

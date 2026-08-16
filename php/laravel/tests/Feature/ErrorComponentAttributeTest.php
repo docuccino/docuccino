@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
@@ -16,6 +17,7 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Facades\Docuccino;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\ApiException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\DeclaredErrorsController;
+use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\EscapedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\HttpConflictException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\InheritedApiException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\MalformedNameException;
@@ -233,18 +235,69 @@ it('lets a registered mapper\'s name beat the one the exception declares', funct
         ->and($document['components']['schemas'])->not->toHaveKey('Conflict');
 });
 
-it('refuses a declared name no component key could carry and keeps the document valid', function (): void {
+it('refuses a declared name no component key could carry and tells the class that declared it', function (): void {
+    // `claimComponentName()` reads an illegal name as no declaration at all and says nothing, so the
+    // attribute would be a line of code that does nothing for no stated reason. The adapter has a
+    // diagnostic channel the draft does not, so it refuses the name where it READS it and reports —
+    // once per route the class is signalled from, riding that route's fragment like every other.
     $result = declaringBuild([
         'first' => [MalformedNameException::class, 409],
         'second' => [MalformedNameException::class, 409],
     ]);
     $document = $result->document->toArray();
-    $rejected = diagnosticsCoded($result->diagnostics, 'components.name-invalid');
+    $rejected = diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid');
 
-    expect($document['components']['schemas'])->toHaveKey('Error409')
-        ->and($document['components']['schemas'])->not->toHaveKey('Not Found!')
-        ->and($rejected)->toHaveCount(1)
-        ->and($rejected[0]->message)->toContain('Not Found!');
+    expect($document['components']['schemas'])->toHaveKey('Conflict')
+        // The status default the framework-errors tier claimed stands, and nothing was named `Error409`.
+        ->and($document['components']['schemas'])->not->toHaveKey('Error409')
+        // Nowhere at all — not as a key, not in a `$ref`, not in the provenance facts.
+        ->and(json_encode($document))->not->toContain('Not Found!')
+        ->and($rejected)->toHaveCount(2)
+        ->and($rejected[0]->message)->toContain(MalformedNameException::class)
+        ->and($rejected[0]->message)->toContain('Not Found!')
+        ->and($rejected[0]->severity)->toBe(Severity::Warning)
+        // The reader has to go and edit the attribute, so the diagnostic points at the file it is on.
+        ->and($rejected[0]->source?->file)->toContain('MalformedNameException.php')
+        // Nothing else reports it: core's hoist keeps `components.name-invalid` for a document that
+        // already states an illegal name, which only an overlay can now do.
+        ->and(diagnosticsCoded($result->diagnostics, 'components.name-invalid'))->toBeEmpty();
+});
+
+it('escapes a refused name before quoting it in a diagnostic', function (): void {
+    // Nothing validated the string an attribute carries and a diagnostic is read on a terminal, so a
+    // control character in the name has to arrive as text rather than as a cursor movement.
+    $result = declaringBuild([
+        'first' => [EscapedNameException::class, 409],
+        'second' => [EscapedNameException::class, 409],
+    ]);
+    $rejected = diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid');
+
+    expect($rejected[0]->message)->toContain('Not\x1B[31mFound')
+        ->and($rejected[0]->message)->not->toContain("\x1B");
+});
+
+it('does not let a name it refused contest one it accepted', function (): void {
+    // A refused name is not a declaration, so the status has one declaration and not two: the legal name
+    // stands. Counting the refused one as a contestant would let a typo on an unrelated exception strip
+    // a correctly named response back to its default.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-declared-first', [DeclaredErrorsController::class, 'first']);
+    $router->get('api/zz-declared-second', [DeclaredErrorsController::class, 'second']);
+
+    $both = signalling([[ThingMissingException::class, 409], [MalformedNameException::class, 409]]);
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(analysisOverrides: [
+        DECLARED_ERROR_ACTIONS['first'] => $both,
+        DECLARED_ERROR_ACTIONS['second'] => $both,
+    ]));
+
+    $result = generateDocument();
+    $document = $result->document->toArray();
+
+    expect($document['components']['schemas'])->toHaveKey('ResourceMissing')
+        ->and($document['components']['schemas'])->not->toHaveKey('Conflict')
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-contested'))->toBeEmpty()
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid'))->toHaveCount(2);
 });
 
 it('shares one component between two exceptions that declare one name over one body', function (): void {
@@ -342,6 +395,20 @@ it('publishes the same bytes and the same diagnostics on a warm fragment-cache b
     $warm = assertWarmEqualsCold(declaringRoutes('first'), declaringRoutes('first', 'second'), $engine);
 
     expect($warm->document->toArray()['components']['schemas'])->toHaveKey('ResourceMissing');
+});
+
+it('replays a refused name\'s warning on a warm fragment-cache build', function (): void {
+    // The refusal is decided while a route is built, so the warning travels on that route's fragment or
+    // not at all. A warm build that reported less than a cold one would be a silent degradation — the
+    // author fixes the typo they were told about and never hears about the one they were not.
+    $engine = declaringEngine([
+        'first' => [MalformedNameException::class, 409],
+        'second' => [MalformedNameException::class, 409],
+    ]);
+
+    $warm = assertWarmEqualsCold(declaringRoutes('first'), declaringRoutes('first', 'second'), $engine);
+
+    expect(diagnosticsCoded($warm->diagnostics, 'attribute.error-component-invalid'))->toHaveCount(2);
 });
 
 it('invalidates a fragment when the BASE class that declares the name is edited', function (): void {

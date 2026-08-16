@@ -219,13 +219,30 @@ Illegal names are refused at the WRITE. `ComponentNames::isLegal()` owns the cha
 copy, in the class that also `sanitize()`s by force — and `claimComponentName()` reads a name that
 fails it as no declaration at all, so nothing a `$ref` could not point at ever reaches
 `x-docuccino.facts.component`, whether or not the hoist that would have refused it later is switched
-on. The body falls back to `Error<status>`: a degraded name, never an invalid document, and never a
-question of which knobs are set. The hoist keeps `components.name-invalid` for the one source the draft
-cannot police — a document that already states the fact, which an overlay can, since overlays are
-applied before the transformers run. That warning is raised only for bodies that were actually
-published, since it says the body "was named after its status instead" and that is untrue of a body
-nothing hoisted; and it quotes the name with control characters escaped, because a diagnostic is read
-on a terminal and nothing validated the string it came from.
+on. The body keeps whatever else named it — the status default the built-in tiers claim, or
+`Error<status>` where the status has no phrase of its own: a degraded name, never an invalid document,
+and never a question of which knobs are set.
+
+Refusing at the write costs the refusal its voice, though, because a draft has nowhere to say anything,
+and a silent refusal is the wrong answer for the one declarer who is not an extension author. So the
+refusal is stated twice more, by whoever CAN state it, and each of the three is the only one that could:
+
+- **The adapter, for `#[ErrorComponent]`.** An application author who typos one has no other way to
+  learn the attribute did nothing, so `ErrorResponsesExtension` asks `DeclaredErrorComponent::isNameLegal()`
+  where it READS the declaration and warns `attribute.error-component-invalid`, naming the class, the
+  file the attribute is on and the name it read. A refused name is not a declaration, so it also does not
+  contest a legal one for the same status — a typo on one exception cannot strip a correctly named
+  response back to its default.
+- **The hoist, for a document that already states the fact.** `components.name-invalid` covers the one
+  source a draft cannot police, which is now only an overlay, since overlays are applied before the
+  transformers run. It is raised only for bodies that were actually published, since it says the body
+  "was named after its status instead" and that is untrue of a body nothing hoisted.
+- **A registered mapper, for itself.** `ExceptionToResponse::toResponse()` is handed the
+  `ComponentRegistry`, so an extension author who wants to be told has the channel already; the adapter
+  does not police a producer's string, and core has deliberately dropped it by the time either could.
+
+Both diagnostics quote the name with control characters escaped, because a diagnostic is read on a
+terminal and nothing validated the string it came from.
 
 **The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
 the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not

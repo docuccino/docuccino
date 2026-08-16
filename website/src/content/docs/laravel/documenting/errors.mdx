@@ -604,8 +604,10 @@ name depend on encounter order — the response keeps its default name and the b
 keep the attribute on the one the response really is.
 :::
 
-A name outside `^[a-zA-Z0-9._-]+$` is refused with a `components.name-invalid` warning and the body falls
-back to `Error<status>`, so a typo costs you a name and never a valid document.
+A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
+the class that declared it, and the response keeps the name it would have had — the status default from
+the table above, or `Error<status>` where the status has none. A typo costs you a name and never a valid
+document, and never a name your other exceptions were using: a refused name does not contest a good one.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
