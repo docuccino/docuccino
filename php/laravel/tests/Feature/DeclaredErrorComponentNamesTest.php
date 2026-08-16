@@ -159,6 +159,64 @@ it('does not rename a declared component when an unrelated route is added', func
         ->toBe('#/components/responses/Brewing');
 });
 
+/**
+ * Declares a name on one ROUTE's response and touches nothing else — the half of a mixed document that
+ * names its error, with the other half left exactly as whatever produced it.
+ */
+function claimingOn(string $uri, string $status, string $name): OperationExtension
+{
+    return new class($uri, $status, $name) implements OperationExtension
+    {
+        public function __construct(
+            private readonly string $uri,
+            private readonly string $status,
+            private readonly string $name,
+        ) {}
+
+        public function phase(): OperationPhase
+        {
+            return OperationPhase::Finalize;
+        }
+
+        public function handle(OperationDraft $operation, RouteContext $context): void
+        {
+            if ($context->route->uri === '/'.ltrim($this->uri, '/') && $operation->hasResponse($this->status)) {
+                $operation->response($this->status)->claimComponentName($this->name, Contribution::attribute());
+            }
+        }
+    };
+}
+
+it('shares a body one route names and another does not', function (): void {
+    // The mixed case a tiered chain produces in a real application: the tier that answers first can
+    // recover a body without naming it while a later tier names an identical one. What repeats decides
+    // whether a body is hoisted, so both routes still get a shared component — and the route that
+    // declared nothing emits the same bytes it did before the other one learned to.
+    $routes = static function (Router $router): void {
+        $router->get('api/zz-blocked', [ErrorsController::class, 'blocked']);
+        $router->get('api/zz-blocked-again', [ErrorsController::class, 'blockedAgain']);
+    };
+
+    bindStubEngine();
+    $routes(app('router'));
+    $before = generateDocument()->document->toArray();
+
+    bindStubEngine();
+    $routes(app('router'));
+    Docuccino::extend(claimingOn('api/zz-blocked', '403', 'Blocked'));
+    $after = generateDocument()->document->toArray();
+
+    expect($before['paths']['/api/zz-blocked']['get']['responses']['403']['$ref'])
+        ->toBe('#/components/responses/Error403')
+        // The declaring route moved to its own name…
+        ->and($after['paths']['/api/zz-blocked']['get']['responses']['403']['$ref'])
+        ->toBe('#/components/responses/Blocked')
+        // …and the one that declared nothing did not move at all, component and reference alike.
+        ->and($after['paths']['/api/zz-blocked-again'])->toBe($before['paths']['/api/zz-blocked-again'])
+        ->and($after['components']['responses']['Error403'])->toBe($before['components']['responses']['Error403'])
+        ->and($after['components']['schemas']['Error403'])->toBe($before['components']['schemas']['Error403']);
+});
+
 it('retires a declared name two different bodies contest, and warns', function (): void {
     // A contest is a contest whoever asked: both climb, and the warning names the claimants rather than
     // letting one silently take a name that used to mean the other.
@@ -180,18 +238,20 @@ it('retires a declared name two different bodies contest, and warns', function (
         ->and(diagnosticsCoded($result->diagnostics, 'components.name-collision'))->not->toBeEmpty();
 });
 
-it('refuses a name no component key could carry and keeps the document valid', function (): void {
+it('refuses a name no component key could carry at the write, and never publishes it', function (): void {
+    // The draft enforces the contract, so a name a `$ref` could not point at is read as no declaration
+    // at all: the body falls back to its status and nothing anywhere in the document — component key or
+    // `x-docuccino` fact — carries the string. The hoist's `components.name-invalid` still exists for
+    // the one source the draft cannot police, a document that already states the fact (an overlay).
     bindStubEngine();
     Docuccino::extend(declaringExtension('418', 'Not Brewing!'));
 
     $result = generateDocument();
     $document = $result->document->toArray();
-    $rejected = diagnosticsCoded($result->diagnostics, 'components.name-invalid');
 
     expect($document['components']['schemas'])->toHaveKey('Error418')
         ->and($document['components']['schemas'])->not->toHaveKey('Not Brewing!')
-        ->and($rejected)->toHaveCount(1)
-        ->and($rejected[0]->message)->toContain('Not Brewing!');
+        ->and(json_encode($document))->not->toContain('Not Brewing!');
 });
 
 it('publishes the same bytes and the same diagnostics on a warm fragment-cache build', function (): void {

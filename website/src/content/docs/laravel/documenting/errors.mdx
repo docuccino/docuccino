@@ -493,6 +493,13 @@ An error nothing claims a name for still falls back to `Error<status>`: a `402` 
 say, or a body an [attribute](/laravel/reference/attributes/#response) documents. Nothing else about
 those bodies changes — only what the shared component is called.
 
+Named and unnamed bodies still share on the same terms. Whether a body is hoisted at all depends on how
+often the document states that status and those bytes, and never on what anyone called it — so a `404`
+your own handler renders as `{"message": …}` is hoisted exactly as it was, under `Error404`, and the
+framework's identical `404` is hoisted beside it under `NotFound`. Two components with the same bytes is
+the honest reading: two producers said different things about what the error is, and neither can rename
+the other's.
+
 :::caution[These names changed]
 Shared error components used to be named `Error404`, `Error422` and so on. Regenerating turns them into
 the names above, and any client you generate from the document renames its error types to match. The

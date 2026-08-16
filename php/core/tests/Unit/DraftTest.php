@@ -211,6 +211,40 @@ it('declares nothing when a producer has no name to give', function (): void {
         ->and($draft->freeze()->docuccino)->toBeNull();
 });
 
+it('reads a name no component key could carry as no declaration at all', function (string $case, string $name): void {
+    // Enforced at the write, so the fact never reaches the document and the answer does not depend on
+    // whether the hoist — the only thing that would have refused it later — is switched on. The body
+    // falls back to its status, which is what an undeclared body was always going to publish under.
+    $draft = new ResponseDraft('404');
+
+    expect($draft->claimComponentName($name, Contribution::integration('acme')))->toBe(PatchResult::NoOp)
+        ->and($draft->componentClaim())->toBeNull()
+        ->and($draft->freeze()->docuccino)->toBeNull();
+})->with([
+    ['a space', 'Not Found'],
+    ['punctuation', 'Not Found!'],
+    ['a namespace separator', 'App\\Errors\\NotFound'],
+    ['a slash, which would leave the pointer', 'errors/NotFound'],
+    ['an escape sequence and a newline', "Evil\x1b[31m\nName"],
+    ['nothing but illegal characters', '!!!'],
+    ['the empty string', ''],
+]);
+
+it('keeps a legal name whatever it is spelled with', function (string $case, string $name): void {
+    // The other half of the contract: the character class is `ComponentNames`', not a second opinion,
+    // so everything a `$ref` can carry goes through untouched.
+    $draft = new ResponseDraft('404');
+
+    expect($draft->claimComponentName($name, Contribution::integration('acme')))->toBe(PatchResult::Accepted)
+        ->and($draft->componentClaim())->toBe($name);
+})->with([
+    ['a reason phrase', 'NotFound'],
+    ['a dotted name', 'acme.NotFound'],
+    ['an underscored name', 'Not_Found'],
+    ['a hyphenated name', 'Not-Found'],
+    ['digits', 'Error404'],
+]);
+
 it('carries a declared name across the merge into the operation it applies to', function (): void {
     // The applier is where a mapper's draft becomes the operation's response, so it is where the claim
     // has to survive — the hoist reads it off the finished document and nowhere else.

@@ -6,6 +6,7 @@ namespace Docuccino\Core\Draft;
 
 use Docuccino\Core\Document\NodeExtension;
 use Docuccino\Core\Document\ResponseObject;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchGuard;
 use Docuccino\Core\Patch\PatchResult;
@@ -85,11 +86,20 @@ final class ResponseDraft
      * that speaks for ONE kind of error and can name it better than `Error<status>`, which is what a
      * generated client's type ends up called. Guarded like any other field, so two producers naming one
      * response settle by precedence; two different BODIES claiming one name is a contest the hoist
-     * settles, not this. The name must be a legal component key (`^[a-zA-Z0-9._-]+$`).
+     * settles, not this.
+     *
+     * A name no component key could carry ({@see ComponentNames::isLegal()}) is read as no declaration
+     * at all and answers `NoOp`, the same as `null`. Enforced at the write like {@see BODYLESS_STATUS}
+     * above it, so a name a `$ref` cannot point at never reaches the document — whether or not the
+     * shared-error hoist, which is the only thing that would have refused it, is switched on.
      */
     public function claimComponentName(?string $name, Contribution $by): PatchResult
     {
-        return $this->guard->apply(self::COMPONENT, $name, $by);
+        return $this->guard->apply(
+            self::COMPONENT,
+            $name !== null && ComponentNames::isLegal($name) ? $name : null,
+            $by,
+        );
     }
 
     /** The component name a producer declared for this response, or null when none did. */

@@ -26,13 +26,14 @@ use Docuccino\Core\Support\Json;
  * `$ref`, and a hoisted component carries an id minted from the bytes it publishes — never a per-route
  * source, which has no business speaking for the other routes sharing it.
  *
- * A producer that speaks for one kind of error may DECLARE the name its body publishes under
- * ({@see ResponseDraft::claimComponentName()}); the declaration is part of what a body IS, so two
- * declared names sharing a body are two components, each named for its own declarer and neither able to
- * move the other. An undeclared body is still `Error<status>`.
+ * What REPEATS decides whether a body is hoisted; what its producer DECLARED
+ * ({@see ResponseDraft::claimComponentName()}) decides only what the component is called — so a
+ * declaration can add a component and never take one away. Design §"Shared error components".
  *
  * Deliberately narrow: 4xx/5xx only, only bodies that actually repeat, and only responses carrying
  * `content`. Anything already a `$ref` is left alone, which is what makes a second run a no-op.
+ *
+ * @phpstan-type Occurrence array{scope: string, group: string, base: string, body: array<array-key, mixed>, count: int, rejected: array<string, array{string, string|null}>}
  */
 final class SharedErrorResponses implements DocumentTransformer
 {
@@ -48,8 +49,10 @@ final class SharedErrorResponses implements DocumentTransformer
      */
     private const CLAIM = 'component';
 
-    /** What an OpenAPI component key may be made of; a declared name that isn't is refused. */
-    private const COMPONENT_NAME = '/^[A-Za-z0-9._-]+$/D';
+    /** The buckets this transformer publishes into, as the `$ref`s pointing at them spell them. */
+    private const SCHEMAS = '#/components/schemas/';
+
+    private const RESPONSES = '#/components/responses/';
 
     /**
      * How many occurrences make a body worth hoisting. Deliberately not a local boundary — a second
@@ -71,12 +74,14 @@ final class SharedErrorResponses implements DocumentTransformer
         }
 
         $components = is_array($doc['components'] ?? null) ? $doc['components'] : [];
-        $rejected = self::rejectedClaims($paths);
 
-        [$paths, $schemas, $schemaContests] = self::shareShapes($paths, self::bucket($components, 'schemas'));
-        [$paths, $responses, $responseContests] = self::shareResponses($paths, self::bucket($components, 'responses'));
+        $shapes = self::shareable(self::collect($paths, self::schemaSites(...), static fn (array $body): array => $body));
+        [$paths, $schemas, $schemaContests, $aliases] = self::shareShapes($paths, $shapes, self::bucket($components, 'schemas'));
 
-        foreach ([...$rejected, ...$schemaContests, ...$responseContests] as $diagnostic) {
+        $bodies = self::shareable(self::collect($paths, self::responseSites(...), static fn (array $body): array => self::withoutMintedNames($body, $aliases)));
+        [$paths, $responses, $responseContests] = self::shareResponses($paths, $bodies, self::bucket($components, 'responses'));
+
+        foreach ([...self::rejectedClaims($shapes, $bodies), ...$schemaContests, ...$responseContests] as $diagnostic) {
             $context->report($diagnostic);
         }
 
@@ -109,16 +114,18 @@ final class SharedErrorResponses implements DocumentTransformer
 
     /**
      * Pass one: hoist every repeated body shape, rewriting each media type's `schema` to a `$ref`.
+     * Hands pass two the ALIASES its shared shapes were published under, since two responses spelling
+     * one shape under two names are still two statements of one body.
      *
      * @param  array<array-key, mixed>  $paths
+     * @param  array<string, Occurrence>  $shapes
      * @param  array<string, mixed>  $existing
-     * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>}
+     * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>, array<string, string>}
      */
-    private static function shareShapes(array $paths, array $existing): array
+    private static function shareShapes(array $paths, array $shapes, array $existing): array
     {
-        $shapes = self::shareable(self::collect($paths, self::schemaSites(...)));
         if ($shapes === []) {
-            return [$paths, null, []];
+            return [$paths, null, [], []];
         }
 
         $identity = new IdentityGenerator;
@@ -126,10 +133,16 @@ final class SharedErrorResponses implements DocumentTransformer
             self::PROVENANCE => ['id' => $identity->publishedSchemaId($scope, Arr::stringKeyed($body))],
         ] + $body);
 
+        $aliases = [];
+        foreach ($names as $key => $name) {
+            $aliases[$name] = $shapes[$key]['group'];
+        }
+
         return [
-            self::rewrite($paths, $names, self::schemaSites(...), '#/components/schemas/'),
+            self::rewrite($paths, $names, self::schemaSites(...), self::SCHEMAS),
             $schemas,
             self::collisions($contests, $names, 'schemas'),
+            $aliases,
         ];
     }
 
@@ -137,20 +150,20 @@ final class SharedErrorResponses implements DocumentTransformer
      * Pass two: hoist every response the rewritten document now states identically two or more times.
      *
      * @param  array<array-key, mixed>  $paths
+     * @param  array<string, Occurrence>  $bodies
      * @param  array<string, mixed>  $existing
      * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>}
      */
-    private static function shareResponses(array $paths, array $existing): array
+    private static function shareResponses(array $paths, array $bodies, array $existing): array
     {
-        $responses = self::shareable(self::collect($paths, self::responseSites(...)));
-        if ($responses === []) {
+        if ($bodies === []) {
             return [$paths, null, []];
         }
 
-        [$names, $bucket, $contests] = self::mint($responses, $existing, static fn (array $body, string $scope): array => $body);
+        [$names, $bucket, $contests] = self::mint($bodies, $existing, static fn (array $body, string $scope): array => $body);
 
         return [
-            self::rewrite($paths, $names, self::responseSites(...), '#/components/responses/'),
+            self::rewrite($paths, $names, self::responseSites(...), self::RESPONSES),
             $bucket,
             self::collisions($contests, $names, 'responses'),
         ];
@@ -189,13 +202,16 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * Count what every hoistable node states, keyed by its scope ({@see scope()}) and canonical content.
+     * Count what every hoistable node states, keyed by the scope it will PUBLISH under ({@see scope()})
+     * and its canonical content, and filed under the GROUP that decides whether it publishes at all:
+     * the status and the body, which no declaration has a say in ({@see shareable()}).
      *
      * @param  array<array-key, mixed>  $paths
      * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>}>  $sites
-     * @return array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>
+     * @param  callable(array<array-key, mixed>): array<array-key, mixed>  $group  the body as the grouping reads it
+     * @return array<string, Occurrence>
      */
-    private static function collect(array $paths, callable $sites): array
+    private static function collect(array $paths, callable $sites, callable $group): array
     {
         $out = [];
 
@@ -206,13 +222,22 @@ final class SharedErrorResponses implements DocumentTransformer
 
             $name = self::claimed($response);
             $scope = self::scope((string) $status, $name);
+            $rejected = self::rejected($response);
 
             foreach ($sites($response) as [, $body]) {
                 $stripped = self::stripProvenance($body);
                 $key = self::key($scope, $stripped);
 
-                $out[$key] ??= ['scope' => $scope, 'base' => $name ?? 'Error'.$status, 'body' => $stripped, 'count' => 0];
+                $out[$key] ??= [
+                    'scope' => $scope,
+                    'group' => self::key((string) $status, $group($stripped)),
+                    'base' => $name ?? 'Error'.$status,
+                    'body' => $stripped,
+                    'count' => 0,
+                    'rejected' => [],
+                ];
                 $out[$key]['count']++;
+                $out[$key]['rejected'] += $rejected;
             }
         }
 
@@ -248,14 +273,48 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * The bodies worth hoisting: the ones that repeat.
+     * The bodies worth hoisting: the ones whose GROUP repeats — status and body, every declaration
+     * erased, which is the count a document nobody declared anything in would have had. Counting per
+     * PUBLICATION would let one route naming its error put an unrelated route's body back inline:
+     * design §"Shared error components".
      *
-     * @param  array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>  $bodies
-     * @return array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>
+     * @param  array<string, Occurrence>  $bodies
+     * @return array<string, Occurrence>
      */
     private static function shareable(array $bodies): array
     {
-        return array_filter($bodies, static fn (array $body): bool => $body['count'] >= self::MIN_OCCURRENCES);
+        $occurrences = [];
+        foreach ($bodies as $body) {
+            $occurrences[$body['group']] = ($occurrences[$body['group']] ?? 0) + $body['count'];
+        }
+
+        return array_filter($bodies, static fn (array $body): bool => $occurrences[$body['group']] >= self::MIN_OCCURRENCES);
+    }
+
+    /**
+     * A response body with every reference to a shape this run just published replaced by the shape's
+     * own group — so two responses that differ only in which NAME their identical shape went out under
+     * are one body when the grouping counts them.
+     *
+     * @param  array<array-key, mixed>  $body
+     * @param  array<string, string>  $aliases  published schema name → the group behind it
+     * @return array<array-key, mixed>
+     */
+    private static function withoutMintedNames(array $body, array $aliases): array
+    {
+        foreach ($body as $key => $value) {
+            if ($key === '$ref' && is_string($value) && str_starts_with($value, self::SCHEMAS)) {
+                $body[$key] = $aliases[substr($value, strlen(self::SCHEMAS))] ?? $value;
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $body[$key] = self::withoutMintedNames($value, $aliases);
+            }
+        }
+
+        return $body;
     }
 
     /**
@@ -274,7 +333,7 @@ final class SharedErrorResponses implements DocumentTransformer
      * the shared body climbs past it instead. One holding an IDENTICAL body is not taken, which is what
      * keeps a rebuild over a restored document byte-identical.
      *
-     * @param  array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>  $bodies
+     * @param  array<string, Occurrence>  $bodies
      * @param  array<string, mixed>  $existing
      * @param  callable(array<array-key, mixed>, string): array<array-key, mixed>  $publish
      * @return array{array<string, string>, array<string, mixed>, array<string, list<string>>}
@@ -478,12 +537,8 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * What distinguishes one publication of a body from another carrying the same bytes: its status,
-     * and the name a producer declared for it. Both halves are load-bearing — the status stops an edit
-     * to a 404 repointing a 403, and the declared name is what makes two named errors that happen to
-     * share a body two components rather than a race for one name. An undeclared body scopes on the
-     * status alone, exactly as it always did, so its key, its hash rung and its component id are
-     * unchanged.
+     * What distinguishes one publication of a body from another carrying the same bytes: its status and
+     * the name a producer declared for it. Why both halves: design §"Shared error components".
      */
     private static function scope(string $status, ?string $name): string
     {
@@ -500,7 +555,7 @@ final class SharedErrorResponses implements DocumentTransformer
     {
         $name = self::declared($response);
 
-        return $name !== null && preg_match(self::COMPONENT_NAME, $name) === 1 ? $name : null;
+        return $name !== null && ComponentNames::isLegal($name) ? $name : null;
     }
 
     /**
@@ -520,24 +575,40 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * One warning per producer that declared a name no `$ref` could carry, so an author error costs the
-     * document a better name and never its validity. Deduped by the pair that identifies the mistake —
-     * a mapper wrong on one route is wrong on every route it maps, and one warning is the whole story.
+     * The illegal name a response declared and who declared it, keyed by the pair that identifies the
+     * mistake. Empty for a legal declaration, and for no declaration at all.
      *
-     * @param  array<array-key, mixed>  $paths
+     * @param  array<array-key, mixed>  $response
+     * @return array<string, array{string, string|null}>
+     */
+    private static function rejected(array $response): array
+    {
+        $name = self::declared($response);
+        if ($name === null || ComponentNames::isLegal($name)) {
+            return [];
+        }
+
+        $producer = self::declarer($response);
+
+        return [$name."\0".($producer ?? '') => [$name, $producer]];
+    }
+
+    /**
+     * One warning per producer of a name no `$ref` could carry, so an author error costs the document a
+     * better name and never its validity. Deduped by the pair that identifies the mistake — a mapper
+     * wrong on one route is wrong on every route it maps — and raised only for bodies that were
+     * actually published, which are the only ones "named after its status instead" is true of.
+     *
+     * @param  array<string, Occurrence>  ...$published
      * @return list<Diagnostic>
      */
-    private static function rejectedClaims(array $paths): array
+    private static function rejectedClaims(array ...$published): array
     {
         $rejected = [];
-        foreach (self::responses($paths) as [, $response]) {
-            $name = self::declared($response);
-            if ($name === null || preg_match(self::COMPONENT_NAME, $name) === 1) {
-                continue;
+        foreach ($published as $bodies) {
+            foreach ($bodies as $body) {
+                $rejected += $body['rejected'];
             }
-
-            $producer = self::declarer($response);
-            $rejected[$name."\0".($producer ?? '')] = [$name, $producer];
         }
 
         ksort($rejected);
@@ -549,14 +620,29 @@ final class SharedErrorResponses implements DocumentTransformer
                 code: 'components.name-invalid',
                 message: sprintf(
                     '%s declared the component name "%s" for a shared error response, which is not a name an OpenAPI component key can carry, so the body was named after its status instead.',
-                    $producer === null ? 'A producer' : sprintf('"%s"', $producer),
-                    $name,
+                    $producer === null ? 'A producer' : sprintf('"%s"', self::printable($producer)),
+                    self::printable($name),
                 ),
                 help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
             );
         }
 
         return $out;
+    }
+
+    /**
+     * A name as a diagnostic may quote it. The document escapes what it publishes; a diagnostic is read
+     * on a terminal, and the only names reaching this one are ones nothing validated, so an escape
+     * sequence or a newline would move the cursor rather than be read. Everything printable passes
+     * through — the author has to recognise what they wrote.
+     */
+    private static function printable(string $value): string
+    {
+        return (string) preg_replace_callback(
+            '/[\x00-\x1F\x7F]/',
+            static fn (array $match): string => sprintf('\x%02X', ord($match[0])),
+            $value,
+        );
     }
 
     /**

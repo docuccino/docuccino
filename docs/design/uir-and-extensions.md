@@ -137,13 +137,32 @@ is: the hoist runs over the finished document, so a claim that lived anywhere el
 warm fragment-cache hit and a warm build would publish different names from a cold one.
 
 **The declaration is part of what the body IS**, not a label applied afterwards, so it joins the status
-in the DEDUP KEY and in the published component's id. Keyed on the bytes alone, two kinds of error that
-happen to render identically would collapse into one component under one of the two names, and which
-name that is would depend on which routes the application happens to have — a name silently coming to
-mean something else, which is the one failure this whole area is built to prevent. Keyed on the
+in the PUBLICATION key and in the published component's id. Keyed on the bytes alone, two kinds of error
+that happen to render identically would collapse into one component under one of the two names, and
+which name that is would depend on which routes the application happens to have — a name silently coming
+to mean something else, which is the one failure this whole area is built to prevent. Keyed on the
 declaration as well they are two components, each named for its own declarer and neither able to move
 the other. An undeclared body keys on the status alone, exactly as it always did, so its key, its hash
 rung and its component id are unchanged.
+
+**What repeats decides WHETHER a body is hoisted; what its producer declared decides only what the
+component is CALLED.** The two questions are counted separately and this is load-bearing: occurrences
+are grouped by status and body with every declaration erased — the grouping a document with no
+declarations in it would have had — and each publication in a group that repeats is hoisted under its
+own name. Count per publication instead and a route learning to name its error takes its occurrence out
+of the group behind an unrelated route's body, drops that body below the threshold and puts it back
+inline: one part of an application changing the emitted representation of another, which is the defect
+locality forbids and which a mixed document (a first tier recovering a body without naming it, a later
+tier naming an identical one) reaches in stock Laravel. So a declaration can ADD a component and never
+take one away, and an undeclared body publishes exactly what it would have published in a document
+where nobody declared anything at all. The price is that a body declared by one route and undeclared
+by another is published twice, once under each name — the same bytes, two types in a generated client,
+and the honest reading of two producers that said different things about the same body.
+
+The second pass counts the same way, which takes one more step: by the time it runs the two responses
+differ in the schema `$ref` the first pass just wrote into them. So the grouping resolves a reference to
+a shape THIS run published back to that shape's group, and two responses spelling one shape under two
+names are one body again.
 
 Naming an error after the EXCEPTION would have been the obvious design and is wrong: the relation is
 not 1:1 in either direction. Three exception types routinely render one body (their `detail`s are
@@ -160,10 +179,20 @@ claim at `integration`, so an application's own integration breaks the tie on `s
 cannot: overlays are applied before the transformers, so `components.responses.*` does not exist yet
 when one runs.
 
-Contests and illegal names both route through the machinery that already exists: two DIFFERENT bodies
-claiming one name climb `ComponentNames`' ladder and are reported as `components.name-collision`, and a
-name outside `^[a-zA-Z0-9._-]+$` is refused with `components.name-invalid` naming the producer while the
-body falls back to `Error<status>` — a degraded name, never an invalid document.
+Contests route through the machinery that already exists: two DIFFERENT bodies claiming one name climb
+`ComponentNames`' ladder and are reported as `components.name-collision`.
+
+Illegal names are refused at the WRITE. `ComponentNames::isLegal()` owns the character class — one
+copy, in the class that also `sanitize()`s by force — and `claimComponentName()` reads a name that
+fails it as no declaration at all, so nothing a `$ref` could not point at ever reaches
+`x-docuccino.facts.component`, whether or not the hoist that would have refused it later is switched
+on. The body falls back to `Error<status>`: a degraded name, never an invalid document, and never a
+question of which knobs are set. The hoist keeps `components.name-invalid` for the one source the draft
+cannot police — a document that already states the fact, which an overlay can, since overlays are
+applied before the transformers run. That warning is raised only for bodies that were actually
+published, since it says the body "was named after its status instead" and that is untrue of a body
+nothing hoisted; and it quotes the name with control characters escaped, because a diagnostic is read
+on a terminal and nothing validated the string it came from.
 
 **The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
 the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not
