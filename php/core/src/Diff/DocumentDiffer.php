@@ -20,7 +20,8 @@ use Docuccino\Core\Support\Arr;
  *
  * Responses and parameters are read through {@see ComponentRefs} on both sides, so where one lives —
  * inline or hoisted into `components` — is not itself a change, while a shared one's content is compared
- * under every operation that `$ref`s it.
+ * under every operation that `$ref`s it. An operation's parameters are its own plus the ones its path item
+ * declares for every operation under it, minus any the operation restates for the same `in` + `name`.
  *
  * Breaking: a removed operation/parameter/response/status, a parameter becoming required, an
  * added required parameter, plus the schema-level rules SchemaComparator owns. Additions, prose
@@ -34,7 +35,10 @@ use Docuccino\Core\Support\Arr;
  * Identity pairing needs identities on BOTH sides. An artifact exported with ids dropped, or a spec from
  * another tool, has none, so the differ falls back to method + path on both sides and reports which it
  * used ({@see Pairing}) — see {@see pairing()} for why the one-sided case can't be paired by id at all.
- * Every node's id is read through {@see NodeIdentity}, which knows both forms an artifact can carry.
+ * Every node's id is read through {@see NodeIdentity}, which knows both forms an artifact can carry, and
+ * keyed through {@see IdentityKeys}, which owns what happens when two nodes claim one id.
+ *
+ * @phpstan-type OperationEntry array{path: string, method: string, op: Operation, shared: list<Parameter>}
  */
 final class DocumentDiffer
 {
@@ -110,8 +114,10 @@ final class DocumentDiffer
      */
     private function diffOperations(UirDocument $old, UirDocument $new, array &$changes, Pairing $pairing): void
     {
-        $oldOps = $this->indexOperations($old, $pairing);
-        $newOps = $this->indexOperations($new, $pairing);
+        [$oldOps, $newOps] = IdentityKeys::pair(
+            $this->operationEntries($old, $pairing),
+            $this->operationEntries($new, $pairing),
+        );
         $oldRefs = ComponentRefs::of($old);
         $newRefs = ComponentRefs::of($new);
 
@@ -130,8 +136,8 @@ final class DocumentDiffer
     }
 
     /**
-     * @param  array{path: string, method: string, op: Operation}  $old
-     * @param  array{path: string, method: string, op: Operation}  $new
+     * @param  OperationEntry  $old
+     * @param  OperationEntry  $new
      * @param  list<Change>  $changes
      */
     private function diffOperationPair(string $id, array $old, array $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes, Pairing $pairing): void
@@ -150,7 +156,7 @@ final class DocumentDiffer
         }
 
         $this->diffSecurity($id, $path, $oldOp, $newOp, $changes);
-        $this->diffParameters($id, $path, $oldOp, $newOp, $oldRefs, $newRefs, $changes, $pairing);
+        $this->diffParameters($id, $path, $old, $new, $oldRefs, $newRefs, $changes, $pairing);
         $this->diffResponses($id, $path, $oldOp, $newOp, $oldRefs, $newRefs, $changes);
         $this->diffRequestBody($id, $path, $oldOp, $newOp, $changes);
     }
@@ -200,12 +206,16 @@ final class DocumentDiffer
     }
 
     /**
+     * @param  OperationEntry  $old
+     * @param  OperationEntry  $new
      * @param  list<Change>  $changes
      */
-    private function diffParameters(string $opId, string $path, Operation $old, Operation $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes, Pairing $pairing): void
+    private function diffParameters(string $opId, string $path, array $old, array $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes, Pairing $pairing): void
     {
-        $oldParams = $this->indexParameters($old, $oldRefs, $pairing);
-        $newParams = $this->indexParameters($new, $newRefs, $pairing);
+        [$oldParams, $newParams] = IdentityKeys::pair(
+            $this->parameterEntries($old, $oldRefs, $pairing),
+            $this->parameterEntries($new, $newRefs, $pairing),
+        );
 
         foreach (Arr::sortedUnion(array_keys($oldParams), array_keys($newParams)) as $key) {
             $inOld = array_key_exists($key, $oldParams);
@@ -328,8 +338,10 @@ final class DocumentDiffer
      */
     private function diffComponentSchemas(UirDocument $old, UirDocument $new, array &$changes, Pairing $pairing): void
     {
-        $oldSchemas = $this->indexComponentSchemas($old, $pairing);
-        $newSchemas = $this->indexComponentSchemas($new, $pairing);
+        [$oldSchemas, $newSchemas] = IdentityKeys::pair(
+            $this->componentSchemaEntries($old, $pairing),
+            $this->componentSchemaEntries($new, $pairing),
+        );
 
         foreach (Arr::sortedUnion(array_keys($oldSchemas), array_keys($newSchemas)) as $key) {
             $inOld = array_key_exists($key, $oldSchemas);
@@ -355,8 +367,7 @@ final class DocumentDiffer
      */
     private function diffPages(UirDocument $old, UirDocument $new, array &$changes): void
     {
-        $oldPages = $this->indexPages($old);
-        $newPages = $this->indexPages($new);
+        [$oldPages, $newPages] = IdentityKeys::pair($this->pageEntries($old), $this->pageEntries($new));
 
         foreach (Arr::sortedUnion(array_keys($oldPages), array_keys($newPages)) as $key) {
             $inOld = array_key_exists($key, $oldPages);
@@ -387,16 +398,18 @@ final class DocumentDiffer
     }
 
     /**
-     * @return array<string, array{path: string, method: string, op: Operation}>
+     * @return list<array{0: ?string, 1: string, 2: OperationEntry}>
      */
-    private function indexOperations(UirDocument $document, Pairing $pairing): array
+    private function operationEntries(UirDocument $document, Pairing $pairing): array
     {
         $out = [];
 
-        foreach ($this->operations($document) as [$op, $method, $path]) {
-            $id = $pairing === Pairing::Identity ? self::operationId($op) : null;
-            $key = $id ?? '_'.strtoupper($method).' '.$path;
-            $out[$key] = ['path' => $path, 'method' => $method, 'op' => $op];
+        foreach ($this->operations($document) as [$op, $method, $path, $shared]) {
+            $out[] = [
+                $pairing === Pairing::Identity ? self::operationId($op) : null,
+                '_'.strtoupper($method).' '.$path,
+                ['path' => $path, 'method' => $method, 'op' => $op, 'shared' => $shared],
+            ];
         }
 
         return $out;
@@ -408,7 +421,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @return list<array{0: Operation, 1: string, 2: string}>
+     * @return list<array{0: Operation, 1: string, 2: string, 3: list<Parameter>}>
      */
     private function operations(UirDocument $document): array
     {
@@ -416,7 +429,7 @@ final class DocumentDiffer
 
         foreach ($document->paths ?? [] as $template => $item) {
             foreach ($item->operations as $method => $op) {
-                $out[] = [$op, $method, (string) $template];
+                $out[] = [$op, $method, (string) $template, $item->parameters];
             }
         }
 
@@ -424,26 +437,46 @@ final class DocumentDiffer
     }
 
     /**
-     * @return array<string, Parameter>
+     * The operation's own parameters plus the ones its path item declares for every operation under it.
+     * Per OAS an operation's entry replaces the path item's for the same `in` + `name`, which is the pair
+     * {@see paramLabel} names — so the two are one parameter and only the operation's is compared.
+     *
+     * @param  OperationEntry  $entry
+     * @return list<array{0: ?string, 1: string, 2: Parameter}>
      */
-    private function indexParameters(Operation $op, ComponentRefs $refs, Pairing $pairing): array
+    private function parameterEntries(array $entry, ComponentRefs $refs, Pairing $pairing): array
     {
-        $out = [];
+        $own = array_map($refs->resolveParameter(...), $entry['op']->parameters);
 
-        foreach ($op->parameters as $param) {
+        $restated = [];
+        foreach ($own as $param) {
+            $restated[self::paramLabel($param)] = true;
+        }
+
+        $effective = [];
+        foreach ($entry['shared'] as $param) {
             $param = $refs->resolveParameter($param);
-            $id = $pairing === Pairing::Identity ? self::parameterId($param) : null;
-            $key = $id ?? self::paramLabel($param);
-            $out[$key] = $param;
+            if (! isset($restated[self::paramLabel($param)])) {
+                $effective[] = $param;
+            }
+        }
+
+        $out = [];
+        foreach ([...$effective, ...$own] as $param) {
+            $out[] = [
+                $pairing === Pairing::Identity ? self::parameterId($param) : null,
+                self::paramLabel($param),
+                $param,
+            ];
         }
 
         return $out;
     }
 
     /**
-     * @return array<string, array{name: string, schema: array<string, mixed>}>
+     * @return list<array{0: ?string, 1: string, 2: array{name: string, schema: array<string, mixed>}}>
      */
-    private function indexComponentSchemas(UirDocument $document, Pairing $pairing): array
+    private function componentSchemaEntries(UirDocument $document, Pairing $pairing): array
     {
         $out = [];
 
@@ -454,18 +487,20 @@ final class DocumentDiffer
 
         foreach ($components->schemas as $name => $schema) {
             $data = $schema->toArray();
-            $id = $pairing === Pairing::Identity ? self::schemaId($data) : null;
-            $key = $id ?? 'name:'.$name;
-            $out[$key] = ['name' => (string) $name, 'schema' => $data];
+            $out[] = [
+                $pairing === Pairing::Identity ? self::schemaId($data) : null,
+                'name:'.$name,
+                ['name' => (string) $name, 'schema' => $data],
+            ];
         }
 
         return $out;
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return list<array{0: ?string, 1: string, 2: array<string, mixed>}>
      */
-    private function indexPages(UirDocument $document): array
+    private function pageEntries(UirDocument $document): array
     {
         $out = [];
 
@@ -474,17 +509,19 @@ final class DocumentDiffer
             return $out;
         }
 
-        foreach ($content->pages as $page) {
-            $stringKeyed = $page->toArray();
-            $key = $page->id !== '' ? $page->id : ($page->slug !== '' ? 'slug:'.$page->slug : 'page:'.count($out));
-            $out[$key] = $stringKeyed;
+        foreach ($content->pages as $index => $page) {
+            $out[] = [
+                $page->id !== '' ? $page->id : null,
+                $page->slug !== '' ? 'slug:'.$page->slug : 'page:'.$index,
+                $page->toArray(),
+            ];
         }
 
         return $out;
     }
 
     /**
-     * @param  array{path: string, method: string, op: Operation}  $entry
+     * @param  OperationEntry  $entry
      */
     private function display(array $entry): string
     {

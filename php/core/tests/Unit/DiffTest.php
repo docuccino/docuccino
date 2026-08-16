@@ -64,6 +64,25 @@ it('refuses to diff documents built with different identity-algorithm versions',
     expect(fn () => diffOf(diffBase(), $new))->toThrow(IncomparableDocumentsException::class);
 });
 
+it('escapes the algo version it quotes back in that refusal', function (): void {
+    // The refusal names both versions and the command prints it straight to the terminal, so an id crafted
+    // to carry an erase-line sequence rewrites the operator's log with a verdict the diff never reached.
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['x-docuccino']['id'] = "op:\x1B[2K\rALL CLEAR - 0 breaking changes:aaaa";
+
+    $message = null;
+    try {
+        diffOf(diffBase(), $new);
+    } catch (IncomparableDocumentsException $exception) {
+        $message = $exception->getMessage();
+    }
+
+    expect($message)->toBeString()
+        ->and($message)->not->toContain("\x1B")
+        ->and($message)->not->toContain("\r")
+        ->and($message)->toContain('new=\x1B[2K\x0DALL CLEAR - 0 breaking changes.');
+});
+
 // --- Pairing ----------------------------------------------------------------
 
 /**
@@ -768,6 +787,186 @@ it('counts a $ref parameter\'s identity as the component\'s when judging overlap
     $new['components']['parameters']['Status']['x-docuccino']['id'] = 'par:v1:7777777777777777';
 
     expect(diffOf(diffHoistedParams(), $new)->disjointIdentities)->toBe(['parameter']);
+});
+
+// --- Path-item parameters ---------------------------------------------------
+
+/**
+ * `diffBase()` with one parameter declared on the path item rather than the operation — the shape a
+ * hand-written or third-party artifact reaches for when every operation under a path shares it. Docuccino
+ * never writes it, so it only ever arrives from the side the diff did not build.
+ *
+ * @param  array<string, mixed>  $parameter
+ * @return array<string, mixed>
+ */
+function diffPathItemParam(array $parameter): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['parameters'] = [$parameter];
+
+    return $doc;
+}
+
+it('reports a required path-item parameter the new side no longer declares', function (): void {
+    // A path item's parameters apply to every operation under it. Reading only the operation's own list
+    // made a removed required parameter read as no change, which passes `--enforce` on a broken contract.
+    $old = diffPathItemParam([
+        'x-docuccino' => ['id' => 'par:v1:1111111111111111'],
+        'name' => 'q', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string'],
+    ]);
+
+    $changes = changesByCode(diffOf($old, diffBase()));
+
+    expect($changes)->toHaveKey('parameter.removed')
+        ->and($changes['parameter.removed']->breaking)->toBeTrue()
+        ->and($changes['parameter.removed']->path)->toBe('GET /api/v1/forms/{id} parameters query:q');
+});
+
+it('compares a path-item parameter as a parameter of the operation under it', function (): void {
+    $optional = ['x-docuccino' => ['id' => 'par:v1:1111111111111111'], 'name' => 'q', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']];
+    $required = $optional;
+    $required['required'] = true;
+
+    $changes = changesByCode(diffOf(diffPathItemParam($optional), diffPathItemParam($required)));
+
+    expect($changes)->toHaveKey('parameter.became-required')
+        ->and($changes['parameter.became-required']->path)->toBe('GET /api/v1/forms/{id} parameters query:q');
+});
+
+it('applies a path item\'s parameter to every operation under it', function (): void {
+    $old = diffPathItemParam([
+        'x-docuccino' => ['id' => 'par:v1:1111111111111111'],
+        'name' => 'q', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string'],
+    ]);
+    $old['paths']['/api/v1/forms/{id}']['delete'] = [
+        'x-docuccino' => ['id' => 'op:v1:3333333333333333'],
+        'operationId' => 'forms.destroy',
+        'responses' => ['204' => ['description' => 'Gone']],
+    ];
+
+    $new = $old;
+    unset($new['paths']['/api/v1/forms/{id}']['parameters']);
+
+    $paths = array_map(
+        static fn (Change $c): string => $c->path,
+        array_values(array_filter(diffOf($old, $new)->changes, static fn (Change $c): bool => $c->code === 'parameter.removed')),
+    );
+    sort($paths);
+
+    expect($paths)->toBe(['DELETE /api/v1/forms/{id} parameters query:q', 'GET /api/v1/forms/{id} parameters query:q']);
+});
+
+it('lets an operation\'s own parameter replace the path item\'s of the same name and location', function (bool $hoisted): void {
+    // OAS: an operation's entry for an `in` + `name` overrides the path item's, so the two are one
+    // parameter and only the operation's counts. Reading the pointer form takes resolving it first.
+    $shared = ['x-docuccino' => ['id' => 'par:v1:1111111111111111'], 'name' => 'status', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']];
+
+    $shadowed = diffBase();
+    if ($hoisted) {
+        $shadowed['components']['parameters'] = ['Status' => $shared];
+        $shadowed['paths']['/api/v1/forms/{id}']['parameters'] = [['$ref' => '#/components/parameters/Status']];
+    } else {
+        $shadowed['paths']['/api/v1/forms/{id}']['parameters'] = [$shared];
+    }
+
+    expect(diffOf($shadowed, diffBase())->isEmpty())->toBeTrue();
+})->with(['stated inline' => false, 'reached by $ref' => true]);
+
+it('counts a path item\'s parameters when judging overlap', function (): void {
+    // The warning that a kind paired nothing has to read the same parameters the pairing read, or a
+    // document that declares them all on its path items looks to carry no parameter identity at all.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['parameters'] = [
+        ['x-docuccino' => ['id' => 'par:v1:1111111111111111'], 'name' => 'q', 'in' => 'query', 'schema' => ['type' => 'string']],
+        ['x-docuccino' => ['id' => 'par:v1:2222222222222222'], 'name' => 'page', 'in' => 'query', 'schema' => ['type' => 'integer']],
+    ];
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'] = [];
+
+    $new = $old;
+    $new['paths']['/api/v1/forms/{id}']['parameters'][0]['x-docuccino']['id'] = 'par:v1:3333333333333333';
+    $new['paths']['/api/v1/forms/{id}']['parameters'][1]['x-docuccino']['id'] = 'par:v1:4444444444444444';
+
+    expect(diffOf($old, $new)->disjointIdentities)->toBe(['parameter']);
+});
+
+// --- Two nodes claiming one id ----------------------------------------------
+
+it('reports a removed operation that shared its id with the one that stayed', function (): void {
+    // Ids are read off an artifact nobody validated. Keyed on the id alone, the second node to claim one
+    // overwrites the first and the node it hid leaves the comparison entirely.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms'] = ['get' => [
+        'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
+        'operationId' => 'forms.index',
+        'responses' => ['200' => ['description' => 'Forms']],
+    ]];
+
+    $new = $old;
+    unset($new['paths']['/api/v1/forms']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('operation.removed')
+        ->and($changes['operation.removed']->path)->toBe('GET /api/v1/forms')
+        ->and($changes)->not->toHaveKey('operation.added');
+});
+
+it('reports a removed parameter that shared its id with the one that stayed', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][0]['x-docuccino']['id'] = 'par:v1:dupedupedupedupe';
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['x-docuccino']['id'] = 'par:v1:dupedupedupedupe';
+
+    $new = $old;
+    array_shift($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('parameter.removed')
+        ->and($changes['parameter.removed']->breaking)->toBeTrue()
+        ->and($changes['parameter.removed']->path)->toBe('GET /api/v1/forms/{id} parameters path:id')
+        ->and($changes)->not->toHaveKey('parameter.added');
+});
+
+it('reports a removed component schema that shared its id with the one that stayed', function (): void {
+    $old = diffBase();
+    $old['components']['schemas']['FormSummary'] = [
+        'x-docuccino' => ['id' => 'sch:v1:eeeeeeeeeeeeeeee'],
+        'type' => 'object',
+        'properties' => ['title' => ['type' => 'string']],
+    ];
+
+    $changes = changesByCode(diffOf($old, diffBase()));
+
+    expect($changes)->toHaveKey('schema.removed')
+        ->and($changes['schema.removed']->path)->toBe('components.schemas.FormSummary')
+        ->and($changes)->not->toHaveKey('schema.added');
+});
+
+it('reports a removed content page that shared its id with the one that stayed', function (): void {
+    $old = diffBase();
+    $old['x-docuccino']['content']['pages'][] = [
+        'id' => 'page:v1:ffffffffffffffff', 'slug' => 'deploying', 'title' => 'Deploying', 'content' => 'Ship it.',
+    ];
+
+    $changes = changesByCode(diffOf($old, diffBase()));
+
+    expect($changes)->toHaveKey('page.removed')
+        ->and($changes['page.removed']->path)->toBe('pages deploying')
+        ->and($changes)->not->toHaveKey('page.added');
+});
+
+it('invents no churn when both sides carry the same contested id', function (): void {
+    // What tells two nodes claiming one id apart has to be a function of the nodes, not of the order they
+    // were met, or an unchanged pair of them reads as removed and re-added the moment one is reordered.
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][0]['x-docuccino']['id'] = 'par:v1:dupedupedupedupe';
+    $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['x-docuccino']['id'] = 'par:v1:dupedupedupedupe';
+
+    $reordered = $doc;
+    $reordered['paths']['/api/v1/forms/{id}']['get']['parameters'] = array_reverse($doc['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    expect(diffOf($doc, $doc)->isEmpty())->toBeTrue()
+        ->and(diffOf($doc, $reordered)->isEmpty())->toBeTrue();
 });
 
 // --- Determinism, model and rendering --------------------------------------

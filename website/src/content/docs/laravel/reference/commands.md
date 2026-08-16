@@ -136,6 +136,11 @@ written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that
 another — so resolving it is also what lets the diff tell an operation's `$ref`ed parameters apart at
 all. Where a pointer resolves to nothing, the pointer itself does that job.
 
+An operation's parameters are its own plus the ones its path item declares for every operation under it,
+minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino
+writes parameters on the operation, so this only comes up when `old` is a hand-written or third-party
+artifact, which is exactly where a parameter would otherwise go uncompared.
+
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `old` (required) | path | The "old" side. Missing/unreadable/invalid-JSON → exit 1. |
