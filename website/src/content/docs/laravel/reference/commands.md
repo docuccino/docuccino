@@ -129,9 +129,12 @@ minted, and re-export it if it does. The warning is advisory — `--enforce` nev
 quiet when either side carries a single identity of that kind, where one node replaced by another says
 the same thing and is far likelier.
 
-Responses are read through `components.responses` on **both** sides, so a body that moved between
+Responses and parameters are read through `components` on **both** sides, so one that moved between
 inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
-a change, while an edit to a shared body is reported against every operation that `$ref`s it.
+a change, while an edit to a shared one is reported against every operation that `$ref`s it. A parameter
+written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one parameter from
+another — so resolving it is also what lets the diff tell an operation's `$ref`ed parameters apart at
+all. Where a pointer resolves to nothing, the pointer itself does that job.
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |

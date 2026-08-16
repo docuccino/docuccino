@@ -18,9 +18,9 @@ use Docuccino\Core\Support\Arr;
  * schemas and content pages, delegating field-level schema comparison to
  * {@see SchemaComparator}, and flags each {@see Change} breaking or not.
  *
- * Responses are read through {@see ComponentResponses} on both sides, so where a body lives —
- * inline or hoisted into `components.responses` — is not itself a change, while a shared body's
- * content is compared under every operation that `$ref`s it.
+ * Responses and parameters are read through {@see ComponentRefs} on both sides, so where one lives —
+ * inline or hoisted into `components` — is not itself a change, while a shared one's content is compared
+ * under every operation that `$ref`s it.
  *
  * Breaking: a removed operation/parameter/response/status, a parameter becoming required, an
  * added required parameter, plus the schema-level rules SchemaComparator owns. Additions, prose
@@ -112,8 +112,8 @@ final class DocumentDiffer
     {
         $oldOps = $this->indexOperations($old, $pairing);
         $newOps = $this->indexOperations($new, $pairing);
-        $oldRefs = ComponentResponses::of($old);
-        $newRefs = ComponentResponses::of($new);
+        $oldRefs = ComponentRefs::of($old);
+        $newRefs = ComponentRefs::of($new);
 
         foreach (Arr::sortedUnion(array_keys($oldOps), array_keys($newOps)) as $key) {
             $inOld = array_key_exists($key, $oldOps);
@@ -134,7 +134,7 @@ final class DocumentDiffer
      * @param  array{path: string, method: string, op: Operation}  $new
      * @param  list<Change>  $changes
      */
-    private function diffOperationPair(string $id, array $old, array $new, ComponentResponses $oldRefs, ComponentResponses $newRefs, array &$changes, Pairing $pairing): void
+    private function diffOperationPair(string $id, array $old, array $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes, Pairing $pairing): void
     {
         $path = $this->display($new);
         $oldOp = $old['op'];
@@ -150,7 +150,7 @@ final class DocumentDiffer
         }
 
         $this->diffSecurity($id, $path, $oldOp, $newOp, $changes);
-        $this->diffParameters($id, $path, $oldOp, $newOp, $changes, $pairing);
+        $this->diffParameters($id, $path, $oldOp, $newOp, $oldRefs, $newRefs, $changes, $pairing);
         $this->diffResponses($id, $path, $oldOp, $newOp, $oldRefs, $newRefs, $changes);
         $this->diffRequestBody($id, $path, $oldOp, $newOp, $changes);
     }
@@ -202,10 +202,10 @@ final class DocumentDiffer
     /**
      * @param  list<Change>  $changes
      */
-    private function diffParameters(string $opId, string $path, Operation $old, Operation $new, array &$changes, Pairing $pairing): void
+    private function diffParameters(string $opId, string $path, Operation $old, Operation $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes, Pairing $pairing): void
     {
-        $oldParams = $this->indexParameters($old, $pairing);
-        $newParams = $this->indexParameters($new, $pairing);
+        $oldParams = $this->indexParameters($old, $oldRefs, $pairing);
+        $newParams = $this->indexParameters($new, $newRefs, $pairing);
 
         foreach (Arr::sortedUnion(array_keys($oldParams), array_keys($newParams)) as $key) {
             $inOld = array_key_exists($key, $oldParams);
@@ -252,10 +252,10 @@ final class DocumentDiffer
     /**
      * @param  list<Change>  $changes
      */
-    private function diffResponses(string $opId, string $path, Operation $old, Operation $new, ComponentResponses $oldRefs, ComponentResponses $newRefs, array &$changes): void
+    private function diffResponses(string $opId, string $path, Operation $old, Operation $new, ComponentRefs $oldRefs, ComponentRefs $newRefs, array &$changes): void
     {
-        $oldResponses = array_map($oldRefs->resolve(...), $old->responses);
-        $newResponses = array_map($newRefs->resolve(...), $new->responses);
+        $oldResponses = array_map($oldRefs->resolveResponse(...), $old->responses);
+        $newResponses = array_map($newRefs->resolveResponse(...), $new->responses);
 
         foreach (Arr::sortedUnion(array_keys($oldResponses), array_keys($newResponses)) as $status) {
             $inOld = array_key_exists($status, $oldResponses);
@@ -426,11 +426,12 @@ final class DocumentDiffer
     /**
      * @return array<string, Parameter>
      */
-    private function indexParameters(Operation $op, Pairing $pairing): array
+    private function indexParameters(Operation $op, ComponentRefs $refs, Pairing $pairing): array
     {
         $out = [];
 
         foreach ($op->parameters as $param) {
+            $param = $refs->resolveParameter($param);
             $id = $pairing === Pairing::Identity ? self::parameterId($param) : null;
             $key = $id ?? self::paramLabel($param);
             $out[$key] = $param;
@@ -524,8 +525,22 @@ final class DocumentDiffer
         return self::contentSchemas(Arr::stringKeyed($requestBody['content']));
     }
 
+    /**
+     * `in` + `name` is how OAS tells one parameter from another, so it both names a parameter in the
+     * report and keys it when there is no id to key on. A Reference Object states neither, so one naming a
+     * component the document doesn't declare falls back to its pointer: unresolvable, but still the name of
+     * a distinct parameter, where `?:?` is the same key for every one of them.
+     */
     private static function paramLabel(Parameter $param): string
     {
+        if ($param->name === null && $param->in === null) {
+            $ref = $param->rest['$ref'] ?? null;
+
+            if (is_string($ref) && $ref !== '') {
+                return $ref;
+            }
+        }
+
         return ($param->in ?? '?').':'.($param->name ?? '?');
     }
 
