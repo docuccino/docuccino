@@ -59,6 +59,16 @@ Never file paths, line numbers, or array positions as identity inputs (those are
 provenance). `operationId` (human-readable OAS field) is separate: route name by default,
 configurable strategy. Identical tuples (two routes claiming `GET /x`) = error diagnostic.
 
+**An id travels in two forms, and every reader owes both.** UIR carries it nested, under the
+`x-docuccino` object that also carries provenance. An OpenAPI export has nowhere to put that object,
+so under `keepIds` it projects the id alone as a flat `x-docuccino-id` at the same node — which is
+the only identity an emitted artifact can carry, at every node. `Core\Document\NodeIdentity` owns
+reading both, and the emitter writes its constant rather than a literal, so a writer and a reader
+cannot drift apart. This matters most where the two meet: `docuccino:diff` pairs a freshly built
+document against an artifact read back off disk, so a reader that knows only the nested form puts the
+two sides in disjoint key spaces and reports every node it cannot pair as removed AND re-added — a
+wall of phantom breaking changes on a document nobody touched.
+
 ### Component naming: a minted name is a function of the thing
 
 A component's storage SLOT is handed out first-come — `Foo`, then `Foo_2` — and first-come is route
