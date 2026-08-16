@@ -594,6 +594,182 @@ it('reports nothing for a response ref naming a component neither side declares'
     expect(diffOf($dangling, $dangling)->isEmpty())->toBeTrue();
 });
 
+// --- Hoisted parameters ($ref parameters) ----------------------------------
+
+/**
+ * `diffBase()` with its two parameters hoisted into `components.parameters` and used by `$ref` — the
+ * shape hand-written and third-party specs reach for, and one `docuccino:diff <file>` is handed.
+ *
+ * @param  list<string>  $used  component names the operation refs, in order
+ * @return array<string, mixed>
+ */
+function diffHoistedParams(array $used = ['FormId', 'Status']): array
+{
+    $doc = diffBase();
+    $inline = $doc['paths']['/api/v1/forms/{id}']['get']['parameters'];
+
+    $doc['components']['parameters'] = ['FormId' => $inline[0], 'Status' => $inline[1]];
+    $doc['paths']['/api/v1/forms/{id}']['get']['parameters'] = array_map(
+        static fn (string $name): array => ['$ref' => '#/components/parameters/'.$name],
+        $used,
+    );
+
+    return $doc;
+}
+
+it('reports a removed $ref parameter instead of losing it to a shared key', function (): void {
+    // A Reference Object has no name and no `in`, so keying parameters on those collapses every one of
+    // them in an operation onto a single entry and drops all but the last. A removed required parameter
+    // then reads as no change at all — the one answer a diff must never give.
+    $changes = changesByCode(diffOf(diffHoistedParams(), diffHoistedParams(['Status'])));
+
+    expect($changes)->toHaveKey('parameter.removed')
+        ->and($changes['parameter.removed']->breaking)->toBeTrue()
+        ->and($changes['parameter.removed']->path)->toContain('path:id');
+});
+
+it('tells a $ref parameter from an inline one in the same operation', function (): void {
+    $old = diffHoistedParams(['FormId']);
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][] = [
+        'x-docuccino' => ['id' => 'par:v1:cccccccccccccccc'],
+        'name' => 'status', 'in' => 'query', 'required' => false,
+        'schema' => ['type' => 'string'],
+    ];
+
+    $new = $old;
+    array_shift($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $removed = array_filter(diffOf($old, $new)->changes, static fn (Change $c): bool => $c->code === 'parameter.removed');
+
+    expect($removed)->toHaveCount(1)
+        ->and(array_values($removed)[0]->path)->toContain('path:id');
+});
+
+it('reads a $ref parameter as the parameter it points at', function (): void {
+    // Hoisting is a move, not an API change: an inline parameter and a `$ref` to the same component are
+    // the same parameter to a consumer, so the diff has to say nothing either way.
+    expect(diffOf(diffBase(), diffHoistedParams())->isEmpty())->toBeTrue()
+        ->and(diffOf(diffHoistedParams(), diffBase())->isEmpty())->toBeTrue();
+});
+
+/**
+ * Two operations refing the same `components.parameters` entry.
+ *
+ * @param  array<string, mixed>  $component
+ * @return array<string, mixed>
+ */
+function diffSharedParam(array $component): array
+{
+    $doc = diffHoistedParams(['FormId', 'Status']);
+    $doc['components']['parameters']['Status'] = $component;
+    $doc['paths']['/api/v1/forms']['get'] = [
+        'x-docuccino' => ['id' => 'op:v1:3333333333333333'],
+        'operationId' => 'forms.index',
+        'parameters' => [['$ref' => '#/components/parameters/Status']],
+        'responses' => ['200' => ['description' => 'Forms']],
+    ];
+
+    return $doc;
+}
+
+it('reports a change to a shared parameter against every operation that refs it', function (): void {
+    $component = ['name' => 'status', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string']];
+    $required = $component;
+    $required['required'] = true;
+
+    $changeset = diffOf(diffSharedParam($component), diffSharedParam($required));
+    $paths = array_map(
+        static fn (Change $c): string => $c->path,
+        array_values(array_filter($changeset->changes, static fn (Change $c): bool => $c->code === 'parameter.became-required')),
+    );
+    sort($paths);
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($paths)->toBe(['GET /api/v1/forms parameters query:status', 'GET /api/v1/forms/{id} parameters query:status']);
+});
+
+it('reports a shared parameter dropped from one operation against that operation only', function (): void {
+    $component = ['name' => 'status', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']];
+
+    $new = diffSharedParam($component);
+    $new['paths']['/api/v1/forms']['get']['parameters'] = [];
+
+    $removed = array_filter(diffOf(diffSharedParam($component), $new)->changes, static fn (Change $c): bool => $c->code === 'parameter.removed');
+
+    expect($removed)->toHaveCount(1)
+        ->and(array_values($removed)[0]->path)->toBe('GET /api/v1/forms parameters query:status');
+});
+
+it('tells two parameter refs apart by pointer when neither side declares the component', function (): void {
+    // Nothing to resolve through, so the pointer is the only thing left that distinguishes them — and it
+    // is a good key in its own right: two uses of one pointer are one parameter.
+    $dangling = diffHoistedParams();
+    unset($dangling['components']['parameters']);
+
+    $new = $dangling;
+    array_pop($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $changes = changesByCode(diffOf($dangling, $new));
+
+    expect(diffOf($dangling, $dangling)->isEmpty())->toBeTrue()
+        ->and($changes)->toHaveKey('parameter.removed')
+        ->and($changes['parameter.removed']->path)->toContain('#/components/parameters/Status');
+});
+
+it('lets what a $ref parameter states beside the pointer win over the component', function (): void {
+    // A pointer is one use of a shared parameter, not the parameter, so anything stated next to it — its own
+    // identity included — describes that use.
+    $old = diffHoistedParams(['Status']);
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][0] += [
+        'x-docuccino' => ['id' => 'par:v1:9999999999999999'],
+        'description' => 'Filter by state',
+    ];
+
+    $new = $old;
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][0]['description'] = 'Filter by lifecycle state';
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('parameter.description-changed')
+        ->and($changes['parameter.description-changed']->id)->toBe('par:v1:9999999999999999');
+});
+
+it('keys a parameter by a pointer it cannot resolve, whatever the pointer names', function (): void {
+    // A `$ref` into another section, an empty component name, an external file: none resolve, and each is
+    // still a parameter of its own rather than another copy of the last.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'] = array_map(
+        static fn (string $ref): array => ['$ref' => $ref],
+        ['#/components/schemas/Status', '#/components/parameters/', 'shared.yaml#/Status'],
+    );
+
+    $new = $old;
+    array_pop($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $removed = array_filter(diffOf($old, $new)->changes, static fn (Change $c): bool => $c->code === 'parameter.removed');
+
+    expect(diffOf($old, $old)->isEmpty())->toBeTrue()
+        ->and($removed)->toHaveCount(1)
+        ->and(array_values($removed)[0]->path)->toContain('shared.yaml#/Status');
+});
+
+it('survives a $ref that is not even a string', function (): void {
+    $malformed = diffBase();
+    $malformed['paths']['/api/v1/forms/{id}']['get']['parameters'] = [['$ref' => ['nope']]];
+
+    expect(diffOf($malformed, $malformed)->isEmpty())->toBeTrue();
+});
+
+it('counts a $ref parameter\'s identity as the component\'s when judging overlap', function (): void {
+    // The warning that a kind paired nothing has to read identity the same way the pairing did, or it goes
+    // quiet on exactly the pairing failure it exists to flag.
+    $new = diffHoistedParams();
+    $new['components']['parameters']['FormId']['x-docuccino']['id'] = 'par:v1:8888888888888888';
+    $new['components']['parameters']['Status']['x-docuccino']['id'] = 'par:v1:7777777777777777';
+
+    expect(diffOf(diffHoistedParams(), $new)->disjointIdentities)->toBe(['parameter']);
+});
+
 // --- Determinism, model and rendering --------------------------------------
 
 it('produces a deterministic toArray with breaking-first ordering', function (): void {
@@ -626,4 +802,39 @@ it('renders a terminal report grouping breaking changes first', function (): voi
 
 it('renders a clean message when there are no changes', function (): void {
     expect((new ChangesetRenderer)->render(diffOf(diffBase(), diffBase())))->toBe("No API changes.\n");
+});
+
+it('escapes control characters in text it read from an artifact', function (): void {
+    // `docuccino:diff <file>` reads a document it did not write, and a removed node is described from that
+    // side. Left as-is, an escape sequence or a newline in a name recolours the operator's terminal or
+    // forges a line of the report — including the report's own verdict.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['name'] = "status\x1B[31m\r\n  - [operation] GET /nope";
+    $old['paths']['/api/v1/forms/{id}']['get']['summary'] = "Show a form\x1B]0;title\x07";
+
+    $new = diffBase();
+    array_pop($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $rendered = (new ChangesetRenderer)->render(diffOf($old, $new));
+
+    expect($rendered)->not->toContain("\x1B")
+        ->and($rendered)->not->toContain("\r")
+        ->and($rendered)->toContain('status\x1B[31m\x0D\x0A  - [operation] GET /nope')
+        ->and($rendered)->toContain('Show a form\x1B]0;title\x07')
+        // The forged removal is text inside one real line, not a second one.
+        ->and(substr_count($rendered, "\n  - "))->toBe(1);
+});
+
+it('leaves legitimate non-ASCII in artifact text alone', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['name'] = 'état';
+    $old['paths']['/api/v1/forms/{id}']['get']['summary'] = 'Formulaire — 日本語';
+
+    $new = diffBase();
+    array_pop($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $rendered = (new ChangesetRenderer)->render(diffOf($old, $new));
+
+    expect($rendered)->toContain('query:état')
+        ->and($rendered)->toContain('Formulaire — 日本語');
 });
