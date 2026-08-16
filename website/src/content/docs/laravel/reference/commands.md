@@ -138,11 +138,29 @@ all. Where a pointer resolves to nothing, the pointer itself does that job.
 
 A `components.schemas` entry that nothing in either document references is a schema no operation can reach,
 so no edit to it can change a request or a response. Its changes are still reported — a component name
-becomes a type in a generated client — but never as breaking, and the diff names each schema it stood down
-(`unreferencedSchemas` in the JSON payload) so the downgrade is never silent. Reachability is transitive
-from the operations: a schema reached only through another schema counts, while one reached only from a
-schema that is itself unreferenced does not. Docuccino publishes no unreferenced component, so this comes
-up only when `old` is a hand-written or third-party artifact — where a shelf of unused schemas is ordinary.
+becomes a type in a generated client — but never as breaking, and the diff names each component it stood
+down (`unreferencedComponents` in the JSON payload) so the downgrade is never silent. Reachability is
+transitive from the operations: a schema reached only through another schema counts, while one reached only
+from a schema that is itself unreferenced does not. Docuccino publishes no unreferenced component, so this
+comes up only when `old` is a hand-written or third-party artifact — where a shelf of unused schemas is
+ordinary. Deleting a schema the new document still points at is the other side of the same coin: the
+pointer is left naming nothing, so that is breaking (`schema.removed-still-referenced`) rather than the
+tidying-up a plain `schema.removed` describes.
+
+`components.securitySchemes` is diffed the same way, keyed by the name a `security` requirement uses. A
+scheme some requirement still names is one every client has to satisfy, so changing how — its `type`, `in`,
+`name`, `flows`, or any other member that isn't prose — is breaking, and so is deleting it while a
+requirement still asks for it. Dropping a scheme along with the requirements naming it is not: the API
+stopped asking. A scheme no requirement anywhere names is stood down exactly like an unreferenced schema,
+and named in the same list.
+
+Webhooks are diffed as the operations they are, under `webhooks.<name>` in place of a path. A webhook is a
+call the API promises to make, and a consumer writes an endpoint against it, so removing one or narrowing
+what it sends is breaking on the same terms as an operation under `paths`.
+
+A parameter or response written as a `$ref` is compared as the component it points at. Per OpenAPI, every
+member stated beside the pointer other than `summary` and `description` is ignored — so a `required: false`
+next to a pointer at a component that says `required: true` changes nothing, and the diff reports nothing.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino
@@ -192,9 +210,9 @@ changed. No color, no timestamps — safe to paste into a PR comment.
 ```
 
 `kind` is `added` \| `removed` \| `changed`; `target` is `operation` \| `parameter` \| `response` \|
-`schema` \| `page`; `code` is a stable classification such as `parameter.removed`,
+`schema` \| `securityScheme` \| `page`; `code` is a stable classification such as `parameter.removed`,
 `parameter.became-required`, `response.content-removed`, `schema.type-narrowed` or
-`operation.security-added`. A change carrying field-level detail adds a `fields` array. The `policy`
+`securityScheme.changed`. A change carrying field-level detail adds a `fields` array. The `policy`
 member appears only with `--enforce`, and `requiredVersion` only on a violation.
 
 ### `--enforce` and versioning policies
