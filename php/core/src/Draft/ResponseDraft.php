@@ -30,9 +30,10 @@ final class ResponseDraft
 
     /**
      * The guarded field {@see claimComponentName()} writes to, and the `x-docuccino.facts` member it
-     * freezes into so the hoist can read it back off the finished document.
+     * freezes into so the hoist can read it back off the finished document. Public because it is that
+     * wire contract: whoever reads the fact back names it from here rather than spelling it again.
      */
-    private const COMPONENT = 'component';
+    public const COMPONENT = 'component';
 
     private readonly PatchGuard $guard;
 

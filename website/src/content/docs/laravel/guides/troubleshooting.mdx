@@ -27,6 +27,7 @@ Then match the symptom:
 | `engine.not-installed` | [The document is thin](#the-document-is-thin) |
 | A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
 | Composer refuses to install on Laravel 13 | [Dependency conflicts](#dependency-conflicts) |
+| An `#[ErrorComponent]` name nowhere in the document | [`#[ErrorComponent]` changed nothing](#errorcomponent-changed-nothing) |
 | `inference.action-failed` on one or two actions | [Reading diagnostics](#reading-diagnostics) |
 
 ---
@@ -249,6 +250,25 @@ If that doesn't resolve it, the version you need isn't published yet.
 [Open an issue](https://github.com/docuccino/docuccino/issues) with the conflict block; a
 constraint widening is a small, fast release. Prefer that over a permanent `conflict` or
 `replace` entry in your own `composer.json`, which will outlive the problem.
+
+---
+
+## `#[ErrorComponent]` changed nothing
+
+**Symptom.** You marked an exception class, regenerated, and `components.responses` has no entry under
+the name you chose. No warning either — the build is silent about it.
+
+**Cause.** The attribute names a *shared* error component, and only an error two or more operations
+state is shared. Throw that exception from a single endpoint and its body stays inline on that
+operation, so there is no component for the name to apply to. That rule is what keeps a `components`
+bucket from filling with one entry per one-off error, and it is the same rule with or without the
+attribute — nothing about the marked class is being ignored.
+
+**Fix.** Nothing, if one endpoint really is the whole story: the response is complete and correct where
+it is, and the name is published the moment a second operation states the same error. If you expected
+several endpoints to share it and none did, they are stating different bodies — see [Repeated bodies
+become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components) for
+what counts as the same one.
 
 ---
 

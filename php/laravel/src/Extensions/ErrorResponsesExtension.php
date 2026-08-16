@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
 use Docuccino\Core\Inference\SourceLocation;
@@ -76,13 +77,20 @@ final class ErrorResponsesExtension implements OperationExtension
             // A name no key could carry is not a name, so it neither claims a response nor contests one.
             // Keyed by the mistake rather than the throw, so a class signalled from two sites is one
             // report, and sorted below so what the route says never depends on which site came first.
-            if (! $declaration->isNameLegal()) {
+            if (! ComponentNames::isLegal($declaration->name)) {
                 $illegal[$declaration->declaredBy."\0".$declaration->name] = $declaration;
 
                 continue;
             }
 
-            $declared[$mapped->draft->status][$declaration->name] = $declaration;
+            // Two classes declaring ONE name for one status agree on what to publish, so this is no
+            // contest — but they disagree on whose declaration the provenance records, and keeping
+            // whichever the engine reported last would put throw order into the emitted bytes. Lowest
+            // FQCN wins, which is a fact about the two classes and not about the order they arrived in.
+            $winner = $declared[$mapped->draft->status][$declaration->name] ?? null;
+            if ($winner === null || strcmp($declaration->declaredBy, $winner->declaredBy) < 0) {
+                $declared[$mapped->draft->status][$declaration->name] = $declaration;
+            }
         }
 
         ksort($illegal);
@@ -94,14 +102,9 @@ final class ErrorResponsesExtension implements OperationExtension
     }
 
     /**
-     * Publish each declared name on the response its exception produced.
-     *
-     * The declaration replaces the DEFAULT name — the one derived from the status — and nothing else. A
-     * producer that named this body said something the class cannot: one exception can render several
-     * bodies and only the mapper that built one tells them apart, so a mapper's name stands and the
-     * attribute is the way to rename what the built-in tiers called after the status. Two exceptions
-     * declaring DIFFERENT names for one status describe one response that can only carry one name, so
-     * neither takes it ({@see reportContest()}).
+     * Publish each declared name on the response its exception produced. Two exceptions declaring
+     * DIFFERENT names for one status describe one response that can only carry one name, so neither
+     * takes it ({@see reportContest()}).
      *
      * @param  array<string, array<string, DeclaredErrorComponent>>  $declared  status → declared name → its declaration
      */
@@ -121,8 +124,9 @@ final class ErrorResponsesExtension implements OperationExtension
                 $response = $operation->response($status);
 
                 // A response that is a reference states no body of its own, so it is not this operation's
-                // to name — the component it points at was named where it was defined.
-                if ($response->resolvedField('$ref') === null && $declaration->replaces($response->componentClaim(), $status)) {
+                // to name — the component it points at was named where it was defined. What a declaration
+                // may take from a body it CAN name: {@see DeclaredErrorComponent::mayReplace()}.
+                if ($response->resolvedField('$ref') === null && DeclaredErrorComponent::mayReplace($response->componentClaim(), $status)) {
                     $response->claimComponentName($declaration->name, Contribution::attribute($this->declarationSource($context, $declaration)));
                 }
             }

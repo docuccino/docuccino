@@ -15,7 +15,6 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Facades\Docuccino;
-use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\ApiException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\DeclaredErrorsController;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\EscapedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\HttpConflictException;
@@ -105,6 +104,40 @@ function declaringBuild(array $byAction): GenerationResult
     return generateDocument();
 }
 
+/**
+ * An exception hierarchy in a directory of its own: a base carrying `#[ErrorComponent('TempFailure')]`
+ * and a subclass that declares nothing, loaded here so reflection reports the written files. Its own
+ * namespace per call, since a class name is claimed for the life of the process.
+ *
+ * @return array{dir: string, base: string, thrown: class-string}
+ */
+function temporaryDeclaringHierarchy(): array
+{
+    $dir = sys_get_temp_dir().'/docuccino-declared-src-'.uniqid('', true);
+    mkdir($dir, 0777, true);
+
+    $namespace = 'Docuccino\\Laravel\\Tests\\Temp'.bin2hex(random_bytes(6));
+    $base = $dir.'/DeclaringBase.php';
+    $thrown = $dir.'/ThrownException.php';
+
+    file_put_contents($base, sprintf(
+        "<?php\n\nnamespace %s;\n\nuse Docuccino\\Attributes\\ErrorComponent;\n\n#[ErrorComponent('TempFailure')]\nabstract class DeclaringBase extends \\RuntimeException {}\n",
+        $namespace,
+    ));
+    file_put_contents($thrown, sprintf(
+        "<?php\n\nnamespace %s;\n\nfinal class ThrownException extends DeclaringBase {}\n",
+        $namespace,
+    ));
+
+    require $base;
+    require $thrown;
+
+    /** @var class-string $fqcn */
+    $fqcn = $namespace.'\\ThrownException';
+
+    return ['dir' => $dir, 'base' => $base, 'thrown' => $fqcn];
+}
+
 /** The route closure the locality and warm/cold harnesses replay. */
 function declaringRoutes(string ...$actions): callable
 {
@@ -144,6 +177,29 @@ it('publishes an error under the name its exception declares', function (): void
         ->and($document['components']['schemas'])->not->toHaveKey('Conflict')
         ->and($document['paths']['/api/zz-declared-first']['get']['responses']['409']['$ref'])
         ->toBe('#/components/responses/ResourceMissing');
+});
+
+it('leaves an error only one operation states inline, declared or not', function (): void {
+    // The attribute names a SHARED component, and a body one operation states is never shared — so a
+    // declared error alone publishes exactly what an undeclared one alone publishes, which is nothing.
+    // What repeats decides WHETHER a body is hoisted; a declaration decides only what the component is
+    // called, and it cannot promote a body the document states once.
+    $result = declaringBuild(['first' => [ThingMissingException::class, 409]]);
+    $document = $result->document->toArray();
+
+    $response = $document['paths']['/api/zz-declared-first']['get']['responses']['409'];
+
+    expect($response)->not->toHaveKey('$ref')
+        ->and($response['content']['application/json']['schema'])->not->toHaveKey('$ref')
+        ->and($document['components']['schemas'])->not->toHaveKey('ResourceMissing')
+        ->and($document['components']['responses'])->not->toHaveKey('ResourceMissing')
+        // Nothing to report either: the author's declaration is neither wrong nor ignored, and a warning
+        // on every one-off error would fire where its reader can do nothing but throw the exception twice.
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid'))->toBeEmpty()
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-contested'))->toBeEmpty()
+        // …and the name is on the response all the same, which is what makes the SECOND operation to state
+        // this body publish `ResourceMissing` rather than `Conflict`.
+        ->and($response['x-docuccino']['facts']['component'])->toBe('ResourceMissing');
 });
 
 it('names a status that has no default name of its own', function (): void {
@@ -318,6 +374,41 @@ it('shares one component between two exceptions that declare one name over one b
         ->toBe($document['paths']['/api/zz-declared-second']['get']['responses']['409']['$ref']);
 });
 
+it('records the same declaring class whichever throw the analyzer reports first', function (): void {
+    // Two classes declaring ONE name for one status agree on what to publish, so there is no contest and
+    // the name is stable either way. The provenance still has to name one of them, and `declaredBy` — with
+    // the file and line the reader is sent to — is emitted, so picking the last one seen would put the
+    // order the engine happened to report throws in into the document's bytes.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-declared-first', [DeclaredErrorsController::class, 'first']);
+
+    $declarer = static function (array $response): array {
+        foreach ($response['x-docuccino']['provenance'] as $record) {
+            if (in_array('component', $record['fields'], true)) {
+                return $record['source'];
+            }
+        }
+
+        return [];
+    };
+
+    $sources = [];
+    foreach ([[ThingMissingException::class, OtherThingMissingException::class], [OtherThingMissingException::class, ThingMissingException::class]] as $order) {
+        app()->instance(TypeEngine::class, WorkbenchEngine::make(analysisOverrides: [
+            DECLARED_ERROR_ACTIONS['first'] => signalling([[$order[0], 409], [$order[1], 409]]),
+        ]));
+
+        $document = generateDocument()->document->toArray();
+        $sources[] = $declarer($document['paths']['/api/zz-declared-first']['get']['responses']['409']);
+    }
+
+    // The lowest FQCN: a fact about the two classes, not about which of them arrived first.
+    expect($sources[0])->toBe($sources[1])
+        ->and($sources[0]['symbol'])->toBe(OtherThingMissingException::class)
+        ->and($sources[0]['file'])->toEndWith('OtherThingMissingException.php');
+});
+
 it('retires a declared name two different bodies contest, and warns', function (): void {
     // The same name over two statuses is two different responses asking for one type name. Neither keeps
     // it; each is published under a name derived from its own content, and the build says so.
@@ -413,32 +504,39 @@ it('replays a refused name\'s warning on a warm fragment-cache build', function 
 
 it('invalidates a fragment when the BASE class that declares the name is edited', function (): void {
     // The inheritance decision's other half: the name comes from a file the throwing route never
-    // mentions, so that file has to key the fragment or a warm build serves the old name.
-    fragmentCacheDir('declared');
-
-    /** @var Router $router */
-    $router = app('router');
-    $router->get('api/zz-declared-first', [DeclaredErrorsController::class, 'first']);
-
-    $engine = new CountingTypeEngine(declaringEngine(['first' => [InheritedApiException::class, 409]])());
-    app()->instance(TypeEngine::class, $engine);
-
-    generateDocument();
-    $engine->analyzeCount = 0;
-
-    generateDocument();
-    expect($engine->analyzeCount)->toBe(0);
-
-    $baseFile = (string) (new ReflectionClass(ApiException::class))->getFileName();
-    $original = (string) file_get_contents($baseFile);
+    // mentions, so that file has to key the fragment or a warm build serves the old name. The hierarchy
+    // is WRITTEN for this row rather than edited in place — a tracked fixture a test rewrites is one
+    // crash away from a dirty checkout, and one parallel worker away from hashing bytes it never wrote.
+    ['dir' => $dir, 'base' => $baseFile, 'thrown' => $thrown] = temporaryDeclaringHierarchy();
 
     try {
-        file_put_contents($baseFile, $original."\n// fragment-cache dependency probe\n");
+        fragmentCacheDir('declared');
+
+        /** @var Router $router */
+        $router = app('router');
+        $router->get('api/zz-declared-first', [DeclaredErrorsController::class, 'first']);
+
+        $engine = new CountingTypeEngine(declaringEngine(['first' => [$thrown, 409]])());
+        app()->instance(TypeEngine::class, $engine);
+
+        $document = generateDocument()->document->toArray();
+        $engine->analyzeCount = 0;
+
+        // The base really is what named this response, so the file edited below is really the one the
+        // answer came from.
+        expect($document['paths']['/api/zz-declared-first']['get']['responses']['409']['x-docuccino']['facts']['component'])
+            ->toBe('TempFailure');
+
+        generateDocument();
+        expect($engine->analyzeCount)->toBe(0);
+
+        file_put_contents($baseFile, file_get_contents($baseFile)."\n// fragment-cache dependency probe\n");
         generateDocument();
 
         expect($engine->analyzeCount)->toBeGreaterThan(0);
     } finally {
-        file_put_contents($baseFile, $original);
+        array_map('unlink', glob($dir.'/*') ?: []);
+        @rmdir($dir);
     }
 });
 

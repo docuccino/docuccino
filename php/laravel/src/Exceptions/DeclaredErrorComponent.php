@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Exceptions;
 
 use Docuccino\Attributes\ErrorComponent;
-use Docuccino\Core\Extensions\Schema\ComponentNames;
-use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use ReflectionClass;
 
@@ -27,26 +25,14 @@ final readonly class DeclaredErrorComponent
     ) {}
 
     /**
-     * Whether the declared name is one a component key could carry.
-     *
-     * `claimComponentName()` reads an illegal name as no declaration at all, silently — sound for core,
-     * which has no channel to say otherwise, but the author who typed the attribute would never learn
-     * why it did nothing. This adapter has a channel, so it asks first and reports instead
-     * ({@see ErrorResponsesExtension}). The character class stays {@see ComponentNames::isLegal()}'s.
-     */
-    public function isNameLegal(): bool
-    {
-        return ComponentNames::isLegal($this->name);
-    }
-
-    /**
-     * Whether this declaration may take the name a response already carries.
+     * Whether a declaration may take the name a response already carries.
      *
      * It replaces the DEFAULT name — the one the error tiers derive from the status — and nothing else.
      * A producer that named the body said something a name on the exception class cannot: one exception
-     * can render several bodies, and only the mapper that built one tells them apart.
+     * can render several bodies, and only the mapper that built one tells them apart. Static because it
+     * is a question about the response and the status; which declaration is asking makes no difference.
      */
-    public function replaces(?string $claim, string $status): bool
+    public static function mayReplace(?string $claim, string $status): bool
     {
         return $claim === null || $claim === FrameworkExceptionTable::componentName($status);
     }

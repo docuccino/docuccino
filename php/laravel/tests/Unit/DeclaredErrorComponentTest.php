@@ -44,9 +44,7 @@ it('answers nothing for a class that cannot be loaded', function (): void {
 });
 
 it('replaces the status default and nothing a producer named itself', function (?string $claim, string $status, bool $expected): void {
-    $declaration = new DeclaredErrorComponent('ResourceMissing', ThingMissingException::class);
-
-    expect($declaration->replaces($claim, $status))->toBe($expected);
+    expect(DeclaredErrorComponent::mayReplace($claim, $status))->toBe($expected);
 })->with([
     'nothing claimed yet' => [null, '409', true],
     'the status default' => ['Conflict', '409', true],

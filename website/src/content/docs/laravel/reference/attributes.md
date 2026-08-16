@@ -567,8 +567,9 @@ final class InvoiceNotFoundException extends RuntimeException {}
 
 Unlike PHP's own attribute lookup, this one is **inherited**: a base your API errors extend names them
 all at once, and a subclass carrying its own attribute wins over the base. It applies wherever the error
-is documented — `components.schemas`, `components.responses`, and the type name in any generated client
-— and changes nothing else about the response.
+is shared — `components.schemas`, `components.responses`, and the type name in any generated client —
+and changes nothing else about the response, including whether it is shared at all: an error only one
+operation states stays inline and has no component to name until a second operation states it too.
 
 The name replaces the [default one derived from the
 status](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). A registered

@@ -539,7 +539,7 @@ Your exceptions get the same treatment, and you say what they are called by mark
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	// The operation
+	// Every operation that throws it
 	"404": { "$ref": "#/components/responses/ResourceMissing" }
 
 	// components.responses
@@ -553,8 +553,15 @@ Your exceptions get the same treatment, and you say what they are called by mark
 	</TabItem>
 </Tabs>
 
-That is the whole of it. Same status, same body, same description — only the name a generated client
-gives the type changes, and now it says what went wrong.
+Same status, same body, same description — only the name a generated client gives the type changes, and
+now it says what went wrong.
+
+**It renames a shared component; it does not create one.** [Which bodies are
+shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
+class doesn't change it: an error only one operation states stays inline, so a one-off error publishes no
+component and no `$ref`, attribute or no attribute. Nothing is lost — the name travels with that
+response, and the day a second operation states the same error the one you marked is published as
+`ResourceMissing` instead of under its status.
 
 **It is inherited**, unlike PHP's own attribute lookup. A base your API errors already extend names them
 all at once, and a subclass that carries its own attribute wins over the base:

@@ -198,7 +198,7 @@ is then the ordinary one, with one rule the guard's layers cannot express. It co
 `attribute`, above the `integration`/`fallback` the tiers claim their status-derived default at, so the
 declaration wins there. It must LOSE to a registered mapper, though, and a mapper contributes at
 `integration` — below `attribute` — so precedence alone would invert the answer. The rule that settles
-it is stated once, on `DeclaredErrorComponent::replaces()`: a declaration replaces the status DEFAULT
+it is stated once, on `DeclaredErrorComponent::mayReplace()`: a declaration replaces the status DEFAULT
 and nothing a producer named itself. That is the honest statement of why, too — the mapper saw this
 body and the class did not, and one exception class can render several.
 
@@ -228,8 +228,9 @@ and a silent refusal is the wrong answer for the one declarer who is not an exte
 refusal is stated twice more, by whoever CAN state it, and each of the three is the only one that could:
 
 - **The adapter, for `#[ErrorComponent]`.** An application author who typos one has no other way to
-  learn the attribute did nothing, so `ErrorResponsesExtension` asks `DeclaredErrorComponent::isNameLegal()`
-  where it READS the declaration and warns `attribute.error-component-invalid`, naming the class, the
+  learn the attribute did nothing, so `ErrorResponsesExtension` asks `ComponentNames::isLegal()` — the
+  same character class the write refuses on — where it READS the declaration and warns
+  `attribute.error-component-invalid`, naming the class, the
   file the attribute is on and the name it read. A refused name is not a declaration, so it also does not
   contest a legal one for the same status — a typo on one exception cannot strip a correctly named
   response back to its default.

@@ -43,12 +43,6 @@ final class SharedErrorResponses implements DocumentTransformer
     /** The provenance key stripped from a hoisted body and kept on the referring node. */
     private const PROVENANCE = 'x-docuccino';
 
-    /**
-     * The `x-docuccino.facts` member a producer declares a component name in
-     * ({@see ResponseDraft::claimComponentName()}).
-     */
-    private const CLAIM = 'component';
-
     /** The buckets this transformer publishes into, as the `$ref`s pointing at them spell them. */
     private const SCHEMAS = '#/components/schemas/';
 
@@ -75,10 +69,10 @@ final class SharedErrorResponses implements DocumentTransformer
 
         $components = is_array($doc['components'] ?? null) ? $doc['components'] : [];
 
-        $shapes = self::shareable(self::collect($paths, self::schemaSites(...), static fn (array $body): array => $body));
+        $shapes = self::shareable(self::collect($paths, self::schemaSites(...)));
         [$paths, $schemas, $schemaContests, $aliases] = self::shareShapes($paths, $shapes, self::bucket($components, 'schemas'));
 
-        $bodies = self::shareable(self::collect($paths, self::responseSites(...), static fn (array $body): array => self::withoutMintedNames($body, $aliases)));
+        $bodies = self::shareable(self::collect($paths, self::responseSites(...), $aliases));
         [$paths, $responses, $responseContests] = self::shareResponses($paths, $bodies, self::bucket($components, 'responses'));
 
         foreach ([...self::rejectedClaims($shapes, $bodies), ...$schemaContests, ...$responseContests] as $diagnostic) {
@@ -208,10 +202,10 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * @param  array<array-key, mixed>  $paths
      * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>}>  $sites
-     * @param  callable(array<array-key, mixed>): array<array-key, mixed>  $group  the body as the grouping reads it
+     * @param  array<string, string>  $aliases  the shapes pass one published, resolved away before grouping
      * @return array<string, Occurrence>
      */
-    private static function collect(array $paths, callable $sites, callable $group): array
+    private static function collect(array $paths, callable $sites, array $aliases = []): array
     {
         $out = [];
 
@@ -230,7 +224,7 @@ final class SharedErrorResponses implements DocumentTransformer
 
                 $out[$key] ??= [
                     'scope' => $scope,
-                    'group' => self::key((string) $status, $group($stripped)),
+                    'group' => self::key((string) $status, self::withoutMintedNames($stripped, $aliases)),
                     'base' => $name ?? 'Error'.$status,
                     'body' => $stripped,
                     'count' => 0,
@@ -294,7 +288,8 @@ final class SharedErrorResponses implements DocumentTransformer
     /**
      * A response body with every reference to a shape this run just published replaced by the shape's
      * own group — so two responses that differ only in which NAME their identical shape went out under
-     * are one body when the grouping counts them.
+     * are one body when the grouping counts them. Pass one has published nothing yet and hands an empty
+     * map, which walks the body and changes none of it.
      *
      * @param  array<array-key, mixed>  $body
      * @param  array<string, string>  $aliases  published schema name → the group behind it
@@ -569,7 +564,7 @@ final class SharedErrorResponses implements DocumentTransformer
     {
         $extension = $response[self::PROVENANCE] ?? null;
         $facts = is_array($extension) ? ($extension['facts'] ?? null) : null;
-        $name = is_array($facts) ? ($facts[self::CLAIM] ?? null) : null;
+        $name = is_array($facts) ? ($facts[ResponseDraft::COMPONENT] ?? null) : null;
 
         return is_string($name) && $name !== '' ? $name : null;
     }
@@ -665,7 +660,7 @@ final class SharedErrorResponses implements DocumentTransformer
             }
 
             $fields = $record['fields'] ?? null;
-            if (is_array($fields) && in_array(self::CLAIM, $fields, true)) {
+            if (is_array($fields) && in_array(ResponseDraft::COMPONENT, $fields, true)) {
                 $producer = $record['producer'] ?? null;
 
                 return is_string($producer) ? $producer : null;
