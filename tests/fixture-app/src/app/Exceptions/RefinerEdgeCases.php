@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Data\ProblemDocumentData;
+use App\Support\TraceContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use InvalidArgumentException;
+use Spatie\LaravelData\Optional;
 
 /**
  * Real-engine fixture for the refiner's remaining edge paths, each previously proven nowhere:
  *
  *   - {@see narrowedEnumVariable()} binds an enum VARIABLE that PHPStan has narrowed to a single case
  *     (rather than a `Enum::Case` const-fetch), exercising the second `enumCaseOf` path;
+ *   - {@see unbindableOptionalMember()} writes a `?? new Optional` argument whose left side is a static
+ *     read rather than a parameter, so no call site can decide whether the member is there;
  *   - {@see lowercaseContentType()} writes the header key in lower case, so the `Content-Type` lookup
  *     must match case-INSENSITIVELY;
  *   - {@see noHeaders()} omits the headers argument entirely (content type absent → default);
@@ -45,6 +51,23 @@ final class RefinerEdgeCases
     public function conditionalAppend(): JsonResponse
     {
         return ProblemResponse::fromProblem(InvoiceProblem::Forbidden, 'With data.', ['ref' => 'abc']);
+    }
+
+    /**
+     * `instance` is written as `TraceContext::id() ?? new Optional` — the idiom for "absent unless the
+     * trace context has one", the same shape as an app's `Tracer::traceId() ?? new Optional`. Its left
+     * side is a static read rather than a parameter, so no call site anywhere can settle whether this
+     * response carries the member: it is supplied on one run and omitted on the next.
+     */
+    public function unbindableOptionalMember(Request $request): JsonResponse
+    {
+        return (new ProblemDocumentData(
+            type: 'https://errors.test/problems/traced',
+            title: 'Traced',
+            status: 424,
+            detail: 'Trace context decides one member.',
+            instance: TraceContext::id() ?? new Optional,
+        ))->toProblemResponse($request);
     }
 
     /** A lower-case header key — the content-type match is case-insensitive. */

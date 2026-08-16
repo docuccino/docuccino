@@ -218,6 +218,14 @@ own (seeded from the action's parameter type):
   metadata blob, plus a POSITIONAL `array{float, float} $position` tuple: the docblock grammar has only
   the keys to tell it that is a JSON array, and a shape it read as an object would document `"0"`/`"1"`
   property names.
+- `app/Data/ActionPreviewData.php` + `app/Rules/MaxJsonByteSize.php` — the commonest override there is: a
+  static `rules()` that only restates `array` over properties whose generics the constructor `@param`
+  block already recovered (a map, a nullable map alongside a size-only custom rule, and a list). `array`
+  is the one word the vocabulary has for every array shape, so restating it must not collapse a recovered
+  map to `{"type": "array"}` — a schema the JSON object the API accepts would fail.
+- `app/Data/MergedRulesData.php` — the class-level `#[MergeValidationRules]`, which flips spatie's
+  resolver from `add` (replace at the key) to `merge` (append), so the property's own `#[Max(255)]` keeps
+  applying alongside the override.
 - `app/Data/UploadPolicyData.php` + `app/Support/MediaCollections.php` — a static `rules()` allow-listing a
   natively typed `#[StringType]` property with `Rule::in(MediaCollections::validNames())`: the values are
   not statically knowable, and the override still replaces what the property type inferred.
@@ -253,12 +261,18 @@ own (seeded from the action's parameter type):
   own response (`OwnResponseProblemData`); the `ArithmeticError` arm passes a class constant named like a
   credential (`self::SUPPORT_API_KEY`) and renders through `toNegotiatedResponse()`, pinning both refusals
   — no folded secret in a published example, and no media-type label borrowed from the helper's other
-  branch; and the fallback writes every argument as a literal at the call site.
+  branch; the `JsonException` arm writes the same credential behind a `??` default, which PHPStan types as
+  the constant's own string and a guard reading only the outermost expression would fold; and the fallback
+  writes every argument as a literal at the call site.
 - `app/Exceptions/DataProblemDocument.php` — the Data-object counterpart of
   `ProblemResponse::fromProblem()`: a factory answering the DTO rather than a response, so the
   constructor is a call hop away from the response and every member reads off one of the factory's
   parameters — a bound `InvoiceProblem` case's accessors, a plain string, or an `?? new Optional` tail
   whose member only exists when the caller passed it.
+- `app/Exceptions/RefinerEdgeCases.php` + `app/Support/TraceContext.php` — the refiner's remaining edge
+  paths, including `unbindableOptionalMember()`: the same `?? new Optional` idiom with a STATIC read on
+  its left (`TraceContext::id()`, the shape of an app's `Tracer::traceId()`), so no call site anywhere can
+  settle whether the member is there and it must not be recorded as one this response carries.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.

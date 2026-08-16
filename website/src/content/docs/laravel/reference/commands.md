@@ -121,6 +121,14 @@ because the two key spaces don't overlap and every operation would read as remov
 Note that content pages live under the document `x-docuccino` and so cannot survive OpenAPI emission
 at all; diffing an OpenAPI artifact against a document that has them reports each as added.
 
+When both sides do carry several identities for a kind of node — operations, parameters, component
+schemas — and share none of them, every one of those reads as removed *and* re-added. That is what a
+pairing failure looks like, so the diff warns and names the kinds (`disjointIdentities` in the JSON
+payload): check whether the artifact belongs to another document or predates a change to how ids are
+minted, and re-export it if it does. The warning is advisory — `--enforce` never reads it — and stays
+quiet when either side carries a single identity of that kind, where one node replaced by another says
+the same thing and is far likelier.
+
 Responses are read through `components.responses` on **both** sides, so a body that moved between
 inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
 a change, while an edit to a shared body is reported against every operation that `$ref`s it.

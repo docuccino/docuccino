@@ -31,6 +31,8 @@ use Throwable;
  *   - the `ArithmeticError` arm writes a class constant named like a credential and renders through the
  *     negotiated helper, so it pins both refusals: no folded secret, and no label borrowed from the
  *     helper's other branch;
+ *   - the `JsonException` arm writes the same credential behind a `??` default, the shape a guard that
+ *     unwrapped only concatenation would fold straight through;
  *   - the fallback writes every argument as a literal at the call site.
  */
 final class DataProblemRenderer
@@ -41,6 +43,9 @@ final class DataProblemRenderer
      * published as an example and examples survive emit.
      */
     private const SUPPORT_API_KEY = 'fixture-api-key-not-real';
+
+    /** Set per deployment to override the key above; null here, as it is in every environment but one. */
+    private const SUPPORT_KEY_OVERRIDE = null;
 
     public function __invoke(Throwable $e, Request $request): ?JsonResponse
     {
@@ -77,6 +82,17 @@ final class DataProblemRenderer
                 status: 500,
                 detail: self::SUPPORT_API_KEY,
             ))->toNegotiatedResponse($request);
+        }
+
+        if ($e instanceof \JsonException) {
+            // The override constant is null, so PHPStan types `A ?? B` as B's own value and the credential
+            // folds exactly as a bare literal would — a published `const` that survives OAS emission.
+            return (new ProblemDocumentData(
+                type: 'about:blank',
+                title: 'Error',
+                status: 500,
+                detail: self::SUPPORT_KEY_OVERRIDE ?? self::SUPPORT_API_KEY,
+            ))->toProblemResponse($request);
         }
 
         return $this->problem('about:blank', 'Internal Server Error', 500, 'Something went wrong.', $request);
