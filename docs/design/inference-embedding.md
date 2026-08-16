@@ -227,11 +227,17 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
 
    Being SUPPLIED is the fact this exists to carry, and it cuts both ways: an argument passed here puts the
    member in this response even where the class declares it optional, and an argument this call site did not
-   pass leaves the map entirely rather than widening — it took its default, so it is not in this body. The
-   adapter's response seam reads the map for exactly that (§6): it decides the example's membership, while
-   the schema still decides what each member looks like. Nothing here expands the object — property
-   semantics, name mappers and `Optional`/`Lazy` markers are the adapter's business, and the engine only
-   ever says "this response carries that object, built with these arguments".
+   pass leaves the map entirely rather than widening — it took its default, so it is not in this body. A
+   third answer is neither: an argument whose TYPE admits an omission marker renders the key on some runs
+   and nothing at all on the others, so its member is recorded OPTIONAL and asserts nothing. Only an
+   argument that IS the awaited value settles one — the callee's `$param ?? new Optional`, met with a value
+   that is neither null nor a marker of its own. A tail that reads THROUGH the argument
+   (`$p->detail() ?? new Optional`) is never settled from out there however solid the receiver: what the
+   caller proved is that the receiver exists, and the key hangs on what the read answers. The adapter's
+   response seam reads the map for exactly that (§6): it decides the example's membership, while the schema
+   still decides what each member looks like. Nothing here expands the object — property semantics, name
+   mappers and `Optional`/`Lazy` markers are the adapter's business, and the engine only ever says "this
+   response carries that object, built with these arguments".
 5. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
    reused verbatim (default 4 / 40). Memoisation is per callee `class::method` (and per
    `(enum-case, method)` for folds). A recovered shape is call-independent but NOT bound-independent, so

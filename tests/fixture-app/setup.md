@@ -268,11 +268,17 @@ own (seeded from the action's parameter type):
   `ProblemResponse::fromProblem()`: a factory answering the DTO rather than a response, so the
   constructor is a call hop away from the response and every member reads off one of the factory's
   parameters — a bound `InvoiceProblem` case's accessors, a plain string, or an `?? new Optional` tail
-  whose member only exists when the caller passed it.
+  whose member only exists when the caller passed it. `traced()` writes that tail over a READ of a
+  parameter (`$trace->currentId() ?? new Optional`) rather than over the parameter itself.
 - `app/Exceptions/RefinerEdgeCases.php` + `app/Support/TraceContext.php` — the refiner's remaining edge
-  paths, including `unbindableOptionalMember()`: the same `?? new Optional` idiom with a STATIC read on
-  its left (`TraceContext::id()`, the shape of an app's `Tracer::traceId()`), so no call site anywhere can
-  settle whether the member is there and it must not be recorded as one this response carries.
+  paths, including every way spatie's "omit this key" idiom reaches a call site that cannot settle it:
+  `unbindableOptionalMember()` writes `?? new Optional` with a STATIC read on its left
+  (`TraceContext::id()`, the shape of an app's `Tracer::traceId()`), which no call site anywhere can
+  settle; `nullableOptionalMember()` reaches the same idiom a factory hop away with a value that may be
+  null; `methodOptionalMember()` hands over a receiver that certainly exists while the tail waits on what
+  a method on it answers; and `forwardedOptionalMember()` passes a value that is never null and may
+  already be the marker. All four must be recorded as members the body may omit, never as ones it carries
+  — only an argument that IS the awaited value can settle one.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.
