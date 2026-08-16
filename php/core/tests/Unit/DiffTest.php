@@ -1507,6 +1507,38 @@ it('finds a requirement wherever an artifact states it', function (callable $req
     }],
 ]);
 
+it('reads no scheme out of a requirement that names none', function (mixed $security, string $scheme): void {
+    // The other half of the shape above: a `security` member an artifact wrote that names nothing readable.
+    // Each row sits beside the scheme a reader that took the shape at face value would have named — an
+    // empty key, or a requirement's VALUES — so over-collecting stands this cosmetic edit up as a break.
+    $secured = static function (array $definition) use ($security, $scheme): array {
+        $doc = diffBase();
+        $doc['components']['securitySchemes'] = [$scheme => $definition];
+        // A component path item, so the malformed member reaches the reader exactly as written — an
+        // operation's own `security` is modelled as a list and would tidy half of these away first.
+        $doc['components']['pathItems'] = ['Saved' => ['post' => [
+            'security' => $security,
+            'responses' => ['200' => ['description' => 'Ack']],
+        ]]];
+
+        return $doc;
+    };
+
+    $changeset = diffOf(
+        $secured(['type' => 'apiKey', 'in' => 'header', 'name' => 'X-Api-Key']),
+        $secured(['type' => 'apiKey', 'in' => 'query', 'name' => 'token']),
+    );
+
+    expect(changesByCode($changeset))->toHaveKey('securityScheme.changed')
+        ->and($changeset->isBreaking())->toBeFalse()
+        ->and($changeset->unreferencedComponents)->toBe(['components.securitySchemes.'.$scheme]);
+})->with([
+    'an empty name where the map is written bare' => [['' => []], ''],
+    'an empty name inside a requirement' => [[['' => []]], ''],
+    'a requirement that is not a map at all' => [['see the wiki'], 'apiKey'],
+    'a requirement written as a list of names' => [[['apiKey', 'oauth2']], 'apiKey'],
+]);
+
 it('survives a securitySchemes section that is not what it claims', function (mixed $section): void {
     // Everything here is read off an artifact nobody validated. A section that is a string, or a scheme
     // that is, describes no way in — and must not be a crash or a type error on the way to saying so.
@@ -1716,6 +1748,25 @@ it('reads a schema name a pointer had to escape', function (string $name, string
     'a tilde' => ['Form~Data', '#/components/schemas/Form~0Data'],
     'a space' => ['Form Data', '#/components/schemas/Form%20Data'],
 ]);
+
+it('reads every schema one string names, not only the first', function (): void {
+    // The scan resumes INSIDE the pointer it just read rather than past it, so a second pointer in the same
+    // string is still found. A description citing two components is the shape that needs it, and stopping at
+    // the first would leave the second schema looking unused — standing a real break down to a report line.
+    $old = diffBase();
+    $old['components']['schemas']['FormNote'] = [
+        'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+        'type' => 'object',
+        'properties' => ['note' => ['type' => 'string']],
+    ];
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['description'] =
+        'Either #/components/schemas/FormNote/properties/note or #/components/schemas/FormData';
+
+    $changeset = diffOf($old, diffShrunkSchema($old));
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($changeset->unreferencedComponents)->toBe([]);
+});
 
 it('survives a pointer that names nothing', function (): void {
     // An artifact nobody validated can point at a component it never declares, or at no component at all.

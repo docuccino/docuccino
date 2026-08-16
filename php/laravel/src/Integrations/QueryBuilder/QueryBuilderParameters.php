@@ -18,8 +18,6 @@ use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
  */
 final class QueryBuilderParameters
 {
-    private const DEFAULT_PER_PAGE = 15;
-
     private const WHERE_IN_NOTE = 'Accepts a comma-separated list of values (matched as `whereIn`).';
 
     private const NULLABLE_NOTE = 'Accepts `null` to filter for absent values.';
@@ -327,15 +325,10 @@ final class QueryBuilderParameters
         }
 
         // The page selector is minted once for the whole adapter, so this and the resource-collection
-        // producer cannot drift apart. `per_page` is this package's own convention, not the framework's.
-        return [
-            PaginatorPageParameter::for($facts->paginationKind),
-            new QueryParameterSpec(
-                'per_page',
-                ['type' => 'integer', 'default' => $facts->perPage ?? self::DEFAULT_PER_PAGE, 'minimum' => 1],
-                'Items per page.',
-            ),
-        ];
+        // producer cannot drift apart — including on a key the call site renamed.
+        $page = PaginatorPageParameter::forTerminal($facts->paginationTerminal, $facts->paginationKind, $facts->paginationArgs);
+
+        return $page === null ? [] : [$page];
     }
 
     private static function filterKindDescription(string $kind): string

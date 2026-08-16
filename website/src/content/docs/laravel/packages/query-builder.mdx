@@ -20,7 +20,7 @@ parameters:
 | `allowedSorts` | `sort` | "Sort by: issued_at, total (prefix `-` for descending)." |
 | `allowedIncludes` | `include` | "Include related resources: customer, lines." |
 | `allowedFields` | `fields[<type>]` | "Comma-separated fields: id, total." |
-| a paginating terminal | `page` + `per_page`, or `cursor` + `per_page` | "Page number." / "Items per page." |
+| a paginating terminal | `page`, or `cursor` | "Page number." / "Opaque cursor for the next/previous page." |
 
 `->defaultSort('issued_at')` becomes the `sort` parameter's `default`. Includes cover relationships
 plus the `count`, `exists`, and `aggregate` include kinds — they're all names in the allow-list, so
@@ -58,8 +58,6 @@ the real list of allowed filters and sorts.
 	    "schema": { "type": "string" } },
 	  { "name": "page", "in": "query", "required": false, "description": "Page number.",
 	    "schema": { "type": "integer", "default": 1, "minimum": 1 } },
-	  { "name": "per_page", "in": "query", "required": false, "description": "Items per page.",
-	    "schema": { "type": "integer", "default": 15, "minimum": 1 } },
 	  { "name": "sort", "in": "query", "required": false,
 	    "description": "Sort by: issued_at, total (prefix `-` for descending).",
 	    "schema": { "type": "string" } }
@@ -69,11 +67,12 @@ the real list of allowed filters and sorts.
 </Tabs>
 
 You wrote no parameter annotations — yet `filter[status]`, `filter[customer_id]`, `sort`, `include`,
-`page`, and `per_page` are all documented, alongside a paginated response.
+and `page` are all documented, alongside a paginated response.
 
 A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why those
-two say so. `per_page` defaults to `15` unless you pass a page size at the call site —
-`->paginate(20)` documents `"default": 20`.
+two say so. Rename the page key at the call site — `->paginate(20, ['*'], 'p')` — and the document
+follows it; there's no `per_page` beside it, because
+[nothing reads one](/laravel/documenting/requests/#pagination).
 
 ## Typed filters from your model's casts
 
@@ -500,7 +499,7 @@ final class InvoiceController
 Nothing the action body does leads to those allow-lists — the container built the object, and a `new`
 isn't a call Docuccino follows. So it traces the **constructor** of the query class as a root of its
 own, into the same facts as the action's own trace: `filter[status]`, `filter[reference]`, `sort`,
-`include`, `page`, and `per_page` all land. The `parent::__construct(Invoice::query())` call is what
+`include`, and `page` all land. The `parent::__construct(Invoice::query())` call is what
 names the subject model, so filters still type off its casts, and the query class file joins the
 fragment-cache dependency set exactly as the hop's does. A paginating helper of your own on the query
 class behaves as it does anywhere else — see [custom pagination terminals](#custom-pagination-terminals).
@@ -534,12 +533,14 @@ above — name it so the pagination parameters are still added:
 ],
 ```
 
-A custom terminal is treated as length-aware (`page` + `per_page`). If yours wraps
-`cursorPaginate()`, leave it out of this list — the trace reaches the real `cursorPaginate` call
-inside it and documents `cursor` correctly.
+A custom terminal is treated as length-aware (`page`). If yours wraps `cursorPaginate()`, leave it out
+of this list — the trace reaches the real `cursorPaginate` call inside it and documents `cursor`
+correctly.
 
-Only the **outermost** terminal counts, so a page size passed at the call site
-(`->paginateList(50)`) is the one documented.
+Only the **outermost** terminal counts, and a custom one takes no page-name argument of its own, so it
+keeps the default key. If your helper renames the key on the `paginate()` call it forwards to, that's
+inside the helper and out of sight — declare the real key with
+[`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
 
 <Aside type="caution" title="The receiver has to be a query builder">
 This setting extends the *method names* that count as a terminal; it doesn't change **what they're
@@ -585,14 +586,16 @@ the build:
 | Situation | Diagnostic | What lands in the spec |
 | --- | --- | --- |
 | An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
-| A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | Pagination parameters only |
+| A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | The page parameter only |
 | A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
 | Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
 
-Three things are outside what the trace models today, and none produces a diagnostic:
+Four things are outside what the trace models today, and none produces a diagnostic:
 
 - **`allowedAppends`** — no `append` parameter is documented. Add one with
   `#[QueryParameter('append')]` if your clients use it.
+- **A page key renamed to something unreadable** — `->paginate(20, ['*'], $key)` documents no page
+  parameter at all, since a guessed `page` would name a key the endpoint never reads.
 - **Relationship-path columns** (`customer.name`) — the filter is documented, but as a plain string;
   only the subject model's own columns are typed from casts.
 - **Pagination that doesn't run through a query builder** — a terminal called on anything but a

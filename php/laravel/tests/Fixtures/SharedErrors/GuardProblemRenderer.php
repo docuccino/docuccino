@@ -8,23 +8,32 @@ use Illuminate\Http\JsonResponse;
 use Throwable;
 
 /**
- * The commonest error renderer there is: one problem document, several reasons for it. Each arm answers
- * 403 with the same carrier and the same media type, and differs only in the words it fills in — which is
- * the difference between illustrations, not between contracts.
+ * The commonest error renderer there is: one problem document, several reasons for it. Each arm builds the
+ * same {@see GuardProblem} at the same status under the same media type, and differs only in the words it
+ * fills in — which is the difference between illustrations, not between contracts.
+ *
+ * The document is CONSTRUCTED, one hop from the response, so what each arm carries is the set of
+ * constructor arguments that arm passed — the fact an example is built from.
  */
 final class GuardProblemRenderer
 {
     public function __invoke(Throwable $e): ?JsonResponse
     {
-        $problem = match (true) {
-            $e instanceof TokenExpiredException => ['title' => 'Token expired', 'detail' => 'Refresh the token and retry.'],
-            $e instanceof RoleMissingException => ['title' => 'Role missing', 'detail' => 'Ask an administrator for access.'],
-            $e instanceof RegionBlockedException => ['title' => 'Region blocked', 'detail' => 'This endpoint is not served in your region.'],
+        return match (true) {
+            $e instanceof TokenExpiredException => $this->problem('Token expired', 'Refresh the token and retry.'),
+            $e instanceof RoleMissingException => $this->problem('Role missing', 'Ask an administrator for access.'),
+            $e instanceof RegionBlockedException => $this->problem('Region blocked', 'This endpoint is not served in your region.'),
             default => null,
         };
+    }
 
-        return $problem === null
-            ? null
-            : response()->json($problem + ['type' => 'about:blank', 'status' => 403], 403, ['Content-Type' => 'application/problem+json']);
+    private function problem(string $title, string $detail): JsonResponse
+    {
+        return (new GuardProblem(
+            type: 'about:blank',
+            title: $title,
+            status: 403,
+            detail: $detail,
+        ))->toProblemResponse();
     }
 }

@@ -2693,53 +2693,6 @@
           },
           {
             "x-docuccino": {
-              "id": "par:v1:4e4ighebimi2m3i7",
-              "provenance": [
-                {
-                  "producer": "integration:query-builder",
-                  "layer": "integration",
-                  "fields": [
-                    "description",
-                    "required"
-                  ],
-                  "source": {
-                    "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
-                    "line": 24,
-                    "symbol": "Workbench\\App\\Http\\Controllers\\WidgetQueryController::index"
-                  }
-                }
-              ]
-            },
-            "name": "per_page",
-            "in": "query",
-            "description": "Items per page.",
-            "required": false,
-            "schema": {
-              "x-docuccino": {
-                "provenance": [
-                  {
-                    "producer": "integration:query-builder",
-                    "layer": "integration",
-                    "fields": [
-                      "default",
-                      "minimum",
-                      "type"
-                    ],
-                    "source": {
-                      "file": "workbench/app/Http/Controllers/WidgetQueryController.php",
-                      "line": 24,
-                      "symbol": "Workbench\\App\\Http\\Controllers\\WidgetQueryController::index"
-                    }
-                  }
-                ]
-              },
-              "type": "integer",
-              "default": 20,
-              "minimum": 1
-            }
-          },
-          {
-            "x-docuccino": {
               "id": "par:v1:oghgbgnnbhu5bhgc",
               "provenance": [
                 {
@@ -3446,7 +3399,7 @@
     "document": {
       "id": "doc:pointer-list",
       "configHash": "8232eca8c6de2c57a33bbce8b03c3e08e85f5ee9723c30729d2c9422552337ff",
-      "contentHash": "e5a8285bb8d5041473e4559716d3ee36cc700e7917556568ffa93a3c5a44235e"
+      "contentHash": "17cc469c45c75c328afcfa3a649b226157a6ef83a91c1dff1b5e3808b862e281"
     },
     "generator": {
       "name": "docuccino/laravel",

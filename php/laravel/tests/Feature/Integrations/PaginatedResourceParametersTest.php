@@ -200,23 +200,46 @@ it('adds no second page when the Query Builder integration already documented on
         before: [new QueryBuilderParametersExtension],
     );
 
-    // One `page`, and it is the Query Builder's — which carries a `per_page` beside it that this
-    // extension never mints.
-    expect(array_keys($params))->toBe(['filter[name]', 'page', 'per_page'])
+    // One `page`, and it is the Query Builder's.
+    expect(array_keys($params))->toBe(['filter[name]', 'page'])
         ->and(paginatedResourceSchema($params['page']))->toBe(['type' => 'integer', 'default' => 1, 'minimum' => 1])
         ->and($params['page']['description'])->toBe('Page number.');
 });
 
-it('adds no rival page key when another producer already named one', function (): void {
-    // The Query Builder documents `page` without reading the chain's `pageName`. Contributing the `p`
-    // this chain really reads would leave the operation naming two ways to page, so it stays quiet.
+it('agrees with the Query Builder on a page key the call site renamed', function (): void {
+    // Both producers read the same terminal's `pageName` argument, so the operation names the one key
+    // this endpoint really reads — once. A producer that ignored the argument would publish `page` here.
     $params = runPaginatedResourceParameters(
         "QueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name'])->paginate(20, ['*'], 'p')",
         receiver: 'Spatie\\QueryBuilder\\QueryBuilder',
         before: [new QueryBuilderParametersExtension],
     );
 
-    expect(array_keys($params))->toBe(['filter[name]', 'page', 'per_page']);
+    expect(array_keys($params))->toBe(['filter[name]', 'p']);
+});
+
+it('names no page key at all when the Query Builder could not fold the one the chain renamed', function (): void {
+    // Neither producer may guess here, and the pair must not disagree either: the Query Builder
+    // withholding the key is not licence for this one to fill the gap with a `page` nothing reads.
+    $params = runPaginatedResourceParameters(
+        "QueryBuilder::for(\\Workbench\\App\\Models\\Form::class)->allowedFilters(['name'])->paginate(20, ['*'], \$pageName)",
+        receiver: 'Spatie\\QueryBuilder\\QueryBuilder',
+        before: [new QueryBuilderParametersExtension],
+    );
+
+    expect(array_keys($params))->toBe(['filter[name]']);
+});
+
+it('stays quiet where the author pinned the framework default and the chain renamed it', function (): void {
+    // The author's key and the chain's disagree, and the author's wins — the layer above says so, and a
+    // second selector beside it could only contradict it. Nothing here re-states the chain's `p`.
+    $params = runPaginatedResourceParameters(
+        "\$q->paginate(15, ['*'], 'p')",
+        attributes: [new QueryParameter('page', type: 'int', description: 'Page number.')],
+        before: [new AttributeParametersExtension],
+    );
+
+    expect(array_keys($params))->toBe(['page']);
 });
 
 it('leaves a page key the author pinned exactly as they wrote it', function (): void {

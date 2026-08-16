@@ -30,21 +30,6 @@ use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 #[ExtensionOrder(priority: Priorities::LATE)]
 final class PaginatedResourceParametersExtension implements OperationExtension
 {
-    /**
-     * Where each of Laravel's own terminals takes the key's name —
-     * `paginate($perPage, $columns, $pageName)`, `cursorPaginate($perPage, $columns, $cursorName)`.
-     *
-     * @var array<string, string>
-     */
-    private const NAME_ARGUMENT = [
-        'paginate' => 'pageName',
-        'simplePaginate' => 'pageName',
-        'cursorPaginate' => 'cursorName',
-    ];
-
-    /** The name argument's position in all three signatures. */
-    private const NAME_POSITION = 2;
-
     public function phase(): OperationPhase
     {
         return OperationPhase::Parameters;
@@ -63,7 +48,7 @@ final class PaginatedResourceParametersExtension implements OperationExtension
             return;
         }
 
-        $spec = $this->pageParameter($visitor, $visitor->kind);
+        $spec = PaginatorPageParameter::forTerminal($visitor->terminal, $visitor->kind, $visitor->outermostArgs);
         if ($spec === null || $this->alreadyStated($operation, $spec, $visitor->kind)) {
             return;
         }
@@ -83,29 +68,5 @@ final class PaginatedResourceParametersExtension implements OperationExtension
     {
         return $operation->hasParameter('query', $spec->name)
             || $operation->hasParameter('query', PaginatorPageParameter::for($kind)->name);
-    }
-
-    /**
-     * The page selector for the terminal that was reached, or null where the call site renamed the key
-     * to something that would not fold — a guessed `page` there names a key the endpoint does not read.
-     * Only Laravel's own terminals take the argument; a custom one forwards to `paginate($perPage)` and
-     * so keeps the default name.
-     */
-    private function pageParameter(PaginationTerminalVisitor $visitor, string $kind): ?QueryParameterSpec
-    {
-        $argument = self::NAME_ARGUMENT[$visitor->terminal ?? ''] ?? null;
-        if ($argument === null) {
-            return PaginatorPageParameter::for($kind);
-        }
-
-        $written = array_key_exists($argument, $visitor->outermostArgs)
-            || array_key_exists(self::NAME_POSITION, $visitor->outermostArgs);
-        if (! $written) {
-            return PaginatorPageParameter::for($kind);
-        }
-
-        $name = $visitor->stringArg($argument) ?? $visitor->stringArg(self::NAME_POSITION);
-
-        return $name === null ? null : PaginatorPageParameter::for($kind, $name);
     }
 }

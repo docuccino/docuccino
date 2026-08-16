@@ -81,13 +81,6 @@ code. Here's a list endpoint you'd write anyway, and the operation it produces:
 	        "schema": { "type": "integer", "default": 1, "minimum": 1 }
 	      },
 	      {
-	        "name": "per_page",
-	        "in": "query",
-	        "description": "Items per page.",
-	        "required": false,
-	        "schema": { "type": "integer", "default": 20, "minimum": 1 }
-	      },
-	      {
 	        "name": "sort",
 	        "in": "query",
 	        "description": "Sort by: issued_at, total (prefix `-` for descending).",
@@ -136,7 +129,7 @@ Nothing in that controller is written for the docs. Every line of the output is 
 | `tags` | The controller name, `InvoiceController` → `Invoice`. |
 | `filter[number]`, `filter[status]` | The `allowedFilters()` allow-list, traced through the builder. `status` is an array of the `InvoiceStatus` enum because the model casts that column to it — and because Query Builder matches a comma-separated list as `whereIn`. |
 | `sort` | The `allowedSorts()` names, with `defaultSort()` as the schema default and the `-` descending convention in the description. |
-| `page`, `per_page` | The `paginate(20)` call — hence the `per_page` default of `20`. |
+| `page` | The `paginate(20)` call. The `20` is fixed at that call site, so no page-size key is documented beside it — nothing reads one. |
 | `200` | `InvoiceResource::collection()` over a paginated result: an array of the shared `InvoiceResource` schema inside Laravel's length-aware `{ data, links, meta }` envelope (trimmed above). |
 | `400` | Query Builder's strict mode, which rejects an unknown filter or sort with `InvalidQuery`. |
 

@@ -145,8 +145,8 @@ guess, and a guessed parameter costs a client more than a missing one. Declare y
 #[QueryParameter('per_page', type: 'int', description: 'Results per page (max 100).', default: 25)]
 ```
 
-A [Spatie Query Builder](/laravel/packages/query-builder/) list endpoint documents a `per_page` beside
-its page key; that page has the full parameter set.
+This holds wherever the page key comes from, [Spatie Query Builder](/laravel/packages/query-builder/)
+list endpoints included.
 </Aside>
 
 ### Pagination Docuccino can't see
@@ -170,10 +170,12 @@ public function index(Request $request, CatalogQuery $catalog): PaginatedDataCol
 }
 ```
 
-The **response** is fine — spatie's `PaginatedDataCollection` says which envelope it is in its own
-class name, so that half needs no call chain at all. It's the request half that's missing, and no
-configuration recovers it: which keys that helper honors is a fact about its body, not its name.
-Declare them, once, where they belong:
+The **response** is fine here: a spatie `PaginatedDataCollection` (or `CursorPaginatedDataCollection`)
+names its paginator in the return type, so its envelope comes from that type alone. That's a property of
+those types, not of paginators generally — a Laravel resource collection reads
+`AnonymousResourceCollection` whether or not it was paginated, so its envelope comes from the same trace
+as the page key. It's the request half that's missing here, and no configuration recovers it: which keys
+that helper honors is a fact about its body, not its name. Declare them, once, where they belong:
 
 <Tabs>
 	<TabItem label="Your code">
