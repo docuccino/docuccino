@@ -87,13 +87,75 @@ List endpoints also get their filters, sorts, includes, and pagination inferred 
 [Spatie Query Builder](/laravel/packages/query-builder/) — no annotation needed. To add or patch one
 parameter by hand, reach for [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter).
 
+### Pagination
+
+An endpoint that returns a paginated resource collection documents the key that paginator actually
+reads — no annotation, no config. Docuccino follows the call chain to the paginating terminal, so the
+key comes from the call your controller makes:
+
+| Your call | Documented key |
+| --- | --- |
+| `paginate()` | `page` — `integer`, default `1`, minimum `1` |
+| `simplePaginate()` | `page` — the same |
+| `cursorPaginate()` | `cursor` — an opaque `string` |
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	public function index(): AnonymousResourceCollection
+	{
+	    return InvoiceResource::collection(Invoice::query()->cursorPaginate(25));
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"parameters": [
+	  { "name": "cursor", "in": "query", "required": false,
+	    "description": "Opaque cursor for the next/previous page.",
+	    "schema": { "type": "string" } }
+	]
+	```
+	</TabItem>
+</Tabs>
+
+`page` is the key `Paginator::resolveCurrentPage()` reads and `cursor` the one
+`CursorPaginator::resolveCurrentCursor()` reads, so the pair matches the `{data, links, meta}`
+[envelope](/laravel/documenting/responses/) on the same operation: the body says which page a client is
+on, and the parameter says how to ask for the next one.
+
+Rename the key at the call site and the document follows it. Laravel takes the name as the third
+argument, and Docuccino reads it there:
+
+```php
+Invoice::query()->paginate(25, ['*'], 'p'); // documents `p`, not `page`
+```
+
+If that argument is something Docuccino can't read statically — a variable, a config lookup — no page
+parameter is documented at all. A guessed `page` would name a key the endpoint never reads, and
+[`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) is the way to state the real one.
+
+<Aside type="note" title="Why there's no per_page">
+`paginate()` takes its page size from the call site or the model's `$perPage` — never from the request.
+An application that honors a `per_page` key wrote that reading itself, so documenting one would be a
+guess, and a guessed parameter costs a client more than a missing one. Declare yours if you have it:
+
+```php
+#[QueryParameter('per_page', type: 'int', description: 'Results per page (max 100).', default: 25)]
+```
+
+A [Spatie Query Builder](/laravel/packages/query-builder/) list endpoint documents a `per_page` beside
+its page key; that page has the full parameter set.
+</Aside>
+
 ### Pagination Docuccino can't see
 
-Pagination parameters are inferred from a paginating call on a **query builder** — `paginate()`,
-`simplePaginate()` or `cursorPaginate()` on an Eloquent or base query builder, a relation, or a Spatie
-`QueryBuilder`. Plenty of applications paginate something else: an in-memory `Collection`, a
-search-engine result set, a list assembled from several services. A helper like this reads `page` and
-`per_page` off the request, but nothing about it says so statically:
+The key above comes from a paginating call on a **query builder** — `paginate()`, `simplePaginate()`
+or `cursorPaginate()` on an Eloquent or base query builder, a relation, or a Spatie `QueryBuilder`.
+Plenty of applications paginate something else: an in-memory `Collection`, a search-engine result set,
+a list assembled from several services. A helper like this reads `page` and `per_page` off the request,
+but nothing about it says so statically:
 
 ```php
 public function index(Request $request, CatalogQuery $catalog): PaginatedDataCollection

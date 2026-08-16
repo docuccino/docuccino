@@ -600,6 +600,10 @@ Three things are outside what the trace models today, and none produces a diagno
   [the receiver rule](#custom-pagination-terminals)). Declare `page` and `per_page` with
   [`#[QueryParameter]`](/laravel/documenting/requests/#pagination-docuccino-cant-see).
 
+The parameters above are this package's whole set. A list endpoint that paginates without Spatie Query
+Builder still gets its page key on its own — see
+[pagination](/laravel/documenting/requests/#pagination).
+
 For anything on this list, document the parameter yourself with
 [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter), addressing it by name:
 

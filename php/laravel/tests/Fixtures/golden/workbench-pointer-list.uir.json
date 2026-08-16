@@ -1922,6 +1922,55 @@
         "tags": [
           "Integrations"
         ],
+        "parameters": [
+          {
+            "x-docuccino": {
+              "id": "par:v1:hqeujtbduw3jqezg",
+              "provenance": [
+                {
+                  "producer": "integration:api-resources",
+                  "layer": "integration",
+                  "fields": [
+                    "description",
+                    "required"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 44,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listPaginatedArticles"
+                  }
+                }
+              ]
+            },
+            "name": "page",
+            "in": "query",
+            "description": "Page number.",
+            "required": false,
+            "schema": {
+              "x-docuccino": {
+                "provenance": [
+                  {
+                    "producer": "integration:api-resources",
+                    "layer": "integration",
+                    "fields": [
+                      "default",
+                      "minimum",
+                      "type"
+                    ],
+                    "source": {
+                      "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                      "line": 44,
+                      "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::listPaginatedArticles"
+                    }
+                  }
+                ]
+              },
+              "type": "integer",
+              "default": 1,
+              "minimum": 1
+            }
+          }
+        ],
         "responses": {
           "200": {
             "x-docuccino": {
@@ -3397,7 +3446,7 @@
     "document": {
       "id": "doc:pointer-list",
       "configHash": "8232eca8c6de2c57a33bbce8b03c3e08e85f5ee9723c30729d2c9422552337ff",
-      "contentHash": "9d818b02593f1f7c9293983939c3fa4c194d05d0614daec32cd092260ffdc0b7"
+      "contentHash": "e5a8285bb8d5041473e4559716d3ee36cc700e7917556568ffa93a3c5a44235e"
     },
     "generator": {
       "name": "docuccino/laravel",
