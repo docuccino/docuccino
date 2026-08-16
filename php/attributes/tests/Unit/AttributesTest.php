@@ -85,7 +85,7 @@ function attributeCatalogue(): array
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
         'DescriptionFromFile' => [DescriptionFromFile::class, $classFn | Attribute::TARGET_PROPERTY],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
-        'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS],
+        'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
     ];
 }
 

@@ -279,6 +279,17 @@ own (seeded from the action's parameter type):
   a method on it answers; and `forwardedOptionalMember()` passes a value that is never null and may
   already be the marker. All four must be recorded as members the body may omit, never as ones it carries
   — only an argument that IS the awaited value can settle one.
+- `app/Exceptions/PortalProblemRenderer.php` + `app/Exceptions/RendersProblems.php` + the
+  `PortalException` family (`HasProblemFields`, `HasRetryWindow`, `PortalRejectedException`,
+  `PortalThrottledException`, `PortalUnavailableException`) — the shape a class-level `#[ErrorComponent]`
+  cannot separate: one annotated base, three arms dispatching on it plus a marker interface, three
+  different bodies, all built through one `problem()` helper inherited from another file. Two arms carry
+  their own `#[ErrorComponent]` and win over the helper's (the OUTERMOST declaring hop on a render path
+  wins); the third carries none, so the helper's house name stands for it and the helper's file has to
+  reach the route's dependency set. The bodies deliberately reach the helper as a whole `array` argument,
+  so the payload honestly widens to `array<string, mixed>` while the names still tell the arms apart.
+- `app/Exceptions/SubmissionLockedException.php` — a renderable exception whose `render()` carries the
+  attribute: the analysed method is the outermost hop on its own path.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.

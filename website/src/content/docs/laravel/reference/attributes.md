@@ -53,7 +53,7 @@ All 28 attributes, grouped by what they do:
 | [`#[Abilities]`](#abilities) | Declare required Sanctum token abilities. |
 | [`#[SchemaId]`](#schemaid) | Pin a class's stable diff identity. |
 | [`#[SchemaName]`](#schemaname) | Set a class's component display name. |
-| [`#[ErrorComponent]`](#errorcomponent) | Name the shared component an exception's error publishes under. |
+| [`#[ErrorComponent]`](#errorcomponent) | Name the shared component an error publishes under, on the exception or on the method that renders it. |
 | [`#[Example]`](#example) | Pin the success response's example body. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
@@ -551,32 +551,47 @@ same way.
 
 ### `#[ErrorComponent]`
 
-Targets `CLASS`.
+Targets `CLASS`, `METHOD`.
 
 ```php
 public function __construct(public string $name)
 ```
 
-Names the shared component the error this exception produces is published under, so a client catches a
-`ResourceMissing` rather than an `Error404`.
+Names the shared component an error is published under, so a client catches a `ResourceMissing` rather
+than an `Error404`. On an **exception class** it names the error that class stands for; on a **render
+method** it names the body that method answers with, which is the only way to tell apart several bodies
+one exception class produces.
 
 ```php
 #[ErrorComponent('ResourceMissing')]
 final class InvoiceNotFoundException extends RuntimeException {}
+
+final class ProblemRenderer
+{
+    #[ErrorComponent('InvoiceRejected')]
+    private function renderRejection(ApiException&HasInvalidFields $e): JsonResponse { /* … */ }
+}
 ```
 
-Unlike PHP's own attribute lookup, this one is **inherited**: a base your API errors extend names them
-all at once, and a subclass carrying its own attribute wins over the base. It applies wherever the error
-is shared — `components.schemas`, `components.responses`, and the type name in any generated client —
-and changes nothing else about the response, including whether it is shared at all: an error only one
-operation states stays inline and has no component to name until a second operation states it too.
+Unlike PHP's own attribute lookup, the class anchor is **inherited**: a base your API errors extend names
+them all at once, and a subclass carrying its own attribute wins over the base. The method anchor
+inherits the way PHP does, since an unoverridden method still belongs to the parent that declared it.
+Either applies wherever the error is shared — `components.schemas`, `components.responses`, and the type
+name in any generated client — and changes nothing else about the response, including whether it is
+shared at all: an error only one operation states stays inline and has no component to name until a
+second operation states it too.
+
+Where several methods on one render path carry it, the one **nearest the answer** wins: the arm that
+returned the body beats the helper that built it, so marking a shared `problem()` helper names only the
+arms that said nothing themselves. Attributes cannot go on `match` arms, so a `match (true)` renderer
+needs a method per body it wants named.
 
 The name replaces the [default one derived from the
-status](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). A registered
-`ExceptionToResponse` that names the body it builds outranks it, because one exception class can render
-several different bodies and only the mapper that built one can tell them apart. A name outside
-`^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming the class that
-declared it, and the response keeps the name it would have had.
+status](/laravel/documenting/errors/#shared-errors-are-named-after-the-error), and a name on the render
+method replaces one on the exception class, because the method that built the body knows which body it
+is. A registered `ExceptionToResponse` ordered ahead of the inferred-handler tier outranks both. A name
+outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming the
+class or method that declared it, and the response keeps the name it would have had.
 
 ## Content & examples
 

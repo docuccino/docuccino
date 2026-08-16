@@ -227,10 +227,10 @@ when one runs.
 says the throw site cannot name an error, and that still holds: what the attribute declares is not
 "call this exception X" but "the error this class stands for is X", and the adapter turns that into the
 same `claimComponentName()` on the same response — `Extensions\ErrorResponsesExtension` is the one
-place that reads it, and `Exceptions\DeclaredErrorComponent` the one place that resolves it. The ladder
-is then the ordinary one, with one rule the guard's layers cannot express. It contributes at
-`attribute`, above the `integration`/`fallback` the tiers claim their status-derived default at, so the
-declaration wins there. It must LOSE to a registered mapper, though, and a mapper contributes at
+place that reads the CLASS anchor, and `Exceptions\DeclaredErrorComponent` the one place that resolves
+it. The ladder is then the ordinary one, with one rule the guard's layers cannot express. It contributes
+at `attribute`, above the `integration`/`fallback` the tiers claim their status-derived default at, so
+the declaration wins there. It must LOSE to a registered mapper, though, and a mapper contributes at
 `integration` — below `attribute` — so precedence alone would invert the answer. The rule that settles
 it is stated once, on `DeclaredErrorComponent::mayReplace()`: a declaration replaces the status DEFAULT
 and nothing a producer named itself. That is the honest statement of why, too — the mapper saw this
@@ -244,7 +244,41 @@ fragment dependencies — otherwise an attribute added to a base would leave war
 old name. Two exceptions declaring DIFFERENT names for one operation's one status is the case layers
 cannot settle either: the response carries one name, and awarding it to whichever throw the engine
 reported first would make a published type name a function of encounter order. Neither takes it, the
-status default stands, and `attribute.error-component-contested` names both classes.
+status default stands, and `attribute.error-component-contested` names both classes — unless a producer
+had already named the body, in which case neither declaration was ever in the running and there is
+nothing for the reader to reconcile, so nothing is reported.
+
+**The same attribute on a RENDER METHOD is the other anchor, and it is the same naming path again.**
+The class anchor says one thing per class, which is not enough for the shape the base above invites: a
+renderer dispatching on `ApiException` plus a marker interface turns one family into several different
+bodies, all inheriting one declared name, and the contest retires it into a hash. Only a per-arm anchor
+separates them. It cannot be read where the class one is, because the arm is only visible on the CALL
+PATH, so the engine reads it — `Analysis\ComponentDeclarations` off a `ReflectionMethod` — and carries
+it out on `ReturnSite::$component`, beside the recovered type rather than inside it: it names the body
+rather than describing it, and a serialised member of the analysis is what survives the fragment cache.
+`InferredHandler\HandlerResponseBuilder` then claims it as the producer's own name, so the ladder needs
+no new rung: `mayReplace()` already says the class anchor takes the status default and nothing a
+producer named itself, which makes the ordering method, then class, then default, with a mapper ordered
+ahead of the tier still winning outright.
+
+The rule for several declaring methods on one path is that the OUTERMOST wins — the method nearest the
+answer, not the one nearest the body. The method that constructs the payload is almost always a shared
+`problem()` helper, so attributing to it would give every arm one name, which is the collapse this
+anchor exists to prevent; making the outermost win instead means a shared helper can only ever speak for
+arms that declared nothing themselves. Stated once on `RefinedResponse::withComponent()`, and stamped
+per callee in `ResponseShapeRefiner::declared()` so the refiner's memo stays a function of the symbol
+alone. Cache soundness follows the same rule as the class anchor: the declaring method's own file is
+recorded, because an unoverridden method belongs to the parent that declared it and a house helper on a
+base is the ordinary case. A path that reaches no declaration — vendor code, dynamic dispatch, a spent
+descent budget — carries none, which is exactly the behaviour before the anchor existed; a declaration
+shadowed by an outer one is deliberate rather than lost, so neither raises a diagnostic of its own.
+
+Which arm a narrowed analysis picks had to be fixed to make any of it true. `Analysis\NarrowingGuard`
+reads a return site's guard as ALTERNATIVES OF REQUIRED classes — a union alternates, an intersection
+requires — because `$e instanceof ApiException && $e instanceof HasRetryWindow` admits a type only if it
+is both, and a flat list of names cannot tell that from `ApiException|HasRetryWindow`, which admits
+either. Read as "either", every arm naming the shared base answers for every member of the family: the
+throttle gets the rejection arm's body under the rejection arm's name.
 
 Contests route through the machinery that already exists: two DIFFERENT bodies claiming one name climb
 `ComponentNames`' ladder and are reported as `components.name-collision`.
@@ -267,7 +301,11 @@ refusal is stated twice more, by whoever CAN state it, and each of the three is 
   `attribute.error-component-invalid`, naming the class, the
   file the attribute is on and the name it read. A refused name is not a declaration, so it also does not
   contest a legal one for the same status — a typo on one exception cannot strip a correctly named
-  response back to its default.
+  response back to its default. The method anchor is refused by the tier that read it, under the same
+  code and the same wording, naming the declaring method instead of the class. That tier is an
+  integration, and an integration may not import `ComponentNames`, so the predicate is asked through
+  `ComponentRegistry::isLegalName()` — a delegation on the object it is already handed for exactly this,
+  and the extension author's view of a character class that still lives in one place.
 - **The hoist, for a document that already states the fact.** `components.name-invalid` covers the one
   source a draft cannot police, which is now only an overlay, since overlays are applied before the
   transformers run. It is raised only for bodies that were actually published, since it says the body

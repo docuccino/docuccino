@@ -41,8 +41,10 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Measured 39.28% (665/1693).
-    'inference-phpstan' => 39,
+    // Measured 40.32% (714/1771): the narrowed-arm guard and the `#[ErrorComponent]` reader are the
+    // latest move into the first half — both answer from a DType or a ReflectionMethod, so neither needs
+    // a Scope to be proved.
+    'inference-phpstan' => 40,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

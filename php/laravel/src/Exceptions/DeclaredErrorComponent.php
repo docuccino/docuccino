@@ -29,8 +29,11 @@ final readonly class DeclaredErrorComponent
      *
      * It replaces the DEFAULT name — the one the error tiers derive from the status — and nothing else.
      * A producer that named the body said something a name on the exception class cannot: one exception
-     * can render several bodies, and only the mapper that built one tells them apart. Static because it
-     * is a question about the response and the status; which declaration is asking makes no difference.
+     * can render several bodies, and only whoever built one tells them apart — a registered mapper, or
+     * the render method the body came back through, which claims its own `#[ErrorComponent]` as it
+     * builds. That is the whole ordering: method anchor, then class anchor, then the status default.
+     * Static because it is a question about the response and the status; which declaration is asking
+     * makes no difference.
      */
     public static function mayReplace(?string $claim, string $status): bool
     {

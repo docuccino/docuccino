@@ -582,35 +582,120 @@ can read.
 their bodies match under one status they publish one component. Where the bodies differ the name is
 contested and retired exactly as above, each body taking a name derived from its own content.
 
-#### When the attribute isn't enough
+#### Name the body instead, when the class can't say enough
 
-It names the exception *class*, so it says one thing per class. Two cases need the longer route:
+On a class the attribute says one thing per class, and a renderer that turns one family of exceptions
+into several different bodies needs to say more than that. Put it on the **render method** and it names
+the body that method answers with:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	use Docuccino\Attributes\ErrorComponent;
+
+	final class ProblemRenderer
+	{
+		public function __invoke(Throwable $e, Request $request): ?JsonResponse
+		{
+			if ($e instanceof ApiException && $e instanceof HasInvalidFields) {
+				return $this->renderRejection($e);
+			}
+
+			if ($e instanceof ApiException && $e instanceof HasRetryWindow) {
+				return $this->renderThrottle($e);
+			}
+
+			return $e instanceof ApiException ? $this->renderProblem($e) : null;
+		}
+
+		#[ErrorComponent('InvoiceRejected')]
+		private function renderRejection(ApiException&HasInvalidFields $e): JsonResponse
+		{
+			return $this->problem(['title' => 'Rejected', 'fields' => $e->fields()], 422);
+		}
+
+		#[ErrorComponent('InvoiceThrottled')]
+		private function renderThrottle(ApiException&HasRetryWindow $e): JsonResponse
+		{
+			return $this->problem(['title' => 'Slow down', 'retryAfter' => $e->retryAfter()], 429);
+		}
+
+		// Declares nothing, so the house name below stands for it.
+		private function renderProblem(ApiException $e): JsonResponse
+		{
+			return $this->problem(['title' => $e->getMessage()], $e->getStatusCode());
+		}
+
+		#[ErrorComponent('InvoiceProblem')]
+		private function problem(array $body, int $status): JsonResponse
+		{
+			return new JsonResponse($body, $status, ['Content-Type' => 'application/problem+json']);
+		}
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	// Three arms, three names — instead of one name three bodies would have contested.
+	"422": { "$ref": "#/components/responses/InvoiceRejected" }
+	"429": { "$ref": "#/components/responses/InvoiceThrottled" }
+	"503": { "$ref": "#/components/responses/InvoiceProblem" }
+	```
+	</TabItem>
+</Tabs>
+
+**Use it when one exception class produces more than one body**, or when the class is a framework or
+vendor one you can't mark. Where every error of a class really is one error — the usual case — the class
+is the better place: it is one line, it is inherited, and it says the thing where the thing is.
+
+**The method nearest the answer wins**, not the one nearest the body. Docuccino follows the render path
+from the method it analyzes down through the helpers it calls, and takes the first name it finds. So the
+arms above beat `problem()`, which builds all three of them, and `problem()` names only the arms that
+said nothing themselves. It works the other way round for a renderable exception — a `render()` on the
+exception itself is both ends of its own path, and marking it names the one body it returns.
+
+:::note[Not on a `match` arm]
+PHP allows attributes on methods, never on `match` arms or `if` branches. A `match (true)` renderer that
+returns each body inline has nowhere to put one, so give the arms that need names a method each — which
+is what the example above does.
+:::
+
+**Precedence, in order:** the name a mapper gave the body it built, then `#[ErrorComponent]` on the
+render method, then `#[ErrorComponent]` on the exception class, then the status default in the table
+above. A mapper still outranks both, and the way it does is unchanged: the chain resolves to the first
+mapper that answers, so one that must beat the renderer Docuccino read orders itself ahead of it.
+
+#### When neither attribute is enough
 
 | | |
 | --- | --- |
-| One exception class, several different bodies | An attribute cannot tell them apart. Register an `ExceptionToResponse` and name each body as you build it — a mapper's name always wins over an attribute, which is what makes it the escape hatch. |
-| An exception you didn't write | You can't mark a framework or vendor class. Rename the component a built-in claimed from an `OperationExtension` instead. |
+| A body no renderer of yours builds | Nothing on the path to mark. Register an `ExceptionToResponse` and name each body as you build it — a mapper's name always wins, which is what makes it the escape hatch. |
+| An exception you didn't write, with no renderer either | You can't mark a framework or vendor class. Rename the component a built-in claimed from an `OperationExtension` instead. |
 
 Both are in [naming the component an error publishes
 under](/extending/extension-authoring/#naming-the-component-an-error-publishes-under). An overlay is
 *not* one of them, because overlays run before the hoist and there is nothing at
 `components.responses.*` to target yet.
 
-**Precedence, in order:** the name a mapper gave the body it built, then `#[ErrorComponent]` on the
-exception, then the status default in the table above.
-
 :::caution[Two names for one response]
 Two exceptions that name one operation's one status differently describe a response that can only carry
 one name. Rather than hand it to whichever the analyzer met first — which would make a published type
 name depend on encounter order — the response keeps its default name and the build reports
-`attribute.error-component-contested` naming both classes. Give the errors statuses of their own, or
-keep the attribute on the one the response really is.
+`attribute.error-component-contested` naming both classes. Give the errors statuses of their own, keep
+the attribute on the one the response really is, or name the body on the render method that builds it,
+which outranks both. Nothing is reported where the render method already named it: neither class was in
+the running, so there is nothing to reconcile.
 :::
 
 A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
-the class that declared it, and the response keeps the name it would have had — the status default from
-the table above, or `Error<status>` where the status has none. A typo costs you a name and never a valid
-document, and never a name your other exceptions were using: a refused name does not contest a good one.
+the class or the render method that declared it, and the response keeps the name it would have had — the
+status default from the table above, or `Error<status>` where the status has none. A typo costs you a
+name and never a valid document, and never a name your other errors were using: a refused name does not
+contest a good one.
+
+Two render methods naming *the same* component for bodies that differ is a real disagreement rather than
+a typo, and it is settled where every such disagreement is: both bodies keep a name derived from their
+own content and the build reports `components.name-collision`.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
