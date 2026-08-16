@@ -64,13 +64,15 @@ final class IdentityOverlap
         $refs = ComponentRefs::of($document);
 
         foreach ($document->paths ?? [] as $item) {
+            // A path item's parameters belong to the operations under it, and the pairing compares them
+            // there, so they count as parameter identities here too.
             foreach ($item->operations as $operation) {
                 $id = NodeIdentity::of($operation->docuccino, $operation->rest);
                 if ($id !== null) {
                     $operations[$id] = true;
                 }
 
-                foreach ($operation->parameters as $parameter) {
+                foreach ([...$item->parameters, ...$operation->parameters] as $parameter) {
                     $parameter = $refs->resolveParameter($parameter);
                     $id = NodeIdentity::of($parameter->docuccino, $parameter->rest);
                     if ($id !== null) {

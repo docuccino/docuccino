@@ -28,7 +28,7 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar. Measured 95.24% (5064/5317).
+    // phpdoc type grammar. Measured 95.29% (5113/5366).
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
     // Measured 93.01% (5790/6225).
