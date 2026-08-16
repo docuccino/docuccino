@@ -969,6 +969,173 @@ it('invents no churn when both sides carry the same contested id', function (): 
         ->and(diffOf($doc, $reordered)->isEmpty())->toBeTrue();
 });
 
+// --- Two nodes claiming one key ---------------------------------------------
+
+it('tells a parameter from a decoy whose structural key spells that parameter\'s id', function (array $decoy): void {
+    // An id and a structural key are two names for a node, not two key spaces: a hand-written entry whose
+    // pointer — or whose `in` and `name` — spells another parameter's id lands on that parameter's key and
+    // hides it. Shaped to match, the decoy answers every question asked of the parameter it hid, and a
+    // parameter that became required reads as no change at all.
+    $status = ['type' => 'string', 'enum' => ['draft', 'published', 'archived']];
+
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'][] = $decoy + ['required' => true, 'schema' => $status];
+
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['required'] = true;
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('parameter.became-required')
+        ->and($changes['parameter.became-required']->breaking)->toBeTrue()
+        ->and($changes['parameter.became-required']->path)->toBe('GET /api/v1/forms/{id} parameters query:status')
+        ->and($changes)->toHaveKey('parameter.removed');
+})->with([
+    'a pointer' => [['$ref' => 'par:v1:cccccccccccccccc']],
+    'an in and a name' => [['in' => 'par:v1', 'name' => 'cccccccccccccccc']],
+]);
+
+it('tells a component schema from one whose id spells another\'s name', function (): void {
+    $old = diffBase();
+    $old['components']['schemas']['Legacy'] = ['type' => 'object', 'properties' => ['title' => ['type' => 'string']]];
+    $old['components']['schemas']['Shadow'] = ['x-docuccino-id' => 'name:Legacy', 'type' => 'string'];
+
+    $new = $old;
+    unset($new['components']['schemas']['Legacy']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('schema.removed')
+        ->and($changes['schema.removed']->path)->toBe('components.schemas.Legacy')
+        ->and($changes)->not->toHaveKey('schema.added');
+});
+
+it('tells a content page from one whose id spells another\'s slug', function (): void {
+    $old = diffBase();
+    $old['x-docuccino']['content']['pages'][] = ['slug' => 'intro', 'title' => 'Intro', 'content' => 'Start here.'];
+    $old['x-docuccino']['content']['pages'][] = ['id' => 'slug:intro', 'slug' => 'shadow', 'title' => 'Shadow', 'content' => 'Hidden.'];
+
+    $new = $old;
+    unset($new['x-docuccino']['content']['pages'][1]);
+    $new['x-docuccino']['content']['pages'] = array_values($new['x-docuccino']['content']['pages']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('page.removed')
+        ->and($changes['page.removed']->path)->toBe('pages intro')
+        ->and($changes)->not->toHaveKey('page.added');
+});
+
+it('reports a removed parameter that carried no id and shared its label', function (): void {
+    // Two parameters of one operation may state the same `in` and `name` in an artifact nobody validated,
+    // and with no id to key on the label is all there is.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'] = [
+        ['name' => 'token', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']],
+        ['name' => 'token', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+    ];
+
+    $new = $old;
+    array_shift($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect(diffOf($old, $old)->isEmpty())->toBeTrue()
+        ->and($changes)->toHaveKey('parameter.removed')
+        ->and($changes['parameter.removed']->breaking)->toBeTrue()
+        ->and($changes)->not->toHaveKey('parameter.added');
+});
+
+it('reports a removed parameter that shared both its id and its label with the one that stayed', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['parameters'] = [
+        ['x-docuccino' => ['id' => 'par:v1:dupedupedupedupe'], 'name' => 'token', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'string']],
+        ['x-docuccino' => ['id' => 'par:v1:dupedupedupedupe'], 'name' => 'token', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+    ];
+
+    $new = $old;
+    array_shift($new['paths']['/api/v1/forms/{id}']['get']['parameters']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect(diffOf($old, $old)->isEmpty())->toBeTrue()
+        ->and($changes)->toHaveKey('parameter.removed')
+        ->and($changes)->not->toHaveKey('parameter.added');
+});
+
+// --- Pages with no slug to key on -------------------------------------------
+
+/**
+ * `diffBase()` with a page that states neither an id nor a slug — the shape a hand-written artifact
+ * reaches for, and the only one the differ has to name for itself.
+ *
+ * @param  array<string, mixed>  $extra
+ * @return array<string, mixed>
+ */
+function diffAnonymousPage(array $extra = []): array
+{
+    $doc = diffBase();
+    $doc['x-docuccino']['content']['pages'][] = ['title' => 'Rate limits', 'content' => 'Ten a second.'] + $extra;
+
+    return $doc;
+}
+
+it('leaves a slug-less page alone when a page is inserted ahead of it', function (): void {
+    // Keyed by where it sits in the list, a page nobody touched reads as removed and re-added the moment
+    // another is written above it.
+    $new = diffAnonymousPage();
+    array_unshift($new['x-docuccino']['content']['pages'], [
+        'id' => 'page:v1:1010101010101010', 'slug' => 'auth', 'title' => 'Authentication', 'content' => 'Use a token.',
+    ]);
+
+    $changes = changesByCode(diffOf(diffAnonymousPage(), $new));
+
+    expect($changes)->toHaveKey('page.added')
+        ->and($changes)->not->toHaveKey('page.removed')
+        ->and($changes)->not->toHaveKey('page.content-changed');
+});
+
+it('keys a slug-less page by its title, so an edit to it still reads as an edit', function (): void {
+    $new = diffAnonymousPage();
+    $new['x-docuccino']['content']['pages'][1]['content'] = 'Twenty a second.';
+
+    $changes = changesByCode(diffOf(diffAnonymousPage(), $new));
+
+    expect($changes)->toHaveKey('page.content-changed')
+        ->and($changes)->not->toHaveKey('page.removed');
+});
+
+it('keys a page with neither slug nor title by its content', function (): void {
+    $old = diffBase();
+    $old['x-docuccino']['content']['pages'][] = ['content' => 'Ten a second.'];
+    $old['x-docuccino']['content']['pages'][] = ['content' => 'Tokens expire hourly.'];
+
+    $new = $old;
+    unset($new['x-docuccino']['content']['pages'][1]);
+    $new['x-docuccino']['content']['pages'] = array_values($new['x-docuccino']['content']['pages']);
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect(diffOf($old, $old)->isEmpty())->toBeTrue()
+        ->and($changes)->toHaveKey('page.removed')
+        ->and($changes)->not->toHaveKey('page.added')
+        ->and($changes)->not->toHaveKey('page.content-changed');
+});
+
+it('invents no churn when both sides carry the same contested page id', function (): void {
+    $doc = diffBase();
+    $doc['x-docuccino']['content']['pages'][0]['id'] = 'page:v1:dupedupedupedupe';
+    $doc['x-docuccino']['content']['pages'][] = [
+        'id' => 'page:v1:dupedupedupedupe', 'slug' => 'auth', 'title' => 'Authentication', 'content' => 'Use a token.',
+    ];
+
+    $reordered = $doc;
+    $reordered['x-docuccino']['content']['pages'] = array_reverse($doc['x-docuccino']['content']['pages']);
+
+    expect(diffOf($doc, $doc)->isEmpty())->toBeTrue()
+        ->and(diffOf($doc, $reordered)->isEmpty())->toBeTrue();
+});
+
 // --- Determinism, model and rendering --------------------------------------
 
 it('produces a deterministic toArray with breaking-first ordering', function (): void {

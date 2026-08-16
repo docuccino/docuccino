@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Diff;
 
+use Docuccino\Core\Document\Content\Page;
 use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\Operation;
 use Docuccino\Core\Document\Parameter;
 use Docuccino\Core\Document\ResponseObject;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\Json;
 
 /**
  * The semantic diff engine: compares two {@see UirDocument}s by their stable `x-docuccino.id`s,
@@ -36,7 +38,7 @@ use Docuccino\Core\Support\Arr;
  * another tool, has none, so the differ falls back to method + path on both sides and reports which it
  * used ({@see Pairing}) — see {@see pairing()} for why the one-sided case can't be paired by id at all.
  * Every node's id is read through {@see NodeIdentity}, which knows both forms an artifact can carry, and
- * keyed through {@see IdentityKeys}, which owns what happens when two nodes claim one id.
+ * keyed through {@see IdentityKeys}, which owns what happens when two nodes claim one key.
  *
  * @phpstan-type OperationEntry array{path: string, method: string, op: Operation, shared: list<Parameter>}
  */
@@ -398,7 +400,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @return list<array{0: ?string, 1: string, 2: OperationEntry}>
+     * @return list<array{0: ?string, 1: string, 2: string, 3: OperationEntry}>
      */
     private function operationEntries(UirDocument $document, Pairing $pairing): array
     {
@@ -408,6 +410,7 @@ final class DocumentDiffer
             $out[] = [
                 $pairing === Pairing::Identity ? self::operationId($op) : null,
                 '_'.strtoupper($method).' '.$path,
+                self::fingerprint($op->toArray()),
                 ['path' => $path, 'method' => $method, 'op' => $op, 'shared' => $shared],
             ];
         }
@@ -442,7 +445,7 @@ final class DocumentDiffer
      * {@see paramLabel} names — so the two are one parameter and only the operation's is compared.
      *
      * @param  OperationEntry  $entry
-     * @return list<array{0: ?string, 1: string, 2: Parameter}>
+     * @return list<array{0: ?string, 1: string, 2: string, 3: Parameter}>
      */
     private function parameterEntries(array $entry, ComponentRefs $refs, Pairing $pairing): array
     {
@@ -466,6 +469,7 @@ final class DocumentDiffer
             $out[] = [
                 $pairing === Pairing::Identity ? self::parameterId($param) : null,
                 self::paramLabel($param),
+                self::fingerprint($param->toArray()),
                 $param,
             ];
         }
@@ -474,7 +478,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @return list<array{0: ?string, 1: string, 2: array{name: string, schema: array<string, mixed>}}>
+     * @return list<array{0: ?string, 1: string, 2: string, 3: array{name: string, schema: array<string, mixed>}}>
      */
     private function componentSchemaEntries(UirDocument $document, Pairing $pairing): array
     {
@@ -490,6 +494,7 @@ final class DocumentDiffer
             $out[] = [
                 $pairing === Pairing::Identity ? self::schemaId($data) : null,
                 'name:'.$name,
+                self::fingerprint($data),
                 ['name' => (string) $name, 'schema' => $data],
             ];
         }
@@ -498,7 +503,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @return list<array{0: ?string, 1: string, 2: array<string, mixed>}>
+     * @return list<array{0: ?string, 1: string, 2: string, 3: array<string, mixed>}>
      */
     private function pageEntries(UirDocument $document): array
     {
@@ -509,15 +514,42 @@ final class DocumentDiffer
             return $out;
         }
 
-        foreach ($content->pages as $index => $page) {
-            $out[] = [
-                $page->id !== '' ? $page->id : null,
-                $page->slug !== '' ? 'slug:'.$page->slug : 'page:'.$index,
-                $page->toArray(),
-            ];
+        foreach ($content->pages as $page) {
+            $data = $page->toArray();
+            $out[] = [$page->id !== '' ? $page->id : null, self::pageKey($page, $data), self::fingerprint($data), $data];
         }
 
         return $out;
+    }
+
+    /**
+     * A page is named by its slug, and where a hand-written one states none, by its title — then by its
+     * own content. Never by where it sits in the list: keyed on that, writing a page above another
+     * reports the pages below as removed and re-added, and reads their edits onto their neighbours.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function pageKey(Page $page, array $data): string
+    {
+        if ($page->slug !== '') {
+            return 'slug:'.$page->slug;
+        }
+
+        return $page->title !== null && $page->title !== '' ? 'title:'.$page->title : 'page:'.self::fingerprint($data);
+    }
+
+    /**
+     * What tells two nodes apart once their identity and their structural key cannot. Identity members are
+     * dropped: the id is already in the key, and provenance travels with it — a node whose only delta is
+     * where it came from is not a changed node.
+     *
+     * @param  array<string, mixed>  $node
+     */
+    private static function fingerprint(array $node): string
+    {
+        unset($node['x-docuccino'], $node[NodeIdentity::FLAT_KEY], $node['provenance']);
+
+        return substr(hash('sha256', Json::stable($node)), 0, 16);
     }
 
     /**
