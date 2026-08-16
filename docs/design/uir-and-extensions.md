@@ -89,6 +89,22 @@ The same claims settle `components.responses` and `components.securitySchemes`. 
 literal like `passport` looks exempt and is not: an app that never called `Passport::tokensCan()`
 builds a different `passport` definition per distinct scope set.
 
+**Rung 1 is an ASK, and a producer may make it.** For a class-identified schema the ask is the class's
+short name and there is nothing to decide. A shared error body has no class to be named after, so its
+ask would default to `Error<status>` — which serves neither of the two readers this project has. The
+developer running the generator has no way to improve it, and whoever catches the type in a generated
+client learns a number rather than what went wrong. `Draft\ResponseDraft::claimComponentName()` lets the
+producer that built the body supply the ask instead (`NotFound`), and nothing else about the ladder
+changes: an error claim carries no identity either way, so rungs 2 and 3 collapse into the hash of its
+published bytes and the ladder is exactly base-then-hash whether the base was declared or defaulted.
+
+Falling to that hash is still the right answer for a name someone chose on purpose. Two DIFFERENT bodies
+claiming `NotFound` are two contracts asking to be called one thing, and awarding the plain name to
+either would make what a client's `NotFound` means depend on which routes the application happens to
+have — the exact defect this section exists to prevent. So both climb to `NotFound_kzvq2m4a`, and the
+`components.name-collision` warning names every claimant and the name it got, because the author is the
+only one who can tell the two errors apart and give them a name each.
+
 ### Shared error components
 
 `Extensions\BuiltIn\SharedErrorResponses` collapses a repeated 4xx/5xx body, in two passes whose
@@ -110,10 +126,79 @@ the per-response types the first pass exists to prevent. The passes are independ
 alternatives: a response differing by example simply does not join an identical-response group, while
 the operations that DO match still share one — and all of them still share one shape.
 
+**The name is declared by whoever built the body.** Both passes publish under a name a code generator
+turns into a type, so `Error404` — or `Error404_2obip4vj` where a status carries two bodies — is what an
+SDK consumer ends up writing in a `catch`, having never seen the codebase that produced it.
+`ResponseDraft::claimComponentName()` lets the producer that assembled the body say what kind of error
+it is, and the adapter's own tiers do (`NotFound`, `Unauthorized`, `TooManyRequests`), so the default
+output already reads. The claim is guarded like every other field — two producers naming one response
+settle by precedence — and freezes into `x-docuccino.facts.component`, which is the only channel there
+is: the hoist runs over the finished document, so a claim that lived anywhere else would be lost on a
+warm fragment-cache hit and a warm build would publish different names from a cold one.
+
+**The declaration is part of what the body IS**, not a label applied afterwards, so it joins the status
+in the PUBLICATION key and in the published component's id. Keyed on the bytes alone, two kinds of error
+that happen to render identically would collapse into one component under one of the two names, and
+which name that is would depend on which routes the application happens to have — a name silently coming
+to mean something else, which is the one failure this whole area is built to prevent. Keyed on the
+declaration as well they are two components, each named for its own declarer and neither able to move
+the other. An undeclared body keys on the status alone, exactly as it always did, so its key, its hash
+rung and its component id are unchanged.
+
+**What repeats decides WHETHER a body is hoisted; what its producer declared decides only what the
+component is CALLED.** The two questions are counted separately and this is load-bearing: occurrences
+are grouped by status and body with every declaration erased — the grouping a document with no
+declarations in it would have had — and each publication in a group that repeats is hoisted under its
+own name. Count per publication instead and a route learning to name its error takes its occurrence out
+of the group behind an unrelated route's body, drops that body below the threshold and puts it back
+inline: one part of an application changing the emitted representation of another, which is the defect
+locality forbids and which a mixed document (a first tier recovering a body without naming it, a later
+tier naming an identical one) reaches in stock Laravel. So a declaration can ADD a component and never
+take one away, and an undeclared body publishes exactly what it would have published in a document
+where nobody declared anything at all. The price is that a body declared by one route and undeclared
+by another is published twice, once under each name — the same bytes, two types in a generated client,
+and the honest reading of two producers that said different things about the same body.
+
+The second pass counts the same way, which takes one more step: by the time it runs the two responses
+differ in the schema `$ref` the first pass just wrote into them. So the grouping resolves a reference to
+a shape THIS run published back to that shape's group, and two responses spelling one shape under two
+names are one body again.
+
+Naming an error after the EXCEPTION would have been the obvious design and is wrong: the relation is
+not 1:1 in either direction. Three exception types routinely render one body (their `detail`s are
+runtime translations that fold to nothing distinct), so picking one of the three names lets deleting an
+unrelated route rename the survivor; and one exception can render two bodies (a literal problem-type
+folds, a computed one does not), so it contests its own name. The producer knows what kind of error it
+speaks for; the throw site does not.
+
+An application overrides a built-in name the way it overrides anything: register an
+`ExceptionToResponse` (unannotated, so `Priorities::DEFAULT` puts it ahead of the framework-errors tier
+at `LATE` and the fallback at `LAST`) and the chain takes it, body and name together; or claim over the
+built-in's name from an `OperationExtension`, where the guard's ladder decides — the built-in tiers
+claim at `integration`, so an application's own integration breaks the tie on `specificity`. An OVERLAY
+cannot: overlays are applied before the transformers, so `components.responses.*` does not exist yet
+when one runs.
+
+Contests route through the machinery that already exists: two DIFFERENT bodies claiming one name climb
+`ComponentNames`' ladder and are reported as `components.name-collision`.
+
+Illegal names are refused at the WRITE. `ComponentNames::isLegal()` owns the character class — one
+copy, in the class that also `sanitize()`s by force — and `claimComponentName()` reads a name that
+fails it as no declaration at all, so nothing a `$ref` could not point at ever reaches
+`x-docuccino.facts.component`, whether or not the hoist that would have refused it later is switched
+on. The body falls back to `Error<status>`: a degraded name, never an invalid document, and never a
+question of which knobs are set. The hoist keeps `components.name-invalid` for the one source the draft
+cannot police — a document that already states the fact, which an overlay can, since overlays are
+applied before the transformers run. That warning is raised only for bodies that were actually
+published, since it says the body "was named after its status instead" and that is untrue of a body
+nothing hoisted; and it quotes the name with control characters escaped, because a diagnostic is read
+on a terminal and nothing validated the string it came from.
+
 **The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
 the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not
 do is change what anything MEANS: same body, same generated type, same contract. That is the whole
-distinction, and it is why names here are derived from content alone while the inline/`$ref` boundary
+distinction, and it is why names here are derived from content and declaration alone while the
+inline/`$ref` boundary
 is allowed to move — the defect worth preventing is a NAME that quietly comes to mean a different
 shape, which a client keeps compiling against and silently gets wrong. Hoisting singletons would make
 the boundary local at the cost of a `components` bucket holding one entry per one-off error body:

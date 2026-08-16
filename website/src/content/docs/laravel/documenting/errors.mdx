@@ -423,14 +423,14 @@ one-line `$ref`.
 	<TabItem label="On the operations">
 	```json
 	// Two operations returning the same 404, presented the same way
-	"404": { "$ref": "#/components/responses/Error404" }
+	"404": { "$ref": "#/components/responses/NotFound" }
 
 	// An operation returning the same shape with its own example keeps its response…
 	"404": {
 	  "description": "Not Found",
 	  "content": {
 	    "application/json": {
-	      "schema": { "$ref": "#/components/schemas/Error404" },
+	      "schema": { "$ref": "#/components/schemas/NotFound" },
 	      "example": { "message": "No such invoice." }
 	    }
 	  }
@@ -440,15 +440,15 @@ one-line `$ref`.
 	<TabItem label="Shared components">
 	```json
 	// components.responses
-	"Error404": {
+	"NotFound": {
 	  "description": "Not Found",
 	  "content": {
-	    "application/json": { "schema": { "$ref": "#/components/schemas/Error404" } }
+	    "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } }
 	  }
 	}
 
 	// components.schemas
-	"Error404": {
+	"NotFound": {
 	  "type": "object",
 	  "properties": { "message": { "type": "string" } },
 	  "required": ["message"]
@@ -463,7 +463,7 @@ one-line `$ref`.
 | A response two or more operations state identically, in full | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
 **How an operation illustrates an error is never part of its shape.** Two `403`s returning the same body
-with different example messaging share one `Error403` schema; only the response, which has to carry the
+with different example messaging share one `Forbidden` schema; only the response, which has to carry the
 example, stays on the operation. That is not a stylistic choice: an OpenAPI Reference Object may carry
 only `$ref`, `summary` and `description`, so a shared *response* cannot hold a per-operation example at
 all. The two passes are independent — a differing example costs you the shared response, never the
@@ -472,21 +472,62 @@ shared shape.
 Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
 meaning, never by value — so throttled routes share both.
 
-A status names more than one component only when the bodies genuinely differ. When that happens the
-plain `Error403` is retired rather than handed to one of them, and each takes a name derived from its own
-content (`Error403_kzvq2m4a`) — so adding a route can never change which body an existing `$ref` means.
+### Shared errors are named after the error
 
-**Retiring the plain name is a rename, and it is announced.** A document publishing `Error404` today
+A component name is what a code generator calls the type, so `Error404` — or `Error404_2obip4vj` where
+a status carries two bodies — is what someone consuming your API ends up writing in a `catch`, having
+never seen the code behind it. Laravel's own errors are published under their reason phrase instead,
+because the tier documenting them speaks for exactly one kind of error per status and can say which:
+
+| Status | Component | Produced for |
+| --- | --- | --- |
+| `400` | `BadRequest` | An unrecognized exception with a `400` status, and the [Query Builder](/laravel/packages/query-builder/) strict-mode rejection |
+| `401` | `Unauthorized` | `AuthenticationException`, and auth middleware |
+| `403` | `Forbidden` | `AuthorizationException`, `can:` / `signed` / `verified` middleware, a FormRequest `authorize()` gate |
+| `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
+| `422` | `UnprocessableEntity` | `ValidationException`, and any recovered request body |
+| `429` | `TooManyRequests` | [`throttle`](/laravel/documenting/rate-limiting/) middleware |
+| `405`, `409`, `500`, `503` | `MethodNotAllowed`, `Conflict`, `InternalServerError`, `ServiceUnavailable` | An unrecognized exception resolving to that status |
+
+An error nothing claims a name for still falls back to `Error<status>`: a `402` your handler renders,
+say, or a body an [attribute](/laravel/reference/attributes/#response) documents. Nothing else about
+those bodies changes — only what the shared component is called.
+
+Named and unnamed bodies still share on the same terms. Whether a body is hoisted at all depends on how
+often the document states that status and those bytes, and never on what anyone called it — so a `404`
+your own handler renders as `{"message": …}` is hoisted exactly as it was, under `Error404`, and the
+framework's identical `404` is hoisted beside it under `NotFound`. Two components with the same bytes is
+the honest reading: two producers said different things about what the error is, and neither can rename
+the other's.
+
+:::caution[These names changed]
+Shared error components used to be named `Error404`, `Error422` and so on. Regenerating turns them into
+the names above, and any client you generate from the document renames its error types to match. The
+document's contract is unchanged — same statuses, same bodies — but a `catch (Error404)` in hand-written
+client code needs updating once.
+:::
+
+**Renaming them is a supported path**, either by registering your own exception mapper or by renaming
+the component a built-in claimed. Both are in [naming the component an error publishes
+under](/extending/extension-authoring/#naming-the-component-an-error-publishes-under); an overlay is
+*not* one of them, because overlays run before the hoist and there is nothing at
+`components.responses.*` to target yet.
+
+A name goes to more than one component only when two bodies genuinely contest it. When that happens the
+plain `NotFound` is retired rather than handed to one of them, and each takes a name derived from its own
+content (`NotFound_kzvq2m4a`) — so adding a route can never change which body an existing `$ref` means.
+
+**Retiring the plain name is a rename, and it is announced.** A document publishing `NotFound` today
 loses it the moment one unrelated endpoint introduces a second `404` shape: both bodies move to
-content-derived names and every operation that referenced `Error404` is repointed. Nothing about either
+content-derived names and every operation that referenced `NotFound` is repointed. Nothing about either
 body changed and no client is reading the wrong shape — that is exactly what the rename prevents — but a
 name a generated type is called after did move, so the build reports it as a
 `components.name-collision` warning naming the retired name and both replacements. The same warning
 fires when a component from elsewhere in your app already holds the name (a class of your own called
-`Error404`), in which case the shared body climbs past it.
+`NotFound`), in which case the shared body climbs past it.
 
-The alternative — always discriminating, so `Error404` never exists — would name the overwhelmingly
-common single-shape case `Error404_a1b2c3d4` for everybody, to spare a few documents a one-time rename.
+The alternative — always discriminating, so `NotFound` never exists — would name the overwhelmingly
+common single-shape case `NotFound_a1b2c3d4` for everybody, to spare a few documents a one-time rename.
 The trade is deliberate, and it is the same one component names make.
 
 Where a body lives is representation, not contract, so

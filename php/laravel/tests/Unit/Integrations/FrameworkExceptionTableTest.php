@@ -44,6 +44,22 @@ it('locks 401 to Unauthorized and degrades an unlisted status to Error', functio
         ->and(FrameworkExceptionTable::reason('402'))->toBe('Error');
 });
 
+it('names every mapped status after its reason phrase, as a legal component key', function (string $status, string $reason): void {
+    $name = FrameworkExceptionTable::componentName($status);
+
+    expect($name)->toBe(str_replace(' ', '', $reason))
+        ->and($name)->toMatch('/^[A-Za-z0-9._-]+$/');
+})->with(FrameworkExceptionTable::reasonPhrases());
+
+it('declares no name for a status with no reason phrase of its own', function (): void {
+    // `Error` names nothing, and every unlisted status would claim it — so an unlisted one declares
+    // nothing and keeps `Error<status>`.
+    expect(FrameworkExceptionTable::componentName('404'))->toBe('NotFound')
+        ->and(FrameworkExceptionTable::componentName('429'))->toBe('TooManyRequests')
+        ->and(FrameworkExceptionTable::componentName('418'))->toBeNull()
+        ->and(FrameworkExceptionTable::componentName('402'))->toBeNull();
+});
+
 it('makes the framework-errors description and problem-details title agree on the 401 phrase', function (): void {
     $auth = 'Illuminate\\Auth\\AuthenticationException';
 

@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
@@ -83,9 +84,11 @@ function stubDocumentArray(?callable $mutateConfig = null): array
 }
 
 /**
- * `[the GET /api/forms responses, the schemas the build hoisted, the diagnostics it raised, the whole
- * result]` for one stubbed action return type. The framework-response suites pin a status, a header
- * and — above all — an ABSENT component, so they need the whole response rather than one schema.
+ * `[the GET /api/forms responses, the whole document, the diagnostics it raised, the whole result]` for
+ * one stubbed action return type. The framework-response suites pin a status, a header and — above all
+ * — an ABSENT component, so they need the whole response rather than one schema, and the whole document
+ * rather than one bucket ({@see typeSchemas()} tells a hoisted type from a shared error shape by where
+ * the document uses it).
  *
  * @param  array<string, ClassMetadata>  $classes  what the engine answers `classMetadata()` with, by FQCN
  * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: list<Diagnostic>, 3: GenerationResult}
@@ -107,7 +110,7 @@ function documentForReturn(DType $returnType, array $classes = []): array
 
     return [
         $document['paths']['/api/forms']['get']['responses'] ?? [],
-        $document['components']['schemas'] ?? [],
+        $document,
         $result->diagnostics,
         $result,
     ];
@@ -247,19 +250,74 @@ function errorSchemaOf(array $document, string $status, string $mediaType, strin
 
 /**
  * The schema components a document hoisted for the types its routes name, with the shared error shapes
- * {@see SharedErrorResponses} lifts out of the framework's own 4xx excluded — those belong to the error
- * contract rather than to whatever a route returns.
+ * {@see SharedErrorResponses} lifts out of a repeated 4xx excluded — those belong to the error contract
+ * rather than to whatever a route returns.
  *
- * @param  array<string, mixed>  $components
+ * Told apart by where the document USES them and never by what they are called: a shared error shape is
+ * one reached only through an error response. Filtering on the name instead would hide an application
+ * class genuinely called `NotFound` or `Conflict` from every assertion built on this helper, which is
+ * exactly the hoist those assertions exist to catch.
+ *
+ * @param  array<string, mixed>  $document
  * @return array<string, mixed>
  */
-function typeSchemas(array $components): array
+function typeSchemas(array $document): array
 {
+    $errors = [];
+    $elsewhere = $document;
+
+    foreach ($document['paths'] ?? [] as $path => $operations) {
+        foreach (is_array($operations) ? $operations : [] as $method => $operation) {
+            foreach ((is_array($operation) ? $operation['responses'] ?? [] : []) as $status => $response) {
+                if (ctype_digit((string) $status) && (int) $status >= 400) {
+                    $errors[] = $response;
+                    unset($elsewhere['paths'][$path][$method]['responses'][$status]);
+                }
+            }
+        }
+    }
+
+    // A shared error RESPONSE is reached only through those, and the shape it points at only through it.
+    foreach (componentRefsIn($errors, 'responses') as $name) {
+        $errors[] = $document['components']['responses'][$name] ?? [];
+        unset($elsewhere['components']['responses'][$name]);
+    }
+
+    $used = componentRefsIn($elsewhere, 'schemas');
+
     return array_filter(
-        $components,
-        static fn (string $name): bool => preg_match('/^Error\d{3}(_[a-z2-7]+)?$/', $name) !== 1,
+        $document['components']['schemas'] ?? [],
+        static fn (string $name): bool => ! in_array($name, componentRefsIn($errors, 'schemas'), true)
+            || in_array($name, $used, true),
         ARRAY_FILTER_USE_KEY,
     );
+}
+
+/**
+ * Every `#/components/{$bucket}/…` name referenced anywhere under `$node`.
+ *
+ * @return list<string>
+ */
+function componentRefsIn(mixed $node, string $bucket): array
+{
+    if (! is_array($node)) {
+        return [];
+    }
+
+    $prefix = '#/components/'.$bucket.'/';
+
+    $out = [];
+    foreach ($node as $key => $value) {
+        if ($key === '$ref' && is_string($value) && str_starts_with($value, $prefix)) {
+            $out[] = substr($value, strlen($prefix));
+
+            continue;
+        }
+
+        $out = [...$out, ...componentRefsIn($value, $bucket)];
+    }
+
+    return $out;
 }
 
 /**

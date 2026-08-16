@@ -295,7 +295,7 @@ where your fact came from:
 | --- | --- | :---: | --- |
 | `Contribution::fallback($source)` | fallback | 5 | A last-resort default, below inference. |
 | `Contribution::inference($source, $confidence)` | inference | 10 | A fact you analyzed from code. |
-| `Contribution::integration($name, $source, $confidence)` | integration | 20 | A package-specific contribution. Names the producer `integration:<name>`, which is what shows up in provenance. |
+| `Contribution::integration($name, $source, $confidence, $specificity)` | integration | 20 | A package-specific contribution. Names the producer `integration:<name>`, which is what shows up in provenance. `$specificity` is how your extension beats a built-in that already owns the field. |
 | `Contribution::docblock($source)` | docblock | 30 | A value read from a docblock. |
 | `Contribution::attribute($source, $specificity)` | attribute | 40 | A value the developer declared with an attribute. |
 
@@ -346,10 +346,151 @@ schema. Examples are **first-writer-wins**: if another producer already attached
 type, yours is left out, so the result never depends on extension evaluation order. An example is only
 emitted when that media type also carries a schema, so set the body schema too. This is exactly the
 method the built-in inferred-handler support uses to attach its error-response examples — no separate
-back door.
+back door. `claimComponentName(?string $name, $by)` names the shared component an error body publishes
+under — see below.
 
 A **`SchemaDraft`** adds `property(string $name): self` for nesting into an object's properties and
 `hasProperty(string $name): bool`.
+
+### Naming the component an error publishes under
+
+An error body two or more operations state identically is hoisted into `components.schemas` and
+`components.responses`, and the name it lands under is the name a code generator gives the type. Left
+unnamed that is `Error404` — or `Error404_2obip4vj` where a status carries two bodies.
+
+Two people pay for that name. Whoever consumes the API cannot see the code behind it, and a `catch` on
+`Error404_2obip4vj` tells them nothing about what went wrong. And you, who *can* see the code and know
+exactly which error this is, have no way to say so. Claiming a name fixes both:
+
+```php
+$by = Contribution::integration('invoices');
+$response = $operation->response('404');
+
+$response->claimComponentName('NotFound', $by);
+$response->setDescription('Not Found', $by);
+$response->content('application/json')->set('type', 'object', $by);
+```
+
+The same call works on a `ResponseDraft` you build in an `ExceptionToResponse`, which is where a mapper
+names the error it speaks for:
+
+```php
+public function toResponse(ThrownException $e, RouteContext $context, ComponentRegistry $components): ?ResponseDraft
+{
+    $by = Contribution::integration('invoices');
+
+    $draft = new ResponseDraft('404');
+    $draft->claimComponentName('InvoiceMissing', $by);
+    $draft->setDescription('Not Found', $by);
+    $draft->content('application/json')->set('type', 'object', $by);
+
+    return $draft;
+}
+```
+
+#### When to claim a name, and when not to
+
+**Claim one when your producer speaks for exactly one kind of error.** A tier that documents "the
+invoice was not found" — however many exception types render it — knows what to call it. That is the
+whole test.
+
+**Don't name it after the exception class.** The relationship isn't one-to-one in either direction:
+three exception types routinely render one body, and one exception can render two. Pick one of the three
+class names and deleting an unrelated route can change which name survives; let one exception claim one
+name for two bodies and it contests itself. The name has to come from the thing you are documenting, not
+from whichever class happened to throw.
+
+**Don't claim a name you can't speak for.** A generic fallback that hands every unrecognized exception
+a `{message}` body knows the status and nothing else, so a status with no meaning of its own is better
+left as `Error<status>` than named something a client would trust.
+
+**Two different bodies claiming one name is a contest, and a suffix is the right answer.** If your
+`NotFound` and someone else's `NotFound` are not the same bytes, neither keeps the plain name: both are
+published as `NotFound_kzvq2m4a` and the build warns with `components.name-collision` naming each
+claimant. That degradation is deliberate — handing the name to whichever the build met first would let
+an unrelated route silently change what a generated type means. Seeing a suffix means two things really
+are contesting the name; give them a name each and the suffix goes away.
+
+The rest of the rules:
+
+| | |
+| --- | --- |
+| Legal names | `^[a-zA-Z0-9._-]+$`. Anything else is refused at the call — read as no name at all, so the body falls back to `Error<status>` and the document is never emitted invalid. |
+| Two producers, one response | Guarded like every other write, so the higher-precedence contribution's name wins and the other is shadowed. |
+| One name, two bodies you meant to differ | Claim a distinct name from each producer. Two names sharing a body publish two components on purpose — that is what makes each name a function of its own declarer. |
+| A name already taken | A component published before the hoist runs keeps it, and your body climbs past to a discriminated name. |
+| Only bodies that repeat | A body one operation states stays inline and is never named at all, claim or no claim. What counts is how often the status and body occur, so a body another route states without naming still shares — you get a component under your name and it keeps `Error<status>`. |
+
+#### Overriding a built-in name
+
+Docuccino's own tiers name Laravel's errors `NotFound`, `Unauthorized`, `Forbidden`,
+`UnprocessableEntity`, `TooManyRequests` and `BadRequest`. Two supported ways to change that, depending
+on whether you want a different body too.
+
+<Steps>
+
+1. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
+   the first mapper that both supports the throw and answers, and an unannotated extension sorts at
+   `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
+   (`LAST`) — so yours simply wins, body and name together. No `#[ExtensionOrder]` needed.
+
+   ```php
+   final class InvoiceNotFound implements ExceptionToResponse
+   {
+       public function supports(ThrownException $e, RouteContext $context): bool
+       {
+           return is_a($e->exceptionFqcn, ModelNotFoundException::class, true);
+       }
+
+       public function producer(): string
+       {
+           return 'integration:invoices';
+       }
+
+       public function toResponse(ThrownException $e, RouteContext $context, ComponentRegistry $c): ?ResponseDraft
+       {
+           $by = Contribution::integration('invoices');
+
+           $draft = new ResponseDraft('404');
+           $draft->claimComponentName('ResourceMissing', $by);
+           $draft->setDescription('Not Found', $by);
+           $draft->content('application/json')->set('type', 'object', $by);
+
+           return $draft;
+       }
+   }
+   ```
+
+2. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
+   name over whatever the built-in claimed. The claim is guarded like every other write, so
+   [precedence](#every-write-carries-a-contribution) decides — and the built-in tiers claim at
+   `integration`, the same layer your extension writes at. An equal contribution is shadowed, so break
+   the tie the way every other field breaks one, with specificity:
+
+   ```php
+   public function handle(OperationDraft $operation, RouteContext $context): void
+   {
+       if (! $operation->hasResponse('404')) {
+           return;
+       }
+
+       $operation->response('404')->claimComponentName(
+           'ResourceMissing',
+           Contribution::integration('invoices', specificity: 1),
+       );
+   }
+   ```
+
+   Only the name changes; the built-in's body, description and provenance stay exactly as they were.
+
+</Steps>
+
+:::caution
+An overlay cannot do this. Overlays are applied *before* the shared-error hoist runs, so at overlay
+time `components.responses.*` does not exist yet and targeting it raises `overlay.target-missing`. Use
+one of the two paths above — see [Overlays](/laravel/guides/customizing-output/) for what overlays are
+for.
+:::
 
 ### The RouteContext surface
 
