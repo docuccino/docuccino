@@ -27,6 +27,7 @@ Then match the symptom:
 | `engine.not-installed` | [The document is thin](#the-document-is-thin) |
 | A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
 | Composer refuses to install on Laravel 13 | [Dependency conflicts](#dependency-conflicts) |
+| An `#[ErrorComponent]` name nowhere in the document | [`#[ErrorComponent]` changed nothing](#errorcomponent-changed-nothing) |
 | `inference.action-failed` on one or two actions | [Reading diagnostics](#reading-diagnostics) |
 
 ---
@@ -252,6 +253,25 @@ constraint widening is a small, fast release. Prefer that over a permanent `conf
 
 ---
 
+## `#[ErrorComponent]` changed nothing
+
+**Symptom.** You marked an exception class, regenerated, and `components.responses` has no entry under
+the name you chose. No warning either — the build is silent about it.
+
+**Cause.** The attribute names a *shared* error component, and only an error two or more operations
+state is shared. Throw that exception from a single endpoint and its body stays inline on that
+operation, so there is no component for the name to apply to. That rule is what keeps a `components`
+bucket from filling with one entry per one-off error, and it is the same rule with or without the
+attribute — nothing about the marked class is being ignored.
+
+**Fix.** Nothing, if one endpoint really is the whole story: the response is complete and correct where
+it is, and the name is published the moment a second operation states the same error. If you expected
+several endpoints to share it and none did, they are stating different bodies — see [Repeated bodies
+become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components) for
+what counts as the same one.
+
+---
+
 ## Reading diagnostics
 
 Diagnostics are how Docuccino tells you it recovered less than it wanted to. A handful on a large
@@ -269,6 +289,8 @@ codebase is normal and usually not worth chasing; the same code on every action 
 | `config.machine-dependent-value` | A value a client acts on — an OAuth flow URL, a session cookie name — came from the build machine rather than from anything you pinned, and was published as-is | Pin it in `docuccino.php` — see [Pin the values your clients act on](/laravel/documenting/authentication/#pin-the-values-your-clients-act-on) |
 | `components.name-collision` | Two schemas asked for one component name, so each was published under a name of its own — from its namespace (`AuthenticationSSOConnectionData`), or from a hash of its identity where there was no namespace to walk | Nothing, if those names read well. A hashed one rarely does: name them yourself with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) — the message gives every claimant and the name it got |
 | `components.name-invalid` | A shared error-response name an OpenAPI component key can't carry reached the document — from an overlay, since a producer's is refused where it's written — so the body was published as `Error<status>` instead | Fix the name in the overlay: a component key is letters, digits, `.`, `_` and `-` only — see [naming the component an error publishes under](/extending/extension-authoring/#naming-the-component-an-error-publishes-under). The message names whatever the document says wrote it |
+| `attribute.error-component-invalid` | An `#[ErrorComponent]` name an OpenAPI component key can't carry, so the attribute named nothing and the response kept the name it would have had | Fix the name on the class the message points at: a component key is letters, digits, `.`, `_` and `-` only — see [Name your own errors](/laravel/documenting/errors/#name-your-own-errors-with-errorcomponent) |
+| `attribute.error-component-contested` | Two exceptions one action signals carry `#[ErrorComponent]` naming one status differently, so the response — which can carry one name — kept its default | Keep the attribute on the exception that response really is and drop it from the others, or give the errors statuses of their own. The message names both classes — see [Name your own errors](/laravel/documenting/errors/#name-your-own-errors-with-errorcomponent) |
 | `route.duplicate-operation-id` | Two routes publish one `operationId`, so a generated client names one function for both | Give one of them its own id with [`#[OperationId]`](/laravel/reference/attributes/#operationid), or name the routes distinctly |
 | `route.operation-collision` | Two routes claim one path and method — usually the same URI on two hosts — and OpenAPI has room for one | Give each host its own [document](/laravel/reference/configuration/#documents) — see [Routes bound to a host](/laravel/guides/production/#routes-bound-to-a-host) |
 | `route-binding.column-untyped` | A `{post:slug}` binding names a column nothing types, so the parameter is a plain `string` rather than the route key's — which would be the wrong type | Add a `@property` tag (or a `$casts` entry) for that column on the model — see [Path parameters](/laravel/documenting/requests/#path-parameters) |

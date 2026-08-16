@@ -25,7 +25,7 @@ you'd expect without a `::class` reference.
 
 ## At a glance
 
-All 27 attributes, grouped by what they do:
+All 28 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -53,6 +53,7 @@ All 27 attributes, grouped by what they do:
 | [`#[Abilities]`](#abilities) | Declare required Sanctum token abilities. |
 | [`#[SchemaId]`](#schemaid) | Pin a class's stable diff identity. |
 | [`#[SchemaName]`](#schemaname) | Set a class's component display name. |
+| [`#[ErrorComponent]`](#errorcomponent) | Name the shared component an exception's error publishes under. |
 | [`#[Example]`](#example) | Pin the success response's example body. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
@@ -547,6 +548,35 @@ published under, because an automatic name is rarely the best one. `#[SchemaName
 how you settle it — on a plain PHP DTO as much as on a resource, model or Data class. Two classes
 choosing the *same* `#[SchemaName]` contest that name in exactly the same way, and are reported the
 same way.
+
+### `#[ErrorComponent]`
+
+Targets `CLASS`.
+
+```php
+public function __construct(public string $name)
+```
+
+Names the shared component the error this exception produces is published under, so a client catches a
+`ResourceMissing` rather than an `Error404`.
+
+```php
+#[ErrorComponent('ResourceMissing')]
+final class InvoiceNotFoundException extends RuntimeException {}
+```
+
+Unlike PHP's own attribute lookup, this one is **inherited**: a base your API errors extend names them
+all at once, and a subclass carrying its own attribute wins over the base. It applies wherever the error
+is shared — `components.schemas`, `components.responses`, and the type name in any generated client —
+and changes nothing else about the response, including whether it is shared at all: an error only one
+operation states stays inline and has no component to name until a second operation states it too.
+
+The name replaces the [default one derived from the
+status](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). A registered
+`ExceptionToResponse` that names the body it builds outranks it, because one exception class can render
+several different bodies and only the mapper that built one can tell them apart. A name outside
+`^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming the class that
+declared it, and the response keeps the name it would have had.
 
 ## Content & examples
 

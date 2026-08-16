@@ -189,6 +189,29 @@ claim at `integration`, so an application's own integration breaks the tie on `s
 cannot: overlays are applied before the transformers, so `components.responses.*` does not exist yet
 when one runs.
 
+**`#[ErrorComponent]` is the short way in, and it is not a second naming path.** The paragraph above
+says the throw site cannot name an error, and that still holds: what the attribute declares is not
+"call this exception X" but "the error this class stands for is X", and the adapter turns that into the
+same `claimComponentName()` on the same response — `Extensions\ErrorResponsesExtension` is the one
+place that reads it, and `Exceptions\DeclaredErrorComponent` the one place that resolves it. The ladder
+is then the ordinary one, with one rule the guard's layers cannot express. It contributes at
+`attribute`, above the `integration`/`fallback` the tiers claim their status-derived default at, so the
+declaration wins there. It must LOSE to a registered mapper, though, and a mapper contributes at
+`integration` — below `attribute` — so precedence alone would invert the answer. The rule that settles
+it is stated once, on `DeclaredErrorComponent::mayReplace()`: a declaration replaces the status DEFAULT
+and nothing a producer named itself. That is the honest statement of why, too — the mapper saw this
+body and the class did not, and one exception class can render several.
+
+Inheritance is deliberate: `ReflectionClass::getAttributes()` does not walk parents, but an application
+base (`ApiException`) naming its errors once is the shape worth serving, so the reader walks and the
+nearest declaration wins. That makes the answer depend on a file the throwing route never mentions, so
+every signalled throw records `DeclarationFiles::of()` for its exception hierarchy on the route's
+fragment dependencies — otherwise an attribute added to a base would leave warm builds publishing the
+old name. Two exceptions declaring DIFFERENT names for one operation's one status is the case layers
+cannot settle either: the response carries one name, and awarding it to whichever throw the engine
+reported first would make a published type name a function of encounter order. Neither takes it, the
+status default stands, and `attribute.error-component-contested` names both classes.
+
 Contests route through the machinery that already exists: two DIFFERENT bodies claiming one name climb
 `ComponentNames`' ladder and are reported as `components.name-collision`.
 
@@ -196,13 +219,31 @@ Illegal names are refused at the WRITE. `ComponentNames::isLegal()` owns the cha
 copy, in the class that also `sanitize()`s by force — and `claimComponentName()` reads a name that
 fails it as no declaration at all, so nothing a `$ref` could not point at ever reaches
 `x-docuccino.facts.component`, whether or not the hoist that would have refused it later is switched
-on. The body falls back to `Error<status>`: a degraded name, never an invalid document, and never a
-question of which knobs are set. The hoist keeps `components.name-invalid` for the one source the draft
-cannot police — a document that already states the fact, which an overlay can, since overlays are
-applied before the transformers run. That warning is raised only for bodies that were actually
-published, since it says the body "was named after its status instead" and that is untrue of a body
-nothing hoisted; and it quotes the name with control characters escaped, because a diagnostic is read
-on a terminal and nothing validated the string it came from.
+on. The body keeps whatever else named it — the status default the built-in tiers claim, or
+`Error<status>` where the status has no phrase of its own: a degraded name, never an invalid document,
+and never a question of which knobs are set.
+
+Refusing at the write costs the refusal its voice, though, because a draft has nowhere to say anything,
+and a silent refusal is the wrong answer for the one declarer who is not an extension author. So the
+refusal is stated twice more, by whoever CAN state it, and each of the three is the only one that could:
+
+- **The adapter, for `#[ErrorComponent]`.** An application author who typos one has no other way to
+  learn the attribute did nothing, so `ErrorResponsesExtension` asks `ComponentNames::isLegal()` — the
+  same character class the write refuses on — where it READS the declaration and warns
+  `attribute.error-component-invalid`, naming the class, the
+  file the attribute is on and the name it read. A refused name is not a declaration, so it also does not
+  contest a legal one for the same status — a typo on one exception cannot strip a correctly named
+  response back to its default.
+- **The hoist, for a document that already states the fact.** `components.name-invalid` covers the one
+  source a draft cannot police, which is now only an overlay, since overlays are applied before the
+  transformers run. It is raised only for bodies that were actually published, since it says the body
+  "was named after its status instead" and that is untrue of a body nothing hoisted.
+- **A registered mapper, for itself.** `ExceptionToResponse::toResponse()` is handed the
+  `ComponentRegistry`, so an extension author who wants to be told has the channel already; the adapter
+  does not police a producer's string, and core has deliberately dropped it by the time either could.
+
+Both diagnostics quote the name with control characters escaped, because a diagnostic is read on a
+terminal and nothing validated the string it came from.
 
 **The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
 the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not

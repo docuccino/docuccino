@@ -11,6 +11,8 @@ use Docuccino\Core\Extensions\BuiltIn\SharedErrorResponses;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Overlay\OverlayApplier;
+use Docuccino\Core\Overlay\OverlayDocument;
 
 /**
  * The shared-error hoist collapses an error body SHAPE repeated across operations into one
@@ -937,6 +939,35 @@ it('says nothing about a rejected name on a body that was never going to hoist',
             '/b' => ['get' => ['responses' => ['409' => claimedBody('Not Found!', messageBody('Conflict'), 'integration:acme')]]],
         ]],
     ];
+});
+
+it('names no producer for an illegal name an overlay wrote, because no record owns the field', function (): void {
+    // The one source of an illegal name left, and the one arm of the message a hand-built document does
+    // not have to fake: `claimComponentName()` refuses one at the write, so a name this transformer can
+    // reject reached the document some other way — an overlay, which runs before the transformers. Its
+    // provenance record owns the `x-docuccino` member it merged and not the `component` inside it, so
+    // there is no producer to name and the diagnostic says only what it knows.
+    $body = messageBody();
+    $overlaid = (new OverlayApplier)->apply(
+        ['paths' => [
+            '/a' => ['get' => ['responses' => ['404' => $body]]],
+            '/b' => ['get' => ['responses' => ['404' => $body]]],
+        ]],
+        OverlayDocument::fromArray([
+            'overlay' => '1.0.0',
+            'actions' => array_map(static fn (string $path): array => [
+                'target' => sprintf('$.paths[\'%s\'].get.responses[\'404\']', $path),
+                'update' => ['x-docuccino' => ['facts' => ['component' => 'Not Found!']]],
+            ], ['/a', '/b']),
+        ]),
+    )->document;
+
+    $rejected = array_values(array_filter(errorDocReport($overlaid), static fn ($d): bool => $d->code === 'components.name-invalid'));
+
+    expect($rejected)->toHaveCount(1)
+        ->and($rejected[0]->message)->toStartWith('A producer declared the component name "Not Found!"')
+        // …and the body still publishes, under the name its status gives it.
+        ->and(array_keys(transformedErrorDoc($overlaid)['components']['schemas']))->toBe(['Error404']);
 });
 
 it('quotes a rejected name without letting it write to the terminal', function (): void {
