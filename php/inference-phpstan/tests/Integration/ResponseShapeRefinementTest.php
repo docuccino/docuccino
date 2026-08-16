@@ -463,20 +463,36 @@ it('folds each case independently + deterministically (memoisation keyed per enu
         ->and($forbiddenAgain)->toEqual($forbidden);
 })->group('fixture');
 
-it('does not record a conditionally-supplied member no call site can settle', function (): void {
-    // `instance: TraceContext::id() ?? new Optional` is written at the `new`, but writing it is not the
-    // same as supplying it: the fallback is what renders when the static read answers null, and the left
-    // side roots in no parameter, so binding has nothing to resolve it against. Recording it would tell the
-    // adapter this response carries a member half its runs omit — and the adapter publishes that as an
-    // example. The four arguments that DO settle are unaffected.
-    $members = [];
+it('records a member the body may omit as optional, not as one it carries', function (): void {
+    // `instance: TraceContext::id() ?? new Optional` is written at the `new`, but writing it is not the same
+    // as supplying it: the fallback renders when the static read answers null, and no call site anywhere can
+    // settle which. Claiming it as a member of this body would tell a client to expect a key half these
+    // responses have no room for; the optional flag says what is actually true. The four arguments that DO
+    // settle are unaffected, and `errors` was never written at all.
+    $fields = [];
     foreach ((edgeShape('unbindableOptionalMember')['typeArgs'][3] ?? null)?->fields ?? [] as $field) {
-        $members[(string) $field->key] = $field->type;
+        $fields[(string) $field->key] = $field;
     }
 
-    expect($members)->toHaveKeys(['type', 'title', 'status', 'detail'])
-        ->and($members['status'])->toEqual(new LiteralT(424))
-        ->and($members['type'])->toEqual(new LiteralT('https://errors.test/problems/traced'))
-        ->and($members)->not->toHaveKey('instance')
-        ->and($members)->not->toHaveKey('errors');
+    expect(array_keys($fields))->toBe(['type', 'title', 'status', 'detail', 'instance'])
+        ->and($fields['status']->type)->toEqual(new LiteralT(424))
+        ->and($fields['type']->type)->toEqual(new LiteralT('https://errors.test/problems/traced'))
+        ->and($fields['instance']->optional)->toBeTrue()
+        // The settled four stay settled: an optional member beside them changes nothing about them.
+        ->and($fields['detail']->optional)->toBeFalse()
+        ->and($fields['status']->optional)->toBeFalse();
+})->group('fixture');
+
+it('settles a conditional member the call site does supply', function (): void {
+    // The factory writes `errors: $errors ?? new Optional`, so on its own the member is conditional. This
+    // caller passes a value that may be null and cannot settle it; the validation arm of the Data renderer
+    // passes `array_keys(...)`, which can never be null, and that response really does carry the key.
+    $fields = [];
+    foreach ((edgeShape('nullableOptionalMember')['typeArgs'][3] ?? null)?->fields ?? [] as $field) {
+        $fields[(string) $field->key] = $field;
+    }
+
+    expect($fields['errors']->optional)->toBeTrue()
+        // `instance` comes from the factory's own `$request->getPathInfo()` — nothing conditional about it.
+        ->and($fields['instance']->optional)->toBeFalse();
 })->group('fixture');

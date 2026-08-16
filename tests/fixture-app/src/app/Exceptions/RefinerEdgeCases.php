@@ -18,6 +18,8 @@ use Spatie\LaravelData\Optional;
  *     (rather than a `Enum::Case` const-fetch), exercising the second `enumCaseOf` path;
  *   - {@see unbindableOptionalMember()} writes a `?? new Optional` argument whose left side is a static
  *     read rather than a parameter, so no call site can decide whether the member is there;
+ *   - {@see nullableOptionalMember()} passes a NULLABLE value into the same idiom one hop away, so the
+ *     member renders on the runs where that value is there and is omitted on the rest;
  *   - {@see lowercaseContentType()} writes the header key in lower case, so the `Content-Type` lookup
  *     must match case-INSENSITIVELY;
  *   - {@see noHeaders()} omits the headers argument entirely (content type absent → default);
@@ -68,6 +70,24 @@ final class RefinerEdgeCases
             detail: 'Trace context decides one member.',
             instance: TraceContext::id() ?? new Optional,
         ))->toProblemResponse($request);
+    }
+
+    /**
+     * The same `?? new Optional` idiom, reached the way an app actually reaches it: the factory writes
+     * `errors: $errors ?? new Optional` against its own parameter, and this caller hands it a value that may
+     * be null. So the body carries `errors` on the runs where the caller had some and omits the key on the
+     * rest — one response, two shapes.
+     *
+     * @param  list<string>|null  $errors
+     */
+    public function nullableOptionalMember(Request $request, ?array $errors): JsonResponse
+    {
+        return DataProblemDocument::make(
+            InvoiceProblem::Unprocessable,
+            'The caller may or may not have field errors to report.',
+            $request,
+            errors: $errors,
+        )->toProblemResponse($request);
     }
 
     /** A lower-case header key — the content-type match is case-insensitive. */

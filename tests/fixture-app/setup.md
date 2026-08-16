@@ -270,9 +270,11 @@ own (seeded from the action's parameter type):
   parameters — a bound `InvoiceProblem` case's accessors, a plain string, or an `?? new Optional` tail
   whose member only exists when the caller passed it.
 - `app/Exceptions/RefinerEdgeCases.php` + `app/Support/TraceContext.php` — the refiner's remaining edge
-  paths, including `unbindableOptionalMember()`: the same `?? new Optional` idiom with a STATIC read on
-  its left (`TraceContext::id()`, the shape of an app's `Tracer::traceId()`), so no call site anywhere can
-  settle whether the member is there and it must not be recorded as one this response carries.
+  paths, including the two halves of spatie's "omit this key" idiom: `unbindableOptionalMember()` writes
+  `?? new Optional` with a STATIC read on its left (`TraceContext::id()`, the shape of an app's
+  `Tracer::traceId()`), which no call site anywhere can settle, and `nullableOptionalMember()` reaches the
+  same idiom a factory hop away with a value that may be null. Both must be recorded as members the body
+  may omit, never as ones it carries.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.
