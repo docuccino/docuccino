@@ -35,15 +35,20 @@ change serves one at the other's expense, say so out loud rather than letting it
   CI also gates line coverage **per package** (`composer test:coverage` →
   `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
   coverage (`composer test:types`, 100%). **Use the composer scripts** — they carry the flags
-  the gates need (`--parallel`, and the 2G memory limits). CI runs the same scripts, so they
-  cannot drift. The 2G is headroom, not a requirement: type coverage peaks near 120 MB and
-  times the same at PHP's default limit as at 4G, so a type-coverage run that appears to hang
-  for minutes is stale pcov state — kill it and re-run rather than reaching for more memory.
-  **Leave that cache alone.** Warm, the run takes seconds; cold, it can stall for many minutes
-  with idle workers, so clearing it is what makes the run expensive, not what fixes it. Clear it
-  for one reason only — a `ParseError` inside `vendor/pestphp/pest-plugin-type-coverage/.temp/`,
-  which the plugin causes by writing that file non-atomically and is never your code — then
-  re-run. CI does the same: run, and only on failure clear and retry once.
+  the gates need (`--parallel`, PHPStan's 2G, and the grpc fork guard below). CI runs the same
+  scripts, so they cannot drift. Memory is NOT the lever it looks like: `phpunit.xml`'s
+  `<ini name="memory_limit">` is applied during bootstrap and so **overrides** anything passed
+  on the command line, and nothing in the suite comes near it anyway (type coverage peaks around
+  135 MB against a 1G ceiling). A run that appears to hang is never short of memory.
+  **Leave the type-coverage cache alone**, and do not blame pcov. A cold run — an empty
+  `vendor/pestphp/pest-plugin-type-coverage/.temp` — forks worker processes, and `fork()` is
+  unsafe under an extension that runs background threads: with `grpc` loaded the children
+  deadlock in module shutdown and the parent waits on them forever, at 0% CPU, with no timeout.
+  `composer test:types` therefore runs pest under `-d grpc.enable_fork_support=1`, which is inert
+  where grpc is absent and turns "never finishes" into ~5s (mechanism and repro in
+  [`docs/testing.md`](./docs/testing.md)). Clear the cache for one reason only — a `ParseError`
+  inside that `.temp/`, which the plugin causes by writing the file non-atomically and is never
+  your code — then re-run. CI does the same: run, and only on failure clear and retry once.
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Determinism is
   necessary but not sufficient — output must also be **local**: adding, removing, renaming or
@@ -183,15 +188,14 @@ composer test:inference-fixture  # real-engine integration tests
 composer analyse                 # PHPStan level max (2G)
 composer lint                    # Pint --test  (composer fix to apply)
 composer test:coverage           # clover + per-package floors (needs pcov)
-composer test:types              # type coverage, 100% (2G)
+composer test:types              # type coverage, 100% (forks — carries the grpc fork guard)
 DOCUCCINO_UPDATE_GOLDEN=1 vendor/bin/pest --parallel --filter=<golden test>   # sanctioned regens only
 ```
 
 **ALWAYS pass `--parallel` to pest — every invocation, including `--filter` and single-file
 runs** (full suite ~16s parallel vs ~65s serial; you will run it many times). The composer
 scripts include it. Never define shared helper functions at test-file level — they break under
-Paratest process splitting; shared helpers live in `tests/Pest.php`. If a coverage/type-coverage
-run hangs (stale pcov state, rare), kill it and re-run fresh.
+Paratest process splitting; shared helpers live in `tests/Pest.php`.
 
 Laravel adapter feature tests run on orchestra/testbench with the workbench app under
 `php/laravel/workbench/`; the engine's real-analysis tests run out-of-process against

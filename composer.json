@@ -85,7 +85,7 @@
             "pest --coverage-clover=build/clover.xml --exclude-group=fixture",
             "@php tools/coverage-floors.php build/clover.xml"
         ],
-        "test:types": "pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G",
+        "test:types": "@php -d grpc.enable_fork_support=1 vendor/bin/pest --type-coverage --exclude-group=fixture --min=100 --memory-limit=2G",
         "analyse": "phpstan analyse --no-progress --memory-limit=2G",
         "lint": "pint --test",
         "fix": "pint",
