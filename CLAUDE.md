@@ -12,6 +12,21 @@ diffing and a bundled Scalar viewer.
 > - [`website/STYLE.md`](./website/STYLE.md) — binding style bar for the docs site (Laravel docs are the gold standard)
 > - [`RELEASING.md`](./RELEASING.md) — tagging, the subtree split, `SPLIT_TOKEN`
 
+## What we optimise for
+
+**Best out of the box.** A correct document with no configuration is the product. An option is an
+admission we could not work it out — before adding one, ask what would have to be true for the
+default to be right, and do that instead where it is sound. A knob most users must turn is a bug
+with a workaround attached.
+
+**Two audiences, both first-class.** The DX of the package's USER — the developer running the
+generator — and the DX of the CONSUMER of its output — whoever reads the document, or catches an
+error in a client generated from it — are separate, and they pull apart. The author wants a default
+they never touch, a name they *can* override, and a diagnostic naming where to go and what to change.
+The consumer cannot see the codebase: they want a type they can name in a `catch`, and a contract
+that does not lie. Most of the rules below are one of those two audiences made specific; when a
+change serves one at the other's expense, say so out loud rather than letting it pass as a tidy-up.
+
 ## ⚠️ Absolute rules
 
 - **Green on all checks, always**: `composer test` (incl. `composer test:inference-fixture`
@@ -105,7 +120,29 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   identities, their content — and never from registration, discovery or route order. A
   first-come counter (`Foo_2`) is the anti-pattern: deterministic per build, and it still
   reassigns meaning when an unrelated route is added. `ComponentNames` owns the invariant;
-  every path that mints a name owes it.
+  every path that mints a name owes it. A published name is read by people AND by code
+  generators — it becomes a type name in a generated client — so an opaque discriminator has a
+  real cost, and a changed name reads as a changed contract even when only an example moved.
+  Where a component is deduped by one key and named from another, the two must agree: dedupe by
+  content while naming for a cause, and the name silently becomes a function of which causes
+  happened to collide on a body.
+- **A diagnostic earns its place by where it fires, not by being right**: before shipping one,
+  measure its firing population against a real application and count the hits where the reader
+  can act and the hits where they cannot. One that fires mostly where nothing can be done — no
+  property to annotate, a shape that was already right — trains people to ignore the channel,
+  and takes the useful diagnostics with it. "It would be technically correct" is not the bar;
+  state the two counts.
+- **A guard must read the same grammar as the thing it guards**: when one reader folds an
+  expression and another decides whether folding is safe, the safe-decider must recognise every
+  form the folder does. A guard that unwraps fewer expression shapes than the fold it protects
+  is a hole, not a conservative default.
+- **Validate a report's premise before fixing it**: a report names a symptom and guesses a
+  cause, and the guess is often wrong in a way that would make the fix wrong too — a property
+  reported as unannotated may carry a constructor `@param`, a stated "expected" output may
+  itself be invalid. Reproduce the symptom in this repo's own tests before changing anything;
+  if the premise does not hold, say so and fix what is actually broken. When a comparison claims
+  another tool does better, check whether the application hand-wrote extensions to make it do
+  so — bespoke code on one side is not a default on the other.
 - **The emitted document is read by API consumers, not by the app's authors**: descriptions,
   summaries and examples address someone who cannot see the codebase, so they never carry
   tooling advice, attribute names or "pin this with…" guidance. Guidance for the author is a
