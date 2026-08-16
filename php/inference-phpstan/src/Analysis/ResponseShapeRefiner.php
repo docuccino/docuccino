@@ -293,8 +293,14 @@ final class ResponseShapeRefiner
     /**
      * Stamp the hop's own `#[ErrorComponent]` over whatever came back from below it — the outermost
      * declaring hop wins ({@see RefinedResponse::withComponent()}). A delegating arm answers with no body,
-     * so there is nothing for a name to be about. The declaring file is touched rather than assumed: an
-     * unoverridden method is the parent's, and the parent is where the name was written.
+     * so there is nothing for a name to be about.
+     *
+     * The file the hop's method is WRITTEN in is touched whether or not it carries a name, and it is not
+     * the file the call resolved to: an unoverridden method is the parent's, and a trait-imported one is
+     * reported as the using class's own while living in the trait's file. What this hop does not declare
+     * is an answer of its own — key only the found case and adding the attribute to a trait method leaves
+     * every warm fragment valid, so a warm build publishes the status default where a cold one publishes
+     * the declared name.
      */
     private function declared(?RefinedResponse $result, Callee $callee): ?RefinedResponse
     {
@@ -302,16 +308,14 @@ final class ResponseShapeRefiner
             return $result;
         }
 
+        $written = $this->declarations->fileFor($callee->class, $callee->method);
+        if ($written !== null) {
+            $this->touch($written);
+        }
+
         $declaration = $this->declarations->on($callee->class, $callee->method);
-        if ($declaration === null) {
-            return $result;
-        }
 
-        if ($declaration->location->file !== '') {
-            $this->touch($declaration->location->file);
-        }
-
-        return $result->withComponent($declaration);
+        return $declaration === null ? $result : $result->withComponent($declaration);
     }
 
     /** Normalise before it reaches the budget, which counts files by their canonical path. */

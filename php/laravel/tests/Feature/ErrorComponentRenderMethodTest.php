@@ -246,6 +246,45 @@ it('refuses a declared name no component key could carry and tells the method th
         ->and($rejected[0]->source?->file)->toContain('PortalRenderer.php');
 });
 
+it('keeps a declared name that happens to spell the status default', function (): void {
+    // The render method named this body `Conflict`, which is also what the 409 default is called — the
+    // same shape as `#[ErrorComponent("NotFound")]` on a 404. Asking the VALUE whether anything had named
+    // the response reads a deliberate name as the absence of one and hands the body to the exception class
+    // instead, so the fact travels from the write (`DeclaredErrorComponentTest` pins the rule itself).
+    $document = renderMethodBuild([
+        'first' => [ThingMissingException::class, 409],
+        'second' => [ThingMissingException::class, 409],
+    ], [ThingMissingException::class => renderedResponse(409, ['detail'], renderMethodDeclaration('Conflict'))])->document->toArray();
+
+    expect($document['components']['schemas'])->toHaveKey('Conflict')
+        ->and($document['components']['schemas'])->not->toHaveKey('ResourceMissing')
+        ->and($document['paths']['/api/zz-rendered-first']['get']['responses']['409']['$ref'])
+        ->toBe('#/components/responses/Conflict');
+});
+
+it('reports one refused name per mistake however many returns carry it', function (): void {
+    // A renderer with three `return`s under one bad attribute is one typo. The engine stamps the analysed
+    // method's declaration onto every site it harvested, so the tier keys what it reports by the mistake
+    // the way the class anchor does — three byte-identical warnings say nothing the first did not.
+    $analysis = new ActionAnalysis(returns: array_map(
+        static fn (int $status): ReturnSite => new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('detail', ScalarT::string())]),
+                new LiteralT($status),
+            ]),
+            new SourceLocation(''),
+            renderMethodDeclaration('Not Found!'),
+        ),
+        [409, 409, 409],
+    ));
+
+    $result = renderMethodBuild([
+        'first' => [ThingMissingException::class, 409],
+    ], [ThingMissingException::class => $analysis]);
+
+    expect(diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid'))->toHaveCount(1);
+});
+
 it('retires a name two render methods claim over two different bodies, and warns', function (): void {
     // Two arms naming one component for bodies that differ is a genuine contest, and it is the contest
     // core already settles: both climb `ComponentNames`' ladder onto names derived from their own content.

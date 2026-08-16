@@ -123,7 +123,9 @@ final class ErrorResponsesExtension implements OperationExtension
             // contest, because a response a producer already named — a mapper, or a render method that
             // named the body it built — was never one these declarations could win, so there is nothing
             // for the author to reconcile and nothing to report.
-            if ($response->resolvedField('$ref') !== null || ! DeclaredErrorComponent::mayReplace($response->componentClaim(), $status)) {
+            if ($response->resolvedField('$ref') !== null
+                || ! DeclaredErrorComponent::mayReplace($response->componentClaim(), $response->componentClaimIsStatusDefault())
+            ) {
                 continue;
             }
 

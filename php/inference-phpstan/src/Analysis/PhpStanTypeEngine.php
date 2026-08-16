@@ -284,9 +284,12 @@ final class PhpStanTypeEngine implements TypeEngine
 
         // The analysed callable is the outermost hop on every path below it, so its own declaration wins
         // over any it descended through — and it is the only anchor a one-body renderer (an exception's
-        // own `render()`) has. Its declaring file joins the deps: an unoverridden method belongs to the
-        // parent, which `$callable->file` does not name.
+        // own `render()`) has. The file that method is WRITTEN in joins the deps whether or not it declares
+        // anything, for the reason {@see ResponseShapeRefiner::declared()} states: an unoverridden method
+        // belongs to the parent and a trait-imported one to the trait, neither of which `$callable->file`
+        // names, and the absence of a name there is an answer too.
         $entry = $this->entryDeclaration($callable);
+        $entryFile = $this->entryDeclarationFile($callable);
 
         return new ActionAnalysis(
             returns: $entry === null
@@ -295,7 +298,7 @@ final class PhpStanTypeEngine implements TypeEngine
             diagnostics: $truncation === null ? $narrowed['diagnostics'] : [...$narrowed['diagnostics'], $truncation],
             dependencyFiles: [
                 $callable->file,
-                ...($entry === null || $entry->location->file === '' ? [] : [$entry->location->file]),
+                ...($entryFile === null ? [] : [$entryFile]),
                 ...$this->drainRefinerFiles(),
             ],
         );
@@ -310,6 +313,17 @@ final class PhpStanTypeEngine implements TypeEngine
         return $class === null || $method === null
             ? null
             : $this->declarations()->on($class, $method);
+    }
+
+    /** The file the analysed callable's method is written in, which is where a name for it can appear. */
+    private function entryDeclarationFile(CallableRef $callable): ?string
+    {
+        $class = $callable->class;
+        $method = $callable->method;
+
+        return $class === null || $method === null
+            ? null
+            : $this->declarations()->fileFor($class, $method);
     }
 
     /**
@@ -431,20 +445,24 @@ final class PhpStanTypeEngine implements TypeEngine
     }
 
     /**
-     * The arm's guard in the shape {@see NarrowingGuard} reads: `&&` requires both, `||` alternates.
-     * Anything that isn't an `instanceof` on `$param` contributes nothing, leaving that side broad.
+     * The arm's guard in the shape {@see NarrowingGuard} reads: `&&` requires both, `||` alternates, and
+     * an arm's several conditions alternate too — `match (true) { $e instanceof A, $e instanceof B => … }`
+     * fires for either, so folding them as requirements would leave both types answered by a later arm.
+     * Anything that isn't an `instanceof` on `$param` says nothing about it, which makes the alternative
+     * it sits in reachable by anything.
      *
      * @param  array<Node\Expr>  $conds
      * @return list<list<string>>
      */
     private function armInstanceofGuards(array $conds, string $param, Scope $scope): array
     {
-        $guard = [];
+        $guard = null;
         foreach ($conds as $cond) {
-            $guard = NarrowingGuard::allOf($guard, $this->condGuard($cond, $param, $scope));
+            $condGuard = $this->condGuard($cond, $param, $scope);
+            $guard = $guard === null ? $condGuard : NarrowingGuard::anyOf($guard, $condGuard);
         }
 
-        return $guard;
+        return $guard ?? [];
     }
 
     /**
@@ -467,10 +485,14 @@ final class PhpStanTypeEngine implements TypeEngine
             );
         }
 
-        if ($node instanceof Node\Expr\BinaryOp) {
-            return [...$this->condGuard($node->left, $param, $scope), ...$this->condGuard($node->right, $param, $scope)];
+        if ($node instanceof Node\Expr\BinaryOp\BooleanOr || $node instanceof Node\Expr\BinaryOp\LogicalOr) {
+            return NarrowingGuard::anyOf(
+                $this->condGuard($node->left, $param, $scope),
+                $this->condGuard($node->right, $param, $scope),
+            );
         }
 
+        // Every other expression — a comparison, a call, a negation — says nothing about `$param`.
         return [];
     }
 
