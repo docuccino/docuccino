@@ -19,6 +19,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
@@ -248,16 +249,24 @@ function errorSchemaOf(array $document, string $status, string $mediaType, strin
 /**
  * The schema components a document hoisted for the types its routes name, with the shared error shapes
  * {@see SharedErrorResponses} lifts out of the framework's own 4xx excluded — those belong to the error
- * contract rather than to whatever a route returns.
+ * contract rather than to whatever a route returns. Two spellings to exclude: the name a status
+ * declares for itself (`NotFound`) and the `Error<status>` a status with no reason phrase falls back
+ * to, each with or without the discriminator a contested one carries.
  *
  * @param  array<string, mixed>  $components
  * @return array<string, mixed>
  */
 function typeSchemas(array $components): array
 {
+    $declared = array_map(
+        static fn (array $pair): ?string => FrameworkExceptionTable::componentName($pair[0]),
+        FrameworkExceptionTable::reasonPhrases(),
+    );
+
     return array_filter(
         $components,
-        static fn (string $name): bool => preg_match('/^Error\d{3}(_[a-z2-7]+)?$/', $name) !== 1,
+        static fn (string $name): bool => preg_match('/^Error\d{3}(_[a-z2-7]+)?$/', $name) !== 1
+            && ! in_array(preg_replace('/_[a-z2-7]{8}$/', '', $name), $declared, true),
         ARRAY_FILTER_USE_KEY,
     );
 }

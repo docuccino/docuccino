@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Draft\SchemaDraft;
+use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Patch\PatchResult;
 use Docuccino\Core\Patch\Remove;
@@ -169,4 +171,59 @@ it('exposes winning value + producer through the public read accessors (B1)', fu
     // A Remove sentinel resolves to null through resolvedField (sentinel omitted, not surfaced).
     $draft->set('deprecated', Remove::value(), Contribution::overlay());
     expect($draft->resolvedField('deprecated'))->toBeNull();
+});
+
+it('carries a declared component name through freeze as an x-docuccino fact', function (): void {
+    $draft = new ResponseDraft('404');
+
+    $draft->setDescription('Not Found', Contribution::integration('framework-errors'));
+    $draft->claimComponentName('NotFound', Contribution::integration('framework-errors'));
+
+    $frozen = $draft->freeze();
+
+    expect($draft->componentClaim())->toBe('NotFound')
+        ->and($frozen->docuccino?->rest)->toBe(['facts' => ['component' => 'NotFound']])
+        // The claim is not a response member: it travels under `x-docuccino`, never beside `description`.
+        ->and($frozen->rest)->toBe([])
+        ->and($frozen->toArray()['x-docuccino']['facts'])->toBe(['component' => 'NotFound']);
+});
+
+it('settles two producers naming one response by precedence, not by order', function (): void {
+    // A declared name is guarded like every other field, so the layer that owns the body owns its name.
+    $lowFirst = new ResponseDraft('404');
+    $lowFirst->claimComponentName('Fallback', Contribution::forProducer('fallback'));
+    $lowFirst->claimComponentName('NotFound', Contribution::integration('framework-errors'));
+
+    $highFirst = new ResponseDraft('404');
+    $highFirst->claimComponentName('NotFound', Contribution::integration('framework-errors'));
+
+    expect($highFirst->claimComponentName('Fallback', Contribution::forProducer('fallback')))
+        ->toBe(PatchResult::Shadowed)
+        ->and($lowFirst->componentClaim())->toBe('NotFound')
+        ->and($highFirst->componentClaim())->toBe('NotFound');
+});
+
+it('declares nothing when a producer has no name to give', function (): void {
+    $draft = new ResponseDraft('402');
+
+    expect($draft->claimComponentName(null, Contribution::forProducer('fallback')))->toBe(PatchResult::NoOp)
+        ->and($draft->componentClaim())->toBeNull()
+        ->and($draft->freeze()->docuccino)->toBeNull();
+});
+
+it('carries a declared name across the merge into the operation it applies to', function (): void {
+    // The applier is where a mapper's draft becomes the operation's response, so it is where the claim
+    // has to survive — the hoist reads it off the finished document and nowhere else.
+    $operation = new OperationDraft;
+
+    $mapped = new ResponseDraft('404');
+    $mapped->setDescription('Not Found', Contribution::integration('framework-errors'));
+    $mapped->claimComponentName('NotFound', Contribution::integration('framework-errors'));
+    $mapped->content('application/json')->set('type', 'object', Contribution::integration('framework-errors'));
+
+    (new ResponseDraftApplier)->apply($operation, $mapped, 'integration:framework-errors');
+
+    $frozen = $operation->freeze()->responses['404'] ?? null;
+
+    expect($frozen?->toArray()['x-docuccino']['facts'])->toBe(['component' => 'NotFound']);
 });

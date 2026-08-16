@@ -363,8 +363,8 @@ Two limits to plan around, both from the [target selector](#the-target-selector)
   that can `422` need ten actions. That's deliberate — every target names exactly what it changes, and
   a target that stops matching warns instead of quietly hitting something else.
 - **Target the operation's response, not the shared error component.** When several operations state
-  the same error body, Docuccino hoists it into `components.schemas.Error422` and
-  `components.responses.Error422` — but those hoists run *after* overlays, so either pointer matches
+  the same error body, Docuccino hoists it into `components.schemas.UnprocessableEntity` and
+  `components.responses.UnprocessableEntity` — but those hoists run *after* overlays, so either pointer matches
   nothing at overlay time and you'd get an `overlay.target-missing` warning. Patch the per-operation
   response, as above, and let the hoists run on the corrected document: the patched `422`s share one
   component and the untouched ones another, never one body merged wrong.

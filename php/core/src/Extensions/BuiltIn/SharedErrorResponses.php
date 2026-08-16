@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
@@ -25,6 +26,11 @@ use Docuccino\Core\Support\Json;
  * `$ref`, and a hoisted component carries an id minted from the bytes it publishes — never a per-route
  * source, which has no business speaking for the other routes sharing it.
  *
+ * A producer that speaks for one kind of error may DECLARE the name its body publishes under
+ * ({@see ResponseDraft::claimComponentName()}); the declaration is part of what a body IS, so two
+ * declared names sharing a body are two components, each named for its own declarer and neither able to
+ * move the other. An undeclared body is still `Error<status>`.
+ *
  * Deliberately narrow: 4xx/5xx only, only bodies that actually repeat, and only responses carrying
  * `content`. Anything already a `$ref` is left alone, which is what makes a second run a no-op.
  */
@@ -35,6 +41,15 @@ final class SharedErrorResponses implements DocumentTransformer
 
     /** The provenance key stripped from a hoisted body and kept on the referring node. */
     private const PROVENANCE = 'x-docuccino';
+
+    /**
+     * The `x-docuccino.facts` member a producer declares a component name in
+     * ({@see ResponseDraft::claimComponentName()}).
+     */
+    private const CLAIM = 'component';
+
+    /** What an OpenAPI component key may be made of; a declared name that isn't is refused. */
+    private const COMPONENT_NAME = '/^[A-Za-z0-9._-]+$/D';
 
     /**
      * How many occurrences make a body worth hoisting. Deliberately not a local boundary — a second
@@ -56,12 +71,13 @@ final class SharedErrorResponses implements DocumentTransformer
         }
 
         $components = is_array($doc['components'] ?? null) ? $doc['components'] : [];
+        $rejected = self::rejectedClaims($paths);
 
         [$paths, $schemas, $schemaContests] = self::shareShapes($paths, self::bucket($components, 'schemas'));
         [$paths, $responses, $responseContests] = self::shareResponses($paths, self::bucket($components, 'responses'));
 
-        foreach ([...$schemaContests, ...$responseContests] as $collision) {
-            $context->report($collision);
+        foreach ([...$rejected, ...$schemaContests, ...$responseContests] as $diagnostic) {
+            $context->report($diagnostic);
         }
 
         if ($schemas === null && $responses === null) {
@@ -106,8 +122,8 @@ final class SharedErrorResponses implements DocumentTransformer
         }
 
         $identity = new IdentityGenerator;
-        [$names, $schemas, $contests] = self::mint($shapes, $existing, static fn (array $body, string $status): array => [
-            self::PROVENANCE => ['id' => $identity->publishedSchemaId($status, Arr::stringKeyed($body))],
+        [$names, $schemas, $contests] = self::mint($shapes, $existing, static fn (array $body, string $scope): array => [
+            self::PROVENANCE => ['id' => $identity->publishedSchemaId($scope, Arr::stringKeyed($body))],
         ] + $body);
 
         return [
@@ -131,7 +147,7 @@ final class SharedErrorResponses implements DocumentTransformer
             return [$paths, null, []];
         }
 
-        [$names, $bucket, $contests] = self::mint($responses, $existing, static fn (array $body, string $status): array => $body);
+        [$names, $bucket, $contests] = self::mint($responses, $existing, static fn (array $body, string $scope): array => $body);
 
         return [
             self::rewrite($paths, $names, self::responseSites(...), '#/components/responses/'),
@@ -173,16 +189,45 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * Count what every hoistable node states, keyed by its status and canonical content.
+     * Count what every hoistable node states, keyed by its scope ({@see scope()}) and canonical content.
      *
      * @param  array<array-key, mixed>  $paths
      * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>}>  $sites
-     * @return array<string, array{status: string, body: array<array-key, mixed>, count: int}>
+     * @return array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>
      */
     private static function collect(array $paths, callable $sites): array
     {
         $out = [];
 
+        foreach (self::responses($paths) as [$status, $response]) {
+            if (! self::isShareable($status, $response)) {
+                continue;
+            }
+
+            $name = self::claimed($response);
+            $scope = self::scope((string) $status, $name);
+
+            foreach ($sites($response) as [, $body]) {
+                $stripped = self::stripProvenance($body);
+                $key = self::key($scope, $stripped);
+
+                $out[$key] ??= ['scope' => $scope, 'base' => $name ?? 'Error'.$status, 'body' => $stripped, 'count' => 0];
+                $out[$key]['count']++;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Every response the document states, as `[status, response]` — the walk `collect()` and the claim
+     * check share. Anything that isn't the shape a document is supposed to have is walked past.
+     *
+     * @param  array<array-key, mixed>  $paths
+     * @return iterable<int, array{array-key, array<array-key, mixed>}>
+     */
+    private static function responses(array $paths): iterable
+    {
         foreach ($paths as $operations) {
             if (! is_array($operations)) {
                 continue;
@@ -194,29 +239,19 @@ final class SharedErrorResponses implements DocumentTransformer
                 }
 
                 foreach ($operation['responses'] as $status => $response) {
-                    if (! is_array($response) || ! self::isShareable($status, $response)) {
-                        continue;
-                    }
-
-                    foreach ($sites($response) as [, $body]) {
-                        $stripped = self::stripProvenance($body);
-                        $key = self::key((string) $status, $stripped);
-
-                        $out[$key] ??= ['status' => (string) $status, 'body' => $stripped, 'count' => 0];
-                        $out[$key]['count']++;
+                    if (is_array($response)) {
+                        yield [$status, $response];
                     }
                 }
             }
         }
-
-        return $out;
     }
 
     /**
      * The bodies worth hoisting: the ones that repeat.
      *
-     * @param  array<string, array{status: string, body: array<array-key, mixed>, count: int}>  $bodies
-     * @return array<string, array{status: string, body: array<array-key, mixed>, count: int}>
+     * @param  array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>  $bodies
+     * @return array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>
      */
     private static function shareable(array $bodies): array
     {
@@ -232,14 +267,14 @@ final class SharedErrorResponses implements DocumentTransformer
      * a numeric tail" is how the two would come to disagree. Each body states a claim with no identity
      * to carry, so the bytes stand in for one and the ladder degenerates to exactly that pair.
      *
-     * So `Error<status>` belongs to a status only while ONE body claims it: two make it contested and
-     * each takes a name derived from its own content, and a third arriving later disturbs neither. A
-     * component already holding a name with a DIFFERENT body is `$taken` and cannot move — this pass
-     * runs after the registry's names are published — so the shared body climbs past it instead. One
-     * holding an IDENTICAL body is not taken, which is what keeps a rebuild over a restored document
-     * byte-identical.
+     * So a base name — `Error<status>`, or whatever the producer declared — belongs to a body only
+     * while ONE claims it: two make it contested and each takes a name derived from its own content,
+     * and a third arriving later disturbs neither. A component already holding a name with a DIFFERENT
+     * body is `$taken` and cannot move — this pass runs after the registry's names are published — so
+     * the shared body climbs past it instead. One holding an IDENTICAL body is not taken, which is what
+     * keeps a rebuild over a restored document byte-identical.
      *
-     * @param  array<string, array{status: string, body: array<array-key, mixed>, count: int}>  $bodies
+     * @param  array<string, array{scope: string, base: string, body: array<array-key, mixed>, count: int}>  $bodies
      * @param  array<string, mixed>  $existing
      * @param  callable(array<array-key, mixed>, string): array<array-key, mixed>  $publish
      * @return array{array<string, string>, array<string, mixed>, array<string, list<string>>}
@@ -249,8 +284,8 @@ final class SharedErrorResponses implements DocumentTransformer
         $claims = [];
         $published = [];
         foreach ($bodies as $key => $body) {
-            $claims[$key] = ['base' => 'Error'.$body['status'], 'identity' => null, 'content' => $key];
-            $published[$key] = $publish($body['body'], $body['status']);
+            $claims[$key] = ['base' => $body['base'], 'identity' => null, 'content' => $key];
+            $published[$key] = $publish($body['body'], $body['scope']);
         }
 
         $taken = [];
@@ -305,7 +340,7 @@ final class SharedErrorResponses implements DocumentTransformer
                     implode(', ', $published),
                     $bucket,
                 ),
-                help: 'The plain name belongs to a status while one shape holds it and is retired when a second arrives. Nothing to do if the shapes really do differ; otherwise have the operations state one body and the plain name comes back.',
+                help: 'A name belongs to one shape while that shape holds it alone, and is retired when a second arrives. Nothing to do if the shapes really do differ; otherwise have the operations state one body — or declare a name apiece — and the plain name comes back.',
             );
         }
 
@@ -341,8 +376,10 @@ final class SharedErrorResponses implements DocumentTransformer
                         continue;
                     }
 
+                    $scope = self::scope((string) $status, self::claimed($response));
+
                     foreach ($sites($response) as [$pointer, $body]) {
-                        $name = $names[self::key((string) $status, self::stripProvenance($body))] ?? null;
+                        $name = $names[self::key($scope, self::stripProvenance($body))] ?? null;
                         if ($name === null) {
                             continue;
                         }
@@ -428,16 +465,128 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * The dedupe identity of a body: its status and everything it states, with provenance already
+     * The dedupe identity of a body: its scope and everything it states, with provenance already
      * removed and keys sorted so two bodies assembled in different orders still collapse together.
      * List order is NOT normalised — `required: [a, b]` and `required: [b, a]` emit different bytes, so
      * treating them as one body would have to pick which bytes to publish.
      *
      * @param  array<array-key, mixed>  $body
      */
-    private static function key(string $status, array $body): string
+    private static function key(string $scope, array $body): string
     {
-        return $status."\0".Json::stable($body);
+        return $scope."\0".Json::stable($body);
+    }
+
+    /**
+     * What distinguishes one publication of a body from another carrying the same bytes: its status,
+     * and the name a producer declared for it. Both halves are load-bearing — the status stops an edit
+     * to a 404 repointing a 403, and the declared name is what makes two named errors that happen to
+     * share a body two components rather than a race for one name. An undeclared body scopes on the
+     * status alone, exactly as it always did, so its key, its hash rung and its component id are
+     * unchanged.
+     */
+    private static function scope(string $status, ?string $name): string
+    {
+        return $name === null ? $status : $status."\0".$name;
+    }
+
+    /**
+     * The component name a producer declared for this response and this pass will honour: null when
+     * none did, and null when the one declared is no legal component key ({@see rejectedClaims()}).
+     *
+     * @param  array<array-key, mixed>  $response
+     */
+    private static function claimed(array $response): ?string
+    {
+        $name = self::declared($response);
+
+        return $name !== null && preg_match(self::COMPONENT_NAME, $name) === 1 ? $name : null;
+    }
+
+    /**
+     * The name a producer declared, legal or not. A non-string is read as no declaration at all — an
+     * overlay or a hand-written document can put anything anywhere, and this walks past what it cannot
+     * read rather than reporting on it.
+     *
+     * @param  array<array-key, mixed>  $response
+     */
+    private static function declared(array $response): ?string
+    {
+        $extension = $response[self::PROVENANCE] ?? null;
+        $facts = is_array($extension) ? ($extension['facts'] ?? null) : null;
+        $name = is_array($facts) ? ($facts[self::CLAIM] ?? null) : null;
+
+        return is_string($name) && $name !== '' ? $name : null;
+    }
+
+    /**
+     * One warning per producer that declared a name no `$ref` could carry, so an author error costs the
+     * document a better name and never its validity. Deduped by the pair that identifies the mistake —
+     * a mapper wrong on one route is wrong on every route it maps, and one warning is the whole story.
+     *
+     * @param  array<array-key, mixed>  $paths
+     * @return list<Diagnostic>
+     */
+    private static function rejectedClaims(array $paths): array
+    {
+        $rejected = [];
+        foreach (self::responses($paths) as [, $response]) {
+            $name = self::declared($response);
+            if ($name === null || preg_match(self::COMPONENT_NAME, $name) === 1) {
+                continue;
+            }
+
+            $producer = self::declarer($response);
+            $rejected[$name."\0".($producer ?? '')] = [$name, $producer];
+        }
+
+        ksort($rejected);
+
+        $out = [];
+        foreach ($rejected as [$name, $producer]) {
+            $out[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'components.name-invalid',
+                message: sprintf(
+                    '%s declared the component name "%s" for a shared error response, which is not a name an OpenAPI component key can carry, so the body was named after its status instead.',
+                    $producer === null ? 'A producer' : sprintf('"%s"', $producer),
+                    $name,
+                ),
+                help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * The producer that declared the name, read off the provenance record owning the field — the one
+     * fact in the document that says whose mistake an illegal name is.
+     *
+     * @param  array<array-key, mixed>  $response
+     */
+    private static function declarer(array $response): ?string
+    {
+        $extension = $response[self::PROVENANCE] ?? null;
+        $records = is_array($extension) ? ($extension['provenance'] ?? null) : null;
+        if (! is_array($records)) {
+            return null;
+        }
+
+        foreach ($records as $record) {
+            if (! is_array($record)) {
+                continue;
+            }
+
+            $fields = $record['fields'] ?? null;
+            if (is_array($fields) && in_array(self::CLAIM, $fields, true)) {
+                $producer = $record['producer'] ?? null;
+
+                return is_string($producer) ? $producer : null;
+            }
+        }
+
+        return null;
     }
 
     /**

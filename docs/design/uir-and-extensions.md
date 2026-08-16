@@ -89,6 +89,22 @@ The same claims settle `components.responses` and `components.securitySchemes`. 
 literal like `passport` looks exempt and is not: an app that never called `Passport::tokensCan()`
 builds a different `passport` definition per distinct scope set.
 
+**Rung 1 is an ASK, and a producer may make it.** For a class-identified schema the ask is the class's
+short name and there is nothing to decide. A shared error body has no class to be named after, so its
+ask would default to `Error<status>` — which serves neither of the two readers this project has. The
+developer running the generator has no way to improve it, and whoever catches the type in a generated
+client learns a number rather than what went wrong. `Draft\ResponseDraft::claimComponentName()` lets the
+producer that built the body supply the ask instead (`NotFound`), and nothing else about the ladder
+changes: an error claim carries no identity either way, so rungs 2 and 3 collapse into the hash of its
+published bytes and the ladder is exactly base-then-hash whether the base was declared or defaulted.
+
+Falling to that hash is still the right answer for a name someone chose on purpose. Two DIFFERENT bodies
+claiming `NotFound` are two contracts asking to be called one thing, and awarding the plain name to
+either would make what a client's `NotFound` means depend on which routes the application happens to
+have — the exact defect this section exists to prevent. So both climb to `NotFound_kzvq2m4a`, and the
+`components.name-collision` warning names every claimant and the name it got, because the author is the
+only one who can tell the two errors apart and give them a name each.
+
 ### Shared error components
 
 `Extensions\BuiltIn\SharedErrorResponses` collapses a repeated 4xx/5xx body, in two passes whose
@@ -110,10 +126,50 @@ the per-response types the first pass exists to prevent. The passes are independ
 alternatives: a response differing by example simply does not join an identical-response group, while
 the operations that DO match still share one — and all of them still share one shape.
 
+**The name is declared by whoever built the body.** Both passes publish under a name a code generator
+turns into a type, so `Error404` — or `Error404_2obip4vj` where a status carries two bodies — is what an
+SDK consumer ends up writing in a `catch`, having never seen the codebase that produced it.
+`ResponseDraft::claimComponentName()` lets the producer that assembled the body say what kind of error
+it is, and the adapter's own tiers do (`NotFound`, `Unauthorized`, `TooManyRequests`), so the default
+output already reads. The claim is guarded like every other field — two producers naming one response
+settle by precedence — and freezes into `x-docuccino.facts.component`, which is the only channel there
+is: the hoist runs over the finished document, so a claim that lived anywhere else would be lost on a
+warm fragment-cache hit and a warm build would publish different names from a cold one.
+
+**The declaration is part of what the body IS**, not a label applied afterwards, so it joins the status
+in the DEDUP KEY and in the published component's id. Keyed on the bytes alone, two kinds of error that
+happen to render identically would collapse into one component under one of the two names, and which
+name that is would depend on which routes the application happens to have — a name silently coming to
+mean something else, which is the one failure this whole area is built to prevent. Keyed on the
+declaration as well they are two components, each named for its own declarer and neither able to move
+the other. An undeclared body keys on the status alone, exactly as it always did, so its key, its hash
+rung and its component id are unchanged.
+
+Naming an error after the EXCEPTION would have been the obvious design and is wrong: the relation is
+not 1:1 in either direction. Three exception types routinely render one body (their `detail`s are
+runtime translations that fold to nothing distinct), so picking one of the three names lets deleting an
+unrelated route rename the survivor; and one exception can render two bodies (a literal problem-type
+folds, a computed one does not), so it contests its own name. The producer knows what kind of error it
+speaks for; the throw site does not.
+
+An application overrides a built-in name the way it overrides anything: register an
+`ExceptionToResponse` (unannotated, so `Priorities::DEFAULT` puts it ahead of the framework-errors tier
+at `LATE` and the fallback at `LAST`) and the chain takes it, body and name together; or claim over the
+built-in's name from an `OperationExtension`, where the guard's ladder decides — the built-in tiers
+claim at `integration`, so an application's own integration breaks the tie on `specificity`. An OVERLAY
+cannot: overlays are applied before the transformers, so `components.responses.*` does not exist yet
+when one runs.
+
+Contests and illegal names both route through the machinery that already exists: two DIFFERENT bodies
+claiming one name climb `ComponentNames`' ladder and are reported as `components.name-collision`, and a
+name outside `^[a-zA-Z0-9._-]+$` is refused with `components.name-invalid` naming the producer while the
+body falls back to `Error<status>` — a degraded name, never an invalid document.
+
 **The occurrence threshold is deliberately not local.** Adding a second identical occurrence promotes
 the FIRST from inline to `$ref`, so an operation nobody edited emits different bytes. What it does not
 do is change what anything MEANS: same body, same generated type, same contract. That is the whole
-distinction, and it is why names here are derived from content alone while the inline/`$ref` boundary
+distinction, and it is why names here are derived from content and declaration alone while the
+inline/`$ref` boundary
 is allowed to move — the defect worth preventing is a NAME that quietly comes to mean a different
 shape, which a client keeps compiling against and silently gets wrong. Hoisting singletons would make
 the boundary local at the cost of a `components` bucket holding one entry per one-off error body:

@@ -27,6 +27,12 @@ final class ResponseDraft
      */
     private const BODYLESS_STATUS = '/^(1\d\d|1XX|204|205|304)$/D';
 
+    /**
+     * The guarded field {@see claimComponentName()} writes to, and the `x-docuccino.facts` member it
+     * freezes into so the hoist can read it back off the finished document.
+     */
+    private const COMPONENT = 'component';
+
     private readonly PatchGuard $guard;
 
     /**
@@ -72,6 +78,24 @@ final class ResponseDraft
     public function set(string $field, mixed $value, Contribution $by): PatchResult
     {
         return $this->guard->apply($field, $value, $by);
+    }
+
+    /**
+     * Declare the component name this error response is published under when it hoists — for a producer
+     * that speaks for ONE kind of error and can name it better than `Error<status>`, which is what a
+     * generated client's type ends up called. Guarded like any other field, so two producers naming one
+     * response settle by precedence; two different BODIES claiming one name is a contest the hoist
+     * settles, not this. The name must be a legal component key (`^[a-zA-Z0-9._-]+$`).
+     */
+    public function claimComponentName(?string $name, Contribution $by): PatchResult
+    {
+        return $this->guard->apply(self::COMPONENT, $name, $by);
+    }
+
+    /** The component name a producer declared for this response, or null when none did. */
+    public function componentClaim(): ?string
+    {
+        return Hydrate::stringOrNull($this->guard->resolved()[self::COMPONENT] ?? null);
     }
 
     public function content(string $mediaType): SchemaDraft
@@ -157,7 +181,9 @@ final class ResponseDraft
             $headers = $resolved['headers'];
         }
 
-        unset($resolved['$ref'], $resolved['description'], $resolved['headers']);
+        $component = Hydrate::stringOrNull($resolved[self::COMPONENT] ?? null);
+
+        unset($resolved['$ref'], $resolved['description'], $resolved['headers'], $resolved[self::COMPONENT]);
 
         $content = null;
         if ($this->content !== []) {
@@ -170,7 +196,11 @@ final class ResponseDraft
             }
         }
 
-        $docuccino = new NodeExtension(id: $this->id, provenance: $this->guard->provenance());
+        $docuccino = new NodeExtension(
+            id: $this->id,
+            provenance: $this->guard->provenance(),
+            rest: $component === null ? [] : ['facts' => [self::COMPONENT => $component]],
+        );
 
         return new ResponseObject(
             ref: $ref,
