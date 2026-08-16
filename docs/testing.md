@@ -122,11 +122,11 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **95.39%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **93.16%** | 93    | fully in-process-measurable                      |
-| `inference-phpstan` | **39.23%** | 39    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **95.68%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **93.22%** | 93    | fully in-process-measurable                      |
+| `inference-phpstan` | **40.32%** | 40    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 87.28%     | —     | informational only; no longer a gate             |
+| Overall             | 87.44%     | —     | informational only; no longer a gate             |
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,

@@ -28,10 +28,10 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar. Measured 95.39% (5210/5462).
+    // phpdoc type grammar. Measured 95.68% (5408/5652).
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
-    // Measured 93.16% (5883/6315).
+    // Measured 93.22% (5938/6370).
     'laravel' => 93,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
