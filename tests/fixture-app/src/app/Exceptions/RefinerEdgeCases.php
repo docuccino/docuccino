@@ -20,6 +20,9 @@ use Spatie\LaravelData\Optional;
  *     read rather than a parameter, so no call site can decide whether the member is there;
  *   - {@see nullableOptionalMember()} passes a NULLABLE value into the same idiom one hop away, so the
  *     member renders on the runs where that value is there and is omitted on the rest;
+ *   - {@see methodOptionalMember()} hands the same idiom a receiver it can prove is there, while the tail
+ *     waits on what a METHOD on that receiver answers;
+ *   - {@see forwardedOptionalMember()} passes a value that is never null and may already BE the marker;
  *   - {@see lowercaseContentType()} writes the header key in lower case, so the `Content-Type` lookup
  *     must match case-INSENSITIVELY;
  *   - {@see noHeaders()} omits the headers argument entirely (content type absent → default);
@@ -87,6 +90,36 @@ final class RefinerEdgeCases
             'The caller may or may not have field errors to report.',
             $request,
             errors: $errors,
+        )->toProblemResponse($request);
+    }
+
+    /**
+     * The tail written over a READ instead of over the parameter: the factory writes
+     * `instance: $trace->currentId() ?? new Optional`, and this caller hands it a tracer that certainly
+     * exists. What the caller settled is that the RECEIVER is there — the key still depends on what the
+     * read answers, so this body carries `instance` on some runs and omits it on the rest.
+     */
+    public function methodOptionalMember(Request $request, TraceContext $trace): JsonResponse
+    {
+        return DataProblemDocument::traced(
+            InvoiceProblem::Unprocessable,
+            'The tracer is here; a trace id may not be.',
+            $trace,
+        )->toProblemResponse($request);
+    }
+
+    /**
+     * The value forwarded here is one an upstream document already holds as `list<string>|Optional`: never
+     * null, and quite possibly the marker itself. Reaching the factory's `$errors ?? new Optional` with it
+     * settles nothing — the coalesce passes the marker straight through to the body.
+     */
+    public function forwardedOptionalMember(Request $request, ProblemDocumentData $upstream): JsonResponse
+    {
+        return DataProblemDocument::make(
+            InvoiceProblem::Unprocessable,
+            'Re-rendered from a document that may already omit its errors.',
+            $request,
+            errors: $upstream->errors,
         )->toProblemResponse($request);
     }
 

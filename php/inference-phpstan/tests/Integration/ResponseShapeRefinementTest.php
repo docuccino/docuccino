@@ -496,3 +496,34 @@ it('settles a conditional member the call site does supply', function (): void {
         // `instance` comes from the factory's own `$request->getPathInfo()` — nothing conditional about it.
         ->and($fields['instance']->optional)->toBeFalse();
 })->group('fixture');
+
+it('leaves a member conditional when the tail waits on a read through the argument', function (): void {
+    // The factory writes `instance: $trace->currentId() ?? new Optional` and this caller passes a tracer
+    // that certainly exists. Non-null is the right question to ask of `$param ?? new Optional`, and the
+    // wrong one to ask here: the receiver being there says nothing about what its method answers, so the
+    // key is still absent on the runs with no trace id. Settling it on the argument would document a member
+    // half these responses omit.
+    $fields = [];
+    foreach ((edgeShape('methodOptionalMember')['typeArgs'][3] ?? null)?->fields ?? [] as $field) {
+        $fields[(string) $field->key] = $field;
+    }
+
+    expect($fields['instance']->optional)->toBeTrue()
+        // The enum accessors beside it fold from the same bound case, and `detail` is a literal: all settled.
+        ->and($fields['status']->type)->toEqual(new LiteralT(422))
+        ->and($fields['status']->optional)->toBeFalse()
+        ->and($fields['detail']->optional)->toBeFalse();
+})->group('fixture');
+
+it('leaves a member conditional when the argument may already be the marker', function (): void {
+    // The other half of the same question. This argument is an upstream document's `list<string>|Optional`
+    // property: never null, so nullability alone would settle it — and it may be the marker itself, which
+    // the factory's coalesce passes straight through to the body.
+    $fields = [];
+    foreach ((edgeShape('forwardedOptionalMember')['typeArgs'][3] ?? null)?->fields ?? [] as $field) {
+        $fields[(string) $field->key] = $field;
+    }
+
+    expect($fields['errors']->optional)->toBeTrue()
+        ->and($fields['instance']->optional)->toBeFalse();
+})->group('fixture');

@@ -584,7 +584,7 @@ final class ResponseShapeRefiner
             $literal = $this->foldAccessorArgument($argExpr, $accessor, $scope);
             $rehome = $literal === null ? $this->rehomeAccessor($argExpr, $accessor, $paramNames) : null;
 
-            $child = $child->bindMember($key, $literal, $rehome, $this->rendersValue($argExpr, $scope));
+            $child = $child->bindMember($key, $literal, $rehome, $this->rendersValue($argExpr, $accessor, $scope));
         }
 
         return $child;
@@ -594,9 +594,19 @@ final class ResponseShapeRefiner
      * Whether the argument passed here renders the key: a value that is neither null (which is what a
      * `?? new Optional` tail waits for) nor a sentinel of its own. Anything less leaves the member
      * conditional.
+     *
+     * Only an IDENTITY accessor can be answered from out here, because only there is the argument the very
+     * value the tail tests. Every other kind reads THROUGH the argument — `$problem->detail() ?? new
+     * Optional` waits on the READ, and a caller proving the receiver exists has proved nothing about what
+     * the read answers. Nor is a `->value`/`->name` accessor safe on that ground: it is matched by property
+     * name alone, so a plain object's nullable `$dto->value` takes the same path as an enum case's.
      */
-    private function rendersValue(Node\Expr $argExpr, Scope $scope): bool
+    private function rendersValue(Node\Expr $argExpr, ParamAccessor $accessor, Scope $scope): bool
     {
+        if ($accessor->kind !== AccessorKind::Identity) {
+            return false;
+        }
+
         $type = $scope->getType($argExpr);
 
         return $type->isNull()->no() && ! OmissionSentinel::inType($type);

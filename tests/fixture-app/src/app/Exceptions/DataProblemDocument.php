@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use App\Data\ProblemDocumentData;
+use App\Support\TraceContext;
 use Illuminate\Http\Request;
 use Spatie\LaravelData\Optional;
 
@@ -22,13 +23,16 @@ use Spatie\LaravelData\Optional;
 final class DataProblemDocument
 {
     /**
-     * @param  list<string>|null  $errors
+     * `$errors` accepts a forwarded `Optional` as well as a value or null, the way a factory does once one
+     * of its callers is re-rendering a document that already carries the marker.
+     *
+     * @param  list<string>|Optional|null  $errors
      */
     public static function make(
         InvoiceProblem $problem,
         string $detail,
         Request $request,
-        ?array $errors = null,
+        array|Optional|null $errors = null,
     ): ProblemDocumentData {
         return new ProblemDocumentData(
             type: $problem->value,
@@ -37,6 +41,25 @@ final class DataProblemDocument
             detail: $detail,
             instance: $request->getPathInfo(),
             errors: $errors ?? new Optional,
+        );
+    }
+
+    /**
+     * The same tail written over a READ rather than over the parameter: `instance` is there when the tracer
+     * has an id for this request and gone when it does not, and no caller can know which — handing in a
+     * tracer is not handing in a trace id.
+     */
+    public static function traced(
+        InvoiceProblem $problem,
+        string $detail,
+        TraceContext $trace,
+    ): ProblemDocumentData {
+        return new ProblemDocumentData(
+            type: $problem->value,
+            title: $problem->title(),
+            status: $problem->status(),
+            detail: $detail,
+            instance: $trace->currentId() ?? new Optional,
         );
     }
 }
