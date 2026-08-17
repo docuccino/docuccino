@@ -71,8 +71,9 @@ and `page` are all documented, alongside a paginated response.
 
 A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why those
 two say so. Rename the page key at the call site — `->paginate(20, ['*'], 'p')` — and the document
-follows it; there's no `per_page` beside it, because
-[nothing reads one](/laravel/documenting/requests/#pagination).
+follows it. There's no `per_page` beside it here because `paginate(20)` fixes the size at that call site;
+hand the size to a helper that reads it off the request and
+[that key is documented too](/laravel/documenting/requests/#the-page-size-key).
 
 ## Typed filters from your model's casts
 

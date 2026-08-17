@@ -729,6 +729,30 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     a spatie `PaginatedDataCollection`/`CursorPaginatedDataCollection` return documents its envelope
     from the type; only the Laravel resource-collection envelope needs the trace (its
     `AnonymousResourceCollection<T>` return type is identical paginated or not).
+  - Page size: proven, not assumed (2026-08-17). The entry above is right that a page-size key is app
+    wiring and that a paginator-shaped return type is no evidence for one — but "no evidence" was read as
+    "unknowable", and it is not. An application that honours a size key writes the read somewhere, and the
+    paginator's own SIZE ARGUMENT points at it: `Support\RequestPageSizeReader` follows that argument back
+    through one local variable and into the callee that produced it, and documents the key only when it
+    lands on a `$request->integer('per_page', …)`. The evidence is the argument, never the name — an app
+    whose key is `limit` documents `limit` — so the previous rule survives intact wherever the size really
+    is a call-site literal or the model's `$perPage`: no read, no parameter.
+    Correlation across the descent boundary is by SOURCE RANGE, because a `TraceVisitor` is never told
+    which call site the body it is walking belongs to: the size argument names a callee, reflection says
+    which lines that callee spans, and a read inside them is that callee's. Both bounds decline rather than
+    guess — one variable hop, and one callee whose range must contain exactly one key (a variable written
+    twice, or two keys in range, recovers nothing). The reader is shared by the Query-Builder visitor and
+    `PaginationTerminalVisitor`, so the two producers cannot name different size keys for one chain, and
+    `PaginatorPageParameter::size()` mints it once for both.
+    The schema states `type: integer` and a `default` only where the read's own fallback was a literal. It
+    deliberately carries no `minimum`/`maximum`: an application clamps an out-of-range size to the nearest
+    bound far more often than it rejects one, so a bound recovered from a `min`/`max` would tell a consumer
+    their value is invalid when it is merely adjusted. No diagnostic rides with this — a silent recovery
+    that succeeds needs none, and an endpoint whose size is a literal has nothing for a reader to act on.
+    Still NOT resolved by this, and still the accepted limitation the entry above describes: a paginator
+    over an in-memory collection (`AbstractCatalogQuery::paginate($request, $entries, …)` building a
+    `new LengthAwarePaginator`) reaches no paginating terminal at all, so there is no size argument to
+    follow and no `page` either. The receiver gate is what declines it, exactly as designed.
   - Enum + request-body component hoisting (Tom, 2026-08-07 — the last engine delta from the
     dogfood run, closing the named-component gap vs Scramble). Both are representation moves — the semantic
     facts (an enum's cases/descriptions; a request's rule set) are unchanged; only their OAS *location*

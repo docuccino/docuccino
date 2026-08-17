@@ -6,6 +6,7 @@ namespace App\Support;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Spatie\QueryBuilder\QueryBuilder;
 
 /**
@@ -27,6 +28,20 @@ final class ListQueryBuilder extends QueryBuilder
      */
     public function paginateList(int $perPage = 15): LengthAwarePaginator
     {
+        return $this->paginate($perPage);
+    }
+
+    /**
+     * The same page, sized by the REQUEST instead of the call site: the clamp helper takes the request as
+     * an argument and reads `per_page` off it, so the key belongs to every endpoint ending here even
+     * though no call site writes it.
+     *
+     * @return LengthAwarePaginator<int, TModel>
+     */
+    public function paginateRequested(Request $request, int $default = 15, int $max = 100): LengthAwarePaginator
+    {
+        $perPage = ListPageSize::clamp($request, $default, $max);
+
         return $this->paginate($perPage);
     }
 }
