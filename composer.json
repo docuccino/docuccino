@@ -78,8 +78,14 @@
     "scripts": {
         "changelog": "@php tools/changelog.php",
         "lint:pr-title": "@php tools/pr-title-lint.php",
-        "test": "pest --parallel",
-        "test:inference-fixture": "pest --parallel --group=fixture",
+        "test": [
+            "@php tools/fixture-app-drift.php",
+            "pest --parallel"
+        ],
+        "test:inference-fixture": [
+            "@php tools/fixture-app-drift.php",
+            "pest --parallel --group=fixture"
+        ],
         "test:coverage": [
             "@php -r \"@mkdir('build', 0755, true);\"",
             "pest --coverage-clover=build/clover.xml --exclude-group=fixture",

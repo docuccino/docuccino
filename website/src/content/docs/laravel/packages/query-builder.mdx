@@ -614,6 +614,12 @@ public function index() { /* … */ }
 
 Values you set with attributes or docblocks always take precedence over what's inferred.
 
+Where the same gap repeats across the API — a shared `append` convention, a pagination helper every
+list action calls — an [`OperationExtension`](/extending/extension-authoring/#writing-an-operationextension)
+states it once for the whole document instead, keying on the action's return type, a route-name prefix,
+or an attribute of your own. See [Once, for a whole
+document](/laravel/documenting/requests/#pagination-docuccino-cant-see).
+
 <Aside title="One attribute, both representations">
 Addressing a single filter by name works the same under either
 [filter representation](/laravel/reference/configuration/#representation). Under the default

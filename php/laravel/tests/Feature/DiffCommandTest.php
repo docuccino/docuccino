@@ -234,6 +234,51 @@ it('fails when git show cannot read the ref', function (): void {
         ->assertFailed();
 });
 
+it('neutralises Symfony markup in a change path without disturbing a legitimate one', function (): void {
+    // Both names come off the old artifact, which nobody re-read before diffing. Core already made every
+    // value it renders plain, so what is still interpreted here is Symfony's own markup: `<fg=red>` would
+    // recolour the rest of the operator's report, and a schema named after a generic must survive intact.
+    bindStubEngine();
+
+    $old = writeArtifact(function (array $uir): array {
+        $components = is_array($uir['components'] ?? null) ? $uir['components'] : [];
+        $schemas = is_array($components['schemas'] ?? null) ? $components['schemas'] : [];
+        $schemas['Gone<fg=red>'] = ['type' => 'object'];
+        $schemas['Paged_array<int, string>'] = ['type' => 'object'];
+        $components['schemas'] = $schemas;
+        $uir['components'] = $components;
+
+        return $uir;
+    });
+
+    Artisan::call('docuccino:diff', ['old' => $old]);
+    $output = Artisan::output();
+
+    expect($output)->toContain('components.schemas.Gone<fg=red>')
+        ->and($output)->toContain('components.schemas.Paged_array<int, string>');
+
+    @unlink($old);
+});
+
+it('neutralises Symfony markup in a version string the policy reports back', function (): void {
+    bindStubEngine();
+    config()->set('docuccino.documents.default.versioning', 'semver');
+
+    $old = writeArtifact(function (array $uir): array {
+        $info = is_array($uir['info'] ?? null) ? $uir['info'] : [];
+        $info['version'] = '1.0.0<fg=red>';
+        $uir['info'] = $info;
+
+        return $uir;
+    });
+
+    Artisan::call('docuccino:diff', ['old' => $old, '--enforce' => true]);
+
+    expect(Artisan::output())->toContain('1.0.0<fg=red>');
+
+    @unlink($old);
+});
+
 it('rejects a git ref that starts with a dash', function (): void {
     bindStubEngine();
 

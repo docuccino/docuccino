@@ -28,10 +28,10 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar. Measured 95.29% (5113/5366).
+    // phpdoc type grammar. Measured 95.68% (5408/5652).
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/.
-    // Measured 93.01% (5790/6225).
+    // Measured 93.22% (5938/6370).
     'laravel' => 93,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
@@ -39,7 +39,7 @@ const FLOORS = [
     // number — read the figure as "mostly proven out-of-process", never as "untested".
     // The split that produces it: what merely parses source runs well above the package average —
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
-    // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/92). Raising this
+    // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/88). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
     // Measured 40.32% (714/1771): the narrowed-arm guard and the `#[ErrorComponent]` reader are the
     // latest move into the first half — both answer from a DType or a ReflectionMethod, so neither needs

@@ -209,8 +209,21 @@ it reads the same and it works.
 
 <Aside type="tip" title="Once, for a whole document">
 If the pair belongs on every list endpoint in the API, an
-[`OperationExtension`](/extending/extension-authoring/) adds them in one place, with your own rule for
-which operations qualify.
+[`OperationExtension`](/extending/extension-authoring/#writing-an-operationextension) adds them in one
+place, with your own rule for which operations qualify.
+
+A rule can key on anything the
+[`RouteContext`](/extending/extension-authoring/#the-routecontext-surface) carries:
+
+- **The action's return type** — `$context->analysis()` gives you what the action returns, so "every
+  action returning a paginator" is a rule.
+- **A route-name prefix** — `$context->route->name`, for the `invoices.index` / `orders.index`
+  convention most applications already follow.
+- **Your own attribute** — reflect `$context->actionRef` (the controller class, method and file) and
+  read whatever marker you put on the actions yourself.
+
+Any of those covers a whole document from one class, which is the answer whenever the parameters are
+real but a helper's body hides them.
 </Aside>
 
 ## Request bodies
