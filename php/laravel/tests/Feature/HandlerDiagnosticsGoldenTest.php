@@ -5,8 +5,11 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\UirEmitter;
+use Docuccino\Laravel\Facades\Docuccino;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
+use Docuccino\Laravel\Tests\Fixtures\InferredHandler\DeferralCarrierController;
 use Docuccino\Laravel\Tests\Fixtures\InferredHandler\PortableCallbackLabels;
+use Docuccino\Laravel\Tests\Support\RouteNoteRecorder;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Routing\Router;
 
@@ -17,17 +20,21 @@ use Illuminate\Routing\Router;
  * A golden is the only thing that fails on the WHOLE string rather than on the part an assertion thought
  * to look at, so it is what catches the path coming back somewhere else in the sentence.
  *
- * It owns its route set (none) and embeds only these two codes: a per-build diagnostic needs no route to
- * fire, and a golden that also carried an operation, or an unrelated build warning, would churn for
- * reasons that have nothing to do with what it proves.
+ * It embeds only these two codes, so no unrelated build warning churns it. It carries exactly ONE route,
+ * and it has to: a deferral is a thing a ROUTE discovered, so its label reaches the summary as a note on
+ * that route's fragment, and with no routes there is nothing to carry it. (The skip is still a per-build
+ * diagnostic that needs none.) The carrier cannot be left out of the bytes selectively, since `contentHash`
+ * is a hash of the whole document — so it is {@see DeferralCarrierController}, which lives in a file of its
+ * own for the reason `PortableCallbackLabels` does: it publishes as little as an operation can, and the one
+ * line its provenance names moves only when that file is edited.
  */
 it('emits the callback diagnostics byte-identical to their committed golden', function (): void {
     /** @var object $handler */
     $handler = app(ExceptionHandler::class);
     $handler->renderable(PortableCallbackLabels::unanalysable());
-    app(HandlerDeferralLog::class)->record(PortableCallbackLabels::deferralLabel(), RuntimeException::class);
+    Docuccino::extend(new RouteNoteRecorder(HandlerDeferralLog::CHANNEL, PortableCallbackLabels::deferralLabel(), RuntimeException::class));
 
-    $result = localityBuild(static fn (Router $router): null => null);
+    $result = localityBuild(static fn (Router $router) => $router->get('api/zz-deferring', [DeferralCarrierController::class, 'index']));
 
     $embedded = array_values(array_filter(
         $result->diagnostics,

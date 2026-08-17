@@ -16,6 +16,7 @@ use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Admin\ReportController as AdminReportController;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Api\ReportController as ApiReportController;
+use Docuccino\Laravel\Tests\Support\RouteNoteRecorder;
 use Docuccino\Laravel\Tests\Support\ThrowingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -160,13 +161,36 @@ it('publishes no machine path in the summary of what an exception handler could 
     // A genuine closure render callback has no class to name, so the label the tier keys its deferrals by
     // is the closure's FILE — absolute, straight from reflection. Recorded here rather than provoked,
     // because what is under test is the crossing into the diagnostic, not what makes a body unfoldable.
+    //
+    // Recorded as the ROUTE NOTE the tier records, which is the label's whole journey now: it rides the
+    // route's cached fragment and is drained into the summary's log from there, so the scrub has to be
+    // where the message is composed and cannot be at the tier. Seeding the log instead would prove
+    // nothing — the pipeline empties it before the first route.
     bindStubEngine();
-    app(HandlerDeferralLog::class)->record(base_path('bootstrap/app.php').'::closure@42', 'RuntimeException');
+    Docuccino::extend(new RouteNoteRecorder(HandlerDeferralLog::CHANNEL, base_path('bootstrap/app.php').'::closure@42', 'RuntimeException'));
 
     $summaries = diagnosticsCoded(generateDocument()->diagnostics, 'inferred-handler.too-dynamic');
 
     expect($summaries)->toHaveCount(1)
         // The locator still names the file and the line — that is the half the author needs.
+        ->and($summaries[0]->message)->toContain('bootstrap/app.php::closure@42')
+        ->and($summaries[0]->message)->not->toContain(base_path());
+});
+
+it('publishes no machine path in that summary on a WARM build either', function (): void {
+    // The label now reaches the diagnostic through a cached fragment, and a fragment is JSON on disk that
+    // legitimately holds the unscrubbed identity — two closures degrading to one basename must not merge.
+    // So the scrub is downstream of the replay, and this is the row that says the replay does not route
+    // around it: same bytes warm as cold, and the machine named in neither.
+    $routes = static function (Router $router): void {
+        $router->get('api/zz-noted', [ApiReportController::class, 'index']);
+    };
+    Docuccino::extend(new RouteNoteRecorder(HandlerDeferralLog::CHANNEL, base_path('bootstrap/app.php').'::closure@42', 'RuntimeException'));
+
+    $warm = assertWarmEqualsCold($routes, $routes, static fn (): TypeEngine => WorkbenchEngine::make());
+    $summaries = diagnosticsCoded($warm->diagnostics, 'inferred-handler.too-dynamic');
+
+    expect($summaries)->toHaveCount(1)
         ->and($summaries[0]->message)->toContain('bootstrap/app.php::closure@42')
         ->and($summaries[0]->message)->not->toContain(base_path());
 });
@@ -196,7 +220,7 @@ it('leaves a callback label that names no file exactly as it stands', function (
     // separators, a relative path's directories and a bare `::method` are not machine paths and must
     // survive whole, or the scrub costs the reader the name it was meant to protect.
     bindStubEngine();
-    app(HandlerDeferralLog::class)->record($label, 'RuntimeException');
+    Docuccino::extend(new RouteNoteRecorder(HandlerDeferralLog::CHANNEL, $label, 'RuntimeException'));
 
     $summaries = diagnosticsCoded(generateDocument()->diagnostics, 'inferred-handler.too-dynamic');
 

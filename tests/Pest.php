@@ -623,11 +623,18 @@ function claim(string $base, ?string $identity, string $content = '{"type":"obje
 /**
  * Reset the router to exactly the routes a row declares, and bind the analyser it builds against.
  *
+ * Container-`scoped` services are forgotten first, because the build these harnesses compare against is
+ * the one a SECOND `docuccino:generate` gets — a fresh process, where every per-build collector starts
+ * empty. Leaving one populated from the previous build lets a warm build pass on state the cold build
+ * next door put there, which is exactly the degradation the comparison exists to catch.
+ *
  * @param  callable(Router): void  $routes
  * @param  callable(): TypeEngine|null  $engine  a FRESH engine per build (the harnesses count calls)
  */
 function localityBuild(callable $routes, ?callable $engine = null, ?TypeEngine &$bound = null): GenerationResult
 {
+    app()->forgetScopedInstances();
+
     /** @var Router $router */
     $router = app('router');
     $router->setRoutes(new RouteCollection);
