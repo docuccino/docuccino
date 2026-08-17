@@ -488,7 +488,7 @@ The other is the **request side of pagination**. A `PaginatedDataCollection` or
 `CursorPaginatedDataCollection` return documents the whole envelope from the type alone — you never
 annotate a paginated response. It says nothing about the request, though: the type tells Docuccino
 what comes back, not which query keys the code that built it read. When the paginating happens inside
-a query builder, [Spatie Query Builder](/laravel/packages/query-builder/) recovers `page` and
-`per_page` from the trace; when it happens anywhere else — a helper paginating an in-memory
+a query builder, [Spatie Query Builder](/laravel/packages/query-builder/) recovers the page key from
+the trace; when it happens anywhere else — a helper paginating an in-memory
 collection, say — declare the parameters with
 [`#[QueryParameter]`](/laravel/documenting/requests/#pagination-docuccino-cant-see).

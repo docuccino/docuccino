@@ -35,6 +35,7 @@ it('leaves the characters either side of the escaped ranges alone', function (st
     'tilde (U+007E)' => '~',
     'no-break space (U+00A0), just past the C1 block' => "\u{00A0}",
     'arabic semicolon (U+061B), just before the letter mark' => "\u{061B}",
+    'arabic end of text mark (U+061D), just past the letter mark' => "\u{061D}",
     'zero-width joiner (U+200D), just before the marks' => "\u{200D}",
     'hyphen (U+2010), just past the marks' => "\u{2010}",
     'hyphenation point (U+2027), just before the separators' => "\u{2027}",

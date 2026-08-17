@@ -115,15 +115,15 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-16)
+## Measured coverage (2026-08-17)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **95.68%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **93.22%** | 93    | fully in-process-measurable                      |
+| `core`              | **95.70%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **93.21%** | 93    | fully in-process-measurable                      |
 | `inference-phpstan` | **40.32%** | 40    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 87.44%     | —     | informational only; no longer a gate             |

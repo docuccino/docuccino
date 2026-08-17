@@ -929,6 +929,28 @@ it('gives two declared names that share a body a component each', function (): v
         ->not->toBe($doc['components']['schemas']['GoneAway']['x-docuccino']['id']);
 });
 
+it('keeps two declared names that differ only by illustration apart, each with its own', function (): void {
+    // Where the two features meet. Arms that only illustrate one body differently collapse onto one
+    // component; a declaration is what says these are two errors, not two pictures of one — so the collapse
+    // stops at the name, and neither component is handed the other's illustration.
+    $one = claimedBody('TokenRejected', examplableBody(['code' => 'token']));
+    $two = claimedBody('RegionBlocked', examplableBody(['code' => 'region']));
+
+    $doc = errorDoc([
+        '/a' => ['403' => $one], '/b' => ['403' => $one],
+        '/c' => ['403' => $two], '/d' => ['403' => $two],
+    ]);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['RegionBlocked', 'TokenRejected'])
+        ->and(responseRefAt($doc, '/a', '403'))->toBe('#/components/responses/TokenRejected')
+        ->and(responseRefAt($doc, '/c', '403'))->toBe('#/components/responses/RegionBlocked')
+        // One illustration each, so each stays the singular `example` it arrived as.
+        ->and(exampleAt($doc, '/a', '403'))->toBe(['code' => 'token'])
+        ->and(exampleAt($doc, '/c', '403'))->toBe(['code' => 'region'])
+        ->and(examplesAt($doc, '/a', '403'))->toBe([])
+        ->and(examplesAt($doc, '/c', '403'))->toBe([]);
+});
+
 it('leaves an undeclared body exactly where it was when a declared one arrives', function (string $case, array $arriving): void {
     // Locality across the feature boundary, on the hardest version of it: the arriving route states the
     // SAME status and the SAME bytes, so the two would be one component if a declaration were only a

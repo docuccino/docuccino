@@ -58,8 +58,10 @@ function guardedRoutes(Router $router): void
 }
 
 /**
- * The engine as the six routes and the three render arms script it: every arm answers the same
- * `GuardProblem` at 403 under the same media type, and supplies its own `title`/`detail` literals.
+ * The engine as the six routes and the three render arms script it. The scripted return type is the one
+ * the real engine recovers from {@see GuardProblemRenderer}: the constructed `GuardProblem`, the folded
+ * 403 and media type, and one supplied member per constructor argument that arm wrote — every one of the
+ * four, since every arm passes all four and each folds. The arms differ only in two of those words.
  *
  * The renderer registers ONCE per application, however many builds a test runs: the handler outlives a
  * build, and re-registering would change what the next build's descriptor cache is keyed on.
@@ -96,7 +98,9 @@ function guardEngine(): TypeEngine
                 new LiteralT(403),
                 new LiteralT('application/problem+json'),
                 new ArrayShapeT([
+                    new ArrayShapeField('type', new LiteralT('about:blank')),
                     new ArrayShapeField('title', new LiteralT($title)),
+                    new ArrayShapeField('status', new LiteralT(403)),
                     new ArrayShapeField('detail', new LiteralT($detail)),
                 ]),
             ]),
@@ -205,8 +209,10 @@ it('leaves every illustration sitting beside the schema it was written against',
         ->and(array_keys($document['components']['schemas']['GuardProblem']['properties']))
         ->toBe(['type', 'title', 'status', 'detail']);
 
+    // Every arm passed all four constructor arguments, so every illustration carries all four members —
+    // membership comes from what that arm supplied, not from what the shared schema calls required.
     foreach ($media['examples'] as $example) {
-        expect(array_keys($example['value']))->toContain('title', 'detail');
+        expect(array_keys($example['value']))->toBe(['type', 'title', 'status', 'detail']);
     }
 });
 

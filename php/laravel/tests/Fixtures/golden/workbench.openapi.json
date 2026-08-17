@@ -964,17 +964,6 @@
             }
           },
           {
-            "name": "per_page",
-            "in": "query",
-            "description": "Items per page.",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 20,
-              "minimum": 1
-            }
-          },
-          {
             "name": "sort",
             "in": "query",
             "description": "Sort by: name, created_at (prefix `-` for descending).",
