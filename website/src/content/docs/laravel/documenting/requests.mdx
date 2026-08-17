@@ -158,10 +158,12 @@ $perPage = ListPageSize::clamp($request);
 return Invoice::query()->paginate($perPage);
 ```
 
-The argument is the evidence, not the name: a key called `limit` documents `limit`. And the same rule
-says nothing where there is nothing to say — `paginate(25)` fixes the size at the call site, and
-`paginate()` takes it from the model's `$perPage`, so neither documents a size key at all. A guessed one
-would name a key the endpoint ignores, which costs a client more than a missing one.
+The argument is the evidence, not the name: a key called `limit` documents `limit`. Any of the request
+accessors that name one key read it — `integer()`, `input()`, `query()`, `get()`, `post()` — so you don't
+have to cast to be understood. And the same rule says nothing where there is nothing to say —
+`paginate(25)` fixes the size at the call site, and `paginate()` takes it from the model's `$perPage`, so
+neither documents a size key at all. A guessed one would name a key the endpoint ignores, which costs a
+client more than a missing one.
 
 <Aside type="note" title="What the size schema states">
 `type: integer`, and a `default` only when the read's own fallback was written as a literal — a fallback
@@ -171,10 +173,30 @@ size rather than rejecting it, and a bound would tell a client their value is in
 pinned to the nearest one.
 </Aside>
 
-Two bounds keep this a reading rather than a guess: one variable hop, and one helper, whose body must
-name exactly one key. A variable assigned twice, or a helper reading two different keys, documents
-nothing — and [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) is the way to state
-the real one:
+What makes this a reading rather than a guess is that the key's **value** has to reach the size. Inside a
+helper, that means reaching what the helper returns — through a clamp, an `(int)` cast, a `??`, a ternary
+or `match` arm, or a local it named on the way. A key read to decide something *else* is not a size,
+however close to the return it sits:
+
+```php
+// Documents nothing. `preset` chooses which size to use; the size is a literal either way.
+public static function preset(Request $request): int
+{
+    return match ($request->input('preset')) {
+        'small' => 10,
+        'large' => 100,
+        default => 25,
+    };
+}
+```
+
+Two bounds keep it honest beyond that: one variable hop per body, and one helper deep. A variable assigned
+twice, a helper reading two different keys, a size that is arithmetic over a read (`$perPage * 2`) — each
+documents nothing, because the key alone would no longer describe the size the endpoint uses. A shared
+clamp imported from a trait is read like any other; so is one inherited from a parent class.
+
+Where nothing is recovered, [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) is the
+way to state the real key:
 
 ```php
 #[QueryParameter('per_page', type: 'int', description: 'Results per page (max 100).', default: 25)]
