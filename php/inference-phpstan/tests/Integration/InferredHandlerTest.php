@@ -152,3 +152,99 @@ it('recovers a per-exception render-callback closure by file+line', function ():
     $keys = array_map(static fn (array $f): string => $f['key'] ?? '', $type->typeArgs[0]->toArray()['fields'] ?? []);
     expect($keys)->toContain('error', 'detail');
 })->group('fixture');
+
+/**
+ * One arm of `PortalProblemRenderer`, which dispatches on `PortalException` plus a marker interface and
+ * builds every body through one inherited `problem()` helper — the shape a class-level attribute cannot
+ * separate, and where "the outermost declaring hop wins" is proved on real code rather than asserted.
+ *
+ * @return array{status: int|null, name: string|null, symbol: string|null, deps: list<string>}
+ */
+function portalArm(string $narrowType): array
+{
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/PortalProblemRenderer.php',
+        'App\\Exceptions\\PortalProblemRenderer',
+        '__invoke',
+        param: 'e',
+        narrowType: 'App\\Exceptions\\'.$narrowType,
+    ));
+
+    expect($analysis->returns)->toHaveCount(1);
+    $return = $analysis->returns[0];
+    $status = $return->type instanceof ClassT ? ($return->type->typeArgs[1] ?? null) : null;
+
+    return [
+        'status' => $status instanceof LiteralT ? (int) $status->value : null,
+        'name' => $return->component?->name,
+        'symbol' => $return->component?->symbol,
+        'deps' => $analysis->dependencyFiles,
+    ];
+}
+
+it('names each arm of a one-family renderer after the render method that answered', function (
+    string $narrowType,
+    int $status,
+    string $name,
+    string $symbol,
+): void {
+    $arm = portalArm($narrowType);
+
+    expect($arm['status'])->toBe($status)
+        ->and($arm['name'])->toBe($name)
+        ->and($arm['symbol'])->toBe('App\\Exceptions\\'.$symbol);
+})->with([
+    // Two arms name the body they answer with; the third declares nothing, so the house name on the
+    // shared helper it builds through stands for it — one exception family, three names, no contest.
+    'declaring arm' => ['PortalRejectedException', 422, 'PortalRejection', 'PortalProblemRenderer::renderRejection'],
+    'the other declaring arm' => ['PortalThrottledException', 429, 'PortalThrottle', 'PortalProblemRenderer::renderThrottle'],
+    'arm that declares nothing' => ['PortalUnavailableException', 503, 'PortalProblem', 'RendersProblems::problem'],
+])->group('fixture');
+
+it('records the file a name was written in, not just the one the render path names', function (): void {
+    $arm = portalArm('PortalUnavailableException');
+
+    // The declaration is on the inherited helper, in a file nothing in PortalProblemRenderer.php mentions.
+    // A fragment keyed only on what the renderer names would serve the old name after the helper is edited.
+    expect($arm['symbol'])->toBe('App\\Exceptions\\RendersProblems::problem');
+
+    $names = array_map(static fn (string $file): string => basename($file), $arm['deps']);
+    expect($names)->toContain('RendersProblems.php')->and($names)->toContain('PortalProblemRenderer.php');
+})->group('fixture');
+
+it('reads a marker-interface arm as one only a type that is BOTH reaches', function (): void {
+    // `$e instanceof PortalException && $e instanceof HasRetryWindow` admits a type only if it is both. A
+    // throttle IS a PortalException, so a guard read as "either" would answer with the earlier rejection
+    // arm — its 422 body, under its name.
+    $arm = portalArm('PortalThrottledException');
+
+    expect($arm['status'])->toBe(429)->and($arm['name'])->toBe('PortalThrottle');
+})->group('fixture');
+
+it('takes the name off the analysed method itself for a renderable exception', function (): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/SubmissionLockedException.php',
+        'App\\Exceptions\\SubmissionLockedException',
+        'render',
+    ));
+
+    expect($analysis->returns)->toHaveCount(1);
+    $component = $analysis->returns[0]->component;
+
+    expect($component?->name)->toBe('SubmissionLocked')
+        ->and($component?->symbol)->toBe('App\\Exceptions\\SubmissionLockedException::render')
+        ->and(basename($component?->location->file ?? ''))->toBe('SubmissionLockedException.php');
+})->group('fixture');
+
+it('leaves a render path that declares nothing unnamed, exactly as before', function (): void {
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/ProblemRenderer.php',
+        'App\\Exceptions\\ProblemRenderer',
+        'render',
+        param: 'e',
+        narrowType: 'Illuminate\\Validation\\ValidationException',
+    ));
+
+    expect($analysis->returns)->toHaveCount(1)
+        ->and($analysis->returns[0]->component)->toBeNull();
+})->group('fixture');

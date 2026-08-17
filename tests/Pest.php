@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\NullTypeEngine;
@@ -26,8 +27,10 @@ use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
+use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 
@@ -794,6 +797,7 @@ function assertUnaffectedByUnrelatedRoute(callable $baseline, callable $extra, s
 function fragmentCacheDir(string $slug): string
 {
     $dir = sys_get_temp_dir().'/docuccino-'.$slug.'-'.uniqid('', true);
+    FragmentCacheDirs::record($slug, $dir);
 
     config()->set('docuccino.cache.enabled', true);
     config()->set('docuccino.cache.path', $dir);
@@ -809,10 +813,14 @@ function removeFragmentCacheDir(string $dir): void
     @rmdir($dir);
 }
 
-/** The same for every directory a slug has produced — for a suite sweeping up in `afterEach`. */
+/**
+ * The same for every directory a slug produced IN THIS PROCESS — for a suite sweeping up in `afterEach`.
+ * Never the slug's whole glob: two suites share the `warm`/`cold` slugs, and under Paratest that would
+ * be one worker deleting a directory another is mid-build against ({@see FragmentCacheDirs}).
+ */
 function removeFragmentCacheDirs(string $slug): void
 {
-    foreach (glob(sys_get_temp_dir().'/docuccino-'.$slug.'-*') ?: [] as $dir) {
+    foreach (FragmentCacheDirs::take($slug) as $dir) {
         removeFragmentCacheDir($dir);
     }
 }
@@ -867,4 +875,26 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
             removeFragmentCacheDir($coldDir);
         }
     }
+}
+
+/**
+ * Register a render callback on the booted exception handler and return the `CallableRef::symbol()` the
+ * inferred-handler tier will analyse it under, so a stub engine can be scripted for exactly that key.
+ */
+function registerRenderCallback(Closure $callback, string $exceptionType): string
+{
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $handler->renderable($callback);
+
+    $function = new ReflectionFunction($callback);
+
+    return (new CallableRef(
+        (string) $function->getFileName(),
+        null,
+        null,
+        $function->getStartLine(),
+        $function->getParameters()[0]->getName(),
+        $exceptionType,
+    ))->symbol();
 }
