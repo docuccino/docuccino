@@ -294,6 +294,34 @@ it('recovers the resource-collection paginating terminal + kind through the real
     'cursorPaginate → cursor' => ['cursor', 'cursor', 'cursorPaginate'],
 ])->group('fixture');
 
+it('recovers a resource collection page-size key from the request through the real engine', function (): void {
+    // No Query Builder in this call graph at all: the SHARED terminal detector has to follow
+    // `paginate($perPage)`'s argument back through the local variable and into `ListPageSize::clamp()`,
+    // so a resource collection and a QB chain of the same shape name the same key.
+    $trace = FixtureRunner::tracePaginationTerminal(
+        'app/Http/Controllers/RequestPagedCollectionController.php',
+        'App\\Http\\Controllers\\RequestPagedCollectionController',
+        'index',
+    );
+
+    expect($trace['paginates'])->toBeTrue()
+        ->and($trace['terminal'])->toBe('paginate')
+        ->and($trace['pageSizeKey'])->toBe('per_page')
+        ->and($trace['pageSizeDefault'])->toBeNull();
+})->group('fixture');
+
+it('claims no page-size key for a terminal whose size is a call-site literal, on the real engine', function (string $method): void {
+    // The negative path on the shared detector: `paginate(15)` reads nothing off the request.
+    $trace = FixtureRunner::tracePaginationTerminal(
+        'app/Http/Controllers/UserPageController.php',
+        'App\\Http\\Controllers\\UserPageController',
+        $method,
+    );
+
+    expect($trace['paginates'])->toBeTrue()
+        ->and($trace['pageSizeKey'])->toBeNull();
+})->with(['lengthAware', 'simple', 'cursor'])->group('fixture');
+
 it('recovers a page key the call site renamed through the real engine', function (): void {
     // `paginate(15, ['*'], 'p')` — the fold has to reach the third argument past a `['*']` columns
     // array, or the document names a key this endpoint does not read.

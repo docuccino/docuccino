@@ -136,10 +136,45 @@ If that argument is something Docuccino can't read statically — a variable, a 
 parameter is documented at all. A guessed `page` would name a key the endpoint never reads, and
 [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) is the way to state the real one.
 
-<Aside type="note" title="Why there's no per_page">
-`paginate()` takes its page size from the call site or the model's `$perPage` — never from the request.
-An application that honors a `per_page` key wrote that reading itself, so documenting one would be a
-guess, and a guessed parameter costs a client more than a missing one. Declare yours if you have it:
+### The page-size key
+
+`paginate()` takes its page size from whatever you hand it, so whether a request key is involved is a
+fact about your own code. Docuccino reads it there. It follows the size argument back — through a local
+variable, and into the helper that produced it — and documents the key when that argument turns out to
+come off the request:
+
+```php
+final class ListPageSize
+{
+    public static function clamp(Request $request, int $default = 15, int $max = 100): int
+    {
+        return max(1, min($request->integer('per_page', $default), $max));
+    }
+}
+
+// In your list builder — `per_page` is documented, because that clamp reads it.
+$perPage = ListPageSize::clamp($request);
+
+return Invoice::query()->paginate($perPage);
+```
+
+The argument is the evidence, not the name: a key called `limit` documents `limit`. And the same rule
+says nothing where there is nothing to say — `paginate(25)` fixes the size at the call site, and
+`paginate()` takes it from the model's `$perPage`, so neither documents a size key at all. A guessed one
+would name a key the endpoint ignores, which costs a client more than a missing one.
+
+<Aside type="note" title="What the size schema states">
+`type: integer`, and a `default` only when the read's own fallback was written as a literal — a fallback
+that is itself a parameter belongs to whichever caller supplied it. There's deliberately no `minimum` or
+`maximum`, even when a `min`/`max` clamp is right there in the helper: a clamp *adjusts* an out-of-range
+size rather than rejecting it, and a bound would tell a client their value is invalid when it is merely
+pinned to the nearest one.
+</Aside>
+
+Two bounds keep this a reading rather than a guess: one variable hop, and one helper, whose body must
+name exactly one key. A variable assigned twice, or a helper reading two different keys, documents
+nothing — and [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) is the way to state
+the real one:
 
 ```php
 #[QueryParameter('per_page', type: 'int', description: 'Results per page (max 100).', default: 25)]
@@ -147,7 +182,6 @@ guess, and a guessed parameter costs a client more than a missing one. Declare y
 
 This holds wherever the page key comes from, [Spatie Query Builder](/laravel/packages/query-builder/)
 list endpoints included.
-</Aside>
 
 ### Pagination Docuccino can't see
 
@@ -161,7 +195,9 @@ return type that misses this and is still covered: its keys come from the
 
 Plenty of applications page something else again: an in-memory `Collection`, a search-engine result
 set, a list assembled from several services. A helper like this reads `page` and `per_page` off the
-request, but nothing about it says so statically:
+request, and Docuccino still documents neither — because it builds its `LengthAwarePaginator` by hand.
+There is no `paginate()` on a query builder anywhere in the call graph, so there is no page key to read a
+name off and no size argument to follow:
 
 ```php
 public function index(Request $request, CatalogQuery $catalog): PaginatedDataCollection
