@@ -527,3 +527,71 @@ it('leaves a member conditional when the argument may already be the marker', fu
     expect($fields['errors']->optional)->toBeTrue()
         ->and($fields['instance']->optional)->toBeFalse();
 })->group('fixture');
+
+/**
+ * A response NAMED in a local before it is returned — what every renderer writes as soon as the protocol
+ * headers an exception carries have to survive onto the body. The variable's own type is the helper's bare
+ * `JsonResponse`, so the shape lives in the expression it was assigned and nowhere else.
+ *
+ * @return array{status: int|null, contentType: string|null, keys: list<string>, args: int}
+ */
+function headerPreservingShape(string $narrowType): array
+{
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable(
+        'app/Exceptions/HeaderPreservingRenderer.php',
+        'App\\Exceptions\\HeaderPreservingRenderer',
+        'render',
+        param: 'e',
+        narrowType: $narrowType,
+    ));
+
+    expect($analysis->returns)->toHaveCount(1);
+    $type = $analysis->returns[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class)->and($type->fqcn)->toBe('Illuminate\\Http\\JsonResponse');
+
+    $statusArg = $type->typeArgs[1] ?? null;
+    $ctArg = $type->typeArgs[2] ?? null;
+    $payload = $type->typeArgs[0] ?? null;
+
+    $keys = [];
+    if ($payload instanceof ArrayShapeT) {
+        foreach ($payload->fields as $field) {
+            $keys[] = (string) $field->key;
+        }
+    }
+
+    return [
+        'status' => $statusArg instanceof LiteralT && is_int($statusArg->value) ? $statusArg->value : null,
+        'contentType' => $ctArg instanceof LiteralT && is_string($ctArg->value) ? $ctArg->value : null,
+        'keys' => $keys,
+        'args' => count($type->typeArgs),
+    ];
+}
+
+it('follows a response named in a local back to the expression that built it', function (): void {
+    // The arm that copies the exception's headers on: one assignment, so the local stands for the call.
+    $shape = headerPreservingShape('Symfony\\Component\\HttpKernel\\Exception\\BadRequestHttpException');
+
+    expect($shape['status'])->toBe(400)
+        ->and($shape['contentType'])->toBe('application/problem+json')
+        ->and($shape['keys'])->toContain('type', 'title', 'status', 'detail');
+})->group('fixture');
+
+it('recovers the same shape when the helper call is returned straight out', function (): void {
+    // The control: the same body, unnamed. The local must not be recovering LESS than the expression.
+    $shape = headerPreservingShape('Illuminate\\Auth\\AuthenticationException');
+
+    expect($shape['status'])->toBe(401)
+        ->and($shape['contentType'])->toBe('application/problem+json')
+        ->and($shape['keys'])->toContain('type', 'title', 'status', 'detail');
+})->group('fixture');
+
+it('refuses the shape when two branches write the one local', function (): void {
+    // Neither expression describes what goes out, and picking one would publish a body the other branch
+    // never sends — so the engine hands back the bare type and the adapter's chain states an honest one.
+    $shape = headerPreservingShape('RuntimeException');
+
+    expect($shape['args'])->toBe(0)
+        ->and($shape['status'])->toBeNull()
+        ->and($shape['keys'])->toBe([]);
+})->group('fixture');
