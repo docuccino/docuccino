@@ -13,6 +13,25 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.5.1
+
+### Features
+
+- **core**: let a finding the whole document reports travel on the route that found it ([#70](https://github.com/docuccino/docuccino/pull/70))
+
+### Bug fixes
+
+- **laravel**: document a page-size key only where the key's value IS the size ([#75](https://github.com/docuccino/docuccino/pull/75))
+- **inference-phpstan**: serve a local's value only to the method that wrote it, and only until something rewrites it ([#74](https://github.com/docuccino/docuccino/pull/74))
+- **inference-phpstan**: report the file a node was written in, which is not always the file being analysed ([#73](https://github.com/docuccino/docuccino/pull/73))
+- **core**: read every form that writes a local, not only the plain assignment ([#72](https://github.com/docuccino/docuccino/pull/72))
+- **laravel**: report the handler deferrals a warm build had been coming back without ([#71](https://github.com/docuccino/docuccino/pull/71))
+- **laravel**: let a diagnostic name the closure it means without naming the machine ([#69](https://github.com/docuccino/docuccino/pull/69))
+- **core**: stop a collision blaming an author for a name nothing claimed, and name the remedy ([#66](https://github.com/docuccino/docuccino/pull/66))
+- **laravel**: let the tier that cannot read an error body stand aside for one that can ([#65](https://github.com/docuccino/docuccino/pull/65))
+- **inference-phpstan**: read a response named in a local as the response it was named from ([#64](https://github.com/docuccino/docuccino/pull/64))
+- **laravel**: document the page-size key a list endpoint really reads ([#63](https://github.com/docuccino/docuccino/pull/63))
+
 ## v0.5.0
 
 ### Breaking changes
