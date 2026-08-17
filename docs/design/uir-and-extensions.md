@@ -472,7 +472,11 @@ interface ExceptionToResponse {
 //      (the common Problem-Details renderer pattern: a catch-all render() with
 //      per-type instanceof branches). Exception-class render() /
 //      Responsable::toResponse() analysed the same way. Too-dynamic body → defer (null)
-//      + diagnostic at the exact expression. Handler files join dependencyFiles.
+//      + diagnostic at the exact expression — including a shape that came back EMPTY,
+//      since an error response with no `content` says the error returns nothing, and
+//      answering with one would end the chain before a tier that can state a body is
+//      asked. It answers anyway when it holds something they do not: a status it folded
+//      itself, or one HTTP forbids a body on. Handler files join dependencyFiles.
 //   2. FrameworkDefaultsExceptionToResponse — Laravel's stock JSON shapes
 //      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
 //   3. Presets (problem-details) + user extensions; attributes/config override anything.
