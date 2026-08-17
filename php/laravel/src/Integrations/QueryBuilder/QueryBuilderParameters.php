@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Laravel\Integrations\Support\PaginatorPageParameter;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 
 /**
@@ -325,22 +326,15 @@ final class QueryBuilderParameters
             return [];
         }
 
-        $perPage = new QueryParameterSpec(
-            'per_page',
-            ['type' => 'integer', 'default' => $facts->perPage ?? self::DEFAULT_PER_PAGE, 'minimum' => 1],
-            'Items per page.',
-        );
-
-        if ($facts->paginationKind === 'cursor') {
-            return [
-                new QueryParameterSpec('cursor', ['type' => 'string'], 'Opaque cursor for the next/previous page.'),
-                $perPage,
-            ];
-        }
-
+        // The page selector is minted once for the whole adapter, so this and the resource-collection
+        // producer cannot drift apart. `per_page` is this package's own convention, not the framework's.
         return [
-            new QueryParameterSpec('page', ['type' => 'integer', 'default' => 1, 'minimum' => 1], 'Page number.'),
-            $perPage,
+            PaginatorPageParameter::for($facts->paginationKind),
+            new QueryParameterSpec(
+                'per_page',
+                ['type' => 'integer', 'default' => $facts->perPage ?? self::DEFAULT_PER_PAGE, 'minimum' => 1],
+                'Items per page.',
+            ),
         ];
     }
 

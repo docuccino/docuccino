@@ -55,5 +55,8 @@ it('emits the flagship QB list document byte-identical to its committed golden',
         ->and($op['responses']['200']['content']['application/json']['schema']['properties'] ?? [])->toHaveKeys(['data', 'links', 'meta'])
         ->and($paramNames)->toContain('filter[name]')
         ->and($paramNames)->toContain('page')
-        ->and($paramNames)->toContain('per_page');
+        ->and($paramNames)->toContain('per_page')
+        // Both producers see this custom terminal — the QB parameters and the resource-collection page
+        // key — and the operation still carries exactly one `page`.
+        ->and(array_count_values($paramNames)['page'])->toBe(1);
 });

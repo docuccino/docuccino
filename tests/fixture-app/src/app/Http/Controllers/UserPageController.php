@@ -29,4 +29,13 @@ class UserPageController extends Controller
     {
         return UserResource::collection(User::query()->cursorPaginate(15));
     }
+
+    /**
+     * The same page of users under an application's own key — `?p=2`, not `?page=2`. Only the third
+     * argument says so, so a documented `page` here would name a key this endpoint never reads.
+     */
+    public function renamedKey(): AnonymousResourceCollection
+    {
+        return UserResource::collection(User::query()->paginate(15, ['*'], 'p'));
+    }
 }
