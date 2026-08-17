@@ -34,6 +34,14 @@ final class ChangesetRenderer
         ."than an API change. Check the artifact is this document's own, and re-export it if it predates a\n"
         ."change to how ids are minted.\n\n";
 
+    /**
+     * Printed when a schema nothing reaches had a change stood down from breaking, so the downgrade is
+     * never silent: a reader who knows the schema IS used can see which verdict to distrust.
+     */
+    private const string UNREFERENCED_NOTE = "Note: nothing in either document references %s.\n"
+        ."Changes to a schema no operation reaches are reported but never breaking — it is in no request\n"
+        ."or response.\n\n";
+
     private const string MARK_ADDED = '+';
 
     private const string MARK_REMOVED = '-';
@@ -44,6 +52,7 @@ final class ChangesetRenderer
     {
         $note = $changeset->pairing === Pairing::Structural ? self::PAIRING_NOTE : '';
         $note .= self::disjointNote($changeset);
+        $note .= self::unreferencedNote($changeset);
 
         if ($changeset->isEmpty()) {
             return $note."No API changes.\n";
@@ -78,6 +87,13 @@ final class ChangesetRenderer
         $kinds = $changeset->disjointIdentities;
 
         return $kinds === [] ? '' : sprintf(self::DISJOINT_NOTE, implode(' or ', $kinds));
+    }
+
+    private static function unreferencedNote(Changeset $changeset): string
+    {
+        $names = array_map(PlainText::of(...), $changeset->unreferencedSchemas);
+
+        return $names === [] ? '' : sprintf(self::UNREFERENCED_NOTE, implode(', ', $names));
     }
 
     private function summaryLine(Changeset $changeset): string

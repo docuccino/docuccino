@@ -136,6 +136,14 @@ written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that
 another — so resolving it is also what lets the diff tell an operation's `$ref`ed parameters apart at
 all. Where a pointer resolves to nothing, the pointer itself does that job.
 
+A `components.schemas` entry that nothing in either document references is a schema no operation can reach,
+so no edit to it can change a request or a response. Its changes are still reported — a component name
+becomes a type in a generated client — but never as breaking, and the diff names each schema it stood down
+(`unreferencedSchemas` in the JSON payload) so the downgrade is never silent. Reachability is transitive
+from the operations: a schema reached only through another schema counts, while one reached only from a
+schema that is itself unreferenced does not. Docuccino publishes no unreferenced component, so this comes
+up only when `old` is a hand-written or third-party artifact — where a shelf of unused schemas is ordinary.
+
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino
 writes parameters on the operation, so this only comes up when `old` is a hand-written or third-party

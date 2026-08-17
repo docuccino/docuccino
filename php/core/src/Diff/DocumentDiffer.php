@@ -28,7 +28,8 @@ use Docuccino\Core\Support\Json;
  * Breaking: a removed operation/parameter/response/status, a parameter becoming required, an
  * added required parameter, plus the schema-level rules SchemaComparator owns. Additions, prose
  * edits and deprecations aren't — and since only modelled fields and schema structure are
- * compared, a provenance-only delta yields an empty changeset.
+ * compared, a provenance-only delta yields an empty changeset. A component schema nothing reaches
+ * is the one place a rule is stood down; {@see diffComponentSchemas()} owns why.
  *
  * Identities carry an algorithm version (`op:v1:…`); documents minted by different algo versions
  * can't be paired safely, so the differ throws {@see IncomparableDocumentsException} rather than
@@ -55,15 +56,19 @@ final class DocumentDiffer
         /** @var list<Change> $changes */
         $changes = [];
 
+        /** @var array<string, true> $unreferenced */
+        $unreferenced = [];
+
         $this->diffOperations($old, $new, $changes, $pairing);
-        $this->diffComponentSchemas($old, $new, $changes, $pairing);
+        $this->diffComponentSchemas($old, $new, $changes, $unreferenced, $pairing);
         $this->diffPages($old, $new, $changes);
 
         usort($changes, static fn (Change $a, Change $b): int => $a->sortKey() <=> $b->sortKey());
+        ksort($unreferenced);
 
         $disjoint = $pairing === Pairing::Identity ? IdentityOverlap::disjointKinds($old, $new) : [];
 
-        return new Changeset($changes, $pairing, $disjoint);
+        return new Changeset($changes, $pairing, $disjoint, array_keys($unreferenced));
     }
 
     /**
@@ -336,14 +341,23 @@ final class DocumentDiffer
     }
 
     /**
+     * A schema nothing in EITHER document reaches ({@see SchemaReachability}) is in no operation's request
+     * or response, so no edit to it can break a consumer of the API. It is still reported — a name under
+     * `components` becomes a type in a generated client — but never as breaking, and the name is collected
+     * so the changeset can say the downgrade happened rather than quietly under-report. Docuccino publishes
+     * no unreachable schema; a hand-written or third-party artifact routinely carries several.
+     *
      * @param  list<Change>  $changes
+     * @param  array<string, true>  $unreferenced
      */
-    private function diffComponentSchemas(UirDocument $old, UirDocument $new, array &$changes, Pairing $pairing): void
+    private function diffComponentSchemas(UirDocument $old, UirDocument $new, array &$changes, array &$unreferenced, Pairing $pairing): void
     {
         [$oldSchemas, $newSchemas] = IdentityKeys::pair(
             $this->componentSchemaEntries($old, $pairing),
             $this->componentSchemaEntries($new, $pairing),
         );
+        $oldReach = SchemaReachability::of($old);
+        $newReach = SchemaReachability::of($new);
 
         foreach (Arr::sortedUnion(array_keys($oldSchemas), array_keys($newSchemas)) as $key) {
             $inOld = array_key_exists($key, $oldSchemas);
@@ -357,7 +371,14 @@ final class DocumentDiffer
                 $changes[] = new Change(ChangeKind::Added, ChangeTarget::Schema, $key, 'components.schemas.'.$entry['name'], false, 'schema.added');
             } else {
                 $entry = $newSchemas[$key];
+                $unreachable = ! $oldReach->reaches($oldSchemas[$key]['name']) && ! $newReach->reaches($entry['name']);
+
                 foreach ($this->schemas->compare($oldSchemas[$key]['schema'], $entry['schema'], 'components.schemas.'.$entry['name'], $key, request: false) as $change) {
+                    if ($unreachable && $change->breaking) {
+                        $unreferenced['components.schemas.'.$entry['name']] = true;
+                        $change = new Change($change->kind, $change->target, $change->id, $change->path, false, $change->code, $change->fields);
+                    }
+
                     $changes[] = $change;
                 }
             }

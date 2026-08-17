@@ -1136,6 +1136,273 @@ it('invents no churn when both sides carry the same contested page id', function
         ->and(diffOf($doc, $reordered)->isEmpty())->toBeTrue();
 });
 
+// --- Schemas nothing references ---------------------------------------------
+
+/**
+ * `diffBase()`'s component schema, referenced from the 200 response. `diffBase()` itself declares it and
+ * points at nothing, which is the unreachable half of every pair below: one mutation, two documents, and
+ * the only difference is whether an operation can reach the schema it edits.
+ *
+ * @return array<string, mixed>
+ */
+function diffReferencedSchema(): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+        '$ref' => '#/components/schemas/FormData',
+    ];
+
+    return $doc;
+}
+
+/**
+ * The edit under test: the schema loses a property and changes its type — breaking wherever a consumer
+ * can reach it.
+ *
+ * @param  array<string, mixed>  $doc
+ * @return array<string, mixed>
+ */
+function diffShrunkSchema(array $doc, string $name = 'FormData'): array
+{
+    unset($doc['components']['schemas'][$name]['properties']['id']);
+    $doc['components']['schemas'][$name]['type'] = 'string';
+
+    return $doc;
+}
+
+it('reports a change to a schema nothing references, but never as breaking', function (): void {
+    // `docuccino:diff <file>` reads an artifact another tool wrote, and an unreferenced `components.schemas`
+    // entry is ordinary there. A schema no operation reaches is in no request and no response, so no edit to
+    // it can break a consumer — calling one breaking fails a CI gate over a contract that did not move.
+    $changeset = diffOf(diffBase(), diffShrunkSchema(diffBase()));
+    $changes = changesByCode($changeset);
+
+    expect($changes)->toHaveKey('schema.property-removed')
+        ->and($changes)->toHaveKey('schema.type-changed')
+        ->and($changeset->isBreaking())->toBeFalse()
+        ->and($changeset->unreferencedSchemas)->toBe(['components.schemas.FormData'])
+        ->and($changeset->toArray()['unreferencedSchemas'])->toBe(['components.schemas.FormData']);
+});
+
+it('keeps the very same change breaking once an operation references that schema', function (): void {
+    $changeset = diffOf(diffReferencedSchema(), diffShrunkSchema(diffReferencedSchema()));
+    $changes = changesByCode($changeset);
+
+    expect($changes['schema.property-removed']->breaking)->toBeTrue()
+        ->and($changes['schema.type-changed']->breaking)->toBeTrue()
+        ->and($changeset->unreferencedSchemas)->toBe([]);
+});
+
+it('finds the reference wherever an artifact put it', function (callable $reference): void {
+    // Reachability decides whether a breaking rule applies, so a place it cannot look is a place a real
+    // break is quietly downgraded. Every one of these is a shape a hand-written artifact reaches for.
+    $old = $reference(diffBase());
+    $changeset = diffOf($old, diffShrunkSchema($old));
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($changeset->unreferencedSchemas)->toBe([]);
+})->with([
+    'a response schema' => [fn (array $doc): array => diffReferencedSchema()],
+    'a response schema under items' => [function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+            'type' => 'array', 'items' => ['$ref' => '#/components/schemas/FormData'],
+        ];
+
+        return $doc;
+    }],
+    'a pointer into the schema' => [function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+            'properties' => ['id' => ['$ref' => '#/components/schemas/FormData/properties/id']],
+        ];
+
+        return $doc;
+    }],
+    'a request body' => [function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}']['get']['requestBody'] = [
+            'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/FormData']]],
+        ];
+
+        return $doc;
+    }],
+    'a parameter schema' => [function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['schema'] = ['$ref' => '#/components/schemas/FormData'];
+
+        return $doc;
+    }],
+    'a response header' => [function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['headers'] = [
+            'X-Form' => ['schema' => ['$ref' => '#/components/schemas/FormData']],
+        ];
+
+        return $doc;
+    }],
+    'a hoisted response' => [function (array $doc): array {
+        $doc['components']['responses']['NotFound'] = [
+            'description' => 'Not found',
+            'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/FormData']]],
+        ];
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['404'] = ['$ref' => '#/components/responses/NotFound'];
+
+        return $doc;
+    }],
+    'a hoisted parameter' => [function (array $doc): array {
+        $doc['components']['parameters']['Filter'] = [
+            'name' => 'filter', 'in' => 'query', 'schema' => ['$ref' => '#/components/schemas/FormData'],
+        ];
+        $doc['paths']['/api/v1/forms/{id}']['get']['parameters'][] = ['$ref' => '#/components/parameters/Filter'];
+
+        return $doc;
+    }],
+    'a webhook' => [function (array $doc): array {
+        $doc['webhooks']['formSaved'] = ['post' => ['responses' => [
+            '200' => ['description' => 'Ack', 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/FormData']]]],
+        ]]];
+
+        return $doc;
+    }],
+    'a discriminator mapping' => [function (array $doc): array {
+        $doc['components']['schemas']['Envelope'] = [
+            'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+            'oneOf' => [['type' => 'object']],
+            'discriminator' => ['propertyName' => 'kind', 'mapping' => ['form' => '#/components/schemas/FormData']],
+        ];
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+            '$ref' => '#/components/schemas/Envelope',
+        ];
+
+        return $doc;
+    }],
+    'another schema that is itself referenced' => [function (array $doc): array {
+        $doc['components']['schemas']['FormEnvelope'] = [
+            'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+            'type' => 'object',
+            'properties' => ['form' => ['$ref' => '#/components/schemas/FormData']],
+        ];
+        $doc['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+            '$ref' => '#/components/schemas/FormEnvelope',
+        ];
+
+        return $doc;
+    }],
+]);
+
+it('reads a schema name a pointer had to escape', function (string $name, string $ref): void {
+    // A component name is free-form, so the pointer that names it escapes `/` and `~` the JSON-Pointer way
+    // and the rest the URI way. Read literally, an escaped name matches nothing and the schema it names
+    // looks unused.
+    $old = diffBase();
+    $old['components']['schemas'][$name] = $old['components']['schemas']['FormData'];
+    unset($old['components']['schemas']['FormData']);
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = ['$ref' => $ref];
+
+    expect(diffOf($old, diffShrunkSchema($old, $name))->isBreaking())->toBeTrue();
+})->with([
+    'a slash' => ['Form/Data', '#/components/schemas/Form~1Data'],
+    'a tilde' => ['Form~Data', '#/components/schemas/Form~0Data'],
+    'a space' => ['Form Data', '#/components/schemas/Form%20Data'],
+]);
+
+it('survives a pointer that names nothing', function (): void {
+    // An artifact nobody validated can point at a component it never declares, or at no component at all.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema'] = [
+        'oneOf' => [['$ref' => '#/components/schemas/Missing'], ['$ref' => '#/components/schemas/']],
+    ];
+
+    $changeset = diffOf($old, diffShrunkSchema($old));
+
+    expect($changeset->isBreaking())->toBeFalse()
+        ->and($changeset->unreferencedSchemas)->toBe(['components.schemas.FormData']);
+});
+
+it('does not let one unreachable schema vouch for another', function (): void {
+    // Reachability is transitive from the operations, not "something points at it": a pointer held by a
+    // schema nobody reaches reaches nothing itself.
+    $old = diffBase();
+    $old['components']['schemas']['FormHolder'] = [
+        'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+        'type' => 'object',
+        'properties' => ['form' => ['$ref' => '#/components/schemas/FormData']],
+    ];
+
+    $changeset = diffOf($old, diffShrunkSchema($old));
+
+    expect($changeset->isBreaking())->toBeFalse()
+        ->and($changeset->unreferencedSchemas)->toBe(['components.schemas.FormData']);
+});
+
+it('terminates on a cycle between the schemas it does reach', function (): void {
+    // Nothing stops an artifact pointing two schemas at each other, and a recursive type is the ordinary
+    // reason to. Walked without a visited set this never returns — a hang, not a wrong answer.
+    $old = diffReferencedSchema();
+    $old['components']['schemas']['FormData']['properties']['loop'] = ['$ref' => '#/components/schemas/FormLoop'];
+    $old['components']['schemas']['FormLoop'] = [
+        'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+        'type' => 'object',
+        'properties' => ['back' => ['$ref' => '#/components/schemas/FormData']],
+    ];
+
+    $new = $old;
+    unset($new['components']['schemas']['FormLoop']['properties']['back']);
+
+    $changeset = diffOf($old, $new);
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($changeset->unreferencedSchemas)->toBe([]);
+});
+
+it('keeps a cycle between unreachable schemas unreachable', function (): void {
+    $old = diffBase();
+    $old['components']['schemas']['FormData']['properties']['loop'] = ['$ref' => '#/components/schemas/FormLoop'];
+    $old['components']['schemas']['FormLoop'] = [
+        'x-docuccino' => ['id' => 'sch:v1:1111111111111111'],
+        'type' => 'object',
+        'properties' => ['back' => ['$ref' => '#/components/schemas/FormData']],
+    ];
+
+    $new = $old;
+    unset($new['components']['schemas']['FormLoop']['properties']['back']);
+
+    $changeset = diffOf($old, $new);
+
+    expect($changeset->isBreaking())->toBeFalse()
+        ->and($changeset->unreferencedSchemas)->toBe(['components.schemas.FormLoop']);
+});
+
+it('stands nothing down for a schema either side still reaches', function (): void {
+    // Reachable on ONE side is enough: the old document's consumers read it, so what changed under them is
+    // a break whether or not the new document still points at it.
+    $shrunk = diffShrunkSchema(diffBase());
+
+    expect(diffOf(diffReferencedSchema(), $shrunk)->isBreaking())->toBeTrue()
+        ->and(diffOf(diffBase(), diffShrunkSchema(diffReferencedSchema()))->isBreaking())->toBeTrue();
+});
+
+it('says in the rendered report which schema it stood down', function (): void {
+    // A breaking change silently reclassified is the one thing a differ must not do quietly: a reader who
+    // knows the schema IS used needs to see which verdict to distrust.
+    $rendered = (new ChangesetRenderer)->render(diffOf(diffBase(), diffShrunkSchema(diffBase())));
+
+    expect($rendered)->toContain('nothing in either document references components.schemas.FormData')
+        ->and($rendered)->toContain('never breaking')
+        ->and($rendered)->toContain('(0 breaking)');
+
+    // …and stays quiet where the schema is reachable, so the note keeps meaning something.
+    expect((new ChangesetRenderer)->render(diffOf(diffReferencedSchema(), diffShrunkSchema(diffReferencedSchema()))))
+        ->not->toContain('nothing in either document references');
+});
+
+it('escapes a schema name it names in that note', function (): void {
+    $old = diffBase();
+    $old['components']['schemas']["Form\x1B[31mData"] = $old['components']['schemas']['FormData'];
+    unset($old['components']['schemas']['FormData']);
+
+    $rendered = (new ChangesetRenderer)->render(diffOf($old, diffShrunkSchema($old, "Form\x1B[31mData")));
+
+    expect($rendered)->not->toContain("\x1B")
+        ->and($rendered)->toContain('nothing in either document references components.schemas.Form\x1B[31mData');
+});
+
 // --- Determinism, model and rendering --------------------------------------
 
 it('produces a deterministic toArray with breaking-first ordering', function (): void {
