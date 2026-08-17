@@ -81,6 +81,26 @@ final class NarrowingGuard
     }
 
     /**
+     * Two guards where EITHER may hold: both sides' alternatives, side by side. A side carrying no
+     * `instanceof` information is a side anything satisfies, so it makes the whole guard broad — the
+     * mirror of {@see allOf()}, where such a side leaves the other one alone. An arm gated on
+     * `$e instanceof A || $e->isFatal()` is reached by a fatal B, and reading it as "A only" would answer
+     * that B with a later arm's body.
+     *
+     * @param  list<list<string>>  $left
+     * @param  list<list<string>>  $right
+     * @return list<list<string>>
+     */
+    public static function anyOf(array $left, array $right): array
+    {
+        if ($left === [] || $right === []) {
+            return [];
+        }
+
+        return [...$left, ...$right];
+    }
+
+    /**
      * Whether the narrowed type reaches this return: one alternative all of whose classes it satisfies.
      *
      * @param  list<list<string>>  $guard

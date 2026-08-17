@@ -7,6 +7,8 @@ use Docuccino\Core\Inference\DType\IntersectionT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Inference\PhpStan\Analysis\NarrowingGuard;
+use Docuccino\Inference\PhpStan\Translation\TypeTranslator;
+use PHPStan\Type\ObjectType;
 
 /**
  * Which return site a narrowed renderer's thrown type reaches. The rule under test is that a guard reads
@@ -46,6 +48,31 @@ it('merges two guards that must both hold, and lets an empty one gate nothing', 
         ->and(NarrowingGuard::allOf([], []))->toBe([])
         // One class named twice is one requirement.
         ->and(NarrowingGuard::allOf([['A']], [['A']]))->toBe([['A']]);
+});
+
+it('merges two guards where either may hold, and lets an empty one widen the whole', function (): void {
+    expect(NarrowingGuard::anyOf([['A']], [['B']]))->toBe([['A'], ['B']])
+        ->and(NarrowingGuard::anyOf([['A', 'B']], [['C']]))->toBe([['A', 'B'], ['C']])
+        // The mirror of `allOf`: a side that says nothing about the parameter is a side ANYTHING
+        // satisfies, so `$e instanceof A || $e->isFatal()` is reached by a fatal B and reading it as
+        // "A only" would answer that B with a later arm's body.
+        ->and(NarrowingGuard::anyOf([], [['B']]))->toBe([])
+        ->and(NarrowingGuard::anyOf([['A']], []))->toBe([])
+        ->and(NarrowingGuard::anyOf([], []))->toBe([]);
+});
+
+it('reads a negated branch as reachable by the type it subtracts', function (): void {
+    // The `if` chain takes its guard from the narrowed parameter type, and PHPStan hands a negated branch
+    // (`if (! ($e instanceof OutOfBounds)) { … }`) a SUBTRACTED type. The translator has no subtraction to
+    // carry it into, so what the guard reads is the class it subtracts from: the branch admits the type it
+    // excludes. That errs wide, which is the honest direction — the site is chosen and the ambiguity
+    // diagnostic says a broad guard shadowed an exact later one, rather than swapping bodies in silence.
+    $subtracted = (new TypeTranslator)->translate(
+        new ObjectType(RuntimeException::class, new ObjectType(OutOfBoundsException::class)),
+    );
+
+    expect(NarrowingGuard::ofType($subtracted))->toBe([[RuntimeException::class]])
+        ->and(NarrowingGuard::satisfiedBy(NarrowingGuard::ofType($subtracted), OutOfBoundsException::class))->toBeTrue();
 });
 
 it('tells an arm that names the thrown class from one that only names a base it extends', function (): void {

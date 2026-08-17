@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
+use Docuccino\Core\Inference\ComponentDeclaration;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use ReflectionMethod;
@@ -102,15 +103,27 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
      * to say it. Raised per throw rather than remembered per name: a tier instance outlives a build, and
      * a warm build that reported less than a cold one is a silent degradation, which repeating a line is
      * not.
+     *
+     * Within one analysis it IS one report per mistake, keyed by the mistake and sorted, the way the class
+     * anchor keys its own: a renderer with three `return`s under one bad attribute is one typo, and saying
+     * it three times says nothing more.
      */
     private function reportIllegalNames(ActionAnalysis $analysis, RouteContext $context, ComponentRegistry $components): void
     {
+        /** @var array<string, ComponentDeclaration> $illegal */
+        $illegal = [];
         foreach ($analysis->returns as $return) {
             $declaration = $return->component;
             if ($declaration === null || $components->isLegalName($declaration->name)) {
                 continue;
             }
 
+            $illegal[$declaration->symbol."\0".$declaration->name] = $declaration;
+        }
+
+        ksort($illegal);
+
+        foreach ($illegal as $declaration) {
             $components->addDiagnostic(new Diagnostic(
                 severity: Severity::Warning,
                 code: 'attribute.error-component-invalid',

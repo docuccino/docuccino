@@ -295,6 +295,14 @@ own (seeded from the action's parameter type):
   so the payload honestly widens to `array<string, mixed>` while the names still tell the arms apart.
 - `app/Exceptions/SubmissionLockedException.php` — a renderable exception whose `render()` carries the
   attribute: the analysed method is the outermost hop on its own path.
+- `app/Exceptions/GroupedProblemRenderer.php` + `app/Exceptions/RendersGroupedProblems.php` — the
+  `match (true)` renderer read off the AST rather than off PHPStan's per-return narrowing, in every shape
+  the grammar has: one arm listing SEVERAL exception types (an arm fires when ANY of its conditions holds,
+  so both types have to reach that arm's body), an arm whose `||` other side says nothing about the
+  parameter (so anything reaches it), an arm whose `&&` still requires both, and two arms building through
+  a helper the class gets from a TRAIT — one carrying `#[ErrorComponent]` and one carrying none, since a
+  trait-imported method is reported as the using class's own and both what it declares and what it does not
+  are only reachable through the trait's own file.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
   file+line.
