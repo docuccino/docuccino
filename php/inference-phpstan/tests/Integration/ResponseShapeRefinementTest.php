@@ -595,3 +595,61 @@ it('refuses the shape when two branches write the one local', function (): void 
         ->and($shape['status'])->toBeNull()
         ->and($shape['keys'])->toBe([]);
 })->group('fixture');
+
+/**
+ * The one return type of a method, with the generic arguments the refinement recovered (none where it
+ * refused). Used for the shapes where refusing is the whole point.
+ *
+ * @return array{fqcn: string, args: int, status: int|null}
+ */
+function refinedReturn(string $relPath, string $class, string $method): array
+{
+    $analysis = ActionAnalysis::fromArray(FixtureRunner::analyzeCallable($relPath, $class, $method));
+
+    expect($analysis->returns)->toHaveCount(1);
+    $type = $analysis->returns[0]->type;
+    expect($type)->toBeInstanceOf(ClassT::class);
+
+    $status = $type->typeArgs[1] ?? null;
+
+    return [
+        'fqcn' => $type->fqcn,
+        'args' => count($type->typeArgs),
+        'status' => $status instanceof LiteralT && is_int($status->value) ? $status->value : null,
+    ];
+}
+
+it('refuses the shape when the local is written again by a form that is not an assignment', function (string $method): void {
+    // Each arm names a 418 body first and then replaces the local — destructured, bound by a `foreach`, or
+    // written by a callee through a reference. Serving the first expression would publish a Teapot body for
+    // a response that carries somebody else's.
+    $return = refinedReturn(
+        'app/Exceptions/RebuiltProblemRenderer.php',
+        'App\\Exceptions\\RebuiltProblemRenderer',
+        $method,
+    );
+
+    expect($return['fqcn'])->toBe('Illuminate\\Http\\JsonResponse')
+        ->and($return['args'])->toBe(0)
+        ->and($return['status'])->toBeNull();
+})->with([
+    'list destructuring' => ['destructured'],
+    'a foreach value binding' => ['iterated'],
+    'a by-reference argument' => ['relabelled'],
+])->group('fixture');
+
+it('keeps two same-named methods in one file from answering for each other', function (): void {
+    // `DecoratedProblemRenderer::render()` returns the response it was HANDED; the inline renderer beside it
+    // builds a 418 in a local also called `$response`. Both the method-body harvest and the local's
+    // assignment are keyed per file, so both have to carry the class or the decorator publishes the inline
+    // renderer's body.
+    $return = refinedReturn(
+        'app/Exceptions/DecoratedProblemRenderer.php',
+        'App\\Exceptions\\DecoratedProblemRenderer',
+        'render',
+    );
+
+    expect($return['fqcn'])->toBe('Illuminate\\Http\\JsonResponse')
+        ->and($return['args'])->toBe(0)
+        ->and($return['status'])->toBeNull();
+})->group('fixture');

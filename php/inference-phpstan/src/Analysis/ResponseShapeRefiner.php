@@ -206,12 +206,12 @@ final class ResponseShapeRefiner
      */
     private function refineLocal(string $name, Scope $scope, array $paramNames, int $depth): ?RefinedResponse
     {
-        $method = $scope->getFunctionName();
-        if ($method === null) {
+        $key = FileAnalyzer::scopeKey($scope);
+        if ($key === null) {
             return null;
         }
 
-        $assignment = $this->fileAnalyzer->localAssignments($scope->getFile())[$method][$name] ?? null;
+        $assignment = $this->fileAnalyzer->localAssignments($scope->getFile())[$key][$name] ?? null;
         if ($assignment === null) {
             return null;
         }
@@ -277,9 +277,9 @@ final class ResponseShapeRefiner
         }
 
         if ($expr instanceof Node\Expr\Variable && is_string($expr->name)) {
-            $method = $scope->getFunctionName();
-            if ($method !== null) {
-                return $this->fileAnalyzer->arrayAssignments($scope->getFile())[$method][$expr->name] ?? null;
+            $key = FileAnalyzer::scopeKey($scope);
+            if ($key !== null) {
+                return $this->fileAnalyzer->arrayAssignments($scope->getFile())[$key][$expr->name] ?? null;
             }
         }
 
@@ -375,7 +375,7 @@ final class ResponseShapeRefiner
     {
         $this->touch($callee->file);
 
-        $node = $this->fileAnalyzer->analyze($callee->file)[$callee->method] ?? null;
+        $node = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
         if ($node === null) {
             return null;
         }
@@ -496,7 +496,7 @@ final class ResponseShapeRefiner
         }
 
         $this->touch($factory->file);
-        $node = $this->fileAnalyzer->analyze($factory->file)[$factory->method] ?? null;
+        $node = $this->fileAnalyzer->method($factory->file, $factory->class, $factory->method);
         if ($node === null) {
             return $child;
         }

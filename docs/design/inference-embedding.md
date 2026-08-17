@@ -113,6 +113,12 @@ interface TypeScope {
 
 `PhpParser\Node` crosses the boundary (stable shared lib); `PHPStan\Type\*`/`Scope` never do.
 
+`location()` reports the file a node was WRITTEN in, which is not always the file being analysed: a trait
+body is analysed once per using class, so its nodes carry the TRAIT's line numbers while the analysed file
+is the class's. Reporting the class there hands a visitor a file+line pair naming a line nobody wrote —
+and a visitor correlating that line against a declaration's span (`RequestPageSizeReader`) then reads a
+trait's code as some unrelated method of the using class. The trait's own file goes with its lines.
+
 **Public surface (`@internal` convention).** The only classes in
 `php/inference-phpstan/src` that are part of this package's supported API are the ones a
 consumer legitimately imports to configure and build the engine: `Analysis\PhpStanTypeEngineBuilder`
@@ -210,6 +216,20 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    whatever its arguments hold by then, which is how a shape stops being true. Only for a local the method
    assigns EXACTLY ONCE: two branches writing one variable are described by neither, and picking one would
    publish a body the other branch never sends. Naming a value is not a call hop, so it costs no depth.
+
+   "Once" has to mean once in the language, not once in one node type. `Docuccino\Core\Inference\LocalWrites`
+   is the single grammar both this harvest and the adapter's page-size reader ask — the plain `=` is the only
+   form with an expression to serve, and compound/reference assignment, `++`/`--`, `list()`/`[…]`
+   destructuring however nested or keyed, a `foreach` value AND key binding, `static`/`global`, `unset()`
+   and a `catch` binding all retire the local. `FileAnalyzer` adds the one write no expression shows — an
+   argument bound to a by-REFERENCE parameter, which it resolves through PHPStan's own reflection (an
+   unresolvable callee cannot write one either: `__call` is handed a copy) — and a write naming no single
+   local (`$$name = …`, `extract()`) retires every local of that scope.
+
+   Both harvests are keyed per file by `Class::method`, and so is the method-body harvest itself: one file
+   can declare a name twice (a renderer beside the inline one it falls back to), and a bare method name
+   there answers one class's return with the other's body. Where a caller has no class to name, the by-name
+   lookup answers only while the file declares that name once.
 2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
    not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
    `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The
