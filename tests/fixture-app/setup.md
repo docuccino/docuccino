@@ -311,6 +311,34 @@ own (seeded from the action's parameter type):
   `application/problem+json`-style body (a `type`/`title`/`status`/`instance` shape). Registered as an
   invokable object, it reaches the handler as a `Closure::fromCallable()` naming `__invoke`, so it is
   analysed as that METHOD with `$e` narrowed — the shape a by-line closure lookup would miss.
+- `app/Exceptions/HeaderPreservingRenderer.php` — the renderer that NAMES its response in a local before
+  returning it (what copying an exception's protocol headers onto the body forces), in three arms: the call
+  returned straight out, one assignment then a mutation, and two branches writing one local (a refusal).
+- `app/Exceptions/RebuiltProblemRenderer.php` — the same local REBUILT after its first assignment, by a
+  `list()` destructuring, a `foreach` binding and a callee taking it by reference. None of the three is an
+  `=`, and all three must retire the first expression rather than publish its body.
+- `app/Exceptions/DecoratedProblemRenderer.php` — a `render()` that returns the response it was handed,
+  beside an inline renderer with its own `render()` building a 418 into a local of the same name. One file,
+  two bodies: the harvest has to carry the class or each answers for the other.
+
+### Page-size recovery
+
+The size argument of a paginating terminal, followed back to the request key it came from — and, just as
+importantly, NOT followed where the key only chose between sizes.
+
+- `app/Support/ListPageSize.php` — the shared clamp (`clamp()`, reading `per_page` with the caller's own
+  `$default`) plus `limit()`, which names its read in a local first and carries a literal fallback.
+- `app/Support/Concerns/ClampsPageSize.php` + `app/Support/TeamPageSize.php` — the same clamp arriving from
+  a TRAIT, with the trait's read deliberately at a line the using class's own `summarySize()` spans: a
+  file+line pair only means something when both halves came from one source.
+- `app/Support/PresetPageSize.php` — two helpers that read the request and answer with a literal of their
+  own (a `match` subject, an `if` condition), so neither key is a page size.
+- `app/Http/Controllers/PageSizeEvidenceController.php` — one list endpoint per helper, all paging the same
+  model, so the only difference between a documented key and none is what the helper's value was built from.
+- `app/Http/Controllers/RequestPagedListController.php` +
+  `app/Http/Controllers/RequestPagedCollectionController.php` — the three-frame shapes: a custom
+  Query-Builder terminal handing the request to the clamp, and a resource collection doing the same with no
+  Query Builder anywhere.
 
 ### JSON:API + laravel-actions recovery
 

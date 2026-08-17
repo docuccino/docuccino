@@ -738,14 +738,32 @@ interface Viewer  { public function render(ViewerContext $ctx): Response; }
     "unknowable", and it is not. An application that honours a size key writes the read somewhere, and the
     paginator's own SIZE ARGUMENT points at it: `Support\RequestPageSizeReader` follows that argument back
     through one local variable and into the callee that produced it, and documents the key only when it
-    lands on a `$request->integer('per_page', …)`. The evidence is the argument, never the name — an app
-    whose key is `limit` documents `limit` — so the previous rule survives intact wherever the size really
-    is a call-site literal or the model's `$perPage`: no read, no parameter.
+    lands on one of the request accessors that names a single key (`integer`, `input`, `query`, `get`,
+    `post`). The evidence is the argument, never the name — an app whose key is `limit` documents `limit` —
+    so the previous rule survives intact wherever the size really is a call-site literal or the model's
+    `$perPage`: no read, no parameter. The accessor set is deliberately not narrowed to the casting
+    `integer()`: plenty of applications write `input('per_page')` into an int-returning helper, and
+    requiring a cast would make recovery a property of an app's house style rather than of what its code
+    does. It is the value-flow rule below that proves a read IS the size, so the accessor does not have to.
+    What makes a read the SIZE is value flow, never proximity: the read has to reach the value the callee
+    RETURNS. `sourcesOf()` is the whole grammar — a read, a local, a `min`/`max`/`intval` argument, an
+    `(int)` cast, either side of `??`, a ternary's or `match`'s arms, or a callee's returns — and an
+    expression it does not name is refused rather than guessed at. The parts of those forms that are read
+    to DECIDE something (a ternary condition, a `match` subject and its conditions) are deliberately not
+    sources: `match ($request->input('preset')) { 'small' => 10, … }` reads a key and answers with a
+    literal, and counting keys near a return would publish a mode selector as an integer page size.
+    Arithmetic over a read (`$perPage * 2`) is refused for the same reason — the key would no longer
+    describe the size the endpoint uses. Both bounds decline rather than guess: one variable hop per body,
+    and one callee deep.
     Correlation across the descent boundary is by SOURCE RANGE, because a `TraceVisitor` is never told
     which call site the body it is walking belongs to: the size argument names a callee, reflection says
-    which lines that callee spans, and a read inside them is that callee's. Both bounds decline rather than
-    guess — one variable hop, and one callee whose range must contain exactly one key (a variable written
-    twice, or two keys in range, recovers nothing). The reader is shared by the Query-Builder visitor and
+    which lines that callee spans, and a `return` inside them is that callee's. A file+line pair is only
+    meaningful when both halves came from ONE source, which is why `TypeScopeImpl::location()` reports the
+    TRAIT's file for a node written in a trait body — PHP analyses that body as part of every using class,
+    so its nodes carry the trait's lines, and a line compared against the using class's own methods reads a
+    trait's code as one of theirs. With the pair coherent, a shared clamp in a trait (the common shape) is
+    read like any other, and a `return` written inside a closure the body never calls is excluded by the
+    nested spans the reader records. The reader is shared by the Query-Builder visitor and
     `PaginationTerminalVisitor`, so the two producers cannot name different size keys for one chain, and
     `PaginatorPageParameter::size()` mints it once for both.
     The schema states `type: integer` and a `default` only where the read's own fallback was a literal. It

@@ -17,4 +17,15 @@ final class ListPageSize
     {
         return max(1, min($request->integer('per_page', $default), $max));
     }
+
+    /**
+     * The same clamp with the read NAMED first, which is the other half of how apps write it — and a
+     * different key, since nothing here matches on `per_page`.
+     */
+    public static function limit(Request $request, int $max = 100): int
+    {
+        $limit = $request->integer('limit', 15);
+
+        return min($limit, $max);
+    }
 }
