@@ -1012,8 +1012,8 @@ Extensions/Integrations line and an extension may not import an integration.
 
 ## 10. Fragment caching
 
-Unit = OperationFragment (operation + registered components + diagnostics + provenance,
-serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
+Unit = OperationFragment (operation + registered components + diagnostics + document-level notes +
+provenance, serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
 doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
 package versions) ‖ route cache-signature ‖ sha256 of each file in
 `ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
@@ -1061,6 +1061,26 @@ had. The requirement names its scheme as a KEY rather than through a `$ref`, so 
 it — `OperationFragment::componentSecuritySchemes` carries it explicitly instead, and the warm restore
 re-registers it under the name it was cached with, repointing the requirement if that name has since
 been taken (two routes referencing scopes the other doesn't build two different `passport` schemes).
+
+**A finding the DOCUMENT reports travels on the fragment too.** Some findings are discovered one route
+at a time and belong to the whole document — a render callback whose body would not fold is one line
+naming the callback, not one per route that threw through it. Held as a running total inside the
+extension, such a finding is simply absent from a warm build: a cached route runs no extension, so
+nothing adds to the total, and the document says less than a cold one's for the same code. The seam is
+`RouteContext::notes()` — a bag of `(channel, key, value)` strings that rides `OperationFragment::$notes`
+— plus the gated `RouteNoteCollector` chain, which owns the aggregate. `DocumentGenerator::collectNotes()`
+drains each fragment's notes into the matching collector for a fragment it just built and for one that came
+back warm ALIKE, so there is one path into an aggregate rather than two that can drift, and the summary a
+`DocumentTransformer` publishes is the same either way. `RouteNotes::all()` is sorted throughout and the
+drain runs in route order, so the aggregate is a function of the route set. `forget()` runs before the
+first route of each document, because a container-`scoped` collector outlives a build and an export of
+several documents must not report the first document's findings against the second's.
+
+A note is strings and nothing richer, because the fragment is JSON on disk — and that disk format is
+stamped with `FragmentCache::FORMAT`. Bump it whenever a fragment gains something a warm build now needs:
+an entry written before the member existed cannot distinguish "this route had none" from "this format
+could not carry them", and reading it as the former is the silent degradation in a new place. A miss costs
+one rebuild.
 
 **The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
 there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and

@@ -224,6 +224,7 @@ And these cover the rest of the surface:
 | `RouteBindingSchemaResolver` | Type a route-model-bound path parameter from the bound model's route key. | `keySchemaFor(string $modelFqcn): ?array` |
 | `RouteBindingFieldSchemaResolver` | The same, for a binding that names its own column (`{post:slug}`). Extends the contract above, so one class answers both; returning `null` documents a plain `string` rather than falling back to the route key. | `fieldSchemaFor(RouteContext $context, string $modelFqcn, string $field): ?array` |
 | `EnvironmentDigestContributor` | Fold booted-app state your extension reads (guards, global config) into the cache key. | `digest(): string` |
+| `RouteNoteCollector` | Aggregate a finding many routes make into one your `DocumentTransformer` reports. | `channel(): string`, `forget(): void`, `collect(string $key, array $values): void` |
 | `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
 
 The resolver contracts are **chains resolved per document**, and each returns a "not mine" value —
@@ -243,6 +244,20 @@ route's own files — a config value, a registered guard, a global default. The 
 files; a fact you read from booted state is invisible to it, and a warm cache would keep serving the
 old answer. Return a short deterministic string built from that state (the empty string when nothing
 resolves) and the cache invalidates when it changes.
+
+A `RouteNoteCollector` answers a different cache question: what to do when a finding belongs to the
+whole document but is discovered one route at a time. Reporting it per route gives a 200-route app 200
+near-identical lines, and holding a running total in your extension makes it vanish from a warm build —
+a cached route runs no extension, so nothing adds to the total. Record the fact on the route instead:
+
+```php
+$context->notes()->record('my-integration.unfoldable', $subject, $detail);
+```
+
+Notes ride the route's cached fragment, and Docuccino replays them into the collector whose `channel()`
+matches on every build, warm or cold. Your `DocumentTransformer` then reads the collector and reports
+once. `forget()` is called before each document's first route, so an export of several documents never
+reports one document's findings against another's.
 
 `OperationExtension`s run in phases, so you can act at the right moment:
 
