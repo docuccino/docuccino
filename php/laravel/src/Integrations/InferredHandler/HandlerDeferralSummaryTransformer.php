@@ -14,8 +14,8 @@ use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 
 /**
  * One info diagnostic per callback that couldn't fold a JSON response, naming the callback, the count and the
- * first few exception types. Reads the {@see HandlerDeferralLog} the tier fills, runs once per build, and
- * never mutates the document.
+ * first few exception types. Reads the {@see HandlerDeferralLog} the pipeline fills from each route's notes,
+ * runs once per document, and never mutates the document.
  */
 final class HandlerDeferralSummaryTransformer implements DocumentTransformer
 {

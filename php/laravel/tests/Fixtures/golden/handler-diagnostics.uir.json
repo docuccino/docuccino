@@ -7,12 +7,37 @@
     "title": "API Documentation",
     "version": "1.0.0"
   },
-  "paths": {},
+  "paths": {
+    "/api/zz-deferring": {
+      "get": {
+        "x-docuccino": {
+          "id": "op:v1:o3dturfd4sfzbdbt",
+          "provenance": [
+            {
+              "producer": "attribute",
+              "layer": "attribute",
+              "fields": [
+                "tags"
+              ],
+              "source": {
+                "file": "tests/Fixtures/InferredHandler/DeferralCarrierController.php",
+                "line": 17,
+                "symbol": "Docuccino\\Laravel\\Tests\\Fixtures\\InferredHandler\\DeferralCarrierController::index"
+              }
+            }
+          ]
+        },
+        "tags": [
+          "DeferralCarrier"
+        ]
+      }
+    }
+  },
   "x-docuccino": {
     "document": {
       "id": "doc:default",
       "configHash": "4f13fa46108392d824b2b8ea43e4cfd7cb8a3c2ede2f597d03cf4c76f3bd0952",
-      "contentHash": "9272fe2168cde86c449ce64c7eb7a569dde0fce8f9a1eda9973af90286e9a063"
+      "contentHash": "72ad244bde51e642624787122ca83007c4d9e16ba75c1a2b8913213f4622c5f1"
     },
     "generator": {
       "name": "docuccino/laravel",
