@@ -12,11 +12,13 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Facades\Docuccino;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Admin\ReportController as AdminReportController;
 use Docuccino\Laravel\Tests\Fixtures\TagNames\Api\ReportController as ApiReportController;
 use Docuccino\Laravel\Tests\Support\ThrowingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Routing\Router;
 
 /**
@@ -153,6 +155,58 @@ it('reports a failed route on a warm cache hit exactly as a cold one does', func
         ->and($failed[0]->message)->toContain('storage/app/missing.json')
         ->and($failed[0]->message)->not->toContain($missing);
 });
+
+it('publishes no machine path in the summary of what an exception handler could not fold', function (): void {
+    // A genuine closure render callback has no class to name, so the label the tier keys its deferrals by
+    // is the closure's FILE — absolute, straight from reflection. Recorded here rather than provoked,
+    // because what is under test is the crossing into the diagnostic, not what makes a body unfoldable.
+    bindStubEngine();
+    app(HandlerDeferralLog::class)->record(base_path('bootstrap/app.php').'::closure@42', 'RuntimeException');
+
+    $summaries = diagnosticsCoded(generateDocument()->diagnostics, 'inferred-handler.too-dynamic');
+
+    expect($summaries)->toHaveCount(1)
+        // The locator still names the file and the line — that is the half the author needs.
+        ->and($summaries[0]->message)->toContain('bootstrap/app.php::closure@42')
+        ->and($summaries[0]->message)->not->toContain(base_path());
+});
+
+it('publishes no machine path in the render callback it had to skip', function (): void {
+    // The second channel, and the pre-existing one: the reflector labels a skipped anonymous closure
+    // `closure@<file>:<line>`, and the file is this test's own — outside the workbench base path, so the
+    // ladder relativises it against the package root instead.
+    bindStubEngine();
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    // A builtin-typed first parameter is one of the reflector's three skip reasons.
+    $handler->renderable(static fn (string $whoops) => response()->json([], 400));
+
+    $ours = array_values(array_filter(
+        diagnosticsCoded(generateDocument()->diagnostics, 'inferred-handler.render-callback-skipped'),
+        static fn (Diagnostic $d): bool => str_contains($d->message, basename(__FILE__)),
+    ));
+
+    expect($ours)->toHaveCount(1)
+        ->and($ours[0]->message)->toContain('tests/Feature/'.basename(__FILE__))
+        ->and($ours[0]->message)->not->toContain(dirname(__DIR__, 4));
+});
+
+it('leaves a callback label that names no file exactly as it stands', function (string $label): void {
+    // The negative path. A label is our own words, and most of them are a class and a method: an FQCN's
+    // separators, a relative path's directories and a bare `::method` are not machine paths and must
+    // survive whole, or the scrub costs the reader the name it was meant to protect.
+    bindStubEngine();
+    app(HandlerDeferralLog::class)->record($label, 'RuntimeException');
+
+    $summaries = diagnosticsCoded(generateDocument()->diagnostics, 'inferred-handler.too-dynamic');
+
+    expect($summaries)->toHaveCount(1)
+        ->and($summaries[0]->message)->toContain($label);
+})->with([
+    'a namespaced class and method' => 'App\\Exceptions\\Renderer::__invoke',
+    'a path already relative' => 'bootstrap/app.php::closure@42',
+    'a single-segment file' => 'app.php::closure@42',
+]);
 
 it('publishes no machine path in any diagnostic a whole build raises', function (): void {
     // The standing guard behind the rows above: whatever the workbench build has to say, it says it
