@@ -147,12 +147,22 @@ ordinary. Deleting a schema the new document still points at is the other side o
 pointer is left naming nothing, so that is breaking (`schema.removed-still-referenced`) rather than the
 tidying-up a plain `schema.removed` describes.
 
+A schema published under a component name carries an id minted from the bytes it publishes, so editing
+the body mints a new one — a [shared error shape](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+that loses a required property is the common case. On ids alone that would read as one schema removed and
+another added under the same name, with nothing comparing the two bodies, so a schema whose id pairs with
+nothing on the other side is paired by the component name instead. Ids still come first, because they
+answer what a name cannot: a schema whose body did not move but whose name did keeps its id, and that is a
+rename rather than a removal plus an addition.
+
 `components.securitySchemes` is diffed the same way, keyed by the name a `security` requirement uses. A
 scheme some requirement still names is one every client has to satisfy, so changing how — its `type`, `in`,
 `name`, `flows`, or any other member that isn't prose — is breaking, and so is deleting it while a
 requirement still asks for it. Dropping a scheme along with the requirements naming it is not: the API
 stopped asking. A scheme no requirement anywhere names is stood down exactly like an unreferenced schema,
-and named in the same list.
+and named in the same list. OpenAPI writes `security` as a list of requirements, and an artifact that wrote
+one bare — `{"bearerAuth": []}` where `[{"bearerAuth": []}]` belongs — is read as the requirement it plainly
+states, wherever it sits: dropped instead, the scheme would look like one nothing asks for.
 
 Webhooks are diffed as the operations they are, under `webhooks.<name>` in place of a path. A webhook is a
 call the API promises to make, and a consumer writes an endpoint against it, so removing one or narrowing
