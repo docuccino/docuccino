@@ -14,8 +14,8 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * `<info>` vanishes from the report. The formatter undoes the escape as it writes, so a legitimate
  * `array<int, string>` still reads exactly as written.
  *
- * Order matters where both halves apply: {@see PlainText} first, so the NUL its trailing-backslash escape
- * inserts is consumed by the formatter rather than printed.
+ * Order matters where both halves apply: {@see PlainText} first, so the NUL the formatter's own
+ * trailing-backslash escape inserts is consumed as it writes rather than escaped into view.
  *
  * Escaping belongs here, at the render boundary, rather than at the producer: the same value goes to JSON
  * and document outputs too, where `json_encode` escapes already and a second pass only garbles it.
@@ -33,8 +33,9 @@ final class TerminalText
     }
 
     /**
-     * Text a core renderer already put through {@see PlainText} — only the markup half is still owed, and
-     * a second pass would escape the backslashes the first one wrote.
+     * A whole report a core renderer already put through {@see PlainText} — only the markup half is still
+     * owed. {@see PlainText} is idempotent, so a second pass would not hurt the values; it would escape the
+     * report's OWN newlines and flatten the layout onto one line.
      */
     public static function markupOnly(string $text): string
     {

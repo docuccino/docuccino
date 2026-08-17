@@ -151,11 +151,17 @@ its page key; that page has the full parameter set.
 
 ### Pagination Docuccino can't see
 
-The key above comes from a paginating call on a **query builder** — `paginate()`, `simplePaginate()`
-or `cursorPaginate()` on an Eloquent or base query builder, a relation, or a Spatie `QueryBuilder`.
-Plenty of applications paginate something else: an in-memory `Collection`, a search-engine result set,
-a list assembled from several services. A helper like this reads `page` and `per_page` off the request,
-but nothing about it says so statically:
+Two things have to hold for the key above. What you page has to be a **query builder** — `paginate()`,
+`simplePaginate()` or `cursorPaginate()` on an Eloquent or base query builder, a relation, or a Spatie
+`QueryBuilder` — and the action has to answer with a plain `AnonymousResourceCollection`, which is the
+return type this parameter belongs to. Page a real query builder and return something else — the
+paginator itself, a Data collection — and no key is documented either. A JSON:API collection is the one
+return type that misses this and is still covered: its keys come from the
+[json-api-paginate](/laravel/packages/json-api-paginate/) integration instead.
+
+Plenty of applications page something else again: an in-memory `Collection`, a search-engine result
+set, a list assembled from several services. A helper like this reads `page` and `per_page` off the
+request, but nothing about it says so statically:
 
 ```php
 public function index(Request $request, CatalogQuery $catalog): PaginatedDataCollection
@@ -164,9 +170,10 @@ public function index(Request $request, CatalogQuery $catalog): PaginatedDataCol
 }
 ```
 
-The **response** is fine — a paginator-shaped return type documents its envelope from the type alone.
-It's the request half that's missing, and no configuration recovers it: which keys that helper honors
-is a fact about its body, not its name. Declare them, once, where they belong:
+The **response** is fine — spatie's `PaginatedDataCollection` says which envelope it is in its own
+class name, so that half needs no call chain at all. It's the request half that's missing, and no
+configuration recovers it: which keys that helper honors is a fact about its body, not its name.
+Declare them, once, where they belong:
 
 <Tabs>
 	<TabItem label="Your code">

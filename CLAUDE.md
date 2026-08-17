@@ -35,11 +35,13 @@ change serves one at the other's expense, say so out loud rather than letting it
   CI also gates line coverage **per package** (`composer test:coverage` →
   `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
   coverage (`composer test:types`, 100%). **Use the composer scripts** — they carry the flags
-  the gates need (`--parallel`, PHPStan's 2G, and the grpc fork guard below). CI runs the same
-  scripts, so they cannot drift. Memory is NOT the lever it looks like: `phpunit.xml`'s
-  `<ini name="memory_limit">` is applied during bootstrap and so **overrides** anything passed
-  on the command line, and nothing in the suite comes near it anyway (type coverage peaks around
-  135 MB against a 1G ceiling). A run that appears to hang is never short of memory.
+  the gates need (`--parallel`, the two 2G limits, and the grpc fork guard below). CI runs the same
+  scripts, so they cannot drift. Both 2G are real: `analyse` runs PHPStan in a process of its own,
+  and `--memory-limit` on `pest --type-coverage` is the type-coverage plugin's own flag, which it
+  applies with `ini_set` before analysing — `phpunit.xml`'s `<ini name="memory_limit">` governs the
+  phpunit run and never reaches that path. A COLD type-coverage run dies inside PHPStan at PHP's
+  128M default and passes at 256M, so the 2G is headroom rather than decoration. Memory is still
+  not the lever a hang looks like: a run that appears to hang is never short of it.
   **Leave the type-coverage cache alone**, and do not blame pcov. A cold run — an empty
   `vendor/pestphp/pest-plugin-type-coverage/.temp` — forks worker processes, and `fork()` is
   unsafe under an extension that runs background threads: with `grpc` loaded the children

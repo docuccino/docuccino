@@ -16,11 +16,13 @@ use Docuccino\Core\Document\UirDocument;
  * becomes a `$ref` (or moves between component names) compares thing-to-thing and reports nothing, while
  * an edit to a shared one reports against every operation using it.
  *
- * What the referring node states beside the pointer does NOT win: OAS 3.1 §3.5 says a Reference Object's
- * members other than `summary` and `description` are ignored, so a `required: false` written next to a
- * `$ref` at a component that says `required: true` describes nothing — honouring it reported a parameter
- * becoming optional, or required, for a contract that had not moved. Identity is the exception: it is
- * ours, not OAS's, and it names the USE rather than the thing, which is what the diff pairs on.
+ * The CONTRACT comes from the component, never from what the referring node states beside the pointer: a
+ * `required: false` written next to a `$ref` at a component that says `required: true` describes nothing,
+ * and honouring it reported a parameter becoming optional, or required, for a contract that had not moved.
+ * That is the MODELLED members only — `name`, `in`, `required`, `deprecated` and `schema` on a parameter,
+ * `headers` and `content` on a response. A `description`, and anything left in `rest` (`style`, `explode`,
+ * `example`, an extension), stay as the referring node wrote them, and so does the identity, which names
+ * the USE rather than the thing the diff pairs on.
  *
  * For a parameter it is also what makes the comparison possible at all: a Reference Object states neither
  * `name` nor `in`, which is how a parameter is told from its neighbours, so unresolved they are
