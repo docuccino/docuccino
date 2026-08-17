@@ -202,6 +202,14 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    already-resolved generic (`response()->json([...], 422)`) straight off the type; or resolve the
    callee and analyse ITS return sites, first documentable return winning. A `return null`/void arm is
    FRAMEWORK DELEGATION — neither a response nor a fold failure.
+
+   A return site may also NAME the response first (`$r = Problem::make(…); $r->headers->add(…); return $r;`
+   — what a renderer writes as soon as the protocol headers an exception carries have to survive), and the
+   variable's own type is the same erased class, so the shape lives only in what was assigned to it. The
+   assignment is refined instead, IN THE SCOPE IT WAS WRITTEN IN — read at the return, an expression binds
+   whatever its arguments hold by then, which is how a shape stops being true. Only for a local the method
+   assigns EXACTLY ONCE: two branches writing one variable are described by neither, and picking one would
+   publish a body the other branch never sends. Naming a value is not a call hop, so it costs no depth.
 2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
    not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
    `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The
