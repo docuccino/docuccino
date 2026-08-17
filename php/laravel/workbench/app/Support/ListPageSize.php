@@ -36,4 +36,31 @@ final class ListPageSize
     {
         return max($request->integer('per_page', 15), $request->integer('per_page', 20));
     }
+
+    /** The read NAMED first, under a key of its own: the value still flows out of the return. */
+    public static function limit(Request $request, int $max = 100): int
+    {
+        $limit = $request->integer('limit', 15);
+
+        return min($limit, $max);
+    }
+
+    /** A preset selector: the key picks the arm, and every arm's value is a literal of this body's own. */
+    public static function preset(Request $request): int
+    {
+        return match ($request->input('preset')) {
+            'small' => 10,
+            default => 25,
+        };
+    }
+
+    /** A read the returned value never touches, because it lives in a closure this body never calls. */
+    public static function lazy(Request $request): int
+    {
+        $threshold = function () use ($request): int {
+            return $request->integer('threshold', 5);
+        };
+
+        return 20;
+    }
 }

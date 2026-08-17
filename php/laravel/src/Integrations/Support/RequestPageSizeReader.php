@@ -7,10 +7,11 @@ namespace Docuccino\Laravel\Integrations\Support;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\LocalWrites;
 use Docuccino\Core\Inference\TypeScope;
 use PhpParser\Node;
-use ReflectionException;
 use ReflectionMethod;
+use Throwable;
 
 /**
  * Recovers the query key a paginated endpoint reads its PAGE SIZE from, by following the paginating
@@ -24,17 +25,26 @@ use ReflectionMethod;
  * (`paginate(20)`, or the model's own `$perPage`) still documents nothing at all —
  * {@see PaginatorPageParameter} states that half of the rule in full.
  *
- * Two bounds, both stated because exceeding either recovers nothing rather than guessing:
+ * Three bounds, all stated because exceeding any of them recovers nothing rather than guessing:
  *
- * - **One variable hop.** `$perPage = clamp(…); … paginate($perPage);` is the shape apps write; a longer
- *   chain of variables is dataflow guesswork, not a reading.
- * - **Correlation is by SOURCE RANGE, one callee deep.** A visitor is never told which call site the body
- *   it is walking belongs to, so the size argument names a callee, reflection says which lines that
- *   callee spans, and a read recorded inside them is that callee's. Two DIFFERENT keys in range, or a
- *   variable assigned twice, recovers nothing: a wrong page-size key would send every generated client to
- *   a parameter the endpoint ignores, which is worse than sending them to none.
+ * - **Value flow, never proximity.** {@see sourcesOf()} is the whole grammar: a value flows out of a read,
+ *   a local, a clamp's arguments, an `(int)` cast, either side of `??`, a ternary's or `match`'s RESULT, or
+ *   a callee's returned value — and out of nothing else. A key the code reads to make some other decision
+ *   (a `match` subject, an `if` condition, a closure nobody calls) never reaches the size, so it is never
+ *   the size. Anything this grammar cannot follow is refused; a size the reader cannot explain is a size
+ *   it says nothing about.
+ * - **One variable hop per body.** `$perPage = clamp(…); … paginate($perPage);` is the shape apps write; a
+ *   longer chain within one body is dataflow guesswork, not a reading.
+ * - **One callee deep, correlated by SOURCE RANGE.** A visitor is never told which call site the body it is
+ *   walking belongs to, so the size argument names a callee, reflection says which lines that callee spans,
+ *   and a `return` recorded inside them is that callee's. The file and the line have to come from the same
+ *   source for that to mean anything — a trait's body is analysed as part of every using class, so its
+ *   nodes carry the trait's lines, and the engine reports the trait's file with them. Two DIFFERENT keys
+ *   reaching one size, or a variable written twice, recovers nothing: a wrong page-size key would send
+ *   every generated client to a parameter the endpoint ignores, which is worse than sending them to none.
  *
  * @phpstan-type PageSizeSource array{read: RequestPageSizeKey|null, callee: string|null, file: string|null, var: string|null}
+ * @phpstan-type SourceSpan array{file: string, start: int, end: int}
  */
 final class RequestPageSizeReader
 {
@@ -43,12 +53,12 @@ final class RequestPageSizeReader
 
     /**
      * Request accessors naming one query key in argument 0 with its fallback in argument 1. `integer()`
-     * casts and the others do not, but a value reaching `paginate()` is a page size either way, so all
-     * four document the same integer parameter.
+     * casts and the others do not, but the value-flow rule above is what proves a read IS the size, so
+     * requiring the cast would only document the apps whose house style writes one.
      *
      * @var list<string>
      */
-    private const ACCESSORS = ['integer', 'input', 'query', 'get'];
+    private const ACCESSORS = ['integer', 'input', 'query', 'get', 'post'];
 
     /**
      * Terminals whose signature says WHERE the page size sits — Laravel's own three, all
@@ -67,8 +77,21 @@ final class RequestPageSizeReader
     /** Clamp helpers written inline around a read. A clamp is not a constraint, so only the key travels. */
     private const CLAMPS = ['min', 'max', 'intval'];
 
-    /** @var list<array{key: string, default: int|null, file: string, line: int}> */
-    private array $reads = [];
+    /**
+     * Every `return` seen, with where it was written and where its value came from — the evidence that a
+     * read inside a callee is the value that callee ANSWERS with.
+     *
+     * @var list<array{file: string, line: int, sources: list<PageSizeSource>}>
+     */
+    private array $returns = [];
+
+    /**
+     * Spans of the closures, functions and anonymous classes written inside a walked body. A `return` in
+     * one of them is that inner body's, not the method whose lines enclose it.
+     *
+     * @var list<SourceSpan>
+     */
+    private array $nested = [];
 
     /**
      * Local assignments by `file|variable`, null once a second write retires one.
@@ -76,6 +99,14 @@ final class RequestPageSizeReader
      * @var array<string, list<PageSizeSource>|null>
      */
     private array $assignments = [];
+
+    /**
+     * Files where a write named no single local ({@see LocalWrites::retiresEveryLocal()}), so no variable
+     * of that file can be followed at all.
+     *
+     * @var array<string, true>
+     */
+    private array $opaqueFiles = [];
 
     /**
      * Every page-size argument seen, from any terminal at any depth: an outer custom terminal hides the
@@ -92,34 +123,38 @@ final class RequestPageSizeReader
 
     private ?RequestPageSizeKey $resolved = null;
 
-    /** Records a request read or a local assignment. Safe to call on every node of every walked body. */
+    /**
+     * Records what a body returns and what its locals hold. Safe to call on every node of every walked
+     * body.
+     */
     public function observe(Node $node, TypeScope $scope): void
     {
-        if ($node instanceof Node\Expr\MethodCall) {
-            $read = $this->readAt($node, $scope);
-            if ($read !== null) {
-                $location = $scope->location($node);
-                $this->reads[] = [
-                    'key' => $read->key,
-                    'default' => $read->default,
-                    'file' => $location->file,
-                    'line' => $location->line ?? 0,
-                ];
-                $this->dirty = true;
-            }
-        }
-
-        if ($node instanceof Node\Expr\Assign
-            && $node->var instanceof Node\Expr\Variable
-            && is_string($node->var->name)
-        ) {
-            $key = $scope->location($node)->file.'|'.$node->var->name;
-            // A variable written twice names no single origin, so the second write retires it.
-            $this->assignments[$key] = array_key_exists($key, $this->assignments)
-                ? null
-                : $this->sourcesOf($node->expr, $scope);
+        if ($node instanceof Node\Stmt\Return_ && $node->expr !== null) {
+            $location = $scope->location($node);
+            $this->returns[] = [
+                'file' => $location->file,
+                'line' => $location->line ?? 0,
+                'sources' => $this->sourcesOf($node->expr, $scope),
+            ];
             $this->dirty = true;
         }
+
+        // Every declaration that can nest INSIDE a method body and return a value of its own. A named class
+        // cannot, and treating one as nested would retire every method it holds.
+        if ($node instanceof Node\Expr\Closure
+            || $node instanceof Node\Expr\ArrowFunction
+            || $node instanceof Node\Stmt\Function_
+            || ($node instanceof Node\Stmt\Class_ && $node->name === null)
+        ) {
+            $this->nested[] = [
+                'file' => $scope->location($node)->file,
+                'start' => $node->getStartLine(),
+                'end' => $node->getEndLine(),
+            ];
+            $this->dirty = true;
+        }
+
+        $this->observeWrites($node, $scope);
     }
 
     /**
@@ -134,6 +169,9 @@ final class RequestPageSizeReader
 
         $argument = null;
         foreach ($call->getArgs() as $index => $arg) {
+            if ($arg->unpack) {
+                return; // a spread breaks positional binding, so nothing here names the size
+            }
             $named = $arg->name?->toString();
             if ($named === self::SIZE_NAME || ($named === null && $index === self::SIZE_POSITION)) {
                 $argument = $arg->value;
@@ -163,7 +201,7 @@ final class RequestPageSizeReader
 
         $found = [];
         foreach ($this->sizes as $source) {
-            foreach ($this->resolve($source, 0) as $read) {
+            foreach ($this->resolve($source, 0, 0) as $read) {
                 // Keyed by name, so agreeing reads collapse however the walk ordered them. Two reads of
                 // one key that DISAGREE on the fallback settle on no default rather than on whichever
                 // arrived last — a default that depended on encounter order would not be a fact.
@@ -181,26 +219,65 @@ final class RequestPageSizeReader
      * {@see RouteContext::recordDependencyFiles()}. The trace reports
      * every file it descended into, but a fact reached through reflection owes its own accounting.
      *
+     * Resolves first, so the list never depends on whether the caller asked for the key before the files.
+     *
      * @return list<string>
      */
     public function dependencyFiles(): array
     {
+        $this->recovered();
+
         return array_values(array_unique($this->dependencyFiles));
+    }
+
+    /** The local-write half of {@see observe()} — one grammar, read from {@see LocalWrites}. */
+    private function observeWrites(Node $node, TypeScope $scope): void
+    {
+        $file = null;
+
+        $assignment = LocalWrites::assignment($node);
+        if ($assignment !== null) {
+            [$name, $expr] = $assignment;
+            $file = $scope->location($node)->file;
+            $key = $file.'|'.$name;
+            // A variable written twice names no single origin, so the second write retires it.
+            $this->assignments[$key] = array_key_exists($key, $this->assignments)
+                ? null
+                : $this->sourcesOf($expr, $scope);
+        }
+
+        foreach (LocalWrites::retires($node) as $name) {
+            $file ??= $scope->location($node)->file;
+            $this->assignments[$file.'|'.$name] = null;
+        }
+
+        if (LocalWrites::retiresEveryLocal($node)) {
+            $file ??= $scope->location($node)->file;
+            $this->opaqueFiles[$file] = true;
+        }
+
+        if ($file !== null) {
+            $this->dirty = true;
+        }
     }
 
     /**
      * @param  PageSizeSource  $source
+     * @param  int  $varHops  variable hops spent in the body this source was written in
+     * @param  int  $calleeHops  bodies descended into, from the call site
      * @return list<RequestPageSizeKey>
      */
-    private function resolve(array $source, int $hops): array
+    private function resolve(array $source, int $varHops, int $calleeHops): array
     {
         if ($source['read'] !== null) {
             return [$source['read']];
         }
 
         if ($source['var'] !== null && $source['file'] !== null) {
-            if ($hops > 0) {
-                return []; // one variable hop; see the class docblock
+            if ($varHops > 0 || isset($this->opaqueFiles[$source['file']])) {
+                // One variable hop (see the class docblock) — and none at all in a body where some write
+                // landed on a local nothing names, since any of them could have been this one.
+                return [];
             }
 
             $next = $this->assignments[$source['file'].'|'.$source['var']] ?? null;
@@ -210,19 +287,27 @@ final class RequestPageSizeReader
 
             $found = [];
             foreach ($next as $inner) {
-                $found = [...$found, ...$this->resolve($inner, $hops + 1)];
+                $found = [...$found, ...$this->resolve($inner, $varHops + 1, $calleeHops)];
             }
 
             return $found;
         }
 
-        return $source['callee'] === null ? [] : $this->readsIn($source['callee']);
+        if ($source['callee'] === null || $calleeHops > 0) {
+            return [];
+        }
+
+        return $this->returnedBy($source['callee'], $calleeHops + 1);
     }
 
     /**
      * Where a value came from, as far as one expression can say: a read here and now, a local variable to
-     * look up once the walk has seen its assignment, or the callee whose body to look inside. A list
-     * because an inline clamp wraps the read in arguments that are values of their own.
+     * look up once the walk has seen its assignment, or the callee whose returns to look at. A list
+     * because a clamp, a `??` or a `match` each pass a value through from several places at once.
+     *
+     * Every arm below is a form the VALUE flows through. An expression this grammar does not name is
+     * refused rather than guessed at, and the parts of these forms that are read to DECIDE something — a
+     * ternary's condition, a `match` subject and its conditions — are not sources of the value they pick.
      *
      * @return list<PageSizeSource>
      */
@@ -239,16 +324,36 @@ final class RequestPageSizeReader
             return [['read' => null, 'callee' => null, 'file' => $scope->location($expr)->file, 'var' => $expr->name]];
         }
 
+        // An int cast passes the value straight through, which is how an app that reads with `input()`
+        // still hands `paginate()` an integer.
+        if ($expr instanceof Node\Expr\Cast\Int_) {
+            return $this->sourcesOf($expr->expr, $scope);
+        }
+
         if ($expr instanceof Node\Expr\FuncCall
             && $expr->name instanceof Node\Name
             && in_array(strtolower($expr->name->toString()), self::CLAMPS, true)
         ) {
-            $sources = [];
-            foreach ($expr->getArgs() as $arg) {
-                $sources = [...$sources, ...$this->sourcesOf($arg->value, $scope)];
-            }
+            return $this->sourcesOfAll(array_values(array_map(
+                static fn (Node\Arg $arg): Node\Expr => $arg->value,
+                $expr->getArgs(),
+            )), $scope);
+        }
 
-            return $sources;
+        if ($expr instanceof Node\Expr\BinaryOp\Coalesce) {
+            return $this->sourcesOfAll([$expr->left, $expr->right], $scope);
+        }
+
+        // `$c ? $a : $b` takes its value from the arms; `$a ?: $b` from the condition and the arm.
+        if ($expr instanceof Node\Expr\Ternary) {
+            return $this->sourcesOfAll([$expr->if ?? $expr->cond, $expr->else], $scope);
+        }
+
+        if ($expr instanceof Node\Expr\Match_) {
+            return $this->sourcesOfAll(
+                array_values(array_map(static fn (Node\MatchArm $arm): Node\Expr => $arm->body, $expr->arms)),
+                $scope,
+            );
         }
 
         $callee = $this->calleeOf($expr, $scope);
@@ -257,42 +362,104 @@ final class RequestPageSizeReader
     }
 
     /**
-     * The request reads written inside one callee's own source lines. Reflection answers where those lines
-     * are, which is the only correlation available: the trace hands a visitor another file's nodes without
-     * ever saying which call led there.
+     * @param  list<Node\Expr>  $exprs
+     * @return list<PageSizeSource>
+     */
+    private function sourcesOfAll(array $exprs, TypeScope $scope): array
+    {
+        $sources = [];
+        foreach ($exprs as $expr) {
+            $sources = [...$sources, ...$this->sourcesOf($expr, $scope)];
+        }
+
+        return $sources;
+    }
+
+    /**
+     * The reads that reach what one callee RETURNS. Reflection answers which source lines that callee
+     * spans, which is the only correlation available: the trace hands a visitor another file's nodes
+     * without ever saying which call led there.
      *
      * @return list<RequestPageSizeKey>
      */
-    private function readsIn(string $callee): array
+    private function returnedBy(string $callee, int $calleeHops): array
     {
-        $split = explode('::', $callee, 2);
-        if (count($split) !== 2 || ! method_exists($split[0], $split[1])) {
+        $span = $this->spanOf($callee);
+        if ($span === null) {
             return [];
         }
-
-        try {
-            $reflection = new ReflectionMethod($split[0], $split[1]);
-        } catch (ReflectionException) {
-            return [];
-        }
-
-        $file = $reflection->getFileName();
-        $start = $reflection->getStartLine();
-        $end = $reflection->getEndLine();
-        if ($file === false || $start === false || $end === false) {
-            return []; // an internal or evaluated method has no lines to correlate against
-        }
-
-        $this->dependencyFiles = [...$this->dependencyFiles, ...DeclarationFiles::of($split[0])];
 
         $found = [];
-        foreach ($this->reads as $read) {
-            if (self::samePath($read['file'], $file) && $read['line'] >= $start && $read['line'] <= $end) {
-                $found[] = new RequestPageSizeKey($read['key'], $read['default']);
+        foreach ($this->returns as $return) {
+            if (! $this->encloses($span, $return['file'], $return['line'])) {
+                continue;
+            }
+            foreach ($return['sources'] as $source) {
+                $found = [...$found, ...$this->resolve($source, 0, $calleeHops)];
             }
         }
 
         return $found;
+    }
+
+    /**
+     * A callee's own source lines, and the files its declaration spans for the fragment cache. Null when
+     * nothing can be reflected: an absent parent makes the autoloader throw an `Error` rather than a
+     * `ReflectionException`, and a route that publishes nothing at all would be a worse answer than one
+     * page-size key fewer.
+     *
+     * @return SourceSpan|null
+     */
+    private function spanOf(string $callee): ?array
+    {
+        $split = explode('::', $callee, 2);
+        if (count($split) !== 2) {
+            return null;
+        }
+
+        try {
+            if (! method_exists($split[0], $split[1])) {
+                return null;
+            }
+
+            $reflection = new ReflectionMethod($split[0], $split[1]);
+            $file = $reflection->getFileName();
+            $start = $reflection->getStartLine();
+            $end = $reflection->getEndLine();
+
+            $declaration = DeclarationFiles::of($split[0]);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if ($file === false || $start === false || $end === false) {
+            return null; // an internal or evaluated method has no lines to correlate against
+        }
+
+        $this->dependencyFiles = [...$this->dependencyFiles, ...$declaration];
+
+        return ['file' => $file, 'start' => $start, 'end' => $end];
+    }
+
+    /**
+     * Whether a file+line pair sits in a span — and in the span's OWN body, not in a closure or a nested
+     * declaration the span happens to enclose.
+     *
+     * @param  SourceSpan  $span
+     */
+    private function encloses(array $span, string $file, int $line): bool
+    {
+        if ($line < $span['start'] || $line > $span['end'] || ! self::samePath($file, $span['file'])) {
+            return false;
+        }
+
+        foreach ($this->nested as $inner) {
+            if ($line >= $inner['start'] && $line <= $inner['end'] && self::samePath($file, $inner['file'])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

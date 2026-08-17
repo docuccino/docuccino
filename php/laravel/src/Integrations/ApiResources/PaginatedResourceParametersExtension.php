@@ -48,7 +48,6 @@ final class PaginatedResourceParametersExtension implements OperationExtension
             return;
         }
 
-        $context->recordDependencyFiles($visitor->dependencyFiles());
         $contribution = Contribution::integration('api-resources', $context->actionSource());
 
         $spec = PaginatorPageParameter::forTerminal($visitor->terminal, $visitor->kind, $visitor->outermostArgs);
@@ -65,6 +64,10 @@ final class PaginatedResourceParametersExtension implements OperationExtension
                 $contribution,
             );
         }
+
+        // Last, because a size key's own file is only known once the recovery has run — the reader resolves
+        // before it answers, so this cannot come back to depending on the order of these two calls.
+        $context->recordDependencyFiles($visitor->dependencyFiles());
     }
 
     /**
