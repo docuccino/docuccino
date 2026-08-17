@@ -295,8 +295,11 @@ every status your renderer produces, and RFC 9457 already makes extension member
 problem object itself — so a client reading `errors` as maybe-absent is reading your API correctly,
 while one told it was guaranteed breaks on the first `404`.
 
-If you want the stronger contract — `errors` required under `422`, absent from the rest — the shape has
-to be split per status. Two ways, both public API:
+On a shared RFC 9457 problem document, stop there — the optional member is the true contract, and a
+consumer who has to handle an absent `errors` either way gains nothing from a split. If the statuses
+genuinely carry different shapes and you want the stronger contract — `errors` required under `422`,
+absent from the rest — the shape has to be split per status, and each split shape is another published
+name a generated client turns into another type. Two ways, both public API:
 
 | Route | Reach for it when |
 | --- | --- |
@@ -529,9 +532,11 @@ because the tier documenting them speaks for exactly one kind of error per statu
 | `429` | `TooManyRequests` | [`throttle`](/laravel/documenting/rate-limiting/) middleware |
 | `405`, `409`, `500`, `503` | `MethodNotAllowed`, `Conflict`, `InternalServerError`, `ServiceUnavailable` | An unrecognized exception resolving to that status |
 
-An error nothing claims a name for still falls back to `Error<status>`: a `402` your handler renders,
-say, or a body an [attribute](/laravel/reference/attributes/#response) documents. Nothing else about
-those bodies changes — only what the shared component is called.
+An error nothing claims a name for still falls back to `Error<status>`, the statuses in that table
+included — the reason phrases belong to the tier documenting those errors, never to the status. A `402`
+your handler renders, a `404` it renders in the framework's place, or a body an
+[attribute](/laravel/reference/attributes/#response) documents: each publishes as `Error<status>`.
+Nothing else about those bodies changes — only what the shared component is called.
 
 Named and unnamed bodies still share on the same terms. Whether a body is hoisted at all depends on how
 often the document states that status and those bytes, and never on what anyone called it — so a `404`
