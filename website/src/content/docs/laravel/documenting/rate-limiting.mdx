@@ -83,8 +83,9 @@ whatever the route throttles at. That's deliberate:
   same place.
 
 The payoff is a smaller, calmer document. Because every `429` is byte-identical, all of your throttled
-routes [share one `Error429` component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
-instead of an `Error429`, `Error429_2`, `Error429_3` … one per distinct limit.
+routes [share one `TooManyRequests` component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+— baking the numbers in would split it into a separate component per distinct limit, and a generated
+client into a type per throttle setting.
 
 If your published spec genuinely needs a documented number, state it yourself with an
 [Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) — a deliberate claim you
