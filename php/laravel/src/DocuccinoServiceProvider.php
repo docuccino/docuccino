@@ -73,8 +73,8 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 {
     /**
      * The released version of this package, published as `x-docuccino.generator.version` and keyed
-     * into the fragment cache's tool version. Bumped as part of tagging a release — see RELEASING.md;
-     * the golden comparison normalises this one member, so a bump regenerates nothing.
+     * into the fragment cache's tool version. Written by the release workflow, never by hand — see
+     * RELEASING.md; the golden comparison normalises this one member, so a bump regenerates nothing.
      */
     public const string VERSION = '0.5.1';
 

@@ -1,9 +1,10 @@
 # The standing release pull request.
 #
-# On every push to `main` this regenerates every changelog from the commit history and keeps one
-# open `Release vX.Y.Z` pull request current. MERGING that pull request is the release: the squash
-# lands the changelogs on `main`, and the version tag then goes on a commit that already contains
-# its own changelog.
+# On every push to `main` this regenerates every changelog from the commit history, writes the
+# version being cut into `DocuccinoServiceProvider::VERSION`, and keeps one open `Release vX.Y.Z`
+# pull request current. MERGING that pull request is the release: the squash lands both on `main`,
+# and the version tag then goes on a commit that already contains its own changelog and already
+# calls itself that version.
 #
 # Generating on TAG push would be the wrong way round. The changelog would land after the tag, and
 # split.yml — which fires on branch pushes AND on tags — would carry a pre-changelog tree into
@@ -15,9 +16,9 @@
 # deliberately has no access to this repository.
 #
 # Loop safety: this workflow pushes only to `release/next`, never to `main`, so its own pushes
-# cannot re-trigger it. When the generated files already match `main` — the state right after the
-# release pull request merges — it closes the pull request and stops, which is also what keeps a
-# just-merged release from immediately re-opening one.
+# cannot re-trigger it. When the changelogs and the version constant already match `main` — the
+# state right after the release pull request merges — it closes the pull request and stops, which is
+# also what keeps a just-merged release from immediately re-opening one.
 #
 # ─────────────────────────────────────────────────────────────────────────────────
 # REQUIRED SECRET: `RELEASE_TOKEN`
@@ -91,12 +92,20 @@ jobs:
           php-version: '8.4'
           coverage: none
 
-      - name: Regenerate every changelog
+      - name: Regenerate the changelogs and the generator version
         id: changelog
         run: |
           set -euo pipefail
           version="$(php tools/changelog.php --print-version)"
           php tools/changelog.php
+          # DocuccinoServiceProvider::VERSION names the release in every emitted document, so it is
+          # rewritten here rather than by hand — before the diff check below, so its own change counts
+          # towards a release being pending. Idempotent: on a re-run, or once `main` already carries
+          # the bump, it writes nothing and the check below still sees a clean tree. It fails loudly
+          # if the declaration ever stops matching, rather than shipping a stale version.
+          if [ -n "$version" ]; then
+            php tools/generator-version.php "$version"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           # No version means nothing user-facing since the last tag; no diff means `main` already
           # carries these files (the state between merging the release and pushing the tag).
@@ -119,8 +128,10 @@ jobs:
           # `release/next` is a generated artifact rebuilt from `main` every run, never a branch
           # anyone commits to, so it is reset and force-pushed rather than merged forward.
           git switch -C release/next
-          git add php/*/CHANGELOG.md website/src/content/docs/changelog.md
-          git commit -m "docs(repo): regenerate the changelogs for $VERSION"
+          # The generator version rides the same commit as the changelogs it belongs to, so the
+          # release lands as one squash and nothing has to be bumped by hand afterwards.
+          git add php/*/CHANGELOG.md website/src/content/docs/changelog.md php/laravel/src/DocuccinoServiceProvider.php
+          git commit -m "chore(repo): regenerate the changelogs and the generator version for $VERSION"
           git push --force origin HEAD:release/next
 
           # The pending section of the aggregate page, as the pull request's own release notes.
