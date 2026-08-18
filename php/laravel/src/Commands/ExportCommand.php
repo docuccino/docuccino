@@ -13,9 +13,9 @@ use Docuccino\Core\Emit\ProvenanceLevel;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Laravel\Config\ExportDiagnostics;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
-use Docuccino\Laravel\Support\AtomicFile;
 use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
 

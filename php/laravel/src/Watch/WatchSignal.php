@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Watch;
 
+use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Core\Support\GeneratedDirectory;
-use Docuccino\Laravel\Support\AtomicFile;
 
 /**
  * The one value a running `docuccino:watch` and the viewer's reload endpoint share: a token naming

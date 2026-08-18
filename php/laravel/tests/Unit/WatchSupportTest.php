@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\FragmentStore;
-use Docuccino\Laravel\Support\AtomicFile;
 use Docuccino\Laravel\Tests\Support\FakeArtisan;
 use Docuccino\Laravel\Tests\Support\RecordingOutput;
 use Docuccino\Laravel\Tests\Support\WatchFixture;

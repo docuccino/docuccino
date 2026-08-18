@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Examples;
 
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Core\Support\ConfinedPath;
 use JsonException;
 
@@ -110,19 +111,7 @@ final readonly class RecordingStore
             return false;
         }
 
-        $temporary = $path.'.'.getmypid().'.tmp';
-
-        if (@file_put_contents($temporary, $json) === false) {
-            return false;
-        }
-
-        if (! @rename($temporary, $path)) {
-            @unlink($temporary);
-
-            return false;
-        }
-
-        return true;
+        return AtomicFile::write($path, $json);
     }
 
     /**
