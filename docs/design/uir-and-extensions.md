@@ -489,9 +489,12 @@ interface ExceptionToResponse {
 //   2. FrameworkDefaultsExceptionToResponse — Laravel's stock JSON shapes
 //      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
 //   3. Presets (problem-details) + user extensions; attributes/config override anything.
-
-interface ExampleProvider { /* chain: static/@example/#[Example] (v1) → factory render / response-calls (v1.1) */ }
 ```
+
+**No `ExampleProvider`.** Examples were sketched as a contract of their own and never needed one:
+`#[Example]` and `@example` are read by the attribute/docblock extensions like any other override, and
+an extension that wants to attach one writes it through `ResponseDraft::setExample()` or the schema
+draft. Nothing implements or names an `ExampleProvider` — it is not part of the v1 surface.
 
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
@@ -523,7 +526,11 @@ status contract); 429 stays the rate-limit integration's.
 
 ```php
 
+// NOT in Extensions\Contracts: this one lives in `Docuccino\Core\Diff\Policy`, beside the differ and
+// the Changeset/PolicyVerdict types it reads. A diff policy is asked at diff time, never during a
+// build, so it belongs with the machinery it judges rather than with the build-time contracts.
 interface VersioningPolicy { // diff enforcement: changeset severity vs info.version delta
+    public function name(): string; // the stable policy id, e.g. `semver`
     public function evaluate(Changeset $changes, string $oldVersion, string $newVersion): PolicyVerdict;
     // Built-ins: SemverPolicy (breaking → major bump required), DateVersionPolicy
     // (breaking → new date version), NoVersioningPolicy (breaking → fail/warn outright).
@@ -533,9 +540,15 @@ interface VersioningPolicy { // diff enforcement: changeset severity vs info.ver
 }
 
 interface DocumentTransformer { public function transform(UirDocumentDraft $doc, DocumentContext $ctx): void; }
-interface Emitter { public function format(): string; public function emit(UirDocument $doc, EmitOptions $o): string; }
 interface Viewer  { public function render(ViewerContext $ctx): Response; }
 ```
+
+**Emitters are not extensible yet.** `Docuccino\Core\Emit\Emitter` names a format and nothing else, and
+its `emit()` half lives on the `@internal` `ReportingEmitter` because `EmitOptions` has moved with every
+format added. More to the point, `Emit\Formats` is a closed table — the CLI, a document's export targets
+and the viewer all resolve formats through it, and no registrar accepts an emitter from outside core. So
+`Emitter` is `@internal` too: implementing it registers nothing. It gets promoted to the public surface
+when a registration path exists and the `emit()` signature settles.
 
 - Ordering: `#[ExtensionOrder(priority: 0, before: [...], after: [...])]` — topo sort,
   tie-break priority desc then FQCN. Built-ins publish `Priorities::*` constants.
