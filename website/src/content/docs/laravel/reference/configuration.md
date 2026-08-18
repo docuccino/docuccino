@@ -391,8 +391,8 @@ turning it on rewrites no byte of the UIR: it shapes the projection, never the d
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
-| `gate` | `null` | Gate ability guarding all three routes — the HTML page, the `.json` spec and the asset. `null` = available only in the `local` environment. Every driver goes through it. |
+| `route` | `'/docs/api'` | Base path for the viewer routes: the HTML page, the `.json` spec, the active driver's asset, and the `/reload` channel a [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) session refreshes the page through. `null` disables them for this document. |
+| `gate` | `null` | Gate ability guarding all four routes — the HTML page, the `.json` spec, the asset and the reload channel. `null` = available only in the `local` environment. Every driver goes through it. |
 | `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
 | `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
 | `driver` | `'scalar'` | Which renderer serves the HTML page: `scalar` (with a try-it-out console) or `redoc` (reference only), or the name of a [driver you registered](/laravel/guides/viewer/#writing-your-own-driver). An unregistered name falls back to `scalar` and logs a warning. |
@@ -635,7 +635,7 @@ so a sharpened extension shows up in the next build rather than the one after it
 
 ```php
 'cache' => [
-    'enabled' => false, // fragment cache: incremental builds, off by default
+    'enabled' => env('DOCUCCINO_FRAGMENT_CACHE', false), // fragment cache: incremental builds, off by default
     'store' => null,    // Laravel cache store for the runtime document cache (docuccino:cache)
     // 'path' => null,  // fragment cache directory (defaults to storage_path('docuccino/fragments'))
 ],
@@ -643,6 +643,6 @@ so a sharpened extension shows up in the next build rather than the one after it
 
 | Key | Effect |
 | --- | --- |
-| `enabled` | Turns on the fragment cache for incremental builds. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
+| `enabled` | Turns on the fragment cache for incremental builds. `DOCUCCINO_FRAGMENT_CACHE` overrides it, which is how [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) turns it on for the builds it drives without changing your config. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
 | `store` | Laravel cache store name for the runtime document cache warmed by `docuccino:cache`. |
 | `path` | Fragment cache directory (defaults to `storage_path('docuccino/fragments')`). Docuccino drops a `.gitignore` into the directory it creates — the same `*` / `!.gitignore` pair Laravel ships inside `storage/` — so cached fragments stay out of your repository. An existing `.gitignore` is never overwritten. |

@@ -20,13 +20,14 @@ is exposed by installing the package.
 
 ## Routes
 
-With the default `viewer.route` of `/docs/api`, three routes are registered per document:
+With the default `viewer.route` of `/docs/api`, four routes are registered per document:
 
 | Route | Serves |
 | --- | --- |
 | `GET /docs/api` | The interactive API reference page. |
 | `GET /docs/api.json` | The generated OpenAPI document. |
 | `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). The filename follows the driver — `redoc.js` for Redoc. |
+| `GET /docs/api/reload` | The [live-reload channel](#live-reload-while-you-work), open only while `docuccino:watch` is running. |
 
 Change the base path with `viewer.route`, or set it to `null` to register nothing for that document
 (export still works). Setting `enabled` to `false` removes the routes for every document at once.
@@ -58,7 +59,8 @@ name a gate:
 
 </Steps>
 
-The gate guards all three routes — the HTML page, the `.json` spec and the asset; a denial is a `403`.
+The gate guards all four routes — the HTML page, the `.json` spec, the asset and the reload channel; a
+denial is a `403`.
 The browser fetches the script over the same session as the page, so a reader who is allowed in always
 gets it.
 
@@ -70,7 +72,7 @@ token check, say); otherwise Laravel refuses the guest before your closure runs.
 
 ## Middleware
 
-`viewer.middleware` is the full stack for all three routes. The default is:
+`viewer.middleware` is the full stack for all four routes. The default is:
 
 ```php
 'middleware' => ['web', 'throttle:60,1'],
@@ -166,6 +168,24 @@ allow-list for that route.
 
 The page title comes from the document's `info.title`, so the browser tab matches the API rather than
 saying "API Documentation".
+
+## Live reload while you work
+
+Run [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) beside `php artisan serve` and
+the page you have open refreshes itself whenever a rebuild changes the document:
+
+```bash
+php artisan docuccino:watch
+```
+
+The page subscribes to `/docs/api/reload` and reloads when the documentation it is showing is no
+longer current. A rebuild that changes no byte leaves it exactly where it was — including your scroll
+position and any request you were part-way through in Scalar's console. The subscriber is spliced into
+whatever the active driver renders, so live reload works on Redoc and on a driver you wrote yourself.
+
+There is nothing to switch off afterwards: the channel sits behind the same gate and middleware as the
+rest of the viewer, it answers only while a watch session is running, and a page served without one
+carries no subscriber at all.
 
 ## Writing your own driver
 

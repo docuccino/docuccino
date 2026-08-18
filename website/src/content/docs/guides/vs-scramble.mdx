@@ -284,9 +284,6 @@ against how you work before you commit:
 - **Examples come from inference and `#[Example]`**, never from running your code. There is no
   factory-rendered or live-response example generation — that's the trade for a generator that needs
   no database and has no side effects.
-- **No watch mode.** Re-run `docuccino:export`, or point the viewer at
-  [`source: generate`](/laravel/reference/configuration/#viewer) so it rebuilds per request while you
-  work locally.
 - **Closure rules aren't documented.** Built-in `Rule::` objects fold statically — `Rule::enum`
   (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists` and `Rule::unique` —
   alongside the whole string-rule vocabulary; your own rule classes document from a

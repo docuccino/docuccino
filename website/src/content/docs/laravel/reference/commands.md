@@ -1,10 +1,10 @@
 ---
 title: Commands
-description: The five docuccino artisan commands — export, validate, diff, cache and clear — with every flag, default and exit code.
+description: The six docuccino artisan commands — export, validate, diff, cache, clear and watch — with every flag, default and exit code.
 ---
 
 
-Docuccino registers five artisan commands. Every one exits `0` on success and `1` on failure, so
+Docuccino registers six artisan commands. Every one exits `0` on success and `1` on failure, so
 each is safe to gate a CI job on.
 
 Shared behavior:
@@ -18,12 +18,15 @@ Shared behavior:
   document only, never all of them. An unknown key errors and exits `1`. Per-document results
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
-  deterministic order; `diff` and `clear` print none.
+  deterministic order; `diff` and `clear` print none. `watch` prints whatever the export it runs
+  prints.
 - **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
-  `diff`, `cache` — since inference runs a static analyzer inside the artisan process. Raise-only: a
-  process already running with a higher limit is left alone, and `-1` is rejected. Same lever as
-  [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins. `clear` builds
-  nothing, so it doesn't take it.
+  `diff`, `cache`, `watch` — since inference runs a static analyzer inside the artisan process.
+  Raise-only: a process already running with a higher limit is left alone, and `-1` is rejected. Same
+  lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins.
+  `clear` builds nothing, so it doesn't take it.
+- **Long-running.** Every command runs once and exits, except `docuccino:watch`, which stays in the
+  foreground until you stop it.
 
 ## `docuccino:export`
 
@@ -351,6 +354,74 @@ document still empties all of it (an unknown key fails the command before anythi
 is emptied whether or not the fragment cache is currently enabled — it is the supported way to recover
 from a fragment store you no longer trust, instead of deleting `storage/docuccino/fragments` by hand.
 
+## `docuccino:watch`
+
+Rebuild API documentation as your code changes, and refresh an open viewer.
+
+```
+docuccino:watch
+    {document? : The configured document key (defaults to every document)}
+    {--interval=1 : Seconds between polls of the watched files}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `document` | any configured key / all documents | Which document(s) to rebuild. Unknown key → exit 1. |
+| `--interval` | seconds, `0.25` and `2` are both fine / `1` | How often the watched files are re-read. A value that isn't a positive number errors (no silent fallback). |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Passed through to each rebuild — see the shared-behavior note above. |
+
+Start it beside `php artisan serve` and leave it running:
+
+```bash
+php artisan docuccino:watch
+```
+
+It builds once, then rebuilds whenever a file the build depends on changes, and prints which file
+triggered it. `Ctrl+C` stops it.
+
+### What it watches
+
+Not a pattern you have to keep in sync with your project — the same files the build itself recorded
+as its inputs:
+
+- **Everything behind an operation.** Each cached operation stores the files it was recovered from:
+  the controller, everything a parent class or trait answered for it, every file a traced helper
+  walked, and any file an attribute read. Editing one controller rebuilds one operation.
+- **Everything that decides all of them.** `config/`, `routes/`, `composer.json` and `composer.lock`,
+  each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
+  [overlay](/laravel/reference/configuration/#overlays) files, and the
+  [`engine.neon`](/laravel/reference/configuration/#engine) file if you name one. These are watched
+  as directories, so a route file or a content page you add mid-session counts too.
+
+The artifacts a build writes are deliberately excluded — watching its own output would rebuild
+forever.
+
+Watch mode turns the [fragment cache](/laravel/guides/speeding-up-builds/) on for the builds it runs
+(via `DOCUCCINO_FRAGMENT_CACHE`), which is what makes a rebuild incremental and what gives it the
+list above. If your config is cached, the override can't reach it: watch says so and falls back to
+watching config, routes, content and overlays only. Run `php artisan config:clear`, or set
+[`cache.enabled`](/laravel/reference/configuration/#cache) to `true`.
+
+### Live viewer refresh
+
+While `docuccino:watch` is running, the [viewer](/laravel/guides/viewer/) subscribes to a reload
+channel at `<viewer.route>/reload` and refreshes itself when a rebuild changes the document. A
+rebuild that changes no byte leaves the page alone.
+
+The channel sits behind exactly the same
+[`viewer.gate`](/laravel/reference/configuration/#viewer) and `viewer.middleware` as the rest of the
+viewer, and it answers only while a watch session is running — with no session, it is a `404` and the
+page carries no subscriber at all. There is nothing to switch off in production.
+
+### Why each rebuild is a new process
+
+Watch runs `docuccino:export` in a fresh PHP process rather than rebuilding in place. PHP never
+un-loads a class, so a long-lived process would keep documenting your controllers as they were when
+it started, and would never see a route you added. Spawning is cheap next to analysis, and the
+fragment cache is on disk — so the new process picks up every operation the last one built and
+re-analyzes only what actually changed.
+
 ## Exit codes
 
 Every command returns `0` on success and `1` on failure. What counts as failure:
@@ -362,3 +433,4 @@ Every command returns `0` on success and `1` on failure. What counts as failure:
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |
 | `cache` | disabled; unknown document key |
 | `clear` | unknown document key (no enabled guard) |
+| `watch` | disabled; unknown document key; `--interval` that isn't a positive number; no documents configured. A failing rebuild does **not** stop the session — it prints and waits for the next change |

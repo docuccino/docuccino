@@ -26,6 +26,7 @@ use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
@@ -34,8 +35,10 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
+use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
+use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
@@ -1095,4 +1098,37 @@ function withLintWebhooks(?callable $then = null): callable
 
         return $then === null ? $raw : $then($raw);
     };
+}
+
+/**
+ * Wire `docuccino:watch` for a test: a scripted {@see BuildRunner} standing in for the subprocess, and
+ * a command instance the runner can stop after `$builds` builds — so no test depends on delivering a
+ * real interrupt to the worker it runs in.
+ *
+ * `$onBuild` runs before that check, with the 1-based build number, for a row that has to move a
+ * watched file between builds.
+ *
+ * @param  (callable(int): void)|null  $onBuild
+ */
+function scriptWatch(int $builds, ?callable $onBuild = null): ScriptedBuildRunner
+{
+    $command = new WatchCommand;
+    app()->instance(WatchCommand::class, $command);
+
+    $runner = new ScriptedBuildRunner(static function (int $call) use ($builds, $command, $onBuild): void {
+        if ($onBuild !== null) {
+            $onBuild($call);
+        }
+
+        if ($call >= $builds) {
+            // The loop's own stop flag, which only a signal handler otherwise writes.
+            (function (): void {
+                $this->stopping = true;
+            })->call($command);
+        }
+    });
+
+    app()->instance(BuildRunner::class, $runner);
+
+    return $runner;
 }

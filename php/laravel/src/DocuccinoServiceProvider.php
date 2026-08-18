@@ -24,6 +24,7 @@ use Docuccino\Laravel\Commands\DiffCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\MemoryLimitOption;
 use Docuccino\Laravel\Commands\ValidateCommand;
+use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\ConsoleBuild;
 use Docuccino\Laravel\Engine\EnginePackage;
@@ -53,6 +54,11 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
 use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Runtime\DocumentCache;
+use Docuccino\Laravel\Watch\ArtisanBuildRunner;
+use Docuccino\Laravel\Watch\BuildRunner;
+use Docuccino\Laravel\Watch\BuildToken;
+use Docuccino\Laravel\Watch\WatchSet;
+use Docuccino\Laravel\Watch\WatchSignal;
 use Docuccino\Laravel\Webhooks\WebhookCollector;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Config\Repository;
@@ -94,6 +100,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 DiffCommand::class,
                 CacheCommand::class,
                 ClearCommand::class,
+                WatchCommand::class,
             ]);
     }
 
@@ -200,6 +207,35 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->when(DocumentBuilder::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
+
+        // `docuccino:watch`. The watch set reads the same fragment store a build writes, and the
+        // engine bag is in because `engine.neon` is a file a build reads and nothing else watches.
+        $this->app->bind(WatchSet::class, function (Application $app): WatchSet {
+            /** @var array<string, mixed> $engine */
+            $engine = (array) config('docuccino.engine', []);
+
+            return new WatchSet(
+                $app->make(DocumentBuilder::class),
+                $app->make(FragmentStore::class),
+                $app->basePath(),
+                $engine,
+            );
+        });
+
+        $this->app->when(BuildToken::class)
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
+
+        // Under storage/, so it is already gitignored and already absent from a deployed release —
+        // the reload endpoint exists only where a watch session put one here.
+        $this->app->when(WatchSignal::class)
+            ->needs('$path')
+            ->give(fn (): string => $this->app->storagePath('docuccino/watch'));
+
+        $this->app->bind(
+            BuildRunner::class,
+            fn (Application $app): BuildRunner => new ArtisanBuildRunner($app->basePath('artisan')),
+        );
 
         $this->app->when(ContentCompiler::class)
             ->needs('$basePath')
@@ -421,10 +457,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
     /**
      * Registers the runtime viewer routes for each document with a `viewer.route`: the HTML page, its
-     * `.json` spec, and the active driver's assets. Access control lives in {@see DocsController} (a
-     * `viewer.gate` ability, else local env only), which is why the asset route is one pattern rather
-     * than one per driver — the driver is chosen late, from a registry that is not readable at boot,
-     * and the names it serves are its own allow-list.
+     * `.json` spec, the active driver's assets, and the reload channel `docuccino:watch` refreshes an
+     * open page through. Access control lives in {@see DocsController} (a `viewer.gate` ability, else
+     * local env only; reload additionally 404s with no watch session running), which is why the asset
+     * route is one pattern rather than one per driver — the driver is chosen late, from a registry
+     * that is not readable at boot, and the names it serves are its own allow-list.
      */
     public function packageBooted(): void
     {
@@ -460,6 +497,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 ->middleware($middleware)
                 ->where('asset', '[A-Za-z0-9_-]+')
                 ->defaults('document', (string) $key);
+            Route::get($base.'/reload', [DocsController::class, 'reload'])->middleware($middleware)->defaults('document', (string) $key);
         }
     }
 

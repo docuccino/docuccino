@@ -22,6 +22,12 @@ With no arguments this builds every configured document and writes each to its o
 The published default writes one document to `docs/openapi.json` as OpenAPI 3.2, creating the
 directory if it doesn't exist.
 
+<Aside type="tip" title="Iterating? Don't re-run it by hand">
+[`docuccino:watch`](/laravel/reference/commands/#docuccinowatch) runs the same export whenever a file
+your documentation depends on changes, and refreshes an open [viewer](/laravel/guides/viewer/) when
+the document actually changes.
+</Aside>
+
 ## What it read
 
 Docuccino walks each route that matches your document's filters and assembles an operation from your
