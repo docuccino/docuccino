@@ -265,6 +265,9 @@ examples.
     //     'naming' => 'none',      // none | x-enumNames | x-enum-varnames
     //     'components' => true,    // true (hoist each enum to a $ref'd component) | false (inline everywhere)
     // ],
+    // 'errors' => [
+    //     'components' => true,    // true (hoist a repeated error body to shared components) | false (inline)
+    // ],
 ],
 ```
 
@@ -312,7 +315,7 @@ build emits one `integration.disabled` info diagnostic per document, so the swit
 There are **eleven** toggleable bags, each keyed by its config name — set
 `integrations.<key>.enabled` to turn one off (or, for `permission`, on):
 
-| Bag key | Package / source | `enabled` default |
+| Key | Package / source | `enabled` default |
 | --- | --- | --- |
 | `api_resources` | Laravel API resources (built in) | `true` |
 | `eloquent` | Eloquent models (built in) | `true` |
@@ -365,7 +368,7 @@ To emit several artifacts from **one** build, list targets instead:
 Analysis is the expensive half of a build, so three targets cost one analysis and three emits — not
 three runs of everything.
 
-| Key | Effect |
+| Field | Effect |
 | --- | --- |
 | `format` | One of [the emit formats](/laravel/reference/commands/#docuccinoexport). Unknown values are an error, never a fallback. |
 | `path` | Where this artifact lands. Relative paths resolve against `base_path()`, and missing directories are created. |

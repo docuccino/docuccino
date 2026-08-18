@@ -62,11 +62,20 @@ that stops reporting blocks every pull request. Do not add individual jobs to th
 Your branch must be up to date with `main` before merging, so that CI's verdict is about the tree
 that actually lands. Rebase if `main` has moved.
 
-Two things CI cannot check for you, so check them yourself before opening a PR:
+One thing CI cannot check for you, so check it yourself before opening a PR: a golden
+regeneration is an isolated commit — never bundled with the change that caused it.
 
-- The docs site's configuration reference stays in sync with
-  `php/laravel/config/docuccino.php` when you add or change an option.
-- A golden regeneration is an isolated commit — never bundled with the change that caused it.
+The docs site's configuration reference used to sit beside it on that list. It is now a test:
+`tests/tools/ConfigReferenceSyncTest.php` reads every key `php/laravel/config/docuccino.php`
+declares — commented-out options included — and every key
+`website/src/content/docs/laravel/reference/configuration.md` documents, and fails naming any that
+appear on one side only. Add an option and the suite tells you to document it; document one that
+does not exist and it tells you that too.
+
+It reads the page as it already reads: the `php` example in each section, and the rows of every
+table whose first column is headed `Key`. Which part of the config a section covers is stated in
+`tools/config-reference-sync.php`, in `CONFIG_REFERENCE_SECTIONS` — so a new section of the page
+needs a line there, and the test says so by name if you forget.
 
 ### Release tags are immutable
 
