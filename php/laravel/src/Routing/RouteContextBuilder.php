@@ -117,6 +117,13 @@ final class RouteContextBuilder
      * The FormRequest type-hinted on the action, resolved once here so rule recovery and the
      * implicit-403 authorize probe both read it off the context rather than reflecting again.
      *
+     * `Illuminate\Foundation` is the one Illuminate namespace the adapter names without requiring:
+     * it ships only in `laravel/framework`, which has no split package to depend on. That is safe
+     * rather than lucky — nothing here LOADS the class. `::class` is a compile-time string and
+     * `is_subclass_of()` walks the ancestry of `$name` and compares names, so the needle is never
+     * autoloaded, and it can only ever match in an application that declares a FormRequest subclass
+     * — which is an application that has the framework.
+     *
      * @return class-string<LaravelFormRequest>|null
      */
     private function formRequestClass(ReflectedAction $action): ?string
