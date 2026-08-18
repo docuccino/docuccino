@@ -98,7 +98,7 @@ signed URL check rather than `$user?->isAdmin()`.
 | `source` | Behavior |
 | --- | --- |
 | `generate` | Rebuilds the document on every request. Fine for local or gated use. |
-| `artifact` | Re-emits a committed export target — no analysis at request time. Serves an empty document if the file isn't there. |
+| `artifact` | Re-emits a committed export target — no analysis at request time. Serves an empty document if the file isn't there, and logs a warning naming it. |
 | `cache` | Serves the [`docuccino:cache`](/laravel/reference/commands/#docuccinocache)-warmed payload; a cold cache falls back to `generate` and logs a warning. |
 
 For anything public or high-traffic, prefer `artifact` or `cache` — see

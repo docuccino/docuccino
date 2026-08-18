@@ -80,8 +80,9 @@ The [viewer guide](/laravel/guides/viewer/#source-modes) has the rest of the vie
 
 <Aside type="caution" title="`artifact` serves what's on disk">
 `artifact` reads a committed export target at request time. If the file isn't in your deployed release, the
-viewer serves an **empty document** rather than falling back to a build — so commit the artifact, or
-add the export to your build step. A UIR artifact is fine too: it's re-emitted as OpenAPI on the way
+viewer serves an **empty document** rather than falling back to a build — no request ever re-analyzes
+under this source — and logs a warning naming the missing file, so commit the artifact, or add the
+export to your build step. A UIR artifact is fine too: it's re-emitted as OpenAPI on the way
 out, so provenance never reaches the browser.
 </Aside>
 
