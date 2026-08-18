@@ -435,10 +435,36 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
         'allow' => [],   // e.g. ['reset_token', '#/components/schemas/Invoice/properties/status']
         // 'patterns' => ['sortcode' => 'a bank sort code', 'iban' => 'an IBAN'],
     ],
+    'descriptions' => [
+        'enabled' => false,
+        'allow' => [],   // e.g. ['GET /api/ping']
+    ],
+    'operation_ids' => [
+        'enabled' => true,
+        'allow' => [],   // e.g. ['GET /api/ping', 'list users']
+    ],
+    'tags' => [
+        'enabled' => false,
+        'allow' => [],   // e.g. ['Internal']
+    ],
 ],
 ```
 
-The data-leakage pass is diagnostics-only — it never mutates the document — and checks two things.
+Every lint is diagnostics-only — none of them can change a byte of the emitted document — and every
+default below is set by where the rule was measured to fire, not by whether it would be correct. A rule
+that fires where you can do nothing teaches you to ignore the channel, and takes the useful warnings
+with it.
+
+| Rule | Default | Warns about |
+| --- | --- | --- |
+| `leakage` | on | A schema property, example or default that looks like a credential. |
+| `descriptions` | **off** | An operation publishing neither a summary nor a description. |
+| `operation_ids` | on | An `operationId` a generated client can't name a method after. |
+| `tags` | **off** | A tag your operations carry that [`tags.definitions`](#tags) never declares. |
+
+### Data leakage
+
+The data-leakage pass checks two things.
 
 **Property names.** A name that looks sensitive (`password`, `token`, `secret`, `api_key`, …) warns with
 its JSON pointer. Names normalize to lowercase alphanumerics, so `api_key`, `apiKey` and `API-KEY` are
@@ -468,6 +494,67 @@ legitimate server URL).
 | `enabled` | `true` | Turn the pass on/off. |
 | `allow` | `[]` | Safelist by property name or JSON pointer. Silences both kinds of finding; for a value, use the pointer. |
 | `patterns` | built-in table | Extra token → label heuristics for **names**, merged over the built-in table (key = normalized token, matched when a name *contains* it). |
+
+### Descriptions
+
+`lint.missing-description` warns on an operation that publishes neither a `summary` nor a
+`description`, so the document never says what the endpoint does. It's the one completeness hole a
+reader can't work around — nothing else in the document carries that sentence. Write a docblock on the
+action (its first line becomes the summary, the rest the description) or put one in an
+[overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice); the warning carries the file and line the action was
+recovered from, so you can go straight there.
+
+Off by default, and deliberately: on an API that documents nothing this fires once per operation, which
+is a backlog rather than a diagnostic. Turn it on when you're closing the gap and want the list.
+
+Deliberately operations only. Parameters and schema properties were measured on a real route set and
+fire on 40% and 98% of their populations respectively, almost all of it where there's nothing to write —
+a route-model-bound `{invoice}`, a column whose name is the whole story.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `false` | Turn the pass on/off. |
+| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`) or by `operationId`. |
+
+### Operation ids
+
+`lint.operation-id-style` warns on an `operationId` a generated client can't turn into a method name:
+empty, starting with a digit, or carrying anything outside letters, digits and the separators
+`.` `-` `_` `@`. Your consumers meet the id as the function they call, so a broken one either fails
+codegen or arrives renamed to something nobody wrote.
+
+The alphabet is wider than an identifier's on purpose: `.`, `-` and `@` are what the `route-name` and
+`controller-method` [id strategies](#representation) mint, and every generator in this space folds them.
+So nothing Docuccino produces can trip this rule — a finding is always on a string somebody typed, in
+an [`#[OperationId]`](/laravel/reference/attributes/#operationid) or a route name, and can be typed
+differently. That's why it's on by default.
+
+Duplicate ids are a separate check with a better vantage point: `route.duplicate-operation-id` reports
+them where the pair is met, naming both routes.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `true` | Turn the pass on/off. |
+| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`) or by the id itself. |
+
+### Undocumented tags
+
+`lint.undocumented-tag` warns on a tag your operations carry that [`tags.definitions`](#tags)
+never declares, so it reaches the reader as a bare heading among tags that have a summary, a
+description and a place in the hierarchy.
+
+It says nothing at all until the document declares at least one tag. Undeclared tags are the normal,
+correct state for an API that never curated them, and "you forgot this one" only means something once
+the others have descriptions.
+
+Off besides that guard, for the case the guard can't tell apart: declaring a few nav parents by hand
+and letting the rest derive from controller names is a deliberate shape, and firing once per derived tag
+there would be noise. Turn it on when your `definitions` are meant to be the complete set.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `false` | Turn the pass on/off. |
+| `allow` | `[]` | Safelist by tag name. |
 
 ## Engine
 

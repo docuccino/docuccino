@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
@@ -1022,4 +1027,44 @@ function registerRenderCallback(Closure $callback, string $exceptionType): strin
         $function->getParameters()[0]->getName(),
         $exceptionType,
     ))->symbol();
+}
+
+/**
+ * Run one document lint over a raw document array and hand back what it reported. The completeness
+ * lints share it rather than each re-rolling the draft → context wiring.
+ *
+ * @param  array<string, mixed>  $document
+ * @return list<Diagnostic>
+ */
+function lintDiagnostics(DocumentTransformer $rule, array $document): array
+{
+    $collector = new DiagnosticCollector;
+    $context = new DocumentContext(new DocumentConfig(key: 'd', info: ['title' => 'T', 'version' => '1']), 'doc:d', $collector);
+
+    $rule->transform(new UirDocumentDraft($document), $context);
+
+    return $collector->all();
+}
+
+/**
+ * A minimal assembled document: operations keyed `METHOD /path`, plus the top-level tag declarations.
+ *
+ * @param  array<string, array<string, mixed>>  $operations
+ * @param  list<array<string, mixed>>  $tags
+ * @return array<string, mixed>
+ */
+function lintDocument(array $operations, array $tags = []): array
+{
+    $paths = [];
+    foreach ($operations as $signature => $operation) {
+        [$method, $path] = explode(' ', $signature, 2);
+        $paths[$path][strtolower($method)] = $operation;
+    }
+
+    $document = ['info' => ['title' => 'T', 'version' => '1'], 'paths' => $paths];
+    if ($tags !== []) {
+        $document['tags'] = $tags;
+    }
+
+    return $document;
 }
