@@ -72,7 +72,12 @@ Spike A perf reference: ~0.4s wall / ~92 MB for container + one controller; dete
 - Analysis runs in the calling process, one container per build. Order never affects bytes:
   every result is canonically serialized and the pipeline consumes routes in canonical order.
 - Per-action try/catch → `UnknownT(reason)` + warning diagnostic. Engine boot failure → fatal
-  diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build).
+  diagnostic + `NullTypeEngine` fallback (docblock/attribute-only docs still build). The failure rides
+  on the returned engine (`Core\Inference\ReportsBootFailure`), because a host may defer the build to
+  the first question a route asks and nothing else survives that far. It arrives after the fragment
+  cache has keyed the build on the engine that was going to answer, so a boot-failed build STOPS
+  persisting fragments rather than filing degraded ones under the real analyser's key
+  (`DocumentGenerator::degraded()` owns the rule).
 - **Two scopes, not one.** The bounds above (depth 4, file budget 40) are shared by every
   descending analysis, but the *scope* is not. Throw classification and the Query-Builder trace
   descend only into `engine.project_paths`; the response-shape refiner and its enum folder run on

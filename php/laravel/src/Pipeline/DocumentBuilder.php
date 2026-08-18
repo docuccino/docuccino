@@ -8,6 +8,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Inference\ReportsBootFailure;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Overlay\InvalidOverlayException;
 use Docuccino\Core\Overlay\OverlayDocument;
@@ -72,15 +73,20 @@ final class DocumentBuilder
 
         $result = $this->generator->generate($config, $engine, $this->configExtensions(), $overlays);
 
-        if ($preDiagnostics === []) {
+        // The half of the inference report no one can read before the build: the engine boots on the
+        // first question a route asks it, and a build that asks none never finds out.
+        $diagnostics = [...$preDiagnostics, ...$this->bootFailureDiagnostics($engine)];
+
+        if ($diagnostics === []) {
             return $result;
         }
 
-        return new GenerationResult($result->document, $this->sort([...$preDiagnostics, ...$result->diagnostics]));
+        return new GenerationResult($result->document, $this->sort([...$diagnostics, ...$result->diagnostics]));
     }
 
     /**
-     * The build's one report on the state of inference, emitted once per document.
+     * The build's report on the state of inference it can read before generating, emitted once per
+     * document ({@see bootFailureDiagnostics()} is the rest of it).
      *
      * A missing engine package is a WARNING, not info: the configured mode asked for inference and the
      * document quietly lost a whole tier of facts (recovered types, response shapes, thrown errors).
@@ -122,6 +128,35 @@ final class DocumentBuilder
         }
 
         return [];
+    }
+
+    /**
+     * The installed engine was asked to analyse and could not start. An ERROR, where an absent engine
+     * is only a warning: absence is a shape an install can legitimately have, a boot failure is a
+     * malfunction nobody chose, and `--fail-on=error` is how a pipeline refuses to ship a document
+     * that quietly lost a whole tier of facts. The analyser's own words arrive with machine paths in
+     * them, so they are relativised before ours are composed around them.
+     *
+     * @return list<Diagnostic>
+     */
+    private function bootFailureDiagnostics(TypeEngine $engine): array
+    {
+        $failure = $engine instanceof ReportsBootFailure ? $engine->bootFailure() : null;
+        if ($failure === null) {
+            return [];
+        }
+
+        $messages = new MessagePaths(new RootRelativeSourcePathResolver($this->basePath));
+
+        return [new Diagnostic(
+            severity: Severity::Error,
+            code: 'engine.boot-failed',
+            message: sprintf(
+                'The inference engine could not start, so documentation came from docblocks and attributes only: %s',
+                $messages->relative($failure),
+            ),
+            help: 'Generate from the project root in an environment the application boots in — the analyser boots it the way an artisan command does — and check the engine package and its analyser are installed at a supported version. Set DOCUCCINO_ENGINE=null to document without inference and silence this.',
+        )];
     }
 
     /**
