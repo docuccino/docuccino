@@ -7,10 +7,12 @@ namespace Docuccino\Laravel\Commands;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\Explain\ExplainedNode;
+use Docuccino\Core\Provenance\Explain\FieldTrail;
 use Docuccino\Core\Provenance\Explain\OperationExplainer;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Routing\OperationLookup;
 use Docuccino\Laravel\Routing\OperationMatch;
+use Docuccino\Laravel\Support\ConsoleTable;
 use Docuccino\Laravel\Support\ProvenanceReport;
 use Docuccino\Laravel\Support\TerminalText;
 use Illuminate\Console\Command;
@@ -20,7 +22,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * Answers "why is this endpoint documented this way?" for one operation, by reading the provenance
  * trail the build already wrote: what each layer contributed field by field, what it overrode, where
- * it came from, and how sure it was.
+ * it came from, how sure it was — and what to change to override it.
  *
  * It builds the document rather than reading an artifact, so the trail it reads is always the full
  * one — `--provenance` levels only decide how much of it survives into an exported file, and an
@@ -29,7 +31,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * Three outcomes, three exit codes: explained (0), nothing matched (1), several matched (2). Which
  * one a query gets is the {@see OperationLookup}'s call, and it never picks a match on the reader's
- * behalf.
+ * behalf. `--field` narrows the same way and answers on the same three codes.
  */
 final class ExplainCommand extends Command
 {
@@ -40,6 +42,7 @@ final class ExplainCommand extends Command
         {route : The operation — "POST /api/invoices", a URI, a route name, an operation id, or part of any of them}
         {document? : The configured document key (defaults to every document)}
         {--method= : Narrow a URI several verbs answer (get, post, put, patch, delete, …)}
+        {--field= : Explain one field, printing every value in full (e.g. requestBody, responses.201.description)}
         {--json : Print the trail as JSON instead of the report}
         {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}';
 
@@ -85,8 +88,13 @@ final class ExplainCommand extends Command
         }
 
         $match = $matches[0];
+        $nodes = $this->explainer->explain($documents[$match->document], $match->path, $match->method);
 
-        return $this->explain($match, $this->explainer->explain($documents[$match->document], $match->path, $match->method));
+        $field = $this->stringOption('field');
+
+        return $field === null
+            ? $this->explain($match, $nodes)
+            : $this->explainField($match, $nodes, $field);
     }
 
     /**
@@ -112,9 +120,13 @@ final class ExplainCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->newLine();
-        foreach ($this->report->legend() as $line) {
-            $this->line($line);
+        // The ladder is the answer to "why did mine lose", so it is printed where something lost and
+        // nowhere else — on an uncontested operation it explains a competition that never happened.
+        if ($this->report->contested($nodes)) {
+            $this->newLine();
+            foreach ($this->report->legend() as $line) {
+                $this->line($line);
+            }
         }
 
         foreach ($this->report->lines($nodes) as $line) {
@@ -122,9 +134,96 @@ final class ExplainCommand extends Command
         }
 
         $this->newLine();
-        $this->line($this->report->summary($nodes));
+        foreach ($this->report->summary($nodes) as $line) {
+            $this->line($line);
+        }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * One field, every value in full. Narrowed exactly as the route argument is — an exact path, then
+     * an exact name, then a fragment — and answering on the same three exit codes, so a query that
+     * names several fields lists them rather than picking one.
+     *
+     * @param  list<ExplainedNode>  $nodes
+     */
+    private function explainField(OperationMatch $match, array $nodes, string $query): int
+    {
+        $found = self::matchFields($nodes, $query);
+
+        if ($found === [] || count($found) > 1) {
+            return $this->reportFields($match, $nodes, $query, $found);
+        }
+
+        [$node, $trail] = $found[0];
+
+        if ($this->option('json') === true) {
+            $this->json([
+                'status' => 'explained',
+                'operation' => $match->toArray(),
+                'nodes' => [(new ExplainedNode($node->label, $node->pointer, [$trail], $node->ref))->toArray()],
+            ]);
+
+            return self::SUCCESS;
+        }
+
+        $this->heading($match->signature(), $this->meta($match));
+
+        foreach ($this->report->field($node, $trail) as $line) {
+            $this->line($line);
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Nothing matched, or too much did. Either way the answer is the field paths this operation
+     * actually has, in the same layout the ambiguous-route list uses.
+     *
+     * @param  list<ExplainedNode>  $nodes
+     * @param  list<array{0: ExplainedNode, 1: FieldTrail}>  $found
+     */
+    private function reportFields(OperationMatch $match, array $nodes, string $query, array $found): int
+    {
+        $listed = $found === [] ? self::allFields($nodes) : $found;
+        $status = $found === [] ? 'no-match' : 'ambiguous';
+        $exit = $found === [] ? self::FAILURE : self::INVALID;
+
+        if ($this->option('json') === true) {
+            $this->json([
+                'status' => $status,
+                'query' => $query,
+                'operation' => $match->toArray(),
+                'fields' => array_map(static fn (array $pair): string => self::path($pair[0], $pair[1]), $listed),
+            ]);
+
+            return $exit;
+        }
+
+        $this->heading(
+            $found === []
+                ? sprintf('No field matches "%s" on %s.', $query, $match->signature())
+                : sprintf('%d fields match "%s".', count($found), $query),
+            null,
+        );
+        $this->newLine();
+
+        foreach (ConsoleTable::render(['Field', 'Rung'], array_map(static fn (array $pair): array => [
+            self::path($pair[0], $pair[1]),
+            $pair[1]->winner()?->layer->label() ?? '—',
+        ], $listed)) as $line) {
+            $this->line($line);
+        }
+
+        $this->newLine();
+        $this->line(sprintf(
+            '<fg=gray>php artisan docuccino:explain "%s" --field=%s</>',
+            TerminalText::of($match->signature()),
+            TerminalText::of(self::path($listed[0][0], $listed[0][1])),
+        ));
+
+        return $exit;
     }
 
     /**
@@ -183,19 +282,21 @@ final class ExplainCommand extends Command
         $this->heading(sprintf('%d operations match "%s".', count($matches), $query), null);
         $this->newLine();
 
-        $this->table(
+        foreach (ConsoleTable::render(
             ['Method', 'URI', 'Document', 'Route', 'Operation id'],
             array_map(static fn (OperationMatch $match): array => [
                 strtoupper($match->method),
-                TerminalText::of($match->path),
-                TerminalText::of($match->document),
-                TerminalText::of($match->name ?? '—'),
-                TerminalText::of($match->operationId ?? '—'),
+                $match->path,
+                $match->document,
+                $match->name ?? '—',
+                $match->operationId ?? '—',
             ], $matches),
-        );
+        ) as $line) {
+            $this->line($line);
+        }
 
-        $this->line('<fg=gray>Name one of them exactly:</>');
-        $this->line(sprintf('  <fg=gray>php artisan docuccino:explain "%s"</>', TerminalText::of($matches[0]->signature())));
+        $this->newLine();
+        $this->line(sprintf('<fg=gray>php artisan docuccino:explain "%s"</>', TerminalText::of($matches[0]->signature())));
 
         return self::INVALID;
     }
@@ -210,6 +311,62 @@ final class ExplainCommand extends Command
         $this->line('<fg=gray>survives into an exported artifact, and this command builds its own document. So</>');
         $this->line('<fg=gray>nothing wrote a field here through the precedence guard: an action that could not</>');
         $this->line('<fg=gray>be reflected is documented as a skeleton, and a skeleton has nothing to explain.</>');
+    }
+
+    /**
+     * The fields a `--field` query names: an exact `label.field` path, then an exact field name, then
+     * a fragment of either. Same ladder as the route argument, for the same reason.
+     *
+     * @param  list<ExplainedNode>  $nodes
+     * @return list<array{0: ExplainedNode, 1: FieldTrail}>
+     */
+    private static function matchFields(array $nodes, string $query): array
+    {
+        $all = self::allFields($nodes);
+        $needle = mb_strtolower(trim($query));
+
+        if ($needle === '') {
+            return [];
+        }
+
+        $tiers = [
+            static fn (ExplainedNode $node, FieldTrail $trail): bool => mb_strtolower(self::path($node, $trail)) === $needle,
+            static fn (ExplainedNode $node, FieldTrail $trail): bool => mb_strtolower($trail->field) === $needle,
+            static fn (ExplainedNode $node, FieldTrail $trail): bool => str_contains(mb_strtolower(self::path($node, $trail)), $needle),
+        ];
+
+        foreach ($tiers as $matches) {
+            $found = array_values(array_filter($all, static fn (array $pair): bool => $matches($pair[0], $pair[1])));
+
+            if ($found !== []) {
+                return $found;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  list<ExplainedNode>  $nodes
+     * @return list<array{0: ExplainedNode, 1: FieldTrail}>
+     */
+    private static function allFields(array $nodes): array
+    {
+        $all = [];
+
+        foreach ($nodes as $node) {
+            foreach ($node->fields as $trail) {
+                $all[] = [$node, $trail];
+            }
+        }
+
+        return $all;
+    }
+
+    /** How a reader names one field of one node: `responses.201.description`. */
+    private static function path(ExplainedNode $node, FieldTrail $trail): string
+    {
+        return $node->label === 'operation' ? $trail->field : $node->label.'.'.$trail->field;
     }
 
     /**
@@ -294,15 +451,23 @@ final class ExplainCommand extends Command
         return is_string($route) ? trim($route) : '';
     }
 
+    /** An option the user actually set, as a non-empty string. */
+    private function stringOption(string $name): ?string
+    {
+        $value = $this->option($name);
+
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
     /** The `--method` filter, or false having printed why it is not one. */
     private function methodOption(): string|false|null
     {
-        $method = $this->option('method');
-        if (! is_string($method) || trim($method) === '') {
+        $method = $this->stringOption('method');
+        if ($method === null) {
             return null;
         }
 
-        $method = strtolower(trim($method));
+        $method = strtolower($method);
         if (in_array($method, PathItem::METHODS, true)) {
             return $method;
         }

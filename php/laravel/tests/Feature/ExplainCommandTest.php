@@ -28,7 +28,9 @@ it('explains the operation a method and URI name', function (): void {
         ->and($output)->toContain('fallback › inference › integration › docblock › attribute › overlay › config')
         // The winner, its rung and where to open.
         ->and($output)->toContain('✓ attribute   "The created widget."')
-        ->and($output)->toContain('workbench/app/Http/Controllers/ValidationController.php:21');
+        ->and($output)->toContain('workbench/app/Http/Controllers/ValidationController.php:21')
+        // …and what to do about it, which is the half a reader actually came for.
+        ->and($output)->toContain("→ set it with #[Response(status: 422, description: '…')]");
 });
 
 it('shows what a higher rung shadowed, which only the full trail records', function (): void {
@@ -64,6 +66,94 @@ it('narrows a URI several verbs answer', function (): void {
 
     expect($exit)->toBe(0)
         ->and(Artisan::output())->toContain("DELETE /api/model-widgets/{id}\n─");
+});
+
+/**
+ * The ladder is chrome until something loses, so it is printed where it explains a competition that
+ * happened and nowhere else.
+ */
+it('prints the ladder only where a field was contested', function (string $route, bool $shown): void {
+    Artisan::call('docuccino:explain', ['route' => $route, 'document' => 'default']);
+
+    expect(str_contains(Artisan::output(), 'fallback › inference › integration'))->toBe($shown);
+})->with([
+    'a shadowed value to explain' => ['POST /api/tickets', true],
+    'nothing shadowed' => ['GET /api/forms', false],
+]);
+
+it('says how to override each field, and never invents a lever it cannot justify', function (): void {
+    Artisan::call('docuccino:explain', ['route' => 'GET /api/widget-query', 'document' => 'default']);
+    $output = Artisan::output();
+
+    expect($output)
+        // A parameter an integration wrote: the attribute that owns it, named with its own name.
+        ->toContain("→ set it with #[QueryParameter(name: 'filter[status]')]")
+        // A response description at the fallback rung.
+        ->toContain("→ set it with #[Response(status: 400, description: '…')]")
+        // A summary no attribute writes — the generic truth rather than a lever that would do nothing.
+        ->toContain('→ no attribute writes this — an overlay outranks docblock');
+});
+
+it('tells the reader the value was shortened and how to see it whole', function (): void {
+    Artisan::call('docuccino:explain', ['route' => 'POST /api/tickets', 'document' => 'default']);
+
+    expect(Artisan::output())->toContain('`--field=<name>` prints one in full');
+});
+
+it('prints one field in full, past the budget the report elides at', function (): void {
+    $exit = Artisan::call('docuccino:explain', ['route' => 'POST /api/tickets', '--field' => 'requestBody', 'document' => 'default']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        // The whole body, indented, rather than the 56 characters the scannable report has room for.
+        ->and($output)->toContain('"$ref": "#/components/schemas/StoreWidgetRequest"')
+        ->and($output)->not->toContain('…')
+        ->and($output)->toContain("→ set it with #[BodyParameter(name: 'total')]");
+});
+
+it('narrows a field the same three ways the route argument narrows', function (string $field, int $exit, string $expected): void {
+    expect(Artisan::call('docuccino:explain', ['route' => 'POST /api/tickets', '--field' => $field, 'document' => 'default']))->toBe($exit);
+
+    expect(Artisan::output())->toContain($expected);
+})->with([
+    'an exact path' => ['responses.201.description', 0, '✓ attribute'],
+    'a name only one node carries' => ['requestBody', 0, '✓ integration'],
+    'a name several nodes carry' => ['description', 2, '2 fields match "description".'],
+    'a fragment' => ['responses.422', 2, '2 fields match "responses.422".'],
+    'nothing at all' => ['nope', 1, 'No field matches "nope" on POST /api/tickets.'],
+]);
+
+it('lists the fields an operation has when the query names none of them', function (): void {
+    Artisan::call('docuccino:explain', ['route' => 'POST /api/tickets', '--field' => 'nope', 'document' => 'default']);
+    $output = Artisan::output();
+
+    expect($output)->toContain('responses.201.description')
+        ->and($output)->toContain('requestBody')
+        // Named with the rung that won it, so the list is worth reading rather than only choosing from.
+        ->and($output)->toContain('integration')
+        ->and($output)->toContain('php artisan docuccino:explain "POST /api/tickets" --field=requestBody');
+});
+
+it('publishes a narrowed field as JSON on the same three codes', function (string $field, string $status, int $exit): void {
+    expect(Artisan::call('docuccino:explain', ['route' => 'POST /api/tickets', '--field' => $field, 'document' => 'default', '--json' => true]))->toBe($exit);
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($payload['status'])->toBe($status);
+})->with([
+    'one field' => ['requestBody', 'explained', 0],
+    'several fields' => ['description', 'ambiguous', 2],
+    'no field' => ['nope', 'no-match', 1],
+]);
+
+it('shows the ambiguous list without box art, like the rest of the tool', function (): void {
+    Artisan::call('docuccino:explain', ['route' => 'article', 'document' => 'default']);
+    $output = Artisan::output();
+
+    expect($output)->toContain('Method  URI')
+        ->and($output)->toContain('──────  ')
+        ->and($output)->not->toContain('+--------+');
 });
 
 it('lists every operation an ambiguous query names, and picks none of them', function (): void {

@@ -336,14 +336,16 @@ php artisan docuccino:explain "POST /api/invoices"
 ```
 
 [`docuccino:explain`](/laravel/reference/commands/#docuccinoexplain) prints the stack behind every
-field of that one operation: which layer won it, what it displaced, and the `file:line` to open. Name
-the endpoint however you already think of it — the method and URI the viewer shows, a route name, an
-operation id, or a fragment of any of them, which lists everything that matches.
+field of that one operation: which layer won it, what it displaced, the `file:line` to open, and — on
+a `→` line under each field — what to change to override it. Name the endpoint however you already
+think of it: the method and URI the viewer shows, a route name, an operation id, or a fragment of any
+of them, which lists everything that matches. Add `--field=<name>` to see one field's values in full.
 
 <Aside type="tip" title="Read the ladder, not just the answer">
-The report prints the precedence ladder at the top for a reason: most surprises here are a layer you
-forgot outranks the one you edited. If your docblock change did nothing, look for an `attribute`,
-`overlay` or `config` line above it in the stack.
+When something *was* shadowed the report prints the precedence ladder above the answer, because most
+surprises here are a layer you forgot outranks the one you edited. If your docblock change did
+nothing, look for an `attribute`, `overlay` or `config` line above it in the stack — and take the `→`
+line under the field, which names the lever that outranks whatever is winning now.
 </Aside>
 
 ---

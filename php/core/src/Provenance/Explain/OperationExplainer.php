@@ -17,7 +17,9 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  *
  * The trail records only winners — a losing value survives solely inside the winner's `overrode`
  * list — so a stack is only ever as complete as the emit level the document was built at. Nothing
- * here re-derives anything: it reads what the build already wrote down.
+ * here re-derives anything: it reads what the build already wrote down, which is also why a losing
+ * contribution never carries a source: `overrode` keeps a field, a value and a producer, and has
+ * nowhere to record where that value came from.
  *
  * `$ref`s into `components` are followed, so a body the operation only points at still gets read.
  * Each component is read at most once however many times the operation reaches it.
@@ -150,13 +152,18 @@ final class OperationExplainer
 
         foreach (Provenance::fromArray(array_values($provenance))->records as $record) {
             foreach ($record->fields as $field) {
+                $value = self::valueOf($node, $facts, $target, $field);
+
                 $stacks[$field][] = new FieldContribution(
                     producer: $record->producer,
                     layer: self::winningLayer($record),
                     won: true,
-                    value: self::valueOf($node, $facts, $target, $field),
+                    value: $value,
                     source: $record->source,
                     confidence: $record->confidence,
+                    // A winning field that is nowhere to be found resolved to field-absent: the layer
+                    // wrote a Remove, which is a decision about the field rather than a missing value.
+                    removed: $value === null,
                 );
             }
 
@@ -196,6 +203,9 @@ final class OperationExplainer
             layer: Contribution::forProducer($producer)->layer,
             won: false,
             value: $entry->value,
+            // The trail writes no `value` for a displaced Remove, so a loser with none had itself
+            // resolved the field to absent.
+            removed: $entry->value === null,
         );
     }
 

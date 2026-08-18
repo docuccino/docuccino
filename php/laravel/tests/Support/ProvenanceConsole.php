@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Tests\Support;
 
 use Docuccino\Core\Provenance\Explain\ExplainedNode;
+use Docuccino\Core\Provenance\Explain\FieldTrail;
 use Docuccino\Laravel\Support\ProvenanceReport;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
@@ -34,7 +35,13 @@ final class ProvenanceConsole
      */
     public static function summary(array $nodes): string
     {
-        return self::format([(new ProvenanceReport)->summary($nodes)], false);
+        return self::format((new ProvenanceReport)->summary($nodes), false);
+    }
+
+    /** One field with every value in full — the `--field` form. */
+    public static function field(ExplainedNode $node, FieldTrail $trail, bool $decorated = false): string
+    {
+        return self::format((new ProvenanceReport)->field($node, $trail), $decorated);
     }
 
     /**
