@@ -20,6 +20,10 @@ use Docuccino\Laravel\Engine\LazyTypeEngine;
  * `engine.memory_limit` is the one key deliberately left out: it is a process ceiling that cannot
  * change a documented byte, and `--memory-limit` would otherwise cost a full rebuild each way.
  *
+ * This names the engine that WILL answer, which a build discovers to be wrong only if that engine
+ * fails to boot — later than any key can be computed. {@see DocumentGenerator::degraded()} owns what
+ * happens then.
+ *
  * @internal
  */
 final readonly class BuildFingerprint

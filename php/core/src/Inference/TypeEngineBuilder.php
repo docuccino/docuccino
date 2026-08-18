@@ -9,7 +9,9 @@ namespace Docuccino\Core\Inference;
  * without importing it: the adapter probes for the implementation by class name and hands over plain
  * paths. That keeps the analysis toolchain an optional, dev-only dependency of the adapter.
  *
- * Implementations are total — a failed boot returns a {@see NullTypeEngine} rather than throwing.
+ * Implementations are total — a failed boot returns a {@see NullTypeEngine} rather than throwing, and
+ * names the failure through {@see ReportsBootFailure} so the host can report the degradation instead
+ * of publishing a quietly thinner document.
  */
 interface TypeEngineBuilder
 {

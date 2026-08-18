@@ -26,6 +26,7 @@ Then match the symptom:
 | Every operation has parameters but no `200` body | [Responses are missing](#responses-are-missing-everywhere) |
 | `engine.not-installed` | [The document is thin](#the-document-is-thin) |
 | A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
+| `engine.boot-failed` | [The analyzer won't start](#the-analyzer-wont-start) |
 | Composer refuses to install on Laravel 13 | [Dependency conflicts](#dependency-conflicts) |
 | An `#[ErrorComponent]` name nowhere in the document | [`#[ErrorComponent]` changed nothing](#errorcomponent-changed-nothing) |
 | `inference.action-failed` on one or two actions | [Reading diagnostics](#reading-diagnostics) |
@@ -227,6 +228,40 @@ For a permanent CI setup, put those in the environment file your pipeline uses.
 
 ---
 
+## The analyzer won't start
+
+**Symptom.** The export succeeds, and one error explains why the document is thin:
+
+```
+[error] engine.boot-failed
+The inference engine could not start, so documentation came from docblocks and
+attributes only: Failed to boot the PHPStan/Larastan container: …
+```
+
+**Cause.** The engine is installed, and it couldn't come up. The analyzer boots your application the
+way an artisan command does, from the project root, so the usual causes are the ones above — a
+service it can't reach, a missing `bootstrap/app.php` because the command ran from elsewhere — plus
+an analyzer version this release doesn't support. The build carries on rather than dying: your
+docblocks, attributes, config and overlays still produce a document.
+
+**Fix.** Read the tail of the message, which is the analyzer's own. Then run the export from the
+project root, in an environment your app boots in, and confirm the analyzer resolved:
+
+```bash
+composer show phpstan/phpstan larastan/larastan
+```
+
+Nothing that build produced is cached, so fixing the environment and re-running gives you the full
+document — no need to clear anything first.
+
+<Aside type="caution">
+This is an error, not a warning: an engine you installed and asked to analyze couldn't, and a
+document that quietly lost every inferred type is worth failing a pipeline over. Add
+`--fail-on=error` to your CI export to make that fail loudly.
+</Aside>
+
+---
+
 ## Dependency conflicts
 
 **Symptom.** Composer refuses to resolve, naming a transitive package rather than Docuccino:
@@ -280,6 +315,7 @@ codebase is normal and usually not worth chasing; the same code on every action 
 | Code | Meaning | What to do |
 |---|---|---|
 | `engine.not-installed` | No analyzer present; annotation-only output | [Install the engine](#the-document-is-thin) |
+| `engine.boot-failed` | The analyzer is installed and couldn't start; annotation-only output | [The analyzer won't start](#the-analyzer-wont-start) |
 | `engine.mode-unknown` | `engine.mode` isn't a mode Docuccino has; it ran in-process | Set `DOCUCCINO_ENGINE` to `in-process` or `null` — see [Engine](/laravel/reference/configuration/#engine) |
 | `inference.action-failed` | One action's analysis threw | One or two: annotate that action. All of them: [version mismatch](#responses-are-missing-everywhere) |
 | `inferred-handler.too-dynamic` | An exception handler's response couldn't be folded to a fixed shape | Describe the error response explicitly — see [Error responses](/laravel/documenting/errors/) |
