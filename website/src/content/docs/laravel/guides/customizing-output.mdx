@@ -132,7 +132,9 @@ unions, or any comparison other than `==` — raises an error diagnostic rather 
 ### Diagnostics
 
 Nothing about an overlay fails quietly. Every problem shows up in the build output, so
-`docuccino:export --fail-on=warning` catches a rotten overlay in CI:
+`docuccino:export --fail-on=warning` catches a rotten overlay in CI. The
+[diagnostics reference](/laravel/reference/diagnostics/#overlays) carries the same four alongside
+every other code Docuccino emits:
 
 | Code | Severity | Means |
 | --- | --- | --- |
