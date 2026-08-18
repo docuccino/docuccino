@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
+use Docuccino\Laravel\Config\AcceptedDiagnostics;
 use Docuccino\Laravel\Support\TerminalText;
 use Illuminate\Console\Command;
 
@@ -19,18 +20,31 @@ use Illuminate\Console\Command;
  * The CLI is the primary channel a diagnostic reaches its author on, so a diagnostic's `help` — the
  * "what to change" half — is printed here alongside the message rather than left to `toArray()`.
  *
+ * A diagnostic `diagnostics.accept` covers prints exactly as any other does, marked `accepted` and
+ * counted in a closing line: acceptance is about which reports fail a build, and a report that
+ * vanished would hide the day it started firing somewhere new.
+ *
  * @mixin Command
  */
 trait RendersDiagnostics
 {
+    /** @var array<string, true> Every code this run printed, which is what {@see FailsOnSeverity} measures a stale acceptance against. */
+    private array $printedCodes = [];
+
     /**
      * @param  list<Diagnostic>  $diagnostics
      */
     protected function renderDiagnostics(string $document, array $diagnostics): void
     {
+        foreach ($diagnostics as $diagnostic) {
+            $this->printedCodes[$diagnostic->code] = true;
+        }
+
         if ($diagnostics === []) {
             return;
         }
+
+        $accepted = AcceptedDiagnostics::read();
 
         $this->newLine();
         $this->line(sprintf('<comment>Diagnostics for %s:</comment>', TerminalText::of($document)));
@@ -44,14 +58,49 @@ trait RendersDiagnostics
             }
 
             $this->line(sprintf(
-                '    [%s] %s: %s',
+                '    [%s%s] %s: %s',
                 $diagnostic->severity->value,
+                $accepted->accepts($diagnostic) ? ', accepted' : '',
                 TerminalText::of($diagnostic->code),
                 TerminalText::of($diagnostic->message),
             ));
 
             $this->renderHelp($diagnostic->help);
         }
+
+        $this->renderAccepted($accepted->tally($diagnostics));
+    }
+
+    /**
+     * Every code this run printed. Printing is the widest net there is — a diagnostic the reader
+     * never saw cannot be the one their acceptance was for — so an entry missing from here is one
+     * nothing in the run reported.
+     *
+     * @return list<string>
+     */
+    protected function printedCodes(): array
+    {
+        return array_keys($this->printedCodes);
+    }
+
+    /**
+     * What acceptance quieted here, so the list stays visible in the output it is quieting — a
+     * suppression nobody reads is the one that outlives what it was for.
+     *
+     * @param  array<string, int>  $tally  by code, so the line reads the same on every run
+     */
+    private function renderAccepted(array $tally): void
+    {
+        if ($tally === []) {
+            return;
+        }
+
+        $codes = [];
+        foreach ($tally as $code => $count) {
+            $codes[] = sprintf('%s (%d)', TerminalText::of($code), $count);
+        }
+
+        $this->line(sprintf('  <fg=gray>Accepted, so --fail-on ignores them: %s</>', implode(', ', $codes)));
     }
 
     /**

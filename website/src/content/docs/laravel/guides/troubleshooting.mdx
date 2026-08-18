@@ -352,6 +352,22 @@ Two flags make diagnostics more useful:
    On an existing codebase, start at `warning` and tighten to `info` once the info list is short. A
    gate that fires on day one is a gate the team switches off.
 
+3. **Accept what you can't act on.** Some reports are true and unfixable — a vendor model with no
+   `@property` tags to add, a validation rule that really is a closure. List those codes under
+   `diagnostics.accept` and the gate stops counting them, so you can tighten it today instead of
+   after the last one is fixed.
+
+   ```php
+   // config/docuccino.php
+   'diagnostics' => [
+       'accept' => ['eloquent.no-columns', 'validation.rule-unrecoverable'],
+   ],
+   ```
+
+   They keep printing, marked `accepted`, so you still see the day one starts firing somewhere new.
+   Errors are never accepted, and an entry nothing reports warns rather than sitting there — the full
+   rules are on [Diagnostics](/laravel/reference/configuration/#diagnostics).
+
 </Steps>
 
 <Aside type="tip" title="Pin the shape you already have">

@@ -58,14 +58,17 @@ final class ExportCommand extends Command
             return self::FAILURE;
         }
 
-        return $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
+        $exit = $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
             $result = $builder->build($key, $engine);
+            $diagnostics = $this->withAcceptanceNotes($result->diagnostics);
 
             $written = $this->writeTargets($builder->config($key), $result->document);
-            $this->renderDiagnostics($key, $result->diagnostics);
+            $this->renderDiagnostics($key, $diagnostics);
 
-            return $written && ! $this->failsOn($result) ? self::SUCCESS : self::FAILURE;
+            return $written && ! $this->failsOnAny($diagnostics) ? self::SUCCESS : self::FAILURE;
         });
+
+        return $this->reportStaleAcceptances($exit);
     }
 
     /**
