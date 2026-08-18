@@ -218,6 +218,30 @@ The [UIR](/uir/) is the document Docuccino builds before emitting: OpenAPI-shape
 stable identity for every operation and schema plus the provenance of each detail. It's what
 `docuccino:diff` compares, so commit the UIR when you want the most precise diffs.
 
+### Several artifacts at once
+
+If you ship more than one of these, configure them as targets rather than running the command once
+per format — analysis is the expensive half, and targets share one:
+
+```php
+// config/docuccino.php
+'export' => [
+    'targets' => [
+        ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
+        ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
+    ],
+],
+```
+
+```bash
+php artisan docuccino:export
+# Wrote /home/you/invoices-api/docs/openapi.json (openapi-3.2).
+# Wrote /home/you/invoices-api/docs/openapi-3.1.yaml (openapi-3.1).
+```
+
+The path's extension picks the serialisation — no `--yaml` needed. See
+[`export`](/laravel/reference/configuration/#export) for the full rules.
+
 ### OpenAPI 3.0 export
 
 Reach for `--format=openapi-3.0` when something downstream is pinned to 3.0 — AWS API Gateway,

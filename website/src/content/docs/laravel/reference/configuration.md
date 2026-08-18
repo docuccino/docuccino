@@ -305,8 +305,43 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 ```
 
 `path` is the default output location for `docuccino:export` and the file
-`viewer.source: artifact` serves. The output format is chosen per run by
-[`docuccino:export --format`](/laravel/reference/commands/#docuccinoexport).
+`viewer.source: artifact` serves. On its own it means one artifact, in OpenAPI 3.2.
+
+To emit several artifacts from **one** build, list targets instead:
+
+```php
+'export' => [
+    'targets' => [
+        ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
+        ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
+        ['format' => 'uir',         'path' => 'docs/api.uir.json'],
+    ],
+],
+```
+
+Analysis is the expensive half of a build, so three targets cost one analysis and three emits — not
+three runs of everything.
+
+| Key | Effect |
+| --- | --- |
+| `format` | One of [the emit formats](/laravel/reference/commands/#docuccinoexport). Unknown values are an error, never a fallback. |
+| `path` | Where this artifact lands. Relative paths resolve against `base_path()`, and missing directories are created. |
+
+Rules the command enforces before it builds anything:
+
+- **`targets` replaces `path`.** Set both and `path` writes nothing; you get one
+  `config.export-path-ignored` info diagnostic telling you to delete it.
+- **One target per format.** Two `openapi-3.2` targets are rejected, which is what keeps
+  `--format` and the viewer's artifact each resolving to exactly one file.
+- **No two targets may write the same file**, in one document or across documents — one would
+  clobber the other.
+- **The extension picks the serialisation.** A `.yaml` or `.yml` path emits YAML; anything else emits
+  JSON. There is no `yaml` key, because the path already says it.
+- **`uir` has no YAML form**, so a `.yaml` path on it is an error rather than a `.yaml` file holding
+  JSON.
+
+A broken target list fails the command with a `config.export-*` error **before** the build runs, so
+you never pay for an analysis to find out a filename was wrong.
 
 ### `viewer`
 

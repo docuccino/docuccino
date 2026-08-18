@@ -98,11 +98,17 @@ signed URL check rather than `$user?->isAdmin()`.
 | `source` | Behavior |
 | --- | --- |
 | `generate` | Rebuilds the document on every request. Fine for local or gated use. |
-| `artifact` | Re-emits the committed `export.path` — no analysis at request time. Serves an empty document if the file isn't there. |
+| `artifact` | Re-emits a committed export target — no analysis at request time. Serves an empty document if the file isn't there. |
 | `cache` | Serves the [`docuccino:cache`](/laravel/reference/commands/#docuccinocache)-warmed payload; a cold cache falls back to `generate` and logs a warning. |
 
 For anything public or high-traffic, prefer `artifact` or `cache` — see
 [Deploying to production](/laravel/guides/production/).
+
+When a document configures [several export targets](/laravel/reference/configuration/#export), the
+viewer serves the most faithful JSON one — OpenAPI 3.2 ahead of 3.1, then 3.0, then the UIR. That is a
+property of the formats, not of your list, so reordering the config cannot change which file is
+served. YAML targets are skipped (the endpoint serves `application/json`), and if a document writes
+nothing servable the viewer generates instead and logs why.
 
 A UIR artifact works as an `artifact` source too: it's re-emitted through the OpenAPI emitter on the
 way out, so provenance and internal identities never reach the browser.
