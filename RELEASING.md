@@ -7,16 +7,14 @@ All four packages are versioned in lockstep with the monorepo: they require each
 
 A release is not a checklist you remember — it is a pull request that is already open.
 [`.github/workflows/release-pr.yml`](.github/workflows/release-pr.yml) runs on every push to `main`,
-regenerates every changelog from the commit messages, and keeps one open **`Release vX.Y.Z`** pull
-request current, with the pending entries as its description.
+regenerates every changelog from the commit messages, writes the pending version into the generator
+constant, and keeps one open **`Release vX.Y.Z`** pull request current, with the pending entries as
+its description.
 
 1. Review that pull request and wait for `CI gate`.
-2. Bump `DocuccinoServiceProvider::VERSION` in
-   [`php/laravel/src/DocuccinoServiceProvider.php`](php/laravel/src/DocuccinoServiceProvider.php) to
-   the version that pull request's title names — see [The generator version](#the-generator-version).
-3. **Squash-merge the release pull request. That is the release** — `main` now carries the changelog
+2. **Squash-merge the release pull request. That is the release** — `main` now carries the changelog
    for a version that is not yet tagged.
-4. Tag the merge commit with the version the pull request named:
+3. Tag the merge commit with the version the pull request named:
 
 ```bash
 git switch main && git pull
@@ -59,11 +57,18 @@ publishes it as `x-docuccino.generator.version` — the field a bug report is re
 the fragment cache's tool version, so bumping it is also what stops an upgrade serving fragments an
 older generator recorded. A stale constant makes the document name a generator that never produced it.
 
-It rides its own **`chore(laravel): …`** pull request onto `main`, merged before the release pull
-request. Two reasons for that shape: `release/next` is a generated branch, reset and force-pushed on
-every push to `main`, so a commit placed there is lost; and `chore` produces no changelog entry, so
-the pending version the release pull request names does not move under you. Merging the bump re-runs
-the release workflow, which rebuilds `release/next` from a `main` that now carries it.
+**Nobody edits it.** The release workflow rewrites it ([`tools/generator-version.php`](tools/generator-version.php))
+in the same step that regenerates the changelogs, so the constant rides the same `release/next`
+commit and the tag lands on a commit that already calls itself that version. The rewrite is
+idempotent — a re-run, or the state between merging a release and pushing its tag, finds the
+constant already there and writes nothing, which is what leaves the workflow's "is anything
+pending?" check reading a clean tree. It is also loud: the declaration has to match exactly once, so
+a refactor that renames it fails the release run instead of quietly shipping a stale version.
+
+Between releases `main` therefore carries the *previous* release's version, which is the honest
+answer — that is the release a `dev-main` install is a descendant of. A dev build is still told
+apart in the fragment cache, whose tool version appends the installed source reference
+(`sourceReference()`), so two commits between tags never share a cache key.
 
 No goldens need regenerating. The golden comparison (`withoutGeneratorVersion()` in `tests/Pest.php`)
 replaces that one member on both sides, so the committed bytes keep the version they were recorded
