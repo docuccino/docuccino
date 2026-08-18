@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 use Docuccino\Core\Examples\ExampleRedaction;
 use Docuccino\Core\Examples\RecordingStore;
+use Docuccino\Core\Examples\UnlockableRecording;
 use Docuccino\Laravel\Testing\ApiContract;
-use Docuccino\Laravel\Testing\ExampleRecorder;
+use Docuccino\Laravel\Testing\ParallelRun;
 use Docuccino\Laravel\Testing\UnrecordableRun;
 use PHPUnit\Framework\AssertionFailedError;
 
@@ -35,6 +36,14 @@ afterEach(function (): void {
         @unlink($file);
     }
     @rmdir($this->recordings);
+
+    // What a parallel run merges through, which lives outside the tree an author commits.
+    foreach (glob(sys_get_temp_dir().'/docuccino-recordings-'.substr(sha1($this->recordings), 0, 16).'-*') ?: [] as $scratch) {
+        foreach (glob($scratch.'/*') ?: [] as $file) {
+            @unlink($file);
+        }
+        @rmdir($scratch);
+    }
 
     @unlink(sys_get_temp_dir().'/docuccino-contract-'.getmypid().'.uir.json');
     ApiContract::reset();
@@ -212,15 +221,108 @@ it('rewrites the committed file when the shape really did move', function (): vo
         ->and(file_get_contents($path))->toContain('"title": "Intake"');
 });
 
-it('refuses to record from inside a parallel run, the way coverage refuses to answer', function (): void {
+it('records from inside a parallel run, where coverage refuses to answer', function (): void {
+    workbenchContract();
     putenv('PARATEST=1');
     putenv('TEST_TOKEN=7');
 
-    expect(fn (): ExampleRecorder => new ExampleRecorder($this->recordings))
-        ->toThrow(UnrecordableRun::class, 'cannot be written from inside a parallel test run (worker 7)');
+    try {
+        // Coverage is an aggregate no worker can take; a recording is per-operation, so a worker needs
+        // nothing from the others except that they take turns.
+        ApiContract::record($this->recordings);
+        ApiContract::assertions()->assertValidResponse(
+            contractResponse('GET', '/api/forms', body: '[{"id":1,"title":"Intake"}]'),
+        );
+    } finally {
+        putenv('TEST_TOKEN');
+        putenv('PARATEST');
+    }
 
-    putenv('TEST_TOKEN');
-    putenv('PARATEST');
+    expect(recordedFile($this->recordings)['responses'])->toBe([[
+        'status' => '200',
+        'mediaType' => 'application/json',
+        'body' => [['id' => 1, 'title' => 'Intake']],
+    ]]);
+});
+
+it('refuses when it cannot tell which run a worker belongs to', function (): void {
+    expect(UnrecordableRun::indeterminate('7')->getMessage())
+        ->toContain('parallel test run on this platform (worker 7)')
+        ->and(UnrecordableRun::indeterminate(null)->getMessage())->toContain('drop --parallel');
+});
+
+it('says nothing was written when the writers cannot be serialised', function (): void {
+    expect(UnrecordableRun::unlockable(UnlockableRecording::unlockable('/tmp/x.lock'))->getMessage())
+        ->toContain('/tmp/x.lock')
+        ->and(UnrecordableRun::unlockable(UnlockableRecording::directory('/tmp/x'))->getMessage())
+        ->toContain('nothing was written at all');
+});
+
+it('names every worker of one run the same way, and no two runs the same', function (): void {
+    expect(ParallelRun::runKey())->toBe('run-'.posix_getppid());
+});
+
+it('records a scenario under the name the test gave it', function (): void {
+    workbenchContract();
+    ApiContract::record($this->recordings);
+
+    ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'), recordAs: 'no-forms');
+    ApiContract::assertions()->assertValidResponse(
+        contractResponse('GET', '/api/forms', body: '[{"id":1,"title":"Intake"}]'),
+        recordAs: 'one-form',
+    );
+
+    expect(recordedFile($this->recordings)['responses'])->toBe([
+        ['status' => '200', 'mediaType' => 'application/json', 'name' => 'no-forms', 'body' => []],
+        ['status' => '200', 'mediaType' => 'application/json', 'name' => 'one-form', 'body' => [['id' => 1, 'title' => 'Intake']]],
+    ]);
+});
+
+it('keeps the best body per name, and only the named ones once a name is in play', function (): void {
+    workbenchContract();
+    ApiContract::record($this->recordings);
+
+    // The plain assertions a suite is already full of, and one scenario somebody named.
+    ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[{"id":1,"title":"Intake"}]'));
+    ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'), recordAs: 'listed');
+    ApiContract::assertions()->assertValidResponse(
+        contractResponse('GET', '/api/forms', body: '[{"id":2,"title":"Other"}]'),
+        recordAs: 'listed',
+    );
+
+    // Naming one scenario names them all: OpenAPI carries `example` or `examples` and never both, so
+    // the file keeps nothing it could not publish.
+    expect(recordedFile($this->recordings)['responses'])->toBe([
+        ['status' => '200', 'mediaType' => 'application/json', 'name' => 'listed', 'body' => [['id' => 2, 'title' => 'Other']]],
+    ]);
+});
+
+it('refuses a name a document could not carry, at the line that wrote it', function (): void {
+    workbenchContract();
+    ApiContract::record($this->recordings);
+
+    expect(fn () => ApiContract::assertions()->assertValidResponse(
+        contractResponse('GET', '/api/forms', body: '[]'),
+        recordAs: 'no forms',
+    ))->toThrow(UnrecordableRun::class, 'is not a name a recorded example can carry');
+
+    expect(recordedFile($this->recordings))->toBeNull();
+});
+
+it('takes the credentials out of a named recording too', function (): void {
+    workbenchContract();
+    ApiContract::record($this->recordings);
+
+    ApiContract::assertions()->assertValidResponse(
+        contractResponse('GET', '/api/forms', body: '[{"id":1,"title":"Intake","api_token":"live-secret-value"}]'),
+        recordAs: 'one-form',
+    );
+
+    $written = (string) file_get_contents($this->recordings.'/'.(new RecordingStore($this->recordings))->fileNames()[0]);
+
+    expect($written)->not->toContain('live-secret-value')
+        ->and($written)->toContain(ExampleRedaction::PLACEHOLDER)
+        ->and($written)->toContain('"name": "one-form"');
 });
 
 it('says where to put recordings when the document does not', function (): void {

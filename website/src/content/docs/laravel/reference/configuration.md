@@ -226,12 +226,15 @@ resolved against the document; broken refs become diagnostics. `null` compiles n
 Points at a directory of response recordings your test suite wrote, one committed file per operation,
 named after the operation's stable id. The build **reads** those files and publishes each body as the
 `example` beside the schema documented for that status and media type — no test runs, no route is
-dispatched, no database is opened.
+dispatched, no database is opened. A test that names its scenario
+(`assertValidResponse(recordAs: 'empty-cart')`) publishes into an `examples` map instead, so several
+scenarios can appear together.
 
 A recorded example sits at the `integration(20)` rung of the precedence ladder — above inference, below
 anything you wrote, so an [`#[Example]`](/laravel/reference/attributes/#example) or an `@example`
-always wins. A body whose status or media type the document doesn't describe is never
-published, and neither is one that still looks like it holds a credential.
+always wins — though a named recording may join a map of named examples you wrote, since the name is
+one you chose too. A body whose status or media type the document doesn't describe is never published,
+and neither is one that still looks like it holds a credential.
 
 Absent — the default — publishes no recorded examples. See
 [contract testing](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples) for how

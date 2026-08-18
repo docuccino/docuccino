@@ -6,10 +6,13 @@ namespace Docuccino\Laravel\Extensions;
 
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\ResponseDraft;
+use Docuccino\Core\Examples\ExampleRecording;
 use Docuccino\Core\Examples\ExampleRedaction;
 use Docuccino\Core\Examples\RecordedExample;
 use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Examples\RecordingStore;
+use Docuccino\Core\Extensions\BuiltIn\SharedErrorResponses;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
@@ -26,20 +29,31 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
  * authored source. It is evidence — the application really did answer this — so it beats a shape
  * inference merely derived; but a `#[Example]` is somebody choosing what a reader should see, and a
  * person who has chosen is never overruled by a test fixture. That rung is settled by the draft rather
- * than here: `setExample()` fills the ILLUSTRATION bag, `#[Example]` fills the DECLARATION bag, and
- * {@see ResponseDraft::freeze()} publishes a declaration over an illustration whichever ran first. So a
- * media type an author has spoken for publishes what they wrote and nothing else — OAS carries
- * `example` or `examples` and never both, and filing a recording under a key of our own would put a
- * name in an author's map that the author did not choose.
+ * than here: a recording fills an ILLUSTRATION bag, `#[Example]` fills a DECLARATION bag, and
+ * {@see ResponseDraft::freeze()} publishes a declaration over an illustration whichever ran first.
  *
- * It is attached as the media type's own `example`, beside the schema rather than inside it, for a
- * reason worth stating: the shared-error hoist strips that member before it groups bodies, and would
- * key on one written into the schema. Recorded there, one route acquiring a recording could drop an
- * unrelated route's 404 out of its shared component and back inline — one part of an application
- * changing the emitted representation of another, which is the defect locality forbids. It never
- * becomes an `examples` MAP for the same reason: the hoist leaves a media type carrying one whole, so
- * promoting a recorded error body to a map would key the grouping exactly as writing it into the
- * schema would.
+ * What a recording gets is the slot its NAME asks for, and the six answers are all one rule — a
+ * declaration wins, and a name somebody chose can sit beside another:
+ *
+ * | The author wrote | An unnamed recording | Named recordings |
+ * | --- | --- | --- |
+ * | nothing | the media type's `example` | an `examples` map of the recorded names |
+ * | a singular `example` | the author's, alone | the author's, alone |
+ * | an `examples` map | the author's map, alone | the author's map plus the recorded names, the author winning any name they both spell |
+ *
+ * A singular declaration is where a recording has nowhere to go: OpenAPI carries `example` or
+ * `examples` and never both, so joining one would mean filing the author's own example under a key
+ * they never chose. A map is different — a name a test passed at the call site is a name somebody
+ * chose, which is the whole reason naming a recording is worth having.
+ *
+ * The example goes on the media type, beside the schema rather than inside it, for a reason worth
+ * stating: the shared-error hoist strips that member before it groups bodies, and would key on one
+ * written into the schema. Recorded there, one route acquiring a recording could drop an unrelated
+ * route's 404 out of its shared component and back inline — one part of an application changing the
+ * emitted representation of another, which is the defect locality forbids. An `examples` MAP is not
+ * stripped, so on a status that hoist groups ({@see SharedErrorResponses::shares()}) named recordings
+ * publish the best of their bodies as the singular `example` instead, and
+ * {@see RecordedExampleAudit} tells the author their names went nowhere.
  *
  * Only a status and media type the document already documents gets one. A recording is an
  * illustration, never a claim that an endpoint answers something the contract does not describe.
@@ -84,20 +98,44 @@ final class RecordedExamplesExtension implements OperationExtension
             return;
         }
 
-        foreach ($recording->responses as $example) {
-            $this->attach($operation, $example);
+        $hoists = RepresentationPolicy::fromConfig($context->document->representation)->errorComponents;
+
+        foreach (self::slots($recording) as $examples) {
+            $this->attach($operation, $examples, $hoists);
         }
     }
 
-    private function attach(OperationDraft $operation, RecordedExample $example): void
+    /**
+     * The recording's examples grouped by the media type they illustrate, in the file's own key order.
+     *
+     * @return list<non-empty-list<RecordedExample>>
+     */
+    private static function slots(ExampleRecording $recording): array
     {
-        if (! $operation->hasResponse($example->status)) {
+        $slots = [];
+
+        foreach ($recording->responses as $example) {
+            $slots[$example->slot()][] = $example;
+        }
+
+        return array_values($slots);
+    }
+
+    /**
+     * @param  non-empty-list<RecordedExample>  $examples  every example recorded for one media type,
+     *                                                     named or unnamed but never a mix of the two
+     */
+    private function attach(OperationDraft $operation, array $examples, bool $hoists): void
+    {
+        $first = $examples[0];
+
+        if (! $operation->hasResponse($first->status)) {
             return;
         }
 
-        $response = $operation->response($example->status);
+        $response = $operation->response($first->status);
 
-        if (! $response->hasContent($example->mediaType)) {
+        if (! $response->hasContent($first->mediaType)) {
             return;
         }
 
@@ -105,14 +143,46 @@ final class RecordedExamplesExtension implements OperationExtension
         // recorder redacts on the way out, so reaching here means the file was edited by hand or the
         // heuristics have learned something since — either way the safe answer is no example, and
         // {@see RecordedExampleAudit} is what tells the author about it.
-        if ($this->redaction->findings($example->body) !== []) {
+        $safe = array_values(array_filter(
+            $examples,
+            fn (RecordedExample $example): bool => $this->redaction->findings($example->body) === [],
+        ));
+
+        if ($safe === []) {
             return;
         }
 
-        // First writer wins here, which is what settles a recording against another integration-layer
-        // producer that already illustrated this media type — the built-in error tiers attach the
-        // literals they folded, and a value the application really returns is not better evidence than
-        // a value the application's own code spells out.
-        $response->setExample($example->mediaType, $example->body);
+        if (! $first->isNamed() || ($hoists && SharedErrorResponses::shares($first->status))) {
+            // First writer wins here, which is what settles a recording against another integration-layer
+            // producer that already illustrated this media type — the built-in error tiers attach the
+            // literals they folded, and a value the application really returns is not better evidence than
+            // a value the application's own code spells out.
+            $response->setExample($first->mediaType, self::best($safe)->body);
+
+            return;
+        }
+
+        $named = [];
+        foreach ($safe as $example) {
+            $named[$example->name] = ['value' => $example->body];
+        }
+
+        $response->illustrateExamples($first->mediaType, $named);
+    }
+
+    /**
+     * @param  non-empty-list<RecordedExample>  $examples
+     */
+    private static function best(array $examples): RecordedExample
+    {
+        $best = $examples[0];
+
+        foreach ($examples as $example) {
+            if ($example->outranks($best)) {
+                $best = $example;
+            }
+        }
+
+        return $best;
     }
 }

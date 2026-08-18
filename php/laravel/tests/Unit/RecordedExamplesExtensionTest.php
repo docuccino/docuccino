@@ -31,7 +31,10 @@ function recordedExamplesBase(): string
     return $base;
 }
 
-function recordedContext(string $base, ?string $operationId = RECORDED_OPERATION): RouteContext
+/**
+ * @param  array<string, mixed>  $representation
+ */
+function recordedContext(string $base, ?string $operationId = RECORDED_OPERATION, array $representation = []): RouteContext
 {
     return new RouteContext(
         route: new RouteDescriptor(['GET'], '/api/invoices'),
@@ -41,6 +44,7 @@ function recordedContext(string $base, ?string $operationId = RECORDED_OPERATION
         document: new DocumentConfig(
             key: 'default',
             info: ['title' => 'T', 'version' => '1'],
+            representation: $representation,
             raw: ['examples' => ['recordings' => 'docs/recordings']],
         ),
         operationId: $operationId,
@@ -57,10 +61,18 @@ function recordedDraft(string $status = '200', string $mediaType = 'application/
 
 function recordInvoice(string $base, mixed $body, string $status = '200', string $mediaType = 'application/json'): void
 {
+    recordInvoices($base, [RecordedExample::of($status, $mediaType, $body)]);
+}
+
+/**
+ * @param  list<RecordedExample>  $responses
+ */
+function recordInvoices(string $base, array $responses): void
+{
     (new RecordingStore($base.'/docs/recordings'))->put(ExampleRecording::of(
         RECORDED_OPERATION,
         'GET /api/invoices',
-        [RecordedExample::of($status, $mediaType, $body)],
+        $responses,
     ));
 }
 
@@ -202,3 +214,121 @@ it('publishes nothing at all when there is nothing to publish', function (callab
         operationId: RECORDED_OPERATION,
     )],
 ]);
+
+it('publishes named recordings as the media type\'s examples map', function (): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [
+        RecordedExample::of('200', 'application/json', ['items' => [['sku' => 'A']]], 'full-cart'),
+        RecordedExample::of('200', 'application/json', ['items' => []], 'empty-cart'),
+    ]);
+
+    $operation = recordedDraft();
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    $content = recordedResponse($operation)['content']['application/json'];
+
+    expect($content['examples'])->toBe([
+        'empty-cart' => ['value' => ['items' => []]],
+        'full-cart' => ['value' => ['items' => [['sku' => 'A']]]],
+    ])->and($content)->not->toHaveKey('example');
+});
+
+it('settles a named recording against what an author wrote', function (array $named, mixed $singular, array $expected): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [
+        RecordedExample::of('200', 'application/json', ['id' => 'recorded'], 'empty'),
+    ]);
+
+    $operation = recordedDraft();
+    $operation->response('200')->declareExamples('application/json', $named, $singular);
+
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    expect(array_diff_key(recordedResponse($operation)['content']['application/json'], ['schema' => true]))->toBe($expected);
+})->with([
+    // A name passed at a call site is a name somebody chose, so it may sit in a map an author curated —
+    // but never over one of theirs, and never beside a singular example OpenAPI would not have it beside.
+    'a map with room for it' => [
+        ['stocked' => ['value' => ['id' => 'authored']]],
+        null,
+        ['examples' => [
+            'empty' => ['value' => ['id' => 'recorded']],
+            'stocked' => ['value' => ['id' => 'authored']],
+        ]],
+    ],
+    'a map that already spells the name' => [
+        ['empty' => ['value' => ['id' => 'authored']]],
+        null,
+        ['examples' => ['empty' => ['value' => ['id' => 'authored']]]],
+    ],
+    'a singular one, which has nowhere for it to go' => [
+        [],
+        ['id' => 'authored'],
+        ['example' => ['id' => 'authored']],
+    ],
+]);
+
+it('publishes the best recorded body without its name where the shared-error pass would group it', function (): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden', 'detail' => 'No.'], 'expired'),
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden'], 'missing'),
+    ]);
+
+    $operation = recordedDraft('403');
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    // An `examples` map is not stripped before that pass groups bodies, so publishing one here would
+    // take this 403 out of the component an unrelated route also points at.
+    $content = recordedResponse($operation, '403')['content']['application/json'];
+
+    expect($content['example'])->toBe(['code' => 'forbidden', 'detail' => 'No.'])
+        ->and($content)->not->toHaveKey('examples');
+});
+
+it('publishes the names on an error response of a document that shares no error components', function (): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden'], 'missing'),
+    ]);
+
+    $operation = recordedDraft('403');
+    (new RecordedExamplesExtension($base))->handle(
+        $operation,
+        recordedContext($base, representation: ['errors' => ['components' => false]]),
+    );
+
+    expect(recordedResponse($operation, '403')['content']['application/json']['examples'])
+        ->toBe(['missing' => ['value' => ['code' => 'forbidden']]]);
+});
+
+it('names a status the shared-error pass reads and one it does not', function (string $status, bool $shares): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [RecordedExample::of($status, 'application/json', ['code' => 'x'], 'named')]);
+
+    $operation = recordedDraft($status);
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    expect(recordedResponse($operation, $status)['content']['application/json'])
+        ->toHaveKey($shares ? 'example' : 'examples');
+})->with([
+    'a 200' => ['200', false],
+    'a 399' => ['399', false],
+    'a 404' => ['404', true],
+    'a 500' => ['500', true],
+    'a 4XX range, which that pass never groups' => ['4XX', false],
+]);
+
+it('drops only the named recording that still holds a credential', function (): void {
+    $base = recordedExamplesBase();
+    recordInvoices($base, [
+        RecordedExample::of('200', 'application/json', ['id' => 1, 'api_key' => 'live-secret-value'], 'leaky'),
+        RecordedExample::of('200', 'application/json', ['id' => 2], 'clean'),
+    ]);
+
+    $operation = recordedDraft();
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    expect(recordedResponse($operation)['content']['application/json']['examples'])
+        ->toBe(['clean' => ['value' => ['id' => 2]]]);
+});

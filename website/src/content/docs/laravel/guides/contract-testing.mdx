@@ -216,7 +216,7 @@ in them — and the build still executes nothing, because the execution already 
    \Docuccino\Laravel\Testing\ApiContract::record();
    ```
 
-3. **Run your suite in one process**, then read the diff:
+3. **Run your suite**, then read the diff:
 
    ```bash
    php artisan test
@@ -263,9 +263,9 @@ its recordings with it:
 ### The curating is yours, and it happens in the diff
 
 A suite produces dozens of responses per endpoint, most of them near-duplicates and some of them
-carrying real data. So the recorder narrows that down to one candidate per status and media type, and
-then hands it to the only reviewer who can judge it — you, reading a diff, before the file is
-committed.
+carrying real data. So the recorder narrows that down to one candidate per status, media type and
+[name](#name-the-scenarios-worth-showing), and then hands it to the only reviewer who can judge
+it — you, reading a diff, before the file is committed.
 
 Three rules do the narrowing, and each of them exists so the file is a function of your responses
 rather than of the run that produced them:
@@ -278,13 +278,16 @@ rather than of the run that produced them:
 
 That last one is what keeps your artifact stable. Re-record as often as you like: the file changes when
 the *shape* of a response changes, which is a change worth reading, and never because a fixture had a
-different id this morning.
+different id this morning. And because every one of the three reads the responses alone, several test
+workers can record one operation at once without any of them having to know about the others.
 
-<Aside type="caution" title="Record in a single process">
-The recorder refuses under a parallel runner, for the same reason
-[coverage does](#report-the-endpoints-your-suite-never-touched): each worker sees its own share of the
-suite, so which response got published would be decided by which worker finished last rather than by
-the responses themselves. Record in a job without `--parallel` — asserting stays unaffected either way.
+<Aside type="tip" title="`--parallel` is fine here">
+Recording works under a parallel runner, unlike
+[coverage](#report-the-endpoints-your-suite-never-touched). Coverage is a whole-suite question — which
+operations did *nobody* touch — and no worker can know when the others have finished. A recording is
+one operation's, so workers only have to take turns: each one compares its candidate against the file
+under an exclusive lock and writes only if it wins. Because the winner is decided by the bodies and
+never by their order, the file you commit is the same however the workers raced for it.
 </Aside>
 
 ### Credentials never reach the file
@@ -309,17 +312,72 @@ The build checks again when it reads the file. A committed body that still looks
 credential — hand-edited, or caught by a heuristic added since — is **not published at all**, and says
 so with an `examples.recording-unsafe` warning naming the pointer (never the value).
 
+### Name the scenarios worth showing
+
+A suite that exercises an empty cart, a full one and a locked one has three payloads worth publishing,
+and one unnamed slot to publish them in. Name them at the call site — the test already knows which
+scenario it set up:
+
+```php
+$this->getJson('/api/carts/1')->assertValidResponse(recordAs: 'empty-cart');
+$this->getJson('/api/carts/2')->assertValidResponse(recordAs: 'full-cart');
+```
+
+Named recordings publish together as the media type's `examples` map, one entry per name, sorted by
+name so adding a scenario never moves another:
+
+```json
+"content": {
+  "application/json": {
+    "schema": { "$ref": "#/components/schemas/Cart" },
+    "examples": {
+      "empty-cart": { "value": { "items": [], "total": 0 } },
+      "full-cart":  { "value": { "items": [{ "sku": "COG-1", "qty": 2 }], "total": 49.5 } }
+    }
+  }
+}
+```
+
+A name may hold letters, digits, dots, dashes and underscores — it becomes a key a generated client
+reads, so the assertion refuses anything else at the line that wrote it. Naming one scenario for a
+status names them all: OpenAPI carries `example` or `examples` and never both, so once a name is in
+play the unnamed candidates for that status stop being recorded. Taking a name back out of your tests
+is the one change re-recording can't make for you — a recorded name is never deleted on the strength of
+a run that might have been a partial one, so delete the file and record it again.
+
+The name is always yours. Docuccino will not derive one from the test's name, because renaming a test
+would then rename a published example — a change to your contract that nobody asked for.
+
 ### Where a recording sits against everything else
 
 A recorded example sits at the `integration(20)` rung of the
 [precedence ladder](/laravel/guides/how-it-works/#3-uir). A recording is evidence — your
 application really did answer this — so it beats a shape inference merely derived. But an
 [`#[Example]`](/laravel/reference/attributes/#example) is you choosing what a reader should see, and
-that is never overruled by a test fixture. That holds for a named map as much as for a single example:
-a recording never joins a set of examples you curated, and never takes a name you didn't choose.
+that is never overruled by a test fixture. A name you passed at a call site *is* a choice, though, so a
+named recording can sit beside the examples you curated:
+
+| You wrote | An unnamed recording | Named recordings |
+| --- | --- | --- |
+| nothing | publishes as the media type's `example` | publish as an `examples` map of their names |
+| a singular `#[Example]` | yours, alone | yours, alone |
+| named `#[Example]`s | yours, alone | yours plus the recorded names — yours wins any name you both spell |
+
+A singular example is the one place a recording has nowhere to go: filing it beside yours would mean
+inventing a name for *yours*, which is not Docuccino's to choose.
 
 A recording is also only ever an illustration. A status or media type your document doesn't describe
 gets no example from one — a recording never adds a response the contract doesn't state.
+
+<Aside type="note" title="Names and shared error responses">
+Docuccino collapses an error body repeated across operations into one shared component every route
+`$ref`s. A media type carrying an `examples` map can't take part in that, so a named recording on a
+4xx or 5xx would quietly drop an *unrelated* route's 404 back inline. Rather than let one route's tests
+change another route's document, the body publishes there as the singular `example` and an
+`examples.recording-name-unpublished` warning tells you the name went nowhere. Turn
+[`representation.errors.components`](/laravel/reference/configuration/#representation) off if you would
+rather have the names.
+</Aside>
 
 ### When recordings go stale
 
@@ -331,6 +389,7 @@ Every build reports what is wrong with the committed directory:
 | `examples.recording-unreadable` | A file in it isn't a recording Docuccino can read |
 | `examples.recording-orphaned` | A recording for an operation this document no longer has — the route was renamed, moved or removed |
 | `examples.recording-unsafe` | A committed body still holds what looks like a credential; it wasn't published |
+| `examples.recording-name-unpublished` | A recorded name on an error response the document shares as a component; the body publishes without it |
 
 And `assertValidExamples()` above is the other half: if the code moves under a recording and the body
 stops fitting its schema, that assertion fails and tells you to re-record.

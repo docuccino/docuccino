@@ -5,6 +5,9 @@ declare(strict_types=1);
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\Examples\ExampleAudit;
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Examples\ExampleRecording;
 use Docuccino\Core\Examples\RecordedExample;
@@ -321,4 +324,120 @@ it('leaves a route it recorded nothing for exactly where it was', function (): v
         ->toBe(['code' => 'forbidden'])
         ->and($after['paths']['/api/zz-denied-again'])->toBe($before['paths']['/api/zz-denied-again'])
         ->and($after['components']['schemas']['Error403'])->toBe($before['components']['schemas']['Error403']);
+});
+
+it('publishes named recordings as the examples map of the media type they illustrate', function (): void {
+    writeRecording($this->recordings, formsOperationId(), 'GET /api/forms', [
+        RecordedExample::of('200', 'application/json', [], 'no-forms'),
+        RecordedExample::of('200', 'application/json', [['id' => 1, 'title' => 'Intake']], 'one-form'),
+    ]);
+
+    $media = recordedDocument($this->recordings)['paths']['/api/forms']['get']['responses']['200']['content']['application/json'];
+
+    expect($media['examples'])->toBe([
+        'no-forms' => ['value' => []],
+        'one-form' => ['value' => [['id' => 1, 'title' => 'Intake']]],
+    ])->and($media)->not->toHaveKey('example');
+});
+
+it('emits a recorded examples map through every OpenAPI version, and validates as UIR', function (): void {
+    writeRecording($this->recordings, formsOperationId(), 'GET /api/forms', [
+        RecordedExample::of('200', 'application/json', [], 'no-forms'),
+        RecordedExample::of('200', 'application/json', [['id' => 1, 'title' => 'Intake']], 'one-form'),
+    ]);
+
+    bindStubEngine();
+    $result = generateDocument(fn (array $raw): array => $raw + ['examples' => ['recordings' => $this->recordings]]);
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $result->diagnostics))->not->toContain('document.schema-invalid');
+
+    foreach ([new OpenApi32Emitter, new OpenApi31DownlevelEmitter, new OpenApi30DownlevelEmitter] as $emitter) {
+        $emitted = $emitter->emit($result->document);
+        $media = json_decode($emitted, true)['paths']['/api/forms']['get']['responses']['200']['content']['application/json'];
+
+        // OpenAPI carries one or the other on a media type, in every version this emits.
+        expect(array_keys($media['examples']))->toBe(['no-forms', 'one-form'])
+            ->and($media)->not->toHaveKey('example');
+    }
+});
+
+it('holds every named recorded example to the schema beside it', function (): void {
+    $id = recordedExampleRoute('search', 'api/examples-search');
+    writeRecording($this->recordings, $id, 'GET /api/examples-search', [
+        RecordedExample::of('200', 'application/json', ['id' => 3, 'name' => 'Sprocket', 'status' => 'published'], 'fits'),
+        RecordedExample::of('200', 'application/json', ['id' => 'INV-3', 'name' => 'Sprocket', 'status' => 'published'], 'moved'),
+    ]);
+
+    bindStubEngine();
+    $document = generateDocument(fn (array $raw): array => $raw + ['examples' => ['recordings' => $this->recordings]])->document->toArray();
+    $report = (new ExampleAudit(ContractIndex::fromArray($document)))->run();
+
+    expect($report->ok())->toBeFalse()
+        ->and($report->findings[0]->pointer)
+        ->toBe('/paths/~1api~1examples-search/get/responses/200/content/application~1json/examples/moved/value');
+});
+
+it('joins the map an author curated, under the name the test chose and never over theirs', function (): void {
+    $id = recordedExampleRoute('show', 'api/examples/{widget}');
+    writeRecording($this->recordings, $id, 'GET /api/examples/{widget}', [
+        RecordedExample::of('200', 'application/json', ['id' => 9, 'name' => 'Recorded', 'status' => 'draft'], 'as-tested'),
+        RecordedExample::of('200', 'application/json', ['id' => 8, 'name' => 'Overruled', 'status' => 'draft'], 'stocked'),
+        RecordedExample::of('404', 'application/json', ['id' => 7, 'name' => 'Gone', 'status' => 'draft'], 'as-tested'),
+    ]);
+
+    $responses = recordedDocument($this->recordings)['paths']['/api/examples/{widget}']['get']['responses'];
+    $ok = $responses['200']['content']['application/json'];
+
+    expect(array_keys($ok['examples']))->toBe(['as-tested', 'discontinued', 'stocked'])
+        ->and($ok['examples']['stocked']['value'])->not->toBe(['id' => 8, 'name' => 'Overruled', 'status' => 'draft'])
+        ->and($ok)->not->toHaveKey('example')
+        // The 404 is a status the shared-error pass groups, so its names go nowhere at all — and the
+        // author's map is what publishes there whether or not anything was recorded for it.
+        ->and(array_keys($responses['404']['content']['application/json']['examples']))->toBe(['missing'])
+        ->and($responses['404']['content']['application/json'])->not->toHaveKey('example');
+});
+
+it('leaves a neighbour exactly where it was when a name is recorded on a shared error', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-denied', [ErrorsController::class, 'denied']);
+    $router->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
+
+    $before = recordedDocument($this->recordings);
+
+    writeRecording($this->recordings, $before['paths']['/api/zz-denied']['get']['x-docuccino']['id'], 'GET /api/zz-denied', [
+        RecordedExample::of('403', 'application/json', ['code' => 'expired'], 'expired'),
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden'], 'missing'),
+    ]);
+
+    $after = recordedDocument($this->recordings);
+
+    // An `examples` map is not stripped before that pass groups bodies, so publishing one here would
+    // key the grouping and drop this route's neighbour out of the component they share.
+    expect($after['paths']['/api/zz-denied']['get']['responses']['403']['content']['application/json']['example'])
+        ->toBe(['code' => 'expired'])
+        ->and($after['paths']['/api/zz-denied']['get']['responses']['403']['content']['application/json'])->not->toHaveKey('examples')
+        ->and($after['paths']['/api/zz-denied-again'])->toBe($before['paths']['/api/zz-denied-again'])
+        ->and($after['components']['responses'])->toBe($before['components']['responses']);
+});
+
+it('says so where a recorded name went nowhere', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-denied', [ErrorsController::class, 'denied']);
+
+    $id = recordedDocument($this->recordings)['paths']['/api/zz-denied']['get']['x-docuccino']['id'];
+    writeRecording($this->recordings, $id, 'GET /api/zz-denied', [
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden'], 'missing'),
+    ]);
+
+    expect(recordedDiagnosticCodes($this->recordings))->toBe(['examples.recording-name-unpublished']);
+});
+
+it('says nothing about a name the document publishes', function (): void {
+    writeRecording($this->recordings, formsOperationId(), 'GET /api/forms', [
+        RecordedExample::of('200', 'application/json', [], 'no-forms'),
+    ]);
+
+    expect(recordedDiagnosticCodes($this->recordings))->toBe([]);
 });

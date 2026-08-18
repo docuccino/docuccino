@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Testing;
 
 use Docuccino\Core\Contract\MediaType;
-use Docuccino\Core\Examples\ExampleRecording;
 use Docuccino\Core\Examples\ExampleRedaction;
+use Docuccino\Core\Examples\ProcessRecordingLedger;
 use Docuccino\Core\Examples\RecordedBody;
 use Docuccino\Core\Examples\RecordedExample;
+use Docuccino\Core\Examples\RecordingLedger;
 use Docuccino\Core\Examples\RecordingStore;
+use Docuccino\Core\Examples\SharedRecordingLedger;
+use Docuccino\Core\Examples\UnlockableRecording;
 use Docuccino\Laravel\Support\Paths;
 use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 use JsonException;
@@ -37,18 +40,16 @@ use JsonException;
  * - a committed body is left alone while its SHAPE is unchanged, so a timestamp or an autoincrement
  *   key in a payload cannot make the artifact churn on every re-record.
  *
+ * A test that set a scenario up can say which one it was — `assertValidResponse(recordAs: 'empty-cart')`
+ * — and those publish together as a named `examples` map. The name is always the caller's: deriving one
+ * from the test's own name would make renaming a test rename a published example, which is a contract
+ * change nobody asked for.
+ *
  * Credentials are replaced on the way out ({@see ExampleRedaction}), before anything reaches disk.
  */
 final class ExampleRecorder implements ContractObserver
 {
-    /** @var array<string, array<string, RecordedExample>> operation id → response key → best so far */
-    private array $best = [];
-
-    /** @var array<string, string> operation id → `GET /api/invoices/{invoice}`, prose for the reviewer */
-    private array $endpoints = [];
-
-    /** @var array<string, ExampleRecording> operation id → what was committed before this run */
-    private array $committed = [];
+    private ?RecordingLedger $ledger = null;
 
     private ?RecordingStore $store = null;
 
@@ -56,40 +57,39 @@ final class ExampleRecorder implements ContractObserver
         private readonly ?string $directory = null,
         private ?ExampleRedaction $redaction = null,
     ) {
-        // The same answer the coverage assertions give, for the same reason. Coverage cannot be MERGED
-        // across workers; a recording cannot be CHOSEN across them — each worker would pick the best of
-        // its own share and the last writer would win, which is a published example decided by
-        // scheduling. Refusing is the only answer that keeps the file a function of the suite.
-        if (ParallelRun::active()) {
-            throw UnrecordableRun::parallel(ParallelRun::worker());
+        // Coverage refuses under a parallel runner because it is an aggregate nobody inside the run can
+        // take; a recording is per-operation, so workers merge theirs under a lock instead. That lock is
+        // keyed by the RUN, and a platform that cannot name the run is one where refusing is still the
+        // only honest answer.
+        if (ParallelRun::active() && ParallelRun::runKey() === null) {
+            throw UnrecordableRun::indeterminate(ParallelRun::worker());
         }
     }
 
     public function observed(ObservedExchange $exchange): void
     {
         $operationId = $exchange->operationId();
+        $name = $exchange->recordAs ?? '';
+
+        if ($name !== '' && ! RecordedExample::isLegalName($name)) {
+            throw UnrecordableRun::badName($name);
+        }
 
         if ($operationId === null) {
             return;
         }
 
-        $example = $this->exampleFor($exchange);
+        $example = $this->exampleFor($exchange, $name);
 
         if ($example === null) {
             return;
         }
 
-        $key = $example->key();
-        $incumbent = $this->best[$operationId][$key] ?? null;
-
-        if ($incumbent !== null && ! $example->outranks($incumbent)) {
-            return;
+        try {
+            $this->ledger()->record($operationId, $exchange->method().' '.$exchange->pathTemplate(), $example);
+        } catch (UnlockableRecording $failure) {
+            throw UnrecordableRun::unlockable($failure);
         }
-
-        $this->best[$operationId][$key] = $example;
-        $this->endpoints[$operationId] = $exchange->method().' '.$exchange->pathTemplate();
-
-        $this->write($operationId);
     }
 
     /**
@@ -122,13 +122,30 @@ final class ExampleRecorder implements ContractObserver
     }
 
     /**
+     * Where this process puts what it records: its own memory when it is the only one recording, a
+     * locked file when it is one worker of a parallel run.
+     */
+    private function ledger(): RecordingLedger
+    {
+        if ($this->ledger !== null) {
+            return $this->ledger;
+        }
+
+        $run = ParallelRun::active() ? ParallelRun::runKey() : null;
+
+        return $this->ledger = $run === null
+            ? new ProcessRecordingLedger($this->store())
+            : new SharedRecordingLedger($this->store(), $run);
+    }
+
+    /**
      * The example this exchange offers, or null when it offers none.
      *
      * A response that was not checked is not evidence of anything — the suite asserted the request half
      * and said nothing about the body — and neither is one that failed. A body JSON Schema could not
      * check (a CSV download, an image) is not an example a document can publish either.
      */
-    private function exampleFor(ObservedExchange $exchange): ?RecordedExample
+    private function exampleFor(ObservedExchange $exchange, string $name): ?RecordedExample
     {
         $outcome = $exchange->result->response;
 
@@ -156,26 +173,6 @@ final class ExampleRecorder implements ContractObserver
 
         [$redacted] = $this->redaction()->apply($decoded);
 
-        return RecordedExample::of((string) $exchange->status(), $mediaType, $redacted);
-    }
-
-    /**
-     * Rewrite this operation's file from what was committed plus this run's winners — always from the
-     * ORIGINAL committed recording, never from what an earlier write in this run left behind, so the
-     * result is the same whatever order the suite ran in.
-     */
-    private function write(string $operationId): void
-    {
-        $store = $this->store();
-        $original = $this->committed[$operationId] ??= $store->read($operationId)
-            ?? ExampleRecording::of($operationId, '');
-
-        $recording = $original->labelled($this->endpoints[$operationId] ?? '');
-
-        foreach ($this->best[$operationId] ?? [] as $example) {
-            $recording = $recording->with($example);
-        }
-
-        $store->put($recording);
+        return RecordedExample::of((string) $exchange->status(), $mediaType, $redacted, $name);
     }
 }
