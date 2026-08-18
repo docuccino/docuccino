@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
+use Docuccino\Core\Extensions\Contracts\TypeSchemaConverter;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
 use Docuccino\Core\Extensions\Contracts\ValidationRulesToSchema;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -45,7 +46,7 @@ final class RouteContext
 {
     private ?ActionAnalysis $analysis = null;
 
-    private ?SchemaConverter $converter = null;
+    private ?TypeSchemaConverter $converter = null;
 
     private ?RepresentationPolicy $representation = null;
 
@@ -325,9 +326,10 @@ final class RouteContext
 
     /**
      * The type→schema converter for this route, hoisting into the document-wide component
-     * registry so cross-route `$ref`s stay consistent and named schemas dedupe once.
+     * registry so cross-route `$ref`s stay consistent and named schemas dedupe once. The contract is
+     * what extensions may rely on; {@see SchemaConverter} behind it is internal.
      */
-    public function converter(): SchemaConverter
+    public function converter(): TypeSchemaConverter
     {
         // The converter gets this route's dependency bag so mappers recording files via
         // SchemaContext::dependsOn() widen the fragment cache key — see dependencies().
