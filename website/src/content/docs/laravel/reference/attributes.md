@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 29 attributes with signatures and examples.
+description: The docuccino/attributes package — all 30 attributes with signatures and examples.
 ---
 
 
@@ -25,7 +25,7 @@ you'd expect without a `::class` reference.
 
 ## At a glance
 
-All 29 attributes, grouped by what they do:
+All 30 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -57,6 +57,7 @@ All 29 attributes, grouped by what they do:
 | [`#[Example]`](#example) | Pin the success response's example body. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
+| [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 
 ## Responses
@@ -665,6 +666,56 @@ the fragment-cache key, so edits invalidate correctly.
 #[DescriptionFromFile('docs/users/show.md')]
 public function show(int $id): UserResource { /* … */ }
 ```
+
+### `#[Mock]`
+
+Targets `CLASS | PROPERTY`, repeatable.
+
+```php
+public function __construct(
+    public ?string $faker = null,
+    public ?string $seedGroup = null,
+    public ?string $property = null,
+)
+```
+
+Records how a mock server should fake one property, as `x-docuccino.mock` on that property's schema.
+`faker` is the expression it evaluates; `seedGroup` names properties whose values should correlate,
+so a mocked `first_name` and `email` can belong to the same imaginary person. Either parameter alone
+is a complete hint.
+
+On a property the attribute applies to that property. On a class it needs `property`, naming a member
+the schema publishes — the form for an Eloquent column, a `toArray()` key or a validated field, none
+of which have a PHP property to carry one — and repeats for as many members as you need.
+
+```php
+final readonly class CustomerData
+{
+    public function __construct(
+        #[Mock(faker: 'uuid')]
+        public string $id,
+        #[Mock(faker: 'safeEmail', seedGroup: 'customer')]
+        public string $email,
+        #[Mock(faker: 'name', seedGroup: 'customer')]
+        public string $fullName,
+    ) {}
+}
+
+#[Mock(faker: 'safeEmail', property: 'email')]
+#[Mock(faker: 'dateTimeThisYear', property: 'created_at')]
+final class Customer extends Model { /* … */ }
+```
+
+A hint is metadata, never a value: Docuccino stores the expression and evaluates nothing, so no
+generated data ever reaches your document. The expression itself is passed through untouched —
+whoever consumes the hint defines its grammar — so nothing checks that a formatter exists; only an
+empty one is refused, with an `attribute.mock-invalid` warning. An attribute naming a property the
+schema does not publish is dropped with `attribute.mock-unknown-property`.
+
+The UIR always carries the hints. OpenAPI artifacts drop them unless
+[`export.mock_faker_key`](/laravel/reference/configuration/#export) names the member to publish them
+under — conventionally `x-faker`. See
+[Mock data hints](/laravel/documenting/schemas/#mock-data-hints).
 
 ## Webhooks
 

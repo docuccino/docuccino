@@ -406,7 +406,16 @@ attribute invalidates. No attribute → the unchanged `validation.rule-unrecover
 opaque by nature.
 
 `--provenance=none|winners|full`, default `winners` for committed artifacts.
-Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties (OAS emitter → `x-faker` or drop).
+Mock hints: `x-docuccino.mock` = `{faker, seedGroup}` on schema properties, written by `#[Mock]` through
+core's `Extensions\Schema\MockHints` — the one reader, called by every class-hoisting mapper (core's DTO
+mapper, spatie Data, API Resource, Eloquent) and by `RecoveredRequest` for a request whose fields are named
+by rules rather than properties. On a property the attribute applies to it and follows a `#[MapName]` to the
+key it publishes under; on a class it names the member, which is the only form a magic column, a `toArray`
+key or a validated field can reach. The property's own attribute beats a class-level one naming it. Nothing
+is evaluated and the expression is opaque — only an empty one is refused (`attribute.mock-invalid`), and a
+name the schema does not publish is dropped (`attribute.mock-unknown-property`). The OAS emitters project
+the `faker` half onto `export.mock_faker_key` (conventionally `x-faker`) or drop it; that key lives under
+`export` so it stays out of `configHash`.
 All other `x-*` members pass through untouched.
 
 `source.line` is provenance, not identity, so it never affects `contentHash` or any `id`.

@@ -19,6 +19,7 @@ use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Attributes\IgnoreResponse;
 use Docuccino\Attributes\InDocs;
 use Docuccino\Attributes\Internal;
+use Docuccino\Attributes\Mock;
 use Docuccino\Attributes\OperationId;
 use Docuccino\Attributes\OptionallyAuthenticated;
 use Docuccino\Attributes\PathParameter;
@@ -88,6 +89,7 @@ function attributeCatalogue(): array
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
+        'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
     ];
 }
 
@@ -192,4 +194,16 @@ it('catalogues every attribute the package ships', function (): void {
 
     expect($shipped)->not->toBeEmpty()
         ->and($catalogued)->toBe($shipped);
+});
+
+it('keeps every #[Mock] parameter optional and null by default', function (): void {
+    // Each one is optional on its own: a hint may be a faker expression, a seed group, or both, and the
+    // class-level form adds the property it names.
+    $mock = new Mock;
+
+    expect([$mock->faker, $mock->seedGroup, $mock->property])->toBe([null, null, null]);
+
+    $named = new Mock(faker: 'safeEmail', seedGroup: 'person', property: 'email');
+
+    expect([$named->faker, $named->seedGroup, $named->property])->toBe(['safeEmail', 'person', 'email']);
 });

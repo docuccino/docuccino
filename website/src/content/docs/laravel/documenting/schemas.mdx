@@ -256,6 +256,54 @@ class names resolve through that file's `use` statements, and an accessor's `@re
 types its property the same way. The `@phpstan-`/`@psalm-` prefixed forms of each tag are read too,
 and win over the plain one where both are present.
 
+## Mock data hints
+
+A schema says what a value *is*; it rarely says what a plausible one looks like. `#[Mock]` records
+that separately, as machine-facing metadata a mock server reads — never as prose in your document.
+
+```php
+final readonly class CustomerData
+{
+    public function __construct(
+        #[Mock(faker: 'uuid')]
+        public string $id,
+        #[Mock(faker: 'safeEmail', seedGroup: 'customer')]
+        public string $email,
+        #[Mock(faker: 'name', seedGroup: 'customer')]
+        public string $fullName,
+    ) {}
+}
+```
+
+`faker` is the expression the mock server evaluates. `seedGroup` names properties whose values should
+belong together, so the `email` and `fullName` above describe one imaginary customer rather than two.
+Either parameter alone is a complete hint.
+
+Columns, `toArray()` keys and validated fields have no PHP property to annotate, so on a class the
+attribute names the member instead and repeats as needed:
+
+```php
+#[Mock(faker: 'safeEmail', property: 'email')]
+#[Mock(faker: 'dateTimeThisYear', property: 'created_at')]
+final class Customer extends Model { /* … */ }
+
+#[Mock(faker: 'safeEmail', property: 'email')]
+final class StoreCustomerRequest extends FormRequest { /* … */ }
+```
+
+Docuccino stores the expression and evaluates nothing, so no generated data ever lands in your
+document — and nothing checks that a formatter by that name exists, because the tool reading the hint
+is the one that defines the vocabulary. An attribute that would publish nothing is reported instead:
+an empty one as `attribute.mock-invalid`, and one naming a member the schema hasn't got as
+`attribute.mock-unknown-property`.
+
+<Aside type="note" title="Where the hints end up">
+The UIR always carries them, under `x-docuccino.mock`. OpenAPI artifacts drop them unless
+[`export.mock_faker_key`](/laravel/reference/configuration/#export) names the member to publish them
+under — `x-faker` is the convention most mock servers read. Turning it on changes the exported
+artifacts and nothing else.
+</Aside>
+
 ## When it can't tell
 
 If a resource, model, or enum can't be fully resolved, Docuccino falls back to a permissive schema
