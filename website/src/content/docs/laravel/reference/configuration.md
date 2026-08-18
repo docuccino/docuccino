@@ -384,17 +384,19 @@ turning it on rewrites no byte of the UIR: it shapes the projection, never the d
     'gate' => null,         // Gate ability name; null = local environment only
     'middleware' => ['web', 'throttle:60,1'],
     'source' => 'generate', // generate | artifact | cache
-    // 'cdn' => false,       // true loads Scalar from a CDN instead of the bundled asset
+    // 'driver' => 'scalar', // scalar | redoc, or a driver you registered
+    // 'cdn' => false,       // true loads the driver's script from a CDN instead of the bundled asset
 ],
 ```
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `route` | `'/docs/api'` | Base path for the viewer/spec/asset routes. `null` disables them for this document. |
-| `gate` | `null` | Gate ability guarding all three routes — the HTML page, the `.json` spec and the asset. `null` = available only in the `local` environment. |
+| `gate` | `null` | Gate ability guarding all three routes — the HTML page, the `.json` spec and the asset. `null` = available only in the `local` environment. Every driver goes through it. |
 | `middleware` | `['web', 'throttle:60,1']` | Middleware for the viewer routes. Keep `throttle` when exposing the (potentially expensive) spec endpoint publicly. See the warning below if your app is multi-tenant or domain-gated. |
 | `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
-| `cdn` | `false` | `true` loads Scalar from jsDelivr instead of the local bundle. |
+| `driver` | `'scalar'` | Which renderer serves the HTML page: `scalar` (with a try-it-out console) or `redoc` (reference only), or the name of a [driver you registered](/laravel/guides/viewer/#writing-your-own-driver). An unregistered name falls back to `scalar` and logs a warning. |
+| `cdn` | `false` | `true` loads the active driver's script from jsDelivr instead of the bundle shipped with the package. |
 
 :::caution[Multi-tenant or domain-gated apps: override `middleware`]
 The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs

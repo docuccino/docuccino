@@ -420,9 +420,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * Registers the runtime viewer routes for each document with a `viewer.route`: the Scalar HTML
-     * page, its `.json` spec, and the bundled Scalar asset. Access control lives in
-     * {@see DocsController} (a `viewer.gate` ability, else local env only).
+     * Registers the runtime viewer routes for each document with a `viewer.route`: the HTML page, its
+     * `.json` spec, and the active driver's assets. Access control lives in {@see DocsController} (a
+     * `viewer.gate` ability, else local env only), which is why the asset route is one pattern rather
+     * than one per driver — the driver is chosen late, from a registry that is not readable at boot,
+     * and the names it serves are its own allow-list.
      */
     public function packageBooted(): void
     {
@@ -454,7 +456,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
             Route::get($base, [DocsController::class, 'show'])->middleware($middleware)->defaults('document', (string) $key);
             Route::get($base.'.json', [DocsController::class, 'spec'])->middleware($middleware)->defaults('document', (string) $key);
-            Route::get($base.'/assets/scalar.js', [DocsController::class, 'asset'])->middleware($middleware)->defaults('document', (string) $key);
+            Route::get($base.'/assets/{asset}.js', [DocsController::class, 'asset'])
+                ->middleware($middleware)
+                ->where('asset', '[A-Za-z0-9_-]+')
+                ->defaults('document', (string) $key);
         }
     }
 

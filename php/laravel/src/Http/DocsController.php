@@ -12,21 +12,25 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Support\Paths;
-use Docuccino\Laravel\Viewer\ScalarViewer;
+use Docuccino\Laravel\Viewer\ViewerDrivers;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 /**
- * The runtime viewer endpoints: the Scalar HTML page, the `.json` spec (per `viewer.source`:
- * generate | artifact | cache), and the bundled Scalar asset. All three go through
- * {@see authorize()} — a configured `viewer.gate` ability, otherwise local environment only.
+ * The runtime viewer endpoints: the driver's HTML page, the `.json` spec (per `viewer.source`:
+ * generate | artifact | cache), and the driver's bundled asset. Which driver renders is
+ * `viewer.driver` ({@see ViewerDrivers}); every one of them arrives here, and all three endpoints go
+ * through {@see authorize()} first — a configured `viewer.gate` ability, otherwise local environment
+ * only. That ordering is the gate's whole guarantee: no driver can be reached without passing it,
+ * because nothing but this controller ever calls one.
  */
 final class DocsController
 {
     public function __construct(
         private readonly DocumentBuilder $builder,
-        private readonly ScalarViewer $viewer,
+        private readonly ViewerDrivers $drivers,
     ) {}
 
     public function show(string $document): Response
@@ -34,7 +38,7 @@ final class DocsController
         $config = $this->config($document);
         $this->authorize($config);
 
-        return new Response($this->viewer->render(new ViewerContext($config)), 200, ['Content-Type' => 'text/html']);
+        return $this->response($config, $this->drivers->for($config)->render(new ViewerContext($config)));
     }
 
     public function spec(string $document, TypeEngine $engine, DocumentCache $cache): Response
@@ -71,11 +75,24 @@ final class DocsController
         return $this->generate($document, $engine);
     }
 
-    public function asset(string $document): Response
+    /**
+     * One of the active driver's own assets. The driver publishes the name → file map, so a name that
+     * driver does not publish is a 404 rather than a path this route resolves — switching drivers
+     * closes the previous one's asset with it.
+     */
+    public function asset(Request $request): Response
     {
-        $this->authorize($this->config($document));
+        // Read by NAME, not by signature position: this is the one viewer route with a URI parameter,
+        // and Laravel appends a route's `defaults` after its URI parameters, so positional binding
+        // would hand `$document` the asset name.
+        $config = $this->config($this->routeParameter($request, 'document'));
+        $this->authorize($config);
 
-        $path = dirname(__DIR__, 2).'/resources/js/scalar.standalone.js';
+        $path = $this->drivers->asset($config, $this->routeParameter($request, 'asset'));
+        if ($path === null) {
+            abort(404);
+        }
+
         $contents = @file_get_contents($path);
 
         if ($contents === false) {
@@ -87,9 +104,41 @@ final class DocsController
         return new Response($contents, 200, [
             'Content-Type' => 'application/javascript',
             // The bundle only changes on package upgrade, so cache it immutably and skip re-reading
-            // 3.6 MB on every viewer load.
+            // megabytes on every viewer load.
             'Cache-Control' => 'public, max-age=31536000, immutable',
         ]);
+    }
+
+    /**
+     * A driver renders `mixed` — the contract is framework-agnostic — so this adapter accepts the two
+     * things it can serve: HTML, or a response the driver built itself. Anything else is a driver bug,
+     * and one that would otherwise show up as a blank page with no explanation anywhere.
+     */
+    private function response(DocumentConfig $config, mixed $rendered): Response
+    {
+        if ($rendered instanceof Response) {
+            return $rendered;
+        }
+
+        if (is_string($rendered)) {
+            return new Response($rendered, 200, ['Content-Type' => 'text/html']);
+        }
+
+        Log::warning(sprintf(
+            'Docuccino viewer "%s" rendered a %s; a driver must return HTML or an Illuminate response. Serving an empty page.',
+            $config->key,
+            get_debug_type($rendered),
+        ));
+
+        return new Response('', 200, ['Content-Type' => 'text/html']);
+    }
+
+    /** A route parameter by name, empty when it is absent or not a string. */
+    private function routeParameter(Request $request, string $name): string
+    {
+        $value = $request->route($name);
+
+        return is_string($value) ? $value : '';
     }
 
     private function config(string $document): DocumentConfig
