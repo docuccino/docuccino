@@ -42,7 +42,7 @@ in-process. The published config ships one document, `default`.
 
 :::note[Paths are stored relative to your application]
 Every path in a document — `info.description.file`, `content.dir`, `webhooks.dir`, `overlays`,
-`export.path` — may be
+`examples.recordings`, `export.path` — may be
 written relative to your application root or as an absolute path; both resolve to the same file. Write
 them however you like: a path inside your application is **stored relative to the application root**,
 so the generated document is identical on your laptop, in CI, and in a container, wherever the app is
@@ -214,6 +214,28 @@ Folders become default nav groups; frontmatter (`title`/`slug`/`summary`/`tags` 
 resolved against the document; broken refs become diagnostics. `null` compiles nothing. See
 [Adding your own pages](/laravel/guides/narrative-content/) for the full workflow, or the
 [UIR content layer](/uir/#content-layer) for how it lives in the raw document.
+
+### `examples`
+
+```php
+'examples' => [
+    'recordings' => 'docs/recordings', // absent by default
+],
+```
+
+Points at a directory of response recordings your test suite wrote, one committed file per operation,
+named after the operation's stable id. The build **reads** those files and publishes each body as the
+`example` beside the schema documented for that status and media type — no test runs, no route is
+dispatched, no database is opened.
+
+A recorded example sits at the `integration(20)` rung of the precedence ladder — above inference, below
+anything you wrote, so an [`#[Example]`](/laravel/reference/attributes/#example) or an `@example`
+always wins. A body whose status or media type the document doesn't describe is never
+published, and neither is one that still looks like it holds a credential.
+
+Absent — the default — publishes no recorded examples. See
+[contract testing](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples) for how
+recordings are written and reviewed.
 
 ### `overlays`
 

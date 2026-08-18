@@ -543,6 +543,55 @@ declaration could name already exists), confines an `#[Example(file:)]` path thr
 `ConfinedPath` `#[DescriptionFromFile]` uses, and registers the resolved path as a route dependency
 whether or not the read worked — so creating a file that wasn't there rebuilds the route.
 
+**Recorded examples.** A test suite already exercises real endpoints with real data, and the
+contract-testing observer seam (`Laravel\Testing\Contracts\ContractObserver`) already holds the
+request, the response and the matched operation. `Laravel\Testing\ExampleRecorder` writes each
+observed exchange to a committed file per operation, and `Laravel\Extensions\RecordedExamplesExtension`
+reads it back at build time. Reading a committed file is ALL the build does — no test runs, no route is
+dispatched, no database is opened — so "Docuccino never executes your application code" is unchanged.
+The file format, the store, the redaction and the whole-document audit are core
+(`Core\Examples\*`): the input is a data file rather than Laravel code, exactly as for the content
+subsystem. Four decisions carry the feature:
+
+- **Curation is the author's, and it happens in the diff.** The recorder narrows a suite's many
+  responses to one candidate per (status, media type) and the human reviews the committed file. The
+  narrowing is a function of the bodies and never of the run: only an exchange whose RESPONSE half was
+  checked and passed is recorded (so a body cannot illustrate a schema it contradicts), and the winner
+  is the most POPULATED body, then the shorter, then the lexicographically smaller —
+  `RecordedExample::outranks()`. A first-come rule would let reordering a test file change a published
+  example, which is the same defect `ComponentNames` exists to prevent, one node down.
+- **A committed body is rewritten only when its SHAPE changes** (`ResponseShape`, keyed into
+  `ExampleRecording::with()`). A `created_at`, a UUID or an autoincrement key moves the body on every
+  run and the structure on none of them, so re-recording an unchanged suite is a no-op on the file and
+  therefore on the artifact. That, plus the file being committed, is the whole determinism answer:
+  nothing is normalised away and nothing is guessed at.
+- **Credentials are replaced on the way out, and re-checked on the way in.**
+  `Core\Examples\ExampleRedaction` reuses `Lint\SensitiveFieldLintOptions` and `Lint\CredentialShapes` rather than
+  re-deriving them — one table, so an application that taught the lint its own names has taught the
+  recorder too. Only STRINGS are replaced, so a `token_count` keeps its type and the example goes on
+  satisfying its schema; a sensitive member name taints everything beneath it. The build refuses to
+  publish a committed body that still matches (a hand edit, or a heuristic added since) and
+  `examples.recording-unsafe` names the pointer, never the value.
+- **The example is the MEDIA TYPE's, not the schema's.** `SharedErrorResponses` strips
+  `content[<media type>].example` before it groups, and would key on one written into the schema — so a
+  recording inside the schema could drop an unrelated route's 404 out of its shared component and back
+  inline. `setExample()` is first-writer-wins and carries no provenance record — that is the cost, and
+  it is the same one every media-type example already pays — so the ladder is read rather than written:
+  the extension asks `producerFor('example')` on the schema draft (where `#[Example]` and `@example`
+  land) and steps aside for anything at `docblock` or above, leaving a recording at the `integration`
+  rung, over inference and under every authored source.
+
+Two supporting notes. `RouteContext::$operationId` carries the already-minted id into the draft phase,
+because a recording is filed under identity (so it survives a route rename) and deriving the id a second
+time is how two answers to "which operation is this" start disagreeing; the recording file joins
+`RouteContext::dependencies()` whether or not it exists, so creating one invalidates exactly as editing
+one does. And every recording DIAGNOSTIC comes from `Core\Examples\RecordedExampleAudit`, a
+`DocumentTransformer`: only a whole-document pass can tell a recording nobody claimed from one that is
+simply another operation's, and a transformer runs on every build, so warm reports what cold reports
+without any of it having to ride a cached fragment. The recorder refuses under a parallel runner for the
+same reason coverage does — each worker would pick the best of its own share and the last writer would
+win, which is a published example decided by scheduling.
+
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
 throws. `ImplicitResponsesExtension` (adapter, Errors phase, `Priorities::LATE`) synthesizes those from

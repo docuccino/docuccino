@@ -511,6 +511,16 @@ what another publishes.
 Request bodies and parameters take examples the same way — see
 [Example payloads on requests](/laravel/documenting/requests/#example-payloads).
 
+### Examples your tests recorded
+
+Your suite already produces real payloads. Point Docuccino at a committed directory of recorded
+responses and each one becomes the example for the operation it came from — no attribute to write, and
+still nothing executed at build time. See [Turn your tests' responses into
+examples](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples).
+
+An `#[Example]` always wins: a recording illustrates a media type nobody has chosen an example for, and
+steps aside for one you wrote.
+
 <Aside type="caution" title="An example that doesn't match its schema is a lie">
 Inference can't be wrong about a shape it derived; a hand-written example can say anything at all, and
 it's the part of a document a reader pastes into their client. `assertValidExamples()` holds every

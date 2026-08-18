@@ -66,6 +66,22 @@ final class ApiContract
         self::$observers[] = $observer;
     }
 
+    /**
+     * Record what this run's responses look like, as the examples the document publishes.
+     *
+     * One line in a test bootstrap and the suite starts writing a committed file per operation; the
+     * build reads those files, and goes on executing nothing. Pass a directory to override
+     * `examples.recordings`. See {@see ExampleRecorder} for what gets chosen and what gets redacted.
+     */
+    public static function record(?string $directory = null): ExampleRecorder
+    {
+        $recorder = new ExampleRecorder($directory);
+
+        self::observe($recorder);
+
+        return $recorder;
+    }
+
     /** The assertions as an object, for a test that cannot use the trait. */
     public static function assertions(): ContractAssertions
     {

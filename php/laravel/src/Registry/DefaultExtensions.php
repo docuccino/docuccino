@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Registry;
 
+use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
@@ -24,6 +25,7 @@ use Docuccino\Laravel\Extensions\FrameworkResponseTypeToSchema;
 use Docuccino\Laravel\Extensions\ImplicitResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
+use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
 use Docuccino\Laravel\Extensions\RouteServersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
 use Docuccino\Laravel\Extensions\ViewMediaType;
@@ -75,6 +77,8 @@ final class DefaultExtensions
             // not one of them is installed.
             AuthConfigDigestContributor::class,
             AttributeOverridesExtension::class,
+            // Reads a committed file of responses a test suite recorded; nothing is executed here.
+            RecordedExamplesExtension::class,
             // Finalize: every response, parameter and request body a #[Example] could name now exists.
             AttributeExamplesExtension::class,
             RouteServersExtension::class,
@@ -122,6 +126,8 @@ final class DefaultExtensions
             MissingDescriptionLint::class,
             OperationIdStyleLint::class,
             UndocumentedTagLint::class,
+            // Diagnostics-only too: what is wrong with the committed recordings, said once per document.
+            RecordedExampleAudit::class,
         ];
     }
 }

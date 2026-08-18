@@ -104,6 +104,12 @@ return [
                 'dir' => null, // e.g. 'resources/docs/api'
             ],
 
+            // Response bodies your test suite recorded, published as examples. The build only ever
+            // READS these committed files — nothing is executed and no database is touched; the
+            // recording is written by your suite (ApiContract::record()). Absent means the document
+            // publishes no recorded examples.
+            // 'examples' => ['recordings' => 'docs/recordings'],
+
             // Overlay 1.0 documents applied to the finished build (globs, relative to the base path).
             'overlays' => [
                 // 'resources/docs/overlays/*.yaml',
