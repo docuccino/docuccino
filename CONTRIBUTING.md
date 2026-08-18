@@ -118,6 +118,7 @@ What lives where:
 composer install
 
 composer test               # full suite, parallel (the `fixture` group auto-skips without the fixture app)
+composer test:unit          # everything but the `fixture` group — what CI's quality job runs
 composer analyse            # PHPStan level max — NO baselines, no blanket ignores
 composer lint               # code style (composer fix to apply)
 composer validate --strict  # per package

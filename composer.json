@@ -82,6 +82,10 @@
             "@php tools/fixture-app-drift.php",
             "pest --parallel"
         ],
+        "test:unit": [
+            "@php tools/fixture-app-drift.php",
+            "pest --parallel --exclude-group=fixture"
+        ],
         "test:inference-fixture": [
             "@php tools/fixture-app-drift.php",
             "pest --parallel --group=fixture"

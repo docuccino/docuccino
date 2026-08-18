@@ -483,9 +483,10 @@
             "dist": {
                 "type": "path",
                 "url": "php/inference-phpstan",
-                "reference": "2a2bed7d02ab04c5888f267be6f270840282a516"
+                "reference": "426edce0d620dcccddc99f9f169a67a14ff34015"
             },
             "require": {
+                "docuccino/attributes": "self.version",
                 "docuccino/core": "self.version",
                 "larastan/larastan": "^3.10",
                 "nikic/php-parser": "^5",
@@ -540,13 +541,15 @@
             "dist": {
                 "type": "path",
                 "url": "php/laravel",
-                "reference": "2ca2a4545c2f70d93224d62483cacc00e6523046"
+                "reference": "8fedb650e137652a2ea3f9ad3aaa613abb0b1452"
             },
             "require": {
                 "docuccino/attributes": "self.version",
                 "docuccino/core": "self.version",
+                "illuminate/cache": "^12.0 || ^13.0",
                 "illuminate/console": "^12.0 || ^13.0",
                 "illuminate/contracts": "^12.0 || ^13.0",
+                "illuminate/database": "^12.0 || ^13.0",
                 "illuminate/routing": "^12.0 || ^13.0",
                 "illuminate/support": "^12.0 || ^13.0",
                 "php": "^8.3",

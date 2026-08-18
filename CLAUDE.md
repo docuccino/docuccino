@@ -35,10 +35,11 @@ change serves one at the other's expense, say so out loud rather than letting it
   CI also gates line coverage **per package** (`composer test:coverage` →
   `tools/coverage-floors.php`; honest measured-now floors, ratchet up, never down) and type
   coverage (`composer test:types`, 100%). **Use the composer scripts** — they carry the flags
-  the gates need (`--parallel`, the two 2G limits, and the grpc fork guard below). CI runs the same
-  scripts, so they cannot drift. Both 2G are real: `analyse` runs PHPStan in a process of its own,
-  and `--memory-limit` on `pest --type-coverage` is the type-coverage plugin's own flag, which it
-  applies with `ini_set` before analysing — `phpunit.xml`'s `<ini name="memory_limit">` governs the
+  the gates need (`--parallel`, the two 2G limits, and the grpc fork guard below). Every check step
+  in CI is one of these scripts — no raw `vendor/bin/…` lines — so the two cannot drift; a step that
+  spells the flags out again IS the drift. Both 2G are real: `analyse` runs PHPStan in a process of
+  its own, and `--memory-limit` on `pest --type-coverage` is the type-coverage plugin's own flag,
+  which it applies with `ini_set` before analysing — `phpunit.xml`'s `<ini name="memory_limit">` governs the
   phpunit run and never reaches that path. A COLD type-coverage run dies inside PHPStan at PHP's
   128M default and passes at 256M, so the 2G is headroom rather than decoration. Memory is still
   not the lever a hang looks like: a run that appears to hang is never short of it.
@@ -107,14 +108,20 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   `<Name>Integration` registrar via the public Registrar API, `class_exists` conditional
   registration, imports only the public surface (`IntegrationsArchTest` is the definition;
   extend its allow-list only with justification — never duplicate a core utility to dodge it).
-- **Public API boundary**: `@internal` marks non-public core; `CoreBoundaryArchTest` +
-  `IntegrationsArchTest` enforce. The extension-author surface freezes at v1.
+- **Public API boundary**: `@internal` marks non-public core, enforced in two halves.
+  `IntegrationsArchTest` reads IMPORTS — a built-in integration may consume only the allow-listed
+  public surface. `CoreBoundaryArchTest` reads REFLECTION — no public method or property of the
+  extension-author surface may take or return an `@internal` type, which an import scan cannot see
+  (`$context->converter()->…` imports nothing); its remaining rules are package-direction. The
+  extension-author surface freezes at v1.
 - **Package direction**: `attributes ← core ← {laravel, inference-phpstan}` — the adapter and the
   engine are SIBLINGS. `docuccino/laravel` must install without an analyser: it names the engine's
   entry class by string (`Engine\EnginePackage`) and degrades to `NullTypeEngine` + one
   `engine.not-installed` warning. `AdapterBoundaryArchTest` / `EngineBoundaryArchTest` enforce both
   directions — note a Pest arch layer can only see PSR-4-autoloaded namespaces, so a phar dependency
-  like phpstan/phpstan needs the `importsMatching()` import scan instead.
+  like phpstan/phpstan needs the `importsMatching()` source scan instead. That scan tokenises rather
+  than greps `use` lines, because `\PHPStan\Foo::class` names the analyser exactly as an import does;
+  a name in a STRING is the one sanctioned exception, and tokenising exempts it for free.
 - **Split repo names ≠ package names**: a split repository whose name would be language-generic
   carries a language prefix (`docuccino/php-core` ships the `docuccino/core` package); one already
   naming its language or framework does not (`docuccino/laravel`). Composer package names never
@@ -186,6 +193,7 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
 ```bash
 composer install
 composer test                    # full suite, parallel (fixture group auto-skips w/o fixture app)
+composer test:unit               # everything but the fixture group — what CI's quality job runs
 composer test:inference-fixture  # real-engine integration tests
 composer analyse                 # PHPStan level max (2G)
 composer lint                    # Pint --test  (composer fix to apply)

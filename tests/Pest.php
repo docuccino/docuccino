@@ -583,18 +583,36 @@ function diagnosticsCoded(array $diagnostics, string $code): array
 }
 
 /**
- * A package's `src/` imports matching a pattern, as `relative/path.php: FQCN` strings.
+ * A package's `src/` references matching a pattern, as `relative/path.php: FQCN` strings.
  *
  * The boundary escape hatch for dependencies Pest's arch layers cannot see: a layer is resolved
  * through composer's PSR-4 prefixes, so phpstan/phpstan — a phar with no prefix — is invisible to
- * `not->toUse('PHPStan')`, which then passes vacuously. Scanning the imports is the honest test.
+ * `not->toUse('PHPStan')`, which then passes vacuously. Scanning the source is the honest test.
  *
  * @return list<string>
  */
 function importsMatching(string $package, string $pattern): array
 {
-    $src = dirname(__DIR__).'/php/'.$package.'/src';
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, FilesystemIterator::SKIP_DOTS));
+    return referencesIn(dirname(__DIR__).'/php/'.$package.'/src', $pattern);
+}
+
+/**
+ * The same scan over any directory of PHP sources: every namespaced name they NAME IN CODE, matched
+ * against $pattern without its leading backslash, as sorted `relative/path.php: FQCN` strings.
+ *
+ * It tokenises rather than greps because a guard must read the same grammar as the thing it guards,
+ * and `^use …` over lines reads a narrower one than PHP does — a fully-qualified reference in an
+ * expression, an attribute or a type position (`\PHPStan\Foo::class`, `new \Larastan\Bar`) walks
+ * straight past it. Tokenising also draws the string/comment line for free, which is the point:
+ * naming a class in a STRING is the sanctioned way to probe for an optional package
+ * (`EnginePackage::BUILDER`), so it must not be flagged. Doc-comment types are out of scope for the
+ * same reason — they load nothing, and PHPStan already fails on one it cannot resolve.
+ *
+ * @return list<string>
+ */
+function referencesIn(string $directory, string $pattern): array
+{
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
 
     $found = [];
     foreach ($files as $file) {
@@ -602,17 +620,89 @@ function importsMatching(string $package, string $pattern): array
             continue;
         }
 
-        preg_match_all('/^use\s+(?!function\s|const\s)([^\s;]+)/m', (string) file_get_contents($file->getPathname()), $matches);
-        foreach ($matches[1] as $import) {
-            if (preg_match($pattern, $import) === 1) {
-                $found[] = str_replace($src.'/', '', $file->getPathname()).': '.$import;
+        foreach (namesInSource((string) file_get_contents($file->getPathname())) as $name) {
+            if (preg_match($pattern, $name) === 1) {
+                $found[str_replace($directory.'/', '', $file->getPathname()).': '.$name] = true;
             }
         }
     }
 
-    sort($found);
+    $names = array_keys($found);
+    sort($names);
 
-    return $found;
+    return $names;
+}
+
+/**
+ * Every namespaced name one PHP source names in code, once each and without a leading backslash:
+ * `use` imports (grouped ones expanded) and inline references alike. The `namespace` declaration is
+ * not one of them — a file does not import itself.
+ *
+ * @return list<string>
+ */
+function namesInSource(string $source): array
+{
+    $tokens = token_get_all($source);
+    $count = count($tokens);
+    $names = [];
+    $declaringNamespace = false;
+
+    for ($i = 0; $i < $count; $i++) {
+        $token = $tokens[$i];
+        if (! is_array($token)) {
+            continue;
+        }
+
+        if ($token[0] === T_NAMESPACE) {
+            $declaringNamespace = true;
+
+            continue;
+        }
+
+        if (! in_array($token[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED], true)) {
+            continue;
+        }
+
+        // `use Prefix\{A, B\C};` — the prefix is a name token followed by `\{`, and each member is a
+        // name token of its own. Nothing else in PHP puts a brace there.
+        if (($tokens[$i + 1][0] ?? null) === T_NS_SEPARATOR && ($tokens[$i + 2] ?? null) === '{') {
+            $prefix = ltrim((string) $token[1], '\\').'\\';
+            $alias = false;
+
+            for ($i += 3; $i < $count && $tokens[$i] !== '}'; $i++) {
+                $member = $tokens[$i];
+                if (! is_array($member)) {
+                    continue;
+                }
+
+                if ($member[0] === T_AS) {
+                    $alias = true;
+                } elseif (! in_array($member[0], [T_STRING, T_NAME_QUALIFIED], true)) {
+                    continue;
+                } elseif ($alias) {
+                    $alias = false;
+                } else {
+                    $names[$prefix.$member[1]] = true;
+                }
+            }
+
+            continue;
+        }
+
+        if ($declaringNamespace) {
+            $declaringNamespace = false;
+
+            continue;
+        }
+
+        // A bare `Foo` is a method, function or constant name far more often than a root-namespace
+        // class, and a one-segment name is never the boundary violation these scans look for.
+        if ($token[0] !== T_STRING) {
+            $names[ltrim((string) $token[1], '\\')] = true;
+        }
+    }
+
+    return array_keys($names);
 }
 
 /**

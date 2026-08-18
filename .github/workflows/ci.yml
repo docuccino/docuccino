@@ -80,8 +80,12 @@ jobs:
       - name: PHPStan (level max)
         run: composer analyse
 
+      # The fixture group has a job of its own (it needs a provisioned Laravel + Larastan app), so
+      # this one runs everything else. `composer test:unit` rather than a raw pest line: the scripts
+      # are what carries the flags every gate needs, and a step that spells them out here is a step
+      # that can drift from them.
       - name: Pest (unit + non-fixture integration)
-        run: vendor/bin/pest --parallel --exclude-group=fixture
+        run: composer test:unit
 
   schema-copies:
     name: UIR schema copies in sync
