@@ -31,19 +31,20 @@ final class ConfigPaths
 {
     /**
      * Document-config keys holding filesystem paths, in a fixed order so diagnostics are
-     * deterministic. `true` = a list of paths, `false` = a single path.
+     * deterministic.
      *
      * Not here on purpose: the `viewer` bag, `servers[].url` and `integrations.passport.url` aren't
      * filesystem paths; `cache.path` and `engine.project_paths` are, but live outside the per-document
      * bag so they never reach a `configHash` or any emitted byte.
      *
-     * @var array<string, bool>
+     * @var array<string, PathShape>
      */
     private const PATH_KEYS = [
-        'content.dir' => false,
-        'export.path' => false,
-        'info.description.file' => false,
-        'overlays' => true,
+        'content.dir' => PathShape::Single,
+        'export.path' => PathShape::Single,
+        'export.targets' => PathShape::TargetList,
+        'info.description.file' => PathShape::Single,
+        'overlays' => PathShape::PathList,
     ];
 
     /**
@@ -54,7 +55,7 @@ final class ConfigPaths
      *
      * @var list<string>
      */
-    private const DESTINATION_KEYS = ['export.path'];
+    private const DESTINATION_KEYS = ['export.path', 'export.targets'];
 
     /**
      * $config with every {@see PATH_KEYS} value inside $basePath rewritten base-relative. Already
@@ -65,36 +66,33 @@ final class ConfigPaths
      */
     public static function relativize(array $config, string $basePath): array
     {
-        foreach (self::PATH_KEYS as $key => $isList) {
+        foreach (self::PATH_KEYS as $key => $shape) {
             $segments = explode('.', $key);
             $value = self::get($config, $segments);
 
-            if ($isList) {
-                if (! is_array($value)) {
-                    continue;
-                }
-
-                $rewritten = [];
-                $changed = false;
-                foreach ($value as $index => $entry) {
-                    $next = is_string($entry) ? self::rewrite($entry, $basePath) : $entry;
-                    $changed = $changed || $next !== $entry;
-                    $rewritten[$index] = $next;
-                }
-
-                if ($changed) {
+            if ($shape === PathShape::Single) {
+                if (is_string($value) && ($rewritten = self::rewrite($value, $basePath)) !== $value) {
                     $config = self::set($config, $segments, $rewritten);
                 }
 
                 continue;
             }
 
-            if (! is_string($value)) {
+            if (! is_array($value)) {
                 continue;
             }
 
-            $rewritten = self::rewrite($value, $basePath);
-            if ($rewritten !== $value) {
+            $rewritten = [];
+            $changed = false;
+            foreach ($value as $index => $entry) {
+                $next = $shape === PathShape::TargetList
+                    ? self::rewriteTarget($entry, $basePath)
+                    : (is_string($entry) ? self::rewrite($entry, $basePath) : $entry);
+                $changed = $changed || $next !== $entry;
+                $rewritten[$index] = $next;
+            }
+
+            if ($changed) {
                 $config = self::set($config, $segments, $rewritten);
             }
         }
@@ -113,14 +111,14 @@ final class ConfigPaths
     {
         $found = [];
 
-        foreach (self::PATH_KEYS as $key => $isList) {
+        foreach (self::PATH_KEYS as $key => $shape) {
             if (in_array($key, self::DESTINATION_KEYS, true)) {
                 continue;
             }
 
             $value = self::get($config, explode('.', $key));
 
-            if ($isList) {
+            if ($shape !== PathShape::Single) {
                 foreach (is_array($value) ? $value : [] as $index => $entry) {
                     if (is_string($entry) && str_starts_with($entry, '/')) {
                         $found[] = ['key' => $key.'.'.(is_int($index) ? (string) $index : $index), 'path' => $entry];
@@ -142,6 +140,18 @@ final class ConfigPaths
     private static function rewrite(string $value, string $basePath): string
     {
         return Paths::relative($value, $basePath) ?? $value;
+    }
+
+    /** One export-target map with its `path` relativized. Anything else passes through untouched. */
+    private static function rewriteTarget(mixed $entry, string $basePath): mixed
+    {
+        if (! is_array($entry) || ! is_string($entry['path'] ?? null)) {
+            return $entry;
+        }
+
+        $entry['path'] = self::rewrite($entry['path'], $basePath);
+
+        return $entry;
     }
 
     /**

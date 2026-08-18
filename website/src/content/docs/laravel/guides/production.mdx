@@ -73,13 +73,13 @@ thin](/laravel/guides/troubleshooting/#the-document-is-thin) for the install tha
 | `source` | Where the spec comes from | Use it when |
 | --- | --- | --- |
 | `generate` | Rebuilt on every request | Local development, or a gated internal viewer on a small app |
-| `artifact` | The committed `export.path`, re-emitted | You commit the spec — the usual production answer |
+| `artifact` | A committed export target, re-emitted | You commit the spec — the usual production answer |
 | `cache` | The `docuccino:cache`-warmed payload | High-traffic or public viewers; you'd rather warm on deploy than commit |
 
 The [viewer guide](/laravel/guides/viewer/#source-modes) has the rest of the viewer's options.
 
 <Aside type="caution" title="`artifact` serves what's on disk">
-`artifact` reads `export.path` at request time. If the file isn't in your deployed release, the
+`artifact` reads a committed export target at request time. If the file isn't in your deployed release, the
 viewer serves an **empty document** rather than falling back to a build — so commit the artifact, or
 add the export to your build step. A UIR artifact is fine too: it's re-emitted as OpenAPI on the way
 out, so provenance never reaches the browser.

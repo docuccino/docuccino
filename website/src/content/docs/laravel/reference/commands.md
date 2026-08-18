@@ -32,8 +32,8 @@ Generate and export API documentation from your routes.
 ```
 docuccino:export
     {document? : The configured document key (defaults to every document)}
-    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 (defaults to openapi-3.2)}
-    {--out= : Output path (defaults to the document export path)}
+    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 — writes this one format instead of the configured targets}
+    {--out= : Output path (defaults to the matching target, else the document export path)}
     {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
     {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
@@ -44,20 +44,34 @@ docuccino:export
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
-| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` / `openapi-3.2` | Selects the emitter. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; anything else → OAS 3.2. An invalid value errors (no silent fallback). |
-| `--out` | path / document's [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when you configure more than one document and pass no `document` argument, since every document would clobber the same file: name a document, or configure a per-document `export.path`. |
+| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters. An invalid value errors (no silent fallback). |
+| `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when you configure more than one document and pass no `document` argument, since every document would clobber the same file: name a document, or configure per-document targets. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. Unrecognized values fall back to `winners`. Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
-| `--yaml` | flag / off | Emit YAML instead of JSON. Applies to the OpenAPI formats only; `--format=uir` always writes canonical UIR JSON. |
+| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir`, which has no YAML form. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
-The command prints `Wrote <path> (<format>).` per document, then any diagnostics.
+**One build, many artifacts.** With no `--format`, the command writes every target the document
+configures — a single analysis feeding each emitter in turn. It prints `Wrote <path> (<format>).` per
+target, in configured order, then any diagnostics.
+
+`--format` and `--out` **replace** that list for the run rather than filtering it, so
+`--format=openapi-3.0` gives you a 3.0 file whether or not a 3.0 target is configured. When one is,
+that target's path is used — looked up by format, so which file you get never depends on how the list
+happens to be ordered.
+
+A target list the command cannot honour — an unknown format, two targets writing one file, a `.yaml`
+path on `uir` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
+never costs you an analysis. A write that fails prints `Could not write <path>.` instead of `Wrote`,
+and the command exits non-zero.
 
 **Downlevel notes.** OpenAPI 3.1 and 3.0 are older, smaller specs, so a downlevel sometimes has to
 convert or drop something the UIR carries. Every one of those steps prints a `downlevel.*` diagnostic
-naming the construct and the JSON pointer it sat at, right after the `Wrote` line — so the artifact
-never quietly ships a weaker contract than your code describes. The table under
+naming the construct and the JSON pointer it sat at, right after that target's `Wrote` line — so the
+artifact never quietly ships a weaker contract than your code describes. These are reported, not
+enforced: `--fail-on` reads the **build's** diagnostics, so adding a 3.0 target never turns a green
+pipeline red on its own. The table under
 [OpenAPI 3.0 export](/laravel/getting-started/first-export/#openapi-30-export) lists what 3.0 changes.
 
 **Committing the output.** Docuccino's output is deterministic — identical code produces
