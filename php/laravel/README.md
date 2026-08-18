@@ -50,6 +50,21 @@ use Docuccino\Laravel\Facades\Docuccino;
 Docuccino::extend(MyOperationExtension::class);
 ```
 
+## Contract testing
+
+`Docuccino\Laravel\Testing\AssertsApiContract` holds the requests and responses your test suite
+already produces to the document Docuccino generates, and a failure names the producer and the
+`file:line` the schema came from. It also reports the documented endpoints your suite never
+exercises, validates every published example against its own schema, and gates breaking changes and
+a stale committed artifact.
+
+```php
+$this->getJson('/api/invoices')->assertValidExchange();
+```
+
+Test-only: nothing registers it, and the service provider never touches it. See
+[contract testing](https://docs.docuccino.app/laravel/guides/contract-testing/).
+
 ## Documentation
 
 Full documentation is at <https://docs.docuccino.app>:

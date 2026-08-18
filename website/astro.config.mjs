@@ -59,6 +59,7 @@ export default defineConfig({
 						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
 						'- Docuccino never executes application code — it reads types with an embedded PHPStan/Larastan engine.',
 						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',
+						'- Contract testing: `Docuccino\\Laravel\\Testing\\AssertsApiContract` asserts a Laravel test suite\'s real requests and responses against the generated UIR, reports untouched endpoints, validates documented examples, and gates breaking changes and artifact staleness.',
 						'- Precedence, lowest to highest: fallback, inference, integration, docblock, attribute, overlay, config. Higher layers win field by field.',
 					].join('\n'),
 					// Pages ordered for a reader starting from zero.
@@ -144,6 +145,7 @@ export default defineConfig({
 						{ label: 'The viewer', slug: 'laravel/guides/viewer' },
 						{ label: 'Multiple documents', slug: 'laravel/guides/multiple-documents' },
 						{ label: 'Adding your own pages', slug: 'laravel/guides/narrative-content' },
+						{ label: 'Contract testing', slug: 'laravel/guides/contract-testing' },
 						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
 						{ label: 'Speeding up builds', slug: 'laravel/guides/speeding-up-builds' },
 						{ label: 'Troubleshooting', slug: 'laravel/guides/troubleshooting' },

@@ -52,6 +52,7 @@ The tools differ at the root, and it colors everything else:
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
 | Byte-stable output you can commit | — | Yes |
 | Semantic diff + CI version gate | — | Yes (`docuccino:diff --enforce`) |
+| Contract testing from your own suite | — | Yes — [assertions](/laravel/guides/contract-testing/) over the generated document |
 | Custom HTML theming | Yes, Blade templates you publish | Yes, by writing a viewer driver — the whole page, not a published template |
 | Generated-UI localization | Yes, via Laravel lang files | No |
 | Documented intermediate format | — | Yes (the [UIR](/uir/)) |
@@ -147,6 +148,9 @@ own shapes for the rest. See [Error responses](/laravel/documenting/errors/).
 | Deterministic, byte-stable output | ✓ | — |
 | A spec artifact you commit and review in a pull request | ✓ | — |
 | Semantic diff + CI gate on breaking changes | ✓ | — |
+| Assertions holding your test suite's traffic to the spec | ✓ | — |
+| A report of documented endpoints your suite never exercises | ✓ | — |
+| Documented examples validated against their own schemas | ✓ | — |
 | A documented intermediate format (the [UIR](/uir/)) | ✓ | — |
 | Single-page HTML doc with Blade templates you own | — | ✓ |
 | Localized generated UI | — | ✓ |
@@ -156,6 +160,11 @@ Both tools let you correct what was extracted and keep the correction: Scribe by
 `.scribe` YAML, Docuccino with an attribute at the source or a standard
 [OpenAPI Overlay](/laravel/guides/customizing-output/). [Where Scribe is
 stronger](#where-scribe-is-stronger) covers the bottom four rows in detail.
+
+The three contract-testing rows are the other side of "never executes your code". Docuccino does not
+run your endpoints to *capture* a response the way Scribe does — but your test suite already runs them,
+so it holds that traffic to the generated document instead, and reports which documented endpoints the
+suite never touched. See [contract testing](/laravel/guides/contract-testing/).
 
 ## What you can stop writing
 
@@ -237,7 +246,10 @@ carefully before you switch — for some teams they're the whole reason to stay.
 
 - **Real captured responses.** Scribe invokes your endpoint (transaction-wrapped, `.env.docs`
   isolated) and shows the genuine JSON your API returns, including anything computed at runtime that
-  static analysis can't see. Docuccino never runs your code, so its examples are inferred or authored.
+  static analysis can't see. Docuccino never runs your code, so its examples are inferred or authored —
+  it uses your real traffic the other way round, holding the responses your *test suite* already
+  produces to the document rather than turning them into examples
+  ([contract testing](/laravel/guides/contract-testing/)).
 - **Factory-driven examples.** `@apiResourceModel states=… with=…` builds examples from your real
   factories, with states, eager-loaded relations and pivot data. Docuccino has no equivalent — it
   documents the response's *shape*, not a rendered instance of it.

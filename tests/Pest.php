@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Contract\CheckResult;
+use Docuccino\Core\Contract\ContractChecker;
+use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Emit\UirEmitter;
@@ -33,6 +37,7 @@ use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
@@ -40,8 +45,11 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
 use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
+use Illuminate\Testing\TestResponse;
 
 /*
  * Monorepo Pest bootstrap. Test files live alongside their package
@@ -1131,4 +1139,107 @@ function scriptWatch(int $builds, ?callable $onBuild = null): ScriptedBuildRunne
     app()->instance(BuildRunner::class, $runner);
 
     return $runner;
+}
+
+/**
+ * The contract-testing fixture: a small, provenance-carrying UIR document covering the shapes the
+ * checker has to get right (a `$ref`'d component, a recursive one, a status range, a `default`, a
+ * literal path beating a placeholder, a media type JSON Schema cannot check).
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
+ */
+function contractIndex(?callable $mutate = null): ContractIndex
+{
+    $document = loadFixture('contract.uir.json');
+
+    return ContractIndex::fromArray($mutate === null ? $document : $mutate($document));
+}
+
+/**
+ * One exchange, spelled the way a test reads best: everything optional but the three things that
+ * decide which operation it is.
+ *
+ * @param  array<string, mixed>  $query
+ * @param  array<string, string>  $headers
+ */
+function contractExchange(
+    string $method,
+    string $path,
+    int $status = 200,
+    string $responseBody = '',
+    ?string $responseContentType = 'application/json',
+    array $query = [],
+    array $headers = [],
+    string $requestBody = '',
+    ?string $requestContentType = 'application/json',
+): Exchange {
+    return new Exchange(
+        method: $method,
+        path: $path,
+        status: $status,
+        query: $query,
+        headers: $headers,
+        requestBody: $requestBody,
+        requestContentType: $requestContentType,
+        responseBody: $responseBody,
+        responseContentType: $responseContentType,
+    );
+}
+
+/**
+ * Check one exchange against the contract fixture, optionally mutating the document first.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
+ */
+function checkContract(Exchange $exchange, ?callable $mutate = null): CheckResult
+{
+    return (new ContractChecker(contractIndex($mutate)))->check($exchange);
+}
+
+/**
+ * Emit the workbench `default` document as UIR into a temp file and point the contract assertions at
+ * it. The one place the Laravel-side contract tests get a real artifact: a real build of the real
+ * workbench through the real emitter, not a document written by hand to suit the assertion.
+ */
+function workbenchContract(?callable $mutateConfig = null): string
+{
+    bindStubEngine();
+
+    $path = sys_get_temp_dir().'/docuccino-contract-'.getmypid().'.uir.json';
+    file_put_contents($path, (new UirEmitter)->emit(generateDocument($mutateConfig)->document));
+
+    ApiContract::using($path);
+
+    return $path;
+}
+
+/**
+ * A `TestResponse` for an exchange that never went through the router, so a contract test can pin the
+ * exact request and response it is asserting about.
+ *
+ * @param  array<string, string>  $headers  response headers
+ * @param  array<string, string>  $requestHeaders
+ * @return TestResponse<Response>
+ */
+function contractResponse(
+    string $method,
+    string $uri,
+    int $status = 200,
+    string $body = '',
+    array $headers = ['Content-Type' => 'application/json'],
+    string $requestBody = '',
+    array $requestHeaders = [],
+): TestResponse {
+    $server = [];
+    foreach ($requestHeaders as $name => $value) {
+        $server['HTTP_'.strtoupper(str_replace('-', '_', $name))] = $value;
+    }
+
+    if ($requestBody !== '') {
+        $server['CONTENT_TYPE'] = $requestHeaders['Content-Type'] ?? 'application/json';
+    }
+
+    $request = Request::create($uri, $method, [], [], [], $server, $requestBody);
+
+    return TestResponse::fromBaseResponse(new Response($body, $status, $headers), $request);
 }
