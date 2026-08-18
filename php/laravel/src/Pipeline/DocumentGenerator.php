@@ -28,7 +28,7 @@ use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Pipeline\OperationPipeline;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
-use Docuccino\Core\Validation\Validator;
+use Docuccino\Core\SpecValidation\Validator;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
