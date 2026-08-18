@@ -118,3 +118,75 @@ it('takes a missing endpoint label as no label rather than as a broken file', fu
 
     expect($recording?->endpoint)->toBe('');
 });
+
+it('keeps one body per name, and orders them by name inside their media type', function (): void {
+    $recording = ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/carts', [
+        RecordedExample::of('200', 'application/json', ['items' => [['sku' => 'A']]], 'full-cart'),
+        RecordedExample::of('200', 'application/json', ['items' => []], 'empty-cart'),
+    ]);
+
+    expect(array_map(static fn (RecordedExample $e): string => $e->key(), $recording->responses))
+        ->toBe(['200 application/json empty-cart', '200 application/json full-cart'])
+        ->and($recording->find('200', 'application/json', 'empty-cart')?->body)->toBe(['items' => []]);
+});
+
+it('drops the unnamed body of a media type a named one has taken over', function (): void {
+    $recording = ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/carts', [
+        RecordedExample::of('200', 'application/json', ['items' => []]),
+        RecordedExample::of('404', 'application/json', ['message' => 'No cart.']),
+    ]);
+
+    $named = $recording->with(RecordedExample::of('200', 'application/json', ['items' => []], 'empty-cart'));
+
+    // OpenAPI carries `example` or `examples` and never both, so a file keeping the unnamed body would
+    // be keeping one the document could not publish. The other status is nobody's business but its own.
+    expect(array_map(static fn (RecordedExample $e): string => $e->key(), $named->responses))
+        ->toBe(['200 application/json empty-cart', '404 application/json']);
+});
+
+it('answers the same way whichever of the two was recorded first', function (): void {
+    $unnamed = RecordedExample::of('200', 'application/json', ['items' => []]);
+    $named = RecordedExample::of('200', 'application/json', ['items' => [['sku' => 'A']]], 'full-cart');
+
+    $one = ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/carts', [$unnamed, $named]);
+    $other = ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/carts', [$named, $unnamed]);
+
+    expect($one->toArray())->toBe($other->toArray());
+});
+
+it('reads and writes a name, and spells none where there is none', function (): void {
+    $named = RecordedExample::of('200', 'application/json', ['id' => 1], 'empty-cart')->toArray();
+
+    expect($named)->toBe(['status' => '200', 'mediaType' => 'application/json', 'name' => 'empty-cart', 'body' => ['id' => 1]])
+        ->and(RecordedExample::of('200', 'application/json', ['id' => 1])->toArray())->not->toHaveKey('name')
+        ->and(RecordedExample::fromArray($named)?->name)->toBe('empty-cart');
+});
+
+it('takes a name a document could not carry as a broken file', function (mixed $name): void {
+    expect(ExampleRecording::fromArray([
+        'docuccino' => 'recording/1',
+        'operation' => 'op:v1:abcdefgh12345678',
+        'responses' => [['status' => '200', 'mediaType' => 'application/json', 'name' => $name, 'body' => []]],
+    ]))->toBeNull();
+})->with([
+    'one with a space in it' => ['empty cart'],
+    'one starting with a dash' => ['-empty'],
+    'one with a slash in it' => ['carts/empty'],
+    'one past sixty-four characters' => [str_repeat('a', 65)],
+    'one that is not a string' => [7],
+]);
+
+it('names what may be a name and what may not', function (string $name, bool $legal): void {
+    expect(RecordedExample::isLegalName($name))->toBe($legal);
+})->with([
+    'a plain word' => ['empty', true],
+    'a dashed pair' => ['empty-cart', true],
+    'dots and underscores' => ['cart.v2_final', true],
+    'a leading digit' => ['2xx', true],
+    'sixty-four characters' => [str_repeat('a', 64), true],
+    'sixty-five' => [str_repeat('a', 65), false],
+    'nothing at all' => ['', false],
+    'a space' => ['empty cart', false],
+    'a leading dot' => ['.empty', false],
+    'a brace' => ['{empty}', false],
+]);

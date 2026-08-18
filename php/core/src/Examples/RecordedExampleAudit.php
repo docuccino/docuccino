@@ -6,7 +6,9 @@ namespace Docuccino\Core\Examples;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Extensions\BuiltIn\SharedErrorResponses;
 use Docuccino\Core\Extensions\Context\DocumentContext;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Lint\LintOperation;
@@ -22,6 +24,8 @@ use Docuccino\Core\Lint\LintOperation;
  *
  * Diagnostics only — it never touches the document. The publishing half applies the same safety rule
  * silently, so nothing here is a report about something that already shipped.
+ *
+ * @phpstan-type Documented array<string, array<string, true>>
  *
  * @internal
  */
@@ -53,17 +57,18 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
             return;
         }
 
-        $documented = self::operationIds($document->toArray());
+        $documented = self::documented($document->toArray());
+        $hoists = RepresentationPolicy::fromConfig($context->config->representation)->errorComponents;
 
         foreach ($files as $file) {
-            $this->check($store, $file, $documented, $context);
+            $this->check($store, $file, $documented, $hoists, $context);
         }
     }
 
     /**
-     * @param  array<string, true>  $documented
+     * @param  Documented  $documented
      */
-    private function check(RecordingStore $store, string $file, array $documented, DocumentContext $context): void
+    private function check(RecordingStore $store, string $file, array $documented, bool $hoists, DocumentContext $context): void
     {
         $path = $store->directory.'/'.$file;
         $recording = RecordingStore::at($path);
@@ -108,6 +113,8 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
             return;
         }
 
+        $this->reportUnpublishableNames($recording, $file, $documented[$operationId], $hoists, $context);
+
         foreach ($recording->responses as $response) {
             $findings = $this->redaction->findings($response->body);
 
@@ -131,12 +138,50 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
     }
 
     /**
-     * Every operation id the document publishes.
+     * The names a recording asked for that the document cannot carry.
+     *
+     * A media type's `examples` map is not stripped before the shared-error hoist groups bodies, so a
+     * named example on a status it groups would take that response out of the component an unrelated
+     * route also points at. The body still publishes, as the singular `example`; the name does not,
+     * and an author who named a scenario is owed the news.
+     *
+     * @param  array<string, true>  $statuses  the statuses this operation documents
+     */
+    private function reportUnpublishableNames(ExampleRecording $recording, string $file, array $statuses, bool $hoists, DocumentContext $context): void
+    {
+        if (! $hoists) {
+            return;
+        }
+
+        $dropped = [];
+        foreach ($recording->responses as $response) {
+            if ($response->isNamed() && isset($statuses[$response->status]) && SharedErrorResponses::shares($response->status)) {
+                $dropped[$response->slot()][] = $response->name;
+            }
+        }
+
+        foreach ($dropped as $slot => $names) {
+            $context->report(new Diagnostic(
+                severity: Severity::Warning,
+                code: 'examples.recording-name-unpublished',
+                message: sprintf(
+                    'The %s recordings in %s publish without their names (%s), which an error response cannot carry.',
+                    $slot,
+                    $file,
+                    implode(', ', $names),
+                ),
+                help: 'Named examples on an error status would keep that response out of the shared error component other routes point at. Record it without a name — the body still publishes as the example — or set representation.errors.components to false for this document.',
+            ));
+        }
+    }
+
+    /**
+     * Every operation id the document publishes, and the statuses each of them documents.
      *
      * @param  array<string, mixed>  $document
-     * @return array<string, true>
+     * @return Documented
      */
-    private static function operationIds(array $document): array
+    private static function documented(array $document): array
     {
         $ids = [];
 
@@ -144,9 +189,14 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
             $extension = $operation->operation['x-docuccino'] ?? null;
             $id = is_array($extension) ? ($extension['id'] ?? null) : null;
 
-            if (is_string($id) && $id !== '') {
-                $ids[$id] = true;
+            if (! is_string($id) || $id === '') {
+                continue;
             }
+
+            $responses = $operation->operation['responses'] ?? null;
+            $statuses = is_array($responses) ? array_map(strval(...), array_keys($responses)) : [];
+
+            $ids[$id] = array_fill_keys($statuses, true);
         }
 
         return $ids;

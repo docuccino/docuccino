@@ -11,6 +11,13 @@ namespace Docuccino\Core\Examples;
  * change that really does make a different operation leaves the old file behind, where
  * {@see RecordedExampleAudit} reports it rather than letting it quietly go on being published.
  *
+ * A media type holds either one unnamed body or a set of named ones, never both — OpenAPI carries
+ * `example` or `examples` and never the two together, so a file keeping an entry that could not
+ * publish would be a file that lies about what the document shows. Naming one scenario for a status
+ * therefore names them all: {@see normalised()} drops the unnamed body once a named one exists. It
+ * never goes the other way — a name is only ever removed by deleting the file, because a run that
+ * recorded no names may simply be a run that did not get to them.
+ *
  * @internal
  */
 final readonly class ExampleRecording
@@ -32,7 +39,7 @@ final readonly class ExampleRecording
      */
     public static function of(string $operationId, string $endpoint, array $responses = []): self
     {
-        return new self($operationId, $endpoint, self::sorted($responses));
+        return new self($operationId, $endpoint, self::normalised($responses));
     }
 
     /**
@@ -70,7 +77,7 @@ final readonly class ExampleRecording
             $examples[] = $example;
         }
 
-        return new self($operationId, is_string($endpoint) ? $endpoint : '', self::sorted($examples));
+        return new self($operationId, is_string($endpoint) ? $endpoint : '', self::normalised($examples));
     }
 
     /**
@@ -86,15 +93,28 @@ final readonly class ExampleRecording
         ];
     }
 
-    public function find(string $status, string $mediaType): ?RecordedExample
+    public function find(string $status, string $mediaType, string $name = ''): ?RecordedExample
     {
         foreach ($this->responses as $response) {
-            if ($response->status === $status && $response->mediaType === $mediaType) {
+            if ($response->status === $status && $response->mediaType === $mediaType && $response->name === $name) {
                 return $response;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The examples recorded for one media type of one status, in key order.
+     *
+     * @return list<RecordedExample>
+     */
+    public function forSlot(string $status, string $mediaType): array
+    {
+        return array_values(array_filter(
+            $this->responses,
+            static fn (RecordedExample $e): bool => $e->status === $status && $e->mediaType === $mediaType,
+        ));
     }
 
     /**
@@ -108,7 +128,7 @@ final readonly class ExampleRecording
      */
     public function with(RecordedExample $example): self
     {
-        $existing = $this->find($example->status, $example->mediaType);
+        $existing = $this->find($example->status, $example->mediaType, $example->name);
 
         if ($existing !== null && $existing->shape() === $example->shape()) {
             return $this;
@@ -120,7 +140,7 @@ final readonly class ExampleRecording
         ));
         $responses[] = $example;
 
-        return new self($this->operationId, $this->endpoint, self::sorted($responses));
+        return new self($this->operationId, $this->endpoint, self::normalised($responses));
     }
 
     /** The same recording under a new endpoint label, which is prose for the reviewer and nothing else. */
@@ -130,13 +150,30 @@ final readonly class ExampleRecording
     }
 
     /**
+     * Key order, with every unnamed body a named one has taken over from dropped.
+     *
+     * Both halves are what keep the file a function of the responses alone: the order never depends on
+     * which was met first, and neither does which of them survives.
+     *
      * @param  list<RecordedExample>  $responses
      * @return list<RecordedExample>
      */
-    private static function sorted(array $responses): array
+    private static function normalised(array $responses): array
     {
-        usort($responses, static fn (RecordedExample $a, RecordedExample $b): int => strcmp($a->key(), $b->key()));
+        $named = [];
+        foreach ($responses as $response) {
+            if ($response->isNamed()) {
+                $named[$response->slot()] = true;
+            }
+        }
 
-        return $responses;
+        $kept = array_values(array_filter(
+            $responses,
+            static fn (RecordedExample $e): bool => $e->isNamed() || ! isset($named[$e->slot()]),
+        ));
+
+        usort($kept, static fn (RecordedExample $a, RecordedExample $b): int => strcmp($a->key(), $b->key()));
+
+        return $kept;
     }
 }

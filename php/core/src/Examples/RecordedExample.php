@@ -7,7 +7,8 @@ namespace Docuccino\Core\Examples;
 use Docuccino\Core\Support\Json;
 
 /**
- * One response body a test suite produced, kept as the example for a status and a media type.
+ * One response body a test suite produced, kept as the example for a status, a media type and — when
+ * the test that produced it said which scenario it was — a name.
  *
  * The shape is derived, never stored: a body and a fingerprint that disagreed would be a recording
  * that lies about when it needs re-recording.
@@ -16,15 +17,28 @@ use Docuccino\Core\Support\Json;
  */
 final readonly class RecordedExample
 {
+    /**
+     * What a name may be: the character set an OpenAPI component key carries, which is the bar a key
+     * a code generator might read has to clear. A name is a call-site literal, so this is checked
+     * where it is written rather than reported later.
+     */
+    private const string NAME_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/D';
+
     private function __construct(
         public string $status,
         public string $mediaType,
         public mixed $body,
+        public string $name = '',
     ) {}
 
-    public static function of(string $status, string $mediaType, mixed $body): self
+    public static function of(string $status, string $mediaType, mixed $body, string $name = ''): self
     {
-        return new self($status, $mediaType, $body);
+        return new self($status, $mediaType, $body, $name);
+    }
+
+    public static function isLegalName(string $name): bool
+    {
+        return preg_match(self::NAME_PATTERN, $name) === 1;
     }
 
     /**
@@ -34,8 +48,13 @@ final readonly class RecordedExample
     {
         $status = $data['status'] ?? null;
         $mediaType = $data['mediaType'] ?? null;
+        $name = $data['name'] ?? '';
 
         if (! is_string($status) || $status === '' || ! is_string($mediaType) || $mediaType === '') {
+            return null;
+        }
+
+        if (! is_string($name) || ($name !== '' && ! self::isLegalName($name))) {
             return null;
         }
 
@@ -43,7 +62,7 @@ final readonly class RecordedExample
             return null;
         }
 
-        return new self($status, $mediaType, $data['body']);
+        return new self($status, $mediaType, $data['body'], $name);
     }
 
     /**
@@ -51,11 +70,30 @@ final readonly class RecordedExample
      */
     public function toArray(): array
     {
-        return ['status' => $this->status, 'mediaType' => $this->mediaType, 'body' => $this->body];
+        $data = ['status' => $this->status, 'mediaType' => $this->mediaType];
+
+        // Only a named recording spells a name, so turning naming on somewhere else in a suite leaves
+        // every file it did not touch byte-identical.
+        if ($this->name !== '') {
+            $data['name'] = $this->name;
+        }
+
+        return $data + ['body' => $this->body];
     }
 
-    /** What this example is the example FOR — one per status and media type. */
+    public function isNamed(): bool
+    {
+        return $this->name !== '';
+    }
+
+    /** What this example is the example FOR — one per status, media type and name. */
     public function key(): string
+    {
+        return $this->isNamed() ? $this->slot().' '.$this->name : $this->slot();
+    }
+
+    /** The media type it illustrates, which every name for it shares. */
+    public function slot(): string
     {
         return $this->status.' '.$this->mediaType;
     }
@@ -74,6 +112,10 @@ final readonly class RecordedExample
      * response with its optional members filled in shows a reader more of the contract; then the
      * shorter one, because a compact illustration reads better than a long one saying the same thing;
      * then the lexicographically smaller, which decides nothing but decides it the same way every run.
+     *
+     * That it is a TOTAL order on content alone is what lets several test-runner workers record one
+     * operation at once ({@see SharedRecordingLedger}): the best of a set is the same whichever worker
+     * met which member of it.
      */
     public function outranks(self $other): bool
     {

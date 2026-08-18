@@ -779,8 +779,18 @@ final class SharedErrorResponses implements DocumentTransformer
         return ! isset($response['$ref'])
             && is_array($response['content'] ?? null)
             && $response['content'] !== []
-            && ctype_digit((string) $status)
-            && (int) $status >= self::MIN_STATUS;
+            && self::shares((string) $status);
+    }
+
+    /**
+     * Whether a status is one this pass groups at all — the same question, spelled once, for anything
+     * that has to keep out of its way. A producer deciding whether it may publish something this pass
+     * would then group on has to read exactly the statuses this reads: a wildcard `4XX` is not one of
+     * them, and a guard that thought it was would hold back an example nothing was going to touch.
+     */
+    public static function shares(string $status): bool
+    {
+        return ctype_digit($status) && (int) $status >= self::MIN_STATUS;
     }
 
     /**

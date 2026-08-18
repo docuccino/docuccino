@@ -29,11 +29,12 @@ function auditBase(): string
 /**
  * @return list<Diagnostic>
  */
-function auditFindings(string $base, array $document = [], ?string $recordings = 'docs/recordings'): array
+function auditFindings(string $base, array $document = [], ?string $recordings = 'docs/recordings', array $representation = []): array
 {
     $config = new DocumentConfig(
         key: 'default',
         info: ['title' => 'T', 'version' => '1'],
+        representation: $representation,
         raw: $recordings === null ? [] : ['examples' => ['recordings' => $recordings]],
     );
 
@@ -46,9 +47,11 @@ function auditFindings(string $base, array $document = [], ?string $recordings =
     return $collector->all();
 }
 
-function auditDocument(string $operationId): array
+function auditDocument(string $operationId, array $statuses = []): array
 {
-    return ['paths' => ['/api/invoices' => ['get' => ['x-docuccino' => ['id' => $operationId], 'responses' => []]]]];
+    $responses = array_fill_keys($statuses, ['description' => 'x']);
+
+    return ['paths' => ['/api/invoices' => ['get' => ['x-docuccino' => ['id' => $operationId], 'responses' => $responses]]]];
 }
 
 it('says nothing at all for a document that names no recordings', function (): void {
@@ -162,3 +165,32 @@ it('reports the same thing whatever order the filesystem lists the files in', fu
         ->and($codes[0])->toContain('op-v1-aaaaaaaa12345678.json')
         ->and($codes[1])->toContain('op-v1-zzzzzzzz12345678.json');
 });
+
+it('reports the names an error response cannot carry, once per media type', function (): void {
+    $base = auditBase();
+    (new RecordingStore($base.'/docs/recordings'))->put(ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/invoices', [
+        RecordedExample::of('403', 'application/json', ['code' => 'a'], 'expired'),
+        RecordedExample::of('403', 'application/json', ['code' => 'b'], 'missing'),
+        RecordedExample::of('200', 'application/json', ['id' => 1], 'paid'),
+    ]));
+
+    $findings = auditFindings($base, auditDocument('op:v1:abcdefgh12345678', ['200', '403']));
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->severity)->toBe(Severity::Warning)
+        ->and($findings[0]->code)->toBe('examples.recording-name-unpublished')
+        ->and($findings[0]->message)->toContain('expired, missing')
+        ->and($findings[0]->help)->toContain('representation.errors.components');
+});
+
+it('says nothing about a name the document can carry after all', function (array $statuses, array $representation): void {
+    $base = auditBase();
+    (new RecordingStore($base.'/docs/recordings'))->put(ExampleRecording::of('op:v1:abcdefgh12345678', 'GET /api/invoices', [
+        RecordedExample::of('403', 'application/json', ['code' => 'a'], 'expired'),
+    ]));
+
+    expect(auditFindings($base, auditDocument('op:v1:abcdefgh12345678', $statuses), representation: $representation))->toBe([]);
+})->with([
+    'a document that shares no error components' => [['403'], ['errors' => ['components' => false]]],
+    'a status the document does not document' => [['200'], []],
+]);
