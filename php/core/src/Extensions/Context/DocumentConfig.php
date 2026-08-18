@@ -129,13 +129,22 @@ final readonly class DocumentConfig
     }
 
     /**
-     * A deterministic fingerprint of this document's config — the sole owner of the config-hash (a
-     * fragment-cache key input and the document's `configHash`). Goes through {@see Json::stable()}
-     * so key order can't perturb it; falls back to the document key if the bag won't encode.
+     * A deterministic fingerprint of the config that SHAPES this document — the sole owner of the
+     * config-hash (a fragment-cache key input and the document's `configHash`). Goes through
+     * {@see Json::stable()} so key order can't perturb it; falls back to the document key if the bag
+     * won't encode.
+     *
+     * `export` is excluded on purpose: it says where artifacts are written, never what they contain.
+     * Folding it in would make adding a second export target rewrite the document's `configHash` —
+     * changing emitted bytes, and cold-busting every cached fragment — over a filename. Nothing a
+     * fragment holds can read an export destination, so this is not under-keying.
      */
     public function hash(): string
     {
-        $stable = Json::stable($this->raw);
+        $shaping = $this->raw;
+        unset($shaping['export']);
+
+        $stable = Json::stable($shaping);
 
         return hash('sha256', $stable === '' ? $this->key : $stable);
     }

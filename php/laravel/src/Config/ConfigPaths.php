@@ -21,7 +21,9 @@ use Docuccino\Laravel\Support\Paths;
  * values against the base path ({@see Paths::absolute()}, {@see ConfinedPath::resolve()}).
  *
  * A path genuinely outside the app is left exactly as configured (rewriting would break the read) and
- * reported as a `config.machine-dependent-path` info diagnostic ({@see ConfigDiagnostics}).
+ * reported as a `config.machine-dependent-path` info diagnostic ({@see ConfigDiagnostics}) — except
+ * for the {@see DESTINATION_KEYS}, which say where artifacts are WRITTEN rather than what they hold.
+ * Those sit outside the hash entirely, so an out-of-tree one makes nothing machine-dependent.
  *
  * @internal
  */
@@ -43,6 +45,16 @@ final class ConfigPaths
         'info.description.file' => false,
         'overlays' => true,
     ];
+
+    /**
+     * Keys relativised for tidiness but exempt from {@see machineDependent()}: an export destination
+     * is outside {@see DocumentConfig::hash()}, so pointing one out of tree makes nothing
+     * machine-dependent. Relativising it is still worth doing — it is what lets two spellings of one
+     * destination compare equal when the export command looks for duplicate targets.
+     *
+     * @var list<string>
+     */
+    private const DESTINATION_KEYS = ['export.path'];
 
     /**
      * $config with every {@see PATH_KEYS} value inside $basePath rewritten base-relative. Already
@@ -102,6 +114,10 @@ final class ConfigPaths
         $found = [];
 
         foreach (self::PATH_KEYS as $key => $isList) {
+            if (in_array($key, self::DESTINATION_KEYS, true)) {
+                continue;
+            }
+
             $value = self::get($config, explode('.', $key));
 
             if ($isList) {
