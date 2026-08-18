@@ -411,13 +411,19 @@ effort); the `$casts` property form is recovered today.
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
    (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
    points, including real signal, flag it). Dropped/demoted points are counted + verbose-logged.
-2. `KnownThrowers` registry (user-extensible), keyed on resolved callee symbol — **dual role**:
-   (a) *enrich* explicit stubbed points with a status (`authorize` → 403, `validate` → 422),
-   (b) *rescue* still-implicit forwarders by callee name (static `Model::findOrFail` surfaces
-   only as implicit bare Throwable — unlike Builder `firstOrFail` — the registry restores
-   ModelNotFoundException/404 as `likely`). `abort/abort_if/abort_unless` → HttpException
-   with status via constantValueOf (arg 0 for abort, arg 1 for abort_if/unless).
-   Route-model binding → 404 (pipeline supplies).
+2. `KnownThrowers` registry (user-extensible), keyed on the callee NAME and gated on the
+   RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
+   (`authorize` → 403, `validate` → 422), (b) *rescue* still-implicit forwarders by callee name
+   (static `Model::findOrFail` surfaces only as implicit bare Throwable — unlike Builder
+   `firstOrFail` — the registry restores ModelNotFoundException/404 as `likely`).
+   `abort/abort_if/abort_unless` → HttpException with status via constantValueOf (arg 0 for
+   abort, arg 1 for abort_if/unless). Route-model binding → 404 (pipeline supplies).
+   **The gate**: a bare name is a guess, so the registry speaks only for callees this build
+   cannot read — vendor, a stub, a trait method (which resolves to the using class's file
+   without being declared there), a magic forward, an unresolved receiver. Where the callee
+   resolves to a project method whose body the analysis really holds, layers 1 and 3 read what
+   it actually throws and layer 2 stands down: an application's own `validate()` throwing its
+   own exception is that exception, never a 422 `ValidationException`.
 3. Bounded descent into project-code callees lacking `@throws` (**depth 3** — observed max
    real depth 2; the vendor-file gate, not depth, does the real containment), memoized,
    cycle-guarded; vendor never descended. **Trap: descent targets must be added to the

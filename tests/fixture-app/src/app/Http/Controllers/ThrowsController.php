@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\OrderService;
+use App\Services\PayloadValidator;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -127,5 +128,16 @@ class ThrowsController extends Controller
         } catch (\App\Exceptions\OutOfStockException $e) {
             return response()->json(['caught' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Case 9: the app's OWN validate(), which the KnownThrowers registry keys
+     * ValidationException/422 on by bare method name. The callee is project code
+     * the engine can read, so what it actually throws (OutOfStockException) has
+     * to win — a name-keyed guess must never overrule a body we analysed.
+     */
+    public function projectValidate(PayloadValidator $validator): JsonResponse
+    {
+        return response()->json($validator->validate(['sku' => 'abc-1']));
     }
 }
