@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Extensions\Context\ViewerContext;
+use Docuccino\Core\Extensions\Contracts\Viewer;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Facades\Docuccino;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Watch\WatchSignal;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The viewer's live-reload channel. Two rules do the work: it goes through exactly the gate the rest
@@ -88,4 +93,66 @@ it('subscribes the viewer page only while a watch session is running', function 
         ->assertSee('"'.url('/docs/api/reload').'"', false)
         // Spliced INSIDE the document rather than tacked on after it.
         ->assertSee('</script></body>', false);
+});
+
+it('warns while watching when the driver builds its own response, which carries no subscriber', function (): void {
+    Docuccino::extend(new class implements Viewer
+    {
+        public function name(): string
+        {
+            return 'house-style';
+        }
+
+        public function render(ViewerContext $context): Response
+        {
+            return new Response('<html><body><h1>house style</h1></body></html>');
+        }
+    });
+
+    config()->set('docuccino.documents.default.viewer.driver', 'house-style');
+    app()['env'] = 'local';
+    $this->signal->publish($this->token);
+
+    // The page the driver built is served untouched — and the one place the author will look for why
+    // it never refreshes says so, including the channel their own page can subscribe to.
+    Log::shouldReceive('warning')->once()->withArgs(
+        static fn (string $message): bool => str_contains($message, '"house-style"')
+            && str_contains($message, url('/docs/api/reload')),
+    );
+
+    expect($this->get('/docs/api')->assertOk()->getContent())
+        ->toBe('<html><body><h1>house style</h1></body></html>');
+});
+
+it('says nothing about reload when no watch session is running', function (): void {
+    Docuccino::extend(new class implements Viewer
+    {
+        public function name(): string
+        {
+            return 'house-style';
+        }
+
+        public function render(ViewerContext $context): Response
+        {
+            return new Response('<html><body></body></html>');
+        }
+    });
+
+    config()->set('docuccino.documents.default.viewer.driver', 'house-style');
+    app()['env'] = 'local';
+
+    // Nothing to miss without a watcher, so nothing to say.
+    Log::shouldReceive('warning')->never();
+
+    $this->get('/docs/api')->assertOk();
+});
+
+it('says nothing about reload for a driver that returns HTML', function (): void {
+    app()['env'] = 'local';
+    $this->signal->publish($this->token);
+
+    // The shipped drivers return strings, so the subscriber goes in and the warning never fires.
+    Log::shouldReceive('warning')->never();
+
+    $this->get('/docs/api')->assertOk()->assertSee('new EventSource(url)', false);
 });

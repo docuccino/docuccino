@@ -181,7 +181,8 @@ php artisan docuccino:watch
 The page subscribes to `/docs/api/reload` and reloads when the documentation it is showing is no
 longer current. A rebuild that changes no byte leaves it exactly where it was — including your scroll
 position and any request you were part-way through in Scalar's console. The subscriber is spliced into
-whatever the active driver renders, so live reload works on Redoc and on a driver you wrote yourself.
+the HTML the active driver returns, so live reload works on Redoc and on a driver you wrote yourself —
+see [writing your own driver](#writing-your-own-driver) for the one case it doesn't.
 
 There is nothing to switch off afterwards: the channel sits behind the same gate and middleware as the
 rest of the viewer, it answers only while a watch session is running, and a page served without one
@@ -233,6 +234,29 @@ Docuccino::extend(HouseStyleViewer::class);
 `render()` may return a string of HTML or an Illuminate response, whichever suits the page. The
 `ViewerContext` carries the document's whole resolved config, so the route, title, servers and viewer
 bag are all in reach.
+
+That choice also decides who owns [live reload](#live-reload-while-you-work). Return a string and
+Docuccino splices the subscriber into your HTML for you, exactly as it does for the shipped drivers.
+Return a response and the page is yours end to end — Docuccino won't rewrite a body you built, because
+it has no way to know it is HTML at all. Your page can still subscribe itself: while a
+`docuccino:watch` session is running, `<viewer route>/reload` sends a reload event carrying a token
+naming the current documentation, and reloading when a later token differs is the whole mechanism.
+
+```php
+public function render(ViewerContext $context): Response
+{
+    return response()->view('docs.house-style', [
+        'title' => $context->config->info['title'] ?? 'API Documentation',
+        'reload' => url($context->config->viewer['route'].'/reload'),
+    ]);
+}
+```
+
+<Aside type="tip">
+If you forget, Docuccino tells you: a page rendered from a response driver while a watch session is
+running logs a warning naming the driver and the reload URL, so "my page never refreshes" doesn't go
+undiagnosed.
+</Aside>
 
 Registering a driver under a name that already exists **replaces** it — return `'scalar'` from
 `name()` and every document already on the default gets your page, no config change needed.
