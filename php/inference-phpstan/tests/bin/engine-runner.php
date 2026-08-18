@@ -25,6 +25,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-json-api-paginate   <controllerFile> <class> <method>
  *   php engine-runner.php trace-pagination-terminal <controllerFile> <class> <method>
  *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
+ *   php engine-runner.php trace-file-responses      <controllerFile> <class> <method>
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
  *
  * Dispatch stays a `match ($mode)` rather than a mode => factory table — each arm is a thin
@@ -45,6 +46,8 @@ use Docuccino\Inference\PhpStan\Analysis\PhpStanTypeEngineBuilder;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeConfig;
 use Docuccino\Inference\PhpStan\Tests\Support\ClosureReturnProbe;
 use Docuccino\Inference\PhpStan\Tests\Support\QueryBuilderProbe;
+use Docuccino\Laravel\Extensions\FileResponseCall;
+use Docuccino\Laravel\Extensions\FileResponseVisitor;
 use Docuccino\Laravel\Integrations\ApiResources\CreatedResourceVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\InlineRulesVisitor;
 use Docuccino\Laravel\Integrations\FormRequest\RulesMethodVisitor;
@@ -360,6 +363,20 @@ $result = match ($mode) {
         $engine->trace(new ActionRef($file, null, '{closure}', $line), $probe);
 
         return ['returns' => $probe->returns];
+    })(),
+    'trace-file-responses' => (static function () use ($engine, $ref): array {
+        // FileResponseVisitor reads what a download/stream/event-stream call proves — the half the
+        // return type cannot carry.
+        $visitor = new FileResponseVisitor;
+        $engine->trace($ref, $visitor);
+
+        return ['calls' => array_map(static fn (FileResponseCall $call): array => [
+            'responseClass' => $call->responseClass,
+            'mediaType' => $call->mediaType,
+            'schema' => $call->schema,
+            'disposition' => $call->disposition,
+            'filename' => $call->filename,
+        ], $visitor->calls)];
     })(),
     'trace-created-resource' => (static function () use ($engine, $ref): array {
         // CreatedResourceVisitor recognises a resource wrapping a real Model::create() — the 201 status

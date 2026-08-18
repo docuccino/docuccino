@@ -1,6 +1,6 @@
 ---
 title: Responses
-description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, HTML views, and 204s.
+description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, HTML views, file downloads, streams, and 204s.
 ---
 
 import { Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -12,6 +12,7 @@ type and return statements. You write the code you'd write anyway; the response 
 	<Card title="Return-type inference" icon="magnifier">A resource, model, or enum return becomes its schema.</Card>
 	<Card title="Status codes" icon="list-format">`response()->json($x, 201)` folds the payload under `201`.</Card>
 	<Card title="Empty responses" icon="approve-check">A `204`, `205`, `304`, or `1xx` is documented with no body.</Card>
+	<Card title="Files and streams" icon="download">A download, a stream, or an event stream gets its own media type.</Card>
 	<Card title="Headers & overrides" icon="setting">Add headers and extra statuses with attributes.</Card>
 </CardGrid>
 
@@ -70,8 +71,9 @@ are emitted in ascending status order, whatever order your return paths appear i
 
 A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
 resource (or a collection of one) serializes as `application/vnd.api+json`, as does a
-[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource, and a rendered view
-serializes as [`text/html`](#html-and-view-responses).
+[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource, a rendered view serializes as
+[`text/html`](#html-and-view-responses), and a [file or stream](#file-downloads-and-streams) serializes
+as the type the call names.
 
 An action that negotiates between representations gets **one content entry per media type** on the same
 status, rather than one schema filed under a media type half of it contradicts. The entries are ordered
@@ -224,7 +226,8 @@ What gets documented instead is only what the class itself proves:
 | --- | --- |
 | `RedirectResponse` | `3XX` with a `Location` header and no body |
 | `JsonResponse` with no recoverable payload | `200` with an open `application/json` body |
-| `Response`, `BinaryFileResponse`, `StreamedResponse` | the status alone — neither media type nor shape is stated anywhere |
+| `BinaryFileResponse`, `StreamedResponse` | `200` with a binary body — see [file downloads and streams](#file-downloads-and-streams) |
+| `Illuminate\Http\Response` | the status alone — neither media type nor shape is stated anywhere |
 
 The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
 302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
@@ -232,9 +235,9 @@ site says which. Docuccino says so with an `inferred-response.unpinned-redirect`
 the action; pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the endpoint
 always answers with one code.
 
-The other two rows lose the body itself, so they are announced rather than silent: each raises an
-`inferred-response.payload-unrecoverable` info diagnostic naming the action. The usual cause is a
-collaborator whose own return type is bare —
+A bare `JsonResponse` or `Illuminate\Http\Response` loses the body itself, so it is announced rather
+than silent: each raises an `inferred-response.payload-unrecoverable` info diagnostic naming the action.
+The usual cause is a collaborator whose own return type is bare —
 
 ```php
 public function reset(Request $request): JsonResponse
@@ -299,6 +302,114 @@ gets both entries under `200`, one per media type:
 
 That's also what a [Laravel Actions](/laravel/packages/laravel-actions/) action defining `htmlResponse()`
 produces, alongside the JSON body its `jsonResponse()` or `handle()` returns.
+
+## File downloads and streams
+
+`response()->download(...)` and `response()->file(...)` both return the same bare
+`BinaryFileResponse`, and `stream()`, `streamDownload()` and `eventStream()` all return the same bare
+`StreamedResponse` — so the return type can't tell them apart. Docuccino reads the **call** instead, and
+documents what it proves.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	public function download(Invoice $invoice): BinaryFileResponse
+	{
+	    return response()->download(storage_path("app/invoices/{$invoice->id}.pdf"), 'invoice.pdf');
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"responses": {
+	  "200": {
+	    "description": "OK",
+	    "headers": {
+	      "Content-Disposition": {
+	        "description": "Asks the client to save the body as a file rather than display it.",
+	        "schema": { "type": "string" },
+	        "example": "attachment; filename=\"invoice.pdf\""
+	      }
+	    },
+	    "content": {
+	      "application/pdf": {
+	        "schema": { "type": "string", "format": "binary" }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The body is a `string` with `format: binary` — that's what a generated client reads to hand you bytes or
+a stream instead of a decoded value. There is no structure below it to describe, so there is nothing
+narrower to say.
+
+### Where the media type comes from
+
+`application/pdf` above isn't a guess about the filename: `BinaryFileResponse` labels the response from
+the file it serves, so a literal path's extension is the same answer the server will reach. Docuccino
+resolves the media type in this order:
+
+1. a literal `Content-Type` you pass in the call's `$headers` argument;
+2. the media type the call fixes itself — `eventStream()` always sends `text/event-stream`,
+   `streamJson()` always sends `application/json`;
+3. a well-known extension on a literal file path — `.pdf`, `.csv`, `.zip`, `.xlsx`, and so on.
+   Laravel's path helpers (`storage_path()`, `public_path()`, …) are seen through;
+4. otherwise `application/octet-stream` for a body read from a **file**, which is the fallback the server
+   itself sends when its own lookup comes up empty.
+
+A body written by a **callback** — `stream()`, `streamDownload()` — is the one case with no honest
+fallback: nothing sets a `Content-Type`, so the framework ends up labelling it `text/html`. Docuccino
+documents it as the `*/*` range and raises an `inferred-response.payload-unrecoverable` info diagnostic,
+because that one is worth fixing:
+
+```php
+// Symfony labels this text/html, whatever the filename says.
+return response()->streamDownload($export, 'ledger.csv');
+
+// State it, and both the response and the document say text/csv.
+return response()->streamDownload($export, 'ledger.csv', ['Content-Type' => 'text/csv']);
+```
+
+### Downloads and inline files
+
+`Content-Disposition` is documented only where the call actually sets it:
+
+| Call | `Content-Disposition` |
+| --- | --- |
+| `response()->download($file)` | `attachment` |
+| `response()->file($file)` | none — Laravel passes no disposition, so the header is never sent |
+| `response()->streamDownload($callback, $name)` | `attachment`, and only when `$name` is given |
+| `Storage::download($path)` | `attachment` |
+| `Storage::response($path)` | `inline` |
+| `response()->stream($callback)`, `response()->eventStream($callback)` | none |
+
+A literal fourth argument overrides it — `response()->download($file, $name, [], 'inline')` documents
+`inline`. Both facades and a specific disk work the same way, since the receiver is matched by type:
+`Response::download(...)`, `Storage::disk('s3')->download(...)`. If one action takes two paths that
+disagree — one attaches, the other displays — no header is documented, because either answer would
+describe the wrong path.
+
+### Server-sent events
+
+`response()->eventStream(...)` is documented as a `200` with a `text/event-stream` body:
+
+```json
+"content": {
+  "text/event-stream": {
+    "schema": { "type": "string" }
+  }
+}
+```
+
+The schema is the **wire format**, deliberately. An SSE body is a sequence of `event:`/`data:` frames
+that keeps going until the connection closes, and an OpenAPI response body is a single value — so a
+schema naming the object your generator yields would tell a consumer the body *is* one event, which is
+false for every stream that sends two. A client generated against that would parse the first frame and
+fail. `string` is the widest thing that stays true.
 
 ## Adding and refining responses
 

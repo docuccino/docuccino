@@ -17,6 +17,7 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
@@ -94,17 +95,23 @@ function stubDocumentArray(?callable $mutateConfig = null): array
  * the document uses it).
  *
  * @param  array<string, ClassMetadata>  $classes  what the engine answers `classMetadata()` with, by FQCN
+ * @param  ?callable(TraceVisitor): void  $trace  a scripted walk over the action, for the suites whose
+ *                                                fact lives at the CALL that built the response rather
+ *                                                than in its type
  * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: list<Diagnostic>, 3: GenerationResult}
  */
-function documentForReturn(DType $returnType, array $classes = []): array
+function documentForReturn(DType $returnType, array $classes = [], ?callable $trace = null): array
 {
+    $action = 'Workbench\\App\\Http\\Controllers\\FormController::index';
+
     $engine = new StubTypeEngine(
         analyses: [
-            'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(
+            $action => new ActionAnalysis(
                 returns: [new ReturnSite($returnType, new SourceLocation(''))],
             ),
         ],
         classes: $classes,
+        traces: $trace === null ? [] : [$action => $trace],
     );
     app()->instance(TypeEngine::class, $engine);
 
