@@ -570,8 +570,9 @@ $context->components->addDiagnostic(new Diagnostic(
 ```
 
 A `Diagnostic` takes a `Severity` — `Error`, `Warning`, `Info` or `Hint` — a stable dotted `code`, a
-`message`, and optionally a `source`, a `routeSignature` and a `help` line. Pick the severity by what
-you want CI to do with it: [`--fail-on`](/laravel/reference/commands/#docuccinoexport) gates on
+`message`, and optionally a `source`, a `routeSignature` and a `help` line — help prints indented
+under the message, so put what to change there and what went wrong in the message. Pick the severity
+by what you want CI to do with it: [`--fail-on`](/laravel/reference/commands/#docuccinoexport) gates on
 `Warning` and `Error` only, so `Info` and `Hint` inform without ever failing a build.
 
 From a `TypeToSchema`, `$context->diagnostic($d)` does the same thing.

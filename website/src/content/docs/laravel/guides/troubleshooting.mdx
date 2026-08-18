@@ -181,8 +181,14 @@ fix — check the version you actually resolved with `composer show docuccino/in
 **Symptom.** A single warning, and a document built almost entirely from your annotations:
 
 ```
-[warning] engine.not-installed
+[warning] engine.not-installed: The inference engine is not installed; documentation
+          came from docblocks and attributes only.
+  Install it where you generate: composer require --dev docuccino/inference-phpstan.
+  Set DOCUCCINO_ENGINE=null to document without inference and silence this.
 ```
+
+The indented line under a diagnostic is its **help** — what to change, printed wherever the
+diagnostic is.
 
 **Cause.** `docuccino/inference-phpstan` isn't installed. The adapter is designed to work without
 it — it degrades to reading docblocks, attributes, config and overlays rather than failing — so
@@ -233,9 +239,12 @@ For a permanent CI setup, put those in the environment file your pipeline uses.
 **Symptom.** The export succeeds, and one error explains why the document is thin:
 
 ```
-[error] engine.boot-failed
-The inference engine could not start, so documentation came from docblocks and
-attributes only: Failed to boot the PHPStan/Larastan container: …
+[error] engine.boot-failed: The inference engine could not start, so documentation
+        came from docblocks and attributes only: Failed to boot the
+        PHPStan/Larastan container: …
+  Generate from the project root in an environment the application boots in — the
+  analyser boots it the way an artisan command does — and check the engine package
+  and its analyser are installed at a supported version. …
 ```
 
 **Cause.** The engine is installed, and it couldn't come up. The analyzer boots your application the
