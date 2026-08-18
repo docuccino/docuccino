@@ -21,6 +21,11 @@ interface TypeEngineBuilder
      * @param  string  $vendorPath  the app's vendor dir: readable for types, never descended into
      * @param  list<string>  $primePaths  source roots whose file bodies must stay intact
      * @param  list<string>  $descendPaths  the narrower set interprocedural descent is confined to
+     * @param  string|null  $configFile  the application's own analyzer config file, merged into the one
+     *                                   the engine writes for itself, so a project's existing analyzer
+     *                                   extensions shape what inference recovers; null runs on the
+     *                                   engine's own configuration alone, and so does a file that isn't
+     *                                   there — the host reports that, the engine never fails over it
      */
     public function build(
         string $projectRoot,
@@ -28,5 +33,6 @@ interface TypeEngineBuilder
         string $vendorPath,
         array $primePaths,
         array $descendPaths,
+        ?string $configFile = null,
     ): TypeEngine;
 }

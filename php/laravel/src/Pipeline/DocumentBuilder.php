@@ -17,6 +17,7 @@ use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Engine\EngineNeon;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\TypeEngineMode;
 use Docuccino\Laravel\Support\Paths;
@@ -94,14 +95,16 @@ final class DocumentBuilder
      * `mode: null` is an explicit opt-out, so it says nothing. An unrecognised mode — a typo, or one a
      * later version dropped — ran in-process instead of failing the build, which is worth saying out
      * loud; it is suppressed when the engine is absent, since which mode was asked for is then moot.
+     * {@see engineNeonDiagnostics()} adds the last of it, and only where something was going to analyse.
      *
      * @return list<Diagnostic>
      */
     private function engineDiagnostics(): array
     {
         $mode = config('docuccino.engine.mode');
+        $analysing = $mode !== TypeEngineMode::Null->value;
 
-        if ($mode !== TypeEngineMode::Null->value && ! $this->engine->installed()) {
+        if ($analysing && ! $this->engine->installed()) {
             return [new Diagnostic(
                 severity: Severity::Warning,
                 code: 'engine.not-installed',
@@ -113,8 +116,10 @@ final class DocumentBuilder
             )];
         }
 
+        $diagnostics = [];
+
         if (is_string($mode) && $mode !== '' && TypeEngineMode::tryFrom($mode) === null) {
-            return [new Diagnostic(
+            $diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
                 code: 'engine.mode-unknown',
                 message: sprintf('Unknown engine mode "%s"; inference ran in-process.', $mode),
@@ -125,10 +130,46 @@ final class DocumentBuilder
                         TypeEngineMode::cases(),
                     )),
                 ),
-            )];
+            );
         }
 
-        return [];
+        return $analysing
+            ? [...$diagnostics, ...$this->engineNeonDiagnostics()]
+            : $diagnostics;
+    }
+
+    /**
+     * `engine.neon` names a file that is not there, so the engine analysed without it.
+     *
+     * A WARNING, like a missing config extension and unlike a boot failure: nothing malfunctioned and
+     * the document that got built is true, but the author configured analysis machinery the build
+     * could not load, and everything their PHPStan extensions would have sharpened is silently vaguer
+     * than they set it up to be. An error would refuse to ship a document that is honest; info would
+     * bury a knob that changes every type the engine infers.
+     *
+     * @return list<Diagnostic>
+     */
+    private function engineNeonDiagnostics(): array
+    {
+        /** @var array<string, mixed> $engineConfig */
+        $engineConfig = (array) config('docuccino.engine', []);
+        $neon = EngineNeon::path($engineConfig, $this->basePath);
+
+        if ($neon === null || is_file($neon)) {
+            return [];
+        }
+
+        $paths = new RootRelativeSourcePathResolver($this->basePath);
+
+        return [new Diagnostic(
+            severity: Severity::Warning,
+            code: 'config.engine-neon-missing',
+            message: sprintf(
+                'engine.neon names %s, which does not exist — inference ran without it, so nothing that file registers shaped this document.',
+                $paths->relative($neon),
+            ),
+            help: 'Check the path in config/docuccino.php; it is read relative to the application base path. Remove the key to analyse with the engine\'s own configuration.',
+        )];
     }
 
     /**

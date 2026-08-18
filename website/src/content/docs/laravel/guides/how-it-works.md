@@ -62,6 +62,10 @@ methods: a query builder assembled a few methods deep is still understood, an in
 controller calls still becomes a documented error response. The walk is bounded and stays inside your
 own code — `engine.project_paths` says where to descend, and `vendor/` is never analyzed.
 
+Because it really is PHPStan, the analyzer extensions you already maintain apply here too: point
+[`engine.neon`](/laravel/reference/configuration/#engine) at your own `phpstan.neon` and whatever it
+registers shapes your documentation, with no Docuccino-specific API to write.
+
 Each route is analyzed in isolation, so one route that can't be understood never breaks the build.
 It leaves behind a skeleton operation and an error diagnostic (or is dropped entirely, with
 `on_route_error: 'omit'`). [Reading diagnostics](/laravel/guides/troubleshooting/#reading-diagnostics)

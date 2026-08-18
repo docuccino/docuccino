@@ -444,6 +444,7 @@ legitimate server URL).
     'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
     // 'memory_limit' => '2G',
     'project_paths' => ['app'],
+    // 'neon' => 'phpstan.neon',
 ],
 ```
 
@@ -452,6 +453,7 @@ legitimate server URL).
 | `mode` | `in-process` | `in-process` runs PHPStan; `null` skips inference entirely (docblocks and attributes still work). Those are the two modes. Set it per environment with `DOCUCCINO_ENGINE`. A boot failure degrades to no inference rather than failing the build. |
 | `memory_limit` | unset | PHP memory limit for inference, applied on **console builds only**. Only ever **raises** — an already-higher or unlimited process is left alone, and `-1` isn't accepted here — so the knob can't introduce the exhaustion it exists to prevent. `--memory-limit` on the build commands overrides it. |
 | `project_paths` | `['app']` | The **descend** scope: directories the engine follows for general interprocedural analysis (throw classification, inline `Validator::make()` rules). Bounds descent into callee bodies. |
+| `neon` | unset | Your own PHPStan config file, included by the one the engine writes for itself. Relative to the application base path. A file that isn't there warns (`config.engine-neon-missing`) and inference runs without it. |
 
 PHP cannot catch memory exhaustion, so it's the one failure that kills a build instead of degrading —
 `memory_limit` and `--memory-limit` exist to prevent it. Full walkthrough:
@@ -473,6 +475,29 @@ resolved even though it isn't listed here. Vendor code is never primed or follow
 
 So you rarely need to change this: add a path only to broaden throw/inline-rules descent — not to make
 modular helpers resolvable, which priming already handles.
+:::
+
+:::tip[Your PHPStan extensions are already Docuccino extensions]
+The engine really is PHPStan, so `neon` is the one escape hatch you need when the analyzer can't work
+something out on its own. Point it at the `phpstan.neon` you already maintain:
+
+```php
+'engine' => [
+    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
+    'project_paths' => ['app'],
+    'neon' => 'phpstan.neon',
+],
+```
+
+Every dynamic return-type extension, stub file and service that file registers is in play while your
+document is built. A gateway method that hands back a bare `JsonResponse`, and whose real payload only
+your extension knows, documents that payload. There's no Docuccino-specific API to learn — it's a
+PHPStan config, read by PHPStan.
+
+Docuccino keeps its own analysis level, scanned paths and scratch directory; what your file
+contributes are the extensions, stubs and services it registers, alongside the ones the engine ships.
+Editing it invalidates the [fragment cache](#cache) — the file's contents are part of the build key,
+so a sharpened extension shows up in the next build rather than the one after it.
 :::
 
 ## Cache
