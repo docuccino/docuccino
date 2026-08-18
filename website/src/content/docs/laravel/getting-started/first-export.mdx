@@ -184,7 +184,7 @@ warmed cache with `viewer.source: 'cache'` plus `docuccino:cache` in your deploy
 
 ## Other formats and paths
 
-`docuccino:export` emits OpenAPI 3.2 by default, and four other artifacts on request:
+`docuccino:export` emits OpenAPI 3.2 by default, and five other artifacts on request:
 
 <Tabs>
 	<TabItem label="OpenAPI 3.2 (default)">
@@ -212,6 +212,11 @@ warmed cache with `viewer.source: 'cache'` plus `docuccino:cache` in your deploy
 	php artisan docuccino:export --format=uir --out=docs/api.uir.json
 	```
 	</TabItem>
+	<TabItem label="Postman">
+	```bash
+	php artisan docuccino:export --format=postman --out=docs/collection.json
+	```
+	</TabItem>
 </Tabs>
 
 The [UIR](/uir/) is the document Docuccino builds before emitting: OpenAPI-shaped, but carrying a
@@ -229,6 +234,7 @@ per format — analysis is the expensive half, and targets share one:
     'targets' => [
         ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
         ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
+        ['format' => 'postman',     'path' => 'docs/collection.json'],
     ],
 ],
 ```
@@ -237,6 +243,7 @@ per format — analysis is the expensive half, and targets share one:
 php artisan docuccino:export
 # Wrote /home/you/invoices-api/docs/openapi.json (openapi-3.2).
 # Wrote /home/you/invoices-api/docs/openapi-3.1.yaml (openapi-3.1).
+# Wrote /home/you/invoices-api/docs/collection.json (postman).
 ```
 
 The path's extension picks the serialisation — no `--yaml` needed. See

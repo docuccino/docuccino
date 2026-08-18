@@ -48,7 +48,7 @@ The tools differ at the root, and it colors everything else:
 | Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
 | Query params from query builders | Annotate them | Inferred, traced several calls deep, including into the method that builds each allow-list entry |
 | Example responses | Captured from real calls and factories | Inferred, or authored with `#[Example]` |
-| Postman collection | Yes | No — import the OpenAPI file |
+| Postman collection | Yes | Yes — a `postman` export target, emitted from the same build |
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
 | Byte-stable output you can commit | — | Yes |
 | Semantic diff + CI version gate | — | Yes (`docuccino:diff --enforce`) |
@@ -148,7 +148,6 @@ own shapes for the rest. See [Error responses](/laravel/documenting/errors/).
 | A spec artifact you commit and review in a pull request | ✓ | — |
 | Semantic diff + CI gate on breaking changes | ✓ | — |
 | A documented intermediate format (the [UIR](/uir/)) | ✓ | — |
-| Postman collection export | — | ✓ |
 | Single-page HTML doc with Blade templates you own | — | ✓ |
 | Localized generated UI | — | ✓ |
 | Hand-written endpoints for routes you have no code for | — | ✓ |
@@ -227,7 +226,7 @@ Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
 | `type: laravel`, `laravel.docs_url`, `laravel.middleware` | `documents.default.viewer` (`route`, `gate`, `middleware`, `source`) |
 | `groups.default` | `documents.default.tags.default_strategy` (`controller` \| `none`) |
 | `--config scribe_admin` (multi-docs) | A second named entry under `documents` |
-| `postman` / `openapi` output toggles | OpenAPI is always emitted; `docuccino:export` picks the format |
+| `postman` / `openapi` output toggles | [`export.targets`](/laravel/reference/configuration/#export) — list both formats and one build writes both |
 
 See the [configuration reference](/laravel/reference/configuration/) for every option.
 
@@ -242,7 +241,6 @@ carefully before you switch — for some teams they're the whole reason to stay.
 - **Factory-driven examples.** `@apiResourceModel states=… with=…` builds examples from your real
   factories, with states, eager-loaded relations and pivot data. Docuccino has no equivalent — it
   documents the response's *shape*, not a rendered instance of it.
-- **A native Postman collection.** Docuccino emits OpenAPI; import that file into Postman instead.
 - **Closure rules.** Scribe's `docs()` method on a custom `Rule` object now has a direct counterpart —
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the rule class, read
   wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 78
@@ -315,7 +313,7 @@ Then migrate incrementally, per controller or group:
 4. **Handle the hard parts** — response-call-derived examples (paste representative payloads into
    `#[Response]` / `#[Example]`), `.scribe` hand-edits and `custom.*.yaml` (re-home as attributes or
    Overlays), Fractal transformers (a `TypeToSchema` extension), custom Blade themes (not carried
-   over), Postman consumers (import the OpenAPI file).
+   over), Postman consumers (add a `postman` export target).
 5. **Decommission Scribe** — remove `knuckleswtf/scribe`, `config/scribe.php`, the `.scribe/` folder,
    published Scribe views, and any `lang/scribe.php`.
 
