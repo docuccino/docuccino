@@ -238,7 +238,7 @@ changed. No color, no timestamps — safe to paste into a PR comment.
     {
       "kind": "removed",
       "target": "parameter",
-      "id": "op:invoices.index#query:status",
+      "id": "par:v1:k4v2mzq7tn3xrs6b",
       "path": "GET /api/invoices parameters query:status",
       "breaking": true,
       "code": "parameter.removed"

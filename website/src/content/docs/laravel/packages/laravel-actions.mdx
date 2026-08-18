@@ -91,7 +91,7 @@ method, so everything is read from the real signature rather than the trait's ge
 	  }
 	},
 	// components.schemas
-	"PublishArticle": {
+	"PublishArticleRequest": {
 	  "type": "object",
 	  "properties": {
 	    "title": { "type": "string", "maxLength": 120 },
@@ -105,8 +105,9 @@ method, so everything is read from the real signature rather than the trait's ge
 
 One class, no annotations — and the summary, the `title`/`body` body (with `max:120` as `maxLength`), the
 `ArticleResource` response, the `403` from `authorize()`, and the `422` that any validated request can
-return are all documented. The body component is named after the action class, so an action reused
-across several routes is one shared schema.
+return are all documented. The body component is named after the action class plus a `Request` suffix —
+it's the shape a client *sends*, so it never competes with the action's own shape for a name — and an
+action reused across several routes is one shared schema.
 
 On a **read verb** (`GET`/`HEAD`) there's no body to send, so `rules()` becomes query parameters
 instead — the same rule as everywhere else in Docuccino.

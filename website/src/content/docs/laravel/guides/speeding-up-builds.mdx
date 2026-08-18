@@ -53,7 +53,7 @@ produced it. Change any of the following and the affected operations are re-anal
 | --- | --- |
 | A route's method, URI, name, action or middleware | That route |
 | A file the analysis actually read — controller, form request, resource, model, DTO, custom rule | Every operation that read it |
-| Anything under `documents.<key>` in your config | Every operation in that document |
+| Anything under `documents.<key>` in your config, except `export` | Every operation in that document |
 | Your app's boot-time registrations: `Relation::morphMap()`, `RateLimiter::for()`, exception `render` callbacks, `app.url` | Every operation |
 | Which engine resolved, whether it's installed, and its `engine` config | Every operation |
 | Your `composer.lock` — a package or analyzer upgrade | Every operation |
@@ -70,11 +70,14 @@ Two of those rows deserve the detail:
   shapes the document without living in any file the analysis opened, so those facts are folded into
   the key directly.
 
-Two things deliberately stay *out* of the key, because rebuilding for them would cost far more than
+Three things deliberately stay *out* of the key, because rebuilding for them would cost far more than
 they're worth:
 
 - **`engine.memory_limit`** (and `--memory-limit`). A process ceiling can't change a documented byte,
   so raising it doesn't throw away your cache.
+- **`documents.<key>.export`.** Export targets say *where* artifacts are written, never what's in
+  them. Adding a second target or renaming an output file writes new files from the cache you already
+  have, rather than re-analyzing the app.
 - **Your [narrative content](/laravel/guides/narrative-content/) pages.** Fragments never read them.
   A typo fix in a Markdown page re-assembles the document without re-analyzing a single route.
 

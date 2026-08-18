@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 27 attributes with signatures and examples.
+description: The docuccino/attributes package — all 28 attributes with signatures and examples.
 ---
 
 

@@ -467,7 +467,10 @@ order to reach for them.
 2. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
    the first mapper that both supports the throw and answers, and an unannotated extension sorts at
    `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
-   (`LAST`) — so yours simply wins, body and name together. No `#[ExtensionOrder]` needed.
+   (`LAST`), so yours wins over both, body and name together, with no `#[ExtensionOrder]` at all. Two
+   tiers still run ahead of it: the inferred-handler tier (`FIRST`), which documents the shape your
+   app's own handler really returns, and the Problem Details preset (`EARLY`) where you've opted in.
+   To beat either, say so — `#[ExtensionOrder(priority: Priorities::FIRST + 1)]`.
 
    ```php
    final class InvoiceNotFound implements ExceptionToResponse

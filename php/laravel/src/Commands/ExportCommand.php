@@ -37,7 +37,7 @@ final class ExportCommand extends Command
 
     protected $signature = 'docuccino:export
         {document? : The configured document key (defaults to every document)}
-        {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 — writes this one format instead of the configured targets}
+        {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
         {--out= : Output path (defaults to the matching target, else the document export path)}
         {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
         {--provenance=winners : none | winners | full — UIR provenance detail}
