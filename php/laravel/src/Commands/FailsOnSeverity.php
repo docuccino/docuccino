@@ -9,8 +9,13 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Illuminate\Console\Command;
 
 /**
- * The `--fail-on` policy shared by the commands: `warning` fails on a warning or an error, `error` on
- * an error only, `none` never fails.
+ * The `--fail-on` policy shared by the commands: a floor on {@see Severity}, where anything reported
+ * at that severity or louder makes the run exit non-zero, and `none` never fails.
+ *
+ * The floor reaches `info` and `hint` as well as `warning` and `error`, because `info` is where the
+ * build reports that it had to widen — an unrecoverable payload, a model with no readable columns, a
+ * validation rule it could not read. Those are the reports a pipeline gating on inference certainty
+ * wants, and no other value on this option reaches them.
  *
  * A value we don't recognise is rejected by {@see validateFailOn()} rather than coerced: coercing a
  * typo would answer "never fail", which silently removes the gate the flag was added to CI to be.
@@ -19,16 +24,14 @@ use Illuminate\Console\Command;
  */
 trait FailsOnSeverity
 {
-    /** @var list<string> */
-    private const FAIL_ON_VALUES = ['none', 'warning', 'error'];
+    /** @var list<string> Loudest first, so the printed list reads as the ladder it is. */
+    private const FAIL_ON_VALUES = ['none', 'error', 'warning', 'info', 'hint'];
 
     protected function failsOn(GenerationResult $result): bool
     {
-        return match ($this->failOn()) {
-            'warning' => $result->has(Severity::Error) || $result->has(Severity::Warning),
-            'error' => $result->has(Severity::Error),
-            default => false,
-        };
+        $floor = Severity::tryFrom($this->failOn());
+
+        return $floor !== null && $result->hasAtLeast($floor);
     }
 
     /** False (after printing why) when `--fail-on` names something we don't know. */

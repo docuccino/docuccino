@@ -359,12 +359,19 @@ Two flags make diagnostics more useful:
    php artisan docuccino:export --format=uir --provenance=full
    ```
 
-2. **Make CI care.** `--fail-on=warning` turns diagnostics into a non-zero exit, so a regression
-   in inference coverage breaks the build instead of quietly thinning your docs.
+2. **Make CI care.** `--fail-on` turns diagnostics into a non-zero exit, so a regression in
+   inference coverage breaks the build instead of quietly thinning your docs. It takes a severity
+   floor — anything that severity or louder fails the run — and nearly every code in the table above
+   is an `info`, because recovering less than the code says is a correct outcome rather than a
+   defect. `--fail-on=info` is therefore the gate on inference certainty; `--fail-on=warning` sees
+   none of them.
 
    ```bash
-   php artisan docuccino:export --fail-on=warning
+   php artisan docuccino:export --fail-on=info
    ```
+
+   On an existing codebase, start at `warning` and tighten to `info` once the list above is short. A
+   gate that fires on day one is a gate the team switches off.
 
 </Steps>
 

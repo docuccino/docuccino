@@ -39,7 +39,7 @@ final class ExportCommand extends Command
         {document? : The configured document key (defaults to every document)}
         {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
         {--out= : Output path (defaults to the matching target, else the document export path)}
-        {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
+        {--fail-on=none : none | error | warning | info | hint — the quietest severity that still makes the command exit non-zero}
         {--provenance=winners : none | winners | full — UIR provenance detail}
         {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
         {--yaml : Emit YAML instead of JSON}
