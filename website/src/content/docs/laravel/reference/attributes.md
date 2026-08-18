@@ -13,7 +13,7 @@ When an attribute and inference describe the same thing, the attribute wins, **f
 example `#[Response(status: 201, description: 'Created')]` sets just the description of the `201`
 response and leaves the inferred body schema intact.
 
-Attributes apply to controllers, actions, Form Requests, Data classes, enum cases, and closure
+Attributes apply to controllers, actions, form requests, Data classes, enum cases, and closure
 routes, as each attribute's targets allow. Put one on the controller to cover every action in it; the
 same attribute on an action is more specific and wins.
 
@@ -287,7 +287,7 @@ send.
 public string $capturedIp;
 ```
 
-A Form Request's body comes from its validation rules, so drop a field there by removing its rule —
+A form request's body comes from its validation rules, so drop a field there by removing its rule —
 or patch the inferred body with [`#[BodyParameter]`](#bodyparameter).
 
 ### `#[ExcludeFromDocs]`

@@ -67,15 +67,15 @@ taken from a running app. `✓` means built-in support; `—` means not supporte
 | Capability | Docuccino | Scribe |
 | --- | :---: | :---: |
 | Validation rules → parameter documentation | ✓ | ✓ |
-| Form Requests and inline `validate()` | ✓ | ✓ |
+| Form requests and inline `validate()` | ✓ | ✓ |
 | Rules → OpenAPI schema constraints (`pattern`, bounds, `format`) | ✓ | — |
-| Form Requests read without instantiating them | ✓ | — |
+| Form requests read without instantiating them | ✓ | — |
 | Custom rule classes documented from the rule class | ✓ | ✓ |
 | Spatie Data objects | ✓ | — |
 | Spatie Query Builder parameters | ✓ | — |
 | Laravel Actions | ✓ | — |
 
-Both tools read the same rules, but they get them differently: Scribe instantiates your Form Request
+Both tools read the same rules, but they get them differently: Scribe instantiates your form request
 and calls `rules()`, which resolves rules assembled at runtime and needs the method to be safe to call;
 Docuccino reads the rule list statically and maps 78 named Laravel rules onto schema constraints, so
 `starts_with:INV` lands as a `pattern` and `between:1,5` as `minimum`/`maximum` in the schema, rather
@@ -195,7 +195,7 @@ biggest win is deletion.
 | `@header` / `#[Header]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | Direct swap. |
 | `@urlParam` / `#[UrlParam]` | **Delete** — inferred; [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to add a format | Route-model binding gives the type. |
 | `@queryParam` / `#[QueryParam]` | **Delete** — inferred; [`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) to add one | Query builders are traced through your helper methods, into the body of the method that builds each allow-list entry, and into a builder subclass's constructor — not just the action body. |
-| `@bodyParam` / `#[BodyParam]` | **Delete** — inferred; [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) patches one property | FormRequests, inline `validate()`, Spatie Data. |
+| `@bodyParam` / `#[BodyParam]` | **Delete** — inferred; [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) patches one property | Form requests, inline `validate()`, Spatie Data. |
 | Validation-rule comments (`// … Example: x`) | [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) for the ones worth keeping | The rules themselves are read; the prose beside them isn't. Where a field needs a description or example, patch that one property. (A comment on a Spatie Query Builder `allowedFilters` entry *is* read — see [Query Builder](/laravel/packages/query-builder/#a-comment-becomes-the-description).) |
 | `@response` / `#[Response]` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
 | `@responseField` / `#[ResponseField]` | **Delete** — inferred | Field descriptions come from the source property/docblock. |

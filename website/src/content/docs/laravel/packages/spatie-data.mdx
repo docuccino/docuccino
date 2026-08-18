@@ -10,13 +10,13 @@ A `Data` class is documented from its properties and validation attributes — *
 constructing it — and works in both directions: as a request body when it's an action parameter, and as
 a reusable schema when it's returned.
 
-All three of spatie's base classes are recognized: `Data`, the output-only `Resource`, and the
+All three of Spatie's base classes are recognized: `Data`, the output-only `Resource`, and the
 input-only `Dto`.
 
 ## Request bodies from Data classes
 
 Type-hint a `Data` class as your action's parameter and Docuccino documents the request body from it,
-the same way it would from a Form Request's `rules()`:
+the same way it would from a form request's `rules()`:
 
 <Tabs>
 	<TabItem label="Your code">
@@ -78,7 +78,7 @@ documents that key and settles the container as an object.
 
 Because a Data class is a single named source class, the body is **hoisted to a `#/components/schemas`
 component and the operation `$ref`s it** — so the same Data class accepted by several endpoints becomes
-one shared, deduped component. The hoisting rules are the same as for a Form Request, including the
+one shared, deduped component. The hoisting rules are the same as for a form request, including the
 `#[BodyParameter]` deviation that keeps one operation's body inline; see
 [Request bodies](/laravel/documenting/requests/#request-bodies) for the full detail.
 
@@ -88,7 +88,7 @@ fields, different optionality — so each gets a name of its own and the plain n
 class's own shape. See [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) for the naming
 rules. A name that already ends in `Request` is left alone.
 
-Two shapes follow from the HTTP verb, exactly as they do for a Form Request:
+Two shapes follow from the HTTP verb, exactly as they do for a form request:
 
 - On a **read verb** (`GET`/`HEAD`) there is no body, so the recovered fields become **query
   parameters** instead.
@@ -152,7 +152,7 @@ don't mention keep their inferred rules, and a field you declare that no propert
 
 Spatie Data's validation **attributes** are read too — statically, never executed — and map to exactly
 the same schema constraints as their string-rule equivalents. A `#[Max(100)]` documents identically to
-`'max:100'` on a Form Request, so you don't annotate anything twice:
+`'max:100'` on a form request, so you don't annotate anything twice:
 
 ```php
 class CreateInvoiceData extends Data
@@ -202,7 +202,7 @@ The component is named after the class, or after
 identity across a rename with [`#[SchemaId]`](/laravel/reference/attributes/#schemaid).
 
 <Aside type="note" title="Required, not non-null">
-A Data property spatie always serializes is **required** even when it's nullable — the key is on the
+A Data property Spatie always serializes is **required** even when it's nullable — the key is on the
 wire carrying `null`, so nullability lives in the value's type (`["string", "null"]`), not in
 presence. Only an `Optional` or `Lazy` marker in the property type makes a key genuinely absent, and
 therefore non-required.
@@ -254,9 +254,9 @@ same types feed the [request rules](#request-bodies-from-data-classes), so `line
 ### Success statuses
 
 <Aside type="caution" title="Upgrade note: create endpoints now document 201">
-A Data class returned from a `POST` is documented **`201 Created`**, from spatie's own
-`ResponsableData` default (`$request->isMethod('POST') ? 201 : 200`). Earlier releases read only a
-`calculateResponseStatus()` override and missed it, so those endpoints were documented `200`.
+A Data class returned from a `POST` is documented **`201 Created`**, from Spatie's own
+`ResponsableData` default (`$request->isMethod('POST') ? 201 : 200`). Releases before **v0.2** read only
+a `calculateResponseStatus()` override and missed it, so those endpoints were documented `200`.
 
 Regenerate before your enforcing diff step: `docuccino:diff` sees a removed `200` plus an added `201`,
 and a removed response is breaking under every policy.
@@ -264,8 +264,8 @@ and a removed response is breaking under every policy.
 
 | The class | Documented status |
 | --- | --- |
-| Takes spatie's concern, `POST` route | `201` |
-| Takes spatie's concern, any other verb | `200` |
+| Takes Spatie's concern, `POST` route | `201` |
+| Takes Spatie's concern, any other verb | `200` |
 | Overrides `calculateResponseStatus()` | Whatever that returns — an override answering `200` on a `POST` documents `200` |
 | Satisfies the response contract by hand | `200`; there's no vendor default to inherit, and assuming one would invent a status |
 
@@ -305,7 +305,7 @@ nested Data property stays an unwrapped, shared `$ref`.
 
 A class that strips the envelope on its own way out is documented **unwrapped**, whatever
 `config('data.wrap')` says — the RFC 9457 case, since a problem document has to sit at the root. Both of
-spatie's spellings are read, statically:
+Spatie's spellings are read, statically:
 
 ```php
 $this->withoutWrapping()->toResponse($request);
@@ -326,7 +326,7 @@ class's root. Precedence is an explicit unwrap, then `defaultWrap()`, then `data
 | `PaginatedDataCollection<int, InvoiceData>` | Spatie's length-aware envelope |
 | `CursorPaginatedDataCollection<int, InvoiceData>` | Spatie's cursor envelope |
 
-Spatie's paginator envelope is **not** Laravel's resource envelope, and Docuccino documents spatie's:
+Spatie's paginator envelope is **not** Laravel's resource envelope, and Docuccino documents Spatie's:
 `links` is an *array* of `{ url, label, active }` objects, and `meta` carries the `*_page_url` members
 alongside the counters (or the cursor tokens, with no `total`). All three members are always
 serialized, so all three are required:
@@ -350,7 +350,7 @@ serialized, so all three are required:
 }
 ```
 
-A paginated collection is always wrapped by spatie, so its wrap key simply names the envelope's items
+A paginated collection is always wrapped by Spatie, so its wrap key simply names the envelope's items
 key — never a second layer around it.
 
 ### `include` / `exclude` / `only` / `except` query parameters
@@ -358,7 +358,7 @@ key — never a second layer around it.
 When a Data class opts into Spatie's request partials — by overriding `allowedRequestIncludes()`,
 `allowedRequestExcludes()`, `allowedRequestOnly()`, or `allowedRequestExcept()` — the matching query
 parameter is documented on every operation that returns that class. Only the methods you override are
-surfaced, because spatie's own base implementations allow nothing:
+surfaced, because Spatie's own base implementations allow nothing:
 
 | Parameter | Description |
 | --- | --- |
@@ -373,7 +373,7 @@ is documented as a free comma-separated string.
 ### Data classes as error bodies
 
 `Data::toResponse()` declares a bare `JsonResponse` and `transform()` a bare `array`, so a renderer that
-hands its error body to spatie would lose the whole schema on the way out. Both are modeled, so it
+hands its error body to Spatie would lose the whole schema on the way out. Both are modeled, so it
 doesn't:
 
 <Tabs>
@@ -431,11 +431,11 @@ JSON your app actually produces and accepts:
 
 | Convention | Effect on the schema |
 | --- | --- |
-| `#[Hidden]` (spatie) | Drops the property from the **output** schema only; it stays in the request body. |
+| `#[Hidden]` (Spatie) | Drops the property from the **output** schema only; it stays in the request body. |
 | `#[HiddenFromRequest]` (Docuccino) | Drops the property from the **request** body only; the response schema is untouched. |
 | `#[Computed]` / `#[WithoutValidation]` | Excluded from the request body — a computed/server-derived value is never a sendable field. |
 | `#[FromRouteParameter]` | Excluded from the request body — populated from the route binding, not the payload. |
-| `#[Prohibited]` (spatie validation) | Excluded from the request body — documenting a field the API refuses would invite exactly that. |
+| `#[Prohibited]` (Spatie validation) | Excluded from the request body — documenting a field the API refuses would invite exactly that. |
 | `Optional` / `Lazy` | Makes the property non-required. |
 | A constructor default | Makes the property non-required, and documents the value as `default`. |
 | `#[MapName]` / `#[MapInputName]` / `#[MapOutputName]` | Renames the property key to the mapped name, per direction. |
@@ -443,18 +443,18 @@ JSON your app actually produces and accepts:
 | Global name-mapping strategy | `data.name_mapping_strategy` renames every un-mapped key, independently for input and output. |
 | Nested `Data` | Recurses into a nested (referenced) schema, and into dotted request rules. |
 | `DataCollection` / `#[DataCollectionOf]` | Becomes an array of the item schema. |
-| Paginated Data collections | Produce spatie's own paginator envelope (above), not Laravel's. |
+| Paginated Data collections | Produce Spatie's own paginator envelope (above), not Laravel's. |
 | `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
 | `$this->withoutWrapping()` / `WrapExecutionType::Disabled` | Documents this class's response root **unwrapped**, whatever `data.wrap` says. |
 | A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
-| `calculateResponseStatus()`, or spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it. |
+| `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it. |
 | An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | Documents the property as an integer Unix timestamp. |
 | `rules()` | Overrides the inferred request rules per field. |
 | `allowedRequest*()` | Surfaces the `include`/`exclude`/`only`/`except` query parameters. |
 | `#[SchemaName]` / `#[SchemaId]` | Names the component / pins its diff identity. |
 
-Name mapping resolves in spatie's own order: a property-level attribute beats a class-level one, a
+Name mapping resolves in Spatie's own order: a property-level attribute beats a class-level one, a
 directional `#[MapInputName]`/`#[MapOutputName]` beats a symmetric `#[MapName]`, and the global
 strategy applies only where no map attribute governs the property.
 
