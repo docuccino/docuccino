@@ -19,8 +19,7 @@ use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
  * Where a recorded example sits in the precedence ladder, and what it declines to do.
  *
  * These build the draft and the context by hand because the question is precedence rather than
- * recovery: a workbench route would have to grow a `#[Example]` to ask it, which would change what
- * every other suite builds.
+ * recovery; `RecordedExamplesTest` asks the same question of a real build with real attributes on it.
  */
 const RECORDED_OPERATION = 'op:v1:abcdefgh12345678';
 
@@ -93,43 +92,63 @@ it('keeps the file in the fragment key whether or not it is there yet', function
         ->toBe([$base.'/docs/recordings/op-v1-abcdefgh12345678.json']);
 });
 
-it('steps aside for an example somebody wrote', function (string $producer): void {
+it('steps aside for an example an author declared', function (array $named, mixed $singular, array $expected): void {
     $base = recordedExamplesBase();
     recordInvoice($base, ['id' => 1]);
 
     $operation = recordedDraft();
-    $operation->response('200')->content('application/json')
-        ->set('example', ['id' => 'authored'], Contribution::forProducer($producer));
+    // What `#[Example]` writes, and it writes it in Finalize — after this extension has run. The
+    // declaration wins at freeze rather than by ordering, which is why the recording is attached anyway.
+    $operation->response('200')->declareExamples('application/json', $named, $singular);
 
     (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
 
     $content = recordedResponse($operation)['content']['application/json'];
 
-    expect($content)->not->toHaveKey('example')
-        ->and($content['schema']['example'])->toBe(['id' => 'authored']);
+    // Exactly one of the two members, holding exactly what the author wrote: a recording neither
+    // displaces an authored example nor joins it under a name the author never chose.
+    expect(array_diff_key($content, ['schema' => true]))->toBe($expected);
 })->with([
-    'a docblock @example' => ['docblock'],
-    'an #[Example]' => ['attribute'],
-    'an overlay' => ['overlay'],
-    'config' => ['config'],
+    'a singular one' => [[], ['id' => 'authored'], ['example' => ['id' => 'authored']]],
+    'a named map' => [
+        ['empty' => ['value' => ['id' => 0]]],
+        null,
+        ['examples' => ['empty' => ['value' => ['id' => 0]]]],
+    ],
+    'both, where the map wins' => [
+        ['empty' => ['value' => ['id' => 0]]],
+        ['id' => 'authored'],
+        ['examples' => ['empty' => ['value' => ['id' => 0]]]],
+    ],
 ]);
 
-it('publishes over an example nothing but inference put there', function (string $producer): void {
+it('leaves the illustration another integration got there first with', function (): void {
+    $base = recordedExamplesBase();
+    recordInvoice($base, ['id' => 1]);
+
+    $operation = recordedDraft();
+    // The built-in error tiers attach the literals they folded, in an earlier phase.
+    $operation->response('200')->setExample('application/json', ['id' => 'folded']);
+
+    (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
+
+    expect(recordedResponse($operation)['content']['application/json']['example'])->toBe(['id' => 'folded']);
+});
+
+it('publishes over an example nothing but the schema carried', function (): void {
     $base = recordedExamplesBase();
     recordInvoice($base, ['id' => 1]);
 
     $operation = recordedDraft();
     $operation->response('200')->content('application/json')
-        ->set('example', ['id' => 'inferred'], Contribution::forProducer($producer));
+        ->set('example', ['id' => 'inferred'], Contribution::inference());
 
     (new RecordedExamplesExtension($base))->handle($operation, recordedContext($base));
 
+    // Different slots: an example INSIDE the schema is the schema's own, and the media type beside it
+    // still has none of its own until something puts one there.
     expect(recordedResponse($operation)['content']['application/json']['example'])->toBe(['id' => 1]);
-})->with([
-    'inference' => ['inference'],
-    'the terminal fallback' => ['fallback'],
-    'another integration' => ['integration:eloquent'],
-]);
+});
 
 it('does not publish an example for something the document does not document', function (string $status, string $mediaType): void {
     $base = recordedExamplesBase();

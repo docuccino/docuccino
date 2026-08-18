@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Extensions;
 
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Examples\ExampleRedaction;
 use Docuccino\Core\Examples\RecordedExample;
 use Docuccino\Core\Examples\RecordedExampleAudit;
@@ -12,8 +13,6 @@ use Docuccino\Core\Examples\RecordingStore;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
-use Docuccino\Core\Patch\Contribution;
-use Docuccino\Core\Patch\Layer;
 
 /**
  * Publishes the response bodies a test suite recorded as the examples for their operation.
@@ -26,14 +25,21 @@ use Docuccino\Core\Patch\Layer;
  * A recording sits at the INTEGRATION rung of the precedence ladder: above inference, below every
  * authored source. It is evidence — the application really did answer this — so it beats a shape
  * inference merely derived; but a `#[Example]` is somebody choosing what a reader should see, and a
- * person who has chosen is never overruled by a test fixture. `setExample()` writes no provenance, so
- * the ladder is READ rather than written — see {@see authored()}.
+ * person who has chosen is never overruled by a test fixture. That rung is settled by the draft rather
+ * than here: `setExample()` fills the ILLUSTRATION bag, `#[Example]` fills the DECLARATION bag, and
+ * {@see ResponseDraft::freeze()} publishes a declaration over an illustration whichever ran first. So a
+ * media type an author has spoken for publishes what they wrote and nothing else — OAS carries
+ * `example` or `examples` and never both, and filing a recording under a key of our own would put a
+ * name in an author's map that the author did not choose.
  *
  * It is attached as the media type's own `example`, beside the schema rather than inside it, for a
  * reason worth stating: the shared-error hoist strips that member before it groups bodies, and would
  * key on one written into the schema. Recorded there, one route acquiring a recording could drop an
  * unrelated route's 404 out of its shared component and back inline — one part of an application
- * changing the emitted representation of another, which is the defect locality forbids.
+ * changing the emitted representation of another, which is the defect locality forbids. It never
+ * becomes an `examples` MAP for the same reason: the hoist leaves a media type carrying one whole, so
+ * promoting a recorded error body to a map would key the grouping exactly as writing it into the
+ * schema would.
  *
  * Only a status and media type the document already documents gets one. A recording is an
  * illustration, never a claim that an endpoint answers something the contract does not describe.
@@ -48,7 +54,8 @@ final class RecordedExamplesExtension implements OperationExtension
     public function phase(): OperationPhase
     {
         // After the response bodies exist, so an example is only ever attached beside a documented
-        // schema; the guard, not the ordering, is what keeps an authored example on top.
+        // schema. Nothing here depends on running before or after the attribute layer: which of the two
+        // bags publishes is the draft's answer, not the pipeline's.
         return OperationPhase::Overrides;
     }
 
@@ -102,24 +109,10 @@ final class RecordedExamplesExtension implements OperationExtension
             return;
         }
 
-        // An example somebody WROTE is the one a reader should see. It lands inside the schema (that is
-        // where `#[Example]` and `@example` put one), so the ladder is read there and a recording steps
-        // aside for anything from the docblock rung up.
-        if (self::authored($response->content($example->mediaType)->producerFor('example'))) {
-            return;
-        }
-
         // First writer wins here, which is what settles a recording against another integration-layer
         // producer that already illustrated this media type — the built-in error tiers attach the
         // literals they folded, and a value the application really returns is not better evidence than
         // a value the application's own code spells out.
         $response->setExample($example->mediaType, $example->body);
-    }
-
-    /** Whether a producer that already wrote an example outranks the integration rung. */
-    private static function authored(?string $producer): bool
-    {
-        return $producer !== null
-            && Contribution::forProducer($producer)->layer->value > Layer::Integration->value;
     }
 }

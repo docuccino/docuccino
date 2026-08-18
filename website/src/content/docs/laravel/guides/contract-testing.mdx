@@ -315,7 +315,8 @@ A recorded example sits at the `integration(20)` rung of the
 [precedence ladder](/laravel/guides/how-it-works/#3-uir). A recording is evidence — your
 application really did answer this — so it beats a shape inference merely derived. But an
 [`#[Example]`](/laravel/reference/attributes/#example) is you choosing what a reader should see, and
-that is never overruled by a test fixture.
+that is never overruled by a test fixture. That holds for a named map as much as for a single example:
+a recording never joins a set of examples you curated, and never takes a name you didn't choose.
 
 A recording is also only ever an illustration. A status or media type your document doesn't describe
 gets no example from one — a recording never adds a response the contract doesn't state.

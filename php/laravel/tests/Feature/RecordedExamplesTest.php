@@ -2,19 +2,24 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Contract\Examples\ExampleAudit;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Examples\ExampleRecording;
 use Docuccino\Core\Examples\RecordedExample;
 use Docuccino\Core\Examples\RecordingStore;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ErrorsController;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Event;
+use Workbench\App\Http\Controllers\ExamplesController;
 
 /**
  * The consuming half, through a real build of the workbench: a committed file becomes a documented
- * example, the artifact does not churn when a re-recording only moved the values, and the build goes on
- * executing nothing at all.
+ * example, an authored `#[Example]` is never displaced by one, the artifact does not churn when a
+ * re-recording only moved the values, and the build goes on executing nothing at all.
  */
 beforeEach(function (): void {
     $this->recordings = base_path('docs/recordings-'.getmypid().'-'.bin2hex(random_bytes(6)));
@@ -202,4 +207,118 @@ it('publishes a recording made before the file existed once it does', function (
     } finally {
         removeFragmentCacheDir($dir);
     }
+});
+
+/**
+ * Register one `ExamplesController` action and hand back the id the build files its recording under.
+ * These actions carry real `#[Example]` declarations, which is what makes them the precedence question
+ * asked of a whole build rather than of a hand-built draft.
+ */
+function recordedExampleRoute(string $action, string $uri): string
+{
+    /** @var Router $router */
+    $router = app('router');
+    $router->get($uri, [ExamplesController::class, $action]);
+
+    $id = stubDocumentArray()['paths']['/'.$uri]['get']['x-docuccino']['id'] ?? null;
+
+    expect($id)->toBeString();
+
+    /** @var string $id */
+    return $id;
+}
+
+/**
+ * @param  list<RecordedExample>  $responses
+ */
+function writeRecording(string $recordings, string $operationId, string $endpoint, array $responses): void
+{
+    (new RecordingStore($recordings))->put(ExampleRecording::of($operationId, $endpoint, $responses));
+}
+
+it('publishes the example an author wrote, never the one a suite recorded', function (): void {
+    $id = recordedExampleRoute('unnamed', 'api/examples-unnamed');
+    writeRecording($this->recordings, $id, 'GET /api/examples-unnamed', [
+        RecordedExample::of('200', 'application/json', ['id' => 999, 'name' => 'Recorded', 'status' => 'draft']),
+    ]);
+
+    $media = recordedDocument($this->recordings)['paths']['/api/examples-unnamed']['get']['responses']['200']['content']['application/json'];
+
+    expect($media['example'])->toBe(['id' => 7, 'name' => 'Cog', 'status' => 'draft'])
+        ->and($media)->not->toHaveKey('examples');
+});
+
+it('puts nothing of its own into an authored examples map', function (): void {
+    $id = recordedExampleRoute('show', 'api/examples/{widget}');
+    writeRecording($this->recordings, $id, 'GET /api/examples/{widget}', [
+        RecordedExample::of('200', 'application/json', ['id' => 999, 'name' => 'Recorded', 'status' => 'draft']),
+        RecordedExample::of('404', 'application/json', ['id' => 998, 'name' => 'Recorded', 'status' => 'draft']),
+    ]);
+
+    $responses = recordedDocument($this->recordings)['paths']['/api/examples/{widget}']['get']['responses'];
+
+    // The author's names and only the author's — and no `example` beside them, which OpenAPI forbids
+    // and which is the only slot a recording could otherwise have taken here.
+    expect(array_keys($responses['200']['content']['application/json']['examples']))->toBe(['discontinued', 'stocked'])
+        ->and($responses['200']['content']['application/json'])->not->toHaveKey('example')
+        ->and(array_keys($responses['404']['content']['application/json']['examples']))->toBe(['missing'])
+        ->and($responses['404']['content']['application/json'])->not->toHaveKey('example');
+});
+
+it('publishes where an author named no example, on an action where they named one elsewhere', function (): void {
+    $id = recordedExampleRoute('search', 'api/examples-search');
+    writeRecording($this->recordings, $id, 'GET /api/examples-search', [
+        RecordedExample::of('200', 'application/json', ['id' => 3, 'name' => 'Sprocket', 'status' => 'published']),
+    ]);
+
+    $operation = recordedDocument($this->recordings)['paths']['/api/examples-search']['get'];
+
+    // The declarations on this action are on the `q` parameter; the response nobody spoke for takes
+    // the recording, so stepping aside is per node rather than per operation.
+    expect($operation['responses']['200']['content']['application/json']['example'])
+        ->toBe(['id' => 3, 'name' => 'Sprocket', 'status' => 'published'])
+        ->and(array_keys($operation['parameters'][0]['examples']))->toBe(['by-name', 'by-sku']);
+});
+
+it('holds a recorded example to the schema beside it', function (mixed $body, bool $ok): void {
+    $id = recordedExampleRoute('search', 'api/examples-search');
+    writeRecording($this->recordings, $id, 'GET /api/examples-search', [
+        RecordedExample::of('200', 'application/json', $body),
+    ]);
+
+    bindStubEngine();
+    $document = generateDocument(fn (array $raw): array => $raw + ['examples' => ['recordings' => $this->recordings]])->document->toArray();
+    $report = (new ExampleAudit(ContractIndex::fromArray($document)))->run();
+
+    expect($report->ok())->toBe($ok)
+        ->and($report->checked)->toBeGreaterThan(0);
+
+    if (! $ok) {
+        expect($report->findings[0]->pointer)->toBe('/paths/~1api~1examples-search/get/responses/200/content/application~1json/example');
+    }
+})->with([
+    'one that fits' => [['id' => 3, 'name' => 'Sprocket', 'status' => 'published'], true],
+    'one the code has moved under' => [['id' => 'INV-3', 'name' => 'Sprocket', 'status' => 'published'], false],
+]);
+
+it('leaves a route it recorded nothing for exactly where it was', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-denied', [ErrorsController::class, 'denied']);
+    $router->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
+
+    $before = recordedDocument($this->recordings);
+
+    writeRecording($this->recordings, $before['paths']['/api/zz-denied']['get']['x-docuccino']['id'], 'GET /api/zz-denied', [
+        RecordedExample::of('403', 'application/json', ['code' => 'forbidden']),
+    ]);
+
+    $after = recordedDocument($this->recordings);
+
+    // The recording is the media type's, never the schema's: written into the schema it would change
+    // what this route's 403 IS, and the shared body its neighbour also points at would come apart.
+    expect($after['paths']['/api/zz-denied']['get']['responses']['403']['content']['application/json']['example'])
+        ->toBe(['code' => 'forbidden'])
+        ->and($after['paths']['/api/zz-denied-again'])->toBe($before['paths']['/api/zz-denied-again'])
+        ->and($after['components']['schemas']['Error403'])->toBe($before['components']['schemas']['Error403']);
 });

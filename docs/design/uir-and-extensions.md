@@ -572,14 +572,18 @@ subsystem. Four decisions carry the feature:
   satisfying its schema; a sensitive member name taints everything beneath it. The build refuses to
   publish a committed body that still matches (a hand edit, or a heuristic added since) and
   `examples.recording-unsafe` names the pointer, never the value.
-- **The example is the MEDIA TYPE's, not the schema's.** `SharedErrorResponses` strips
-  `content[<media type>].example` before it groups, and would key on one written into the schema — so a
-  recording inside the schema could drop an unrelated route's 404 out of its shared component and back
-  inline. `setExample()` is first-writer-wins and carries no provenance record — that is the cost, and
-  it is the same one every media-type example already pays — so the ladder is read rather than written:
-  the extension asks `producerFor('example')` on the schema draft (where `#[Example]` and `@example`
-  land) and steps aside for anything at `docblock` or above, leaving a recording at the `integration`
-  rung, over inference and under every authored source.
+- **The example is the MEDIA TYPE's, not the schema's, and never an `examples` map.**
+  `SharedErrorResponses` strips `content[<media type>].example` before it groups, and leaves a media type
+  already carrying an `examples` map whole — so either of the other two placements keys the hoist, and a
+  recording written into the schema, or promoted to a map, could drop an unrelated route's 404 out of its
+  shared component and back inline. `setExample()` is first-writer-wins and carries no provenance record
+  — that is the cost, and it is the same one every media-type example already pays — so the `integration`
+  rung is settled by the DRAFT rather than by the extension: `setExample()` fills the illustration bag,
+  `declareExamples()` fills the declaration bag, and `ResponseDraft::freeze()` publishes a declaration
+  over an illustration whichever ran first, which is why nothing here depends on the recorded extension
+  running before or after `AttributeExamplesExtension`. A media type an author has spoken for publishes
+  their example alone, singular or map: OAS carries `example` or `examples` and never both, and filing a
+  recording under a key of our own would put a name in an author's map that they never chose.
 
 Two supporting notes. `RouteContext::$operationId` carries the already-minted id into the draft phase,
 because a recording is filed under identity (so it survives a route rename) and deriving the id a second
