@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Registry;
 
+use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
@@ -74,6 +75,8 @@ final class DefaultExtensions
             // not one of them is installed.
             AuthConfigDigestContributor::class,
             AttributeOverridesExtension::class,
+            // Finalize: every response, parameter and request body a #[Example] could name now exists.
+            AttributeExamplesExtension::class,
             RouteServersExtension::class,
             // A rendered view answers text/html; the built-in resolver sits in the same gated chain the
             // integrations' media-type matchers do.

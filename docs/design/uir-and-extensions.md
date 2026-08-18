@@ -511,6 +511,16 @@ interface ExceptionToResponse {
 an extension that wants to attach one writes it through `ResponseDraft::setExample()` or the schema
 draft. Nothing implements or names an `ExampleProvider` — it is not part of the v1 surface.
 
+Two bags, not one. `setExample()` is a producer ILLUSTRATING what it worked out (first-writer-wins);
+`declareExamples()` on `ResponseDraft` / `ParameterDraft` / `OperationDraft` is an author STATING what
+the payload looks like, which is why a declaration displaces an illustration at freeze. Declared maps
+are keyed by the author's own names and kept name-sorted, and OAS makes `example` and `examples`
+mutually exclusive, so a non-empty map wins over either singular. `Core\Extensions\BuiltIn\AttributeExamplesExtension`
+is the one producer of declarations: it runs in Finalize (every response, parameter and request body a
+declaration could name already exists), confines an `#[Example(file:)]` path through the same
+`ConfinedPath` `#[DescriptionFromFile]` uses, and registers the resolved path as a route dependency
+whether or not the read worked — so creating a file that wasn't there rebuilds the route.
+
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
 throws. `ImplicitResponsesExtension` (adapter, Errors phase, `Priorities::LATE`) synthesizes those from
@@ -701,7 +711,8 @@ when a registration path exists and the `emit()` signature settles.
       recover their rule sets adapter-side, then converge on this core applier.
     - Overrides: `Core\Extensions\BuiltIn\AttributeOverridesExtension` (was
       `Laravel\Extensions\AttributeOverridesExtension`) reads only Docuccino attributes + core
-      `ConfinedPath` (for `#[DescriptionFromFile]`); the provider keeps binding its `$basePath`.
+      `ConfinedPath` (for `#[DescriptionFromFile]`); the provider keeps binding its `$basePath`, and
+      binds the same for `AttributeExamplesExtension`, which reads `#[Example(file:)]` the same way.
   - Corollary: pure, stable core utilities that integrations legitimately need (e.g.
     `Core\Support\Fqcn`) get allow-listed in the arch test with justification — never
     duplicated to dodge the boundary. Because these moves landed in already-allow-listed core

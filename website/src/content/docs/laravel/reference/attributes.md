@@ -54,7 +54,7 @@ All 30 attributes, grouped by what they do:
 | [`#[SchemaId]`](#schemaid) | Pin a class's stable diff identity. |
 | [`#[SchemaName]`](#schemaname) | Set a class's component display name. |
 | [`#[ErrorComponent]`](#errorcomponent) | Name the shared component an error publishes under, on the exception or on the method that renders it. |
-| [`#[Example]`](#example) | Pin the success response's example body. |
+| [`#[Example]`](#example) | Pin example payloads — one, or several named ones — on a response, the request body or a parameter. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
 | [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
@@ -607,17 +607,64 @@ public function __construct(
     public ?string $name = null,
     public ?string $summary = null,
     public ?string $externalValue = null,
+    public ?string $description = null,
+    public ?string $file = null,
+    public int|string|null $status = null,
+    public ?string $mediaType = null,
+    public ?string $parameter = null,
+    public bool $request = false,
 )
 ```
 
-Pins the example body for an action's success response: the first `#[Example]` with a non-null `value`
-becomes the `example` on the `200` response's `application/json` content. Inference supplies examples
-for error bodies on its own — this is how you fix the shape of a success payload it can't know.
+Pins the example payloads a reader copies. Without a `name:` it sets the singular `example`; with one
+it adds an entry to the `examples` map, so an endpoint can show several — an empty cart beside a full
+one — each with its own `summary` and `description`.
 
 ```php
 #[Example(value: ['id' => 42, 'total' => 19900, 'currency' => 'GBP'])]
 public function show(Invoice $invoice): InvoiceResource { /* … */ }
 ```
+
+```php
+#[Example(name: 'paid', summary: 'A settled invoice', value: ['id' => 42, 'status' => 'paid'])]
+#[Example(name: 'overdue', summary: 'One past its due date', value: ['id' => 43, 'status' => 'overdue'])]
+public function show(Invoice $invoice): InvoiceResource { /* … */ }
+```
+
+**Where the payload comes from.** Exactly one of `value:`, `file:` or `externalValue:`. `file:` reads a
+`.json`, `.yaml` or `.yml` file relative to your application root — the way to keep a realistic payload
+out of an attribute argument — and the file joins the build's dependencies, so editing it regenerates
+that endpoint. `externalValue:` publishes a URL for the payload instead of the payload itself, and
+needs a `name:`, as do `summary:` and `description:`.
+
+```php
+#[Example(name: 'full-cart', file: 'docs/examples/full-cart.json', summary: 'Three lines and a discount')]
+public function show(Cart $cart): CartResource { /* … */ }
+```
+
+**What it illustrates.** By default the success response — the lowest `2xx` the operation documents —
+in that response's first media type. At most one of these redirects it:
+
+| Argument | Illustrates |
+| --- | --- |
+| `status:` | That response instead (`status: 404`). |
+| `request:` | The request body. |
+| `parameter:` | The named parameter, wherever it lives — path, query, header or cookie. |
+| `mediaType:` | Combines with the others: which content of the response or request body. |
+
+```php
+#[Example(name: 'minimal', value: ['name' => 'Acme Ltd'], request: true)]
+#[Example(name: 'not-found', value: ['message' => 'No such invoice'], status: 404)]
+#[Example(name: 'second-page', value: 2, parameter: 'page')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+A node carries `example` or `examples`, never both, so where you name one example on a node, name them
+all — a nameless declaration sharing a node with named ones is dropped with a diagnostic.
+
+A declaration Docuccino can't place — a status the operation doesn't document, a parameter it doesn't
+have, a file it can't read — is dropped the same way, with a diagnostic naming the action, never
+guessed at. See [Reading diagnostics](/laravel/guides/troubleshooting/#reading-diagnostics).
 
 For a field-level example, an `@example` docblock line on the property is read when the schema comes
 from a [Data class](/laravel/packages/spatie-data/):
@@ -630,9 +677,6 @@ from a [Data class](/laravel/packages/spatie-data/):
  */
 public string $tenant;
 ```
-
-The `name`, `summary` and `externalValue` arguments are part of the attribute's signature; today only
-`value` reaches the emitted document.
 
 ### `#[CaseDescription]`
 
