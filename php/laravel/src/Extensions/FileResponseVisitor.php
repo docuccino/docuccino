@@ -23,6 +23,8 @@ use PhpParser\Node;
  * Receivers are matched by type, not by spelling, so `response()`, an injected `ResponseFactory`, the
  * `Response` facade, `Storage::` and `Storage::disk('s3')->` all land here and an application's own
  * `download()` never does.
+ *
+ * @phpstan-type CallSpec array{class: string, file: ?int, name: ?int, headers: ?int, sets: ?string, disposition: ?int, needsName: bool, mediaType: ?string, schema: array<string, mixed>}
  */
 final class FileResponseVisitor implements TraceVisitor
 {
@@ -50,7 +52,7 @@ final class FileResponseVisitor implements TraceVisitor
      * is; and `stream()`/`streamDownload()` set no type at all, which is why an unstated one degrades to
      * {@see BinaryRepresentation::ANY_MEDIA_TYPE} rather than to a plausible-looking one.
      *
-     * @var array<string, array<string, array{class: string, file: ?int, name: ?int, headers: ?int, sets: ?string, disposition: ?int, needsName: bool, mediaType: ?string, schema: array<string, mixed>}>>
+     * @var array<string, array<string, CallSpec>>
      */
     private const CALLS = [
         'factory' => [
@@ -142,7 +144,7 @@ final class FileResponseVisitor implements TraceVisitor
      * The disposition the call really sets. A literal argument overrides the default; a non-literal one
      * leaves it unknown, and a call that only sets a header when a name was supplied sets none without.
      *
-     * @param  array{sets: ?string, disposition: ?int, needsName: bool, ...}  $spec
+     * @param  CallSpec  $spec
      * @param  list<Node\Expr>  $args
      */
     private function disposition(array $spec, ?Node\Expr $name, TypeScope $scope, array $args): ?string
