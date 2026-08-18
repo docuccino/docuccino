@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 28 attributes with signatures and examples.
+description: The docuccino/attributes package — all 29 attributes with signatures and examples.
 ---
 
 
@@ -25,7 +25,7 @@ you'd expect without a `::class` reference.
 
 ## At a glance
 
-All 28 attributes, grouped by what they do:
+All 29 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -57,6 +57,7 @@ All 28 attributes, grouped by what they do:
 | [`#[Example]`](#example) | Pin the success response's example body. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
+| [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 
 ## Responses
 
@@ -664,3 +665,47 @@ the fragment-cache key, so edits invalidate correctly.
 #[DescriptionFromFile('docs/users/show.md')]
 public function show(int $id): UserResource { /* … */ }
 ```
+
+## Webhooks
+
+### `#[Webhook]`
+
+Targets `CLASS`.
+
+```php
+public function __construct(
+    public string $name,
+    public string $method = 'post',
+    public ?string $payload = null,
+    public string $mediaType = 'application/json',
+)
+```
+
+Publishes the annotated class under the document's `webhooks` as an operation your API promises to
+**call** — the outbound side of the contract, which no route describes. `name` is the key consumers
+subscribe to; `method` is the HTTP method their endpoint must implement. The annotated class is the
+delivered body unless `payload` names another type, and the type string is read by the same grammar
+as everywhere else.
+
+```php
+/**
+ * An invoice was paid.
+ *
+ * Delivered once payment has settled, and retried until your endpoint answers 2xx.
+ */
+#[Webhook('invoice.paid')]
+#[Group('Billing')]
+final readonly class InvoicePaid
+{
+    public function __construct(
+        public int $invoiceId,
+        public int $amountInCents,
+    ) {}
+}
+```
+
+The class docblock becomes the summary and description, and `#[Group]`, `#[Response]`,
+`#[DeprecatedOperation]`, `#[Internal]`, `#[InDocs]` and `#[ExcludeFromDocs]` read on it exactly as
+they read on a controller. Classes are discovered from
+[`webhooks.dir`](/laravel/reference/configuration/#webhooks); see
+[Documenting webhooks](/laravel/documenting/webhooks/) for the whole picture.

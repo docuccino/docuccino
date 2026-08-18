@@ -113,6 +113,7 @@ export default defineConfig({
 						{ label: 'Error responses', slug: 'laravel/documenting/errors' },
 						{ label: 'Authentication', slug: 'laravel/documenting/authentication' },
 						{ label: 'Rate limiting', slug: 'laravel/documenting/rate-limiting' },
+						{ label: 'Webhooks', slug: 'laravel/documenting/webhooks' },
 					],
 				},
 				{

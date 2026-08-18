@@ -49,6 +49,7 @@ use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
 use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Runtime\DocumentCache;
+use Docuccino\Laravel\Webhooks\WebhookCollector;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
@@ -197,6 +198,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->basePath());
 
         $this->app->when(ContentCompiler::class)
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
+
+        $this->app->when(WebhookCollector::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
 

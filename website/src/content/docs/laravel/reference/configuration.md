@@ -41,7 +41,8 @@ servers, security, content, and export target, and shares route contexts + the T
 in-process. The published config ships one document, `default`.
 
 :::note[Paths are stored relative to your application]
-Every path in a document — `info.description.file`, `content.dir`, `overlays`, `export.path` — may be
+Every path in a document — `info.description.file`, `content.dir`, `webhooks.dir`, `overlays`,
+`export.path` — may be
 written relative to your application root or as an absolute path; both resolve to the same file. Write
 them however you like: a path inside your application is **stored relative to the application root**,
 so the generated document is identical on your laptop, in CI, and in a container, wherever the app is
@@ -187,6 +188,17 @@ resolved, the result never depends on the order you wrote the definitions in.
 
 `summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, each with its own
 `downlevel.tag-*` warning — the tags themselves stay, flattened.
+
+### `webhooks`
+
+```php
+// 'webhooks' => ['dir' => 'app/Webhooks'],
+```
+
+Points at a directory of classes carrying [`#[Webhook]`](/laravel/reference/attributes/#webhook).
+Every annotated class under it is published under the document's `webhooks` — an operation your API
+promises to CALL, rather than one it answers. Absent, the document has none. See
+[Documenting webhooks](/laravel/documenting/webhooks/).
 
 ### `content`
 

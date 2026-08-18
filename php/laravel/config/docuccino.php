@@ -95,6 +95,10 @@ return [
                 // ],
             ],
 
+            // Where #[Webhook] classes live: every annotated class found under here is published as a
+            // webhook. Relative to the base path; absent means the document has none.
+            // 'webhooks' => ['dir' => 'app/Webhooks'],
+
             // A markdown tree compiled into the document as pages and navigation.
             'content' => [
                 'dir' => null, // e.g. 'resources/docs/api'

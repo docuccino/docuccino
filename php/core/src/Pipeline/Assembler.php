@@ -20,11 +20,12 @@ use Docuccino\Core\Overlay\OverlayApplier;
 use Docuccino\Core\Overlay\OverlayDocument;
 
 /**
- * Merges operation fragments into a UIR document array: places operations under their path/method,
- * hoists and identifies components, stamps document identity + generator metadata, applies overlays
- * and document transformers, then computes the content hash. Two operations contesting one slot —
- * duplicate identities, or a path and method a fragment already holds — are error diagnostics, and the
- * first claimant keeps the slot; nothing is ever silently overwritten.
+ * Merges operation fragments into a UIR document array: places operations under their path and method
+ * (or, for a webhook, under its name in `webhooks`), hoists and identifies components, stamps document
+ * identity + generator metadata, applies overlays and document transformers, then computes the content
+ * hash. Two operations contesting one slot — duplicate identities, or a path and method a fragment
+ * already holds — are error diagnostics, and the first claimant keeps the slot; nothing is ever
+ * silently overwritten.
  *
  * @internal
  */
@@ -64,7 +65,8 @@ final class Assembler
         /** @var list<Diagnostic> $diagnostics */
         $diagnostics = [];
 
-        $paths = $this->buildPaths($fragments, $diagnostics);
+        $paths = $this->buildPaths(self::under($fragments, webhooks: false), $diagnostics);
+        $webhooks = $this->buildWebhooks(self::under($fragments, webhooks: true), $diagnostics);
         $componentSchemas = $this->buildComponents($components);
 
         $doc = [
@@ -90,6 +92,10 @@ final class Assembler
         }
 
         $doc['paths'] = $paths;
+
+        if ($webhooks !== []) {
+            $doc['webhooks'] = $webhooks;
+        }
 
         $componentsOut = [];
         if ($componentSchemas !== []) {
@@ -261,6 +267,59 @@ final class Assembler
     }
 
     /**
+     * The fragments published under one heading. A webhook is an operation the API promises to CALL,
+     * so it travels as a fragment like any other and is separated here rather than in a second pipeline.
+     *
+     * @param  list<OperationFragment>  $fragments
+     * @return list<OperationFragment>
+     */
+    private static function under(array $fragments, bool $webhooks): array
+    {
+        return array_values(array_filter($fragments, static fn (OperationFragment $f): bool => $f->webhook === $webhooks));
+    }
+
+    /**
+     * The `webhooks` map: the same first-claimant-wins rule as {@see buildPaths()}, over a NAME rather
+     * than a path template. There is no identity-sharing check to make — a webhook name is published
+     * verbatim, so two of them are the same slot or they are different ones.
+     *
+     * @param  list<OperationFragment>  $fragments
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, array<string, mixed>>
+     */
+    private function buildWebhooks(array $fragments, array &$diagnostics): array
+    {
+        $webhooks = [];
+        /** @var array<string, array<string, string>> $claimed */
+        $claimed = [];
+
+        foreach ($fragments as $fragment) {
+            $holder = $claimed[$fragment->path][$fragment->method] ?? null;
+            if ($holder !== null) {
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Error,
+                    code: 'webhook.operation-collision',
+                    message: sprintf(
+                        'The webhook "%s" already documents %s from %s; this one is not in the document.',
+                        $fragment->path,
+                        strtoupper($fragment->method),
+                        $holder,
+                    ),
+                    routeSignature: $fragment->routeSignature,
+                    help: 'Give one of them a name of its own, or a method the other does not use.',
+                );
+
+                continue;
+            }
+
+            $claimed[$fragment->path][$fragment->method] = $fragment->routeSignature;
+            $webhooks[$fragment->path][$fragment->method] = $fragment->operation->toArray();
+        }
+
+        return $webhooks;
+    }
+
+    /**
      * Rewrite the document onto the component names the registry publishes: rekey
      * `components.schemas` and repoint every `$ref` that named one of them.
      *
@@ -309,12 +368,23 @@ final class Assembler
             $doc['security'] = self::rekeyRequirements($doc['security'], $renames);
         }
 
-        $paths = $doc['paths'] ?? null;
-        if (! is_array($paths)) {
-            return $doc;
+        foreach (['paths', 'webhooks'] as $member) {
+            if (is_array($doc[$member] ?? null)) {
+                $doc[$member] = self::rekeyItemRequirements($doc[$member], $renames);
+            }
         }
 
-        foreach ($paths as $path => $operations) {
+        return $doc;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $items
+     * @param  array<string, string>  $renames
+     * @return array<array-key, mixed>
+     */
+    private static function rekeyItemRequirements(array $items, array $renames): array
+    {
+        foreach ($items as $path => $operations) {
             if (! is_array($operations)) {
                 continue;
             }
@@ -328,12 +398,10 @@ final class Assembler
                 $operations[$method] = $operation;
             }
 
-            $paths[$path] = $operations;
+            $items[$path] = $operations;
         }
 
-        $doc['paths'] = $paths;
-
-        return $doc;
+        return $items;
     }
 
     /**

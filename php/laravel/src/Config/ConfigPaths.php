@@ -45,6 +45,7 @@ final class ConfigPaths
         'export.targets' => PathShape::TargetList,
         'info.description.file' => PathShape::Single,
         'overlays' => PathShape::PathList,
+        'webhooks.dir' => PathShape::Single,
     ];
 
     /**

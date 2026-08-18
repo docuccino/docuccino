@@ -48,6 +48,11 @@ supported.
 		href="/laravel/documenting/rate-limiting/"
 		description="A 429 response and rate-limit headers from throttle middleware."
 	/>
+	<LinkCard
+		title="Webhooks"
+		href="/laravel/documenting/webhooks/"
+		description="The calls your API makes, documented from the payload classes it sends."
+	/>
 </CardGrid>
 
 ## How support activates
@@ -115,6 +120,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 | [Passport](/laravel/documenting/authentication/) | An OAuth2 security scheme with per-operation scopes read from `scope:` / `scopes:` middleware | [`laravel/passport`](https://laravel.com/docs/passport) | [`integrations.passport.url`](/laravel/reference/configuration/#integrations) |
 | [Spatie Laravel Permission](/laravel/packages/laravel-permission/) | `role:` / `permission:` / `role_or_permission:` middleware as an `x-permissions` member and a description line | [`spatie/laravel-permission`](https://spatie.be/docs/laravel-permission) | Opt-in — [`integrations.permission.enabled`](/laravel/reference/configuration/#integrations) |
 | [Rate limiting](/laravel/documenting/rate-limiting/) | A `429` response with `Retry-After` and `X-RateLimit-*` headers, read from `throttle` middleware | Built in | [`integrations.rate_limit`](/laravel/reference/configuration/#integrations) |
+| [Webhooks](/laravel/documenting/webhooks/) | The calls your API makes, from classes carrying `#[Webhook]` — payload, acknowledgement and prose | Built in — opt in by naming a directory | [`webhooks.dir`](/laravel/reference/configuration/#webhooks) |
 | [Spatie Query Builder](/laravel/packages/query-builder/) | Filters, sorts, includes, sparse field sets, and pagination — traced through the builder several method calls deep | [`spatie/laravel-query-builder`](https://spatie.be/docs/laravel-query-builder) | [`integrations.query_builder`](/laravel/reference/configuration/#integrations) |
 | [Spatie JSON API Paginate](/laravel/packages/json-api-paginate/) | JSON:API `page[number]` / `page[size]` (or `page[cursor]`) pagination parameters from `jsonPaginate()` | [`spatie/laravel-json-api-paginate`](https://github.com/spatie/laravel-json-api-paginate) | [`integrations.json_api_paginate`](/laravel/reference/configuration/#integrations) |
 
