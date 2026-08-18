@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit;
 
 use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Emit\Postman\CollectionEmitter;
 use InvalidArgumentException;
 
 /**
@@ -40,6 +41,7 @@ final class Formats
         'openapi-3.1' => [OpenApi31DownlevelEmitter::class, true, true],
         'openapi-3.0' => [OpenApi30DownlevelEmitter::class, true, true],
         'uir' => [UirEmitter::class, false, true],
+        'postman' => [CollectionEmitter::class, false, false],
     ];
 
     /**

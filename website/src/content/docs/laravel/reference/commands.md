@@ -32,7 +32,7 @@ Generate and export API documentation from your routes.
 ```
 docuccino:export
     {document? : The configured document key (defaults to every document)}
-    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 — writes this one format instead of the configured targets}
+    {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
     {--out= : Output path (defaults to the matching target, else the document export path)}
     {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
@@ -44,12 +44,12 @@ docuccino:export
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
-| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters. An invalid value errors (no silent fallback). |
+| `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when you configure more than one document and pass no `document` argument, since every document would clobber the same file: name a document, or configure per-document targets. |
 | `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. Unrecognized values fall back to `winners`. Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
-| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir`, which has no YAML form. |
+| `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before inference runs — see the shared-behavior note above. |
 
 **One build, many artifacts.** With no `--format`, the command writes every target the document
@@ -73,6 +73,24 @@ artifact never quietly ships a weaker contract than your code describes. These a
 enforced: `--fail-on` reads the **build's** diagnostics, so adding a 3.0 target never turns a green
 pipeline red on its own. The table under
 [OpenAPI 3.0 export](/laravel/getting-started/first-export/#openapi-30-export) lists what 3.0 changes.
+
+### Postman collections
+
+`--format=postman` (or a `postman` export target) writes a **Postman Collection v2.1.0** from the same
+build as your OpenAPI file:
+
+- **Folders follow your tags**, nested the way `tags.definitions` nests them. A tag with no operations
+  is left out.
+- **`{{baseUrl}}`** comes from your first configured server, and every server variable becomes a
+  collection variable of its own — so switching tenant or version is one edit.
+- **Auth** maps onto Postman's own block (`bearer`, `basic`, `digest`, `apikey`, `oauth2`), with the
+  credentials as `{{variable}}` references named after your security schemes.
+- **Request bodies** are generated from each schema, so a request is runnable rather than empty, and
+  every documented response is saved as an example.
+
+Postman cannot hold a JSON Schema, so a collection is a weaker contract than the OpenAPI file — keep
+emitting both. Where something has no Postman equivalent at all (webhooks, callbacks, `mutualTLS` and
+`openIdConnect` schemes) a `postman.*` diagnostic names it rather than letting the file go quiet.
 
 **Committing the output.** Docuccino's output is deterministic — identical code produces
 byte-for-byte identical output. Commit `docs/openapi.json` (or a UIR document) and diff it in CI — see

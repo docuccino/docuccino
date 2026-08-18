@@ -133,8 +133,8 @@ detail is documented the way it is.
 
 ## 4. Emitters
 
-Emitters transcode the UIR into what you ship: OpenAPI 3.2, a 3.1 or 3.0 downlevel, or the raw UIR
-itself, as JSON or YAML. A build feeds as many emitters as the document configures
+Emitters transcode the UIR into what you ship: OpenAPI 3.2, a 3.1 or 3.0 downlevel, a Postman
+collection, or the raw UIR itself, as JSON or YAML. A build feeds as many emitters as the document configures
 [export targets](/laravel/reference/configuration/#export), so several artifacts cost one analysis
 rather than one run each. Because the UIR is canonically ordered and free of timestamps, identical code always
 produces byte-for-byte identical output — which is what makes the

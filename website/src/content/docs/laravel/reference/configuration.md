@@ -315,6 +315,7 @@ To emit several artifacts from **one** build, list targets instead:
         ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
         ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
         ['format' => 'uir',         'path' => 'docs/api.uir.json'],
+        ['format' => 'postman',     'path' => 'docs/collection.json'],
     ],
 ],
 ```
@@ -337,8 +338,8 @@ Rules the command enforces before it builds anything:
   clobber the other.
 - **The extension picks the serialisation.** A `.yaml` or `.yml` path emits YAML; anything else emits
   JSON. There is no `yaml` key, because the path already says it.
-- **`uir` has no YAML form**, so a `.yaml` path on it is an error rather than a `.yaml` file holding
-  JSON.
+- **`uir` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
+  `.yaml` file holding JSON.
 
 A broken target list fails the command with a `config.export-*` error **before** the build runs, so
 you never pay for an analysis to find out a filename was wrong.

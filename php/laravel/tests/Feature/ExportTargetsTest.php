@@ -49,6 +49,51 @@ it('writes every configured target from a single build', function (): void {
         ->and(file_get_contents($dir.'/api.uir.json'))->toContain('"uir":');
 });
 
+it('writes a Postman collection alongside the OpenAPI document', function (): void {
+    $dir = targetsDir();
+    configureTargets([
+        ['format' => 'openapi-3.2', 'path' => $dir.'/openapi.json'],
+        ['format' => 'postman', 'path' => $dir.'/collection.json'],
+    ]);
+
+    $this->artisan('docuccino:export')
+        ->expectsOutputToContain('collection.json (postman)')
+        ->assertSuccessful();
+
+    $collection = json_decode((string) file_get_contents($dir.'/collection.json'), true);
+
+    expect($collection['info']['schema'])->toBe('https://schema.getpostman.com/json/collection/v2.1.0/collection.json')
+        ->and($collection['item'])->not->toBeEmpty();
+});
+
+it('rejects a YAML path for a Postman target', function (): void {
+    // Postman imports JSON only, so a `.yaml` collection is a file it refuses.
+    configureTargets([['format' => 'postman', 'path' => targetsDir().'/collection.yaml']]);
+
+    $this->artisan('docuccino:export')
+        ->expectsOutputToContain('config.export-yaml-unsupported')
+        ->assertFailed();
+});
+
+it('writes byte-identical artifacts across two runs', function (): void {
+    // Determinism has to hold for every format the build feeds, not only the one under test elsewhere.
+    $dir = targetsDir();
+    $paths = [$dir.'/openapi.json', $dir.'/openapi-3.1.yaml', $dir.'/collection.json'];
+
+    configureTargets([
+        ['format' => 'openapi-3.2', 'path' => $paths[0]],
+        ['format' => 'openapi-3.1', 'path' => $paths[1]],
+        ['format' => 'postman', 'path' => $paths[2]],
+    ]);
+
+    $this->artisan('docuccino:export')->assertSuccessful();
+    $first = array_map(file_get_contents(...), $paths);
+
+    $this->artisan('docuccino:export')->assertSuccessful();
+
+    expect(array_map(file_get_contents(...), $paths))->toBe($first);
+});
+
 it('creates missing directories for a target', function (): void {
     $dir = targetsDir();
     configureTargets([['format' => 'openapi-3.2', 'path' => $dir.'/nested/deeper/openapi.json']]);
