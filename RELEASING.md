@@ -11,9 +11,12 @@ regenerates every changelog from the commit messages, and keeps one open **`Rele
 request current, with the pending entries as its description.
 
 1. Review that pull request and wait for `CI gate`.
-2. **Squash-merge it. That is the release** — `main` now carries the changelog for a version that is
-   not yet tagged.
-3. Tag the merge commit with the version the pull request named:
+2. Bump `DocuccinoServiceProvider::VERSION` in
+   [`php/laravel/src/DocuccinoServiceProvider.php`](php/laravel/src/DocuccinoServiceProvider.php) to
+   the version that pull request's title names — see [The generator version](#the-generator-version).
+3. **Squash-merge the release pull request. That is the release** — `main` now carries the changelog
+   for a version that is not yet tagged.
+4. Tag the merge commit with the version the pull request named:
 
 ```bash
 git switch main && git pull
@@ -46,6 +49,26 @@ a `CHANGELOG.md` missing the release it is.
 
 Tagging stays manual on purpose. A tag pushed with the automatic `GITHUB_TOKEN` triggers no further
 workflows, so `split.yml` would never see it.
+
+### The generator version
+
+`DocuccinoServiceProvider::VERSION` (in
+[`php/laravel/src/DocuccinoServiceProvider.php`](php/laravel/src/DocuccinoServiceProvider.php)) is the
+one string in this repository that has to say which release you are running. Every emitted document
+publishes it as `x-docuccino.generator.version` — the field a bug report is read against — and it keys
+the fragment cache's tool version, so bumping it is also what stops an upgrade serving fragments an
+older generator recorded. A stale constant makes the document name a generator that never produced it.
+
+It rides its own **`chore(laravel): …`** pull request onto `main`, merged before the release pull
+request. Two reasons for that shape: `release/next` is a generated branch, reset and force-pushed on
+every push to `main`, so a commit placed there is lost; and `chore` produces no changelog entry, so
+the pending version the release pull request names does not move under you. Merging the bump re-runs
+the release workflow, which rebuilds `release/next` from a `main` that now carries it.
+
+No goldens need regenerating. The golden comparison (`withoutGeneratorVersion()` in `tests/Pest.php`)
+replaces that one member on both sides, so the committed bytes keep the version they were recorded
+with and a bump changes nothing else — `info.version`, `specVersion` and `contentHash` all stay
+byte-locked.
 
 ### The changelogs
 

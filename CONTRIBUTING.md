@@ -161,6 +161,12 @@ casually:
 - **CI guards that `DOCUCCINO_UPDATE_GOLDEN` is unset**, so a drifting document can never masquerade
   as green.
 
+One member is deliberately outside the lock: `x-docuccino.generator.version`, which names the release
+rather than the application. The comparison normalises it on both sides (`withoutGeneratorVersion()`
+in `tests/Pest.php`), so bumping the version at release time regenerates nothing — see
+[RELEASING.md](RELEASING.md). Everything else in those bytes, `info.version` and `contentHash`
+included, is still locked.
+
 ## Coverage standards
 
 Coverage protects the paths goldens never traverse. Summarised (full detail in
