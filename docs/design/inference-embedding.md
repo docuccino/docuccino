@@ -411,7 +411,8 @@ effort); the `$casts` property form is recovered today.
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
    (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
    points, including real signal, flag it). Dropped/demoted points are counted + verbose-logged.
-2. `KnownThrowers` registry (user-extensible), keyed on the callee NAME and gated on the
+2. `KnownThrowers` registry (engine-owned and `@internal` — NOT a user surface; §7 is the
+   sanctioned escape hatch), keyed on the callee NAME and gated on the
    RESOLVED callee — **dual role**: (a) *enrich* explicit stubbed points with a status
    (`authorize` → 403, `validate` → 422), (b) *rescue* still-implicit forwarders by callee name
    (static `Model::findOrFail` surfaces only as implicit bare Throwable — unlike Builder
@@ -446,8 +447,20 @@ are the pipeline's ExceptionToResponse job. Known limitation (accepted): an inco
 - `Data::from/collect` precision; `Resource::collection` → `AnonymousResourceCollection<T>`
   (threading the inner resource type through anonymous collections needs a dedicated
   extension — flagged by Spike A as not-free; Phase 4).
-- User's own PHPStan extensions (via `docuccino.neon` include) improve their docs with
-  zero Docuccino-specific API — headline feature.
+- User's own PHPStan extensions improve their docs with zero Docuccino-specific API — headline
+  feature, and the one sanctioned way to teach the analysis about a project's own code (which is
+  why §6's registry stays internal). The wiring, end to end:
+  `engine.neon` (adapter config, a path relative to the app base path) → `EngineNeon::path()` →
+  the core `TypeEngineBuilder::build(configFile:)` seam → `RuntimeConfig::$userNeon` → an extra
+  entry under `includes:` in the generated neon, after Larastan's. So the file is a normal PHPStan
+  config: whatever it registers (dynamic return-type extensions, stub files, parameters) is in play
+  for every question the engine answers, and a project usually just points the key at the
+  `phpstan.neon` it already has.
+  Two consequences the wiring owes: the file's CONTENT joins `BuildFingerprint`, since an edited
+  extension changes inferred types with no analysed file moving; and a configured path that names
+  no file is skipped by the engine and reported by the adapter as one
+  `config.engine-neon-missing` warning — the build is honest without it, just vaguer than
+  configured, so it degrades rather than failing.
 
 ## 8. Determinism
 
