@@ -20,7 +20,7 @@ method, so everything is read from the real signature rather than the trait's ge
 
 - **The operation summary** comes from the resolved method's docblock.
 - **The request body** comes from the action's own `rules()` method, turned into schema constraints
-  through the same [validation pipeline](/laravel/documenting/requests/) Form Requests use.
+  through the same [validation pipeline](/laravel/documenting/requests/) form requests use.
 - **A `403` response** is documented whenever the action defines `authorize()`, rendered in the same
   style as the rest of your error responses (framework defaults, or the Problem Details preset).
 - **The response body** is inferred from the resolved method's return type, by the same rules as

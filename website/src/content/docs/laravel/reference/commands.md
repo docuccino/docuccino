@@ -61,7 +61,7 @@ target, in configured order, then any diagnostics.
 that target's path is used — looked up by format, so which file you get never depends on how the list
 happens to be ordered.
 
-A target list the command cannot honour — an unknown format, two targets writing one file, a `.yaml`
+A target list the command cannot honor — an unknown format, two targets writing one file, a `.yaml`
 path on `uir` — fails with a `config.export-*` error **before** the build starts, so a wrong filename
 never costs you an analysis. A write that fails prints `Could not write <path>.` instead of `Wrote`,
 and the command exits non-zero.

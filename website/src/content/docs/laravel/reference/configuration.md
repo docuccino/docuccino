@@ -10,6 +10,11 @@ scrolling through it. This page is the long-form version: what each key does, wh
 and where its behavior is explained in full. The file is plain data — no imports, no class
 references — so it stays safe to load even where Docuccino itself isn't installed.
 
+The **Default** column is the value the published file ships with. For most keys that is also the
+built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as
+`'default'` and falls back to `'none'` when a document omits it, which is why a second document
+[inherits nothing](/laravel/guides/multiple-documents/) from the first.
+
 ## Top level
 
 ```php
@@ -336,7 +341,7 @@ Rules the command enforces before it builds anything:
   `--format` and the viewer's artifact each resolving to exactly one file.
 - **No two targets may write the same file**, in one document or across documents — one would
   clobber the other.
-- **The extension picks the serialisation.** A `.yaml` or `.yml` path emits YAML; anything else emits
+- **The extension picks the serialization.** A `.yaml` or `.yml` path emits YAML; anything else emits
   JSON. There is no `yaml` key, because the path already says it.
 - **`uir` and `postman` have no YAML form**, so a `.yaml` path on either is an error rather than a
   `.yaml` file holding JSON.
@@ -504,7 +509,7 @@ so a sharpened extension shows up in the next build rather than the one after it
 
 ```php
 'cache' => [
-    'enabled' => false, // OperationFragment cache: incremental builds, off by default
+    'enabled' => false, // fragment cache: incremental builds, off by default
     'store' => null,    // Laravel cache store for the runtime document cache (docuccino:cache)
     // 'path' => null,  // fragment cache directory (defaults to storage_path('docuccino/fragments'))
 ],
@@ -512,6 +517,6 @@ so a sharpened extension shows up in the next build rather than the one after it
 
 | Key | Effect |
 | --- | --- |
-| `enabled` | Turns on the `OperationFragment` cache for incremental builds. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
+| `enabled` | Turns on the fragment cache for incremental builds. The key hashes the tool/spec/identity-algo versions, doc config, resolved extension list, route signature, the build environment, and every dependency file the engine reported — so invalidation is sound even for a Query class three calls deep. Assembly/canonicalize/validate always run fresh. A build whose routes are all warm never boots the analyzer at all; [Speeding up builds](/laravel/guides/speeding-up-builds/) covers when to turn this on. |
 | `store` | Laravel cache store name for the runtime document cache warmed by `docuccino:cache`. |
 | `path` | Fragment cache directory (defaults to `storage_path('docuccino/fragments')`). Docuccino drops a `.gitignore` into the directory it creates — the same `*` / `!.gitignore` pair Laravel ships inside `storage/` — so cached fragments stay out of your repository. An existing `.gitignore` is never overwritten. |

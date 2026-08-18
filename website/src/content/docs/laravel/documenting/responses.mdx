@@ -144,14 +144,14 @@ explicit. An explicit `201` always wins.
 ### Spatie Data success status
 
 A [Spatie Data](/laravel/packages/spatie-data/) class returned from a `POST` documents **`201 Created`**,
-from spatie's own `ResponsableData` default; any other verb documents `200`. A class that **overrides**
+from Spatie's own `ResponsableData` default; any other verb documents `200`. A class that **overrides**
 `calculateResponseStatus()` documents that instead — `return 201;`, a class constant like
 `Response::HTTP_CREATED`, or a conditional whose arms are *all* constants
 (`return $invoice->isPaid() ? 200 : 202;` documents the same body under **each** status). A computed
 status falls back to `200` with a `spatie-data.response-status-unresolved` info diagnostic rather than
 guessing.
 
-The `201` is new: earlier releases read only the override. See the
+The `201` is new in **v0.2**: earlier releases read only the override. See the
 [upgrade note](/laravel/packages/spatie-data/#success-statuses).
 
 ## Empty responses
@@ -239,7 +239,7 @@ public function reset(Request $request): JsonResponse
 }
 ```
 
-— so build the payload where the analyser can see it, or name it with
+— so build the payload where the analyzer can see it, or name it with
 `#[Response(type: ResetResultData::class)]`. A `JsonResponse` whose payload *is* recoverable is
 documented in full, exactly as [above](#status-codes-and-jsonresponse); the guard only ever refuses
 the wrapper, never a payload.

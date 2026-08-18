@@ -12,7 +12,7 @@ constructs your objects, so generating docs has no side effects.
 <CardGrid>
 	<Card title="Path parameters" icon="seti:default">From the route template and route-model bindings.</Card>
 	<Card title="Query parameters" icon="magnifier">From validation on read routes — and your query builders.</Card>
-	<Card title="Request bodies" icon="document">From Form Requests and inline validation.</Card>
+	<Card title="Request bodies" icon="document">From form requests and inline validation.</Card>
 	<Card title="File uploads" icon="add-document">Flip the media type to `multipart/form-data` automatically.</Card>
 </CardGrid>
 
@@ -45,13 +45,6 @@ parameter falls back to a plain `string` and the build reports `route-binding.co
 it. It never falls back to the model's route key: an endpoint that takes a slug documented as an
 `integer` id is a wrong answer, and a plain `string` is at least a true one.
 
-## Fallback routes
-
-`Route::fallback()` answers whatever no other route matched, so its URI is a placeholder rather than a
-path a client can call — and OpenAPI has no way to say "any unmatched path". A fallback route is
-therefore left out of the document, with a `route.fallback-omitted` note saying so. Document what a
-client gets for an unknown path as a `404` response on the operations that can produce one.
-
 Reach for [`#[PathParameter]`](/laravel/reference/attributes/#pathparameter) to refine a parameter — set
 an OpenAPI `format`, a description, or an example, or give an unbound segment a non-string type:
 
@@ -59,6 +52,13 @@ an OpenAPI `format`, a description, or an example, or give an unbound segment a 
 #[PathParameter(name: 'invoice', type: 'string', format: 'uuid', description: 'Invoice public id')]
 public function show(Invoice $invoice): InvoiceResource { /* … */ }
 ```
+
+## Fallback routes
+
+`Route::fallback()` answers whatever no other route matched, so its URI is a placeholder rather than a
+path a client can call — and OpenAPI has no way to say "any unmatched path". A fallback route is
+therefore left out of the document, with a `route.fallback-omitted` note saying so. Document what a
+client gets for an unknown path as a `404` response on the operations that can produce one.
 
 ## Query parameters
 
@@ -139,9 +139,9 @@ parameter is documented at all. A guessed `page` would name a key the endpoint n
 ### The page-size key
 
 `paginate()` takes its page size from whatever you hand it, so whether a request key is involved is a
-fact about your own code. Docuccino reads it there. It follows the size argument back — through a local
-variable, and into the helper that produced it — and documents the key when that argument turns out to
-come off the request:
+fact about your own code. Docuccino follows the size argument back — through a local variable, and into
+the helper that produced it — and documents the key when that argument turns out to come off the
+request:
 
 ```php
 final class ListPageSize
@@ -162,8 +162,7 @@ The argument is the evidence, not the name: a key called `limit` documents `limi
 accessors that name one key read it — `integer()`, `input()`, `query()`, `get()`, `post()` — so you don't
 have to cast to be understood. And the same rule says nothing where there is nothing to say —
 `paginate(25)` fixes the size at the call site, and `paginate()` takes it from the model's `$perPage`, so
-neither documents a size key at all. A guessed one would name a key the endpoint ignores, which costs a
-client more than a missing one.
+neither documents a size key at all.
 
 <Aside type="note" title="What the size schema states">
 `type: integer`, and a `default` only when the read's own fallback was written as a literal — a fallback
@@ -173,10 +172,9 @@ size rather than rejecting it, and a bound would tell a client their value is in
 pinned to the nearest one.
 </Aside>
 
-What makes this a reading rather than a guess is that the key's **value** has to reach the size. Inside a
-helper, that means reaching what the helper returns — through a clamp, an `(int)` cast, a `??`, a ternary
-or `match` arm, or a local it named on the way. A key read to decide something *else* is not a size,
-however close to the return it sits:
+The key's **value** has to reach the size. Inside a helper, that means reaching what the helper returns —
+through a clamp, an `(int)` cast, a `??`, a ternary or `match` arm, or a local it named on the way. A key
+read to decide something *else* is not a size, however close to the return it sits:
 
 ```php
 // Documents nothing. `preset` chooses which size to use; the size is a literal either way.
@@ -228,7 +226,7 @@ public function index(Request $request, CatalogQuery $catalog): PaginatedDataCol
 }
 ```
 
-The **response** is fine here: a spatie `PaginatedDataCollection` (or `CursorPaginatedDataCollection`)
+The **response** is fine here: a Spatie `PaginatedDataCollection` (or `CursorPaginatedDataCollection`)
 names its paginator in the return type, so its envelope comes from that type alone. That's a property of
 those types, not of paginators generally — a Laravel resource collection reads
 `AnonymousResourceCollection` whether or not it was paginated, so its envelope comes from the same trace
@@ -295,11 +293,11 @@ real but a helper's body hides them.
 
 ## Request bodies
 
-A Form Request's `rules()` — or an inline `$request->validate([...])` / `Validator::make(...)` in the
+A form request's `rules()` — or an inline `$request->validate([...])` / `Validator::make(...)` in the
 action — becomes the request body schema.
 
 <Tabs>
-	<TabItem label="Form Request">
+	<TabItem label="Form request">
 	```php
 	// app/Http/Requests/StoreInvoiceRequest.php
 	public function rules(): array
@@ -328,7 +326,7 @@ action — becomes the request body schema.
 	</TabItem>
 	<TabItem label="Generated OpenAPI">
 	```json
-	// Form Request: the body hoists to a named component the operation $refs.
+	// Form request: the body hoists to a named component the operation $refs.
 	"requestBody": {
 	  "required": true,
 	  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StoreInvoiceRequest" } } }
@@ -351,7 +349,7 @@ Either way documents a body with `customer_id`, `currency` (as an enum), and `du
 required fields and formats. `requestBody.required` is `true` as soon as at least one field is
 required, and omitted when every field is optional.
 
-Because a **Form Request** is a single named source class, its body is hoisted to a
+Because a **form request** is a single named source class, its body is hoisted to a
 `#/components/schemas/StoreInvoiceRequest` component and the operation `$ref`s it — so the same
 request class used across several endpoints is one shared, deduped component. Rename the component
 with [`#[SchemaName]`](/laravel/reference/attributes/#schemaname), and pin its diff identity across a
@@ -380,7 +378,7 @@ The rules array is recovered without ever being executed, from any of these:
 
 | Source | How it's found |
 | --- | --- |
-| A Form Request type-hinted on the action | Its `rules()` is analyzed as a constant array. |
+| A form request type-hinted on the action | Its `rules()` is analyzed as a constant array. |
 | `$request->validate([...])` in the action | Read from the action body. |
 | `Validator::make($data, [...])` in the action | The second argument is read. |
 | Either of the above inside a helper the action calls | Docuccino descends into your own code (bounded), so a `Validator::make(...)` built in a query or service class one or more hops away is still found. Vendor code is never entered. |
@@ -459,7 +457,7 @@ child is the array case and keeps the rule.
 
 A custom `ValidationRule` class does its work at runtime, so there's nothing to read from its body. Say
 what it accepts once, on the class, with `#[RuleSchema]` — and every field validated by it is documented,
-in Form Requests, inline `validate()` calls, and Spatie Data's `#[Rule(new …)]` alike:
+in form requests, inline `validate()` calls, and Spatie Data's `#[Rule(new …)]` alike:
 
 <Tabs>
 	<TabItem label="Your rule">

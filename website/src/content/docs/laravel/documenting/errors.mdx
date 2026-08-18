@@ -84,11 +84,10 @@ directly from the code:
 	</TabItem>
 </Tabs>
 
-Throw this from an action and a `402` response with that body shape is documented — no annotation
-required. The description is the RFC 9110 reason phrase for the status (`401` is `Unauthorized`,
-`422` is `Unprocessable Entity`, and so on); a status without a standard phrase — like `402` here — is
-documented with a generic `Error`. If a handler is too dynamic to read statically, Docuccino records a
-diagnostic and moves on to the next tier.
+Throw this from an action and a `402` response with that body shape is documented. The description is
+the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Unprocessable Entity`, and
+so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
+handler is too dynamic to read statically, Docuccino records a diagnostic and moves on to the next tier.
 
 ### Responses built through a helper
 
@@ -162,9 +161,8 @@ the schema, and every member whose value is a constant is pinned with a JSON-Sch
 	</TabItem>
 </Tabs>
 
-Constants read from the arm appear as both `const`s and example values. A `status` member that carries
-the response's status code is filled with **this response's** — the `403` arm says `403`, a `404` arm says
-`404` — even when the status itself was computed dynamically.
+A `status` member that carries the response's status code is filled with **this response's** — the `403`
+arm says `403`, a `404` arm says `404` — even when the status itself was computed dynamically.
 
 ### Examples are completed, not withheld
 
@@ -232,10 +230,9 @@ Because the arm names the case, Docuccino resolves the accessors the helper appl
 the extra hop from a `renderProblem($case)` wrapper into the factory. `->value` and `->name` come
 straight from the case (so they fold for **vendor** enums too). A no-arg accessor **method** folds by
 reading the method body: a `match ($this)` arm for that case, or a plain constant `return`. A folded
-`status()` becomes the response's status — the enum is the source of truth, so it's preferred over the
-status inferred from the exception type.
+`status()` becomes the response's status, preferred over the status inferred from the exception type.
 
-The honest bounds are deliberate:
+The bounds are deliberate:
 
 - A method whose body is **computed** rather than a direct constant — `return __($this->titleKey());`,
   `return strtoupper($this->name);` — does not fold. The member is documented at its widened type with
@@ -247,11 +244,10 @@ The honest bounds are deliberate:
 
 This descent is **bounded and project-only**: it follows a helper into another helper up to a small
 depth and file budget, and it never steps into framework or vendor code — if the shape is produced by
-a vendor call, the response is documented without a recovered body rather than reaching into internals.
-An arm that `return`s `null` (or has no return) is treated as "delegate to the framework", not an
-error — the next source documents those exception types. When a renderer genuinely can't be read,
-Docuccino emits one summary diagnostic per renderer (naming the exception types it skipped), not one
-per exception.
+a vendor call, the response is documented without a recovered body. An arm that `return`s `null` (or has
+no return) is treated as "delegate to the framework", not an error — the next source documents those
+exception types. When a renderer genuinely can't be read, Docuccino emits one summary diagnostic per
+renderer (naming the exception types it skipped), not one per exception.
 
 ### When the error body is a Data class
 
@@ -290,16 +286,12 @@ and say when it arrives:
 }
 ```
 
-That's the true statement about the class rather than the convenient one. The same class serializes
-every status your renderer produces, and RFC 9457 already makes extension members optional on the
-problem object itself — so a client reading `errors` as maybe-absent is reading your API correctly,
-while one told it was guaranteed breaks on the first `404`.
+That's the true statement about the class: the same class serializes every status your renderer
+produces, so a client reading `errors` as maybe-absent is reading your API correctly.
 
-On a shared RFC 9457 problem document, stop there — the optional member is the true contract, and a
-consumer who has to handle an absent `errors` either way gains nothing from a split. If the statuses
-genuinely carry different shapes and you want the stronger contract — `errors` required under `422`,
-absent from the rest — the shape has to be split per status, and each split shape is another published
-name a generated client turns into another type. Two ways, both public API:
+If the statuses genuinely carry different shapes and you want the stronger contract — `errors` required
+under `422`, absent from the rest — the shape has to be split per status, and each split shape is
+another published name a generated client turns into another type. Two ways, both public API:
 
 | Route | Reach for it when |
 | --- | --- |
@@ -438,9 +430,9 @@ signals and runs each through the same resolution above, so the body matches you
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
 | `401` | The route has authentication middleware (matching `security.auto_detect_middleware`). | Mark the route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) — or `#[IgnoreResponse(401)]`. |
-| `422` | A validated request body was recovered (Spatie Data, a FormRequest, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
+| `422` | A validated request body was recovered (Spatie Data, a form request, or an action's `rules()`). | `#[IgnoreResponse(422)]`. |
 | `404` | The route binds a model to a path parameter (implicit binding). One `404` per operation. | `#[IgnoreResponse(404)]`. |
-| `403` | The route has `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
+| `403` | The route has `can:` / `signed` / `verified` middleware, or a form request `authorize()` gate that isn't a literal `return true`. | `#[IgnoreResponse(403)]`. |
 
 If your action *also* throws one of these explicitly, the two merge into a single response for that
 status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
@@ -459,8 +451,7 @@ Error contracts repeat by nature: the same `404` shape sits under every show rou
 every write. Docuccino collapses that repetition in two independent passes.
 
 **The shape goes into `components.schemas`.** A body shape two or more operations state identically is
-stated once, and every response that returns it points at that one entry. One shape means one type in a
-generated client, however many operations return it.
+stated once, and every response that returns it points at that one entry.
 
 **The whole response goes into `components.responses`.** Where operations state the same response —
 description and headers included — that response is hoisted too, and each operation becomes a one-line
@@ -505,28 +496,27 @@ description and headers included — that response is hoisted too, and each oper
 | A response two or more operations state identically, however each illustrates it | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
 **How an operation illustrates an error is never part of its contract.** Two `403`s returning the same
-body with different example messaging are one `Forbidden`, and the shared response carries both examples
-rather than splitting into two types nobody can name. Where the operations agree on one illustration it
-stays the media type's single `example`; where they don't, they become an `examples` map keyed from each
-body's own content, so adding or removing an endpoint never renames another one's example. A difference
-in `description`, though, *does* keep two responses apart: that is what the response says, not how it is
-illustrated.
+body with different example messaging are one `Forbidden`, and the shared response carries both examples.
+Where the operations agree on one illustration it stays the media type's single `example`; where they
+don't, they become an `examples` map keyed from each body's own content, so adding or removing an
+endpoint never renames another one's example. A difference in `description`, though, *does* keep two
+responses apart: that is what the response says, not how it is illustrated.
 
 Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
 meaning, never by value — so throttled routes share both.
 
 ### Shared errors are named after the error
 
-A component name is what a code generator calls the type, so `Error404` — or `Error404_2obip4vj` where
-a status carries two bodies — is what someone consuming your API ends up writing in a `catch`, having
-never seen the code behind it. Laravel's own errors are published under their reason phrase instead,
-because the tier documenting them speaks for exactly one kind of error per status and can say which:
+A component name is what a code generator calls the type — what someone consuming your API ends up
+writing in a `catch`, having never seen the code behind it. Laravel's own errors are published under
+their reason phrase, because the tier documenting them speaks for exactly one kind of error per status
+and can say which:
 
 | Status | Component | Produced for |
 | --- | --- | --- |
 | `400` | `BadRequest` | An unrecognized exception with a `400` status, and the [Query Builder](/laravel/packages/query-builder/) strict-mode rejection |
 | `401` | `Unauthorized` | `AuthenticationException`, and auth middleware |
-| `403` | `Forbidden` | `AuthorizationException`, `can:` / `signed` / `verified` middleware, a FormRequest `authorize()` gate |
+| `403` | `Forbidden` | `AuthorizationException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
 | `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
 | `422` | `UnprocessableEntity` | `ValidationException`, and any recovered request body |
 | `429` | `TooManyRequests` | [`throttle`](/laravel/documenting/rate-limiting/) middleware |
@@ -541,15 +531,13 @@ Nothing else about those bodies changes — only what the shared component is ca
 Named and unnamed bodies still share on the same terms. Whether a body is hoisted at all depends on how
 often the document states that status and those bytes, and never on what anyone called it — so a `404`
 your own handler renders as `{"message": …}` is hoisted exactly as it was, under `Error404`, and the
-framework's identical `404` is hoisted beside it under `NotFound`. Two components with the same bytes is
-the honest reading: two producers said different things about what the error is, and neither can rename
-the other's.
+framework's identical `404` is hoisted beside it under `NotFound`.
 
 :::caution[These names changed]
-Shared error components used to be named `Error404`, `Error422` and so on. Regenerating turns them into
-the names above, and any client you generate from the document renames its error types to match. The
-document's contract is unchanged — same statuses, same bodies — but a `catch (Error404)` in hand-written
-client code needs updating once.
+Before **v0.5**, shared error components were named `Error404`, `Error422` and so on. Regenerating turns
+them into the names above, and any client you generate from the document renames its error types to
+match. The document's contract is unchanged — same statuses, same bodies — but a `catch (Error404)` in
+hand-written client code needs updating once.
 :::
 
 A name goes to more than one component only when two bodies genuinely contest it. When that happens the
@@ -559,15 +547,10 @@ content (`NotFound_kzvq2m4a`) — so adding a route can never change which body 
 **Retiring the plain name is a rename, and it is announced.** A document publishing `NotFound` today
 loses it the moment one unrelated endpoint introduces a second `404` shape: both bodies move to
 content-derived names and every operation that referenced `NotFound` is repointed. Nothing about either
-body changed and no client is reading the wrong shape — that is exactly what the rename prevents — but a
-name a generated type is called after did move, so the build reports it as a
-`components.name-collision` warning naming the retired name and both replacements. The same warning
-fires when a component from elsewhere in your app already holds the name (a class of your own called
-`NotFound`), in which case the shared body climbs past it.
-
-The alternative — always discriminating, so `NotFound` never exists — would name the overwhelmingly
-common single-shape case `NotFound_a1b2c3d4` for everybody, to spare a few documents a one-time rename.
-The trade is deliberate, and it is the same one component names make.
+body changed, but a published name did move, so the build reports a `components.name-collision` warning
+naming the retired name and both replacements. The same warning fires when a component from elsewhere in
+your app already holds the name (a class of your own called `NotFound`), in which case the shared body
+climbs past it.
 
 ### Name your own errors with `#[ErrorComponent]`
 
@@ -598,15 +581,14 @@ Your exceptions get the same treatment, and you say what they are called by mark
 	</TabItem>
 </Tabs>
 
-Same status, same body, same description — only the name a generated client gives the type changes, and
-now it says what went wrong.
+Same status, same body, same description — only the name a generated client gives the type changes.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
 class doesn't change it: an error only one operation states stays inline, so a one-off error publishes no
-component and no `$ref`, attribute or no attribute. Nothing is lost — the name travels with that
-response, and the day a second operation states the same error the one you marked is published as
-`ResourceMissing` instead of under its status.
+component and no `$ref`, attribute or no attribute. The name travels with that response, and the day a
+second operation states the same error the one you marked is published as `ResourceMissing` instead of
+under its status.
 
 **It is inherited**, unlike PHP's own attribute lookup. A base your API errors already extend names them
 all at once, and a subclass that carries its own attribute wins over the base:
@@ -695,7 +677,7 @@ the body that method answers with:
 
 **Use it when one exception class produces more than one body**, or when the class is a framework or
 vendor one you can't mark. Where every error of a class really is one error — the usual case — the class
-is the better place: it is one line, it is inherited, and it says the thing where the thing is.
+is the better place: it is one line, and it is inherited.
 
 **The method nearest the answer wins**, not the one nearest the body. Docuccino follows the render path
 from the method it analyzes down through the helpers it calls, and takes the first name it finds. So the
@@ -711,8 +693,8 @@ is what the example above does.
 
 **Precedence, in order:** the name a mapper gave the body it built, then `#[ErrorComponent]` on the
 render method, then `#[ErrorComponent]` on the exception class, then the status default in the table
-above. A mapper still outranks both, and the way it does is unchanged: the chain resolves to the first
-mapper that answers, so one that must beat the renderer Docuccino read orders itself ahead of it.
+above. The chain resolves to the first mapper that answers, so a mapper that must beat the renderer
+Docuccino read orders itself ahead of it.
 
 #### When neither attribute is enough
 
@@ -728,23 +710,20 @@ under](/extending/extension-authoring/#naming-the-component-an-error-publishes-u
 
 :::caution[Two names for one response]
 Two exceptions that name one operation's one status differently describe a response that can only carry
-one name. Rather than hand it to whichever the analyzer met first — which would make a published type
-name depend on encounter order — the response keeps its default name and the build reports
-`attribute.error-component-contested` naming both classes. Give the errors statuses of their own, keep
-the attribute on the one the response really is, or name the body on the render method that builds it,
-which outranks both. Nothing is reported where the render method already named it: neither class was in
-the running, so there is nothing to reconcile.
+one name. Rather than hand it to whichever the analyzer met first, the response keeps its default name
+and the build reports `attribute.error-component-contested` naming both classes. Give the errors statuses
+of their own, keep the attribute on the one the response really is, or name the body on the render method
+that builds it, which outranks both. Nothing is reported where the render method already named it.
 :::
 
 A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
 the class or the render method that declared it, and the response keeps the name it would have had — the
-status default from the table above, or `Error<status>` where the status has none. A typo costs you a
-name and never a valid document, and never a name your other errors were using: a refused name does not
-contest a good one.
+status default from the table above, or `Error<status>` where the status has none. A refused name never
+contests a good one.
 
-Two render methods naming *the same* component for bodies that differ is a real disagreement rather than
-a typo, and it is settled where every such disagreement is: both bodies keep a name derived from their
-own content and the build reports `components.name-collision`.
+Two render methods naming *the same* component for bodies that differ is settled like every other
+contest: both bodies keep a name derived from their own content and the build reports
+`components.name-collision`.
 
 Where a body lives is representation, not contract, so
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references on both sides: a body
