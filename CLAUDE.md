@@ -52,6 +52,14 @@ change serves one at the other's expense, say so out loud rather than letting it
   [`docs/testing.md`](./docs/testing.md)). Clear the cache for one reason only — a `ParseError`
   inside that `.temp/`, which the plugin causes by writing the file non-atomically and is never
   your code — then re-run. CI does the same: run, and only on failure clear and retry once.
+  **Local green is not CI green**: `composer analyse` runs the PHPStan the lockfile resolves, and
+  the quality matrix also runs a leg pinned to an older PHPStan minor plus a `--prefer-lowest` leg
+  (both named in `.github/workflows/ci.yml`), which are stricter in places. The one that bites is an
+  **unsealed array shape** — `@param array{a: string, b: ?int, ...}` — accepted by the resolved
+  PHPStan and rejected by the pinned minor as `missingType.iterableValue`. Name every key, and
+  where one shape is described in more than one place declare it ONCE as a `@phpstan-type` alias on
+  the class and refer to that (`DocumentDiffer`, `ComponentNames`, `ModelSchema`). Reproduce recipe,
+  lockfile restore included, in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 - **Determinism is a product feature**: byte-identical output for identical code. No
   timestamps, no absolute paths, no randomness in any emitted document. Determinism is
   necessary but not sufficient — output must also be **local**: adding, removing, renaming or
@@ -164,6 +172,12 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over
   EVERY entry + unknown-entry degradation; stub-engine tests prove mechanics only — the
   parsing/recovery half needs real-path tests (fixture group). Negative paths are coverage.
+  A dataset only proves the rows it LISTS, so a hand-maintained "full set" — a catalogue, a
+  reference page, an allow-list — owes a SEPARATE guard that reads the source of truth and fails
+  when the list is short; an attribute has shipped uncatalogued with the whole suite green. And a
+  scan that matches NOTHING must fail rather than pass: assert a plausible minimum beside the real
+  assertion so a scanner that stopped seeing its shapes fails loudly instead of passing forever.
+  Full statement in [`docs/testing.md`](./docs/testing.md) §Standards.
 - **Fixture honesty (binding)**: real-engine fixtures MUST use idiomatic target-package shapes
   (magic-attribute `@property` models, conditional/closure resource fields, `Rule::*` descriptors);
   a fixture shaped to satisfy the analyzer proves nothing — pin the degraded output + diagnostic
@@ -177,10 +191,12 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   is only the start (`DeclarationFiles`), and an enum whose cases were copied is a file of its own.
   Under-keying is a correctness bug and over-keying only a cost — key more when in doubt.
 - **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
-  option present, optional ones commented out, one short comment each. A key the code reads must
-  appear there, and the website's configuration reference must document it — key for key, commented
-  options included, which `ConfigReferenceSyncTest` checks in both directions (a new section of that
-  page needs a line in `CONFIG_REFERENCE_SECTIONS`). It must also stay
+  option present, optional ones commented out, one short comment each. Commenting out is not
+  cosmetic: a key shipped PRESENT, even as `null`, is part of the resolved config and so changes
+  every document's `configHash`, churning every golden for a feature nobody turned on. A key the
+  code reads must appear there, and the website's configuration reference must document it — key
+  for key, commented options included, which `ConfigReferenceSyncTest` checks in both directions
+  (a new section of that page needs a line in `CONFIG_REFERENCE_SECTIONS`). It must also stay
   **pure data** — no imports, no class references, `env()` the only call — so a dev-only install
   survives a `--no-dev` production boot, which loads every `config/` file (`ShippedConfigTest`).
 - **Comment style**: comments are small and informal. Class docblocks are 1–3 short sentences
