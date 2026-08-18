@@ -1,6 +1,6 @@
 ---
 title: Responses
-description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, and 204s.
+description: Document success responses from your action return types — resources, models, enums, JsonResponse payloads, status codes, HTML views, and 204s.
 ---
 
 import { Card, CardGrid, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -70,8 +70,12 @@ are emitted in ascending status order, whatever order your return paths appear i
 
 A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
 resource (or a collection of one) serializes as `application/vnd.api+json`, as does a
-[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource. Every payload under a status
-has to agree: if one return path there is a plain JSON payload, the response is `application/json`.
+[`timacdonald/json-api`](/laravel/packages/timacdonald-json-api/) resource, and a rendered view
+serializes as [`text/html`](#html-and-view-responses).
+
+An action that negotiates between representations gets **one content entry per media type** on the same
+status, rather than one schema filed under a media type half of it contradicts. The entries are ordered
+by media type, so adding a return path never reshuffles the ones already there.
 
 ## Status codes and JsonResponse
 
@@ -243,6 +247,58 @@ public function reset(Request $request): JsonResponse
 `#[Response(type: ResetResultData::class)]`. A `JsonResponse` whose payload *is* recoverable is
 documented in full, exactly as [above](#status-codes-and-jsonresponse); the guard only ever refuses
 the wrapper, never a payload.
+
+## HTML and view responses
+
+Not every endpoint answers JSON. An action that renders a Blade template is documented as a `200` with a
+`text/html` body:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	public function printable(Invoice $invoice): View
+	{
+	    return view('invoices.printable', ['invoice' => $invoice]);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"responses": {
+	  "200": {
+	    "description": "OK",
+	    "content": {
+	      "text/html": {
+	        "schema": { "type": "string" }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The schema is a plain `string` and stays that way. Markup has no structure your code proves, so anything
+narrower would be invented — and a client generated against an invented shape fails at runtime. A view is
+transport in the same sense a response object is, so it never reaches `components.schemas` either; your
+own subclass of Laravel's view, and an action declared as returning the `View` contract rather than the
+concrete class, are both covered.
+
+Nothing about this is a degradation you can fix, so it raises no diagnostic.
+
+An action that answers HTML **or** JSON depending on the client — a `View|InvoiceResource` return —
+gets both entries under `200`, one per media type:
+
+```json
+"content": {
+  "application/json": { "schema": { "$ref": "#/components/schemas/InvoiceResource" } },
+  "text/html": { "schema": { "type": "string" } }
+}
+```
+
+That's also what a [Laravel Actions](/laravel/packages/laravel-actions/) action defining `htmlResponse()`
+produces, alongside the JSON body its `jsonResponse()` or `handle()` returns.
 
 ## Adding and refining responses
 
