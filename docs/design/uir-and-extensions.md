@@ -442,6 +442,15 @@ interface TypeToSchema {
     public function toSchema(DType $type, SchemaContext $ctx): ?SchemaResult; // null = defer to next in chain
 }
 
+// What RouteContext::converter() hands an extension: the top-level entry into that chain, and the
+// SchemaContext mappers themselves receive (so it passes straight to ValidationRulesToSchema::convert).
+// The implementation behind it (Extensions\Schema\SchemaConverter) is @internal — a method declared only
+// there is not surface. toSchema() starts a fresh confidence run and depth count; SchemaContext::convert()
+// recurses inside one.
+interface TypeSchemaConverter extends SchemaContext {
+    public function toSchema(DType $type): SchemaResult;
+}
+
 interface ValidationRulesToSchema { /* rules aren't types; per-rule transformer sub-extensions incl. cross-field */ }
 
 interface ExceptionToResponse {
