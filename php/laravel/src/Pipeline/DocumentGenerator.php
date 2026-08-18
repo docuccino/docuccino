@@ -283,16 +283,9 @@ final class DocumentGenerator
                 $descriptor,
                 $document,
                 $engine,
-                $resolved->typeToSchema,
-                $resolved->exceptionToResponse,
-                $resolved->ruleTransformers,
+                $resolved,
                 $components,
                 $method,
-                $resolved->responseAnalysisTargets,
-                $resolved->responseStatusResolvers,
-                $resolved->payloadMediaTypeResolvers,
-                $resolved->routeBindingSchemaResolvers,
-                $resolved->routeBindingFieldSchemaResolvers,
             );
 
             if ($context === null) {
