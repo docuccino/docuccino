@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Pipeline\FragmentStore;
 use Docuccino\Laravel\Support\AtomicFile;
+use Docuccino\Laravel\Tests\Support\FakeArtisan;
+use Docuccino\Laravel\Tests\Support\RecordingOutput;
 use Docuccino\Laravel\Tests\Support\WatchFixture;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
 use Docuccino\Laravel\Watch\BuildToken;
@@ -16,7 +18,8 @@ use Docuccino\Laravel\Watch\WatchSignal;
 /**
  * The small pieces `docuccino:watch` is assembled from: the signal the viewer reads, the token that
  * decides whether there is anything to refresh, the poll loop, the rebuild line, the command line a
- * real session spawns, and the atomic write that keeps a half-exported artifact off disk.
+ * real session spawns, the rebuild it exec's, and the atomic write that keeps a half-exported
+ * artifact off disk.
  */
 
 // The signal is also the reload endpoint's on switch, so what counts as "no signal" is load-bearing.
@@ -105,18 +108,63 @@ it('names the files that moved, and counts the rest', function (array $changed, 
     'outside the project' => [['/elsewhere/Vendor.php'], '/elsewhere/Vendor.php changed; rebuilding…'],
 ]);
 
-it('spawns a fresh artisan export, with every argument escaped', function (?string $document, ?string $memoryLimit, string $expected): void {
-    $runner = new ArtisanBuildRunner('/app/artisan', '/usr/bin/php');
+it('spawns a fresh artisan export, passing every argument through as its own', function (?string $document, ?string $memoryLimit, bool $ansi, array $expected): void {
+    $runner = new ArtisanBuildRunner('/app dir/artisan', '/usr/bin/php');
 
-    expect($runner->commandLine($document, $memoryLimit))->toBe($expected);
+    expect($runner->command($document, $memoryLimit, $ansi))->toBe($expected);
 })->with([
-    'every document' => [null, null, "'/usr/bin/php' '/app/artisan' 'docuccino:export'"],
-    'one document' => ['default', null, "'/usr/bin/php' '/app/artisan' 'docuccino:export' 'default'"],
-    'with a memory limit' => ['default', '2G', "'/usr/bin/php' '/app/artisan' 'docuccino:export' 'default' '--memory-limit=2G'"],
+    'every document' => [null, null, false, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export']],
+    'one document' => ['default', null, false, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export', 'default']],
+    'with a memory limit' => ['default', '2G', false, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export', 'default', '--memory-limit=2G']],
     // An unset option arrives as the empty string often enough that it must not become an argument.
-    'blank option values' => ['', '', "'/usr/bin/php' '/app/artisan' 'docuccino:export'"],
-    'a shell-hostile document key' => ["a'; rm -rf /", null, "'/usr/bin/php' '/app/artisan' 'docuccino:export' 'a'\\''; rm -rf /'"],
+    'blank option values' => ['', '', false, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export']],
+    // There is no shell to be hostile to: the key stays one argument, quotes and semicolons and all.
+    'a shell-hostile document key' => ["a'; rm -rf /", null, false, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export', "a'; rm -rf /"]],
+    // The child's stdout is a pipe rather than the terminal, so it colours itself only when asked.
+    'a decorated session' => [null, null, true, ['/usr/bin/php', '/app dir/artisan', 'docuccino:export', '--ansi']],
 ]);
+
+it('runs the rebuild with no shell between it and artisan', function (): void {
+    $artisan = FakeArtisan::reporting(exit: 3);
+    $output = new RecordingOutput;
+
+    $exit = (new ArtisanBuildRunner($artisan->path))->build($output, "a b & c'd", '2G');
+    $artisan->remove();
+
+    expect($exit)->toBe(3)
+        // Every argument arrived whole: no word splitting, no expansion, no quotes to unpick.
+        ->and($output->text())->toContain("argv:docuccino:export|a b & c'd|--memory-limit=2G|--ansi")
+        // And the fragment cache the loop depends on reached the child without touching our own env.
+        ->and($output->text())->toContain("cache='1'")
+        ->and(getenv(ArtisanBuildRunner::FRAGMENT_CACHE))->toBeFalse();
+});
+
+it("streams the build's output, in colour, as it arrives", function (): void {
+    $artisan = FakeArtisan::reporting();
+    $output = new RecordingOutput;
+
+    (new ArtisanBuildRunner($artisan->path))->build($output, null, null);
+    $artisan->remove();
+
+    // Two writes a pause apart rather than one at the end: a watch loop that goes quiet until the
+    // build finishes is worse than no streaming at all.
+    expect($output->chunks)->toHaveCount(2)
+        ->and($output->chunks[1]['at'] - $output->chunks[0]['at'])->toBeGreaterThan(0.15)
+        // The child was asked for ANSI and nothing stripped it on the way back.
+        ->and($output->text())->toContain("\033[32m");
+});
+
+it('gives up on a build that never finishes', function (): void {
+    $artisan = FakeArtisan::hanging();
+    $output = new RecordingOutput;
+
+    $exit = (new ArtisanBuildRunner($artisan->path, timeout: 1))->build($output, null, null);
+    $artisan->remove();
+
+    // A wedged export must end as a failed build the session reports and survives, not as a hang.
+    expect($exit)->not->toBe(0)
+        ->and($output->text())->toContain('did not finish within');
+});
 
 it('replaces a file only once the whole of it is written', function (): void {
     $path = sys_get_temp_dir().'/docuccino-atomic-'.uniqid('', true);

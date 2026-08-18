@@ -75,7 +75,7 @@ final class WatchCommand extends Command
 
         try {
             while (! $this->stopping) {
-                $runner->build($this->documentArgument(), $this->memoryLimit());
+                $runner->build($this->getOutput(), $this->documentArgument(), $this->memoryLimit());
 
                 $token = $tokens->of($documents);
                 if ($token !== $published) {

@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Tests\Support;
 
 use Closure;
 use Docuccino\Laravel\Watch\BuildRunner;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * A {@see BuildRunner} that records what it was asked to build and hands control back to the test
@@ -25,7 +26,7 @@ final class ScriptedBuildRunner implements BuildRunner
         private readonly int $exit = 0,
     ) {}
 
-    public function build(?string $document, ?string $memoryLimit): int
+    public function build(OutputInterface $output, ?string $document, ?string $memoryLimit): int
     {
         $this->calls[] = ['document' => $document, 'memoryLimit' => $memoryLimit];
 

@@ -422,6 +422,10 @@ it started, and would never see a route you added. Spawning is cheap next to ana
 fragment cache is on disk — so the new process picks up every operation the last one built and
 re-analyzes only what actually changed.
 
+Nothing goes through a shell on the way, so a project path with a space or an `&` in it is spawned
+correctly on every platform. A rebuild that hasn't finished in 15 minutes is stopped and reported as
+a failed build, so an analysis that wedges costs you one rebuild rather than the session.
+
 ## Exit codes
 
 Every command returns `0` on success and `1` on failure. What counts as failure:
