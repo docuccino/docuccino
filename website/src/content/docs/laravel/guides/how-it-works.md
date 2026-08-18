@@ -138,7 +138,9 @@ field by field:
 
 Higher layers win individual fields without discarding the rest, and every contribution is recorded
 in the document's provenance — including the value it replaced — so you can always answer *why* a
-detail is documented the way it is.
+detail is documented the way it is. [`docuccino:explain`](/laravel/reference/commands/#docuccinoexplain)
+is that question at the terminal: point it at one endpoint and it prints the stack behind every field,
+which rung won it, and the `file:line` it came from.
 
 ## 4. Emitters
 
