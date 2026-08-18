@@ -9,6 +9,7 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Contracts\TypeSchemaConverter;
 use Docuccino\Core\Extensions\Contracts\TypeToSchema;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\DType;
@@ -27,7 +28,9 @@ $context = static fn (TypeToSchema ...$mappers): RouteContext => new RouteContex
     attributes: new AttributeSet,
     engine: new StubTypeEngine,
     document: new DocumentConfig('default', []),
-    typeMappers: array_values($mappers),
+    extensions: new ResolvedExtensions(
+        typeToSchema: array_values($mappers),
+    ),
 );
 
 it('hands out the public contract, memoised for the route', function () use ($context): void {

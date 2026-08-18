@@ -7,14 +7,7 @@ namespace Docuccino\Laravel\Routing;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
-use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
-use Docuccino\Core\Extensions\Contracts\PayloadMediaTypeResolver;
-use Docuccino\Core\Extensions\Contracts\ResponseAnalysisTarget;
-use Docuccino\Core\Extensions\Contracts\ResponseStatusResolver;
-use Docuccino\Core\Extensions\Contracts\RouteBindingFieldSchemaResolver;
-use Docuccino\Core\Extensions\Contracts\RouteBindingSchemaResolver;
-use Docuccino\Core\Extensions\Contracts\RuleTransformer;
-use Docuccino\Core\Extensions\Contracts\TypeToSchema;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Provenance\SourcePathResolver;
@@ -43,30 +36,14 @@ final class RouteContextBuilder
         private readonly ResolvedRouteIndex $index = new ResolvedRouteIndex,
     ) {}
 
-    /**
-     * @param  list<TypeToSchema>  $typeMappers
-     * @param  list<ExceptionToResponse>  $exceptionMappers
-     * @param  list<RuleTransformer>  $ruleTransformers
-     * @param  list<ResponseAnalysisTarget>  $responseAnalysisTargets
-     * @param  list<ResponseStatusResolver>  $responseStatusResolvers
-     * @param  list<PayloadMediaTypeResolver>  $payloadMediaTypeResolvers
-     * @param  list<RouteBindingSchemaResolver>  $routeBindingSchemaResolvers
-     * @param  list<RouteBindingFieldSchemaResolver>  $routeBindingFieldSchemaResolvers
-     */
+    /** The extension set travels whole — see {@see ResolvedExtensions} for why it isn't unpacked here. */
     public function build(
         RouteDescriptor $descriptor,
         DocumentConfig $document,
         TypeEngine $engine,
-        array $typeMappers,
-        array $exceptionMappers,
-        array $ruleTransformers,
+        ResolvedExtensions $extensions,
         ComponentRegistry $components,
         ?string $method = null,
-        array $responseAnalysisTargets = [],
-        array $responseStatusResolvers = [],
-        array $payloadMediaTypeResolvers = [],
-        array $routeBindingSchemaResolvers = [],
-        array $routeBindingFieldSchemaResolvers = [],
     ): ?RouteContext {
         // Reuse the Route + reflection the resolver already produced. On a container miss the index is
         // empty, so fall back to a lookup and fresh reflection.
@@ -91,9 +68,7 @@ final class RouteContextBuilder
             attributes: $this->attributes->collect($reflected),
             engine: $engine,
             document: $document,
-            typeMappers: $typeMappers,
-            exceptionMappers: $exceptionMappers,
-            ruleTransformers: $ruleTransformers,
+            extensions: $extensions,
             pathParameters: $pathParameters,
             optionalPathParameters: $optional,
             routeBindings: $this->routeBindings($reflected, $pathParameters),
@@ -104,12 +79,7 @@ final class RouteContextBuilder
             pathResolver: $this->pathResolver,
             documentedMethod: $method ?? $descriptor->primaryMethod(),
             allowsTrashedBindings: $route->allowsTrashedBindings(),
-            responseAnalysisTargets: $responseAnalysisTargets,
-            responseStatusResolvers: $responseStatusResolvers,
-            payloadMediaTypeResolvers: $payloadMediaTypeResolvers,
-            routeBindingSchemaResolvers: $routeBindingSchemaResolvers,
             formRequestClass: $this->formRequestClass($reflected),
-            routeBindingFieldSchemaResolvers: $routeBindingFieldSchemaResolvers,
         );
     }
 
