@@ -665,8 +665,7 @@ all — a nameless declaration sharing a node with named ones is dropped with a 
 A declaration Docuccino can't place — a status the operation doesn't document, a parameter it doesn't
 have, a file it can't read — is dropped the same way, with a diagnostic naming the action, never
 guessed at. So is a payload no JSON document can hold: `INF`, `-INF` and `NAN` have no JSON form,
-whether they arrive through `value:` or as YAML's `.nan` and `.inf` in a `file:`. See [Reading
-diagnostics](/laravel/guides/troubleshooting/#reading-diagnostics).
+whether they arrive through `value:` or as YAML's `.nan` and `.inf` in a `file:`. See the [diagnostics reference](/laravel/reference/diagnostics/).
 
 For a field-level example, an `@example` docblock line on the property is read when the schema comes
 from a [Data class](/laravel/packages/spatie-data/):

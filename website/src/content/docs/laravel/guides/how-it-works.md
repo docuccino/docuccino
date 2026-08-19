@@ -73,8 +73,8 @@ registers shapes your documentation, with no Docuccino-specific API to write.
 
 Each route is analyzed in isolation, so one route that can't be understood never breaks the build.
 It leaves behind a skeleton operation and an error diagnostic (or is dropped entirely, with
-`on_route_error: 'omit'`). [Reading diagnostics](/laravel/guides/troubleshooting/#reading-diagnostics)
-covers what each code means and which ones are worth chasing.
+`on_route_error: 'omit'`). The [diagnostics reference](/laravel/reference/diagnostics/) covers what
+each code means and which ones are worth chasing.
 
 ## 3. UIR
 

@@ -158,6 +158,7 @@ export default defineConfig({
 						{ label: 'Configuration', slug: 'laravel/reference/configuration' },
 						{ label: 'Commands', slug: 'laravel/reference/commands' },
 						{ label: 'Attributes', slug: 'laravel/reference/attributes' },
+						{ label: 'Diagnostics', slug: 'laravel/reference/diagnostics' },
 					],
 				},
 				{
