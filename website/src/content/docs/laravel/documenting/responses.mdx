@@ -483,6 +483,13 @@ The file joins that endpoint's build dependencies, so editing it regenerates the
 when you create a file that wasn't there yet. A file Docuccino can't read raises a diagnostic and the
 example is left out; nothing partial is ever published.
 
+<Aside type="tip" title="Two YAML spellings to know about">
+YAML can express things JSON cannot. `.nan`, `.inf` and `-.inf` parse but have no JSON form, so a file
+holding one is refused with an `example-file.invalid` diagnostic rather than published. And an unquoted
+`2020-01-01` is a *date* to YAML, so it publishes as a number — write `'2020-01-01'` to keep it a
+string. JSON files have neither problem.
+</Aside>
+
 ### Illustrating something other than the success response
 
 By default an example illustrates the success response — the lowest `2xx` the operation documents — in

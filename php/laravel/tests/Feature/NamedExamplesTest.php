@@ -30,6 +30,7 @@ const EXAMPLE_FILES = [
     'docuccino-example-broken.yaml' => "root:\n\t- indented with a tab\n",
     'docuccino-example.txt' => 'plain text',
     'docuccino-example-null.json' => 'null',
+    'docuccino-example-nan.yaml' => "ratio: .nan\n",
 ];
 
 beforeEach(function (): void {
@@ -193,6 +194,11 @@ it('diagnoses every way a declaration can fail to describe an example, and publi
     'malformed YAML' => ['malformedYaml', 'example-file.invalid', 'warning', 'docuccino-example-broken.yaml'],
     'a format examples are not read from' => ['unsupportedFormat', 'example-file.invalid', 'warning', 'is not a format examples are read from'],
     'a file holding nothing' => ['emptyFile', 'example-file.invalid', 'warning', 'it decodes to null'],
+    // Both halves of "parses, but no JSON document can hold it": YAML spells `.nan`, and an attribute
+    // argument may be `NAN` outright. Either used to reach the canonical writer, which threw naming
+    // neither the route nor the declaration and took the build with it.
+    'a file holding a value JSON cannot express' => ['unpublishableFile', 'example-file.invalid', 'warning', 'non-finite floats'],
+    'a value JSON cannot express' => ['nonFiniteValue', 'attribute.example-unusable', 'warning', 'no JSON document can hold'],
 ]);
 
 it('keeps the first of two declarations sharing a name, and says the second went', function (): void {

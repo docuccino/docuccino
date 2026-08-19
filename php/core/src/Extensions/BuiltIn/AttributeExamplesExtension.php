@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Extensions\BuiltIn;
 
 use Docuccino\Attributes\Example;
+use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
@@ -269,6 +270,19 @@ final class AttributeExamplesExtension implements OperationExtension
         }
 
         if ($declaration->value !== null) {
+            // An attribute argument may be `INF` or `NAN`, which no JSON document can hold. The canonical
+            // writer is where that used to surface, as an exception naming neither the route nor the
+            // declaration and taking the whole build with it.
+            $rejected = (new CanonicalJsonSerializer)->rejects($declaration->value);
+            if ($rejected !== null) {
+                $this->report($context, Severity::Warning, 'attribute.example-unusable', sprintf(
+                    'An #[Example] here carries a `value:` no JSON document can hold (%s); it was not documented.',
+                    lcfirst($rejected),
+                ), 'Examples are published as JSON. `INF`, `-INF` and `NAN` have no JSON form — write the value as a string, or leave the member out.');
+
+                return null;
+            }
+
             $example['value'] = $declaration->value;
 
             return $example;

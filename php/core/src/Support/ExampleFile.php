@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Support;
 
+use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use JsonException;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -17,6 +18,9 @@ use Symfony\Component\Yaml\Yaml;
  * A failed read still carries {@see $path} whenever one was resolved, because the caller registers it
  * as a cache dependency either way — a file that isn't there yet must still rebuild the route when it
  * appears.
+ *
+ * A file that parses is not yet a file that publishes: YAML spells values JSON has no form for, so the
+ * decoded value is held to what the canonical writer will take before it is handed back.
  *
  * @internal
  */
@@ -66,6 +70,14 @@ final readonly class ExampleFile
                 : Yaml::parse($contents);
         } catch (JsonException|ParseException $exception) {
             return new self($resolved, null, self::INVALID, PlainText::of($exception->getMessage()));
+        }
+
+        // Parsing is not the same as being publishable. YAML has spellings JSON does not — `.nan` and
+        // `.inf` decode to floats with no JSON form — and the first thing that noticed used to be the
+        // canonical writer, which throws naming neither the file nor the attribute that asked for it.
+        $rejected = (new CanonicalJsonSerializer)->rejects($value);
+        if ($rejected !== null) {
+            return new self($resolved, null, self::INVALID, lcfirst($rejected));
         }
 
         return new self($resolved, $value, null);

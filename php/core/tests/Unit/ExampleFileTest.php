@@ -108,6 +108,36 @@ it('decodes a document that holds nothing as nothing, and says so through the va
         ->and($read->value)->toBeNull();
 });
 
+it('refuses a value that parses but no JSON document can hold', function (string $contents): void {
+    // YAML spells things JSON has no form for. Handing one back left the canonical writer to find it at
+    // emit time, where it threw naming neither the file nor the attribute — a dead build with nothing in
+    // the message to act on.
+    file_put_contents($this->base.'/example.yaml', $contents);
+
+    $read = ExampleFile::read($this->base, 'example.yaml');
+
+    expect($read->ok())->toBeFalse()
+        ->and($read->error)->toBe(ExampleFile::INVALID)
+        ->and($read->value)->toBeNull()
+        ->and($read->detail)->toContain('non-finite')
+        // Still named, so the route still depends on it and fixing the file rebuilds.
+        ->and($read->path)->toBe($this->base.'/example.yaml');
+})->with([
+    'not a number' => ["ratio: .nan\n"],
+    'an infinity' => ["ceiling: .inf\n"],
+    'a negative infinity' => ["floor: -.inf\n"],
+    'a bare infinity' => [".inf\n"],
+]);
+
+it('decodes an unquoted date the way YAML does, as a timestamp', function (): void {
+    // Not something to fix here: YAML says an unquoted `2020-01-01` is a date, and the alternative
+    // spellings are all worse than telling an author to quote it. Pinned so it cannot change silently.
+    file_put_contents($this->base.'/example.yaml', "when: 2020-01-01\n");
+
+    expect(ExampleFile::read($this->base, 'example.yaml')->value)->toBe(['when' => 1577836800])
+        ->and(ExampleFile::read($this->base, 'example.yaml')->ok())->toBeTrue();
+});
+
 it('decodes a scalar and a list as readily as an object', function (mixed $expected, string $contents): void {
     file_put_contents($this->base.'/example.json', $contents);
 

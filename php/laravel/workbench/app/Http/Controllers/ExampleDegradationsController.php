@@ -115,6 +115,18 @@ final class ExampleDegradationsController
         return response()->json([]);
     }
 
+    #[Example(name: 'not-a-number', value: ['ratio' => NAN])]
+    public function nonFiniteValue(): JsonResponse
+    {
+        return response()->json([]);
+    }
+
+    #[Example(name: 'from-yaml', file: 'docuccino-example-nan.yaml')]
+    public function unpublishableFile(): JsonResponse
+    {
+        return response()->json([]);
+    }
+
     // Well-formed, documented, and a lie about the body — nothing here can catch that, which is the
     // example audit's job.
     #[Example(name: 'wrong-shape', value: ['id' => 'not a number', 'name' => 'Sprocket'])]
