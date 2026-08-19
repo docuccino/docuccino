@@ -64,6 +64,36 @@ it('loads an in-tree #[Description(file:)] into the operation description', func
     @unlink($absolute);
 });
 
+// Determinism is byte-identical output for identical code, and a line ending is not a code change:
+// the same markdown checked out on Windows and on Linux has to emit the same description.
+it('emits the same bytes whether the described file is CRLF or LF', function (): void {
+    $absolute = base_path('docuccino-described.md');
+
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/described', [DescribedController::class, 'index']);
+
+    $config = app(DocumentConfigFactory::class)->make('default', (array) config('docuccino.documents.default'), 'skeleton');
+
+    $emit = static function () use ($config): string {
+        $document = app(DocumentGenerator::class)->generate($config, app(TypeEngine::class))->document;
+
+        return json_encode($document->toArray(), JSON_THROW_ON_ERROR);
+    };
+
+    file_put_contents($absolute, "# Described\r\n\r\nBody prose.\r\n");
+    $crlf = $emit();
+
+    file_put_contents($absolute, "# Described\n\nBody prose.\n");
+    $lf = $emit();
+
+    @unlink($absolute);
+
+    // The LF spelling is what lands, so a stale cache serving the CRLF build back fails here too.
+    expect($crlf)->toContain('# Described\n\nBody prose.')
+        ->and($crlf)->toBe($lf);
+});
+
 it('says so when a #[Description(file:)] names a file that is not there', function (): void {
     $result = describeRoutes(function (Router $router): void {
         $router->get('api/absent', [ConsumerProseController::class, 'absentFile']);

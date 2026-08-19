@@ -19,6 +19,7 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Fqcn;
+use Docuccino\Core\Support\LineEndings;
 
 /**
  * The overrides layer: docblock summary/description (docblock precedence), then the operation
@@ -138,7 +139,7 @@ final class AttributeOverridesExtension implements OperationExtension
             return;
         }
 
-        $operation->setDescription(rtrim($contents, "\n"), $attribute);
+        $operation->setDescription(rtrim(LineEndings::normalize($contents), "\n"), $attribute);
     }
 
     private function report(RouteContext $context, Severity $severity, string $code, string $message, string $help): void
