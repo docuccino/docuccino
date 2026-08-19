@@ -59,6 +59,23 @@ final class ResponseDraft
      */
     private array $examples = [];
 
+    /**
+     * The named Example Objects an author declared per media type ({@see declareExamples()}), kept
+     * sorted by name so adding one never moves another.
+     *
+     * @var array<string, array<string, array<string, mixed>>>
+     */
+    private array $declaredExamples = [];
+
+    /**
+     * The singular example an author declared per media type. Separate from {@see $examples} because
+     * a declaration outranks an illustration: this is someone saying what the body looks like, that is
+     * a producer showing what it worked out.
+     *
+     * @var array<string, mixed>
+     */
+    private array $declaredExample = [];
+
     private ?string $id = null;
 
     /** Tracks the winning {@see claimComponentName()} write, so it turns over with the name it belongs to. */
@@ -160,6 +177,27 @@ final class ResponseDraft
         $this->examples[$mediaType] ??= $example;
     }
 
+    /**
+     * Attach the examples an author declared for a media type: a map of named Example Objects, a
+     * singular value, or both over several calls. Either outranks whatever {@see setExample()}
+     * illustrated the media type with, and OAS makes `example` and `examples` mutually exclusive, so a
+     * non-empty map wins over a singular. First declaration of a name wins; the map stays name-sorted.
+     *
+     * @param  array<string, array<string, mixed>>  $named
+     */
+    public function declareExamples(string $mediaType, array $named, mixed $singular = null): void
+    {
+        if ($named !== []) {
+            $merged = ($this->declaredExamples[$mediaType] ?? []) + $named;
+            ksort($merged);
+            $this->declaredExamples[$mediaType] = $merged;
+        }
+
+        if ($singular !== null) {
+            $this->declaredExample[$mediaType] ??= $singular;
+        }
+    }
+
     /** The first media type registered, or `''` when the response has none. */
     public function primaryMediaType(): string
     {
@@ -227,7 +265,12 @@ final class ResponseDraft
             $content = [];
             foreach ($this->content as $mediaType => $schema) {
                 $content[$mediaType] = ['schema' => $schema->freeze()->toArray()];
-                if (array_key_exists($mediaType, $this->examples)) {
+
+                if (($this->declaredExamples[$mediaType] ?? []) !== []) {
+                    $content[$mediaType]['examples'] = $this->declaredExamples[$mediaType];
+                } elseif (array_key_exists($mediaType, $this->declaredExample)) {
+                    $content[$mediaType]['example'] = $this->declaredExample[$mediaType];
+                } elseif (array_key_exists($mediaType, $this->examples)) {
                     $content[$mediaType]['example'] = $this->examples[$mediaType];
                 }
             }

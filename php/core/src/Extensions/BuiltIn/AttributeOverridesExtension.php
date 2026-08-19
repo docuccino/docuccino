@@ -91,12 +91,15 @@ final class AttributeOverridesExtension implements OperationExtension
             return;
         }
 
+        // Registered before the read, so a file that isn't there yet still rebuilds this route when it
+        // appears — an absent file hashes to nothing, and gaining contents is a change like any other.
+        $context->dependencies()->addFile($resolved);
+
         $contents = @file_get_contents($resolved);
         if ($contents === false) {
             return;
         }
 
-        $context->dependencies()->addFile($resolved);
         $operation->setDescription(rtrim($contents, "\n"), $attribute);
     }
 

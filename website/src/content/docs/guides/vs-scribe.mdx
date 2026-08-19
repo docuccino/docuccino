@@ -211,7 +211,7 @@ biggest win is deletion.
 | `@apiResource*` / `#[ResponseFromApiResource]` | **Delete** — inferred | Resource + pagination inference, no factory needed. |
 | `@transformer*` (Fractal) | No Fractal integration | Would need a `TypeToSchema` extension — see [where Scribe is stronger](#where-scribe-is-stronger). |
 | `@responseFile` / `#[ResponseFromFile]` | Inline via `#[Response]` / `#[Example]` | No file-loading equivalent. |
-| `Example:` / `No-example` markers | [`#[Example]`](/laravel/reference/attributes/#example) / [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) | `#[Example]` on an action pins the success response's example body; `#[IgnoreParam]` drops a parameter you'd rather not document. |
+| `Example:` / `No-example` markers | [`#[Example]`](/laravel/reference/attributes/#example) / [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) | `#[Example]` pins example payloads on a response, the request body or a parameter — one, or several named ones, written inline or loaded from a JSON/YAML file; `#[IgnoreParam]` drops a parameter you'd rather not document. |
 | `examples.faker_seed` | **Delete** — unnecessary | Output is deterministic by construction. |
 | `groups.order` config | [`tags.definitions`](/laravel/reference/configuration/#tags) (weight-ordered) + `tags.map` | Tag objects are sorted by ascending `weight`, then name. |
 | `inheritedDocsOverrides()` | Not needed for route context | Path params, bindings, and controller-level attributes resolve against the concrete child route; use attributes or [overlays](/laravel/reference/configuration/#overlays) for anything an inherited method's body inference doesn't cover. |
@@ -325,8 +325,8 @@ Then migrate incrementally, per controller or group:
    nothing regressed — the diff is your safety net.
 3. **Translate the survivors** — `@group` → `#[Group]`, `@response` → `#[Response]`, `Example:` →
    `#[Example]`, `@hideFromAPIDocumentation` → `#[ExcludeFromDocs]`.
-4. **Handle the hard parts** — response-call-derived examples (paste representative payloads into
-   `#[Response]` / `#[Example]`), `.scribe` hand-edits and `custom.*.yaml` (re-home as attributes or
+4. **Handle the hard parts** — response-call-derived examples (save representative payloads as JSON
+   files and point `#[Example(file: …)]` at them), `.scribe` hand-edits and `custom.*.yaml` (re-home as attributes or
    Overlays), Fractal transformers (a `TypeToSchema` extension), custom Blade themes (not carried
    over), Postman consumers (add a `postman` export target).
 5. **Decommission Scribe** — remove `knuckleswtf/scribe`, `config/scribe.php`, the `.scribe/` folder,

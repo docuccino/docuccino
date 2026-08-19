@@ -431,6 +431,89 @@ public function show(int $id): InvoiceResource { /* … */ }
 
 <Aside title="Error responses have their own page">
 `4xx` and `5xx` responses are documented from your real exception handling — see
-[Error responses](/laravel/documenting/errors/). Example values come from inference and
-[`#[Example]`](/laravel/reference/attributes/#example).
+[Error responses](/laravel/documenting/errors/).
+</Aside>
+
+## Example payloads
+
+Inference fills in example values where the code states them outright. Where it can't — and for the
+payloads you actually want a reader to copy — [`#[Example]`](/laravel/reference/attributes/#example)
+pins them. One declaration sets the response's single `example`; several *named* ones publish a map a
+viewer offers as a picker, so an endpoint can show what a settled invoice looks like beside an overdue
+one.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	#[Response(status: 200, type: InvoiceResource::class, description: 'The invoice')]
+	#[Example(name: 'paid', summary: 'A settled invoice', value: ['id' => 42, 'status' => 'paid'])]
+	#[Example(name: 'overdue', summary: 'One past its due date', value: ['id' => 43, 'status' => 'overdue'])]
+	public function show(Invoice $invoice): InvoiceResource { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"content": {
+	  "application/json": {
+	    "schema": { "$ref": "#/components/schemas/InvoiceResource" },
+	    "examples": {
+	      "overdue": { "summary": "One past its due date", "value": { "id": 43, "status": "overdue" } },
+	      "paid": { "summary": "A settled invoice", "value": { "id": 42, "status": "paid" } }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The map is sorted by name, so adding an example never moves the ones already there and a diff shows
+only what you changed.
+
+### Examples from a file
+
+A realistic payload is a poor fit for an attribute argument. Point `file:` at a `.json`, `.yaml` or
+`.yml` file relative to your application root and Docuccino reads it in:
+
+```php
+#[Example(name: 'full-cart', file: 'docs/examples/full-cart.json', summary: 'Three lines and a discount')]
+public function show(Cart $cart): CartResource { /* … */ }
+```
+
+The file joins that endpoint's build dependencies, so editing it regenerates the endpoint — including
+when you create a file that wasn't there yet. A file Docuccino can't read raises a diagnostic and the
+example is left out; nothing partial is ever published.
+
+<Aside type="tip" title="Two YAML spellings to know about">
+YAML can express things JSON cannot. `.nan`, `.inf` and `-.inf` parse but have no JSON form, so a file
+holding one is refused with an `example-file.invalid` diagnostic rather than published. And an unquoted
+`2020-01-01` is a *date* to YAML, so it publishes as a number — write `'2020-01-01'` to keep it a
+string. JSON files have neither problem.
+</Aside>
+
+### Illustrating something other than the success response
+
+By default an example illustrates the success response — the lowest `2xx` the operation documents — in
+that response's first media type. `status:` sends it to another response, and `mediaType:` to another
+content type:
+
+```php
+#[Response(status: 404, type: ProblemDetails::class, description: 'No such invoice')]
+#[Example(name: 'not-found', status: 404, value: ['title' => 'Not Found', 'status' => 404])]
+public function show(Invoice $invoice): InvoiceResource { /* … */ }
+```
+
+Where that error body is one other endpoints return too, it is
+[hoisted into a shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components),
+and your name goes with it: the shared response publishes `not-found` beside the keys generated for
+endpoints that illustrated the same body without naming anything. Annotating one endpoint never changes
+what another publishes.
+
+Request bodies and parameters take examples the same way — see
+[Example payloads on requests](/laravel/documenting/requests/#example-payloads).
+
+<Aside type="caution" title="An example that doesn't match its schema is a lie">
+Inference can't be wrong about a shape it derived; a hand-written example can say anything at all, and
+it's the part of a document a reader pastes into their client. `assertValidExamples()` holds every
+published example to the schema beside it — see [Contract
+testing](/laravel/guides/contract-testing/).
 </Aside>

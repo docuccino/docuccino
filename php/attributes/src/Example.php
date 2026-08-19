@@ -9,6 +9,9 @@ use Attribute;
 /**
  * Attaches an example (optionally named, or referenced via externalValue). Repeatable to supply
  * several named examples; usable on actions, DTO properties, parameters and closure routes.
+ *
+ * The value comes from exactly one of `value`, `file` (a JSON or YAML file under the app root) or
+ * `externalValue`; `status`, `request` and `parameter` pick what it illustrates, at most one of them.
  */
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_PROPERTY | Attribute::TARGET_FUNCTION | Attribute::TARGET_PARAMETER | Attribute::IS_REPEATABLE)]
 final readonly class Example
@@ -18,5 +21,11 @@ final readonly class Example
         public ?string $name = null,
         public ?string $summary = null,
         public ?string $externalValue = null,
+        public ?string $description = null,
+        public ?string $file = null,
+        public int|string|null $status = null,
+        public ?string $mediaType = null,
+        public ?string $parameter = null,
+        public bool $request = false,
     ) {}
 }

@@ -6,6 +6,7 @@ namespace Docuccino\Laravel;
 
 use Composer\InstalledVersions;
 use Docuccino\Core\Content\ContentCompiler;
+use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Lint\LintRuleOptions;
@@ -134,6 +135,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->give(fn (): string => $this->app->basePath());
 
         $this->app->when(AttributeOverridesExtension::class)
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
+
+        // #[Example(file: …)] reads a project file, confined to the same base #[DescriptionFromFile] is.
+        $this->app->when(AttributeExamplesExtension::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
 
