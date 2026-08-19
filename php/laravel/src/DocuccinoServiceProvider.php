@@ -416,10 +416,6 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * One `docuccino.lint.<key>` bag as rule options. `$default` is the rule's own answer when the key
-     * is absent, so a config file predating the rule keeps whatever shipped with it.
-     */
-    /**
      * @return array<string, mixed>
      */
     private static function leakageConfig(): array
@@ -430,6 +426,10 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         return $leakage;
     }
 
+    /**
+     * One `docuccino.lint.<key>` bag as rule options. `$default` is the rule's own answer when the key
+     * is absent, so a config file predating the rule keeps whatever shipped with it.
+     */
     private static function lintRule(string $key, bool $default): LintRuleOptions
     {
         /** @var array<string, mixed> $rule */
