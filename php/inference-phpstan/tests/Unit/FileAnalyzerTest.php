@@ -48,21 +48,23 @@ function fileAnalyzerWithRecordingAdapter(int &$calls): FileAnalyzer
     return new FileAnalyzer($adapter);
 }
 
-it('harvests methods, closures and array assignments, memoising each per normalised file', function (): void {
+it('harvests methods, closures and array assignments off one pass per normalised file', function (): void {
     $calls = 0;
     $analyzer = fileAnalyzerWithRecordingAdapter($calls);
 
-    // First access of each harvest kind runs one pass; the no-emit adapter collects nothing.
+    // Whichever harvest is asked for first pays the one pass; the no-emit adapter collects nothing.
     expect($analyzer->analyze('/x.php'))->toBe([])
         ->and($analyzer->closures('/x.php'))->toBe([])
         ->and($analyzer->arrayAssignments('/x.php'))->toBe([])
-        ->and($calls)->toBe(3);
+        ->and($analyzer->localAssignments('/x.php'))->toBe([])
+        ->and($calls)->toBe(1);
 
-    // Re-access hits the per-file cache for each kind — no further passes.
+    // Re-access hits the per-file cache — no further passes.
     expect($analyzer->analyze('/x.php'))->toBe([])
         ->and($analyzer->closures('/x.php'))->toBe([])
         ->and($analyzer->arrayAssignments('/x.php'))->toBe([])
-        ->and($calls)->toBe(3);
+        ->and($analyzer->localAssignments('/x.php'))->toBe([])
+        ->and($calls)->toBe(1);
 });
 
 it('answers for no method the file does not declare', function (): void {

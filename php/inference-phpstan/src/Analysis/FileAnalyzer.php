@@ -14,25 +14,24 @@ use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Type\ObjectType;
 
 /**
- * Parses a file once and harvests its virtual `MethodReturnStatementsNode`s by method name — the node that
- * pairs every `return` with its flow-refined scope and carries the method's throw points. Memoised per file
- * so descent reuses one rich parse; the adapter's priming is what keeps the bodies from being stripped.
+ * Parses a file once and harvests everything the engine reads out of it: the virtual
+ * `MethodReturnStatementsNode`s — the node that pairs every `return` with its flow-refined scope and carries
+ * the method's throw points — plus the closures and the local assignments. Memoised per file so descent
+ * reuses one rich parse; the adapter's priming is what keeps the bodies from being stripped.
+ *
+ * @phpstan-type FileHarvest array{
+ *     methods: array<string, MethodReturnStatementsNode>,
+ *     closures: array<int, ClosureReturnStatementsNode>,
+ *     arrays: array<string, array<string, Node\Expr\Array_>>,
+ *     locals: array<string, array<string, array{Node\Expr, Scope}|null>>,
+ * }
  *
  * @internal
  */
 final class FileAnalyzer
 {
-    /** @var array<string, array<string, MethodReturnStatementsNode>> file → `Class::method` → its returns */
+    /** @var array<string, FileHarvest> */
     private array $cache = [];
-
-    /** @var array<string, array<int, ClosureReturnStatementsNode>> */
-    private array $closureCache = [];
-
-    /** @var array<string, array<string, array<string, Node\Expr\Array_>>> file → scope → varName → first array-literal assigned */
-    private array $arrayAssignmentCache = [];
-
-    /** @var array<string, array<string, array<string, array{Node\Expr, Scope}|null>>> file → scope → varName → its ONE assignment, or null when it takes several */
-    private array $localAssignmentCache = [];
 
     public function __construct(private readonly RuntimeAdapter $adapter) {}
 
@@ -54,21 +53,7 @@ final class FileAnalyzer
      */
     public function analyze(string $file): array
     {
-        $normalised = $this->adapter->normalize($file);
-        if (isset($this->cache[$normalised])) {
-            return $this->cache[$normalised];
-        }
-
-        $collected = [];
-        $this->adapter->processFile($file, static function (Node $node, Scope $scope) use (&$collected): void {
-            // Watching for this virtual node is the sanctioned way to pair returns with refined scope.
-            // @phpstan-ignore phpstanApi.instanceofAssumption
-            if ($node instanceof MethodReturnStatementsNode) {
-                $collected[$node->getClassReflection()->getName().'::'.$node->getMethodName()] = $node;
-            }
-        });
-
-        return $this->cache[$normalised] = $collected;
+        return $this->harvest($file)['methods'];
     }
 
     /**
@@ -102,20 +87,7 @@ final class FileAnalyzer
      */
     public function closures(string $file): array
     {
-        $normalised = $this->adapter->normalize($file);
-        if (isset($this->closureCache[$normalised])) {
-            return $this->closureCache[$normalised];
-        }
-
-        $collected = [];
-        $this->adapter->processFile($file, static function (Node $node, Scope $scope) use (&$collected): void {
-            // @phpstan-ignore phpstanApi.instanceofAssumption
-            if ($node instanceof ClosureReturnStatementsNode) {
-                $collected[$node->getClosureExpr()->getStartLine()] = $node;
-            }
-        });
-
-        return $this->closureCache[$normalised] = $collected;
+        return $this->harvest($file)['closures'];
     }
 
     /**
@@ -128,7 +100,7 @@ final class FileAnalyzer
      */
     public function arrayAssignments(string $file): array
     {
-        return $this->assignments($file)[0];
+        return $this->harvest($file)['arrays'];
     }
 
     /**
@@ -145,7 +117,7 @@ final class FileAnalyzer
      */
     public function localAssignments(string $file): array
     {
-        return $this->assignments($file)[1];
+        return $this->harvest($file)['locals'];
     }
 
     /**
@@ -167,19 +139,24 @@ final class FileAnalyzer
     }
 
     /**
-     * Both assignment harvests off ONE walk of the file — the array-literal initialisers and every local's
-     * single assignment. Memoised together because they read the same nodes; a second walk would cost a
-     * full re-analysis of the file to collect what this one already saw.
+     * Every harvest off ONE walk of the file — the method bodies, the closures, the array-literal
+     * initialisers and every local's single assignment. Memoised together because they read the same nodes;
+     * a second walk would cost a full re-analysis of the file to collect what this one already saw, and
+     * resolving scope over the whole file is the expensive half of a pass.
      *
-     * @return array{array<string, array<string, Node\Expr\Array_>>, array<string, array<string, array{Node\Expr, Scope}|null>>}
+     * @return FileHarvest
      */
-    private function assignments(string $file): array
+    private function harvest(string $file): array
     {
         $normalised = $this->adapter->normalize($file);
-        if (isset($this->arrayAssignmentCache[$normalised])) {
-            return [$this->arrayAssignmentCache[$normalised], $this->localAssignmentCache[$normalised]];
+        if (isset($this->cache[$normalised])) {
+            return $this->cache[$normalised];
         }
 
+        /** @var array<string, MethodReturnStatementsNode> $methods `Class::method` → its returns */
+        $methods = [];
+        /** @var array<int, ClosureReturnStatementsNode> $closures */
+        $closures = [];
         /** @var array<string, array<string, Node\Expr\Array_>> $arrays */
         $arrays = [];
         /** @var array<string, array<string, array{Node\Expr, Scope}|null>> $locals */
@@ -187,10 +164,21 @@ final class FileAnalyzer
         /** @var array<string, true> $opaque scopes where a write named no single local */
         $opaque = [];
 
-        $this->adapter->processFile($file, function (Node $node, Scope $scope) use (&$arrays, &$locals, &$opaque): void {
+        $this->adapter->processFile($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrays, &$locals, &$opaque): void {
+            // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
+            // @phpstan-ignore phpstanApi.instanceofAssumption
+            if ($node instanceof MethodReturnStatementsNode) {
+                $methods[$node->getClassReflection()->getName().'::'.$node->getMethodName()] = $node;
+            }
+
+            // @phpstan-ignore phpstanApi.instanceofAssumption
+            if ($node instanceof ClosureReturnStatementsNode) {
+                $closures[$node->getClosureExpr()->getStartLine()] = $node;
+            }
+
             $key = self::scopeKey($scope);
             if ($key === null) {
-                return;
+                return; // outside any function, where there are no locals to harvest
             }
 
             $assignment = LocalWrites::assignment($node);
@@ -223,9 +211,12 @@ final class FileAnalyzer
             $locals[$key] = array_map(static fn (): null => null, $locals[$key] ?? []);
         }
 
-        $this->localAssignmentCache[$normalised] = $locals;
-
-        return [$this->arrayAssignmentCache[$normalised] = $arrays, $locals];
+        return $this->cache[$normalised] = [
+            'methods' => $methods,
+            'closures' => $closures,
+            'arrays' => $arrays,
+            'locals' => $locals,
+        ];
     }
 
     /**
