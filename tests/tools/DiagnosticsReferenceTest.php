@@ -273,3 +273,27 @@ it('maps no prefix the page cannot answer for', function (): void {
 
     expect($dead)->toBe([]);
 });
+
+/*
+ * The HOST as well as the anchor. The anchor test above proves the fragment names a section that
+ * exists; it says nothing about which site the link points AT, and a link to the wrong host is
+ * broken in a way no page-source check can see. The docs site's own canonical URL is the one
+ * `website/astro.config.mjs` builds against, so read it from there rather than repeating it.
+ */
+it('points at the site the docs are actually published to', function (): void {
+    $config = (string) file_get_contents(dirname(__DIR__, 2).'/website/astro.config.mjs');
+
+    expect(preg_match("/site:\s*'([^']+)'/", $config, $m))->toBe(1);
+
+    $site = rtrim($m[1], '/');
+    $url = DiagnosticDocs::urlFor('engine.not-installed');
+
+    expect($site)->not->toBeEmpty()
+        ->and($url)->toStartWith($site.'/');
+
+    // And the CNAME the deploy actually serves from, which is what a reader's browser resolves.
+    $cname = trim((string) file_get_contents(dirname(__DIR__, 2).'/website/public/CNAME'));
+
+    expect($cname)->not->toBeEmpty()
+        ->and($url)->toStartWith('https://'.$cname.'/');
+});

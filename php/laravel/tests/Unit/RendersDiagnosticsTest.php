@@ -83,7 +83,7 @@ it('gives a diagnostic that states no help the page that documents it', function
     // the link lands on the page itself rather than promising an anchor that isn't there.
     $output = Console::render([Console::diagnostic('fine', 'GET api/orders')]);
 
-    expect($output)->toBe("\nDiagnostics for default:\n  GET api/orders\n    [warning] demo.code: fine\n      https://docuccino.app/laravel/reference/diagnostics/\n");
+    expect($output)->toBe("\nDiagnostics for default:\n  GET api/orders\n    [warning] demo.code: fine\n      https://docs.docuccino.app/laravel/reference/diagnostics/\n");
 });
 
 it('indents every line of a multi-line help, and keeps the blank line between paragraphs', function (): void {
@@ -135,7 +135,7 @@ it('marks nothing, and totals nothing, where the list names another code', funct
 
     $output = Console::render([Console::diagnostic('fine', 'GET api/orders')]);
 
-    expect($output)->toBe("\nDiagnostics for default:\n  GET api/orders\n    [warning] demo.code: fine\n      https://docuccino.app/laravel/reference/diagnostics/\n");
+    expect($output)->toBe("\nDiagnostics for default:\n  GET api/orders\n    [warning] demo.code: fine\n      https://docs.docuccino.app/laravel/reference/diagnostics/\n");
 });
 
 it('never marks an error accepted, however the list reads', function (): void {

@@ -16,7 +16,7 @@ namespace Docuccino\Core\Diagnostics;
 final class DiagnosticDocs
 {
     /** The reference itself. Hardcoded for the same reason the UIR schema's `$id` is: a URL a document publishes cannot come from the machine that built it. */
-    public const string PAGE = 'https://docuccino.app/laravel/reference/diagnostics/';
+    public const string PAGE = 'https://docs.docuccino.app/laravel/reference/diagnostics/';
 
     /**
      * Code prefix → the section anchor that documents it.
