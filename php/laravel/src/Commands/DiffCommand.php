@@ -14,10 +14,10 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
+use Docuccino\Laravel\Support\GitShow;
 use Docuccino\Laravel\Support\Paths;
 use Docuccino\Laravel\Support\TerminalText;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Process;
 use JsonException;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -157,31 +157,20 @@ final class DiffCommand extends Command
 
     private function readFromGit(string $ref, string $path): ?string
     {
-        // Reject anything git would read as an option (`--upload-pack=…`), so a hostile argument can't
-        // smuggle a flag past the `<ref>:<path>` operand.
-        if (str_starts_with($ref, '-') || str_starts_with($path, '-')) {
-            $this->error('The git ref and path must not start with "-".');
+        [$contents, $problem] = GitShow::read($ref, $path);
 
-            return null;
-        }
-
-        // Array-form Process runs git directly with no shell, so nothing is word-split or expanded.
-        $result = Process::run(['git', 'show', $ref.':'.$path]);
-
-        if (! $result->successful()) {
-            // git's own stderr, plus a ref and a path that in CI come from a workflow variable rather than
-            // from someone watching the terminal they steer.
+        if ($contents === null) {
+            // git's own stderr (or the refusal), plus a ref and a path that in CI come from a workflow
+            // variable rather than from someone watching the terminal they steer.
             $this->error(sprintf(
                 'git show %s:%s failed: %s',
                 TerminalText::of($ref),
                 TerminalText::of($path),
-                TerminalText::of(trim($result->errorOutput())),
+                TerminalText::of($problem),
             ));
-
-            return null;
         }
 
-        return $result->output();
+        return $contents;
     }
 
     private function enforce(DocumentBuilder $builder, string $key, Changeset $changeset, UirDocument $old, UirDocument $new): PolicyVerdict
