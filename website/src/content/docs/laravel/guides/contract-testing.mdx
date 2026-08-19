@@ -190,11 +190,15 @@ Coverage — default
 Docuccino contract coverage: 17 of 23 documented operations exercised (73.91%, floor 85%).
 
 Never exercised:
-  DELETE /api/invoices/{invoice}       op:v1:aaaainvoicekill
-  POST   /api/invoices/{invoice}/void  op:v1:aaaainvoicevoid
+  DELETE /api/invoices/{invoice}       op:v1:h4dqx2mrb7ks9tvz
+  POST   /api/invoices/{invoice}/void  op:v1:p6nw3jc8ygf5s0ea
 
 Cover them, or — if this is the honest measured floor for now — move the floor to 73 and ratchet it up from there.
 ```
+
+Logs accumulate until something clears them, which is what the `--reset` in the recipe is for: skip it
+and the report unions this run with every earlier one, reading more generous than the truth. If the logs
+it merged were written far enough apart to be more than one run, the report says so above the numbers.
 
 Treat the floor the way you treat a line-coverage floor: set it to what you measure today, and raise it
 as you close gaps. A floor you cannot meet is a floor somebody deletes. `--min=100` is "every documented
@@ -203,7 +207,7 @@ operation".
 ### Sharded CI
 
 `--path` is repeatable, because the merge is the only place several shards' logs ever meet. Each shard
-uploads its directory; a final job downloads them all and merges before gating:
+uploads its directory; a final job downloads them all and names every one of them before gating:
 
 ```yaml
 # each shard
@@ -212,22 +216,38 @@ uploads its directory; a final job downloads them all and merges before gating:
   with:
     name: contract-coverage-${{ matrix.shard }}
     path: storage/docuccino/coverage
+    if-no-files-found: error   # a shard that logged nothing must fail here, not vanish
 
 # the gate, after the matrix
 - uses: actions/download-artifact@v4
   with: { pattern: contract-coverage-*, path: coverage-logs }
-- run: php artisan docuccino:coverage --path=coverage-logs --min=85
+- run: |
+    php artisan docuccino:coverage --min=85 \
+      --path=coverage-logs/contract-coverage-1 \
+      --path=coverage-logs/contract-coverage-2 \
+      --path=coverage-logs/contract-coverage-3 \
+      --path=coverage-logs/contract-coverage-4
 ```
 
-Subdirectories are walked, so the whole download tree is one `--path`. Log filenames are unique per
-writing process, so two shards on one machine — or two workers sharing a token — never overwrite each
-other.
+**Name every shard's directory, one `--path` each.** Subdirectories *are* walked, so a single
+`--path=coverage-logs` reads all four when all four arrive — but if shard 3's artifact never arrives, the
+tree simply lacks a subdirectory, and a directory nobody named is a directory nothing can report as
+missing. The merge would be "complete" over three shards. Named individually, an absent shard is an
+absent directory, the command refuses, and the gate stays shut. `if-no-files-found: error` closes the
+other half: without it, `upload-artifact` warns and uploads nothing when a shard wrote no logs at all.
+
+Log filenames are unique per writing process, so two shards on one machine — or two workers sharing a
+token — never overwrite each other.
 
 <Aside type="caution" title="An incomplete merge never produces a number">
-A directory that isn't there, one holding no log, and a file that doesn't read back as ids each fail the
+A directory it cannot read — absent, or there and refusing to open, at the top of a named path or nested
+anywhere under one — a directory holding no log, and a file that doesn't read back as ids each fail the
 command with the path named, *before* any percentage is printed. A gate that quietly measured three of
 four shards is worse than no gate — so the answer is "these logs are missing", never a number computed
 from the ones that happened to arrive.
+
+The one thing it cannot see is a directory you never named, which is why the recipe above names each
+shard rather than the tree they land in.
 </Aside>
 
 ## Catch an example that lies
