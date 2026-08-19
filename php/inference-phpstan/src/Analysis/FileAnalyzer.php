@@ -12,6 +12,7 @@ use PHPStan\Node\ClosureReturnStatementsNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ParameterReflection;
 use PHPStan\Type\ObjectType;
+use Throwable;
 
 /**
  * Parses a file once and harvests everything the engine reads out of it: the virtual
@@ -105,10 +106,11 @@ final class FileAnalyzer
 
     /**
      * Every local's assignment by scope ({@see scopeKey()}) then variable name, as `[what was assigned, the
-     * scope it was assigned in]` — and NULL for a local written more than once, or written in any of the
-     * ways that leave no expression to speak for it ({@see LocalWrites}, plus a call writing it through a
-     * by-reference parameter). Lets the refiner follow a response built into a local and then returned back
-     * to the expression that built it, whose shape the variable's own bare type has already thrown away.
+     * scope it was assigned in]` — and NULL for a local written more than once, written in any of the ways
+     * that leave no expression to speak for it ({@see LocalWrites}, plus a call writing it through a
+     * by-reference parameter), or sitting in a scope whose writes could not be read at all. Lets the refiner
+     * follow a response built into a local and then returned back to the expression that built it, whose
+     * shape the variable's own bare type has already thrown away.
      *
      * The scope is the one at the ASSIGNMENT, not at the return: an expression read in the wrong scope
      * binds whatever the arguments happen to hold later, which is how a shape stops being true.
@@ -166,6 +168,8 @@ final class FileAnalyzer
 
         $this->adapter->processFile($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrays, &$locals, &$opaque): void {
             // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
+            // Collected first and outside the guard below, so that a reader wanting only a method body — the
+            // throw analyzer, the tracer descending into a callee — never pays for the write half's failures.
             // @phpstan-ignore phpstanApi.instanceofAssumption
             if ($node instanceof MethodReturnStatementsNode) {
                 $methods[$node->getClassReflection()->getName().'::'.$node->getMethodName()] = $node;
@@ -176,32 +180,44 @@ final class FileAnalyzer
                 $closures[$node->getClosureExpr()->getStartLine()] = $node;
             }
 
-            $key = self::scopeKey($scope);
-            if ($key === null) {
-                return; // outside any function, where there are no locals to harvest
-            }
+            $key = null;
 
-            $assignment = LocalWrites::assignment($node);
-            if ($assignment !== null) {
-                [$name, $expr] = $assignment;
-                // A second write retires the first: the variable at the return is whichever branch ran, and
-                // picking one of them would publish a body the other branch never sends.
-                $locals[$key][$name] = array_key_exists($name, $locals[$key] ?? []) ? null : [$expr, $scope];
-
-                if ($expr instanceof Node\Expr\Array_) {
-                    // First assignment wins — the initialiser carries the provenance.
-                    $arrays[$key][$name] ??= $expr;
+            try {
+                $key = self::scopeKey($scope);
+                if ($key === null) {
+                    return; // outside any function, where there are no locals to harvest
                 }
-            }
 
-            // Every other way the language writes a local — see LocalWrites for the list — plus the one no
-            // expression shows, a callee assigning through a by-reference parameter.
-            foreach ([...LocalWrites::retires($node), ...$this->byReferenceWrites($node, $scope)] as $name) {
-                $locals[$key][$name] = null;
-            }
+                $assignment = LocalWrites::assignment($node);
+                if ($assignment !== null) {
+                    [$name, $expr] = $assignment;
+                    // A second write retires the first: the variable at the return is whichever branch ran, and
+                    // picking one of them would publish a body the other branch never sends.
+                    $locals[$key][$name] = array_key_exists($name, $locals[$key] ?? []) ? null : [$expr, $scope];
 
-            if (LocalWrites::retiresEveryLocal($node)) {
-                $opaque[$key] = true;
+                    if ($expr instanceof Node\Expr\Array_) {
+                        // First assignment wins — the initialiser carries the provenance.
+                        $arrays[$key][$name] ??= $expr;
+                    }
+                }
+
+                // Every other way the language writes a local — see LocalWrites for the list — plus the one no
+                // expression shows, a callee assigning through a by-reference parameter.
+                foreach ([...LocalWrites::retires($node), ...$this->byReferenceWrites($node, $scope)] as $name) {
+                    $locals[$key][$name] = null;
+                }
+
+                if (LocalWrites::retiresEveryLocal($node)) {
+                    $opaque[$key] = true;
+                }
+            } catch (Throwable) {
+                // Resolving a callee is the one thing here that can throw out of PHPStan, and a scope whose
+                // writes could not be read is the scope an unreadable write already retires — vague but true,
+                // and confined to the answers it is about. Letting it out instead would cost every return and
+                // throw point in the file a shape this same walk had already recovered.
+                if ($key !== null) {
+                    $opaque[$key] = true;
+                }
             }
         });
 
@@ -237,6 +253,11 @@ final class FileAnalyzer
         if ($node->isFirstClassCallable()) {
             return []; // a callable, not a call
         }
+        if (! self::hasVariableArgument($node)) {
+            // Resolving the callee is the expensive half — and the half PHPStan can throw out of — so a call
+            // that passes nothing a reference could bind to skips it. Most calls in a file are that call.
+            return [];
+        }
 
         $parameters = $this->parametersOf($node, $scope);
         if ($parameters === null) {
@@ -262,6 +283,26 @@ final class FileAnalyzer
         }
 
         return $written;
+    }
+
+    /**
+     * Whether any argument is a plain `$var`, the only form {@see byReferenceWrites()} ever reports. Reads
+     * the same grammar as that loop, spread included — recognising fewer shapes would skip a call whose write
+     * the loop would have found.
+     */
+    private static function hasVariableArgument(Node\Expr\FuncCall|Node\Expr\MethodCall|Node\Expr\StaticCall $node): bool
+    {
+        foreach ($node->getArgs() as $arg) {
+            if ($arg->unpack) {
+                return false; // as in the loop: nothing past a spread binds positionally
+            }
+
+            if ($arg->value instanceof Node\Expr\Variable && is_string($arg->value->name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
