@@ -131,7 +131,7 @@ field by field:
 | `fallback` | Docuccino's own defaults | A route-name operation id, an `OK` response description, an untyped path parameter |
 | `inference` | The static-analysis engine | Return types, validation rules, resource shapes, thrown exceptions |
 | `integration` | A package integration, e.g. `integration:query-builder` | Filters and sorts, pagination envelopes, security schemes, `Data` object schemas |
-| `docblock` | PHPDoc on the action or class | A summary and description, `@param`/`@return` detail |
+| `docblock` | PHPDoc on the action or class | A summary and description — the leading prose, or `@summary`/`@description` where the prose is for maintainers — plus `@param`/`@return` detail |
 | `attribute` | A Docuccino [attribute](/laravel/reference/attributes/) | `#[Response]`, `#[QueryParameter]`, `#[Group]`, `#[Hidden]` |
 | `overlay` | An [OpenAPI Overlay](/laravel/guides/customizing-output/) file | Corrections to routes you don't own, spec-side polish |
 | `config` | `config/docuccino.php` | `info`, `servers`, security schemes, tag definitions, representation policies |

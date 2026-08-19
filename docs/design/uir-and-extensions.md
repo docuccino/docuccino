@@ -540,7 +540,7 @@ are keyed by the author's own names and kept name-sorted, and OAS makes `example
 mutually exclusive, so a non-empty map wins over either singular. `Core\Extensions\BuiltIn\AttributeExamplesExtension`
 is the one producer of declarations: it runs in Finalize (every response, parameter and request body a
 declaration could name already exists), confines an `#[Example(file:)]` path through the same
-`ConfinedPath` `#[DescriptionFromFile]` uses, and registers the resolved path as a route dependency
+`ConfinedPath` `#[Description(file: …)]` uses, and registers the resolved path as a route dependency
 whether or not the read worked — so creating a file that wasn't there rebuilds the route.
 
 **Recorded examples.** A test suite already exercises real endpoints with real data, and the
@@ -811,7 +811,7 @@ when a registration path exists and the `emit()` signature settles.
       recover their rule sets adapter-side, then converge on this core applier.
     - Overrides: `Core\Extensions\BuiltIn\AttributeOverridesExtension` (was
       `Laravel\Extensions\AttributeOverridesExtension`) reads only Docuccino attributes + core
-      `ConfinedPath` (for `#[DescriptionFromFile]`); the provider keeps binding its `$basePath`, and
+      `ConfinedPath` (for `#[Description(file: …)]`); the provider keeps binding its `$basePath`, and
       binds the same for `AttributeExamplesExtension`, which reads `#[Example(file:)]` the same way.
   - Corollary: pure, stable core utilities that integrations legitimately need (e.g.
     `Core\Support\Fqcn`) get allow-listed in the arch test with justification — never
@@ -1021,6 +1021,10 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
 - `null` in an attribute = "not specified" (no write); explicit removal is a sentinel
   (`Remove::field()`, `#[Hidden]`, `#[IgnoreParam]`, `#[IgnoreResponse]`).
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
+- Within the docblock layer, `@summary`/`@description` beat the free-prose split, and declaring
+  EITHER hands both fields to the tags — the prose above them was written for whoever maintains
+  the action, and half of that note is worse in the document than none of it. `DocBlockReader::read()`
+  resolves this before any patch, so the two never contest a field.
 
 **`#[Hidden]` stays OUTPUT-only; request-hiding is the separate `#[HiddenFromRequest]` (pre-dogfood
 decision).** `#[Hidden]` was NOT conflated to also hide a Data property from the request body. A

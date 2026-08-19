@@ -16,7 +16,8 @@ it('names the attribute that writes an operation-level field', function (string 
     'tags' => ['tags', "#[Group('Invoices')]"],
     'operationId' => ['operationId', "#[OperationId('storeInvoice')]"],
     'deprecated' => ['deprecated', '#[DeprecatedOperation]'],
-    'description' => ['description', "#[DescriptionFromFile('docs/endpoint.md')]"],
+    'summary' => ['summary', "#[Summary('Create an invoice')]"],
+    'description' => ['description', "#[Description('…')]"],
     'requestBody' => ['requestBody', "#[BodyParameter(name: 'total')]"],
     'the internal marker' => ['x-internal', '#[Internal]'],
 ]);
@@ -47,8 +48,6 @@ it('names the attribute that writes a response', function (string $label, string
 it('falls back to the generic truth wherever no attribute writes the field', function (string $label, string $field): void {
     expect(OverrideHint::for($label, $field, Layer::Inference))->toBe('no attribute writes this — an overlay outranks inference');
 })->with([
-    // There is no summary attribute: the docblock is the only thing below an overlay that writes it.
-    'an operation summary' => ['operation', 'summary'],
     'a member an integration invented' => ['operation', 'x-rate-limit'],
     'a parameter place we do not know' => ['parameters.matrix:coords', 'schema'],
     'a parameter with no name' => ['parameters.query:', 'required'],
@@ -71,7 +70,7 @@ it('says what the rung means where nothing above it is worth naming', function (
 
 /** Every rung below the attribute layer gets the same shape of answer, naming its own rung. */
 it('names the winning rung in the generic answer', function (Layer $winner): void {
-    expect(OverrideHint::for('operation', 'summary', $winner))->toBe('no attribute writes this — an overlay outranks '.$winner->label());
+    expect(OverrideHint::for('operation', 'x-rate-limit', $winner))->toBe('no attribute writes this — an overlay outranks '.$winner->label());
 })->with([
     'fallback' => [Layer::Fallback],
     'inference' => [Layer::Inference],

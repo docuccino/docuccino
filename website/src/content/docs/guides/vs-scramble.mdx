@@ -233,10 +233,10 @@ Most annotations map across cleanly.
 | Hidden fields / `$hidden` | [`#[Hidden]`](/laravel/reference/attributes/#hidden) | Property-level or a class-level list, on any class Docuccino hoists; your model's `$hidden` / `$visible` are read anyway. Hides from **output**. |
 | A field hidden from a request schema | [`#[HiddenFromRequest]`](/laravel/reference/attributes/#hiddenfromrequest) | Drops a Data-class property from the **request** body only, leaving the response schema alone. |
 | Enum case descriptions | [`#[CaseDescription]`](/laravel/reference/attributes/#casedescription) | Emitted as `x-enumDescriptions`. |
-| Markdown description file | [`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile) | Loads a symbol-anchored Markdown file into `description`. |
+| Markdown description file | [`#[Description(file: …)]`](/laravel/reference/attributes/#description) | Loads a symbol-anchored Markdown file into `description`. The same attribute takes inline prose as `text:`. |
 | Deprecation | [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Marks an operation (or controller) deprecated, with an optional reason. |
 
-Docuccino also adds attributes with no direct Scramble equivalent — `#[OperationId]`, `#[Internal]`,
+Docuccino also adds attributes with no direct Scramble equivalent — `#[Summary]`, `#[OperationId]`, `#[Internal]`,
 `#[InDocs]`, `#[IgnoreParam]`, `#[IgnoreResponse]`, `#[ResponseHeader]`, `#[SchemaId]`, `#[SchemaName]`,
 and the security family `#[Security]`, `#[OptionallyAuthenticated]` and `#[Abilities]`. See the full
 [attributes reference](/laravel/reference/attributes/).

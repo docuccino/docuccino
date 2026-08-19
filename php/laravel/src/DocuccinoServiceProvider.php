@@ -143,7 +143,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());
 
-        // #[Example(file: …)] reads a project file, confined to the same base #[DescriptionFromFile] is.
+        // #[Example(file: …)] reads a project file, confined to the same base #[Description(file: …)] is.
         $this->app->when(AttributeExamplesExtension::class)
             ->needs('$basePath')
             ->give(fn (): string => $this->app->basePath());

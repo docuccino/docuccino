@@ -141,16 +141,16 @@ too, alongside what to do about each one.
 | `content.unresolved-nav-ref` | error | A `nav.type: operation`/`tag` entry pointed at something absent. |
 | `content.duplicate-operation-id` | warning | Two operations share an `operationId`, so `::operation{id="…"}` is ambiguous. |
 
-## Symbol-anchored prose with `#[DescriptionFromFile]`
+## Symbol-anchored prose
 
 There's a second way to bring Markdown into your docs, for a different job. When the prose belongs to
 *one specific symbol* — a controller action, or a Data class — attach it at the source with
-[`#[DescriptionFromFile]`](/laravel/reference/attributes/#descriptionfromfile):
+[`#[Description]`](/laravel/reference/attributes/#description):
 
 ```php
-use Docuccino\Attributes\DescriptionFromFile;
+use Docuccino\Attributes\Description;
 
-#[DescriptionFromFile('resources/docs/invoices/index.md')]
+#[Description(file: 'resources/docs/invoices/index.md')]
 public function index(): AnonymousResourceCollection { /* … */ }
 ```
 
@@ -159,11 +159,43 @@ reference. The path is resolved within your application root, and the file joins
 dependencies — so editing the Markdown correctly invalidates just that fragment.
 
 <Aside type="tip" title="Which one do I want?">
-Use **`#[DescriptionFromFile]`** when the prose *is* the description of a single operation or schema —
+Use **`#[Description(file: …)]`** when the prose *is* the description of a single operation or schema —
 it lives inline in the reference. Use the **content directory** for standalone material that stands
 apart from any one endpoint: an overview, an authentication guide, a getting-started tutorial, with
 its own place in the navigation.
 </Aside>
+
+## Prose for consumers, docblocks for maintainers
+
+By default an action's docblock is its prose: the first paragraph becomes the `summary`, the rest
+becomes the `description`. That works right up until the docblock has something to say to whoever
+maintains the code — *dispatched by the worker, don't call this directly* — which is not something an
+API consumer can use, or should read.
+
+Two `@` tags settle it without touching the prose above them:
+
+```php
+/**
+ * Internal — dispatched by the queue worker, never call this directly.
+ *
+ * The retry budget is three attempts.
+ *
+ * @summary Void an invoice
+ *
+ * @description Marks an invoice void. Voiding is permanent and cannot be undone.
+ */
+public function void(Invoice $invoice): JsonResponse { /* … */ }
+```
+
+Declaring **either** tag hands the whole consumer-facing text over to the tags: the free prose stops
+feeding both fields, so the note above them never reaches the document, and a field you didn't state
+comes out empty rather than half-quoting a note meant for someone else.
+
+[`#[Summary]`](/laravel/reference/attributes/#summary) and
+[`#[Description]`](/laravel/reference/attributes/#description) say the same two things one rung higher,
+so they win over both the tags and the prose. Reach for the tags when you'd rather not import
+anything, and for the attributes when the prose lives in a file or you want the override to be
+obvious at a glance.
 
 ## What each format keeps
 
@@ -178,7 +210,7 @@ nowhere to put a page tree. What survives an export depends on the format:
 In other words: your standalone guide pages and the navigation tree live in the UIR. Exporting to
 OpenAPI drops them, because there's no standard place for them to go. Descriptions that sit in
 ordinary OpenAPI fields — `info.description`, tag descriptions, and per-operation descriptions
-(including ones set with `#[DescriptionFromFile]`) — survive, because they were standard fields all
+(including ones set with `#[Description]`) — survive, because they were standard fields all
 along.
 
 Rendering the guide pages and their multi-page navigation is a job for a UIR consumer. The

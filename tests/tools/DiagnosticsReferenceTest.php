@@ -196,6 +196,7 @@ it('names the construction sites whose code is not written beside it', function 
     expect(diagnostic_code_sites(diagnosticSourceDirectories()))->toBe([
         'Emit/OpenApi31DownlevelEmitter.php',
         'Extensions/BuiltIn/AttributeExamplesExtension.php',
+        'Extensions/BuiltIn/AttributeOverridesExtension.php',
         'Pipeline/DocumentGenerator.php',
         'Support/MachineDependentValue.php',
     ]);
