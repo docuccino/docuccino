@@ -340,6 +340,14 @@ does not.
   `Rule::enum(...)->only(Open, ...$this->alsoAllowed())`, plus a `visibility` field stating every value at
   the rule. The written half is the hazard: published on its own it is a SHORTER list of legal values than
   the endpoint accepts, so the constraint is dropped and `validation.rule-values-unread` says so.
+- `app/Http/Controllers/SpreadResponseController.php` — `response()->json(...)`, `new JsonResponse(...)`
+  and `response()->noContent(...)` all handed an argument list built by a private helper, with `index()`
+  writing the same envelope at the call site as the control. Read positionally, the argument LIST is
+  documented as the response body and the framework's default status is published for a call that states
+  its own.
+- `app/Exceptions/SpreadProblemRenderer.php` — a renderer spreading its arguments into
+  `DataProblemDocument::make()`, whose every body member reads one of those parameters. Read as "the call
+  site passed nothing", each member is deleted from a body that always carries it.
 
 ### Page-size recovery
 
