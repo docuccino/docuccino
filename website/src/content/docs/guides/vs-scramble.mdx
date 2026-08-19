@@ -284,9 +284,13 @@ end-to-end.
 Docuccino is new, and there are things it deliberately or simply doesn't do today. Check this list
 against how you work before you commit:
 
-- **Examples come from inference and `#[Example]`**, never from running your code. There is no
-  factory-rendered or live-response example generation — that's the trade for a generator that needs
-  no database and has no side effects.
+- **The generator never runs your code to produce an example.** Examples come from inference, from
+  [`#[Example]`](/laravel/reference/attributes/#example), or from responses your test suite recorded
+  into committed files
+  ([recorded examples](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)) —
+  which the build only ever reads. There is no factory-rendered or live-response example generation
+  inside the generator itself; that's the trade for one that needs no database and has no side
+  effects, and an endpoint no test exercises gets an inferred or authored example.
 - **Closure rules aren't documented.** Built-in `Rule::` objects fold statically — `Rule::enum`
   (including `->only()` / `->except()` chains), `Rule::in`, `Rule::exists` and `Rule::unique` —
   alongside the whole string-rule vocabulary; your own rule classes document from a

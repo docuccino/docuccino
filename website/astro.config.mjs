@@ -57,9 +57,9 @@ export default defineConfig({
 						'- Requirements: PHP 8.3+, Laravel 12 or 13.',
 						'- Commands: `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`.',
 						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
-						'- Docuccino never executes application code — it reads types with an embedded PHPStan/Larastan engine.',
+						'- The document build never executes application code — it reads types with an embedded PHPStan/Larastan engine, and reads committed files for anything else. Real response payloads reach the document only as recordings your own test suite wrote.',
 						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',
-						'- Contract testing: `Docuccino\\Laravel\\Testing\\AssertsApiContract` asserts a Laravel test suite\'s real requests and responses against the generated UIR, reports untouched endpoints, validates documented examples, and gates breaking changes and artifact staleness.',
+						'- Contract testing: `Docuccino\\Laravel\\Testing\\AssertsApiContract` asserts a Laravel test suite\'s real requests and responses against the generated UIR, reports untouched endpoints, validates documented examples, and gates breaking changes and artifact staleness. `ApiContract::record()` writes those responses to committed files (keyed by operation id, credentials redacted) that the build publishes as examples at the integration precedence layer.',
 						'- Precedence, lowest to highest: fallback, inference, integration, docblock, attribute, overlay, config. Higher layers win field by field.',
 					].join('\n'),
 					// Pages ordered for a reader starting from zero.

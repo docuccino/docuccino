@@ -34,8 +34,10 @@ The tools differ at the root, and it colors everything else:
   docblocks are *targeted overrides*.
 - **Executes your code vs never executes it.** Scribe's flagship response mechanism **runs** your
   endpoints — inside a rolled-back transaction, with `.env.docs` isolation and before/after hooks — to
-  capture real payloads. Docuccino is purely static: no database, no side effects, no seed data — but
-  also no runtime-captured payloads.
+  capture real payloads. Docuccino's generator is purely static: no database, no side effects, no seed
+  data. It gets real payloads a different way, from responses your *test suite* already produced and
+  you committed — so the capture happens where execution already lived, and the doc build still only
+  ever reads a file.
 
 ## At a glance
 
@@ -47,7 +49,7 @@ The tools differ at the root, and it colors everything else:
 | Executes your application code | Yes, for response calls | Never — static analysis only |
 | Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
 | Query params from query builders | Annotate them | Inferred, traced several calls deep, including into the method that builds each allow-list entry |
-| Example responses | Captured from real calls and factories | Inferred, or authored with `#[Example]` |
+| Example responses | Captured from real calls and factories | Inferred, authored with `#[Example]`, or [recorded from your test suite](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples) |
 | Postman collection | Yes | Yes — a `postman` export target, emitted from the same build |
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
 | Byte-stable output you can commit | — | Yes |
@@ -163,8 +165,9 @@ stronger](#where-scribe-is-stronger) covers the bottom four rows in detail.
 
 The three contract-testing rows are the other side of "never executes your code". Docuccino does not
 run your endpoints to *capture* a response the way Scribe does — but your test suite already runs them,
-so it holds that traffic to the generated document instead, and reports which documented endpoints the
-suite never touched. See [contract testing](/laravel/guides/contract-testing/).
+so it holds that traffic to the generated document instead, reports which documented endpoints the
+suite never touched, and can record those responses into committed files the build publishes as
+examples. See [contract testing](/laravel/guides/contract-testing/).
 
 ## What you can stop writing
 
@@ -244,12 +247,14 @@ See the [configuration reference](/laravel/reference/configuration/) for every o
 Scribe is mature and does several things Docuccino doesn't. If you rely on any of these, weigh them
 carefully before you switch — for some teams they're the whole reason to stay.
 
-- **Real captured responses.** Scribe invokes your endpoint (transaction-wrapped, `.env.docs`
-  isolated) and shows the genuine JSON your API returns, including anything computed at runtime that
-  static analysis can't see. Docuccino never runs your code, so its examples are inferred or authored —
-  it uses your real traffic the other way round, holding the responses your *test suite* already
-  produces to the document rather than turning them into examples
-  ([contract testing](/laravel/guides/contract-testing/)).
+- **Real captured responses from the generator itself.** Scribe invokes your endpoint
+  (transaction-wrapped, `.env.docs` isolated) and shows the genuine JSON your API returns, including
+  anything computed at runtime that static analysis can't see — and it does that for every documented
+  endpoint, whether or not you have tests. Docuccino can publish genuine payloads too, but only ones
+  your test suite produced and you committed
+  ([recorded examples](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)), so
+  an endpoint no test exercises still gets an inferred or authored example. If your HTTP coverage is
+  thin, Scribe reaches further here.
 - **Factory-driven examples.** `@apiResourceModel states=… with=…` builds examples from your real
   factories, with states, eager-loaded relations and pivot data. Docuccino has no equivalent — it
   documents the response's *shape*, not a rendered instance of it.
@@ -290,9 +295,9 @@ carefully before you switch — for some teams they're the whole reason to stay.
 <Aside type="tip">
 The honest summary: Scribe optimizes for a documentation *page* a human enjoys reading, and gets real
 payloads by running your app to do it. Docuccino optimizes for a machine-readable *contract* — reusable
-`components/schemas`, byte-stable output you commit, and a semantic diff you can gate CI on — and
-accepts inferred examples as the price of never executing your code. Pick the one whose primary
-artifact is the one you actually need; some teams genuinely want both.
+`components/schemas`, byte-stable output you commit, and a semantic diff you can gate CI on — and takes
+its real payloads from the test suite you already run rather than by executing your app itself. Pick
+the one whose primary artifact is the one you actually need; some teams genuinely want both.
 </Aside>
 
 ## Running them side by side

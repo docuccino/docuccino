@@ -47,25 +47,29 @@ trait AssertsApiContract
     /**
      * The response matches the schema the contract documents for its status and media type.
      *
+     * `recordAs:` names the scenario this test set up — `recordAs: 'empty-cart'` — so that a suite
+     * with the recorder on publishes it as that entry of the operation's `examples` map rather than
+     * competing with every other response for the one unnamed slot. Ignored when nothing is recording.
+     *
      * @param  TestResponse<Response>  $response
      * @return TestResponse<Response>
      */
-    public function assertValidResponse(TestResponse $response): TestResponse
+    public function assertValidResponse(TestResponse $response, ?string $recordAs = null): TestResponse
     {
-        ApiContract::assertExchange($response, false, true);
+        ApiContract::assertExchange($response, false, true, $recordAs);
 
         return $response;
     }
 
     /**
-     * Both halves at once.
+     * Both halves at once. `recordAs:` names the scenario, as on {@see assertValidResponse()}.
      *
      * @param  TestResponse<Response>  $response
      * @return TestResponse<Response>
      */
-    public function assertValidExchange(TestResponse $response): TestResponse
+    public function assertValidExchange(TestResponse $response, ?string $recordAs = null): TestResponse
     {
-        ApiContract::assertExchange($response, true, true);
+        ApiContract::assertExchange($response, true, true, $recordAs);
 
         return $response;
     }

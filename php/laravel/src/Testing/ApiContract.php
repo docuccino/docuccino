@@ -66,6 +66,23 @@ final class ApiContract
         self::$observers[] = $observer;
     }
 
+    /**
+     * Record what this run's responses look like, as the examples the document publishes.
+     *
+     * One line in a test bootstrap and the suite starts writing a committed file per operation; the
+     * build reads those files, and goes on executing nothing. Pass a directory to override
+     * `examples.recordings`. See {@see ExampleRecorder} for what gets chosen and what gets redacted,
+     * and `recordAs:` on the response assertions for publishing several named scenarios at once.
+     */
+    public static function record(?string $directory = null): ExampleRecorder
+    {
+        $recorder = new ExampleRecorder($directory);
+
+        self::observe($recorder);
+
+        return $recorder;
+    }
+
     /** The assertions as an object, for a test that cannot use the trait. */
     public static function assertions(): ContractAssertions
     {
@@ -135,11 +152,13 @@ final class ApiContract
      * Match the exchange to its documented operation, check the halves asked for, tell the observers,
      * and fail the test when the contract and the exchange disagree — in that order, so an observer
      * sees a failing exchange as well as a passing one.
-     */
-    /**
+     *
+     * `$recordAs` names the scenario for {@see ExampleRecorder}, and is ignored by a suite that is not
+     * recording.
+     *
      * @param  TestResponse<Response>  $response
      */
-    public static function assertExchange(TestResponse $response, bool $checkRequest, bool $checkResponse): void
+    public static function assertExchange(TestResponse $response, bool $checkRequest, bool $checkResponse, ?string $recordAs = null): void
     {
         $index = self::index();
         $request = self::requestFor($response);
@@ -156,7 +175,7 @@ final class ApiContract
             ));
         }
 
-        self::notify(new ObservedExchange($operation, $exchange, $request, $response, $result));
+        self::notify(new ObservedExchange($operation, $exchange, $request, $response, $result, $recordAs));
 
         $failures = $result->failures();
 
@@ -182,16 +201,16 @@ final class ApiContract
             return $this;
         });
 
-        TestResponse::macro('assertValidResponse', function (): TestResponse {
+        TestResponse::macro('assertValidResponse', function (?string $recordAs = null): TestResponse {
             /** @var TestResponse<Response> $this */
-            ApiContract::assertExchange($this, false, true);
+            ApiContract::assertExchange($this, false, true, $recordAs);
 
             return $this;
         });
 
-        TestResponse::macro('assertValidExchange', function (): TestResponse {
+        TestResponse::macro('assertValidExchange', function (?string $recordAs = null): TestResponse {
             /** @var TestResponse<Response> $this */
-            ApiContract::assertExchange($this, true, true);
+            ApiContract::assertExchange($this, true, true, $recordAs);
 
             return $this;
         });

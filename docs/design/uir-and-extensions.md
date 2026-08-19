@@ -543,6 +543,84 @@ declaration could name already exists), confines an `#[Example(file:)]` path thr
 `ConfinedPath` `#[DescriptionFromFile]` uses, and registers the resolved path as a route dependency
 whether or not the read worked — so creating a file that wasn't there rebuilds the route.
 
+**Recorded examples.** A test suite already exercises real endpoints with real data, and the
+contract-testing observer seam (`Laravel\Testing\Contracts\ContractObserver`) already holds the
+request, the response and the matched operation. `Laravel\Testing\ExampleRecorder` writes each
+observed exchange to a committed file per operation, and `Laravel\Extensions\RecordedExamplesExtension`
+reads it back at build time. Reading a committed file is ALL the build does — no test runs, no route is
+dispatched, no database is opened — so "Docuccino never executes your application code" is unchanged.
+The file format, the store, the redaction and the whole-document audit are core
+(`Core\Examples\*`): the input is a data file rather than Laravel code, exactly as for the content
+subsystem. Five decisions carry the feature:
+
+- **Curation is the author's, and it happens in the diff.** The recorder narrows a suite's many
+  responses to one candidate per (status, media type, name) and the human reviews the committed file. The
+  narrowing is a function of the bodies and never of the run: only an exchange whose RESPONSE half was
+  checked and passed is recorded (so a body cannot illustrate a schema it contradicts), and the winner
+  is the most POPULATED body, then the shorter, then the lexicographically smaller —
+  `RecordedExample::outranks()`. A first-come rule would let reordering a test file change a published
+  example, which is the same defect `ComponentNames` exists to prevent, one node down.
+- **A committed body is rewritten only when its SHAPE changes** (`ResponseShape`, keyed into
+  `ExampleRecording::with()`). A `created_at`, a UUID or an autoincrement key moves the body on every
+  run and the structure on none of them, so re-recording an unchanged suite is a no-op on the file and
+  therefore on the artifact. That, plus the file being committed, is the whole determinism answer:
+  nothing is normalised away and nothing is guessed at.
+- **Credentials are replaced on the way out, and re-checked on the way in.**
+  `Core\Examples\ExampleRedaction` reuses `Lint\SensitiveFieldLintOptions` and `Lint\CredentialShapes` rather than
+  re-deriving them — one table, so an application that taught the lint its own names has taught the
+  recorder too. Only STRINGS are replaced, so a `token_count` keeps its type and the example goes on
+  satisfying its schema; a sensitive member name taints everything beneath it. The build refuses to
+  publish a committed body that still matches (a hand edit, or a heuristic added since) and
+  `examples.recording-unsafe` names the pointer, never the value.
+- **The example is the MEDIA TYPE's, not the schema's.** `SharedErrorResponses` strips
+  `content[<media type>].example` before it groups, so a recording written into the schema would key the
+  hoist and could drop an unrelated route's 404 out of its shared component and back inline.
+  `setExample()` is first-writer-wins and carries no provenance record — that is the cost, and it is the
+  same one every media-type example already pays — so the `integration` rung is settled by the DRAFT
+  rather than by the extension: `setExample()`/`illustrateExamples()` fill the illustration bags,
+  `declareExamples()` fills the declaration bags, and `ResponseDraft::freeze()` publishes a declaration
+  over an illustration whichever ran first, which is why nothing here depends on the recorded extension
+  running before or after `AttributeExamplesExtension`.
+- **A recording may be NAMED, and a name is what decides which member it publishes into.** A test names
+  the scenario it set up (`assertValidResponse(recordAs: 'empty-cart')`); named recordings publish
+  together as the media type's `examples` map, unnamed ones as the singular `example`, and naming one
+  scenario for a (status, media type) drops the unnamed candidate for it — OAS carries `example` or
+  `examples` and never both, so a file keeping one would keep something the document cannot publish
+  (`ExampleRecording::normalised()`). A name is never derived from the test's name: renaming a test would
+  then rename a published example. `ResponseDraft::freeze()` resolves the rest — a declared map takes
+  named illustrations into it (a name passed at a call site is a name somebody CHOSE, unlike a key of our
+  own) and wins every key it also spells, while a declared singular publishes alone, since filing a
+  recording beside it would mean inventing a name for the AUTHOR'S example. The exception is the hoist:
+  `SharedErrorResponses` leaves a media type already carrying an `examples` map whole, so on a status it
+  groups (`SharedErrorResponses::shares()` — the same grammar, read once) the names are not published at
+  all, the best body goes out as the singular `example`, and `examples.recording-name-unpublished` says
+  so.
+
+Two supporting notes. `RouteContext::$operationId` carries the already-minted id into the draft phase,
+because a recording is filed under identity (so it survives a route rename) and deriving the id a second
+time is how two answers to "which operation is this" start disagreeing; the recording file joins
+`RouteContext::dependencies()` whether or not it exists, so creating one invalidates exactly as editing
+one does. And every recording DIAGNOSTIC comes from `Core\Examples\RecordedExampleAudit`, a
+`DocumentTransformer`: only a whole-document pass can tell a recording nobody claimed from one that is
+simply another operation's, and a transformer runs on every build, so warm reports what cold reports
+without any of it having to ride a cached fragment.
+
+Recording under a PARALLEL runner is allowed where coverage is not, and the difference is not a
+loosened rule but a different question. Coverage is a whole-suite aggregate no worker can take: none of
+them knows when the others have finished, and merging fixes the data rather than the timing. A recording
+is per-operation, and `outranks()` is a total order on the bodies themselves, so the best of a set does
+not depend on which worker met which member of it — workers only have to take turns.
+`Core\Examples\SharedRecordingLedger` gives them one: an exclusive `flock` on a lock file of its own
+(the recording is replaced by a rename, so a lock held ON it is a lock on a discarded inode), around a
+read-compare-write against a scratch SESSION holding the file as it stood before the run plus the run's
+best per key. The session is what makes the answer equal the single-process one: the shape rule compares
+against what was COMMITTED, which a worker cannot recover from a file another worker has already
+rewritten. Both live under the system temp directory keyed by the recordings directory and by the run
+(`ParallelRun::runKey()`, the worker's parent process — the one thing every worker of a run agrees on
+and no later run repeats), so a second run starts from the file as it stands and neither ever appears in
+the tree an author commits. Where the platform cannot name the run, or the lock cannot be taken,
+recording refuses and writes nothing: a half-merged recording is worse than none.
+
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
 throws. `ImplicitResponsesExtension` (adapter, Errors phase, `Priorities::LATE`) synthesizes those from

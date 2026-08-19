@@ -28,10 +28,11 @@ use JsonException;
  * or vanishing is stale either way.
  *
  * Storage is a flat directory of `{key}.json` files written atomically (temp file + rename), each
- * stamped with {@see FORMAT} — the shape of what a fragment carries. Bump it whenever the fragment gains
- * something a warm build now needs, because an entry written before that member existed reads back as
- * "this route had none", which is a warm build quietly saying less than a cold one. A miss costs one
- * rebuild; a wrong warm answer costs the document.
+ * stamped with {@see FORMAT} — the shape of what a fragment carries, and how it is written. Bump it
+ * whenever the fragment gains something a warm build now needs, because an entry written before that
+ * member existed reads back as "this route had none", which is a warm build quietly saying less than a
+ * cold one; bump it for a change to the encoding too, since an entry written by a lossier one restores
+ * different values. A miss costs one rebuild; a wrong warm answer costs the document.
  *
  * Dependency hashing goes through {@see FileDigests}, so one build hashes each file once — one cache
  * instance is one build's worth of memo, and callers get a fresh one per build.
@@ -41,7 +42,7 @@ use JsonException;
 final readonly class FragmentCache
 {
     /** The entry format {@see get()} will read. An entry stamped anything else is a miss. */
-    public const FORMAT = 4;
+    public const FORMAT = 5;
 
     /**
      * The manifest's stand-ins for the two things a digest cannot be. Neither can be mistaken for one:
@@ -142,13 +143,22 @@ final readonly class FragmentCache
             $dependencies[] = ['file' => $file, 'hash' => $this->recorded($file)];
         }
 
+        // What goes in has to come back out as the same PHP value, and `json_encode`'s defaults do not
+        // manage that for a float: a whole one writes as `1` and restores as an int, and the rest follow
+        // the ambient `serialize_precision`, which is the host deciding what a warm build says.
+        $precision = ini_set('serialize_precision', '-1');
+
         try {
             $payload = json_encode(
                 ['format' => self::FORMAT, 'fragment' => $fragment->toArray(), 'dependencies' => $dependencies],
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION,
             );
         } catch (JsonException) {
             return;
+        } finally {
+            if (is_string($precision)) {
+                ini_set('serialize_precision', $precision);
+            }
         }
 
         $this->writeAtomically($this->file($key), $payload);

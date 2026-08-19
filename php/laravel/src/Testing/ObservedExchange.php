@@ -23,6 +23,8 @@ final readonly class ObservedExchange
 {
     /**
      * @param  TestResponse<Response>  $response
+     * @param  string|null  $recordAs  what the test called this scenario, when it said — the one thing
+     *                                 here the assertion did not work out for itself
      */
     public function __construct(
         public ContractOperation $operation,
@@ -30,6 +32,7 @@ final readonly class ObservedExchange
         public Request $request,
         public TestResponse $response,
         public CheckResult $result,
+        public ?string $recordAs = null,
     ) {}
 
     /** The stable operation id — null only when the artifact carries no identities. */

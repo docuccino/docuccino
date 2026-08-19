@@ -56,6 +56,11 @@ email is sent. That's the trust argument: documenting a payment endpoint can't c
 generating docs in CI needs no seed data and has no side effects. It's also what makes the output
 deterministic — there's no runtime state to vary between runs.
 
+That holds for the whole pipeline, including the one place real payloads get in. If you
+[record your test suite's responses](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)
+as examples, the running happens in your suite, where it already happened; the build reads the
+committed file and nothing else.
+
 Because the analysis follows types rather than executing calls, it traces *through* your helper
 methods: a query builder assembled a few methods deep is still understood, an inline
 `Validator::make(...)` still yields real parameters, and an exception thrown by a service the

@@ -6,6 +6,8 @@ namespace Docuccino\Laravel;
 
 use Composer\InstalledVersions;
 use Docuccino\Core\Content\ContentCompiler;
+use Docuccino\Core\Examples\ExampleRedaction;
+use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Inference\TypeEngine;
@@ -13,7 +15,6 @@ use Docuccino\Core\Lint\LintRuleOptions;
 use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
-use Docuccino\Core\Lint\SensitiveFieldLintOptions;
 use Docuccino\Core\Lint\UndocumentedTagLint;
 use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
@@ -27,9 +28,11 @@ use Docuccino\Laravel\Commands\MemoryLimitOption;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Config\LeakageOptions;
 use Docuccino\Laravel\Engine\ConsoleBuild;
 use Docuccino\Laravel\Engine\EnginePackage;
 use Docuccino\Laravel\Engine\TypeEngineFactory;
+use Docuccino\Laravel\Extensions\RecordedExamplesExtension;
 use Docuccino\Laravel\Http\DocsController;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
 use Docuccino\Laravel\Integrations\JsonApiPaginate\JsonApiPaginateConfig;
@@ -253,29 +256,19 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
 
         // The data-leakage lint itself is framework-agnostic core; the adapter just maps
         // docuccino.lint.leakage.* onto its options.
-        $this->app->bind(SensitiveFieldLint::class, static function (): SensitiveFieldLint {
-            /** @var array<string, mixed> $leakage */
-            $leakage = (array) config('docuccino.lint.leakage', []);
-            $allow = is_array($leakage['allow'] ?? null) ? array_values(array_filter($leakage['allow'], 'is_string')) : [];
+        $this->app->bind(SensitiveFieldLint::class, static fn (): SensitiveFieldLint => new SensitiveFieldLint(
+            LeakageOptions::fromConfig(self::leakageConfig()),
+        ));
 
-            $options = new SensitiveFieldLintOptions(
-                enabled: ($leakage['enabled'] ?? true) !== false,
-                allow: $allow,
-            );
+        // Recorded examples read the same heuristics table, minus its off switch: turning a report off
+        // is not a request to publish credentials.
+        $this->app->bind(ExampleRedaction::class, static fn (): ExampleRedaction => new ExampleRedaction(
+            LeakageOptions::fromConfig(self::leakageConfig(), honourSwitch: false),
+        ));
 
-            // Extra token → label heuristics merge over the defaults; existing tokens keep their label.
-            $patterns = [];
-            foreach (is_array($leakage['patterns'] ?? null) ? $leakage['patterns'] : [] as $token => $label) {
-                if (is_string($token) && is_string($label)) {
-                    $patterns[$token] = $label;
-                }
-            }
-            if ($patterns !== []) {
-                $options = $options->withPatterns($patterns);
-            }
-
-            return new SensitiveFieldLint($options);
-        });
+        $this->app->when([RecordedExampleAudit::class, RecordedExamplesExtension::class])
+            ->needs('$basePath')
+            ->give(fn (): string => $this->app->basePath());
 
         // The completeness lints share one options shape, so they share one reader; each is core, and
         // the adapter only maps its docuccino.lint.<key> bag onto it.
@@ -412,6 +405,17 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
      * One `docuccino.lint.<key>` bag as rule options. `$default` is the rule's own answer when the key
      * is absent, so a config file predating the rule keeps whatever shipped with it.
      */
+    /**
+     * @return array<string, mixed>
+     */
+    private static function leakageConfig(): array
+    {
+        /** @var array<string, mixed> $leakage */
+        $leakage = (array) config('docuccino.lint.leakage', []);
+
+        return $leakage;
+    }
+
     private static function lintRule(string $key, bool $default): LintRuleOptions
     {
         /** @var array<string, mixed> $rule */

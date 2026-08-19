@@ -285,6 +285,9 @@ final class DocumentGenerator
         $path = $this->oasPath($descriptor->uri);
         // Naming the specific method keeps multi-method routes' diagnostics distinct.
         $signature = $descriptor->signature($method);
+        // Minted here rather than at freeze time, so an extension keyed on the operation's identity
+        // reads the same string the node ends up carrying instead of deriving a second one.
+        $operationId = $this->identity->operationId($documentId, $method, $path, $descriptor->domain);
 
         // The method is part of the cache key: GET query vs POST body are different fragments with
         // different operation identities.
@@ -307,6 +310,7 @@ final class DocumentGenerator
                 $resolved,
                 $components,
                 $method,
+                $operationId,
             );
 
             if ($context === null) {
@@ -318,7 +322,7 @@ final class DocumentGenerator
             $operation = new OperationDraft;
             $this->pipeline->run($operation, $context, $resolved);
             $diagnostics = $this->analysisDiagnostics($context, $signature);
-            $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
+            $this->assignIds($operation, $operationId);
 
             $frozen = $operation->freeze();
             [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases, $referencedSecuritySchemes, $referencedResponseBases, $referencedSchemeBases] = $this->componentClosure($frozen->toArray(), $components);
@@ -681,14 +685,13 @@ final class DocumentGenerator
 
         $operation = new OperationDraft;
         $operation->setDescription('Documentation could not be generated for this route.', Contribution::fallback());
-        $this->assignIds($operation, $documentId, $method, $path, $descriptor->domain);
+        $this->assignIds($operation, $this->identity->operationId($documentId, $method, $path, $descriptor->domain));
 
         return new OperationFragment($path, $method, $operation->freeze(), $signature);
     }
 
-    private function assignIds(OperationDraft $operation, string $documentId, string $method, string $path, ?string $host = null): void
+    private function assignIds(OperationDraft $operation, string $operationId): void
     {
-        $operationId = $this->identity->operationId($documentId, $method, $path, $host);
         $operation->assignId($operationId);
         $operation->assignChildIds(
             fn (string $in, string $name): string => $this->identity->parameterId($operationId, $in, $name),

@@ -332,6 +332,23 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The directory of committed response recordings, from `examples.recordings`, or null when the
+     * document publishes none. May be relative; the adapter confines it against the app base path the
+     * same as {@see contentDir()}.
+     *
+     * Reading files out of it is the whole of what a build does with a test suite's traffic — nothing
+     * is executed and nothing is fetched. Absent is the default, so a document publishes a recorded
+     * example only once someone has said where the recordings live.
+     */
+    public function recordingsDir(): ?string
+    {
+        $examples = is_array($this->raw['examples'] ?? null) ? $this->raw['examples'] : [];
+        $dir = $examples['recordings'] ?? null;
+
+        return is_string($dir) && $dir !== '' ? $dir : null;
+    }
+
+    /**
      * Where `docuccino:export` writes and the viewer's `artifact` source reads, from `export.path`,
      * defaulting to `docs/openapi.json`. May be relative — the adapter resolves it against the app
      * base path.

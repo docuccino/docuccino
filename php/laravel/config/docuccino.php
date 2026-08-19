@@ -104,6 +104,12 @@ return [
                 'dir' => null, // e.g. 'resources/docs/api'
             ],
 
+            // Response bodies your test suite recorded, published as examples. The build only ever
+            // READS these committed files — nothing is executed and no database is touched; the
+            // recording is written by your suite (ApiContract::record()). Absent means the document
+            // publishes no recorded examples.
+            // 'examples' => ['recordings' => 'docs/recordings'],
+
             // Overlay 1.0 documents applied to the finished build (globs, relative to the base path).
             'overlays' => [
                 // 'resources/docs/overlays/*.yaml',
@@ -228,7 +234,8 @@ return [
         'leakage' => [
             'enabled' => true,
             // Property names or JSON pointers to accept, e.g.
-            // ['reset_token', '#/components/schemas/Invoice/properties/status'].
+            // ['reset_token', '#/components/schemas/Invoice/properties/status']. A name silences this
+            // lint only; the response recorder redacts by name regardless and honours a pointer alone.
             'allow' => [],
             // Extra heuristics, merged over the built-in table (built-in tokens keep their label).
             // Key = a token matched anywhere inside a property name, value = the label in the message.
