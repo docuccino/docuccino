@@ -196,6 +196,51 @@ it('says so, and what it does not mean, when an operation recorded nothing', fun
         ->and($output)->toContain('`--provenance` only decides how much of it');
 });
 
+/**
+ * A `--field` query on an operation that recorded nothing has no list to answer with, and the two
+ * halves of the no-match report — a table of the fields on offer, and a command naming the first of
+ * them — are both a read of that list. It says why the list is empty instead.
+ */
+it('answers a field query on an empty trail without a list it does not have', function (): void {
+    $exit = Artisan::call('docuccino:explain', ['route' => 'GET /api/ping', '--field' => 'nosuchfield', 'document' => 'default']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('No field matches "nosuchfield" on GET /api/ping.')
+        ->and($output)->toContain('No provenance recorded for this operation.')
+        // Neither the header rule over no rows, nor a command naming a field that does not exist.
+        ->and($output)->not->toContain('Field  Rung')
+        ->and($output)->not->toContain('--field=');
+});
+
+it('publishes an empty trail as an empty field list rather than a crash', function (): void {
+    $exit = Artisan::call('docuccino:explain', ['route' => 'GET /api/ping', '--field' => 'nosuchfield', 'document' => 'default', '--json' => true]);
+
+    /** @var array<string, mixed> $payload */
+    $payload = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($exit)->toBe(1)
+        ->and($payload['status'])->toBe('no-match')
+        ->and($payload['fields'])->toBe([]);
+});
+
+/**
+ * The sibling of the above on the route argument: a document that publishes nothing still has to
+ * answer, so the spellings are shown against a placeholder and the exit code is the same 1.
+ */
+it('answers a route query against a document that published nothing', function (): void {
+    config()->set('docuccino.documents.empty', config('docuccino.documents.default'));
+    config()->set('docuccino.documents.empty.routes.include', ['api/no-route-answers-this']);
+
+    $exit = Artisan::call('docuccino:explain', ['route' => 'api/nowhere', 'document' => 'empty']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('No operation matches "api/nowhere".')
+        ->and($output)->toContain('0 operations are published. Name one by:')
+        ->and($output)->toContain('method + URI');
+});
+
 it('names the document an answer is about when several are configured', function (): void {
     config()->set('docuccino.documents.public', config('docuccino.documents.default'));
     config()->set('docuccino.documents.public.routes.include', ['api/tickets']);

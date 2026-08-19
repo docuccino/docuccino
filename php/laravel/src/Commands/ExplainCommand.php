@@ -179,7 +179,8 @@ final class ExplainCommand extends Command
 
     /**
      * Nothing matched, or too much did. Either way the answer is the field paths this operation
-     * actually has, in the same layout the ambiguous-route list uses.
+     * actually has, in the same layout the ambiguous-route list uses — unless it has none, where the
+     * honest answer is the empty trail rather than an empty list.
      *
      * @param  list<ExplainedNode>  $nodes
      * @param  list<array{0: ExplainedNode, 1: FieldTrail}>  $found
@@ -207,6 +208,16 @@ final class ExplainCommand extends Command
                 : sprintf('%d fields match "%s".', count($found), $query),
             null,
         );
+
+        // No fields to list at all, so the query did not miss — the operation recorded nothing, and
+        // a header rule over no rows plus a command naming a field that does not exist would say it
+        // did.
+        if ($listed === []) {
+            $this->emptyTrail();
+
+            return $exit;
+        }
+
         $this->newLine();
 
         foreach (ConsoleTable::render(['Field', 'Rung'], array_map(static fn (array $pair): array => [
