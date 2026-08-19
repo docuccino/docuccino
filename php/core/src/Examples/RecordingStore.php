@@ -42,9 +42,7 @@ final readonly class RecordingStore
             return null;
         }
 
-        $resolved = str_starts_with($configured, '/')
-            ? $configured
-            : ConfinedPath::resolve($basePath, $configured);
+        $resolved = ConfinedPath::configuredDir($basePath, $configured);
 
         return $resolved === null ? null : new self($resolved);
     }
