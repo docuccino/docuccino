@@ -227,6 +227,11 @@ final class WorkbenchEngine
             ],
             classes: [
                 'Workbench\\App\\Data\\FormData' => $formData,
+                // The webhook payload class, as the engine recovers it from promoted properties.
+                'Workbench\\App\\Webhooks\\FormSubmitted' => new ClassMetadata('Workbench\\App\\Webhooks\\FormSubmitted', [
+                    new PropertyMetadata('formId', ScalarT::int()),
+                    new PropertyMetadata('submittedAt', ScalarT::string()),
+                ]),
                 'Workbench\\App\\Data\\WidgetData' => $widgetData,
                 self::ARTICLE_DATA => new ClassMetadata(self::ARTICLE_DATA, [
                     new PropertyMetadata('id', ScalarT::int()),

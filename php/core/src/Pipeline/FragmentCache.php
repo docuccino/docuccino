@@ -34,7 +34,7 @@ use JsonException;
 final readonly class FragmentCache
 {
     /** The entry format {@see get()} will read. An entry stamped anything else is a miss. */
-    public const FORMAT = 2;
+    public const FORMAT = 3;
 
     public function __construct(
         private bool $enabled,

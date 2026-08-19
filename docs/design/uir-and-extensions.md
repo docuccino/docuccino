@@ -47,6 +47,7 @@ schema's `nodeId` pattern.
 | Kind | Identity inputs (hashed canonical tuple) | Survives | Breaks on |
 |---|---|---|---|
 | `op:` | doc id + upper method + path template with params positionally normalized (`/forms/{p0}/fields/{p1}`) | file moves, controller/method renames, path-param renames, param reorder | URI or method change |
+| `op:` (webhook) | doc id + a `webhook` discriminator + upper method + the webhook NAME verbatim | file moves, class renames | name or method change |
 | `par:` | parent op id + `in` + name | reorder, description/schema edits | rename (a real contract change for query/header) |
 | `sch:` (named) | source FQCN (+ generic args); pinnable via `#[SchemaId('…')]` | file moves | class rename without pin |
 | `sch:` (request body) | the source class identity (pinned id or FQCN) with a `#request` discriminator appended | same as the class identity above — file moves, and rename **with** a pin | class rename without pin |
@@ -54,6 +55,11 @@ schema's `nodeId` pattern.
 | `res:` | parent op id + status + media type | — | status change (correct) |
 | `doc:` | config key | everything | doc renamed in config |
 | `page:` | content page slug | file moves within content dir | slug change |
+
+A webhook is an operation and carries an `op:` id, because that is what the differ pairs on — but it
+is keyed by a name rather than a path, so nothing is normalised away (a webhook has no parameters, and
+every byte of its name is contract) and the discriminator keeps a webhook called `/forms` out of the
+identity the path `/forms` holds.
 
 Never file paths, line numbers, or array positions as identity inputs (those are
 provenance). `operationId` (human-readable OAS field) is separate: route name by default,
@@ -1122,6 +1128,17 @@ an entry written before the member existed cannot distinguish "this route had no
 could not carry them", and reading it as the former is the silent degradation in a new place. A miss costs
 one rebuild.
 
+**A webhook is a fragment too.** `#[Webhook]` classes are discovered per document from
+`webhooks.dir` (`Laravel\Webhooks\WebhookCollector`), and each one is built and cached exactly as a
+route is: keyed on the declaration (`WebhookDeclaration::cacheSignature()`) against the same document
+`configHash` and extension signature, with a dependency manifest of the class's `DeclarationFiles`
+plus whatever the payload conversion recorded through `SchemaContext::dependsOn()`. The alternative —
+rebuilding webhooks on every run because they are document-level — would re-run the analyser over
+every payload class for a build that changed nothing. The split is deliberate: what the ATTRIBUTE says
+(a blank name, an unrepresentable method, two classes claiming one name) is recomputed from reflection
+on every build, because reading it costs nothing; what the ENGINE answered rides the fragment. The
+discovery scan itself is never cached, so a webhook added or deleted is seen the run it happens.
+
 **The extension signature is per INSTANCE.** Extensions are registrable as objects on every surface
 there is (`Registrar::add`, `ExtensionRegistry::extend`, config), so `new MyExtension(mode: 'a')` and
 `mode: 'b'` are two different builds under one class name. `ResolvedExtensions::cacheSignature()`
@@ -1188,4 +1205,3 @@ genuinely theirs (Sanctum's `session.cookie`, Passport's URLs, scopes and grants
 - Generic schema identity (`Paginated<FormData>`): FQCN+args tuple proposed; needs a
   normative cross-language rule in the spec before 1.0.
 - Confidence semantics: recorded-only in v1; spec must document meaning now.
-- Webhooks: in UIR shape, no producer until `#[Webhook]` (v1.1).

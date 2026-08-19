@@ -319,6 +319,19 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The directory `#[Webhook]` classes are discovered under, from `webhooks.dir`, or null when
+     * unset — in which case the document publishes no webhooks. May be relative; the adapter resolves
+     * and confines it against the app base path, the same as {@see contentDir()}.
+     */
+    public function webhooksDir(): ?string
+    {
+        $webhooks = is_array($this->raw['webhooks'] ?? null) ? $this->raw['webhooks'] : [];
+        $dir = $webhooks['dir'] ?? null;
+
+        return is_string($dir) && $dir !== '' ? $dir : null;
+    }
+
+    /**
      * Where `docuccino:export` writes and the viewer's `artifact` source reads, from `export.path`,
      * defaulting to `docs/openapi.json`. May be relative — the adapter resolves it against the app
      * base path.

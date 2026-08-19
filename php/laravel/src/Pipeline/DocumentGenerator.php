@@ -11,11 +11,14 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDependencies;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Inference\ReportsBootFailure;
 use Docuccino\Core\Inference\TypeEngine;
@@ -34,6 +37,9 @@ use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Registry\IntegrationToggles;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
+use Docuccino\Laravel\Webhooks\WebhookCollector;
+use Docuccino\Laravel\Webhooks\WebhookDeclaration;
+use Docuccino\Laravel\Webhooks\WebhookOperationBuilder;
 use Illuminate\Contracts\Container\Container;
 use Throwable;
 
@@ -57,6 +63,8 @@ final class DocumentGenerator
         private readonly Assembler $assembler,
         private readonly Validator $validator,
         private readonly ContentCompiler $contentCompiler,
+        private readonly WebhookCollector $webhooks,
+        private readonly WebhookOperationBuilder $webhookBuilder,
         private readonly string $generatorVersion,
         ?FragmentCache $cache = null,
         private readonly IdentityGenerator $identity = new IdentityGenerator,
@@ -126,6 +134,19 @@ final class DocumentGenerator
                     $bag->addAll($fragment->diagnostics);
                     $this->collectNotes($fragment, $resolved);
                 }
+            }
+        }
+
+        // Webhooks are document-level — no route reaches them — but each one is still an operation, so
+        // it travels as a fragment and is cached, restored and reported exactly like a route's.
+        [$declarations, $webhookDiagnostics] = $this->webhooks->collect($document);
+        $bag->addAll($webhookDiagnostics);
+
+        foreach ($declarations as $declaration) {
+            $fragment = $this->processWebhook($declaration, $document, $documentId, $engine, $resolved, $components, $bag, $configHash, $extensionClasses);
+            if ($fragment !== null) {
+                $fragments[] = $fragment;
+                $bag->addAll($fragment->diagnostics);
             }
         }
 
@@ -319,6 +340,100 @@ final class DocumentGenerator
             $components->restore($snapshot);
 
             return $this->onFailure($descriptor, $document, $documentId, $path, $method, $exception->getMessage(), $bag);
+        }
+    }
+
+    /**
+     * One webhook, through the same cache, component registry and diagnostic channel a route uses.
+     *
+     * There is no route and no action to analyse, so the fragment's dependency manifest is what the
+     * declaration read plus what the payload conversion recorded through `SchemaContext::dependsOn()`
+     * — the class's own hierarchy, and every file the schema it produced was built from. Everything
+     * the build reports rides the fragment, so a warm hit says what a cold one said.
+     *
+     * @param  list<string>  $extensionClasses
+     */
+    private function processWebhook(
+        WebhookDeclaration $webhook,
+        DocumentConfig $document,
+        string $documentId,
+        TypeEngine $engine,
+        ResolvedExtensions $resolved,
+        ComponentRegistry $components,
+        DiagnosticCollector $bag,
+        string $configHash,
+        array $extensionClasses,
+    ): ?OperationFragment {
+        $cacheKey = $this->cache->key($webhook->cacheSignature(), $configHash, $extensionClasses);
+        $cached = $this->cache->get($cacheKey);
+        if ($cached !== null) {
+            return $this->restoreComponents($cached, $components);
+        }
+
+        $snapshot = $components->snapshot();
+
+        try {
+            $dependencies = new RouteDependencies;
+            $dependencies->addFiles($webhook->files);
+
+            $converter = new SchemaConverter(
+                $resolved->typeToSchema,
+                $engine,
+                $components,
+                RepresentationPolicy::fromConfig($document->representation, $document->integration('api_resources')['wrap'] ?? null),
+                $dependencies,
+            );
+
+            $diagnostics = [];
+            $operation = $this->webhookBuilder->build($webhook, $document, $converter, $webhook->source, $diagnostics);
+
+            $operationId = $this->identity->webhookId($documentId, $webhook->method, $webhook->name);
+            $operation->assignId($operationId);
+            $operation->assignChildIds(
+                fn (string $in, string $name): string => $this->identity->parameterId($operationId, $in, $name),
+                fn (string $status, string $mediaType): ?string => $mediaType === '' ? null : $this->identity->responseId($operationId, $status, $mediaType),
+            );
+
+            $frozen = $operation->freeze();
+            [$referencedSchemas, $referencedSchemaIds, $referencedResponses, $referencedSchemaBases, $referencedSecuritySchemes, $referencedResponseBases, $referencedSchemeBases] = $this->componentClosure($frozen->toArray(), $components);
+
+            $diagnostics = [...$diagnostics, ...$components->takeDiagnosticsSince($snapshot)];
+
+            $fragment = new OperationFragment(
+                path: $webhook->name,
+                method: $webhook->method,
+                operation: $frozen,
+                routeSignature: $webhook->signature(),
+                diagnostics: $diagnostics,
+                componentSchemas: $referencedSchemas,
+                componentSchemaIds: $referencedSchemaIds,
+                componentResponses: $referencedResponses,
+                componentSchemaBases: $referencedSchemaBases,
+                componentSecuritySchemes: $referencedSecuritySchemes,
+                componentResponseBases: $referencedResponseBases,
+                componentSecuritySchemeBases: $referencedSchemeBases,
+                webhook: true,
+            );
+
+            if (! self::degraded($engine)) {
+                $files = array_values(array_unique($dependencies->files()));
+                sort($files);
+                $this->cache->put($cacheKey, $fragment, $files);
+            }
+
+            return $fragment;
+        } catch (Throwable $exception) {
+            $components->restore($snapshot);
+
+            $bag->add(new Diagnostic(
+                severity: Severity::Error,
+                code: 'webhook.build-failed',
+                message: sprintf('Failed to document the webhook "%s": %s', $webhook->name, $this->messagePaths->relative($exception->getMessage())),
+                routeSignature: $webhook->signature(),
+                help: 'The webhook is not in the document.',
+            ));
+
+            return null;
         }
     }
 

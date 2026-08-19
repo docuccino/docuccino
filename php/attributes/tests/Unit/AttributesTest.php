@@ -30,6 +30,7 @@ use Docuccino\Attributes\SchemaId;
 use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Webhook;
 
 /**
  * A fixture carrying repeated + stacked attributes, reflected below to prove repeatability is
@@ -86,6 +87,7 @@ function attributeCatalogue(): array
         'DescriptionFromFile' => [DescriptionFromFile::class, $classFn | Attribute::TARGET_PROPERTY],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
+        'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
     ];
 }
 
@@ -136,7 +138,7 @@ function defaultArgs(string $class): array
         CookieParameter::class, BodyParameter::class, Group::class,
         IgnoreParam::class, ResponseHeader::class => ['name'],
         OperationId::class, SchemaId::class => ['id'],
-        SchemaName::class, Security::class, ErrorComponent::class => ['name'],
+        SchemaName::class, Security::class, ErrorComponent::class, Webhook::class => ['name'],
         CaseDescription::class => ['a description'],
         IgnoreResponse::class => [200],
         DescriptionFromFile::class => ['docs/x.md'],
@@ -169,4 +171,25 @@ it('legally stacks repeatable attributes on one symbol', function (): void {
 
     expect($responses[0]->newInstance()->status)->toBe(200)
         ->and($responses[1]->newInstance()->status)->toBe(404);
+});
+
+// The catalogue above calls itself the full attribute set, which is only true while someone keeps it
+// that way. `#[Webhook]` shipped without an entry and the dataset still passed, because a dataset
+// only ever proves the rows it lists. This reads the directory instead, so a new attribute fails
+// here until it is catalogued.
+it('catalogues every attribute the package ships', function (): void {
+    $shipped = [];
+    foreach (glob(__DIR__.'/../../src/*.php') ?: [] as $file) {
+        $shipped[] = 'Docuccino\\Attributes\\'.basename($file, '.php');
+    }
+    sort($shipped);
+
+    $catalogued = array_map(
+        static fn (array $row): string => $row[0],
+        array_values(attributeCatalogue()),
+    );
+    sort($catalogued);
+
+    expect($shipped)->not->toBeEmpty()
+        ->and($catalogued)->toBe($shipped);
 });
