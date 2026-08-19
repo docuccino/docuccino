@@ -502,6 +502,14 @@ don't, they become an `examples` map keyed from each body's own content, so addi
 endpoint never renames another one's example. A difference in `description`, though, *does* keep two
 responses apart: that is what the response says, not how it is illustrated.
 
+Names you chose yourself survive that merge. Where an operation's error carries
+[`#[Example(name: …)]`](/laravel/documenting/responses/#example-payloads), the shared response
+publishes your key next to the generated ones, so annotating one route never changes what the others
+publish. The exception is two operations giving one name to two different examples: only you can say
+which body that name means, so those responses are left where they are and the build reports
+`components.example-name-conflict` naming the key. Rename one, or make them agree, and the operations
+share a component again.
+
 Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
 meaning, never by value — so throttled routes share both.
 

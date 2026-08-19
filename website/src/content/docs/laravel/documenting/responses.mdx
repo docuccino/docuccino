@@ -495,6 +495,12 @@ content type:
 public function show(Invoice $invoice): InvoiceResource { /* … */ }
 ```
 
+Where that error body is one other endpoints return too, it is
+[hoisted into a shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components),
+and your name goes with it: the shared response publishes `not-found` beside the keys generated for
+endpoints that illustrated the same body without naming anything. Annotating one endpoint never changes
+what another publishes.
+
 Request bodies and parameters take examples the same way — see
 [Example payloads on requests](/laravel/documenting/requests/#example-payloads).
 

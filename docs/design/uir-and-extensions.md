@@ -153,11 +153,32 @@ dropping all but one. A single illustration therefore keeps the singular member:
 mint a key nobody asked for, and the bytes an unmerged document already published are the simplest
 thing that says it.
 
+**An authored `examples` map is illustration too, and its NAMES survive the merge.** Keeping such a map
+in the key looked like the careful answer — those keys were chosen by whoever wrote them and a document
+has published them — and it was the wrong one, because it made a response's identity a function of who
+had annotated it. Two operations answering 403 identically shared one `Error403`; naming an example on
+ONE of them split the group, pushed the other's body back inline and retired the component both were
+referencing. A `#[Example(name:)]` on one route rewrote an unrelated route's bytes, and deleted a name a
+generated client had been written against. It bit at exactly two arms — three or more left a pair still
+agreeing — which is the common case, not the exotic one.
+
+So the map comes off the key and the names travel with it. The shared component publishes the author's
+own keys, plus a minted one per illustration nobody named; minting is handed the authored names as
+taken, so the two kinds of key can never displace one another and no illustration is lost to a
+collision. An author's key is already a function of their declaration, so it disturbs nothing that
+`ComponentNames` would not — and it reads far better than a hash.
+
+The one case nothing here can settle is two arms giving one name to two different examples. Publishing
+either would put one arm's body behind the other's label and dropping one loses an illustration, so the
+arms are not merged: each keeps its own body, and the build reports
+`components.example-name-conflict` naming the contested key. That is a shared component the document no
+longer has, so silence would leave an author looking at a name that quietly stopped existing.
+
 Two limits, both about not claiming more than is true. An example only illustrates something when a
 schema is there to be illustrated, so a media type stating an example and NO shape keeps it in the key
-— that example is the only claim the media type makes. And a media type already carrying an `examples`
-map is left whole: those keys were chosen by whoever wrote them and a document has published them, so
-rewriting one would be exactly the failure this area exists to prevent.
+— that example is the only claim the media type makes. And a media type stating BOTH `example` and
+`examples` is left whole: OpenAPI already calls that document wrong, and this pass has no business
+tidying it by merging half of it away.
 
 Nothing merged this way can become false. The key still holds every media type and every `schema` in
 it, so each example goes on sitting beside precisely the schema it was written against — the merge
@@ -167,8 +188,9 @@ nothing. That is the honest reading of responses the document already stated ide
 price of one type instead of one per arm.
 
 **Example keys are minted by `ComponentNames`, from the example's own content.** A key is
-`example_<hash>`, opaque on purpose. For a COMPONENT name opacity is a real cost — a generated client
-is written against it — but no code generator turns an example key into a type, so this is the one
+`example_<hash>` — or plainly `example` where it is the only one asking — opaque on purpose. For a
+COMPONENT name opacity is a real cost — a generated client is written against it — but no code
+generator turns an example key into a type, so this is the one
 place the naming invariant can be paid for in readability rather than in meaning. In exchange the
 locality is absolute: every key is a function of its own body alone, so an arm arriving or leaving adds
 or removes its own key and renames none of the others. (Going from one arm to two does swap the
