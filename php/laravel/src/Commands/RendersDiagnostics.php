@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Commands;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
+use Docuccino\Core\Diagnostics\DiagnosticDocs;
 use Docuccino\Laravel\Config\AcceptedDiagnostics;
 use Docuccino\Laravel\Support\TerminalText;
 use Illuminate\Console\Command;
@@ -30,6 +31,9 @@ trait RendersDiagnostics
 {
     /** @var array<string, true> Every code this run printed, which is what {@see FailsOnSeverity} measures a stale acceptance against. */
     private array $printedCodes = [];
+
+    /** @var array<string, true> Codes whose reference link this run has already shown. */
+    private array $linkedCodes = [];
 
     /**
      * @param  list<Diagnostic>  $diagnostics
@@ -66,6 +70,7 @@ trait RendersDiagnostics
             ));
 
             $this->renderHelp($diagnostic->help);
+            $this->renderReference($diagnostic->code);
         }
 
         $this->renderAccepted($accepted->tally($diagnostics));
@@ -101,6 +106,22 @@ trait RendersDiagnostics
         }
 
         $this->line(sprintf('  <fg=gray>Accepted, so --fail-on ignores them: %s</>', implode(', ', $codes)));
+    }
+
+    /**
+     * Where the code is written up, under its first appearance only. A build that reports one code two
+     * hundred times has one link to follow, not two hundred: the line is worth its place because it is
+     * proportional to the codes a reader actually met, never to how loudly they fired.
+     */
+    private function renderReference(string $code): void
+    {
+        if (isset($this->linkedCodes[$code])) {
+            return;
+        }
+
+        $this->linkedCodes[$code] = true;
+
+        $this->line(sprintf('      <fg=gray>%s</>', DiagnosticDocs::urlFor($code)));
     }
 
     /**
