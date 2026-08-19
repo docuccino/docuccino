@@ -43,9 +43,16 @@ final class DocsController
         $config = $this->config($document);
         $this->authorize($config);
 
-        $rendered = $this->drivers->for($config)->render(new ViewerContext($config));
+        $viewer = $this->drivers->for($config);
+        $rendered = $viewer->render(new ViewerContext($config));
 
-        return $this->response($config, is_string($rendered) ? $this->withReload($rendered, $config) : $rendered);
+        if (is_string($rendered)) {
+            return $this->response($config, $this->withReload($rendered, $config));
+        }
+
+        $this->warnUnreloadable($config, $viewer->name(), $rendered);
+
+        return $this->response($config, $rendered);
     }
 
     /**
@@ -80,16 +87,56 @@ final class DocsController
      */
     private function withReload(string $html, DocumentConfig $config): string
     {
-        $route = $config->viewer['route'] ?? null;
+        $endpoint = $this->reloadEndpoint($config);
 
-        if ($this->signal->token() === null || ! is_string($route) || $route === '') {
+        if ($endpoint === null) {
             return $html;
         }
 
-        $script = ReloadScript::html(url('/'.trim($route, '/').'/reload'));
+        $script = ReloadScript::html($endpoint);
         $position = strripos($html, '</body>');
 
         return $position === false ? $html.$script : substr_replace($html, $script, $position, 0);
+    }
+
+    /**
+     * The channel an open page subscribes to, or null when there is nothing to subscribe to: no watch
+     * session has published a signal, or the document has no viewer route to hang it off. Both the
+     * splice and the warning about a page that misses it read this one answer, so the warning fires
+     * exactly where the subscriber would have gone in.
+     */
+    private function reloadEndpoint(DocumentConfig $config): ?string
+    {
+        $route = $config->viewer['route'] ?? null;
+
+        if ($this->signal->token() === null || ! is_string($route) || $route === '') {
+            return null;
+        }
+
+        return url('/'.trim($route, '/').'/reload');
+    }
+
+    /**
+     * A driver that builds its own response owns the page, live reload included — rewriting a body
+     * this package did not construct could corrupt a response that isn't HTML. Saying nothing is what
+     * costs: the terminal reports rebuild after rebuild while the page never moves. Only worth a word
+     * while a watch session is actually running, and only for a response we could otherwise have
+     * served; anything else is already a driver bug the response path reports.
+     */
+    private function warnUnreloadable(DocumentConfig $config, string $driver, mixed $rendered): void
+    {
+        $endpoint = $this->reloadEndpoint($config);
+
+        if (! $rendered instanceof Response || $endpoint === null) {
+            return;
+        }
+
+        Log::warning(sprintf(
+            'Docuccino viewer "%s" is being watched, but driver "%s" returned its own response rather than HTML, so the live-reload subscriber was not spliced in and the open page will not refresh on a rebuild. Return HTML from the driver to get it, or subscribe your page to "%s" yourself.',
+            $config->key,
+            $driver,
+            $endpoint,
+        ));
     }
 
     public function spec(string $document, TypeEngine $engine, DocumentCache $cache): Response
