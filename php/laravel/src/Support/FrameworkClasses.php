@@ -23,6 +23,9 @@ final class FrameworkClasses
     /** Symfony's HttpFoundation response — the root every framework response class extends. */
     public const RESPONSE_BASE = 'Symfony\\Component\\HttpFoundation\\Response';
 
+    /** The view contract `view()` is declared as returning; Laravel's own view implements it. */
+    public const VIEW_CONTRACT = 'Illuminate\\Contracts\\View\\View';
+
     /**
      * The framework response classes an action is declared as returning. A response OBJECT is transport,
      * not an API contract — reflecting one documents PHP internals (`original`, `exception`, `headers`)
@@ -42,11 +45,31 @@ final class FrameworkClasses
         self::RESPONSE_BASE,
     ];
 
+    /**
+     * The rendered-view classes an action is declared as returning. A view is transport too, but unlike a
+     * response object it proves its own representation — HTML ({@see HtmlRepresentation}). Not exhaustive
+     * either: {@see isView()} also matches any loadable implementation of the contract, which is listed
+     * because `is_subclass_of` does not match the named type itself.
+     *
+     * @var list<string>
+     */
+    public const VIEW_CLASSES = [
+        self::VIEW_CONTRACT,
+        'Illuminate\\View\\View',
+    ];
+
     /** Whether an FQCN names a framework response object rather than a body the API hands back. */
     public static function isResponse(string $fqcn): bool
     {
         return in_array($fqcn, self::RESPONSE_CLASSES, true)
             || is_subclass_of($fqcn, self::RESPONSE_BASE, true);
+    }
+
+    /** Whether an FQCN names a rendered view: transport that serves HTML rather than a body to reflect. */
+    public static function isView(string $fqcn): bool
+    {
+        return in_array($fqcn, self::VIEW_CLASSES, true)
+            || is_subclass_of($fqcn, self::VIEW_CONTRACT, true);
     }
 
     /** Whether an FQCN names a redirect: a 3xx carrying a `Location` header and no body. */

@@ -26,7 +26,7 @@ supported.
 	<LinkCard
 		title="Responses"
 		href="/laravel/documenting/responses/"
-		description="Success responses from your return types — resources, models, enums, JsonResponse payloads, and 204s."
+		description="Success responses from your return types — resources, models, enums, JsonResponse payloads, HTML views, and 204s."
 	/>
 	<LinkCard
 		title="Resources, models & enums"
@@ -92,7 +92,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
-| [Response inference](/laravel/documenting/responses/) | Success responses from your action return types — resources, models, enums, `JsonResponse` payloads with status codes, and `204` | Built in — always on | — |
+| [Response inference](/laravel/documenting/responses/) | Success responses from your action return types — resources, models, enums, `JsonResponse` payloads with status codes, rendered views as `text/html`, and `204` | Built in — always on | — |
 | [API resources](/laravel/documenting/schemas/#api-resources) | Response schemas from `JsonResource` shapes, wrapped per the resource's own `$wrap` | Built in | [`integrations.api_resources.wrap`](/laravel/reference/configuration/#integrations) |
 | [First-party JSON:API resources](/laravel/packages/timacdonald-json-api/#which-one-runs) | JSON:API documents from Laravel's own `JsonApiResource`, plus its `include` / `fields[TYPE]` parameters | Laravel 13+ — activates when the `JsonApiResource` class exists | [`integrations.api_resources`](/laravel/reference/configuration/#integrations) |
 | [JSON:API resources (timacdonald)](/laravel/packages/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | [`integrations.timacdonald_json_api`](/laravel/reference/configuration/#integrations) |

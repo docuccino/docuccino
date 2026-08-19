@@ -353,44 +353,48 @@ final class InferredResponsesExtension implements OperationExtension
             return;
         }
 
-        $type = count($payloads) === 1 ? $payloads[0] : UnionT::of($this->dedupe($payloads));
-        $result = $context->converter()->toSchema($type);
-
         // Anchor the body to the first contributing return path (design §4); no usable location means
         // a sourceless contribution rather than a churny one.
         $source = $location !== null ? $context->sourceAt($location) : null;
-        $contribution = $producer !== null
-            ? Contribution::forProducer($producer, $source, $result->confidence)
-            : Contribution::inference($source, $result->confidence);
 
-        // Registered even when the payload converted to an open `{}` — an absent content entry would read
-        // as "no body at all", which is the one thing inference has ruled out.
-        $mediaType = $this->mediaType($context, $payloads);
-        $content = $response->content($mediaType);
-        foreach ($result->schema as $keyword => $value) {
-            $content->set($keyword, $value, $contribution);
+        foreach ($this->byMediaType($context, $payloads) as $mediaType => $group) {
+            $type = count($group) === 1 ? $group[0] : UnionT::of($this->dedupe($group));
+            $result = $context->converter()->toSchema($type);
+
+            $contribution = $producer !== null
+                ? Contribution::forProducer($producer, $source, $result->confidence)
+                : Contribution::inference($source, $result->confidence);
+
+            // Registered even when the payload converted to an open `{}` — an absent content entry would
+            // read as "no body at all", which is the one thing inference has ruled out.
+            $content = $response->content($mediaType);
+            foreach ($result->schema as $keyword => $value) {
+                $content->set($keyword, $value, $contribution);
+            }
         }
     }
 
     /**
-     * The media type from the gated {@see PayloadMediaTypeResolver} chain — e.g. JSON:API resources
-     * serialise as `application/vnd.api+json`. Every payload must agree; a mixed union falls back to
-     * `application/json`.
+     * The status's payloads grouped by the media type each serialises as, from the gated
+     * {@see PayloadMediaTypeResolver} chain — JSON:API resources answer `application/vnd.api+json`, a
+     * rendered view `text/html`, everything else the default `application/json`. A return path that
+     * negotiates between representations is one content entry per media type rather than one `anyOf`
+     * under a media type half of it contradicts. Sorted, so which entry is primary follows from the set
+     * of payloads and not from return-path order.
      *
      * @param  list<DType>  $payloads
+     * @return array<string, list<DType>>
      */
-    private function mediaType(RouteContext $context, array $payloads): string
+    private function byMediaType(RouteContext $context, array $payloads): array
     {
-        $resolved = null;
+        $groups = [];
         foreach ($payloads as $payload) {
-            $mediaType = $context->payloadMediaType($payload);
-            if ($mediaType === 'application/json') {
-                return 'application/json';
-            }
-            $resolved = $mediaType;
+            $groups[$context->payloadMediaType($payload)][] = $payload;
         }
 
-        return $resolved ?? 'application/json';
+        ksort($groups);
+
+        return $groups;
     }
 
     /**

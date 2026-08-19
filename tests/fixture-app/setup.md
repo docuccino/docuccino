@@ -241,6 +241,9 @@ own (seeded from the action's parameter type):
   the way a real controller declares it: `BinaryFileResponse` from `response()->download()`,
   `StreamedResponse` from `response()->stream()`, and the plain `Illuminate\Http\Response` from
   `response()`. Each is proof that the class the response guard names is one the engine really recovers.
+- `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
+  `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
+  `Illuminate\View\View` either way, so recognising only the contract would miss every real app.
 - `app/Models/Product.php` — an idiomatic Eloquent model declaring NO public column properties
   (magic attributes) and documenting its columns the ide-helper way, via class-level
   `@property`/`@property-read` docblock tags (`id: int`, `sku: string`, `description: ?string`,

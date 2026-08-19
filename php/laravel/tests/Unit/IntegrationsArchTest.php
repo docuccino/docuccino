@@ -76,6 +76,11 @@ arch('built-in integrations consume only the public extension surface')
         // OAuth and cookie values are integrations' — and an extension may not import an integration, so
         // the rule lives under Laravel\Support and is allow-listed here rather than existing twice.
         'Docuccino\Laravel\Support\MachineDependentValue',
+        // And again: the single statement of how HTML is documented — a `text/html` body whose schema is
+        // a plain `string`. A built-in extension says it for a rendered view and this integration says it
+        // for a laravel-actions `htmlResponse()`; an extension may not import an integration, so the one
+        // sentence lives under Laravel\Support rather than being written twice and drifting.
+        'Docuccino\Laravel\Support\HtmlRepresentation',
     ]);
 
 arch('built-in integrations never reach into core internals or adapter wiring')

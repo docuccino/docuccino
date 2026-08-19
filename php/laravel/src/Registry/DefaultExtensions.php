@@ -22,6 +22,8 @@ use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
 use Docuccino\Laravel\Extensions\RouteServersExtension;
 use Docuccino\Laravel\Extensions\SecurityExtension;
+use Docuccino\Laravel\Extensions\ViewMediaType;
+use Docuccino\Laravel\Extensions\ViewTypeToSchema;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsIntegration;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerIntegration;
@@ -70,6 +72,9 @@ final class DefaultExtensions
             AuthConfigDigestContributor::class,
             AttributeOverridesExtension::class,
             RouteServersExtension::class,
+            // A rendered view answers text/html; the built-in resolver sits in the same gated chain the
+            // integrations' media-type matchers do.
+            ViewMediaType::class,
             // Error-response chain, first supports() wins (design §6): the app's real error shapes,
             // then the Problem Details preset (self-gated on error_responses), then framework defaults,
             // then a generic fallback.
@@ -95,9 +100,11 @@ final class DefaultExtensions
             ...$enabled('sanctum'),
             ...$enabled('passport'),
             ...$enabled('permission'),
-            // Ahead of the core mappers: a framework response object is transport, not a body, so it
-            // must never reach the framework-agnostic class mapper and be reflected into a component.
+            // Ahead of the core mappers: a framework response object and a rendered view are transport,
+            // not bodies, so neither may reach the framework-agnostic class mapper and be reflected into
+            // a component.
             FrameworkResponseTypeToSchema::class,
+            ViewTypeToSchema::class,
             ...DefaultTypeMappers::all(),
             // Data-leakage lint: warns on sensitive-looking property names. Diagnostics only, never
             // mutates output.
