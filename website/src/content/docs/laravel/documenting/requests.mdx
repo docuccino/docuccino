@@ -394,10 +394,11 @@ statically. It raises a `validation.rule-unrecoverable` info diagnostic naming t
 disappears silently: the field is omitted from the schema, or — when something else documents it, such
 as a Data property's own type — kept without the constraints those rules stated.
 
-A rule that writes some of its values and spreads the rest in — `Rule::in('any', ...$this->statuses())`,
-or an `->only(Draft, ...$this->extra())` chain — publishes no value list at all rather than the half it
-can read, and raises `validation.rule-values-unread`. A short `enum` is worse than none: a client
-generated from it rejects a value your API accepts.
+A rule that writes some of its values and gets the rest from somewhere else — `Rule::in('any',
+$this->fallback())`, `Rule::in('any', ...$this->statuses())`, or an `->only([Draft, $this->extra()])`
+chain — publishes no value list at all rather than the half it can read, and raises
+`validation.rule-values-unread`. A short `enum` is worse than none: a client generated from it rejects a
+value your API accepts.
 
 ### Nested and array fields
 
