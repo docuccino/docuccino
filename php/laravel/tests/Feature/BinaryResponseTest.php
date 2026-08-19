@@ -165,28 +165,38 @@ it('reads nothing off a call it cannot place', function (string $expression, str
     'first-class callable' => ['response()->download(...)', BINARY_RESPONSE_FACTORY],
 ]);
 
-it('reads nothing off a spread, on every call it knows', function (string $expression, string $receiver): void {
-    // A spread is the other form that doesn't occupy one position: it fills its own and every later one
+it('reads nothing off a spread it cannot read, on every call it knows', function (string $expression, string $receiver): void {
+    // A spread the call site did not write out occupies no position: it fills its own and every later one
     // from a sequence, so the slots the reader indexes are not the values the call receives.
-    // `download('exports/invoices.pdf', ...['name.pdf'])` really offers `name.pdf`, and reading position 1
+    // `download('exports/invoices.pdf', ...$args)` may well offer another name, and reading position 1
     // would publish `invoices.pdf` — a Content-Disposition the server never sends. One row per call the
     // table names, so the guard cannot go stale against it.
     expect(recoveredCalls($expression, $receiver))->toBe([]);
 })->with([
-    'download' => ["response()->download('exports/invoices.pdf', ...['name.pdf'])", BINARY_RESPONSE_FACTORY],
-    'file' => ["response()->file('exports/invoices.pdf', ...[['Content-Type' => 'text/csv']])", BINARY_RESPONSE_FACTORY],
-    'stream' => ["response()->stream(\$callback, ...[200, ['Content-Type' => 'text/csv']])", BINARY_RESPONSE_FACTORY],
-    'streamDownload' => ["response()->streamDownload(\$callback, ...['report.csv'])", BINARY_RESPONSE_FACTORY],
-    'streamJson' => ["response()->streamJson(\$data, ...[200, ['Content-Type' => 'application/problem+json']])", BINARY_RESPONSE_FACTORY],
-    'eventStream' => ['response()->eventStream(...[$callback])', BINARY_RESPONSE_FACTORY],
-    'disk download' => ["\$disk->download(...['exports/invoices.pdf'])", BINARY_RESPONSE_FILESYSTEM],
-    'disk response' => ["\$disk->response('exports/invoices.pdf', null, [], ...['attachment'])", BINARY_RESPONSE_FILESYSTEM],
+    'download' => ["response()->download('exports/invoices.pdf', ...\$args)", BINARY_RESPONSE_FACTORY],
+    'file' => ["response()->file('exports/invoices.pdf', ...\$args)", BINARY_RESPONSE_FACTORY],
+    'stream' => ['response()->stream($callback, ...$args)', BINARY_RESPONSE_FACTORY],
+    'streamDownload' => ['response()->streamDownload($callback, ...$args)', BINARY_RESPONSE_FACTORY],
+    'streamJson' => ['response()->streamJson($data, ...$args)', BINARY_RESPONSE_FACTORY],
+    'eventStream' => ['response()->eventStream(...$args)', BINARY_RESPONSE_FACTORY],
+    'disk download' => ['$disk->download(...$args)', BINARY_RESPONSE_FILESYSTEM],
+    'disk response' => ["\$disk->response('exports/invoices.pdf', null, [], ...\$args)", BINARY_RESPONSE_FILESYSTEM],
     // Both facades reach the same reader through a static call, so the guard has to hold on that path too.
-    'response facade' => ["\\Illuminate\\Support\\Facades\\Response::download('exports/invoices.pdf', ...['name.pdf'])", BINARY_RESPONSE_FACTORY],
-    'storage facade' => ["\\Illuminate\\Support\\Facades\\Storage::download(...['exports/invoices.pdf'])", BINARY_RESPONSE_FACTORY],
-    // A spread beside a name is still a call nothing is read off.
-    'spread and name' => ["response()->download(...['exports/invoices.pdf'], name: 'name.pdf')", BINARY_RESPONSE_FACTORY],
+    'response facade' => ["\\Illuminate\\Support\\Facades\\Response::download('exports/invoices.pdf', ...\$args)", BINARY_RESPONSE_FACTORY],
+    'storage facade' => ['\\Illuminate\\Support\\Facades\\Storage::download(...$args)', BINARY_RESPONSE_FACTORY],
+    // A name the reader cannot place is the other form that holds no position.
+    'spread and name' => ["response()->download(...\$args, name: 'name.pdf')", BINARY_RESPONSE_FACTORY],
 ]);
+
+it('reads a spread the call site wrote out, whose items ARE the arguments', function (): void {
+    // Nothing is hidden in `...['name.pdf']`: the item sits at the position it takes, so the name the
+    // server really sends is the one published — declining here would widen away a true filename.
+    $calls = recoveredCalls("response()->download('exports/invoices.pdf', ...['name.pdf'])");
+
+    expect($calls)->toHaveCount(1)
+        ->and($calls[0]->filename)->toBe('name.pdf')
+        ->and($calls[0]->disposition)->toBe('attachment');
+});
 
 it('widens rather than reads through a spread inside a path helper', function (): void {
     // The helper's own argument is a separate read, and a spread there folds to an array rather than a

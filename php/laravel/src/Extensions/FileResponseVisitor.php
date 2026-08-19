@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Extensions;
 
+use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\TraceVisitor;
@@ -113,17 +114,16 @@ final class FileResponseVisitor implements TraceVisitor
             return;
         }
 
-        // Everything below is read off a POSITION, and two argument forms don't occupy one: a named
+        // Everything below is read off a POSITION, and two argument forms may not occupy one: a named
         // argument puts its value under a name instead, and a spread holds a sequence that fills its own
-        // index and every later one. Nothing is read off a call whose shape we cannot index, which
-        // costs the media type and never mis-states it.
-        $positional = [];
-        foreach ($args as $arg) {
-            if ($arg->name !== null || $arg->unpack) {
-                return;
-            }
-            $positional[] = $arg->value;
+        // index and every later one. `ArgumentSlots` places what it can — a spread the call site
+        // wrote out IS its arguments — and nothing is read off what is left, which costs the media type
+        // and never mis-states it.
+        $slots = ArgumentSlots::of($args);
+        if (! $slots->isIndexable()) {
+            return;
         }
+        $positional = $slots->positional();
 
         $path = $spec['file'] === null ? null : $this->literalPath($positional[$spec['file']] ?? null, $scope);
         $headers = $spec['headers'] === null ? null : ($positional[$spec['headers']] ?? null);
