@@ -6,6 +6,7 @@ namespace Docuccino\Core\Pipeline;
 
 use Docuccino\Core\Extensions\Context\RouteDependencies;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Core\Support\GeneratedDirectory;
 use JsonException;
 
@@ -161,7 +162,9 @@ final readonly class FragmentCache
             }
         }
 
-        $this->writeAtomically($this->file($key), $payload);
+        $file = $this->file($key);
+        GeneratedDirectory::ensure(dirname($file));
+        AtomicFile::write($file, $payload);
     }
 
     /**
@@ -218,21 +221,5 @@ final readonly class FragmentCache
     private function file(string $key): string
     {
         return rtrim($this->path, '/').'/'.$key.'.json';
-    }
-
-    private function writeAtomically(string $file, string $contents): void
-    {
-        GeneratedDirectory::ensure(dirname($file));
-
-        // random_int over bin2hex(random_bytes(…)): unambiguous int return type for every analyser
-        // version we support, and 63 bits of entropy instead of 32.
-        $temp = $file.'.'.getmypid().'.'.dechex(random_int(0, PHP_INT_MAX)).'.tmp';
-        if (@file_put_contents($temp, $contents) === false) {
-            return;
-        }
-
-        if (! @rename($temp, $file)) {
-            @unlink($temp);
-        }
     }
 }

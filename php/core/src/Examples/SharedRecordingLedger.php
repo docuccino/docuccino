@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Examples;
 
 use Docuccino\Core\Support\AtomicFile;
+use Docuccino\Core\Support\Directory;
 use JsonException;
 
 /**
@@ -83,7 +84,7 @@ final class SharedRecordingLedger extends RecordingLedger
     {
         $directory = $this->scratch();
 
-        if (! is_dir($directory) && ! @mkdir($directory, 0700, true) && ! is_dir($directory)) {
+        if (! Directory::ensure($directory, 0700)) {
             throw UnlockableRecording::directory($directory);
         }
 

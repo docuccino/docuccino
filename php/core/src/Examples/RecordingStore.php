@@ -7,6 +7,7 @@ namespace Docuccino\Core\Examples;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Support\AtomicFile;
 use Docuccino\Core\Support\ConfinedPath;
+use Docuccino\Core\Support\Directory;
 use JsonException;
 
 /**
@@ -105,7 +106,7 @@ final readonly class RecordingStore
             return true;
         }
 
-        if (! is_dir($this->directory) && ! @mkdir($this->directory, 0755, true) && ! is_dir($this->directory)) {
+        if (! Directory::ensure($this->directory)) {
             return false;
         }
 
