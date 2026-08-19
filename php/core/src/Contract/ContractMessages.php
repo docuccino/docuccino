@@ -92,12 +92,18 @@ final class ContractMessages
     /** Examples that do not satisfy the schema they sit beside. */
     public static function examples(ExampleReport $report): string
     {
+        // Two different counts decide the grammar: the noun follows how many were checked, the verb
+        // and the pronoun follow how many failed.
+        $failed = count($report->findings);
+
         $lines = [
             sprintf(
-                '%d of %d documented example%s do not match the schema beside them.',
-                count($report->findings),
+                '%d of %d documented example%s %s not match the schema beside %s.',
+                $failed,
                 $report->checked,
                 $report->checked === 1 ? '' : 's',
+                $failed === 1 ? 'does' : 'do',
+                $failed === 1 ? 'it' : 'them',
             ),
             '',
         ];

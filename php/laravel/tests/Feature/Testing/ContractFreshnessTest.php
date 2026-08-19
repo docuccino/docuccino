@@ -169,7 +169,7 @@ it('fails an example that disagrees with the schema beside it', function (): voi
         ApiContract::assertions()->assertValidExamples();
     } catch (AssertionFailedError $failure) {
         expect($failure->getMessage())
-            ->toContain('do not match the schema beside them')
+            ->toContain('does not match the schema beside it')
             ->toContain('components/schemas/FormData')
             ->toContain('must match the type: integer');
 
