@@ -8,8 +8,12 @@ use Composer\InstalledVersions;
 use Docuccino\Core\Content\ContentCompiler;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Lint\LintRuleOptions;
+use Docuccino\Core\Lint\MissingDescriptionLint;
+use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
+use Docuccino\Core\Lint\UndocumentedTagLint;
 use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
@@ -231,6 +235,12 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             return new SensitiveFieldLint($options);
         });
 
+        // The completeness lints share one options shape, so they share one reader; each is core, and
+        // the adapter only maps its docuccino.lint.<key> bag onto it.
+        $this->app->bind(MissingDescriptionLint::class, static fn (): MissingDescriptionLint => new MissingDescriptionLint(self::lintRule('descriptions', false)));
+        $this->app->bind(OperationIdStyleLint::class, static fn (): OperationIdStyleLint => new OperationIdStyleLint(self::lintRule('operation_ids', true)));
+        $this->app->bind(UndocumentedTagLint::class, static fn (): UndocumentedTagLint => new UndocumentedTagLint(self::lintRule('tags', false)));
+
         // json-api-paginate's parameter names and sizes are renamable in its own config; an absent bag
         // falls back to defaults plus an info diagnostic. Its response envelope (pagination mode) and
         // the cache's environment digest read the same bag, hence the three bindings.
@@ -354,6 +364,22 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $value = config($key);
 
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * One `docuccino.lint.<key>` bag as rule options. `$default` is the rule's own answer when the key
+     * is absent, so a config file predating the rule keeps whatever shipped with it.
+     */
+    private static function lintRule(string $key, bool $default): LintRuleOptions
+    {
+        /** @var array<string, mixed> $rule */
+        $rule = (array) config('docuccino.lint.'.$key, []);
+        $allow = is_array($rule['allow'] ?? null) ? array_values(array_filter($rule['allow'], 'is_string')) : [];
+
+        return new LintRuleOptions(
+            enabled: ($rule['enabled'] ?? $default) !== false,
+            allow: $allow,
+        );
     }
 
     /**

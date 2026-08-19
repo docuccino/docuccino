@@ -230,6 +230,29 @@ return [
             // Key = a token matched anywhere inside a property name, value = the label in the message.
             // 'patterns' => ['sortcode' => 'a bank sort code', 'iban' => 'an IBAN'],
         ],
+        // Warns on an operation that publishes neither a summary nor a description. Off by default:
+        // on an application that documents nothing it fires once per operation.
+        'descriptions' => [
+            'enabled' => false,
+            // Operation signatures or operationIds to accept, e.g. ['GET /api/ping'].
+            'allow' => [],
+        ],
+        // Warns on an operationId a generated client cannot name a method after — empty, leading with
+        // a digit, or outside letters, digits and . - _ @. Duplicates are a separate diagnostic
+        // (route.duplicate-operation-id). Nothing Docuccino mints can trip it.
+        'operation_ids' => [
+            'enabled' => true,
+            // Operation signatures or operationIds to accept, e.g. ['GET /api/ping'].
+            'allow' => [],
+        ],
+        // Warns on a tag operations carry that tags.definitions never declares. Silent unless the
+        // document declares tags at all — and off besides, because declaring a few nav parents while
+        // the rest derive from controllers is a deliberate shape, not a hole.
+        'tags' => [
+            'enabled' => false,
+            // Tag names to accept, e.g. ['Internal'].
+            'allow' => [],
+        ],
     ],
 
     /*

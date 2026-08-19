@@ -9,7 +9,10 @@ use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\BuiltIn\SharedErrorResponses;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Lint\MissingDescriptionLint;
+use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
+use Docuccino\Core\Lint\UndocumentedTagLint;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Extensions\AttributeRequestBodyExtension;
@@ -106,11 +109,16 @@ final class DefaultExtensions
             FrameworkResponseTypeToSchema::class,
             ViewTypeToSchema::class,
             ...DefaultTypeMappers::all(),
-            // Data-leakage lint: warns on sensitive-looking property names. Diagnostics only, never
-            // mutates output.
-            SensitiveFieldLint::class,
             // Collapses an error body repeated across operations into one shared component + $refs.
+            // The only document transformer that moves a byte, so everything reading the finished
+            // document comes after it.
             SharedErrorResponses::class,
+            // The document lints. All diagnostics-only, and all pinned to Priorities::LAST so they read
+            // what will be emitted — this list's order is not what settles that, the attribute is.
+            SensitiveFieldLint::class,
+            MissingDescriptionLint::class,
+            OperationIdStyleLint::class,
+            UndocumentedTagLint::class,
         ];
     }
 }

@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
+use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
@@ -1022,4 +1027,72 @@ function registerRenderCallback(Closure $callback, string $exceptionType): strin
         $function->getParameters()[0]->getName(),
         $exceptionType,
     ))->symbol();
+}
+
+/**
+ * Run one document lint over a raw document array and hand back what it reported. The completeness
+ * lints share it rather than each re-rolling the draft → context wiring.
+ *
+ * @param  array<string, mixed>  $document
+ * @return list<Diagnostic>
+ */
+function lintDiagnostics(DocumentTransformer $rule, array $document): array
+{
+    $collector = new DiagnosticCollector;
+    $context = new DocumentContext(new DocumentConfig(key: 'd', info: ['title' => 'T', 'version' => '1']), 'doc:d', $collector);
+
+    $rule->transform(new UirDocumentDraft($document), $context);
+
+    return $collector->all();
+}
+
+/**
+ * A minimal assembled document: operations keyed `METHOD /path`, webhooks keyed `METHOD name`, plus
+ * the top-level tag declarations.
+ *
+ * @param  array<string, array<string, mixed>>  $operations
+ * @param  list<array<string, mixed>>  $tags
+ * @param  array<string, array<string, mixed>>  $webhooks
+ * @return array<string, mixed>
+ */
+function lintDocument(array $operations, array $tags = [], array $webhooks = []): array
+{
+    $keyed = static function (array $nodes): array {
+        $out = [];
+        foreach ($nodes as $signature => $node) {
+            [$method, $name] = explode(' ', $signature, 2);
+            $out[$name][strtolower($method)] = $node;
+        }
+
+        return $out;
+    };
+
+    $document = ['info' => ['title' => 'T', 'version' => '1'], 'paths' => $keyed($operations)];
+    if ($tags !== []) {
+        $document['tags'] = $tags;
+    }
+    if ($webhooks !== []) {
+        $document['webhooks'] = $keyed($webhooks);
+    }
+
+    return $document;
+}
+
+/**
+ * Point the `default` document at the lint webhook fixtures, the way the shipped config documents it —
+ * a directory relative to the application base path — by basing the app on the adapter package, so the
+ * fixtures sit inside it exactly as `app/Webhooks` sits inside a real application.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $then  further config to mutate
+ * @return callable(array<string, mixed>): array<string, mixed>
+ */
+function withLintWebhooks(?callable $then = null): callable
+{
+    app()->setBasePath(dirname(__DIR__).'/php/laravel');
+
+    return static function (array $raw) use ($then): array {
+        $raw['webhooks'] = ['dir' => 'tests/Fixtures/Webhooks/Lint'];
+
+        return $then === null ? $raw : $then($raw);
+    };
 }

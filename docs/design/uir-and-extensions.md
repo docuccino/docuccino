@@ -625,12 +625,35 @@ when a registration path exists and the `emit()` signature settles.
   - Validation: normalized rule model + transformer chain + schema builder = core
     (machinery); the Laravel rule VOCABULARY + rule RECOVERY (FormRequest/inline/Data
     attributes) = adapter (`Integrations/Validation` + per-source integrations).
-  - Data-leakage lint (`Core\Lint\SensitiveFieldLint`): scans the emitted document —
-    core, even though some default heuristics table entries look Laravel-flavored
-    (they're neutral strings); the adapter contributes only config plumbing/registration.
-    `Core\Lint` is where future document-level rules (description coverage, naming)
-    accumulate — reusable by the reference CLI, other-language producers, and any
-    downstream consumer of the UIR.
+  - Document lints (`Core\Lint\*`): they scan the emitted document, so core, even though some
+    default heuristics table entries look Laravel-flavored (they're neutral strings); the
+    adapter contributes only config plumbing/registration, so the reference CLI, other-language
+    producers and any downstream consumer of the UIR run the identical rules.
+    `SensitiveFieldLint` is the leakage pass; `MissingDescriptionLint`, `OperationIdStyleLint`
+    and `UndocumentedTagLint` are the completeness ones, sharing `LintRuleOptions` (off-switch +
+    safelist) and `LintOperation` (the signature-ordered walk, so a finding's place never depends
+    on the order its route was met).
+    `LintOperation` walks BOTH headings: a webhook is an operation too, and its operationId, its
+    prose and its tags are all author-typed. It is named `METHOD webhooks.<name>` — the differ's
+    vocabulary, and what a webhook's own diagnostics already say — which keeps it out of the space a
+    path template occupies, since a path always begins with `/`. Where the lever differs the help
+    does: `#[OperationId]` never reaches a webhook, so the rename it names is the `#[Webhook]`.
+    All four carry `#[ExtensionOrder(priority: Priorities::LAST)]`. A lint reads the document as it
+    will be EMITTED, so it must run after anything that can still change it — today only
+    `SharedErrorResponses`, whose hoist rewrites an inline error body into a `$ref` and would leave
+    the leakage pass publishing pointers the output does not have. `LAST` rather than an edge onto
+    that one class, so a third-party transformer lands ahead of the lints too; the FQCN tie-break
+    that happened to produce the right answer is not an ordering contract.
+    **Every one of them owes a firing population before it ships**, per the diagnostics rule:
+    measured against the workbench, the prose rule fires on 2 of 23 operations (both actionable) and
+    the other two fire zero times; only the operationId rule is on by default, because it is the only
+    one whose worst case is bounded — it cannot fire on anything Docuccino mints. The webhook half of
+    that population is 3 operations across the goldens and 0 hits on all three rules, so extending the
+    walk added no noise to anything shipped — and every hit it CAN produce names a `#[Webhook]`
+    argument or a class docblock, which is the most actionable population any of the three has. The
+    rules considered and rejected on the same measurement are worth keeping in mind before adding
+    another: parameter descriptions 35/88, schema-property descriptions 224/229, missing examples
+    110/117, missing operationId 110/117, no-error-responses 67/117.
   - Pipeline engine = core (`Core\Pipeline\{Assembler, FragmentCache, OperationPipeline,
     OperationFragment, GenerationResult, AssemblyResult}` + `Core\Extensions\ResolvedExtensions`):
     a second adapter inherits the whole assemble→overlay→transform→hash→validate spine and
@@ -999,9 +1022,14 @@ return [
         ],
     ],
     'extensions' => [],
-    // Data-leakage lint: enabled, an allow-list, and `patterns` (extra token → label heuristics
-    // merged over the built-in sensitive-name table).
-    'lint' => ['leakage' => ['enabled' => true, 'allow' => [], 'patterns' => []]],
+    // Document lints, all diagnostics-only. `leakage` also takes `patterns` (extra token → label
+    // heuristics merged over the built-in sensitive-name table); the rest take enabled + allow.
+    'lint' => [
+        'leakage' => ['enabled' => true, 'allow' => [], 'patterns' => []],
+        'descriptions' => ['enabled' => false, 'allow' => []],
+        'operation_ids' => ['enabled' => true, 'allow' => []],
+        'tags' => ['enabled' => false, 'allow' => []],
+    ],
     'on_route_error' => 'skeleton',
     'cache' => ['enabled' => true, 'store' => null],
 ];

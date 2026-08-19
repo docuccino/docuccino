@@ -146,3 +146,8 @@ path, so removing one or narrowing its payload is a breaking change like any oth
 | `webhook.method-unknown` | A `method` OpenAPI has no path-item member for. Documented as `POST` instead. |
 | `webhook.name-collision` | Two classes claim one name and method. The document keeps one; both are named. |
 | `webhook.payload-unresolved` | A `payload` type string that resolves to no shape. The body is published unconstrained. |
+
+The [document lints](/laravel/reference/configuration/#lint) read webhooks too, and name one
+`POST webhooks.invoice.paid`. `lint.operation-id-style` is on by default, so a name a generated client
+can't turn into a method — `1 form submitted!` — is caught here as it is on a route; rename the
+`#[Webhook]`, since that name is the webhook's `operationId`.
