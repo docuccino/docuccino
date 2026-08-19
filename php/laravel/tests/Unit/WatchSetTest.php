@@ -105,3 +105,19 @@ it('reports an added, a removed and a rewritten file as changes, and nothing els
     expect(WatchSet::changed($before, $after))->toBe(['/b', '/c', '/d'])
         ->and(WatchSet::changed($before, $before))->toBe([]);
 });
+
+it('adds the webhook directory, and as a directory so a class created mid-session registers', function (): void {
+    mkdir($this->fixture->path('app/Webhooks'), 0755, true);
+    config()->set('docuccino.documents.default.webhooks.dir', 'app/Webhooks');
+
+    $roots = $this->watched->documentRoots(['default']);
+    expect($roots)->toContain($this->fixture->path('app/Webhooks'));
+
+    // The point of rooting on the directory: a class with no fragment behind it yet is invisible to
+    // the operation half, so nothing else in the set would move when someone writes one.
+    $before = $this->watched->snapshot($roots);
+    file_put_contents($this->fixture->path('app/Webhooks/InvoicePaid.php'), '<?php');
+
+    expect(WatchSet::changed($before, $this->watched->snapshot($roots)))
+        ->toBe([$this->fixture->path('app/Webhooks/InvoicePaid.php')]);
+});

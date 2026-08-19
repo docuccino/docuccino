@@ -138,3 +138,41 @@ it('rebuilds when a watched file moves', function (): void {
         pcntl_signal(SIGALRM, SIG_DFL);
     }
 })->skip(fn (): bool => ! extension_loaded('pcntl'), 'Needs ext-pcntl to move a watched file mid-poll.');
+
+it('rebuilds when a webhook class appears where the directory had none', function (): void {
+    mkdir($this->fixture->path('webhooks'), 0755, true);
+    config()->set('docuccino.documents.default.webhooks.dir', $this->fixture->path('webhooks'));
+    $this->fixture->storeFragment([$this->fixture->path('app/InvoiceController.php')], 'watched');
+
+    $created = $this->fixture->path('webhooks/InvoicePaid.php');
+
+    $phase = 0;
+    pcntl_async_signals(true);
+    pcntl_signal(SIGALRM, function () use (&$phase, $created): void {
+        if ($phase === 0) {
+            $phase = 1;
+            file_put_contents($created, '<?php // a webhook class the session never saw');
+            pcntl_alarm(5);
+
+            return;
+        }
+
+        (function (): void {
+            $this->stopping = true;
+        })->call(app(WatchCommand::class));
+    });
+
+    $runner = scriptWatch(2);
+    pcntl_alarm(1);
+
+    try {
+        $this->artisan('docuccino:watch', ['--interval' => '0.05'])
+            ->expectsOutputToContain('changed; rebuilding')
+            ->assertExitCode(0);
+
+        expect($runner->calls)->toHaveCount(2);
+    } finally {
+        pcntl_alarm(0);
+        pcntl_signal(SIGALRM, SIG_DFL);
+    }
+})->skip(fn (): bool => ! extension_loaded('pcntl'), 'Needs ext-pcntl to create a webhook class mid-poll.');
