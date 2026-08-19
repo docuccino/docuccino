@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Runtime\FileWalks;
-use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
+use Docuccino\Inference\PhpStan\Tests\Support\ScriptedRuntimeAdapter;
 use PhpParser\Node;
 use PhpParser\ParserFactory;
 use PHPStan\Analyser\Scope;
-use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\ShouldNotHappenException;
 use PHPUnit\Framework\MockObject\Stub;
 
@@ -18,82 +17,20 @@ use PHPUnit\Framework\MockObject\Stub;
  * real-engine behaviour, proven by the --group=fixture suites). Here a no-emit adapter exercises the
  * memoisation and empty-collection paths deterministically.
  */
-function fileAnalyzerWithRecordingAdapter(int &$calls): FileAnalyzer
+function fileAnalyzerOn(ScriptedRuntimeAdapter $adapter): FileAnalyzer
 {
-    $adapter = new class($calls) implements RuntimeAdapter
-    {
-        /** @param  int  $calls  incremented on each processFile pass, so cache hits are observable */
-        public function __construct(private int &$calls) {}
-
-        public function boot(): void {}
-
-        public function prime(array $files): void {}
-
-        public function processFile(string $file, callable $callback): void
-        {
-            $this->calls++;
-        }
-
-        public function normalize(string $file): string
-        {
-            return $file;
-        }
-
-        public function stableScope(Scope $scope): Scope
-        {
-            return $scope;
-        }
-
-        public function reflectionProvider(): ReflectionProvider
-        {
-            throw new RuntimeException('not used in this unit');
-        }
-    };
-
     return new FileAnalyzer($adapter, new FileWalks($adapter));
 }
 
 /**
- * An adapter that walks a scripted `[node, scope]` list, so the harvest callback can be driven over the
- * shapes the write half reads without a container to resolve them.
+ * An analyzer over a scripted `[node, scope]` pass, so the harvest callback can be driven over the shapes
+ * the write half reads without a container to resolve them.
  *
  * @param  list<array{Node, Scope}>  $nodes
  */
 function fileAnalyzerOverNodes(array $nodes): FileAnalyzer
 {
-    $adapter = new class($nodes) implements RuntimeAdapter
-    {
-        /** @param  list<array{Node, Scope}>  $nodes */
-        public function __construct(private array $nodes) {}
-
-        public function boot(): void {}
-
-        public function prime(array $files): void {}
-
-        public function processFile(string $file, callable $callback): void
-        {
-            foreach ($this->nodes as [$node, $scope]) {
-                $callback($node, $scope);
-            }
-        }
-
-        public function normalize(string $file): string
-        {
-            return $file;
-        }
-
-        public function stableScope(Scope $scope): Scope
-        {
-            return $scope;
-        }
-
-        public function reflectionProvider(): ReflectionProvider
-        {
-            throw new RuntimeException('not used in this unit');
-        }
-    };
-
-    return new FileAnalyzer($adapter, new FileWalks($adapter));
+    return fileAnalyzerOn(new ScriptedRuntimeAdapter(['/x.php' => $nodes]));
 }
 
 /** The expression `<code>` parses to, so a test names the shape it drives as the PHP it stands for. */
@@ -121,35 +58,35 @@ function fileAnalyzerFailingScope(Stub&Scope $scope, string $function): Scope
 }
 
 it('harvests methods, closures and assignments off one pass per normalised file', function (): void {
-    $calls = 0;
-    $analyzer = fileAnalyzerWithRecordingAdapter($calls);
+    $adapter = new ScriptedRuntimeAdapter;
+    $analyzer = fileAnalyzerOn($adapter);
 
     // Whichever harvest is asked for first pays the one pass; the no-emit adapter collects nothing.
     expect($analyzer->analyze('/x.php'))->toBe([])
         ->and($analyzer->closures('/x.php'))->toBe([])
         ->and($analyzer->arrayAssignments('/x.php'))->toBe([])
         ->and($analyzer->localAssignments('/x.php'))->toBe([])
-        ->and($calls)->toBe(1);
+        ->and($adapter->totalPasses)->toBe(1);
 
     // Re-access hits the per-file cache — no further passes.
     expect($analyzer->analyze('/x.php'))->toBe([])
         ->and($analyzer->closures('/x.php'))->toBe([])
         ->and($analyzer->arrayAssignments('/x.php'))->toBe([])
         ->and($analyzer->localAssignments('/x.php'))->toBe([])
-        ->and($calls)->toBe(1);
+        ->and($adapter->totalPasses)->toBe(1);
 });
 
 it('answers for no method the file does not declare', function (): void {
     // The lookup a caller with a class in hand makes, and the by-name one a closure-based caller makes.
     // A file declaring nothing answers neither — which is the `inference.method-not-found` degradation,
     // not a body borrowed from somewhere else.
-    $calls = 0;
-    $analyzer = fileAnalyzerWithRecordingAdapter($calls);
+    $adapter = new ScriptedRuntimeAdapter;
+    $analyzer = fileAnalyzerOn($adapter);
 
     expect($analyzer->method('/x.php', 'App\\Renderer', 'render'))->toBeNull()
         ->and($analyzer->method('/x.php', null, 'render'))->toBeNull()
         // Both went through the one memoised harvest.
-        ->and($calls)->toBe(1);
+        ->and($adapter->totalPasses)->toBe(1);
 });
 
 it('retires only the failing scope when the write harvest throws mid-walk', function (): void {

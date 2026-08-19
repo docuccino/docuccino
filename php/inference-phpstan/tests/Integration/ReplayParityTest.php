@@ -40,6 +40,11 @@ it('harvests a replayed trace exactly as a live one', function (): void {
         // And a replay is idempotent: the second trace off the same recording harvests the same again.
         ->and($replayed['second'])->toBe($live);
 
+    // The recorder is SHARED, not one per consumer. An analyzeAction plus two traces of the same file cost
+    // exactly one walk of it — which is the whole point of the layer, and the half that byte-identical JSON
+    // cannot see. Two FileWalks instances out of PhpStanEngineFactory would make this 2 or 3.
+    expect($replayed['passes'])->toBe(1);
+
     // Guard against a mutually-empty pass: the harvest has to be the real one, not two blanks agreeing.
     expect($live['filters'])->toBe(["'name'", "AllowedFilter::exact('status')", "AllowedFilter::partial('email')"])
         ->and($live['paginates'])->toBeTrue()

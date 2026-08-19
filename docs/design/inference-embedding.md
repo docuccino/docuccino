@@ -57,14 +57,45 @@ because PHPStan's parser/reflection caches already made a repeat pass cheaper th
 The invariant it rests on: **a replay and the walk that recorded it are indistinguishable.** Every consumer,
 the recording one included, is handed the STABILISED scope (`stableScope()` → `toMutatingScope()`), deduped by
 scope object identity — many nodes share one scope instance, which is what keeps stabilising every node's
-scope near-free (+4.6% on a pass, against +14% undeduped). So a recording that is absent, evicted or
-discarded costs one more live pass and nothing else, which is what makes the layer invisible to output: warm
-equals cold by construction. Under-recording is the sanctioned degradation and it takes three forms — a pass
-that threw records nothing (a truncated recording would answer a later consumer with less than a live pass
-does), a re-entrant ask for the file being walked gets a plain pass rather than nesting `processNodes`, and a
-per-build node budget (100k nodes, ~1.7 KB retained each as measured, so ~170 MB; a 500-file app extrapolates
-to ~60k) evicts the least recently walked file. Closure harvesting is the one walk that may NOT be replayed
-and goes straight to the adapter — §4b.
+scope near-free (+4.6% on a pass, against +14% undeduped). Stabilisation is UNIFORM across all three paths:
+recording, replay, and the plain live pass a declined recording falls back to. Which of the three answered a
+question therefore cannot move a byte, and a build stays deterministic whatever the recorder decides to keep.
+
+Uniform is not identical to the RAW fiber scope, and the gap was measured rather than assumed: 1 divergence in
+2945 fixture-app queries — `AllowedFilter::callback('tag', $this->tagFilter(...))` in
+`modules/Billing/ChargeListQuery.php`, where the raw scope types the first-class callable `Closure(...)` and
+the stabilised one `mixed`. Benign (no golden moved: a callback filter's column is recovered from the callee's
+AST, not from that argument's type) and narrow — the class is "a first-class-callable argument widens". The
+fixture group asserts that filter's recovery explicitly (`QueryBuilderTraceTest`, `trace-qb-enrich`) so the
+class cannot grow silently.
+
+Under-recording is the sanctioned degradation, and the invariant above is what licenses every form of it: a
+missing recording is pure COST — one more live pass — never a different answer.
+
+- A pass that threw records nothing; a truncated recording would answer a later consumer with less than a
+  live pass does.
+- No recording is built from inside another walk. The nesting itself is the caller's problem ("collect then
+  recurse, never nest `processNodes`", §4) — the fallback IS a nested pass; what the guard buys is that an
+  outer recording can never be interleaved with an inner walk's nodes.
+- Recording is abandoned MID-PASS the moment it crosses its budget, dropping what it accumulated, and the
+  file is remembered so later asks go straight to a live pass with no accumulation at all — otherwise one
+  huge file materialises hundreds of MB before being discarded, and re-pays that on every later ask. Two
+  bounds, because nodes are only a proxy for the real risk: 100k retained nodes (~1.7 KB each as measured, so
+  ~170 MB; the whole fixture app is ~7.5k nodes, a 500-file application extrapolates to ~60k) and
+  `memory_get_usage()` reaching 70% of the process's own `memory_limit`. When the total retained would exceed
+  the node budget the WHOLE store is cleared rather than evicted file by file: a cleared file is walked live
+  and re-recorded, so the cheap reset is a correct one and the replay path keeps no ordering to maintain.
+- A recording is stamped with the SIZE of the adapter's analysed-file set and discarded when that set has
+  grown since. This is the one way a recording could answer with less than a live pass: PHPStan gates trait
+  inlining on the analysed set, so a file primed after the recording was made would make a fresh pass over
+  the same file richer. Growth after boot is rare — boot primes every project and prime root, so only a walk
+  of a file outside all of them grows the set — but without the stamp one route's richness would depend on
+  which unrelated route ran first. So warm equals cold not "by construction" but by this stamp plus the
+  uniform stabilisation above, and it costs nothing measurable: the fixture app still walks 1.0 passes/file.
+
+Closure harvesting is the one walk that may not come through here. The reason is NOT that a closure cannot be
+replayed — a stabilised arrow-function scope answers after its pass like any other — but that those visitors
+are handed the raw scope; §4b.
 
 **Spike A traps (regression-test each):**
 1. `bootstrapFiles` are NOT auto-run by a raw ContainerFactory embed — read
@@ -342,15 +373,19 @@ Two honesty rules ride on top:
 
 **Closure harvesting (verified PHPStan behaviour).** When a closure is harvested by line — the
 `RateLimiter::for` limiters — the visitor must be driven INSIDE the `processNodes` pass, on the live
-scope. An arrow function's scope is a lazy fiber scope that cannot type expressions once the pass has
+scope. An arrow function's RAW scope is a lazy fiber scope that cannot type expressions once the pass has
 ended, so nothing may be deferred until after the walk.
 `ClosureReturnStatementsNode::getStatementResult()->isAlwaysTerminating()` distinguishes a conditional
 (fall-through) closure body from an unconditional one; a limiter that does not always return is left
 unrecovered rather than half-folded.
 
-This is also why `traceClosure()` is the one walk that bypasses `FileWalks` (§2): stabilising saves other
-scopes for a later replay and does not save an arrow function's, so a recording of that walk could not
-answer. Every `ClosureReturnStatementsNode`/`InArrowFunctionNode` consumer takes a live `processFile`.
+The "raw" qualification is load-bearing, and it is also why `traceClosure()` is the one walk that bypasses
+`FileWalks` (§2). Stabilising lifts exactly that limit — a stabilised arrow-function scope answers after its
+pass like any other, verified — so it is not that closures cannot be replayed. It is that these visitors take
+the raw scope, `$statement->getScope()` for a full closure and the callback scope itself for an arrow
+function, because a return's flow refinement lives only there; a recording holds nothing but stabilised
+scopes, so it has nothing to hand them. Every `ClosureReturnStatementsNode`/`InArrowFunctionNode` consumer
+takes a live `processFile`. The decision is owned by `PhpStanTypeEngine::traceClosure()`'s docblock.
 
 ## 5. DType model + translator
 

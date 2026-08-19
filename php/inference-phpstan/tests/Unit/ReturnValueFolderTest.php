@@ -5,10 +5,9 @@ declare(strict_types=1);
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Runtime\FileWalks;
-use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
+use Docuccino\Inference\PhpStan\Tests\Support\ScriptedRuntimeAdapter;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
-use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
 
 /**
@@ -18,34 +17,7 @@ use PHPStan\Reflection\ReflectionProvider;
  * group's.
  */
 it('declines a callee the analyser has no body for, without re-parsing its file', function (): void {
-    $adapter = new class implements RuntimeAdapter
-    {
-        public int $processed = 0;
-
-        public function boot(): void {}
-
-        public function prime(array $files): void {}
-
-        public function processFile(string $file, callable $callback): void
-        {
-            $this->processed++;
-        }
-
-        public function normalize(string $file): string
-        {
-            return $file;
-        }
-
-        public function stableScope(Scope $scope): Scope
-        {
-            return $scope;
-        }
-
-        public function reflectionProvider(): ReflectionProvider
-        {
-            throw new RuntimeException('not needed');
-        }
-    };
+    $adapter = new ScriptedRuntimeAdapter;
 
     $reflection = $this->createStub(ReflectionProvider::class);
     $reflection->method('hasClass')->willReturn(false);
@@ -58,5 +30,5 @@ it('declines a callee the analyser has no body for, without re-parsing its file'
         ->and($folder->fold(new Callee($class, 'termFilter', $file), [ConstValue::scalar('q')], []))->toBeNull()
         ->and($folder->fold(new Callee($class, 'statusFilter', $file), [], []))->toBeNull()
         // The expensive half is cached by the file analysis, so three folds cost one parse.
-        ->and($adapter->processed)->toBe(1);
+        ->and($adapter->totalPasses)->toBe(1);
 });

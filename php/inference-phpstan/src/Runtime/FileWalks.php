@@ -17,52 +17,63 @@ use WeakMap;
  * The invariant the layer rests on: **a replayed walk and the walk that recorded it are indistinguishable.**
  * Every consumer — the recording one included — is handed the STABILISED scope
  * ({@see RuntimeAdapter::stableScope()}), in `NodeScopeResolver`'s own callback order, so the first walk and
- * the tenth see the same nodes with scopes answering the same `getType()`. That is what makes the layer
- * invisible to output: a recording that is missing, evicted or discarded costs one more live pass and
- * nothing else, so warm equals cold by construction.
- *
- * Not everything may be replayed: an arrow function's lazy fiber scope cannot type expressions once its pass
- * has ended even though other scopes can (docs/design/inference-embedding.md §4b), so closure harvesting
- * calls {@see RuntimeAdapter::processFile()} directly and never comes through here. This class deliberately
- * offers no live pass of its own — a consumer needing one holds the adapter.
+ * the tenth see the same nodes with scopes answering the same `getType()`. That is what licenses every
+ * abandon, discard and clear below: a recording that is missing is pure cost — one more live pass — and
+ * never a different answer. Not every consumer can come through here; the exception and its reason are
+ * `PhpStanTypeEngine::traceClosure()`'s docblock. See docs/design/inference-embedding.md §2.
  *
  * @internal
+ *
+ * @phpstan-type RecordedWalk list<array{Node, Scope}>
  */
 final class FileWalks
 {
-    /**
-     * How many recorded nodes to keep. A recorded node retains its parse node, its stabilised scope's share
-     * (~2.7 nodes per scope object) and one array slot — measured at ~1.7 KB per node across the fixture
-     * app's largest files, so this is a ceiling of roughly 170 MB. The whole fixture app is ~7.5k nodes and
-     * a 500-file application extrapolates to ~60k, so only an app several times that ever evicts.
-     */
-    private const NODE_BUDGET = 100_000;
+    /** Fraction of the process's memory ceiling a recording may let usage reach before it is abandoned. */
+    private const MEMORY_HEADROOM = 0.7;
+
+    /** php.ini shorthand suffixes, in bytes. */
+    private const MEMORY_UNITS = ['k' => 1024, 'm' => 1048576, 'g' => 1073741824];
+
+    /** Digits that always fit a 64-bit int, so the scaling below is bounds-checked rather than saturating. */
+    private const MEMORY_MAX_DIGITS = 18;
 
     /**
-     * Recorded walks by normalised file, least-recently-walked first — which is the eviction order.
+     * Recorded walks by normalised file, each stamped with the analysed-file-set size it was made at.
      *
-     * @var array<string, list<array{Node, Scope}>>
+     * @var array<string, array{nodes: RecordedWalk, analysed: int}>
      */
     private array $recordings = [];
 
     private int $recordedNodes = 0;
 
     /**
-     * Files with a live pass in flight. Recording one from inside its own walk would nest
-     * `processNodes`, so a re-entrant ask gets a plain pass and records nothing.
+     * Files whose recording was abandoned mid-pass. Remembered so a later ask goes straight to a live pass
+     * rather than re-paying the accumulation it is only going to throw away again.
      *
      * @var array<string, true>
      */
-    private array $inFlight = [];
+    private array $oversized = [];
+
+    /** True while any live pass is in flight. */
+    private bool $walking = false;
+
+    /** Memory usage a recording stops at, or null when the process has no readable ceiling. */
+    private readonly ?int $memoryCeiling;
 
     /**
-     * @param  int  $nodeBudget  overridable so the mechanics can be tested at a budget of a few nodes; the
-     *                           build always takes the default, which is why it is a constant and not config
+     * @param  int  $nodeBudget  total recorded nodes to retain — a ceiling on this layer's memory, sized well
+     *                           above what a large application walks (docs/design/inference-embedding.md §2);
+     *                           overridable so the mechanics are testable at a budget of a few nodes
+     * @param  int|null  $memoryCeiling  bytes usage may reach before recording is abandoned; null reads the
+     *                                   process's own `memory_limit`
      */
     public function __construct(
         private readonly RuntimeAdapter $adapter,
-        private readonly int $nodeBudget = self::NODE_BUDGET,
-    ) {}
+        private readonly int $nodeBudget = 100_000,
+        ?int $memoryCeiling = null,
+    ) {
+        $this->memoryCeiling = $memoryCeiling ?? self::ceilingFromIni();
+    }
 
     /**
      * Drive `$callback(PhpParser\Node, PHPStan\Analyser\Scope)` over every node of a file, from the
@@ -74,47 +85,68 @@ final class FileWalks
 
         $recording = $this->recordings[$key] ?? null;
         if ($recording !== null) {
-            // Re-insert so the working set is what survives eviction.
-            unset($this->recordings[$key]);
-            $this->recordings[$key] = $recording;
+            // A recording made before the analysed set grew can answer with less than a live pass would:
+            // PHPStan gates trait inlining on that set, so a file primed since is richer now than it was.
+            if ($recording['analysed'] === $this->adapter->analysedFileCount()) {
+                foreach ($recording['nodes'] as [$node, $scope]) {
+                    $callback($node, $scope);
+                }
 
-            foreach ($recording as [$node, $scope]) {
-                $callback($node, $scope);
+                return;
             }
 
-            return;
+            $this->recordedNodes -= count($recording['nodes']);
+            unset($this->recordings[$key]);
         }
 
-        if (isset($this->inFlight[$key])) {
+        // A plain pass, recording nothing, on two counts. No recording is ever built from inside another
+        // walk — the nesting itself is the caller's business ("collect then recurse, never nest
+        // processNodes" is Tracer's rule, and this pass IS a nested `processNodes` when a caller breaks it);
+        // what the guard buys is that an outer recording cannot end up interleaved with an inner walk's
+        // nodes. And a file already found oversized skips the accumulation it would only throw away again.
+        if ($this->walking || isset($this->oversized[$key])) {
             $this->livePass($file, $callback);
 
             return;
         }
 
-        $this->inFlight[$key] = true;
+        $this->walking = true;
 
-        /** @var list<array{Node, Scope}> $recorded */
+        /** @var RecordedWalk $recorded */
         $recorded = [];
+        $abandoned = false;
         try {
-            $this->livePass($file, function (Node $node, Scope $scope) use (&$recorded, $callback): void {
-                $recorded[] = [$node, $scope];
+            $this->livePass($file, function (Node $node, Scope $scope) use (&$recorded, &$abandoned, $callback): void {
+                if (! $abandoned && $this->exhausted(count($recorded))) {
+                    // Stop appending AND drop what was accumulated: holding a recording that will be
+                    // discarded anyway is the peak-memory cost this budget exists to bound.
+                    $abandoned = true;
+                    $recorded = [];
+                }
+                if (! $abandoned) {
+                    $recorded[] = [$node, $scope];
+                }
+
                 $callback($node, $scope);
             });
 
             // Only a walk that ran to the end is worth keeping: replaying a truncated recording would
             // answer a later consumer with less than a live pass gives it.
-            $this->store($key, $recorded);
+            if ($abandoned) {
+                $this->oversized[$key] = true;
+            } else {
+                $this->store($key, $recorded);
+            }
         } finally {
-            unset($this->inFlight[$key]);
+            $this->walking = false;
         }
     }
 
     /**
      * One live pass, stabilising each callback scope before anyone sees it. Deduped per scope object because
-     * several nodes share one instance, which is what keeps stabilising every node's scope near-free
-     * (measured +4.6% over a plain pass, against +14% undeduped). A `WeakMap` rather than an
-     * `spl_object_id` array: PHPStan discards scopes as it walks, and a reused object handle would hand a
-     * fresh scope the stabilisation of a dead one.
+     * several nodes share one instance, which is what keeps stabilising every node's scope near-free. A
+     * `WeakMap` rather than an `spl_object_id` array: PHPStan discards scopes as it walks, and a reused
+     * object handle would hand a fresh scope the stabilisation of a dead one.
      */
     private function livePass(string $file, callable $callback): void
     {
@@ -127,25 +159,60 @@ final class FileWalks
     }
 
     /**
-     * @param  list<array{Node, Scope}>  $recorded
+     * Whether a recording of `$recorded` nodes so far has to stop. Node count is the cheap proxy; the real
+     * risk is bytes, so usage against the process ceiling decides too — a recording is a speed optimisation
+     * and must never be the reason a build runs out of memory.
+     */
+    private function exhausted(int $recorded): bool
+    {
+        return $recorded >= $this->nodeBudget
+            || ($this->memoryCeiling !== null && memory_get_usage() >= $this->memoryCeiling);
+    }
+
+    /**
+     * @param  RecordedWalk  $recorded
      */
     private function store(string $key, array $recorded): void
     {
         $nodes = count($recorded);
-        if ($nodes > $this->nodeBudget) {
-            return; // one file over the whole budget: evicting everything else for it is not a trade
+        if ($this->recordedNodes + $nodes > $this->nodeBudget) {
+            // Clear everything rather than evict a file at a time: a cleared file is walked live and
+            // re-recorded, so the cheapest reset is also a correct one, and the replay path is left with
+            // no ordering to maintain.
+            $this->recordings = [];
+            $this->recordedNodes = 0;
         }
 
-        $this->recordings[$key] = $recorded;
+        // Stamped AFTER the pass: `processFile()` primes the file itself, so the set the recording answers
+        // for is the one the pass left behind.
+        $this->recordings[$key] = ['nodes' => $recorded, 'analysed' => $this->adapter->analysedFileCount()];
         $this->recordedNodes += $nodes;
+    }
 
-        while ($this->recordedNodes > $this->nodeBudget) {
-            $oldest = array_key_first($this->recordings);
-            if ($oldest === null || $oldest === $key) {
-                break;
-            }
-            $this->recordedNodes -= count($this->recordings[$oldest]);
-            unset($this->recordings[$oldest]);
+    /** The ceiling in force for this process. */
+    private static function ceilingFromIni(): ?int
+    {
+        return self::ceiling((string) ini_get('memory_limit'));
+    }
+
+    /**
+     * The usable share of a php.ini memory value, in bytes — or null when it is unlimited or not a shorthand,
+     * in which case the node budget is the only bound. Parsed here rather than shared with the adapter
+     * package's `MemoryLimit`, which the engine may not import.
+     */
+    private static function ceiling(string $value): ?int
+    {
+        $value = strtolower(trim($value));
+        $unit = substr($value, -1);
+        $scale = self::MEMORY_UNITS[$unit] ?? 1;
+        $number = isset(self::MEMORY_UNITS[$unit]) ? substr($value, 0, -1) : $value;
+
+        // An unlimited `-1`, an empty value and a figure too large to be a byte count all read as "no
+        // ceiling to compare against" — a saturating cast would be a worse answer than none.
+        if (! ctype_digit($number) || strlen($number) > self::MEMORY_MAX_DIGITS || (int) $number > intdiv(PHP_INT_MAX, $scale)) {
+            return null;
         }
+
+        return (int) ((int) $number * $scale * self::MEMORY_HEADROOM);
     }
 }
