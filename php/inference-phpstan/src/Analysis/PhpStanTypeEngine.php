@@ -24,6 +24,7 @@ use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Metadata\ClassMetadataFactory;
+use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\SourceOrder;
@@ -76,6 +77,7 @@ final class PhpStanTypeEngine implements TypeEngine
         private readonly ProjectFilter $projectFilter,
         private readonly ClassMetadataFactory $classMetadataFactory,
         private readonly ProjectFilter $refinerFilter,
+        private readonly FileWalks $walks,
     ) {}
 
     public function analyzeAction(ActionRef $action): ActionAnalysis
@@ -555,6 +557,7 @@ final class PhpStanTypeEngine implements TypeEngine
 
         $tracer = new Tracer(
             $this->adapter,
+            $this->walks,
             $this->translator,
             $this->projectFilter,
             new CalleeResolver($this->adapter->reflectionProvider()),
@@ -583,7 +586,9 @@ final class PhpStanTypeEngine implements TypeEngine
      * function (`InArrowFunctionNode`, one implicit return).
      *
      * The visitor runs inside the pass, on the live scope: an arrow function's scope is a lazy fiber scope
-     * that can't type expressions once the pass has ended, so nothing may be deferred.
+     * that can't type expressions once the pass has ended, so nothing may be deferred — and this is the one
+     * walk that goes straight to the adapter rather than through {@see FileWalks}, because a recording of it
+     * could not answer.
      */
     private function traceClosure(ActionRef $action, TraceVisitor $visitor): void
     {

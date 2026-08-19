@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Analysis;
 
 use Docuccino\Core\Inference\LocalWrites;
+use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
@@ -34,11 +35,16 @@ final class FileAnalyzer
     /** @var array<string, FileHarvest> */
     private array $cache = [];
 
-    public function __construct(private readonly RuntimeAdapter $adapter) {}
+    public function __construct(
+        private readonly RuntimeAdapter $adapter,
+        private readonly FileWalks $walks,
+    ) {}
 
     /**
      * Every node this class hands out is consumed after its walk finished, so the scopes hanging off them
-     * must be stabilised before they are queried — see {@see RuntimeAdapter::stableScope()}.
+     * must be stabilised before they are queried — see {@see RuntimeAdapter::stableScope()}. That is the
+     * scope INSIDE a harvested node (a return statement's), which no walk hands to a callback; the callback
+     * scopes {@see FileWalks} deals in arrive stabilised already, and this is a no-op on them.
      */
     public function stableScope(Scope $scope): Scope
     {
@@ -142,9 +148,9 @@ final class FileAnalyzer
 
     /**
      * Every harvest off ONE walk of the file — the method bodies, the closures, the array-literal
-     * initialisers and every local's single assignment. Memoised together because they read the same nodes;
-     * a second walk would cost a full re-analysis of the file to collect what this one already saw, and
-     * resolving scope over the whole file is the expensive half of a pass.
+     * initialisers and every local's single assignment. Memoised together because they read the same nodes:
+     * a second harvest would have to walk the file again to collect what this one already saw. The walk
+     * itself comes from {@see FileWalks}, so it is also the walk the trace reuses.
      *
      * @return FileHarvest
      */
@@ -166,7 +172,7 @@ final class FileAnalyzer
         /** @var array<string, true> $opaque scopes where a write named no single local */
         $opaque = [];
 
-        $this->adapter->processFile($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrays, &$locals, &$opaque): void {
+        $this->walks->walk($file, function (Node $node, Scope $scope) use (&$methods, &$closures, &$arrays, &$locals, &$opaque): void {
             // Watching for these virtual nodes is the sanctioned way to pair returns with refined scope.
             // Collected first and outside the guard below, so that a reader wanting only a method body — the
             // throw analyzer, the tracer descending into a callee — never pays for the write half's failures.

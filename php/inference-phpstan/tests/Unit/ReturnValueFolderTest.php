@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Inference\ConstValue;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
+use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
@@ -49,7 +50,7 @@ it('declines a callee the analyser has no body for, without re-parsing its file'
     $reflection = $this->createStub(ReflectionProvider::class);
     $reflection->method('hasClass')->willReturn(false);
 
-    $folder = new ReturnValueFolder(new FileAnalyzer($adapter), $reflection);
+    $folder = new ReturnValueFolder(new FileAnalyzer($adapter, new FileWalks($adapter)), $reflection);
     $class = 'Modules\\Billing\\PositionSearchQuery';
     $file = '/app/PositionSearchQuery.php';
 

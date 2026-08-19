@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
+use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use PhpParser\Node;
 use PhpParser\ParserFactory;
@@ -49,7 +50,7 @@ function fileAnalyzerWithRecordingAdapter(int &$calls): FileAnalyzer
         }
     };
 
-    return new FileAnalyzer($adapter);
+    return new FileAnalyzer($adapter, new FileWalks($adapter));
 }
 
 /**
@@ -92,7 +93,7 @@ function fileAnalyzerOverNodes(array $nodes): FileAnalyzer
         }
     };
 
-    return new FileAnalyzer($adapter);
+    return new FileAnalyzer($adapter, new FileWalks($adapter));
 }
 
 /** The expression `<code>` parses to, so a test names the shape it drives as the PHP it stands for. */

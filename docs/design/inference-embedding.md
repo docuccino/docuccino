@@ -46,6 +46,26 @@ paired with flow-refined scope — `$scope->getType($expr)` per return path) and
 `getStatementResult()->getThrowPoints()` (escaping exceptions, caught subtracted, `@throws`
 consulted).
 
+**One pass per file, replayed (`Runtime\FileWalks`).** Resolving scope over a file is the expensive half of
+an analysis, and several consumers want the SAME walk of it: the method/closure/assignment harvest
+(`FileAnalyzer`), then the Query-Builder trace, the inline-rules trace and a pagination trace of every route
+the file holds. `FileWalks` runs `processFile` once per file, records the `(node, scope)` sequence in
+`NodeScopeResolver`'s own callback order, and replays it verbatim to every later ask. Measured on the fixture
+app: 313 passes over 30 files → 30, and ~28% off the analysis wall (pass count falls further than time
+because PHPStan's parser/reflection caches already made a repeat pass cheaper than a cold one).
+
+The invariant it rests on: **a replay and the walk that recorded it are indistinguishable.** Every consumer,
+the recording one included, is handed the STABILISED scope (`stableScope()` → `toMutatingScope()`), deduped by
+scope object identity — many nodes share one scope instance, which is what keeps stabilising every node's
+scope near-free (+4.6% on a pass, against +14% undeduped). So a recording that is absent, evicted or
+discarded costs one more live pass and nothing else, which is what makes the layer invisible to output: warm
+equals cold by construction. Under-recording is the sanctioned degradation and it takes three forms — a pass
+that threw records nothing (a truncated recording would answer a later consumer with less than a live pass
+does), a re-entrant ask for the file being walked gets a plain pass rather than nesting `processNodes`, and a
+per-build node budget (100k nodes, ~1.7 KB retained each as measured, so ~170 MB; a 500-file app extrapolates
+to ~60k) evicts the least recently walked file. Closure harvesting is the one walk that may NOT be replayed
+and goes straight to the adapter — §4b.
+
 **Spike A traps (regression-test each):**
 1. `bootstrapFiles` are NOT auto-run by a raw ContainerFactory embed — read
    `getParameter('bootstrapFiles')` and `require_once` each, or Larastan fails with
@@ -327,6 +347,10 @@ ended, so nothing may be deferred until after the walk.
 `ClosureReturnStatementsNode::getStatementResult()->isAlwaysTerminating()` distinguishes a conditional
 (fall-through) closure body from an unconditional one; a limiter that does not always return is left
 unrecovered rather than half-folded.
+
+This is also why `traceClosure()` is the one walk that bypasses `FileWalks` (§2): stabilising saves other
+scopes for a later replay and does not save an arrow function's, so a recording of that walk could not
+answer. Every `ClosureReturnStatementsNode`/`InArrowFunctionNode` consumer takes a live `processFile`.
 
 ## 5. DType model + translator
 

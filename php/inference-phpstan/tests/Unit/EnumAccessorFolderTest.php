@@ -7,6 +7,7 @@ use Docuccino\Inference\PhpStan\Analysis\AccessorKind;
 use Docuccino\Inference\PhpStan\Analysis\EnumAccessorFolder;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Analysis\ParamAccessor;
+use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\FolderProbeEnum;
@@ -51,7 +52,7 @@ function makeEnumAccessorFolder(array &$recorded, bool $projectSees = false): En
     $projectFilter = new ProjectFilter($projectSees ? ['/'] : [], static fn (string $f): string => $f);
 
     return new EnumAccessorFolder(
-        new FileAnalyzer($adapter),
+        new FileAnalyzer($adapter, new FileWalks($adapter)),
         $projectFilter,
         static function (string $file) use (&$recorded): void {
             $recorded[] = $file;

@@ -19,6 +19,7 @@ declare(strict_types=1);
  *   php engine-runner.php refine-pair               <fileBudget> <traceDepth> <file1> <class1> <method1> <file2> <class2> <method2>
  *   php engine-runner.php class-metadata            <ignored>        <class>
  *   php engine-runner.php trace-qb                  <controllerFile> <class> <method>
+ *   php engine-runner.php trace-qb-replay           <controllerFile> <class> <method>
  *   php engine-runner.php trace-qb-enrich           <controllerFile> <class> <method>
  *   php engine-runner.php trace-rules               <file> <class> <method>
  *   php engine-runner.php trace-inline-rules        <controllerFile> <class> <method>
@@ -165,6 +166,22 @@ $engine = $mode === 'refine-pair'
 
 $ref = new ActionRef($file, $class === '' ? null : $class, $method);
 
+// Shared by trace-qb and trace-qb-replay, whose whole point is that the two harvests are comparable.
+$qbHarvest = static function () use ($engine, $ref): array {
+    $probe = new QueryBuilderProbe;
+    $engine->trace($ref, $probe);
+
+    return [
+        'filters' => $probe->allowedFilters,
+        'sorts' => $probe->allowedSorts,
+        'default' => $probe->defaultSort,
+        'terminals' => $probe->terminals,
+        'paginates' => $probe->paginates(),
+        'perPage' => $probe->recoveredPerPage(),
+        'outermost' => $probe->outermostTerminal()['terminal'] ?? null,
+    ];
+};
+
 $result = match ($mode) {
     'analyze', 'analyze-with-config' => $engine->analyzeAction($ref)->toArray(),
     'analyze-callable' => $engine->analyzeCallable(new CallableRef(
@@ -188,18 +205,17 @@ $result = match ($mode) {
         ];
     })(),
     'class-metadata' => $engine->classMetadata(new ClassRef($class))->toArray(),
-    'trace-qb' => (static function () use ($engine, $ref): array {
-        $probe = new QueryBuilderProbe;
-        $engine->trace($ref, $probe);
+    'trace-qb' => $qbHarvest(),
+    // The replay layer's real-path parity: analyse the action first, so the controller's walk is recorded
+    // by the METHOD harvest, then trace it twice off that recording. Every harvest here — and the one
+    // trace-qb takes off a live pass in its own subprocess — must be the same harvest.
+    'trace-qb-replay' => (static function () use ($engine, $ref, $qbHarvest): array {
+        $analysis = $engine->analyzeAction($ref);
 
         return [
-            'filters' => $probe->allowedFilters,
-            'sorts' => $probe->allowedSorts,
-            'default' => $probe->defaultSort,
-            'terminals' => $probe->terminals,
-            'paginates' => $probe->paginates(),
-            'perPage' => $probe->recoveredPerPage(),
-            'outermost' => $probe->outermostTerminal()['terminal'] ?? null,
+            'returns' => count($analysis->returns),
+            'first' => $qbHarvest(),
+            'second' => $qbHarvest(),
         ];
     })(),
     'trace-qb-enrich' => (static function () use ($engine, $ref): array {
