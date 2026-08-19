@@ -569,9 +569,13 @@ subsystem. Five decisions carry the feature:
   `Core\Examples\ExampleRedaction` reuses `Lint\SensitiveFieldLintOptions` and `Lint\CredentialShapes` rather than
   re-deriving them — one table, so an application that taught the lint its own names has taught the
   recorder too. Only STRINGS are replaced, so a `token_count` keeps its type and the example goes on
-  satisfying its schema; a sensitive member name taints everything beneath it. The build refuses to
-  publish a committed body that still matches (a hand edit, or a heuristic added since) and
-  `examples.recording-unsafe` names the pointer, never the value.
+  satisfying its schema; a sensitive member name taints everything beneath it. A number is REPORTED
+  rather than replaced — `{"cvv": 123}` is a secret and `[redacted]` where the schema says integer is
+  not a fix — and reporting is enough, because publication is refused on any finding at all. Nothing but
+  the name can speak for a number, so the name has to BE a heuristic rather than contain one: `token`
+  counts, `token_count` does not. The build refuses to publish a committed body that still matches (a
+  hand edit, or a heuristic added since) and `examples.recording-unsafe` names the pointer, never the
+  value.
 - **The example is the MEDIA TYPE's, not the schema's.** `SharedErrorResponses` strips
   `content[<media type>].example` before it groups, so a recording written into the schema would key the
   hoist and could drop an unrelated route's 404 out of its shared component and back inline.

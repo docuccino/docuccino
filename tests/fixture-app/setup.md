@@ -172,9 +172,9 @@ own (seeded from the action's parameter type):
 
 ### Exception-flow analysis
 
-- `app/Http/Controllers/ThrowsController.php` — eight actions covering abort/abort_if,
-  authorize, findOrFail, inline `validate()`, a 2-deep service call with and without
-  `@throws`, a vendor any-throwable call, and a try/catch.
+- `app/Http/Controllers/ThrowsController.php` — ten actions covering abort/abort_if (with the
+  status written positionally and, separately, named), authorize, findOrFail, inline `validate()`,
+  a 2-deep service call with and without `@throws`, a vendor any-throwable call, and a try/catch.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
   throw chain descended by the exception-flow layer.
 - `app/Exceptions/OutOfStockException.php` — a custom domain exception (also reused by the
@@ -329,17 +329,22 @@ own (seeded from the action's parameter type):
   beside an inline renderer with its own `render()` building a 418 into a local of the same name. One file,
   two bodies: the harvest has to carry the class or each answers for the other.
 
-### Arguments assembled elsewhere and spread in
+### Arguments the call site does not write out
 
 Every reader that wants argument N reads a POSITION, and a spread fills its own and every later one from a
-sequence — so the slot a reader indexes is not the value the call receives. Each file below writes one such
-call in the shape an app writes it, beside the same call written out, so the pair pins what widens and what
-does not.
+sequence — so the slot a reader indexes is not the value the call receives. An argument that is written but
+does not fold loses the same value without moving anything, which is why both shapes are here. Each file
+below writes one such call in the shape an app writes it, beside the same call written out, so the pair
+pins what widens and what does not.
 
 - `app/Http/Requests/SpreadChoicesRequest.php` — a `Rule::in('any', ...$this->statuses())` and a
   `Rule::enum(...)->only(Open, ...$this->alsoAllowed())`, plus a `visibility` field stating every value at
   the rule. The written half is the hazard: published on its own it is a SHORTER list of legal values than
   the endpoint accepts, so the constraint is dropped and `validation.rule-values-unread` says so.
+- `app/Http/Requests/UnreadChoicesRequest.php` — the same truncation with no spread in it:
+  `Rule::in('any', $this->fallbackStatus())` and `->only([ListingStatus::Open, $this->alsoAllowed()])`
+  each name one value the fold cannot read. A reader watching only for spreads walked straight past
+  both and published a list one value short.
 - `app/Http/Controllers/SpreadResponseController.php` — `response()->json(...)`, `new JsonResponse(...)`
   and `response()->noContent(...)` all handed an argument list built by a private helper, with `index()`
   writing the same envelope at the call site as the control. Read positionally, the argument LIST is
