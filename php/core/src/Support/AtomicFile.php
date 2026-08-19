@@ -26,7 +26,9 @@ final class AtomicFile
     /** False when the write or the rename failed, leaving whatever was already there untouched. */
     public static function write(string $path, string $contents): bool
     {
-        $temp = $path.'.'.getmypid().'.'.bin2hex(random_bytes(4)).'.tmp';
+        // random_int over bin2hex(random_bytes(…)): an unambiguous int return type for every analyser
+        // version we support, and twice the entropy.
+        $temp = $path.'.'.getmypid().'.'.dechex(random_int(0, PHP_INT_MAX)).'.tmp';
         $handle = @fopen($temp, 'xb');
 
         if ($handle === false) {
