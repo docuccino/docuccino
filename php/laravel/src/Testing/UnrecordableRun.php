@@ -36,7 +36,7 @@ final class UnrecordableRun extends RuntimeException
             "Response recordings cannot be written safely here: %s\n".
             "Workers take turns through that lock; without it each would write the whole file back and the\n".
             "published example would be whichever finished last, so nothing was written at all.\n".
-            'Record in a single-process job (drop --parallel), or point TMPDIR at a filesystem that locks.',
+            'Record in a single-process job (drop --parallel), or point TMPDIR at a directory of your own on a filesystem that locks.',
             $failure->getMessage(),
         ), previous: $failure);
     }

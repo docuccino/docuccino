@@ -36,7 +36,9 @@ function ledgerDirectories(): array
 function ledgerRemove(string $path): void
 {
     foreach (glob($path.'/*') ?: [] as $entry) {
-        is_dir($entry) ? ledgerRemove($entry) : @unlink($entry);
+        // A link is unlinked, never followed: one of these tests plants a link to a directory, and
+        // descending through it would empty whatever it points at.
+        is_dir($entry) && ! is_link($entry) ? ledgerRemove($entry) : @unlink($entry);
     }
 
     @rmdir($path);
@@ -248,6 +250,43 @@ it('writes nothing at all when it cannot take the lock', function (): void {
     ))->toThrow(UnlockableRecording::class);
 
     expect($store->fileNames())->toBe([]);
+});
+
+it('refuses a scratch directory somebody else could have left there', function (Closure $plant): void {
+    // The path is derivable by anyone on the machine, so a directory found under it is only usable
+    // when it is this user's alone. One that is not would put somebody else's bodies into the
+    // recordings an author commits, and hand them everything this run recorded.
+    [$recordings, $scratch] = ledgerDirectories();
+    $store = new RecordingStore($recordings);
+
+    $plant($scratch.'/docuccino-recordings-'.substr(sha1($recordings), 0, 16).'-run-1');
+
+    expect(fn () => (new SharedRecordingLedger($store, 'run-1', $scratch))->record(
+        LEDGER_OPERATION,
+        'GET /api/invoices/{invoice}',
+        RecordedExample::of('200', 'application/json', ['id' => 1]),
+    ))->toThrow(UnlockableRecording::class);
+
+    expect($store->fileNames())->toBe([]);
+})->with([
+    'a link to somewhere else' => [fn (string $path): bool => mkdir($path.'-target') && symlink($path.'-target', $path)],
+    'a directory anybody can write to' => [fn (string $path): bool => mkdir($path, 0777, true) && chmod($path, 0777)],
+]);
+
+it('creates its scratch directory private to this user', function (): void {
+    [$recordings, $scratch] = ledgerDirectories();
+    $store = new RecordingStore($recordings);
+
+    (new SharedRecordingLedger($store, 'run-1', $scratch))->record(
+        LEDGER_OPERATION,
+        'GET /api/invoices/{invoice}',
+        RecordedExample::of('200', 'application/json', ['id' => 1]),
+    );
+
+    $created = glob($scratch.'/docuccino-recordings-*') ?: [];
+
+    expect($created)->toHaveCount(1)
+        ->and(fileperms($created[0]) & 0o777)->toBe(0o700);
 });
 
 it('ignores an operation id no recording could be filed under', function (): void {

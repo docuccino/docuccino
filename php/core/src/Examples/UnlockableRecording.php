@@ -29,6 +29,11 @@ final class UnlockableRecording extends RuntimeException
         return new self($path, sprintf('The lock directory %s could not be created.', $path));
     }
 
+    public static function untrusted(string $path): self
+    {
+        return new self($path, sprintf('The lock directory %s is not this user\'s, so nothing was read from it or written to it.', $path));
+    }
+
     public static function unopenable(string $path): self
     {
         return new self($path, sprintf('The lock file %s could not be opened.', $path));

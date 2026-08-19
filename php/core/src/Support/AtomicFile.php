@@ -11,8 +11,9 @@ use Docuccino\Core\Examples\SharedRecordingLedger;
  *
  * It matters most where a write can be interrupted — `docuccino:watch` re-exports on every save, and
  * Ctrl+C reaches the build it is running, so a plain `file_put_contents` would eventually leave a
- * truncated artifact behind. The temp name carries the pid, so two processes writing the same target
- * cannot land on each other's.
+ * truncated artifact behind. The temp name carries the pid and a random suffix, so two processes
+ * writing the same target cannot land on each other's — and it is created with `x`, which refuses to
+ * open anything already there rather than writing through a symlink somebody left in the way.
  *
  * Note what the rename does to a lock: it replaces the target's inode, so a lock held ON the file
  * being written is a lock on something the next writer has already thrown away. Anything serialising
@@ -25,13 +26,17 @@ final class AtomicFile
     /** False when the write or the rename failed, leaving whatever was already there untouched. */
     public static function write(string $path, string $contents): bool
     {
-        $temp = $path.'.'.getmypid().'.tmp';
+        $temp = $path.'.'.getmypid().'.'.bin2hex(random_bytes(4)).'.tmp';
+        $handle = @fopen($temp, 'xb');
 
-        if (@file_put_contents($temp, $contents) === false) {
+        if ($handle === false) {
             return false;
         }
 
-        if (@rename($temp, $path)) {
+        $written = @fwrite($handle, $contents);
+        @fclose($handle);
+
+        if ($written === strlen($contents) && @rename($temp, $path)) {
             return true;
         }
 

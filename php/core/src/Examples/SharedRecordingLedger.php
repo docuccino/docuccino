@@ -23,6 +23,12 @@ use JsonException;
  * so a later run of the same suite starts from the file as it stands rather than from what the last
  * one was accumulating, and neither ever appears in the tree an author commits.
  *
+ * That directory's name is derivable by anyone with an account on the machine — it has to be, or two
+ * workers of one run could not find the same one without talking — so the trust comes from who owns
+ * it. It is created private and refused when it turns out to be somebody else's, because the contents
+ * of one somebody else made would reach the recordings an author commits, and everything this run
+ * recorded would be readable by whoever made it.
+ *
  * @internal
  */
 final class SharedRecordingLedger extends RecordingLedger
@@ -45,11 +51,7 @@ final class SharedRecordingLedger extends RecordingLedger
             return;
         }
 
-        $directory = $this->scratch();
-
-        if (! is_dir($directory) && ! @mkdir($directory, 0777, true) && ! is_dir($directory)) {
-            throw UnlockableRecording::directory($directory);
-        }
+        $directory = $this->open();
 
         $session = $directory.'/'.$file;
         $lock = $session.'.lock';
@@ -74,6 +76,42 @@ final class SharedRecordingLedger extends RecordingLedger
         } finally {
             fclose($handle);
         }
+    }
+
+    /** The scratch directory, made ours or refused. */
+    private function open(): string
+    {
+        $directory = $this->scratch();
+
+        if (! is_dir($directory) && ! @mkdir($directory, 0700, true) && ! is_dir($directory)) {
+            throw UnlockableRecording::directory($directory);
+        }
+
+        if (! self::ours($directory)) {
+            throw UnlockableRecording::untrusted($directory);
+        }
+
+        return $directory;
+    }
+
+    /** Ours: the directory itself rather than a link to one, owned by this user, writable by nobody else. */
+    private static function ours(string $directory): bool
+    {
+        clearstatcache(true, $directory);
+
+        if (is_link($directory)) {
+            return false;
+        }
+
+        // Nothing to compare an owner against without POSIX — and nothing reaches this ledger without
+        // it either, since the run key it is built with is taken from the same extension.
+        if (! function_exists('posix_geteuid')) {
+            return true;
+        }
+
+        $permissions = @fileperms($directory);
+
+        return @fileowner($directory) === posix_geteuid() && $permissions !== false && ($permissions & 0o022) === 0;
     }
 
     /** The run's own scratch directory: one per recordings directory per run, never inside the tree. */

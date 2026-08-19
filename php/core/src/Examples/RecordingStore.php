@@ -107,7 +107,7 @@ final readonly class RecordingStore
             return true;
         }
 
-        if (! is_dir($this->directory) && ! @mkdir($this->directory, 0777, true) && ! is_dir($this->directory)) {
+        if (! is_dir($this->directory) && ! @mkdir($this->directory, 0755, true) && ! is_dir($this->directory)) {
             return false;
         }
 

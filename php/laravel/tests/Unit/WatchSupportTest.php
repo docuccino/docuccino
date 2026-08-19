@@ -177,6 +177,23 @@ it('replaces a file only once the whole of it is written', function (): void {
     @unlink($path);
 });
 
+it('replaces a link rather than writing through it', function (): void {
+    // The rename replaces the name, never what the name pointed at, so a link left in the way is not a
+    // write into somebody else's file.
+    $base = sys_get_temp_dir().'/docuccino-atomic-'.uniqid('', true);
+    mkdir($base);
+    file_put_contents($base.'/target', 'target contents');
+    symlink($base.'/target', $base.'/link');
+
+    expect(AtomicFile::write($base.'/link', 'new contents'))->toBeTrue()
+        ->and(is_link($base.'/link'))->toBeFalse()
+        ->and(file_get_contents($base.'/target'))->toBe('target contents');
+
+    @unlink($base.'/link');
+    @unlink($base.'/target');
+    @rmdir($base);
+});
+
 it('leaves what was there when it cannot write', function (): void {
     $directory = sys_get_temp_dir().'/docuccino-atomic-'.uniqid('', true);
 
