@@ -37,6 +37,7 @@ final class ExplainCommand extends Command
 {
     use GuardsEnabled;
     use IteratesDocuments;
+    use PrintsSections;
     use StringOptions;
 
     protected $signature = 'docuccino:explain
@@ -113,7 +114,7 @@ final class ExplainCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->heading($match->signature(), $this->meta($match));
+        $this->section($match->signature(), $this->meta($match));
 
         if ($nodes === []) {
             $this->emptyTrail();
@@ -169,7 +170,7 @@ final class ExplainCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->heading($match->signature(), $this->meta($match));
+        $this->section($match->signature(), $this->meta($match));
 
         foreach ($this->report->field($node, $trail) as $line) {
             $this->line($line);
@@ -203,7 +204,7 @@ final class ExplainCommand extends Command
             return $exit;
         }
 
-        $this->heading(
+        $this->section(
             $found === []
                 ? sprintf('No field matches "%s" on %s.', $query, $match->signature())
                 : sprintf('%d fields match "%s".', count($found), $query),
@@ -252,7 +253,7 @@ final class ExplainCommand extends Command
             return self::FAILURE;
         }
 
-        $this->heading(sprintf('No operation matches "%s".', $query), null);
+        $this->section(sprintf('No operation matches "%s".', $query), null);
 
         $example = $operations[0] ?? null;
         $this->newLine();
@@ -291,7 +292,7 @@ final class ExplainCommand extends Command
             return self::INVALID;
         }
 
-        $this->heading(sprintf('%d operations match "%s".', count($matches), $query), null);
+        $this->section(sprintf('%d operations match "%s".', count($matches), $query), null);
         $this->newLine();
 
         foreach (ConsoleTable::render(
@@ -409,17 +410,6 @@ final class ExplainCommand extends Command
         ));
 
         return $segments === [] ? 'invoices' : $segments[count($segments) - 1];
-    }
-
-    private function heading(string $title, ?string $meta): void
-    {
-        $this->newLine();
-        $this->line(sprintf('<options=bold>%s</>', TerminalText::of($title)));
-        $this->line(sprintf('<fg=gray>%s</>', str_repeat('─', mb_strlen($title))));
-
-        if ($meta !== null) {
-            $this->line(sprintf('<fg=gray>%s</>', TerminalText::of($meta)));
-        }
     }
 
     private function meta(OperationMatch $match): string

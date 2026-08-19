@@ -54,13 +54,7 @@ final class ExtensionRegistry
      */
     public function resolve(Container $container, array $defaults, array $configExtensions): ResolvedExtensions
     {
-        $instances = [];
-        foreach ([...$defaults, ...$this->registrations, ...$configExtensions] as $registration) {
-            foreach ($this->expand($registration, $container) as $instance) {
-                $instances[] = $instance;
-            }
-        }
-
+        $instances = $this->instances($container, $defaults, $configExtensions);
         $sorter = new ExtensionSorter;
 
         return new ResolvedExtensions(
@@ -97,15 +91,34 @@ final class ExtensionRegistry
     {
         $viewers = [];
 
-        foreach ([...$defaults, ...$this->registrations, ...$configExtensions] as $registration) {
-            foreach ($this->expand($registration, $container) as $instance) {
-                if ($instance instanceof Viewer) {
-                    $viewers[$instance->name()] = $instance;
-                }
+        foreach ($this->instances($container, $defaults, $configExtensions) as $instance) {
+            if ($instance instanceof Viewer) {
+                $viewers[$instance->name()] = $instance;
             }
         }
 
         return $viewers;
+    }
+
+    /**
+     * Every registration as an instance, defaults first — the one order both consumers read, so a
+     * registration cannot reach the build and miss the viewer lookup or the other way round.
+     *
+     * @param  list<class-string|object>  $defaults
+     * @param  list<class-string|object>  $configExtensions
+     * @return list<object>
+     */
+    private function instances(Container $container, array $defaults, array $configExtensions): array
+    {
+        $instances = [];
+
+        foreach ([...$defaults, ...$this->registrations, ...$configExtensions] as $registration) {
+            foreach ($this->expand($registration, $container) as $instance) {
+                $instances[] = $instance;
+            }
+        }
+
+        return $instances;
     }
 
     /**
