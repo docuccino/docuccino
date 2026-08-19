@@ -633,13 +633,25 @@ because a union has nothing to reconcile; `CoverageMerge` unions N directories o
   overwriting the other is exactly the false gap the feature exists to stop. Nothing is detected: a
   runner that sets no token is the ordinary single-process case, and a runner nobody has heard of
   participates by writing a file like everybody else. The price is that runs accumulate rather than
-  replace, which `docuccino:coverage --reset` is for.
+  replace, which `docuccino:coverage --reset` is for — and a forgotten reset reads exactly like one run,
+  only more generous, which for a gate is the worse direction. There is no sound structural fix (stamping
+  the parent pid would refuse two shard invocations sharing a machine, which the design sanctions), so
+  the report says how far apart the logs it merged were written where that is longer than a run.
 - **The merged answer is a function of the run and of nothing else.** Sets have no first writer, so the
   same ids come back whatever the worker count, whichever file each id was seen in, and whatever order
   the directories were named — the parallel report equals the single-process one exactly.
-- **An incomplete merge is never averaged.** A directory that is not there, one holding no log, and a
-  file that does not read back as ids each take the whole merge out of gating and are named. A gate that
-  quietly measured three of four shards is worse than no gate.
+- **An incomplete merge is never averaged.** A directory that cannot be read — absent, or there and
+  refusing to open, at the top of a named path or nested anywhere under one — a directory holding no log,
+  and a file that does not read back as ids each take the whole merge out of gating and are named. A gate
+  that quietly measured three of four shards is worse than no gate. Two things make that guarantee hold
+  rather than nearly hold. The walk propagates a subdirectory it could not open BY NAME instead of
+  merging what it could reach, because one `--path` over a downloaded artifact tree is the recommended
+  shape and a shard nobody could read is not a shard that ran clean. And a log line is held to the id
+  SHAPE, not merely to being printable: a worker killed part way through a write leaves an ASCII prefix
+  of an id, which would otherwise merge as an id, match no operation, and undercount in silence. What is
+  left is a directory nobody NAMED, which nothing in the merge can see — so the documented CI recipe
+  names each shard's directory as a `--path` of its own, and the count is a gate over exactly the shards
+  it was told to expect.
 
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
