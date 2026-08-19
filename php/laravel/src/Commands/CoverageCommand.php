@@ -123,7 +123,7 @@ final class CoverageCommand extends Command
 
         // Line by line rather than as one blob: a console writer is free to wrap, and a reader
         // scrolling for the operation they own wants it on a line of its own.
-        foreach (explode("\n", TerminalText::markupOnly($report->render($minimum > 0 ? $minimum : null))) as $line) {
+        foreach (explode("\n", TerminalText::markupOnly($report->render($minimum > 0 ? $minimum : null, 'php artisan docuccino:export --format=uir'))) as $line) {
             $this->line($line);
         }
 
