@@ -86,15 +86,31 @@ it('escapes a member name a JSON pointer would otherwise read as two', function 
     expect($pointers)->toBe(['/a~1b~0c/token']);
 });
 
-it('honours the leakage safelist by member name and by pointer', function (SensitiveFieldLintOptions $options, array $expected): void {
+it('honours the leakage safelist by pointer, and never by member name', function (SensitiveFieldLintOptions $options, array $expected): void {
     [$body] = (new ExampleRedaction($options))->apply(['reset_token' => 'public-value']);
 
     expect($body)->toBe($expected);
 })->with([
-    'by name' => [new SensitiveFieldLintOptions(allow: ['reset_token']), ['reset_token' => 'public-value']],
     'by pointer' => [new SensitiveFieldLintOptions(allow: ['/reset_token']), ['reset_token' => 'public-value']],
+    'by name' => [new SensitiveFieldLintOptions(allow: ['reset_token']), ['reset_token' => ExampleRedaction::PLACEHOLDER]],
     'neither' => [new SensitiveFieldLintOptions, ['reset_token' => ExampleRedaction::PLACEHOLDER]],
 ]);
+
+it('goes on reporting a name-safelisted credential in a committed body', function (): void {
+    $redaction = new ExampleRedaction(new SensitiveFieldLintOptions(allow: ['access_token']));
+
+    expect($redaction->findings(['access_token' => '1|hR4kQzVb8Nn2tYpLxWc7Jd5']))->toBe(['/access_token']);
+});
+
+it('takes a pointer safelist as the one way to publish a value under a sensitive name', function (): void {
+    $options = new SensitiveFieldLintOptions(allow: ['/meta/next_page_token']);
+    $body = ['meta' => ['next_page_token' => 'cursor:42'], 'api_key' => 'live-value'];
+
+    [$redacted, $pointers] = (new ExampleRedaction($options))->apply($body);
+
+    expect($redacted)->toBe(['meta' => ['next_page_token' => 'cursor:42'], 'api_key' => ExampleRedaction::PLACEHOLDER])
+        ->and($pointers)->toBe(['/api_key']);
+});
 
 it('applies an application\'s own heuristics too', function (): void {
     $options = (new SensitiveFieldLintOptions)->withPatterns(['sortcode' => 'a bank sort code']);

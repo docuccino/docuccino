@@ -132,7 +132,7 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
                     $file,
                     implode(', ', $findings),
                 ),
-                help: 'Re-record it — the recorder replaces credentials on the way out. If the value is genuinely public, list its pointer or its property name under lint.leakage.allow.',
+                help: 'Re-record it — the recorder replaces credentials on the way out. If the value is genuinely public, list the pointer this message names under lint.leakage.allow; a bare property name silences the lint but never the redaction.',
             ));
         }
     }

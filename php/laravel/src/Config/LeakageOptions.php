@@ -13,6 +13,10 @@ use Docuccino\Core\Lint\SensitiveFieldLintOptions;
  * response recorder applies on the way out, and the re-check the build runs over a committed
  * recording. An application that taught Docuccino its own sensitive member names has taught all three.
  *
+ * The three read the same options and honour different parts of them on purpose: `enabled` and the
+ * name half of `allow` turn a REPORT off, and neither is a request to publish a credential — the
+ * recorder's redaction honours a pointer alone.
+ *
  * @internal
  */
 final class LeakageOptions

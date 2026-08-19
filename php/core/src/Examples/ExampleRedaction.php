@@ -23,6 +23,11 @@ use stdClass;
  * it, so `credentials: {id, value}` loses both halves rather than only the half whose own name gave it
  * away.
  *
+ * Only half of the safelist is honoured here, and deliberately. A POINTER names one value in one body,
+ * which is a decision about that value; a bare NAME blankets every member of that name everywhere,
+ * which is a decision about a schema. The lint is a report, so a name silencing it costs a warning; a
+ * name silencing this would write a live credential into a committed file and publish it.
+ *
  * @internal
  */
 final readonly class ExampleRedaction
@@ -105,6 +110,7 @@ final readonly class ExampleRedaction
             return $value;
         }
 
+        // Pointers only — see the class docblock for why a bare name is not enough to publish a value.
         if (in_array($pointer, $this->options->allow, true)) {
             return $value;
         }
@@ -114,10 +120,10 @@ final readonly class ExampleRedaction
         return $replace ? self::PLACEHOLDER : $value;
     }
 
-    /** Whether a member name means "a secret lives here", safelist honoured. */
+    /** Whether a member name means "a secret lives here". */
     private function sensitive(string $name): bool
     {
-        return $this->options->match($name) !== null && ! in_array($name, $this->options->allow, true);
+        return $this->options->match($name) !== null;
     }
 
     /** RFC 6901 escaping, so a member called `a/b` addresses one place rather than two. */

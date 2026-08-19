@@ -304,9 +304,14 @@ anything is written:
   id, a GitHub or Slack token, a live Stripe key, a JWT, a URL with a password in it.
 
 Each becomes `"[redacted]"`, and only strings are touched — a `token_count` of `5` stays the integer
-`5`, so the example goes on satisfying its own schema. Your own `lint.leakage.patterns` and
-`lint.leakage.allow` apply here too: teach Docuccino a sensitive member name once and both the lint and
-the recorder learn it.
+`5`, so the example goes on satisfying its own schema. Your own `lint.leakage.patterns` apply here too:
+teach Docuccino a sensitive member name once and both the lint and the recorder learn it.
+
+Half of `lint.leakage.allow` applies, and only half. A **JSON pointer** into the response body —
+`'/meta/next_page_token'` — publishes that one value, because it is a statement about that value. A bare
+**property name** silences the lint and is ignored here: it would exempt every member of that name in
+every body, which is the difference between accepting one public value and publishing whatever a live
+request happened to return.
 
 The build checks again when it reads the file. A committed body that still looks like it holds a
 credential — hand-edited, or caught by a heuristic added since — is **not published at all**, and says
