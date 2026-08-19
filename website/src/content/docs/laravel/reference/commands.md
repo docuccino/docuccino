@@ -390,18 +390,23 @@ as its inputs:
   walked, and any file an attribute read. Editing one controller rebuilds one operation.
 - **Everything that decides all of them.** `config/`, `routes/`, `composer.json` and `composer.lock`,
   each document's [`content.dir`](/laravel/reference/configuration/#content) tree, its
+  [`webhooks.dir`](/laravel/reference/configuration/#webhooks) tree, its
   [overlay](/laravel/reference/configuration/#overlays) files, and the
   [`engine.neon`](/laravel/reference/configuration/#engine) file if you name one. These are watched
-  as directories, so a route file or a content page you add mid-session counts too.
+  as directories, so a route file, a content page or a webhook class you add mid-session counts too.
 
 The artifacts a build writes are deliberately excluded — watching its own output would rebuild
 forever.
 
 Watch mode turns the [fragment cache](/laravel/guides/speeding-up-builds/) on for the builds it runs
 (via `DOCUCCINO_FRAGMENT_CACHE`), which is what makes a rebuild incremental and what gives it the
-list above. If your config is cached, the override can't reach it: watch says so and falls back to
-watching config, routes, content and overlays only. Run `php artisan config:clear`, or set
-[`cache.enabled`](/laravel/reference/configuration/#cache) to `true`.
+list above.
+
+If you have run `php artisan config:cache`, that env value was read and baked in when you cached, so
+the override reaches nothing: every rebuild re-analyzes your whole application and stores none of it,
+and editing a controller stops triggering one. Watch says so on startup, before the first build, so
+you can stop and fix it. Run `php artisan config:clear`, or set `DOCUCCINO_FRAGMENT_CACHE=true` and
+cache again.
 
 ### Live viewer refresh
 
