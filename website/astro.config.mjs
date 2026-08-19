@@ -42,14 +42,14 @@ export default defineConfig({
 		starlight({
 			title: 'Docuccino',
 			description:
-				'UIR-based API documentation generator for Laravel: deep type inference, deterministic output, semantic diffing and a bundled Scalar viewer.',
+				'UIR-based API documentation generator for Laravel: deep type inference, deterministic output, semantic diffing and a bundled API viewer.',
 			// Machine-readable copies of the docs, for readers who arrive as an AI assistant rather
 			// than in a browser: llms-txt builds the /llms*.txt digests, md-txt writes a .md twin
 			// beside every page. Both are build-time only — no runtime, no request-time work.
 			plugins: [
 				starlightLlmsTxt({
 					description:
-						'Docuccino is an open-source (MIT) API documentation generator for Laravel. It compiles an application into a UIR (Universal Intermediate Representation — an OpenAPI-3.2-shaped, deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1/3.0, with semantic diffing and a bundled Scalar viewer.',
+						'Docuccino is an open-source (MIT) API documentation generator for Laravel. It compiles an application into a UIR (Universal Intermediate Representation — an OpenAPI-3.2-shaped, deterministic, identity-carrying JSON document) and emits OpenAPI 3.2/3.1/3.0, with semantic diffing and a bundled API viewer (Scalar or Redoc).',
 					details: [
 						'## Key facts',
 						'',
@@ -114,6 +114,7 @@ export default defineConfig({
 						{ label: 'Responses', slug: 'laravel/documenting/responses' },
 						{ label: 'Resources, models & enums', slug: 'laravel/documenting/schemas' },
 						{ label: 'Error responses', slug: 'laravel/documenting/errors' },
+						{ label: 'Example payloads', slug: 'laravel/documenting/examples' },
 						{ label: 'Authentication', slug: 'laravel/documenting/authentication' },
 						{ label: 'Rate limiting', slug: 'laravel/documenting/rate-limiting' },
 						{ label: 'Webhooks', slug: 'laravel/documenting/webhooks' },
@@ -126,7 +127,7 @@ export default defineConfig({
 						{ label: 'Spatie Data', slug: 'laravel/packages/spatie-data' },
 						{ label: 'Spatie Query Builder', slug: 'laravel/packages/query-builder' },
 						{ label: 'Laravel Actions', slug: 'laravel/packages/laravel-actions' },
-						{ label: 'JSON:API Resources', slug: 'laravel/packages/timacdonald-json-api' },
+						{ label: 'JSON:API Resources (TiMacDonald)', slug: 'laravel/packages/timacdonald-json-api' },
 						{ label: 'Spatie JSON API Paginate', slug: 'laravel/packages/json-api-paginate' },
 						{
 							label: 'Spatie Laravel Permission',
@@ -139,8 +140,9 @@ export default defineConfig({
 				},
 				{
 					// Ordered by when a reader needs them: fix the output, look at it, split it, add
-					// prose, ship it, make it fast, and — when it goes wrong — troubleshoot. Build
-					// speed follows production because its CI recipe extends the job that page builds.
+					// prose, hold it to your tests, ship it, make it fast, and — when it goes wrong —
+					// troubleshoot. Build speed follows production because its CI recipe extends the
+					// job that page builds.
 					label: 'Guides',
 					items: [
 						{ label: 'Customizing the output', slug: 'laravel/guides/customizing-output' },

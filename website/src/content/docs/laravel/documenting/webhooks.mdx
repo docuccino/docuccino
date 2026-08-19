@@ -138,17 +138,9 @@ path, so removing one or narrowing its payload is a breaking change like any oth
 
 ## What Docuccino tells you
 
-The codes a webhook can raise, with their severities and the rest of Docuccino's, are in the
-[diagnostics reference](/laravel/reference/diagnostics/#webhooks).
-
-| Diagnostic | When |
-| --- | --- |
-| `webhook.dir-missing` | `webhooks.dir` names a directory that isn't there. |
-| `webhook.dir-escapes-base` | A relative `webhooks.dir` resolves outside your application. |
-| `webhook.name-invalid` | A `#[Webhook]` with a blank name — there is no key to publish it under, so it is omitted. |
-| `webhook.method-unknown` | A `method` OpenAPI has no path-item member for. Documented as `POST` instead. |
-| `webhook.name-collision` | Two classes claim one name and method. The document keeps one; both are named. |
-| `webhook.payload-unresolved` | A `payload` type string that resolves to no shape. The body is published unconstrained. |
+A directory that isn't there, a blank or contested name, a payload that resolves to no shape — each
+is reported against the class it came from. Every code a webhook can raise, how loud it is and what
+to change, is in the [diagnostics reference](/laravel/reference/diagnostics/#webhooks).
 
 The [document lints](/laravel/reference/configuration/#lint) read webhooks too, and name one
 `POST webhooks.invoice.paid`. `lint.operation-id-style` is on by default, so a name a generated client

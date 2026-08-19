@@ -228,15 +228,15 @@ Codes from OpenAPI Overlays. See [Customizing the output](/laravel/guides/custom
 
 ## Recorded examples
 
-Codes from examples your test suite recorded. See
-[Contract testing](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples).
+Codes from examples your test suite recorded. See [Examples your tests
+recorded](/laravel/documenting/examples/#examples-your-tests-recorded).
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `examples.recordings-empty` | info | The recordings directory holds no recordings, so the document publishes none | Run your suite with the recorder registered, or drop `examples.recordings` |
 | `examples.recording-unreadable` | warning | A file in the recordings directory isn't a recording Docuccino can read, or records an operation its filename doesn't name | Re-record it, or delete it. The message names the file |
 | `examples.recording-orphaned` | warning | A recording is for an operation this document no longer has — the route was renamed, moved or removed | Delete the file, then re-record whatever replaced it. The message names the endpoint it came from |
-| `examples.recording-unsafe` | warning | A committed recording still holds what looks like a credential, so it wasn't published | Re-record it; credentials are replaced on the way out. If the value really is public, list its pointer or property name under `lint.leakage.allow`. The message names the pointer, never the value |
+| `examples.recording-unsafe` | warning | A committed recording still holds what looks like a credential, so it wasn't published | Re-record it; credentials are replaced on the way out. If the value really is public, list the pointer the message names under `lint.leakage.allow` — a bare property name silences the lint but never the redaction. The message names the pointer, never the value |
 | `examples.recording-name-unpublished` | warning | A recording named a scenario on an error response, and a named example there would take that response out of the component other routes share | The body publishes without the name. Record it unnamed, or set `representation.errors.components` to `false` if the names matter more |
 
 ## Lint rules
@@ -297,7 +297,7 @@ does. See [Postman collections](/laravel/reference/commands/#postman-collections
 | `postman.auth-unsupported` | warning | A security scheme has no Postman equivalent, so requests are sent unauthenticated | Add the credential by hand in Postman |
 | `postman.auth-multi-scheme` | warning | An operation requires more than one credential together, and a Postman request carries one | Supply the others by hand — the message names which one the collection sends |
 | `postman.body-not-object` | warning | A form body isn't an object, and a form body is a list of fields, so it's sent empty | Fill the body in after importing |
-| `postman.body-media-type` | warning | No example body could be built for a media type, so requests using it are sent empty | Add an example for that media type — see [Example payloads](/laravel/documenting/responses/#example-payloads) |
+| `postman.body-media-type` | warning | No example body could be built for a media type, so requests using it are sent empty | Add an example for that media type — see [Example payloads](/laravel/documenting/examples/) |
 | `postman.examples-truncated` | warning | An operation documents more saved responses than the collection keeps, so the first few by status were saved to stay navigable | Nothing. The full set is still in the OpenAPI document |
 | `postman.callbacks-dropped` | warning | The callbacks an operation declares have no Postman equivalent | Nothing |
 | `postman.webhooks-dropped` | warning | A collection describes requests you send, so it can't carry the webhooks your API delivers | Nothing. Export an OpenAPI format alongside for the webhook contract |

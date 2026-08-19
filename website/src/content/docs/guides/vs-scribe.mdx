@@ -49,7 +49,7 @@ The tools differ at the root, and it colors everything else:
 | Executes your application code | Yes, for response calls | Never — static analysis only |
 | Production install | Ships with its extraction stack | Adapter only — the analysis engine is a dev dependency |
 | Query params from query builders | Annotate them | Inferred, traced several calls deep, including into the method that builds each allow-list entry |
-| Example responses | Captured from real calls and factories | Inferred, authored with `#[Example]`, or [recorded from your test suite](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples) |
+| Example responses | Captured from real calls and factories | Inferred, authored with `#[Example]`, or [recorded from your test suite](/laravel/documenting/examples/#examples-your-tests-recorded) |
 | Postman collection | Yes | Yes — a `postman` export target, emitted from the same build |
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
 | Byte-stable output you can commit | — | Yes |
@@ -80,7 +80,7 @@ taken from a running app. `✓` means built-in support; `—` means not supporte
 
 Both tools read the same rules, but they get them differently: Scribe instantiates your form request
 and calls `rules()`, which resolves rules assembled at runtime and needs the method to be safe to call;
-Docuccino reads the rule list statically and maps 78 named Laravel rules onto schema constraints, so
+Docuccino reads the rule list statically and maps 80 named Laravel rules onto schema constraints, so
 `starts_with:INV` lands as a `pattern` and `between:1,5` as `minimum`/`maximum` in the schema, rather
 than as prose beside the parameter.
 
@@ -252,7 +252,7 @@ carefully before you switch — for some teams they're the whole reason to stay.
   anything computed at runtime that static analysis can't see — and it does that for every documented
   endpoint, whether or not you have tests. Docuccino can publish genuine payloads too, but only ones
   your test suite produced and you committed
-  ([recorded examples](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)), so
+  ([recorded examples](/laravel/documenting/examples/#examples-your-tests-recorded)), so
   an endpoint no test exercises still gets an inferred or authored example. If your HTTP coverage is
   thin, Scribe reaches further here.
 - **Factory-driven examples.** `@apiResourceModel states=… with=…` builds examples from your real
@@ -260,7 +260,7 @@ carefully before you switch — for some teams they're the whole reason to stay.
   documents the response's *shape*, not a rendered instance of it.
 - **Closure rules.** Scribe's `docs()` method on a custom `Rule` object now has a direct counterpart —
   [`#[RuleSchema]`](/laravel/documenting/requests/#documenting-a-custom-rule) on the rule class, read
-  wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 78
+  wherever the rule object appears — and Docuccino maps the whole string-rule vocabulary besides: 80
   named Laravel rules, from `alpha` and `starts_with` patterns to `const` for `accepted`/`declined`, date
   comparisons, numeric bounds, `not_in` and `distinct`, plus `Rule::enum` (including `->only()` /
   `->except()`), `Rule::in`, `Rule::exists` and `Rule::unique`. A `RuleTransformer` teaches it any rule

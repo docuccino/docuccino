@@ -380,33 +380,27 @@ Two flags make diagnostics more useful:
 
 2. **Make CI care.** `--fail-on` turns diagnostics into a non-zero exit, so a regression in
    inference coverage breaks the build instead of quietly thinning your docs. It takes a severity
-   floor — anything that severity or louder fails the run — and every diagnostic about how much
-   Docuccino recovered is an `info`, because recovering less than the code says is a correct outcome
-   rather than a defect. `--fail-on=info` is therefore the gate on inference certainty;
-   `--fail-on=warning` sees none of them.
+   floor — anything that loud or louder fails the run.
+
+   `--fail-on=warning` already catches the loud failures of recovery: an engine that never started,
+   an action whose analysis failed, an attribute that didn't take. `--fail-on=info` adds the
+   *widening* diagnostics on top — the ones that say Docuccino recovered less than your code claims
+   and published something broader to stay truthful. That is the gate on inference certainty, and
+   it's the one that catches a model quietly losing its columns.
 
    ```bash
    php artisan docuccino:export --fail-on=info
    ```
 
-   On an existing codebase, start at `warning` and tighten to `info` once the info list is short. A
-   gate that fires on day one is a gate the team switches off.
+   Which floor to start at, and how to move it, is on the [diagnostics
+   reference](/laravel/reference/diagnostics/#severities).
 
 3. **Accept what you can't act on.** Some reports are true and unfixable — a vendor model with no
    `@property` tags to add, a validation rule that really is a closure. List those codes under
-   `diagnostics.accept` and the gate stops counting them, so you can tighten it today instead of
-   after the last one is fixed.
-
-   ```php
-   // config/docuccino.php
-   'diagnostics' => [
-       'accept' => ['eloquent.no-columns', 'validation.rule-unrecoverable'],
-   ],
-   ```
-
-   They keep printing, marked `accepted`, so you still see the day one starts firing somewhere new.
-   Errors are never accepted, and an entry nothing reports warns rather than sitting there — the full
-   rules are on [Diagnostics](/laravel/reference/configuration/#diagnostics).
+   [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) and the gate stops counting
+   them, so you can tighten it today instead of after the last one is fixed. They keep printing,
+   marked `accepted`, so you still see the day one starts firing somewhere new — see [accepting a
+   code](/laravel/reference/diagnostics/#accepting-a-code).
 
 </Steps>
 

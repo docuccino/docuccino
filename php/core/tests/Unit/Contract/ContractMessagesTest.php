@@ -86,10 +86,22 @@ it('counts the examples it checked as well as the ones that lied', function (): 
     })))->run();
 
     expect(ContractMessages::examples($report))
-        ->toContain('1 of 3 documented examples do not match the schema beside them.')
+        ->toContain('1 of 3 documented examples does not match the schema beside it.')
         ->toContain('components/schemas/Invoice')
         ->toContain('at /components/schemas/Invoice/properties/total/example')
         ->toContain('from     integration:eloquent (integration) — app/Models/Invoice.php:31');
+});
+
+it('agrees the verb with how many lied, not with how many it checked', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['schemas']['Invoice']['properties']['total']['example'] = 'lots';
+        $document['components']['schemas']['Line']['properties']['quantity']['example'] = 'several';
+
+        return $document;
+    })))->run();
+
+    expect(ContractMessages::examples($report))
+        ->toContain('2 of 3 documented examples do not match the schema beside them.');
 });
 
 it('renders a breaking changeset the way the diff command does, and adds who wrote it', function (): void {

@@ -364,7 +364,9 @@ An **inline** `validate()` / `Validator::make()` body has no source class to nam
 stays inline at the operation. To patch a single property of the inferred body — a description, an
 example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying
 one keeps its body inline for that operation, because the patch adjusts a property the shared
-component must not carry.
+component must not carry. To illustrate the body as a whole — the payload a reader would send —
+[`#[Example]`](/laravel/reference/attributes/#example) takes `request: true`, and has a page of its
+own: [Example payloads](/laravel/documenting/examples/).
 
 <Aside title="Data objects get their own page">
 Type-hint a [Spatie Data](/laravel/packages/spatie-data/) class as your action parameter and Docuccino
@@ -525,54 +527,6 @@ moment its author adds the attribute. Nothing is instantiated and `validate()` n
 with no `#[RuleSchema]` keeps the `validation.rule-unrecoverable` diagnostic; closures stay opaque.
 </Aside>
 
-## Example payloads
-
-A field's `example:` on [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) or
-[`#[QueryParameter]`](/laravel/reference/attributes/#queryparameter) illustrates that one field.
-[`#[Example]`](/laravel/reference/attributes/#example) illustrates the whole thing — the request body
-as a reader would send it, or one parameter — and several *named* declarations publish a map a viewer
-offers as a picker.
-
-<Tabs>
-	<TabItem label="Your code">
-	```php
-	#[Example(name: 'minimal', summary: 'The two required fields', request: true, value: [
-	    'name' => 'Acme Ltd',
-	    'currency' => 'GBP',
-	])]
-	#[Example(name: 'with-terms', request: true, file: 'docs/examples/customer-with-terms.json')]
-	#[Example(name: 'second-page', parameter: 'page', value: 2)]
-	public function store(StoreCustomerRequest $request): CustomerResource { /* … */ }
-	```
-	</TabItem>
-	<TabItem label="Generated OpenAPI">
-	```json
-	"requestBody": {
-	  "required": true,
-	  "content": {
-	    "application/json": {
-	      "schema": { "type": "object", "properties": { "name": { "type": "string" } } },
-	      "examples": {
-	        "minimal": {
-	          "summary": "The two required fields",
-	          "value": { "name": "Acme Ltd", "currency": "GBP" }
-	        },
-	        "with-terms": { "value": { "name": "Acme Ltd", "currency": "GBP", "net_days": 30 } }
-	      }
-	    }
-	  }
-	}
-	```
-	</TabItem>
-</Tabs>
-
-`request: true` targets the request body and `parameter:` names a parameter — path, query, header or
-cookie, whichever it turns out to be. `file:` reads the payload from a `.json`, `.yaml` or `.yml` file
-under your application root, which joins the build's dependencies so editing it regenerates the
-endpoint. The full argument list is in the [attribute
-reference](/laravel/reference/attributes/#example); the response side is on
-[Responses](/laravel/documenting/responses/#example-payloads).
-
 ## Validation rule reference
 
 This is the complete rule vocabulary. Anything not listed leaves the property permissive and raises a
@@ -621,6 +575,19 @@ This is the complete rule vocabulary. Anything not listed leaves the property pe
 | `multiple_of:n` | `multipleOf` |
 | `decimal:2`, `decimal:1,4` | `number`, plus a note ("Must have 2 decimal places." / "Must have between 1 and 4 decimal places.") — JSON Schema has no decimal-places keyword. |
 | `digits:8`, `digits_between:2,4`, `min_digits:n`, `max_digits:n` | An anchored digit `pattern` — `^\d{8}$`, `^\d{2,4}$`, `^\d{n,}$`, `^\d{1,n}$`. |
+
+### Dates and comparisons
+
+| Rule | Documented as |
+| --- | --- |
+| `before:…`, `before_or_equal:…` | `string`, plus "Must be a date before `…`." / "Must be a date on or before `…`." |
+| `after:…`, `after_or_equal:…` | `string`, plus "Must be a date after `…`." / "Must be a date on or after `…`." |
+
+A date bound is a relationship OpenAPI has no keyword for, so it lands as a description the way the
+other comparisons do. Where the target is itself a date — `after:2026-01-01`, `before:tomorrow` — the
+field also takes `format: date`, or `format: date-time` when the target carries a time. A bare field
+reference like `after:start_date` is described but left unformatted: that field could be anything, and
+a `format` claim about it would be a guess.
 
 ### Choices and patterns
 

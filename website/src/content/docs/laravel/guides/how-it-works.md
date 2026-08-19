@@ -57,7 +57,7 @@ generating docs in CI needs no seed data and has no side effects. It's also what
 deterministic — there's no runtime state to vary between runs.
 
 That holds for the whole pipeline, including the one place real payloads get in. If you
-[record your test suite's responses](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)
+[record your test suite's responses](/laravel/documenting/examples/#examples-your-tests-recorded)
 as examples, the running happens in your suite, where it already happened; the build reads the
 committed file and nothing else.
 
@@ -157,7 +157,7 @@ stay an internal detail and what you publish is a clean, standard spec.
 ## 5. Viewer & export
 
 Finally the document is written to disk by [`docuccino:export`](/laravel/reference/commands/#docuccinoexport),
-and served by the bundled [Scalar viewer](/laravel/guides/viewer/) straight from your own app. From
+and served by the bundled [viewer](/laravel/guides/viewer/) straight from your own app. From
 there it's yours to commit, diff, and publish — see [Deploying to production](/laravel/guides/production/).
 
 ## Rebuilds

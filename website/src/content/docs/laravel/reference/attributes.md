@@ -587,9 +587,8 @@ as far as it takes to tell them apart. An `App\DTOs\Schema\Authentication\SSOCon
 `SSOSSOConnectionData`.
 
 Those names depend only on what the schemas are, never on the order your routes happen to be
-discovered in — which matters, because a positional `Foo`/`Foo_2` would hand the plain name to
-whichever route sorted first, and adding an unrelated route later could silently swap what `Foo`
-means in every generated client. Where a namespace walk can't tell two claimants apart — two classes
+discovered in, so adding an unrelated endpoint never renames a component your generated clients
+already use. Where a namespace walk can't tell two claimants apart — two classes
 in one namespace, or a `#[SchemaId]` pin carrying no namespace to walk — each takes a short hash of
 its own identity instead (`UserData_x7ztb6hq`). Stable, but not descriptive: that is a name to
 replace, and the warning below says so.
