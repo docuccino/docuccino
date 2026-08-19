@@ -53,9 +53,10 @@ export default defineConfig({
 					details: [
 						'## Key facts',
 						'',
-						'- Install: `composer require docuccino/laravel` plus `composer require --dev docuccino/inference-phpstan` (the analysis engine is a dev dependency; the adapter degrades to no inference without it).',
+						'- Install: `composer require docuccino/laravel` plus `composer require --dev docuccino/inference-phpstan` (the analysis engine is a dev dependency; the adapter degrades to no inference without it), then `php artisan docuccino:install`.',
 						'- Requirements: PHP 8.3+, Laravel 12 or 13.',
-						'- Commands: `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`, `docuccino:explain`.',
+						'- Commands: `docuccino:install`, `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`, `docuccino:explain`.',
+						'- `docuccino:install` is the first-run command: it publishes `config/docuccino.php` (never overwriting an existing one without `--force`), reports how many of the application\'s routes each document actually matches and which prefixes they sit under when none do, says whether the analysis engine is installed, and offers a first export. It is idempotent and works non-interactively.',
 						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
 						'- The document build never executes application code — it reads types with an embedded PHPStan/Larastan engine, and reads committed files for anything else. Real response payloads reach the document only as recordings your own test suite wrote.',
 						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',

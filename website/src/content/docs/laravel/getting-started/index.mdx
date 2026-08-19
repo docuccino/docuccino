@@ -63,31 +63,49 @@ accurate document — with no annotations to start.
    upgrade moved ahead of Docuccino's constraint —
    [Dependency conflicts](/laravel/guides/troubleshooting/#dependency-conflicts) has the fix.
 
-2. Publish the config file — optional, but you'll want it soon:
+2. Run the installer:
 
    ```bash
-   php artisan vendor:publish --tag=docuccino-config
-   ```
-
-   This writes `config/docuccino.php`. The package's defaults are already active without it, so
-   publish when you want to change something. Out of the box they document every `api/*` route in
-   your own application, export to `docs/openapi.json`, and serve an interactive viewer at
-   `/docs/api`.
-
-   The published file is plain data on purpose — no imports, no class references — so a dev-only
-   install stays safe when production boots with the packages pruned.
-
-3. Export your first document:
-
-   ```bash
-   php artisan docuccino:export
+   php artisan docuccino:install
    ```
 
    ```text
-   Wrote /home/you/invoices-api/docs/openapi.json (openapi-3.2).
+   Config
+   ──────
+   Published config/docuccino.php.
+
+   Routes
+   ──────
+   "default" documents 23 of the 30 routes this application publishes (include: api/*).
+
+   Engine
+   ──────
+   The inference engine is installed.
+   Response shapes, query parameters and error responses are read from your code.
+
+   First document
+   ──────────────
+    Export one now? (yes/no) [yes]:
    ```
 
+   One command covers the whole first run. It publishes `config/docuccino.php`, tells you how many
+   of **your** routes the default `api/*` pattern really matches — and which prefixes they sit under
+   when it matches none — reports whether the analysis engine is installed, and offers to write your
+   first document.
+
+   Out of the box the defaults document every `api/*` route in your own application, export to
+   `docs/openapi.json`, and serve an interactive viewer at `/docs/api`. They are already active
+   without the published file; the file is there so you can change them. It is plain data on purpose
+   — no imports, no class references — so a dev-only install stays safe when production boots with
+   the packages pruned.
+
 </Steps>
+
+The installer never replaces a `config/docuccino.php` you already have (pass `--force` if that's what
+you want), so it is safe to run again. In a provisioning script, `--no-interaction` takes the
+prompt's default and exports, and `--no-export` finishes the setup without one. Prefer to publish the
+config on its own? `php artisan vendor:publish --tag=docuccino-config` writes exactly the same file.
+[The commands reference](/laravel/reference/commands/#docuccinoinstall) has every flag.
 
 That's it. Open `docs/openapi.json`, or visit `/docs/api` in your browser — the bundled viewer is
 live in your `local` environment out of the box, and closed everywhere else until you name a gate.
@@ -106,8 +124,8 @@ That keeps a CI export safe without letting thin output pass unremarked.
 
 <CardGrid>
 	<Card title="Artisan commands" icon="seti:powershell">
-		`docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`,
-		`docuccino:clear`, `docuccino:watch`, and `docuccino:explain`. See the
+		`docuccino:install`, `docuccino:export`, `docuccino:validate`, `docuccino:diff`,
+		`docuccino:cache`, `docuccino:clear`, `docuccino:watch`, and `docuccino:explain`. See the
 		[commands reference](/laravel/reference/commands/).
 	</Card>
 	<Card title="A built-in viewer" icon="laptop">

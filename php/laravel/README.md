@@ -27,11 +27,16 @@ Analysis is a build-time job either way: the inference engine runs wherever you 
 the document, never on a production host. Without the engine, documentation comes from
 docblocks and attributes only — and every export warns that it did.
 
-Publish the config:
+Then set up:
 
 ```bash
-php artisan vendor:publish --tag=docuccino-config
+php artisan docuccino:install
 ```
+
+It publishes `config/docuccino.php` (never replacing one you already have), reports how many of your
+routes the default `api/*` pattern matches and which prefixes they sit under when none do, says
+whether the engine is installed, and offers a first export. `vendor:publish --tag=docuccino-config`
+still publishes the config on its own.
 
 ## Usage
 
@@ -41,7 +46,7 @@ Generate and export the default document:
 php artisan docuccino:export
 ```
 
-Other commands: `docuccino:diff`, `docuccino:validate`, `docuccino:cache`,
+Other commands: `docuccino:install`, `docuccino:diff`, `docuccino:validate`, `docuccino:cache`,
 `docuccino:clear`, and `docuccino:explain "POST /api/invoices"` — which prints, field by field, which
 precedence layer produced each value of one endpoint and what it overrode. Register your own
 extensions from any service provider:
