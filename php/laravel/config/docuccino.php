@@ -269,6 +269,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Diagnostics
+    |--------------------------------------------------------------------------
+    |
+    | Codes you have read and accepted. An accepted diagnostic still prints,
+    | marked `accepted`, and stops counting towards `--fail-on` — so a stricter
+    | gate can go on before the last report is fixed. An error is never
+    | accepted, and an entry nothing reports warns so the list cannot rot.
+    |
+    */
+
+    'diagnostics' => [
+        'accept' => [
+            // 'eloquent.no-columns',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Inference engine
     |--------------------------------------------------------------------------
     |

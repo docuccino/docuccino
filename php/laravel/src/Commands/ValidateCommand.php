@@ -35,9 +35,10 @@ final class ValidateCommand extends Command
             return self::FAILURE;
         }
 
-        return $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
+        $exit = $this->forEachDocument($builder, function (string $key) use ($builder, $engine): int {
             $result = $builder->build($key, $engine);
-            $schemaErrors = $this->schemaErrors($result->diagnostics);
+            $diagnostics = $this->withAcceptanceNotes($result->diagnostics);
+            $schemaErrors = $this->schemaErrors($diagnostics);
 
             if ($schemaErrors === []) {
                 $this->info(sprintf('%s: valid against UIR %s.', $key, $this->uirVersion($result->document->toArray())));
@@ -45,10 +46,12 @@ final class ValidateCommand extends Command
                 $this->error(sprintf('%s: %d schema violation(s).', $key, count($schemaErrors)));
             }
 
-            $this->renderDiagnostics($key, $result->diagnostics);
+            $this->renderDiagnostics($key, $diagnostics);
 
-            return $schemaErrors !== [] || $this->failsOn($result) ? self::FAILURE : self::SUCCESS;
+            return $schemaErrors !== [] || $this->failsOnAny($diagnostics) ? self::FAILURE : self::SUCCESS;
         });
+
+        return $this->reportStaleAcceptances($exit);
     }
 
     /**

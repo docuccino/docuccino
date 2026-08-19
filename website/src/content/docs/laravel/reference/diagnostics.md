@@ -37,6 +37,29 @@ php artisan docuccino:export --fail-on=info
 On an existing codebase, start at `warning` and tighten to `info` later. A gate that fires on day one
 is a gate the team switches off.
 
+## Accepting a code
+
+The other way to tighten a gate is to accept the codes you can't act on. List them under
+[`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) and they keep printing — marked
+`accepted`, with a hit count at the end of the block — while `--fail-on` stops counting them:
+
+```php
+'diagnostics' => [
+    'accept' => ['eloquent.no-columns', 'validation.rule-unrecoverable'],
+],
+```
+
+```
+    [info, accepted] eloquent.no-columns: Model App\Vendor\Ledger exposes no documentable columns.
+  Accepted, so --fail-on ignores them: eloquent.no-columns (12)
+```
+
+Acceptance changes the exit code and nothing else: the document is byte-identical either way, and the
+report is still in the log the day it starts firing somewhere new. **An `error` is never accepted** —
+it says the document is wrong or the build lost a whole tier of facts, and an entry that reaches one
+is reported as `config.accept-refused` while the run fails as it always would. An entry nothing
+reports is reported as `config.accept-unused`, so the list can't outlive what it was for.
+
 ## The engine and inference
 
 Docuccino reads your types with an embedded static analyzer. These codes are about the analyzer
@@ -130,6 +153,8 @@ exact key.
 | `config.export-duplicate-path` | error | Two export targets in one document write the same file, so the later would clobber the earlier | Give each target its own path |
 | `config.export-yaml-unsupported` | error | An export target asks for a `.yaml` file in a format that has no YAML serialization | Give it a `.json` path rather than a `.yaml` file holding JSON |
 | `config.export-path-collision` | error | Two documents write the same file, so one would clobber the other | Give each document its own export path — see [Multiple documents](/laravel/guides/multiple-documents/) |
+| `config.accept-refused` | warning | A code in `diagnostics.accept` was reported as an error, and acceptance never covers an error, so it still failed the run | Fix what the error reports, then delete the entry — see [Diagnostics](/laravel/reference/configuration/#diagnostics) |
+| `config.accept-unused` | warning | A code in `diagnostics.accept` that nothing reported: the cause is fixed, or the code is misspelled | Delete the entry. Checked only once a run has built every document, so a single-document run never raises it |
 | `config.export-path-ignored` | info | A document sets both `export.targets` and `export.path`, and targets win, so the path is never written | Delete the `export.path` key |
 | `integration.disabled` | info | An integration's package is installed, but the integration is off — either opt-in and never switched on, or explicitly disabled | Set `integrations.<key>.enabled = true` if you want its contributions. The message names the package and the key |
 

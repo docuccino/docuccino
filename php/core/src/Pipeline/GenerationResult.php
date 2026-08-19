@@ -34,7 +34,7 @@ final readonly class GenerationResult
         return false;
     }
 
-    /** True when anything was reported at $floor or louder — what `--fail-on` gates on. */
+    /** True when anything was reported at $floor or louder — the raw question a severity gate starts from. */
     public function hasAtLeast(Severity $floor): bool
     {
         foreach ($this->diagnostics as $diagnostic) {

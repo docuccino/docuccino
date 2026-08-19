@@ -23,6 +23,7 @@ return [
     'documents' => [ /* … */ ],
     'extensions' => [],
     'lint' => [ /* … */ ],
+    'diagnostics' => [ /* … */ ],
     'engine' => [ /* … */ ],
     'on_route_error' => 'skeleton',
     'cache' => [ /* … */ ],
@@ -595,6 +596,57 @@ there would be noise. Turn it on when your `definitions` are meant to be the com
 | --- | --- | --- |
 | `enabled` | `false` | Turn the pass on/off. |
 | `allow` | `[]` | Safelist by tag name. |
+
+## Diagnostics
+
+```php
+'diagnostics' => [
+    'accept' => [
+        // 'eloquent.no-columns',
+    ],
+],
+```
+
+`accept` is the list of [diagnostic codes](/laravel/reference/diagnostics/) you've read and decided
+to live with. An accepted diagnostic **still prints**, marked `accepted` and counted in a closing
+line, and stops counting towards [`--fail-on`](/laravel/reference/commands/#docuccinoexport). That's
+what makes a stricter gate adoptable: you can turn `--fail-on=info` on today, accept the codes you
+can't act on — a vendor model with no readable columns, a validation rule that's genuinely a closure
+— and still have the gate catch everything new.
+
+```php
+'diagnostics' => [
+    'accept' => [
+        'eloquent.no-columns',
+        'validation.rule-unrecoverable',
+    ],
+],
+```
+
+The unit is a whole code, not a code at one route: a code names a cause, which is the thing you
+decide about, and a list scoped by route would be a second copy of your application's shape that goes
+stale on the next rename.
+
+**An `error` is never accepted.** An error means the document is wrong or the build lost a whole tier
+of facts, so a code that reaches an error keeps failing the run, and the build says so with
+`config.accept-refused`. Accepting a code that's *sometimes* an error still covers its `warning`,
+`info` and `hint` reports.
+
+Nothing accepted is invisible, and the list can't rot:
+
+| Where | What you see |
+| --- | --- |
+| The diagnostic itself | `[info, accepted] eloquent.no-columns: …`, exactly where it always printed. |
+| The end of each document's block | `Accepted, so --fail-on ignores them: eloquent.no-columns (12)` — every entry that fired, with its hit count. |
+| An entry that fired as an error | `config.accept-refused` — acceptance didn't apply, and the run still failed. |
+| An entry nothing reported | `config.accept-unused` — the cause is fixed, or the code is misspelled. Delete the line. |
+
+`config.accept-unused` is checked once a run has built **every** document, so `docuccino:export
+billing` never reports an entry the document it skipped fires on.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `accept` | `[]` | Diagnostic codes that print but never fail `--fail-on`. Errors are never accepted. |
 
 ## Engine
 

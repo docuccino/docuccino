@@ -50,6 +50,7 @@ const CONFIG_REFERENCE_SECTIONS = [
     '### Descriptions' => 'lint.descriptions',
     '### Operation ids' => 'lint.operation_ids',
     '### Undocumented tags' => 'lint.tags',
+    '## Diagnostics' => 'diagnostics',
     '## Engine' => 'engine',
     '## Cache' => 'cache',
 ];

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Tests\Support\DiagnosticConsole as Console;
 
 /**
@@ -111,4 +113,34 @@ it('cannot be made to forge a diagnostic line from help', function (): void {
 
     expect($output)->toContain('      [error] fake.code: shipped')
         ->and($output)->not->toContain("\n    [error] fake.code: shipped");
+});
+
+/*
+ * The other half of what the console owes a reader: `diagnostics.accept` changes an exit code, so
+ * every line it covers has to say so where the line is read.
+ */
+it('marks a diagnostic the accepted list covers, and totals them under the block', function (): void {
+    config()->set('docuccino.diagnostics.accept', ['demo.code']);
+
+    $output = Console::render([Console::diagnostic('fine', 'GET api/orders'), Console::diagnostic('also fine')]);
+
+    expect($output)->toContain('    [warning, accepted] demo.code: fine')
+        ->and($output)->toContain('  Accepted, so --fail-on ignores them: demo.code (2)');
+});
+
+it('marks nothing, and totals nothing, where the list names another code', function (): void {
+    config()->set('docuccino.diagnostics.accept', ['other.code']);
+
+    $output = Console::render([Console::diagnostic('fine', 'GET api/orders')]);
+
+    expect($output)->toBe("\nDiagnostics for default:\n  GET api/orders\n    [warning] demo.code: fine\n");
+});
+
+it('never marks an error accepted, however the list reads', function (): void {
+    config()->set('docuccino.diagnostics.accept', ['demo.code']);
+
+    $error = new Diagnostic(severity: Severity::Error, code: 'demo.code', message: 'gone');
+
+    expect(Console::render([$error]))->toContain('    [error] demo.code: gone')
+        ->and(Console::render([$error]))->not->toContain('Accepted, so --fail-on ignores them');
 });
