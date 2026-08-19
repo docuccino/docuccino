@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Testing;
 
+use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Formats;
@@ -12,8 +13,9 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
+use Docuccino\Laravel\Support\GitShow;
 use Docuccino\Laravel\Support\Paths;
-use Illuminate\Support\Facades\Process;
+use JsonException;
 
 /**
  * A freshly-generated document and the committed artifact beside it, for the two assertions that
@@ -107,22 +109,28 @@ final class ContractBuild
     }
 
     /**
-     * The artifact as of a git ref, the way `docuccino:diff --against` reads it: `git show <ref>:<path>`
-     * with a repo-relative path, run without a shell so nothing is word-split.
+     * The artifact as of a git ref, the way `docuccino:diff --against` reads it — the same reader, so
+     * the assertion and the command can never disagree about what a ref resolves to.
      *
-     * @return array{0: string|null, 1: string} contents (null on failure) and git's own stderr
+     * @return array{0: string|null, 1: string} contents (null on failure) and the reason
      */
     public function committedAtRef(string $ref, string $path): array
     {
-        // Reject anything git would read as an option, so a hostile argument cannot smuggle a flag past
-        // the `<ref>:<path>` operand — the same guard the diff command applies.
-        if (str_starts_with($ref, '-') || str_starts_with($path, '-')) {
-            return [null, 'the git ref and path must not start with "-"'];
+        return GitShow::read($ref, $path);
+    }
+
+    /**
+     * A committed artifact's JSON as a contract index, or the failure a suite author can act on. One
+     * decoder for every path that reads one, so a torn file reports the same way whoever found it —
+     * and one decode, because the index keeps the original text the JSON Schema half needs.
+     */
+    public static function indexOf(string $json, string $path): ContractIndex
+    {
+        try {
+            return ContractIndex::fromJson($json);
+        } catch (JsonException $exception) {
+            throw UnreadableContract::notJson($path, $exception->getMessage());
         }
-
-        $result = Process::run(['git', 'show', $ref.':'.$path]);
-
-        return $result->successful() ? [$result->output(), ''] : [null, trim($result->errorOutput())];
     }
 
     private function builder(): DocumentBuilder

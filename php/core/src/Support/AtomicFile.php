@@ -4,20 +4,19 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Support;
 
-use Docuccino\Core\Examples\SharedRecordingLedger;
-
 /**
  * Write a file so no reader ever sees half of one: a temp file in the same directory, then a rename.
  *
  * It matters most where a write can be interrupted — `docuccino:watch` re-exports on every save, and
  * Ctrl+C reaches the build it is running, so a plain `file_put_contents` would eventually leave a
- * truncated artifact behind. The temp name carries the pid and a random suffix, so two processes
- * writing the same target cannot land on each other's — and it is created with `x`, which refuses to
- * open anything already there rather than writing through a symlink somebody left in the way.
+ * truncated artifact behind. The temp name carries the pid and 63 bits of randomness, so two
+ * processes writing the same target cannot land on each other's — and it is created with `x`, which
+ * refuses to open anything already there rather than writing through a symlink somebody left in the
+ * way.
  *
  * Note what the rename does to a lock: it replaces the target's inode, so a lock held ON the file
  * being written is a lock on something the next writer has already thrown away. Anything serialising
- * writers here locks a file of its own — see {@see SharedRecordingLedger}.
+ * writers here has to lock a file of its own.
  *
  * @internal
  */

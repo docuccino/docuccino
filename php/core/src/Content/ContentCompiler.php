@@ -42,7 +42,7 @@ final readonly class ContentCompiler
             return [new CompiledContent, []];
         }
 
-        $dir = $this->resolveDir($configured);
+        $dir = ConfinedPath::configuredDir($this->basePath, $configured);
         if ($dir === null) {
             return [new CompiledContent, [new Diagnostic(
                 severity: Severity::Warning,
@@ -68,18 +68,6 @@ final readonly class ContentCompiler
         }
 
         return [new CompiledContent($pages), []];
-    }
-
-    /**
-     * Relative dirs are confined to the base path, absolute ones used verbatim. Null = escaped.
-     */
-    private function resolveDir(string $configured): ?string
-    {
-        if (str_starts_with($configured, '/')) {
-            return $configured;
-        }
-
-        return ConfinedPath::resolve($this->basePath, $configured);
     }
 
     private function compilePage(string $absolute, string $dir, string $prefix): CompiledPage

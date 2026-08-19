@@ -33,6 +33,7 @@ use Illuminate\Support\Facades\URL;
 final class InstallCommand extends Command
 {
     use GuardsEnabled;
+    use PrintsSections;
 
     /** How many route prefixes are worth listing when nothing matched. */
     private const int PREFIX_LIMIT = 8;
@@ -301,12 +302,5 @@ final class InstallCommand extends Command
     private function projectPath(string $path): string
     {
         return Paths::relative($path, base_path()) ?? $path;
-    }
-
-    private function section(string $title): void
-    {
-        $this->newLine();
-        $this->line(sprintf('<options=bold>%s</>', $title));
-        $this->line(sprintf('<fg=gray>%s</>', str_repeat('─', mb_strlen($title))));
     }
 }

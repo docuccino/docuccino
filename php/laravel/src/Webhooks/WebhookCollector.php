@@ -68,7 +68,7 @@ final readonly class WebhookCollector
             return [[], []];
         }
 
-        $dir = str_starts_with($configured, '/') ? $configured : ConfinedPath::resolve($this->basePath, $configured);
+        $dir = ConfinedPath::configuredDir($this->basePath, $configured);
         if ($dir === null) {
             return [[], [new Diagnostic(
                 severity: Severity::Warning,

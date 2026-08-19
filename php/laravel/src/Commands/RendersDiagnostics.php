@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Commands;
 
+use Docuccino\Core\Diagnostics\AcceptedCodes;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Diagnostics\DiagnosticDocs;
@@ -21,9 +22,8 @@ use Illuminate\Console\Command;
  * The CLI is the primary channel a diagnostic reaches its author on, so a diagnostic's `help` — the
  * "what to change" half — is printed here alongside the message rather than left to `toArray()`.
  *
- * A diagnostic `diagnostics.accept` covers prints exactly as any other does, marked `accepted` and
- * counted in a closing line: acceptance is about which reports fail a build, and a report that
- * vanished would hide the day it started firing somewhere new.
+ * A diagnostic `diagnostics.accept` covers prints exactly as any other does ({@see AcceptedCodes}),
+ * marked `accepted` and counted in a closing line.
  *
  * @mixin Command
  */

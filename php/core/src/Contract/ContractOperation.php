@@ -40,11 +40,6 @@ final readonly class ContractOperation
         return $this->method.' '.$this->path;
     }
 
-    public function pointer(): string
-    {
-        return Pointer::of($this->segments);
-    }
-
     /**
      * The path parameters a concrete request path binds to this template, or null when the template
      * does not describe that path at all.

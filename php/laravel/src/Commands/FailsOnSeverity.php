@@ -24,9 +24,8 @@ use Illuminate\Console\Command;
  * typo would answer "never fail", which silently removes the gate the flag was added to CI to be.
  *
  * The one thing that carves into the floor is `diagnostics.accept` ({@see AcceptedCodes}), and it
- * carves into the EXIT CODE only — an accepted diagnostic still prints. This is also where the two
- * reports acceptance owes the reader are raised: a code it could not cover, and an entry this run
- * proved does nothing.
+ * carves into the exit code and nothing else. This is also where the two reports acceptance owes the
+ * reader are raised: a code it could not cover, and an entry this run proved does nothing.
  *
  * @mixin Command
  */

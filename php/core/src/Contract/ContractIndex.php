@@ -8,6 +8,7 @@ use Docuccino\Core\Diff\Change;
 use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Support\Arr;
 use JsonException;
 use stdClass;
 
@@ -178,7 +179,7 @@ final class ContractIndex
     {
         $found = [];
 
-        $id = NodeIdentity::inArray(self::stringKeyed($node));
+        $id = NodeIdentity::inArray(Arr::stringKeyed($node));
         if ($id !== null) {
             $found[$id] = $segments;
         }
@@ -192,20 +193,6 @@ final class ContractIndex
         }
 
         return $found;
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $node
-     * @return array<string, mixed>
-     */
-    private static function stringKeyed(array $node): array
-    {
-        $out = [];
-        foreach ($node as $key => $value) {
-            $out[(string) $key] = $value;
-        }
-
-        return $out;
     }
 
     /**

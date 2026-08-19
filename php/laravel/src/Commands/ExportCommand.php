@@ -14,6 +14,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Support\AtomicFile;
+use Docuccino\Core\Support\Directory;
 use Docuccino\Laravel\Config\ExportDiagnostics;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Support\Paths;
@@ -35,6 +36,7 @@ final class ExportCommand extends Command
     use GuardsEnabled;
     use IteratesDocuments;
     use RendersDiagnostics;
+    use StringOptions;
 
     protected $signature = 'docuccino:export
         {document? : The configured document key (defaults to every document)}
@@ -244,14 +246,13 @@ final class ExportCommand extends Command
 
         $path = Paths::absolute($this->stringOption('out') ?? $target->path, base_path());
         $directory = dirname($path);
-        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+        if (! Directory::ensure($directory)) {
             $this->error(sprintf('Could not create %s.', $directory));
 
             return false;
         }
 
-        // Atomic, because `docuccino:watch` re-exports on every save and an interrupted write would
-        // otherwise leave a truncated document where a whole one was.
+        // Atomic for the reason {@see AtomicFile} gives: `docuccino:watch` re-exports on every save.
         if (! AtomicFile::write($path, $result->output)) {
             $this->error(sprintf('Could not write %s.', $path));
 
@@ -282,13 +283,5 @@ final class ExportCommand extends Command
     {
         // Validated up front, so the fallback is only ever the unset flag's default.
         return ProvenanceLevel::tryFrom($this->stringOption('provenance') ?? '') ?? ProvenanceLevel::Winners;
-    }
-
-    /** An option the user actually set, as a non-empty string. */
-    private function stringOption(string $name): ?string
-    {
-        $value = $this->option($name);
-
-        return is_string($value) && $value !== '' ? $value : null;
     }
 }

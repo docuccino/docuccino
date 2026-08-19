@@ -13,7 +13,6 @@ use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 use Illuminate\Container\Container;
 use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
-use JsonException;
 use PHPUnit\Framework\Assert;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
@@ -131,11 +130,7 @@ final class ApiContract
             throw UnreadableContract::notFound($path, self::$documentKey);
         }
 
-        try {
-            return self::$index = ContractIndex::fromJson($contents);
-        } catch (JsonException $exception) {
-            throw UnreadableContract::notJson($path, $exception->getMessage());
-        }
+        return self::$index = ContractBuild::indexOf($contents, $path);
     }
 
     /** Forget the artifact, the observers and everything the run recorded. */

@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Testing;
 
+use Docuccino\Core\Contract\Coverage\CoverageReport;
 use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 
 /**
- * Which operations the run actually touched, by stable id.
- *
- * Ids, never paths: an id survives a path rename, so a renamed route reads as still covered rather
- * than as one operation appearing and another vanishing.
+ * Which operations the run actually touched, by stable id — never by path, for the reason
+ * {@see CoverageReport} gives.
  *
  * It lives for one PHP process, and {@see ParallelRun} is why that is safe rather than misleading —
  * the coverage assertions refuse outright under a parallel runner instead of reporting the operations

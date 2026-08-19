@@ -18,45 +18,15 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 
 /**
- * Publishes the response bodies a test suite recorded as the examples for their operation.
+ * Publishes the response bodies a test suite recorded as the examples for their operation: a committed
+ * file is read, nothing is dispatched and no database is opened.
  *
- * The build reads a committed file and nothing else — no test runs here, no route is dispatched, no
- * database is opened. Execution happened in the suite, where execution already lived; what reaches the
- * document is a reviewed artifact of it — the recorder that writes them is a contract-testing observer,
- * and lives with the rest of that dev-only surface.
- *
- * A recording sits at the INTEGRATION rung of the precedence ladder: above inference, below every
- * authored source. It is evidence — the application really did answer this — so it beats a shape
- * inference merely derived; but a `#[Example]` is somebody choosing what a reader should see, and a
- * person who has chosen is never overruled by a test fixture. That rung is settled by the draft rather
- * than here: a recording fills an ILLUSTRATION bag, `#[Example]` fills a DECLARATION bag, and
- * {@see ResponseDraft::freeze()} publishes a declaration over an illustration whichever ran first.
- *
- * What a recording gets is the slot its NAME asks for, and the six answers are all one rule — a
- * declaration wins, and a name somebody chose can sit beside another:
- *
- * | The author wrote | An unnamed recording | Named recordings |
- * | --- | --- | --- |
- * | nothing | the media type's `example` | an `examples` map of the recorded names |
- * | a singular `example` | the author's, alone | the author's, alone |
- * | an `examples` map | the author's map, alone | the author's map plus the recorded names, the author winning any name they both spell |
- *
- * A singular declaration is where a recording has nowhere to go: OpenAPI carries `example` or
- * `examples` and never both, so joining one would mean filing the author's own example under a key
- * they never chose. A map is different — a name a test passed at the call site is a name somebody
- * chose, which is the whole reason naming a recording is worth having.
- *
- * The example goes on the media type, beside the schema rather than inside it, for a reason worth
- * stating: the shared-error hoist strips that member before it groups bodies, and would key on one
- * written into the schema. Recorded there, one route acquiring a recording could drop an unrelated
- * route's 404 out of its shared component and back inline — one part of an application changing the
- * emitted representation of another, which is the defect locality forbids. An `examples` MAP is not
- * stripped, so on a status that hoist groups ({@see SharedErrorResponses::shares()}) named recordings
- * publish the best of their bodies as the singular `example` instead, and
- * {@see RecordedExampleAudit} tells the author their names went nowhere.
- *
- * Only a status and media type the document already documents gets one. A recording is an
- * illustration, never a claim that an endpoint answers something the contract does not describe.
+ * Which of a recording and an `#[Example]` publishes is the draft's answer rather than this class's — a
+ * recording fills an ILLUSTRATION bag and an attribute a DECLARATION bag, and {@see ResponseDraft::freeze()}
+ * publishes a declaration over an illustration whichever ran first. Examples go on the MEDIA TYPE and
+ * never into the schema: the shared-error hoist strips a schema-level `example` before it groups bodies,
+ * so recorded there, one route acquiring a recording could drop an unrelated route's 404 out of its
+ * shared component ({@see SharedErrorResponses::shares()}).
  */
 final class RecordedExamplesExtension implements OperationExtension
 {

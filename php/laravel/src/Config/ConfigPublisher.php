@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Support\AtomicFile;
+use Docuccino\Core\Support\Directory;
 
 /**
  * Copies the shipped `config/docuccino.php` into the application — the one write `docuccino:install`
@@ -40,8 +41,7 @@ final readonly class ConfigPublisher
             return false;
         }
 
-        $directory = dirname($this->target);
-        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+        if (! Directory::ensure(dirname($this->target))) {
             return false;
         }
 

@@ -39,6 +39,16 @@ final class ConfinedPath
         return $candidate;
     }
 
+    /**
+     * A configured directory resolved for reading: an absolute path is taken verbatim, because naming
+     * one is a deliberate statement about where the machine keeps something, and a relative one is
+     * confined to $base. Null carries the same meaning as {@see resolve()}'s — a rejected escape.
+     */
+    public static function configuredDir(string $base, string $configured): ?string
+    {
+        return str_starts_with($configured, '/') ? $configured : self::resolve($base, $configured);
+    }
+
     private static function within(string $base, string $candidate): bool
     {
         return $candidate === $base || str_starts_with($candidate, $base.'/');
