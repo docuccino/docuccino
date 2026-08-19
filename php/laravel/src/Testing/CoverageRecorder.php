@@ -38,9 +38,17 @@ final class CoverageRecorder implements ContractObserver
         }
     }
 
+    /**
+     * Record one exercised operation, by id.
+     *
+     * Anything that is not an operation id is dropped rather than recorded: this is public, a log line
+     * is held to the id shape when it is read back, and a caller passing a stray string would otherwise
+     * condemn the whole file its process wrote. Nothing is lost by dropping it — an id that is not an
+     * operation's matches no operation in the report either.
+     */
     public function record(string $id): void
     {
-        if (isset($this->ids[$id])) {
+        if (isset($this->ids[$id]) || ! CoverageLog::isId($id)) {
             return;
         }
 

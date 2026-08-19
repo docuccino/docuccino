@@ -60,7 +60,7 @@ it('writes nothing until a bootstrap asks it to', function (): void {
     ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'));
 
     expect(ApiContract::coverage()->logPath())->toBeNull()
-        ->and(CoverageLog::filesIn($this->root))->toBe([]);
+        ->and(CoverageLog::scan($this->root)->files)->toBe([]);
 });
 
 it('logs what this process exercised, once per id, where the bootstrap said', function (): void {
@@ -156,9 +156,23 @@ it('forgets what it recorded when the suite resets', function (): void {
     ApiContract::coverage()->forget();
     expect(ApiContract::coverage()->exercised())->toBe([]);
 
-    ApiContract::coverage()->record('op:v1:zeta');
-    ApiContract::coverage()->record('op:v1:alpha');
-    expect(ApiContract::coverage()->exercised())->toBe(['op:v1:alpha', 'op:v1:zeta']);
+    ApiContract::coverage()->record('op:v1:zzzzzzzzzzzzzzzz');
+    ApiContract::coverage()->record('op:v1:aaaaaaaaaaaaaaaa');
+    expect(ApiContract::coverage()->exercised())->toBe(['op:v1:aaaaaaaaaaaaaaaa', 'op:v1:zzzzzzzzzzzzzzzz']);
+});
+
+it('drops a recorded string that is not an operation id rather than writing it down', function (): void {
+    // record() is public, and a log line is held to the id shape when it is read back — so a stray
+    // string reaching the log would condemn the whole file its process wrote. Nothing is lost: an id
+    // that is not an operation's matches no operation in the report either.
+    ApiContract::recordCoverage($this->root);
+
+    ApiContract::coverage()->record('GET /api/forms');
+    ApiContract::coverage()->record('op:v1:aaaa');
+    ApiContract::coverage()->record('sch:v1:aaaaaaaaaaaaaaaa');
+
+    expect(ApiContract::coverage()->exercised())->toBe([])
+        ->and(CoverageLog::scan($this->root)->files)->toBe([]);
 });
 
 it('detects a parallel runner and which worker it is', function (): void {

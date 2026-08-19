@@ -34,6 +34,15 @@ final class CoverageCommand extends Command
     use IteratesDocuments;
     use PrintsSections;
 
+    /**
+     * How far apart the logs may be written before it is worth saying so, in seconds.
+     *
+     * Ten minutes, because below that a run and two runs back to back are not distinguishable and the
+     * line would fire on ordinary single runs. Above it, the line states a fact rather than an
+     * accusation: a suite that really does take a quarter of an hour reads it and moves on.
+     */
+    private const int LONG_SPAN = 600;
+
     protected $signature = 'docuccino:coverage
         {document? : The configured document key (defaults to every document)}
         {--path=* : A coverage log directory to merge (repeatable; defaults to the document\'s own)}
@@ -99,6 +108,17 @@ final class CoverageCommand extends Command
         $report = CoverageReport::of($index, $merge->ids);
 
         $this->line(sprintf('<fg=gray>%d log files, %d ids</>', count($merge->files), count($merge->ids)));
+
+        // Logs accumulate until something resets them, and a merge of three runs reads exactly like a
+        // merge of one — too GENEROUS, which for a gate is the worse direction, and nothing in the
+        // numbers above betrays it. The one thing that does is how far apart the files were written.
+        if ($merge->span >= self::LONG_SPAN) {
+            $this->line(sprintf(
+                '<fg=yellow>These logs span %s. Unless your suite does too, they are several runs unioned — reset before the run.</>',
+                self::duration($merge->span),
+            ));
+        }
+
         $this->newLine();
 
         // Line by line rather than as one blob: a console writer is free to wrap, and a reader
@@ -115,8 +135,8 @@ final class CoverageCommand extends Command
      *
      * Names are unique per writing process — two shards on one machine must never overwrite each other
      * — and the cost of that is that runs accumulate rather than replace. This is the answer, and it
-     * only ever unlinks the log files {@see CoverageLog::filesIn()} reports: regular files, ending in
-     * the log extension, never a link and never a directory.
+     * only ever unlinks the log files {@see CoverageLog::scan()} reports: regular files, ending in the
+     * log extension, never a link and never a directory.
      *
      * @param  list<string>  $directories
      */
@@ -124,7 +144,7 @@ final class CoverageCommand extends Command
     {
         $removed = 0;
         foreach ($directories as $directory) {
-            foreach (CoverageLog::filesIn($directory) ?? [] as $file) {
+            foreach (CoverageLog::scan($directory)->files as $file) {
                 if (@unlink($file)) {
                     $removed++;
                 }
@@ -198,7 +218,10 @@ final class CoverageCommand extends Command
         $problems = [];
 
         foreach ($merge->missing as $directory) {
-            $problems[] = sprintf('%s — no such directory (a shard whose logs never arrived?)', $directory);
+            $problems[] = sprintf(
+                '%s — could not be read (a shard whose logs never arrived, or a directory this job cannot open)',
+                $directory,
+            );
         }
 
         foreach ($merge->empty as $directory) {
@@ -210,6 +233,15 @@ final class CoverageCommand extends Command
         }
 
         return $problems;
+    }
+
+    /** `14m`, `2h 34m` — only ever called above {@see LONG_SPAN}, so there are no seconds to lose. */
+    private static function duration(int $seconds): string
+    {
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+
+        return $hours === 0 ? sprintf('%dm', $minutes) : sprintf('%dh %dm', $hours, $minutes);
     }
 
     /** The floor, or null having said why it is not a percentage. */

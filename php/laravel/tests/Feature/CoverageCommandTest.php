@@ -99,10 +99,29 @@ it('refuses to gate on a merge it could not complete', function (array $paths, s
         ->doesntExpectOutputToContain('documented operations exercised')
         ->assertFailed();
 })->with([
-    'a shard whose logs never arrived' => [['shard-1', 'shard-missing'], 'no such directory'],
+    'a shard whose logs never arrived' => [['shard-1', 'shard-missing'], 'could not be read'],
     'a shard that logged nothing' => [['shard-blank'], 'holds no coverage log'],
     'a torn log' => [['shard-1'], 'not readable as a coverage log'],
 ]);
+
+it('says so when the logs span longer than a run, and stays quiet when they do not', function (): void {
+    // Nothing in the counts betrays a forgotten --reset: three runs union exactly like one, and too
+    // generous is the worse direction for a gate. How far apart the files were written is the only tell.
+    CoverageLog::for($this->logs, '1')->append(array_slice($this->ids, 0, 2));
+
+    $this->artisan('docuccino:coverage')
+        ->doesntExpectOutputToContain('These logs span')
+        ->assertSuccessful();
+
+    $stale = $this->logs.'/2.0.deadbeef.ids';
+    file_put_contents($stale, implode("\n", array_slice($this->ids, 2, 1))."\n");
+    touch($stale, time() - 9000);
+    clearstatcache();
+
+    $this->artisan('docuccino:coverage')
+        ->expectsOutputToContain('These logs span 2h 30m')
+        ->assertSuccessful();
+});
 
 it('says where to look when no suite has ever written a log', function (): void {
     $this->artisan('docuccino:coverage')
@@ -140,7 +159,7 @@ it('empties the logs on --reset and leaves everything else alone', function (): 
         ->expectsOutputToContain('default: removed 1 coverage log(s).')
         ->assertSuccessful();
 
-    expect(CoverageLog::filesIn($this->logs))->toBe([])
+    expect(CoverageLog::scan($this->logs)->files)->toBe([])
         ->and(is_file($this->logs.'/notes.txt'))->toBeTrue();
 
     $this->artisan('docuccino:coverage', ['--reset' => true])
