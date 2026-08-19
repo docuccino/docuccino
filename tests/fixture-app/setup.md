@@ -238,9 +238,14 @@ own (seeded from the action's parameter type):
   action and a `JsonResponse` action whose payloads are named nowhere, the two shapes the response side
   degrades on.
 - `app/Http/Controllers/FileDeliveryController.php` — the rest of the framework response family, declared
-  the way a real controller declares it: `BinaryFileResponse` from `response()->download()`,
-  `StreamedResponse` from `response()->stream()`, and the plain `Illuminate\Http\Response` from
-  `response()`. Each is proof that the class the response guard names is one the engine really recovers.
+  the way a real controller declares it: `BinaryFileResponse` from `response()->download()` and
+  `response()->file()`, `StreamedResponse` from `response()->stream()`, `streamDownload()`,
+  `eventStream()` and `Storage::download()`, and the plain `Illuminate\Http\Response` from `response()`.
+  Each is proof that the class the response guard names is one the engine really recovers — and, since
+  the download and the inline file are the SAME class, that the call site is where the media type and the
+  disposition really come from. `download()` wraps its path in `storage_path(...)`, which PHPStan does not
+  fold, so the extension has to survive that; `eventStream()` is not on the response-factory contract the
+  `response()` helper is typed as, so its recovery is a fact about the analyser rather than an assumption.
 - `app/Http/Controllers/DashboardPageController.php` — a Blade page: `view('…')` behind a declared
   `: View` (the contract) and behind no return type at all. Proof that the engine hands back the CONCRETE
   `Illuminate\View\View` either way, so recognising only the contract would miss every real app.

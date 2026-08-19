@@ -104,6 +104,19 @@ final class FixtureRunner
     }
 
     /**
+     * Trace a controller action with the real FileResponseVisitor: returns, per recovered call, the
+     * response class it hands back plus the media type, body schema, disposition and filename it proves.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function traceFileResponses(string $controllerRelPath, string $class, string $method): array
+    {
+        $calls = self::invoke('trace-file-responses', self::path($controllerRelPath), $class, $method)['calls'] ?? [];
+
+        return is_array($calls) ? array_values(array_filter($calls, 'is_array')) : [];
+    }
+
+    /**
      * Trace a controller with the shared PaginationTerminalVisitor over the `jsonPaginate` terminal:
      * returns whether it reached the terminal, plus the folded per-call-site overrides
      * (`maxResults`/`defaultSize`, from the outermost call's int args).

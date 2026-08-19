@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
 use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
+use Docuccino\Laravel\Integrations\Support\FoldedArguments;
 use Docuccino\Laravel\Integrations\Support\PaginationTerminalVisitor;
 use Docuccino\Laravel\Integrations\Support\RequestPageSizeReader;
 use PhpParser\Comment;
@@ -827,12 +828,7 @@ final class QueryBuilderTraceVisitor implements FollowsReturnType, TraceVisitor
         $this->facts->paginationKind = $this->terminals[$name];
         $this->facts->paginationTerminal = $name;
 
-        $args = [];
-        foreach ($node->getArgs() as $index => $arg) {
-            $value = $scope->constantValueOf($arg->value);
-            $args[$arg->name?->toString() ?? $index] = $value !== null && $value->isScalar() ? $value->scalar : null;
-        }
-        $this->facts->paginationArgs = $args;
+        $this->facts->paginationArgs = FoldedArguments::of($node, $scope);
     }
 
     private function receiverIsBuilder(Node\Expr $receiver, TypeScope $scope): bool

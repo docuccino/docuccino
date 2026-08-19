@@ -171,7 +171,9 @@ against:
   rules over the same bracketed key merge onto the parameter the allow-list named.
 - **Responses** — API Resources (including conditional and closure fields), Eloquent model schemas
   from casts and `@property` docblocks, Data objects, backed enums with case descriptions, pagination
-  envelopes, JSON:API resources, and polymorphic `MorphTo` returns as a discriminated `oneOf`.
+  envelopes, JSON:API resources, and polymorphic `MorphTo` returns as a discriminated `oneOf`. Beyond
+  JSON: rendered views as `text/html`, file downloads and streams as a binary body under the media type
+  the call names, and `eventStream()` as `text/event-stream`.
 - **Reusable components** — DTOs, models, resources, request bodies and enums hoisted to
   `components/schemas`, deduped and `$ref`'d.
 - **Path parameters** — typed from the bound model's route key (uuid, ulid, integer, string).
