@@ -109,13 +109,16 @@ final class DefaultExtensions
             FrameworkResponseTypeToSchema::class,
             ViewTypeToSchema::class,
             ...DefaultTypeMappers::all(),
-            // The document lints. All diagnostics-only, none of them mutates output.
+            // Collapses an error body repeated across operations into one shared component + $refs.
+            // The only document transformer that moves a byte, so everything reading the finished
+            // document comes after it.
+            SharedErrorResponses::class,
+            // The document lints. All diagnostics-only, and all pinned to Priorities::LAST so they read
+            // what will be emitted — this list's order is not what settles that, the attribute is.
             SensitiveFieldLint::class,
             MissingDescriptionLint::class,
             OperationIdStyleLint::class,
             UndocumentedTagLint::class,
-            // Collapses an error body repeated across operations into one shared component + $refs.
-            SharedErrorResponses::class,
         ];
     }
 }

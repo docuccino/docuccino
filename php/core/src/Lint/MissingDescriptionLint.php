@@ -9,6 +9,8 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
 
 /**
  * Warns on an operation that publishes neither a summary nor a description — the one completeness
@@ -22,8 +24,9 @@ use Docuccino\Core\Extensions\Document\UirDocumentDraft;
  * an application that documents nothing this fires once per operation, which is a backlog, not a
  * diagnostic.
  *
- * Diagnostics only — it never mutates the document.
+ * Diagnostics only, and pinned to run last so what it reads is what will be emitted.
  */
+#[ExtensionOrder(priority: Priorities::LAST)]
 final class MissingDescriptionLint implements DocumentTransformer
 {
     public function __construct(

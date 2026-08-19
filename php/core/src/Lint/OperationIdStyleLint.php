@@ -9,6 +9,8 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
 
 /**
  * Warns on an operationId a generated client cannot turn into a method name ({@see
@@ -19,8 +21,9 @@ use Docuccino\Core\Extensions\Document\UirDocumentDraft;
  * this passes — so every finding is on a string somebody typed, in an `#[OperationId]`, a route name
  * or a `#[Webhook]` name, and can be typed differently.
  *
- * Diagnostics only — it never mutates the document.
+ * Diagnostics only, and pinned to run last so what it reads is what will be emitted.
  */
+#[ExtensionOrder(priority: Priorities::LAST)]
 final class OperationIdStyleLint implements DocumentTransformer
 {
     public function __construct(

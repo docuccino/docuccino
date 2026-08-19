@@ -638,6 +638,12 @@ when a registration path exists and the `emit()` signature settles.
     vocabulary, and what a webhook's own diagnostics already say — which keeps it out of the space a
     path template occupies, since a path always begins with `/`. Where the lever differs the help
     does: `#[OperationId]` never reaches a webhook, so the rename it names is the `#[Webhook]`.
+    All four carry `#[ExtensionOrder(priority: Priorities::LAST)]`. A lint reads the document as it
+    will be EMITTED, so it must run after anything that can still change it — today only
+    `SharedErrorResponses`, whose hoist rewrites an inline error body into a `$ref` and would leave
+    the leakage pass publishing pointers the output does not have. `LAST` rather than an edge onto
+    that one class, so a third-party transformer lands ahead of the lints too; the FQCN tie-break
+    that happened to produce the right answer is not an ordering contract.
     **Every one of them owes a firing population before it ships**, per the diagnostics rule:
     measured against the workbench, the prose rule fires on 2 of 23 operations (both actionable) and
     the other two fire zero times; only the operationId rule is on by default, because it is the only

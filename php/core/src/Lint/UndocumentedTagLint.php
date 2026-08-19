@@ -9,6 +9,8 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
 
 /**
  * Warns on a tag operations carry that the document never declares, so it reaches the reader as a
@@ -20,8 +22,9 @@ use Docuccino\Core\Extensions\Document\UirDocumentDraft;
  * a few nav parents declared by hand while the rest derive from controller names — is a deliberate
  * shape, and firing once per derived tag there is exactly the noise the guard exists to avoid.
  *
- * Diagnostics only — it never mutates the document.
+ * Diagnostics only, and pinned to run last so what it reads is what will be emitted.
  */
+#[ExtensionOrder(priority: Priorities::LAST)]
 final class UndocumentedTagLint implements DocumentTransformer
 {
     public function __construct(
