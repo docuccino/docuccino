@@ -1,0 +1,308 @@
+---
+title: Contract testing
+description: Assert the requests and responses your test suite already produces against the generated document, with failures that name the producer and the file:line the schema came from.
+---
+
+import { Steps, Aside, Tabs, TabItem, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Your test suite already calls real endpoints with real data. Docuccino can hold every one of those
+exchanges to the document it generates — so a response that drifts from its own documentation fails a
+test instead of reaching a client.
+
+The assertions read the **UIR** artifact rather than an OpenAPI export, and that is the whole point.
+UIR carries `x-docuccino.provenance`, so a failure does not stop at *"`total` should be a number"* — it
+tells you the shape came from `integration:eloquent`, out of `app/Models/Invoice.php:31`. That is
+almost always where the fix is.
+
+## Setup
+
+<Steps>
+
+1. **Export the document as UIR.** Add a `uir` target beside whatever you already write:
+
+   ```php
+   // config/docuccino.php
+   'export' => [
+       'targets' => [
+           ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
+           ['format' => 'uir',         'path' => 'docs/api.uir.json'],
+       ],
+   ],
+   ```
+
+   ```bash
+   php artisan docuccino:export
+   ```
+
+   The assertions find that file on their own — they read the document's own `uir` target, so there is
+   nothing else to configure. Commit the artifact; it is deterministic, and the freshness and
+   breaking-change assertions below both compare against it.
+
+2. **Add the trait to your base test case.**
+
+   ```php
+   // tests/TestCase.php
+   use Docuccino\Laravel\Testing\AssertsApiContract;
+
+   abstract class TestCase extends BaseTestCase
+   {
+       use AssertsApiContract;
+   }
+   ```
+
+3. **Optionally, register the response macros** so the assertions chain off the call you already make:
+
+   <Tabs>
+   	<TabItem label="PHPUnit">
+   	```php
+   	// tests/TestCase.php
+   	protected function setUp(): void
+   	{
+   	    parent::setUp();
+
+   	    \Docuccino\Laravel\Testing\ApiContract::registerMacros();
+   	}
+   	```
+   	</TabItem>
+   	<TabItem label="Pest">
+   	```php
+   	// tests/Pest.php
+   	use Docuccino\Laravel\Testing\ApiContract;
+   	use Docuccino\Laravel\Testing\AssertsApiContract;
+
+   	uses(AssertsApiContract::class)->in('Feature');
+
+   	ApiContract::registerMacros();
+   	```
+   	</TabItem>
+   </Tabs>
+
+</Steps>
+
+<Aside type="note" title="Nothing is registered for you">
+Docuccino's service provider never touches the testing surface, and the macros exist only after you
+call `registerMacros()`. A production install loads none of it.
+</Aside>
+
+## Assert an exchange
+
+<Tabs>
+	<TabItem label="Your test">
+	```php
+	it('lists invoices', function () {
+	    $this->getJson('/api/invoices?page=2')
+	        ->assertOk()
+	        ->assertValidExchange();
+	});
+	```
+	</TabItem>
+	<TabItem label="When it disagrees">
+	```text
+	GET /api/invoices does not match the documented contract.
+
+	  operation  GET /api/invoices  op:v1:kgfeda3prpqaw73i
+	  status     200
+
+	  the response body at /data/0/total
+	    The data (string) must match the type: number
+	    schema   /components/schemas/Invoice/properties/total
+	    from     integration:eloquent (integration) — app/Models/Invoice.php:31 in App\Models\Invoice::$total
+	```
+	</TabItem>
+</Tabs>
+
+Three assertions cover the exchange, as methods on your test case or as chained macros:
+
+| Assertion | Checks |
+| --- | --- |
+| `assertValidRequest($response)` | The path, query, header and cookie parameters, and the request body, against what the operation documents. |
+| `assertValidResponse($response)` | The status, the media type, and the body against the schema documented for that pair. |
+| `assertValidExchange($response)` | Both halves. |
+
+Each returns the response, so they chain with Laravel's own assertions in any order.
+
+What they hold you to:
+
+- **The status must be documented.** A `500` nobody wrote down fails, naming the statuses the operation
+  does document.
+- **The media type must be documented** for that status, `application/problem+json` and vendor `+json`
+  types included.
+- **A body JSON Schema cannot check passes with a note** rather than passing blank — a `text/csv`
+  download, or a media type documented with no schema.
+- **Query and header values are read as the type the contract documents.** `?page=2` is checked as the
+  integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
+  instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
+  Docuccino documents it as.
+
+## Report the endpoints your suite never touched
+
+Every assertion records the operation it matched, keyed by the stable `x-docuccino.id` — never by path
+string, so a renamed route reads as still covered rather than as one endpoint vanishing and another
+appearing.
+
+```php
+it('exercises the documented API', function () {
+    $this->assertContractCoverage(85.0);
+});
+```
+
+```text
+Docuccino contract coverage: 17 of 23 documented operations exercised (73.91%, floor 85%).
+
+Never exercised:
+  DELETE /api/invoices/{invoice}       op:v1:aaaainvoicekill
+  POST   /api/invoices/{invoice}/void  op:v1:aaaainvoicevoid
+
+Cover them, or — if this is the honest measured floor for now — move the floor to 73 and ratchet it up from there.
+```
+
+`assertEveryOperationExercised()` is the same gate at 100%. Treat the floor the way you treat a
+line-coverage floor: set it to what you measure today, and raise it as you close gaps. A floor you
+cannot meet is a floor somebody deletes.
+
+<Aside type="caution" title="Run the coverage check in a single process">
+Coverage is the one thing a parallel runner cannot answer. Each worker exercises its own share of the
+suite, and no worker can know when the others have finished — so rather than name endpoints your suite
+covered perfectly well, the assertion **refuses** under a parallel run and says so. Run it in a job
+without `--parallel`; every other assertion on this page is unaffected.
+</Aside>
+
+## Catch an example that lies
+
+Inference cannot be wrong about a shape it derived. A hand-written
+[`#[Example]`](/laravel/reference/attributes/#example) can say anything at all — and it is the part of
+your documentation a reader copies.
+
+```php
+it('publishes examples that are actually valid', function () {
+    $this->assertValidExamples();
+});
+```
+
+Every example in the document goes through the same validator the response assertions use: response
+content, request bodies, parameters, named `examples` maps, and examples nested anywhere inside a
+component schema.
+
+```text
+1 of 34 documented examples do not match the schema beside them.
+
+  components/schemas/Invoice
+    at /components/schemas/Invoice/properties/total/example
+      the example
+        The data (string) must match the type: number
+        schema   /components/schemas/Invoice/properties/total
+        from     integration:eloquent (integration) — app/Models/Invoice.php:31
+```
+
+## Gate breaking changes
+
+`assertNoBreakingChanges()` runs the same semantic, id-based diff as
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff), against the artifact you committed —
+so the assertion and the command can never disagree about what "breaking" means.
+
+```php
+it('does not break the published contract', function () {
+    $this->assertNoBreakingChanges();
+});
+```
+
+Pass a git ref to compare against a branch or a tag instead of your working tree, exactly as the
+command's `--against` does:
+
+```php
+$this->assertNoBreakingChanges('origin/main');
+```
+
+The failure renders the changeset, then says where each broken node came from:
+
+```text
+The current document makes 1 breaking change to the committed contract.
+
+1 change (1 breaking)
+
+BREAKING
+  ~ [schema] components.schemas.Invoice.properties.total.type  (schema.type-changed)
+      type: number -> string
+
+  Where those changes came from:
+    components.schemas.Invoice.properties.total.type
+      integration:eloquent (integration) — app/Models/Invoice.php:31 in App\Models\Invoice::$total
+```
+
+## Keep the committed artifact honest
+
+A committed document is only useful while it matches the code. `assertDocumentUpToDate()` compares a
+fresh build against every file your export targets write — **byte for byte**, which is a fair test
+precisely because Docuccino's output is deterministic:
+
+```php
+it('has an up-to-date API document', function () {
+    $this->assertDocumentUpToDate();
+});
+```
+
+Emit options that do not change the contract are not staleness: an artifact exported at a different
+`--provenance` level, or with `--drop-ids`, still passes. When the bytes really have moved, the
+failure names the file and shows what changed:
+
+```text
+docs/api.uir.json is out of date.
+
+  What changed since it was written:
+
+    2 changes (0 breaking)
+
+    NON-BREAKING
+      + [parameter] GET /api/invoices  query.status  (parameter.added)
+      ~ [operation] GET /api/invoices  (operation.summary-changed)
+
+  Where those changes came from:
+    GET /api/invoices  query.status
+      integration:query-builder (integration) — app/Queries/InvoiceQuery.php:18
+
+  Regenerate it: php artisan docuccino:export
+```
+
+## Pointing at a different document
+
+Multi-document apps pick one; anything else names a path directly. Both belong in your test bootstrap:
+
+```php
+use Docuccino\Laravel\Testing\ApiContract;
+
+ApiContract::forDocument('admin');          // assert against documents.admin
+ApiContract::using('docs/api.uir.json');    // or name the artifact yourself
+```
+
+`ApiContract::assertions()` hands you the same assertions as an object, for a test case you cannot add
+the trait to.
+
+## Watch every exchange
+
+Every assertion hands the request, the response and the matched operation to any observer you register
+— the seam anything built on top of contract testing needs:
+
+```php
+use Docuccino\Laravel\Testing\ApiContract;
+use Docuccino\Laravel\Testing\Contracts\ContractObserver;
+use Docuccino\Laravel\Testing\ObservedExchange;
+
+final class RecordExchanges implements ContractObserver
+{
+    public function observed(ObservedExchange $exchange): void
+    {
+        // $exchange->operationId(), ->method(), ->pathTemplate(), ->status(), ->body()
+        // ->request (Illuminate\Http\Request), ->response (TestResponse), ->result
+    }
+}
+
+ApiContract::observe(new RecordExchanges);
+```
+
+Observers are notified **before** the assertion fails, so they see failing exchanges as well as passing
+ones. Docuccino's own coverage recorder is one of these.
+
+<CardGrid>
+	<LinkCard title="Commands" href="/laravel/reference/commands/" description="docuccino:export and docuccino:diff, the commands these assertions mirror." />
+	<LinkCard title="The UIR format" href="/uir/" description="What provenance is, and why the assertions read UIR rather than OpenAPI." />
+</CardGrid>

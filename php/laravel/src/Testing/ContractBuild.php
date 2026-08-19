@@ -1,0 +1,132 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Docuccino\Laravel\Testing;
+
+use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Emit\EmitOptions;
+use Docuccino\Core\Emit\Formats;
+use Docuccino\Core\Emit\ProvenanceLevel;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\ExportTarget;
+use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Pipeline\DocumentBuilder;
+use Docuccino\Laravel\Support\Paths;
+use Illuminate\Support\Facades\Process;
+
+/**
+ * A freshly-generated document and the committed artifact beside it, for the two assertions that
+ * compare the two.
+ *
+ * It goes through {@see DocumentBuilder} and {@see Formats}, which is the exact path `docuccino:export`
+ * and `docuccino:diff` take, so an assertion can never disagree with the command about what the
+ * document is or how it serialises.
+ *
+ * @internal
+ */
+final class ContractBuild
+{
+    private ?UirDocument $fresh = null;
+
+    public function __construct(private readonly string $key) {}
+
+    public function key(): string
+    {
+        return $this->key;
+    }
+
+    public function config(): DocumentConfig
+    {
+        return $this->builder()->config($this->key);
+    }
+
+    public function exists(): bool
+    {
+        return $this->builder()->hasDocument($this->key);
+    }
+
+    /** Built once per instance: analysis is the expensive half and nothing changes under it mid-test. */
+    public function fresh(): UirDocument
+    {
+        return $this->fresh ??= $this->builder()->build($this->key, app(TypeEngine::class))->document;
+    }
+
+    /**
+     * Every byte string the exporter can legitimately write for this target.
+     *
+     * Provenance detail and whether ids are re-emitted are EMIT options, not facts about the contract —
+     * `source.line` is explicitly not an identity input — so an artifact exported at a different
+     * `--provenance` level is a differently-serialised copy of the same document, not a stale one.
+     * Comparing against every form is what keeps `assertDocumentUpToDate()` about the contract.
+     *
+     * @return list<string>
+     */
+    public function emissions(ExportTarget $target): array
+    {
+        $document = $this->fresh();
+        $yaml = $target->yaml() && Formats::serialisesYaml($target->format);
+
+        $variants = [];
+        foreach (ProvenanceLevel::cases() as $provenance) {
+            foreach ([true, false] as $keepIds) {
+                $output = Formats::emit($target->format, $document, new EmitOptions(
+                    keepIds: $keepIds,
+                    provenance: $provenance,
+                    yaml: $yaml,
+                ))->output;
+
+                $variants[$output] = true;
+            }
+        }
+
+        return array_keys($variants);
+    }
+
+    /** What `docuccino:export` writes with no flags — the form a failure message compares against. */
+    public function canonicalEmission(ExportTarget $target): string
+    {
+        return Formats::emit($target->format, $this->fresh(), new EmitOptions(
+            keepIds: true,
+            provenance: ProvenanceLevel::Winners,
+            yaml: $target->yaml() && Formats::serialisesYaml($target->format),
+        ))->output;
+    }
+
+    public function absolute(string $path): string
+    {
+        return Paths::absolute($path, base_path());
+    }
+
+    /** The committed artifact's contents, or null when it is not there. */
+    public function committed(string $path): ?string
+    {
+        $contents = @file_get_contents($this->absolute($path));
+
+        return $contents === false ? null : $contents;
+    }
+
+    /**
+     * The artifact as of a git ref, the way `docuccino:diff --against` reads it: `git show <ref>:<path>`
+     * with a repo-relative path, run without a shell so nothing is word-split.
+     *
+     * @return array{0: string|null, 1: string} contents (null on failure) and git's own stderr
+     */
+    public function committedAtRef(string $ref, string $path): array
+    {
+        // Reject anything git would read as an option, so a hostile argument cannot smuggle a flag past
+        // the `<ref>:<path>` operand — the same guard the diff command applies.
+        if (str_starts_with($ref, '-') || str_starts_with($path, '-')) {
+            return [null, 'the git ref and path must not start with "-"'];
+        }
+
+        $result = Process::run(['git', 'show', $ref.':'.$path]);
+
+        return $result->successful() ? [$result->output(), ''] : [null, trim($result->errorOutput())];
+    }
+
+    private function builder(): DocumentBuilder
+    {
+        return app(DocumentBuilder::class);
+    }
+}

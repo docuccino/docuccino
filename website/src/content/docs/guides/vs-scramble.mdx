@@ -149,13 +149,16 @@ is whether you hand-maintain its shape beside the code that produces it.
 | A spec artifact you commit and review in a pull request | ✓ | — | — |
 | Semantic diff over stable node identities | ✓ | — | — |
 | CI gate on breaking changes (`docuccino:diff --enforce`) | ✓ | — | — |
+| Assertions holding your test suite's traffic to the spec | ✓ | — | — |
+| A report of documented endpoints your suite never exercises | ✓ | — | — |
 | A documented intermediate format (the [UIR](/uir/)) | ✓ | — | — |
 | No static-analysis toolchain in a production install | ✓ | — | — |
 
 Everything down to the build cache you can have either way. The rows below it are the ones worth
 weighing, because they only exist for structural reasons: output is deterministic, every node carries a
-stable identity, and the analyzer is a dev dependency the adapter names by string rather than a hard
-requirement. See [what Docuccino doesn't do](#what-docuccino-doesnt-do) for the other side of the ledger.
+stable identity, the document is rich enough to
+[assert your test suite's traffic against](/laravel/guides/contract-testing/), and the analyzer is a dev
+dependency the adapter names by string rather than a hard requirement. See [what Docuccino doesn't do](#what-docuccino-doesnt-do) for the other side of the ledger.
 
 ## What Docuccino infers for you
 
