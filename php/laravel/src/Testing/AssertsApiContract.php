@@ -11,6 +11,7 @@ use Docuccino\Core\Diff\Changeset;
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\IncomparableDocumentsException;
 use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Core\Support\PlainText;
 use Illuminate\Testing\TestResponse;
@@ -213,7 +214,7 @@ trait AssertsApiContract
      */
     private function staleDetail(ContractBuild $build, ExportTarget $target, string $committed): array
     {
-        if (! in_array($target->format, ['uir', 'openapi-3.2', 'openapi-3.1', 'openapi-3.0'], true) || $target->yaml()) {
+        if (! in_array($target->format, Formats::contractPreference(), true) || $target->yaml()) {
             return [null, null, null];
         }
 

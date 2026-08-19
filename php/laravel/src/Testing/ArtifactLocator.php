@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Testing;
 
+use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Laravel\Support\Paths;
@@ -12,9 +13,9 @@ use Docuccino\Laravel\Support\Paths;
  * Which file the contract assertions read.
  *
  * There is deliberately no option of its own: an application that exports a document has already said
- * where it lands, so the assertions read `export.targets` — the UIR target when there is one, because
- * only UIR carries the provenance that makes a failure actionable, else whatever the document does
- * write. A second place to name the file would be a second place to get it wrong.
+ * where it lands, so the assertions read `export.targets` — the best of them a contract can be read
+ * back out of, which is UIR when there is one because only UIR carries the provenance that makes a
+ * failure actionable. A second place to name the file would be a second place to get it wrong.
  */
 final class ArtifactLocator
 {
@@ -29,16 +30,20 @@ final class ArtifactLocator
     }
 
     /**
-     * The document's UIR target, else its first target. UIR first because provenance only survives
-     * there — an OpenAPI artifact still validates, it just cannot say who wrote the schema.
+     * The best target the assertions can read, in {@see Formats::contractPreference()} order — a
+     * function of which formats the document exports, never of the order they were listed in. The
+     * first target is the last resort, reached only by a document exporting nothing readable as a
+     * contract at all.
      */
     public static function preferred(DocumentConfig $config): ExportTarget
     {
         $targets = $config->exportTargets();
 
-        foreach ($targets as $target) {
-            if ($target->format === 'uir') {
-                return $target;
+        foreach (Formats::contractPreference() as $format) {
+            foreach ($targets as $target) {
+                if ($target->format === $format) {
+                    return $target;
+                }
             }
         }
 
