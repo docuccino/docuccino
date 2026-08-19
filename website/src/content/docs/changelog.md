@@ -13,6 +13,51 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.6.0
+
+### Breaking changes
+
+- **attributes**: address the API consumer with #[Summary] and #[Description] ([#118](https://github.com/docuccino/docuccino/pull/118))
+  - `#[DescriptionFromFile('docs/x.md')]` is removed. Use `#[Description(file: 'docs/x.md')]`, which does the same thing and also takes inline prose as `text:`. A second attribute that does almost the same job is a worse API than one that does both — the same reasoning that gave `#[Example]` its `file:` argument rather than a sibling attribute.
+
+### Features
+
+- **laravel**: make contract coverage a post-run command ([#124](https://github.com/docuccino/docuccino/pull/124))
+- **laravel**: walk a new install to its first document ([#120](https://github.com/docuccino/docuccino/pull/120))
+- **laravel**: point a diagnostic at the page that documents it ([#119](https://github.com/docuccino/docuccino/pull/119))
+- **laravel**: read the provenance trail back with docuccino:explain ([#116](https://github.com/docuccino/docuccino/pull/116))
+- **laravel**: accept the diagnostic codes you have already read ([#114](https://github.com/docuccino/docuccino/pull/114))
+- **laravel**: record your test suite's responses as documented examples ([#109](https://github.com/docuccino/docuccino/pull/109))
+- **core**: show several named examples, and read one from a file ([#108](https://github.com/docuccino/docuccino/pull/108))
+- **laravel**: assert your test suite against the generated contract ([#107](https://github.com/docuccino/docuccino/pull/107))
+- **laravel**: rebuild and refresh the viewer as your code changes ([#106](https://github.com/docuccino/docuccino/pull/106))
+- **laravel**: resolve the viewer through its contract and ship a Redoc driver ([#105](https://github.com/docuccino/docuccino/pull/105))
+- **core**: lint the document for missing prose, unusable ids and undeclared tags ([#104](https://github.com/docuccino/docuccino/pull/104))
+- **laravel**: let --fail-on gate on the info and hint rungs ([#103](https://github.com/docuccino/docuccino/pull/103))
+- **laravel**: hint how a mock server should fake a property ([#102](https://github.com/docuccino/docuccino/pull/102))
+- **laravel**: document the webhooks an API delivers ([#101](https://github.com/docuccino/docuccino/pull/101))
+- **laravel**: document binary, file, streamed and SSE responses ([#99](https://github.com/docuccino/docuccino/pull/99))
+- **laravel**: let projects extend the engine's PHPStan configuration ([#90](https://github.com/docuccino/docuccino/pull/90))
+- **core**: promote the schema conversion surface used by integrations to a public contract ([#85](https://github.com/docuccino/docuccino/pull/85))
+- **core**: emit a Postman collection ([#81](https://github.com/docuccino/docuccino/pull/81))
+- **laravel**: write every configured export target in one run ([#80](https://github.com/docuccino/docuccino/pull/80))
+
+### Bug fixes
+
+- **laravel**: widen a rule's values for every entry that names none ([#125](https://github.com/docuccino/docuccino/pull/125))
+- **core**: report a credential a recording cannot redact ([#126](https://github.com/docuccino/docuccino/pull/126))
+- **core**: place a call's arguments where its readers index them ([#123](https://github.com/docuccino/docuccino/pull/123))
+- **core**: agree the example report's verb with how many examples lied ([#121](https://github.com/docuccino/docuccino/pull/121))
+- **laravel**: say why a driver's own response never live-reloads ([#115](https://github.com/docuccino/docuccino/pull/115))
+- **repo**: stage a cache-invalidation test's disagreement in its own directory ([#110](https://github.com/docuccino/docuccino/pull/110))
+- **laravel**: document a rendered view as text/html instead of reflecting it ([#98](https://github.com/docuccino/docuccino/pull/98))
+- **inference-phpstan**: gate the throw-registry rescue on the resolved callee ([#89](https://github.com/docuccino/docuccino/pull/89))
+- **laravel**: reject unknown option values and diagnose misconfigured keys ([#88](https://github.com/docuccino/docuccino/pull/88))
+- **laravel**: publish the real generator version ([#87](https://github.com/docuccino/docuccino/pull/87))
+- **laravel**: print diagnostic help text in command output ([#86](https://github.com/docuccino/docuccino/pull/86))
+- **core**: surface engine boot failures and stop caching their degraded fragments ([#84](https://github.com/docuccino/docuccino/pull/84))
+- **core**: keep the export destination out of the document config hash ([#79](https://github.com/docuccino/docuccino/pull/79))
+
 ## v0.5.1
 
 ### Features

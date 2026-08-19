@@ -7,4 +7,9 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
-_No user-facing changes yet._
+## v0.6.0
+
+### Breaking changes
+
+- address the API consumer with #[Summary] and #[Description] ([#118](https://github.com/docuccino/docuccino/pull/118))
+  - `#[DescriptionFromFile('docs/x.md')]` is removed. Use `#[Description(file: 'docs/x.md')]`, which does the same thing and also takes inline prose as `text:`. A second attribute that does almost the same job is a worse API than one that does both — the same reasoning that gave `#[Example]` its `file:` argument rather than a sibling attribute.
