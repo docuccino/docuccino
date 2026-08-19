@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Examples\ExampleRecording;
+use Docuccino\Core\Examples\RecordedBody;
 use Docuccino\Core\Examples\RecordedExample;
 
 /**
@@ -30,6 +31,20 @@ it('ranks two equally good bodies the same way whichever arrives first', functio
 
     expect($a->outranks($b))->toBeTrue()
         ->and($b->outranks($a))->toBeFalse();
+});
+
+it('ranks two object-shaped bodies apart, the same way it ranks two arrays', function (): void {
+    // A JSON object whose keys an array cannot carry — the ordinary keyBy('id') payload — decodes to a
+    // stdClass. Rank it by anything that reads such a body as "an object" and every candidate ties, so
+    // the published example becomes whichever the ledger merged first.
+    $a = RecordedBody::decode('{"1":{"id":1,"note":"aaa"},"2":{"id":2,"note":"bbb"}}');
+    $b = RecordedBody::decode('{"7":{"id":7,"note":"zzz"},"9":{"id":9,"note":"yyy"}}');
+
+    $first = RecordedExample::of('200', 'application/json', $a);
+    $second = RecordedExample::of('200', 'application/json', $b);
+
+    expect($first->outranks($second))->toBeTrue()
+        ->and($second->outranks($first))->toBeFalse();
 });
 
 it('leaves a committed body alone while its shape is unchanged', function (): void {

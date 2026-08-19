@@ -115,7 +115,9 @@ final readonly class RecordedExample
      *
      * That it is a TOTAL order on content alone is what lets several test-runner workers record one
      * operation at once ({@see SharedRecordingLedger}): the best of a set is the same whichever worker
-     * met which member of it.
+     * met which member of it. Which is why the encoding it ranks on has to descend into an object as
+     * well as an array — a body that reads as one value ties with every other, and a tie hands the
+     * choice back to merge order.
      */
     public function outranks(self $other): bool
     {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Composer\Autoload\ClassLoader;
 use Docuccino\Core\Examples\ExampleRecording;
 use Docuccino\Core\Examples\ProcessRecordingLedger;
+use Docuccino\Core\Examples\RecordedBody;
 use Docuccino\Core\Examples\RecordedExample;
 use Docuccino\Core\Examples\RecordingStore;
 use Docuccino\Core\Examples\SharedRecordingLedger;
@@ -108,6 +109,42 @@ it('publishes the best of a run whichever process met it, and never the one that
             $worker = $index % 3;
             $workers[$worker] ??= new SharedRecordingLedger($store, 'run-'.$run, $scratch);
             $workers[$worker]->record(LEDGER_OPERATION, 'GET /api/invoices/{invoice}', $candidates[$index]);
+        }
+
+        expect(file_get_contents((string) $store->pathFor(LEDGER_OPERATION)))->toBe($expected);
+    }
+});
+
+it('publishes the best object-shaped body whichever worker met it', function (): void {
+    // The interleavings above deal ARRAY bodies. A JSON object whose keys an array cannot carry — the
+    // ordinary keyBy('id') payload — is the case where every candidate once ranked equal, and the
+    // survivor was whichever worker merged first.
+    [$recordings, $scratch] = ledgerDirectories();
+    $store = new RecordingStore($recordings);
+
+    $candidates = array_map(
+        static fn (string $json): RecordedExample => RecordedExample::of('200', 'application/json', RecordedBody::decode($json)),
+        [
+            '{"1":{"id":1}}',
+            '{"2":{"id":2,"note":"paid"}}',
+            '{"3":{"id":3,"note":"part paid"}}',
+        ],
+    );
+
+    $serial = new ProcessRecordingLedger($store);
+    foreach ($candidates as $candidate) {
+        $serial->record(LEDGER_OPERATION, 'GET /api/invoices', $candidate);
+    }
+    $expected = (string) file_get_contents((string) $store->pathFor(LEDGER_OPERATION));
+
+    foreach (ledgerOrderings([0, 1, 2]) as $run => $ordering) {
+        @unlink((string) $store->pathFor(LEDGER_OPERATION));
+
+        $workers = [];
+        foreach ($ordering as $index) {
+            $worker = $index % 2;
+            $workers[$worker] ??= new SharedRecordingLedger($store, 'object-run-'.$run, $scratch);
+            $workers[$worker]->record(LEDGER_OPERATION, 'GET /api/invoices', $candidates[$index]);
         }
 
         expect(file_get_contents((string) $store->pathFor(LEDGER_OPERATION)))->toBe($expected);
