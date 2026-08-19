@@ -1249,3 +1249,81 @@ function contractResponse(
 
     return TestResponse::fromBaseResponse(new Response($body, $status, $headers), $request);
 }
+
+/**
+ * A directory of this process's own, under the gitignored build tree, for a coverage-log fixture. Each
+ * one carries the pid and eight random bytes, so two parallel workers running the same test never share
+ * a fixture — and so the sweep below can only ever be taking away its own caller's.
+ */
+function coverageFixtureDir(string $slug): string
+{
+    $directory = dirname(__DIR__).'/build/tests/coverage-'.$slug.'-'.getmypid().'-'.bin2hex(random_bytes(8));
+    mkdir($directory, 0755, true);
+
+    return $directory;
+}
+
+/**
+ * Remove a {@see coverageFixtureDir()} directory and everything under it.
+ *
+ * Two rules, and both of them are why this is here rather than written out per suite. It refuses any
+ * path that is not under the build tree this process made, because a recursive delete pointed at the
+ * wrong root is not a test failure but an incident. And it asks `is_link()` BEFORE `is_dir()`, because
+ * `is_dir()` answers true for a link to a directory: a sweep that asked the other way round would
+ * follow a planted link straight out of the fixture and start deleting whatever it pointed at.
+ */
+function removeCoverageFixture(string $directory): void
+{
+    $root = dirname(__DIR__).'/build/tests/';
+
+    if (! str_starts_with($directory, $root) || ! is_dir($directory) || is_link($directory)) {
+        return;
+    }
+
+    // A fixture that proved a directory cannot be read has to be removable afterwards, and the mode is
+    // safe to put back here: nothing reaches this line that is not under the build tree this made.
+    @chmod($directory, 0755);
+
+    foreach ((array) @scandir($directory) as $entry) {
+        if (! is_string($entry) || $entry === '.' || $entry === '..') {
+            continue;
+        }
+
+        $path = $directory.'/'.$entry;
+
+        if (is_link($path) || ! is_dir($path)) {
+            @unlink($path);
+
+            continue;
+        }
+
+        removeCoverageFixture($path);
+    }
+
+    @rmdir($directory);
+}
+
+/**
+ * Every ordering of a list, for a test that has to prove an answer does not depend on one.
+ *
+ * @param  list<string>  $items
+ * @return list<list<string>>
+ */
+function permutationsOf(array $items): array
+{
+    if (count($items) <= 1) {
+        return [$items];
+    }
+
+    $orders = [];
+    foreach ($items as $index => $item) {
+        $rest = $items;
+        unset($rest[$index]);
+
+        foreach (permutationsOf(array_values($rest)) as $order) {
+            $orders[] = [$item, ...$order];
+        }
+    }
+
+    return $orders;
+}

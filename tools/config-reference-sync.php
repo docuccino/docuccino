@@ -38,6 +38,7 @@ const CONFIG_REFERENCE_SECTIONS = [
     '### `webhooks`' => 'documents.*.webhooks',
     '### `content`' => 'documents.*.content',
     '### `examples`' => 'documents.*.examples',
+    '### `coverage`' => 'documents.*.coverage',
     '### `overlays`' => 'documents.*.overlays',
     '### `representation`' => 'documents.*.representation',
     '### `integrations`' => 'documents.*.integrations',

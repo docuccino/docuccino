@@ -129,18 +129,18 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-17)
+## Measured coverage (2026-08-19)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **95.81%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **93.49%** | 93    | fully in-process-measurable                      |
-| `inference-phpstan` | **40.03%** | 40    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **96.37%** | 95    | fully in-process-measurable                      |
+| `laravel`           | **94.70%** | 94    | fully in-process-measurable                      |
+| `inference-phpstan` | **43.77%** | 40    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 87.44%     | —     | informational only; no longer a gate             |
+| Overall             | 90.48%     | —     | informational only; no longer a gate             |
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,
@@ -184,7 +184,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **95**, `laravel` **93**, `inference-phpstan` **40**.
+  an aspiration. Current floors: `core` **95**, `laravel` **94**, `inference-phpstan` **40**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

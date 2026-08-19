@@ -28,14 +28,16 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 96.30% (7727/8024) — held at 95 rather than
+    // phpdoc type grammar, the contract checker. Measured 96.37% (8550/8872) — held at 95 rather than
     // ratcheted, deliberately: rounding down leaves 0.08pp, which one uncovered branch in the next
     // change would trip, and the failure would land on that change rather than on the margin this one
     // set. Ratchet once the figure settles.
     'core' => 95,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 93.95% (7449/7929).
-    'laravel' => 93,
+    // contract-testing assertions. Measured 94.70% (8373/8842) — ratcheted 93 → 94: the coverage log,
+    // its merge command and the recorder all answer from files and config, which the in-process suites
+    // reach whole.
+    'laravel' => 94,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this

@@ -216,13 +216,12 @@ different id this morning. And because every one of the three reads the response
 workers can record one operation at once without any of them having to know about the others.
 
 <Aside type="tip" title="`--parallel` is fine here">
-Recording works under a parallel runner, unlike [contract
-coverage](/laravel/guides/contract-testing/#report-the-endpoints-your-suite-never-touched). Coverage is
-a whole-suite question — which operations did *nobody* touch — and no worker can know when the others
-have finished. A recording is one operation's, so workers only have to take turns: each one compares
-its candidate against the file under an exclusive lock and writes only if it wins. Because the winner
-is decided by the bodies and never by their order, the file you commit is the same however the workers
-raced for it.
+A recording is one operation's, so workers only have to take turns: each one compares its candidate
+against the file under an exclusive lock and writes only if it wins. Because the winner is decided by
+the bodies and never by their order, the file you commit is the same however the workers raced for it.
+[Contract coverage](/laravel/guides/contract-testing/#report-the-endpoints-your-suite-never-touched) is
+a whole-suite question — which operations did *nobody* touch — so it needs no lock and no turns at all:
+each process writes a log of its own and a command unions them once the run is over.
 </Aside>
 
 ### Credentials never reach the file

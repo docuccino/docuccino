@@ -147,6 +147,14 @@ pinned to an older PHPStan minor and a `--prefer-lowest` leg — both are in the
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is where to read the pinned version
 rather than trusting one written down elsewhere — and they are stricter in places.
 
+The other one is a **function whose return type the older analyser widens**. `bin2hex(random_bytes(4))`
+is the recurring instance: the resolved PHPStan types `random_bytes` as `string`, the `--prefer-lowest`
+leg types it as `mixed`, and `bin2hex` refuses it. Reach for `dechex(random_int(0, PHP_INT_MAX))`
+instead — an int on every version, and more entropy per character —
+`php/core/src/Support/AtomicFile.php` and `php/core/src/Contract/Coverage/CoverageLog.php` are the
+precedent. The general shape: where an older analyser can widen a call's return type, prefer the
+function whose type is unambiguous.
+
 The one that catches people is an **unsealed array shape** in a docblock:
 `@param array{a: string, b: ?int, ...} $spec`. The resolved PHPStan accepts it; the pinned minor
 rejects it as `missingType.iterableValue`, and the pull request goes red after review. So name
@@ -160,6 +168,10 @@ pull request:
 ```bash
 # the version the phpstan axis in ci.yml pins — 2.2.0 as this is written
 composer update --with "phpstan/phpstan:2.2.0" --no-interaction --no-progress
+composer analyse
+
+# and the other strict leg, which downgrades EVERY dependency rather than one
+composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
 composer analyse
 git checkout composer.lock && composer install --no-interaction --no-progress
 ```
