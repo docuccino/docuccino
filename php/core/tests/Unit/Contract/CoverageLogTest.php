@@ -52,7 +52,7 @@ it('never gives two shards on one machine the same filename', function (): void 
     $shardTwo->append(['op:v1:bbbbbbbbbbbbbbbb']);
 
     expect($shardOne->file)->not->toBe($shardTwo->file)
-        ->and(CoverageLog::filesIn($this->root))->toHaveCount(2)
+        ->and(CoverageLog::scan($this->root)->files)->toHaveCount(2)
         ->and(CoverageMerge::of([$this->root])->ids)->toBe(['op:v1:aaaaaaaaaaaaaaaa', 'op:v1:bbbbbbbbbbbbbbbb']);
 });
 
@@ -87,21 +87,74 @@ it('reports the logs under a directory, descending subdirectories and never a li
     file_put_contents($this->root.'/shard-1/notes.txt', 'not a log');
     symlink($this->root.'/shard-1', $this->root.'/loop');
 
-    $files = CoverageLog::filesIn($this->root) ?? [];
+    $scan = CoverageLog::scan($this->root);
 
-    expect($files)->toHaveCount(2)
-        ->and(implode("\n", $files))->not->toContain('notes.txt')
-        ->and(implode("\n", $files))->not->toContain('/loop/')
+    expect($scan->files)->toHaveCount(2)
+        ->and($scan->missing)->toBe([])
+        ->and(implode("\n", $scan->files))->not->toContain('notes.txt')
+        ->and(implode("\n", $scan->files))->not->toContain('/loop/')
         ->and(CoverageMerge::of([$this->root])->ids)->toBe(['op:v1:aaaaaaaaaaaaaaaa', 'op:v1:bbbbbbbbbbbbbbbb']);
 });
 
-it('reads a path that is not a directory as no directory at all', function (): void {
+it('reads a path that is not a directory as a directory it could not read', function (): void {
     file_put_contents($this->root.'/a-file', 'x');
     symlink($this->root, $this->root.'/self');
 
-    expect(CoverageLog::filesIn($this->root.'/nope'))->toBeNull()
-        ->and(CoverageLog::filesIn($this->root.'/a-file'))->toBeNull()
-        ->and(CoverageLog::filesIn($this->root.'/self'))->toBeNull();
+    foreach (['nope', 'a-file', 'self'] as $entry) {
+        $scan = CoverageLog::scan($this->root.'/'.$entry);
+
+        expect($scan->files)->toBe([])
+            ->and($scan->missing)->toBe([$this->root.'/'.$entry]);
+    }
+});
+
+it('names a SUBdirectory it could not open, rather than reading it as one holding nothing', function (): void {
+    // The hole the completeness guarantee had in its own code. One `--path` over a downloaded artifact
+    // tree is the recommended shape, so a shard the job cannot open has to travel up by name — folded
+    // into "found nothing here" it merges clean and silently measures three of four shards.
+    if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+        test()->markTestSkipped('running as root — mode bits deny nothing');
+    }
+
+    mkdir($this->root.'/shard-1');
+    mkdir($this->root.'/shard-2');
+    CoverageLog::for($this->root.'/shard-1', '1')->append(['op:v1:aaaaaaaaaaaaaaaa']);
+    CoverageLog::for($this->root.'/shard-2', '2')->append(['op:v1:bbbbbbbbbbbbbbbb']);
+    chmod($this->root.'/shard-2', 0o000);
+    clearstatcache();
+
+    $scan = CoverageLog::scan($this->root);
+    $merge = CoverageMerge::of([$this->root]);
+
+    // The sweep puts the mode back, but a failed expectation must not be what decides whether it can.
+    chmod($this->root.'/shard-2', 0o755);
+
+    expect($scan->files)->toHaveCount(1)
+        ->and($scan->missing)->toBe([$this->root.'/shard-2'])
+        ->and($merge->missing)->toBe([$this->root.'/shard-2'])
+        ->and($merge->empty)->toBe([])
+        ->and($merge->complete())->toBeFalse()
+        ->and($merge->ids)->toBe(['op:v1:aaaaaaaaaaaaaaaa']);
+});
+
+it('reports a directory it cannot open once, as unreadable rather than as empty', function (): void {
+    // Named at the top of the tree it is the same fact, and reporting it twice — once as unreadable and
+    // once as holding no log — would name one absence as two different problems.
+    if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+        test()->markTestSkipped('running as root — mode bits deny nothing');
+    }
+
+    mkdir($this->root.'/shut');
+    chmod($this->root.'/shut', 0o000);
+    clearstatcache();
+
+    $merge = CoverageMerge::of([$this->root.'/shut']);
+
+    chmod($this->root.'/shut', 0o755);
+
+    expect($merge->missing)->toBe([$this->root.'/shut'])
+        ->and($merge->empty)->toBe([])
+        ->and($merge->complete())->toBeFalse();
 });
 
 it('unions the same ids whatever the worker count and whatever order the directories are given', function (): void {
@@ -169,7 +222,41 @@ it('names a torn log and refuses to be complete, rather than measuring what happ
     'a NUL mid-line' => ["op:v1:aaaaaaaaaaaaaaaa\n\x00broken\n"],
     'an escape sequence' => ["\x1b[31mred\n"],
     'a line no id could be' => [str_repeat('x', 300)."\n"],
+    // The likeliest tear of all, and the one nothing printable gives away: a worker killed part way
+    // through a write leaves a PREFIX of an id, which carries no control character and is short.
+    'a write cut off mid-id' => ["op:v1:aaaaaaaaaaaaaaaa\nop:v1:bbbb"],
+    'a line that is not an id at all' => ["op:v1:aaaaaaaaaaaaaaaa\nGET /api/invoices\n"],
 ]);
+
+it('holds a log line to the shape an operation id has, and to nothing narrower', function (string $line, bool $isId): void {
+    // Both ends read this one grammar: a recorder will not write a line the merge would condemn.
+    expect(CoverageLog::isId($line))->toBe($isId);
+})->with([
+    'an operation id' => ['op:v1:aaaaaaaaaaaaaaaa', true],
+    'digits are base32 too' => ['op:v1:0123456789abcdef', true],
+    'a version this build has not shipped yet' => ['op:v12:aaaaaaaaaaaaaaaa', true],
+    'a prefix a killed worker left behind' => ['op:v1:aaaa', false],
+    'one character too many' => ['op:v1:aaaaaaaaaaaaaaaaa', false],
+    'a schema id is not an operation' => ['sch:v1:aaaaaaaaaaaaaaaa', false],
+    'the document id is not an operation' => ['doc:default', false],
+    'uppercase is not base32 here' => ['op:v1:AAAAAAAAAAAAAAAA', false],
+    'no version' => ['op:aaaaaaaaaaaaaaaa', false],
+    'something with an id inside it' => ['ran op:v1:aaaaaaaaaaaaaaaa twice', false],
+    'nothing at all' => ['', false],
+]);
+
+it('reports how far apart the logs it read were written', function (): void {
+    // Runs accumulate until something resets them, and three runs merge exactly like one. The span is
+    // the only thing in the merge that can tell them apart, so it is measured rather than inferred.
+    CoverageLog::for($this->root, '1')->append(['op:v1:aaaaaaaaaaaaaaaa']);
+    $old = $this->root.'/1.0.deadbeef.ids';
+    file_put_contents($old, "op:v1:bbbbbbbbbbbbbbbb\n");
+    touch($old, time() - 9000);
+    clearstatcache();
+
+    expect(CoverageMerge::of([$this->root])->span)->toBeGreaterThanOrEqual(9000)
+        ->and(CoverageMerge::of([$this->root.'/nothing-here'])->span)->toBe(0);
+});
 
 it('names a directory that is not there and one that holds no log', function (): void {
     CoverageLog::for($this->root.'/full', '1')->append(['op:v1:aaaaaaaaaaaaaaaa']);

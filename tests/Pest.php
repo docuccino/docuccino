@@ -1280,7 +1280,11 @@ function removeCoverageFixture(string $directory): void
         return;
     }
 
-    foreach ((array) scandir($directory) as $entry) {
+    // A fixture that proved a directory cannot be read has to be removable afterwards, and the mode is
+    // safe to put back here: nothing reaches this line that is not under the build tree this made.
+    @chmod($directory, 0755);
+
+    foreach ((array) @scandir($directory) as $entry) {
         if (! is_string($entry) || $entry === '.' || $entry === '..') {
             continue;
         }

@@ -22,6 +22,9 @@ final readonly class CoverageLog
 {
     public const string EXTENSION = '.ids';
 
+    /** The algorithm version is read loosely: a log a newer identity algorithm wrote is still a log. */
+    private const string ID_PATTERN = '/^op:v\d+:[0-9a-z]{16}$/D';
+
     public function __construct(public string $directory, public string $file) {}
 
     /**
@@ -78,30 +81,44 @@ final readonly class CoverageLog
     }
 
     /**
-     * Every log file under a directory, sorted, or null when the directory is not one that can be
-     * read — which the merge reports as a shard it is missing rather than as an absence of coverage.
+     * Whether a line is an operation id and not something else — the log's only grammar, read at both
+     * ends so a writer never appends what the reader would condemn.
      *
-     * It descends subdirectories, so a directory of downloaded CI artifacts merges as one path, and it
-     * refuses to descend a LINK: `is_link()` is asked before `is_dir()`, which answers true for a link
-     * to one. That matters because the reset path deletes what this returns.
-     *
-     * @return list<string>|null
+     * Ids are fixed-shape, which is what makes the check worth having. A worker killed mid-write leaves
+     * an ASCII PREFIX of one, and a prefix carries no control character to give itself away: it would
+     * merge as an ordinary id, match no documented operation, and quietly undercount. Held to the shape
+     * instead, a truncated line makes its file unreadable, which is what the merge already refuses on.
      */
-    public static function filesIn(string $directory): ?array
+    public static function isId(string $value): bool
+    {
+        return preg_match(self::ID_PATTERN, $value) === 1;
+    }
+
+    /**
+     * Every log file under a directory, sorted, plus every directory in the tree that could not be read.
+     *
+     * It descends subdirectories, so a directory of downloaded CI artifacts merges as one path — and a
+     * subdirectory it cannot open is carried up BY NAME rather than folded into "found nothing", because
+     * a shard nobody could read is not a shard that ran clean. It refuses to descend a LINK: `is_link()`
+     * is asked before `is_dir()`, which answers true for a link to one. That matters because the reset
+     * path deletes the files this reports.
+     */
+    public static function scan(string $directory): CoverageScan
     {
         if (! is_dir($directory) || is_link($directory)) {
-            return null;
+            return new CoverageScan([], [$directory]);
         }
 
         $entries = @scandir($directory);
 
         if ($entries === false) {
-            return null;
+            return new CoverageScan([], [$directory]);
         }
 
         sort($entries);
 
         $files = [];
+        $missing = [];
         foreach ($entries as $entry) {
             if ($entry === '.' || $entry === '..') {
                 continue;
@@ -114,7 +131,9 @@ final readonly class CoverageLog
             }
 
             if (is_dir($path)) {
-                $files = array_merge($files, self::filesIn($path) ?? []);
+                $below = self::scan($path);
+                $files = [...$files, ...$below->files];
+                $missing = [...$missing, ...$below->missing];
 
                 continue;
             }
@@ -124,7 +143,7 @@ final readonly class CoverageLog
             }
         }
 
-        return $files;
+        return new CoverageScan($files, $missing);
     }
 
     /** A worker token as a filename fragment: the runner chose the string, not us. */
