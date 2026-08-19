@@ -46,7 +46,9 @@ final readonly class CoverageLog
             '%s.%d.%s%s',
             self::slug($worker ?? 'main'),
             getmypid() === false ? 0 : getmypid(),
-            bin2hex(random_bytes(4)),
+            // random_int over bin2hex(random_bytes(…)): the oldest analyser CI resolves types
+            // random_bytes as mixed, and it carries more entropy per character besides.
+            dechex(random_int(0, PHP_INT_MAX)),
             self::EXTENSION,
         ));
     }
