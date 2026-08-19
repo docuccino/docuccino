@@ -101,13 +101,14 @@ final readonly class CoverageReport
         // Escape before measuring, or an escaped label is wider than the column it was padded to. And
         // measure in characters rather than bytes, or a label with an accent in it pads short.
         $labels = array_map(static fn (OperationCoverage $row): string => PlainText::of($row->label), $missing);
-        $width = max(array_map(mb_strlen(...), $labels));
+        $width = max(array_map(self::characters(...), $labels));
 
         $lines[] = '';
         $lines[] = 'Never exercised:';
 
         foreach ($missing as $index => $row) {
-            $lines[] = '  '.mb_str_pad($labels[$index], $width).'  '.($row->id === null ? '(no id)' : PlainText::of($row->id));
+            $pad = str_repeat(' ', max(0, $width - self::characters($labels[$index])));
+            $lines[] = '  '.$labels[$index].$pad.'  '.($row->id === null ? '(no id)' : PlainText::of($row->id));
         }
 
         if ($minimum !== null) {
@@ -130,6 +131,15 @@ final readonly class CoverageReport
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * A label's width in characters. PCRE counts them without ext-mbstring, which core would
+     * otherwise have to require for one aligned column.
+     */
+    private static function characters(string $value): int
+    {
+        return preg_match_all('/./u', $value) ?: strlen($value);
     }
 
     /** `100`, `87.5` — never `87.50`, and never locale-dependent. */
