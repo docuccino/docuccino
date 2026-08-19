@@ -7,7 +7,7 @@ use Docuccino\Attributes\BodyParameter;
 use Docuccino\Attributes\CaseDescription;
 use Docuccino\Attributes\CookieParameter;
 use Docuccino\Attributes\DeprecatedOperation;
-use Docuccino\Attributes\DescriptionFromFile;
+use Docuccino\Attributes\Description;
 use Docuccino\Attributes\ErrorComponent;
 use Docuccino\Attributes\Example;
 use Docuccino\Attributes\ExcludeFromDocs;
@@ -30,6 +30,7 @@ use Docuccino\Attributes\RuleSchema;
 use Docuccino\Attributes\SchemaId;
 use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
+use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Attributes\Webhook;
 
@@ -85,7 +86,8 @@ function attributeCatalogue(): array
         'IgnoreParam' => [IgnoreParam::class, $classFn | Attribute::IS_REPEATABLE],
         'IgnoreResponse' => [IgnoreResponse::class, $classFn | Attribute::IS_REPEATABLE],
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
-        'DescriptionFromFile' => [DescriptionFromFile::class, $classFn | Attribute::TARGET_PROPERTY],
+        'Summary' => [Summary::class, $classFn | Attribute::TARGET_PROPERTY],
+        'Description' => [Description::class, $classFn | Attribute::TARGET_PROPERTY],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
@@ -143,7 +145,7 @@ function defaultArgs(string $class): array
         SchemaName::class, Security::class, ErrorComponent::class, Webhook::class => ['name'],
         CaseDescription::class => ['a description'],
         IgnoreResponse::class => [200],
-        DescriptionFromFile::class => ['docs/x.md'],
+        Summary::class => ['Create an invoice'],
         default => [],
     };
 }

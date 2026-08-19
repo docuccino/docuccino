@@ -22,7 +22,7 @@ use SplFileInfo;
  * sorted order and nothing time- or machine-dependent reaches a page — source paths are
  * project-root-relative — so the output is deterministic.
  *
- * A relative `content.dir` is confined to the app base path, same as `#[DescriptionFromFile]`; an
+ * A relative `content.dir` is confined to the app base path, same as `#[Description(file: …)]`; an
  * absolute dir is trusted as developer-authored config. A configured-but-missing directory warns;
  * an unset or empty one compiles to nothing, leaving no empty content key.
  *

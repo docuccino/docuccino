@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Support;
 
 /**
- * Confines a user-supplied relative path to a base directory. `#[DescriptionFromFile]` and
+ * Confines a user-supplied relative path to a base directory. `#[Description(file: …)]` and
  * `info.description.file` both read a project file whose path comes from config or an attribute, so
  * `../../etc/passwd` must never escape the app. Resolution is lexical first — collapsing `.` / `..`
  * without touching the filesystem, which catches traversal even for targets that don't exist — then

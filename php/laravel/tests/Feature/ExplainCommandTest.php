@@ -90,8 +90,13 @@ it('says how to override each field, and never invents a lever it cannot justify
         ->toContain("→ set it with #[QueryParameter(name: 'filter[status]')]")
         // A response description at the fallback rung.
         ->toContain("→ set it with #[Response(status: 400, description: '…')]")
-        // A summary no attribute writes — the generic truth rather than a lever that would do nothing.
-        ->toContain('→ no attribute writes this — an overlay outranks docblock');
+        // A docblock summary, which an attribute does write.
+        ->toContain("→ set it with #[Summary('Create an invoice')]");
+
+    Artisan::call('docuccino:explain', ['route' => 'GET /api/moderated-forms', 'document' => 'default']);
+
+    // A member an integration invented: the generic truth rather than a lever that would do nothing.
+    expect(Artisan::output())->toContain('→ no attribute writes this — an overlay outranks integration');
 });
 
 it('tells the reader the value was shortened and how to see it whole', function (): void {

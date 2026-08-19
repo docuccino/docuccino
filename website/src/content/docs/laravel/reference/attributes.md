@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 30 attributes with signatures and examples.
+description: The docuccino/attributes package — all 31 attributes with signatures and examples.
 ---
 
 
@@ -25,7 +25,7 @@ you'd expect without a `::class` reference.
 
 ## At a glance
 
-All 30 attributes, grouped by what they do:
+All 31 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -44,6 +44,8 @@ All 30 attributes, grouped by what they do:
 | [`#[InDocs]`](#indocs) | Restrict a route to named output documents. |
 | [`#[IgnoreParam]`](#ignoreparam) | Drop an inferred parameter by name. |
 | [`#[IgnoreResponse]`](#ignoreresponse) | Drop an inferred response by status. |
+| [`#[Summary]`](#summary) | Set the one-line `summary` an API consumer reads. |
+| [`#[Description]`](#description) | Set the `description`, inline or from a Markdown file. |
 | [`#[Group]`](#group) | Assign an operation to an OAS tag. |
 | [`#[OperationId]`](#operationid) | Override the `operationId`. |
 | [`#[DeprecatedOperation]`](#deprecatedoperation) | Mark an operation deprecated. |
@@ -56,7 +58,6 @@ All 30 attributes, grouped by what they do:
 | [`#[ErrorComponent]`](#errorcomponent) | Name the shared component an error publishes under, on the exception or on the method that renders it. |
 | [`#[Example]`](#example) | Pin example payloads — one, or several named ones — on a response, the request body or a parameter. |
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
-| [`#[DescriptionFromFile]`](#descriptionfromfile) | Load a Markdown file into `description`. |
 | [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 
@@ -372,6 +373,59 @@ public function show(int $id): UserResource { /* … */ }
 ```
 
 ## Metadata
+
+### `#[Summary]`
+
+Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
+
+```php
+public function __construct(public string $text)
+```
+
+Sets the one-line `summary` an API consumer reads, whatever the docblock above the action says.
+
+```php
+/**
+ * Internal — dispatched by the queue worker, never call this directly.
+ */
+#[Summary('Create an invoice')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+There is no `file:` form on purpose. A summary is one line; long prose is what `#[Description]` is
+for, and that one does read a file.
+
+### `#[Description]`
+
+Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
+
+```php
+public function __construct(
+    public ?string $text = null,
+    public ?string $file = null,
+)
+```
+
+Sets the `description`, either inline or from a Markdown file. Give it exactly one of the two — a
+declaration carrying both, or neither, is reported as
+[`attribute.description-unusable`](/laravel/reference/diagnostics/#attributes) and writes
+nothing.
+
+```php
+#[Description(text: 'Creates a draft invoice for the authenticated tenant.')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+```php
+#[Description(file: 'resources/docs/invoices/store.md')]
+public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+The `file:` path is read relative to your application root and cannot leave it. The file joins the
+operation's cache dependencies whether or not it exists yet, so the description appears the moment
+you write it, and editing it invalidates just that fragment. See
+[symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) for when to reach
+for a file over a standalone guide page.
 
 ### `#[Group]`
 
@@ -694,22 +748,6 @@ enum Status: string {
     #[CaseDescription('Awaiting review by a moderator')]
     case Pending = 'pending';
 }
-```
-
-### `#[DescriptionFromFile]`
-
-Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
-
-```php
-public function __construct(public string $path)
-```
-
-Loads a symbol-anchored markdown file into the `description` field. The file content is hashed into
-the fragment-cache key, so edits invalidate correctly.
-
-```php
-#[DescriptionFromFile('docs/users/show.md')]
-public function show(int $id): UserResource { /* … */ }
 ```
 
 ### `#[Mock]`

@@ -44,7 +44,8 @@ final class OverrideHint
         'tags' => "#[Group('Invoices')]",
         'operationId' => "#[OperationId('storeInvoice')]",
         'deprecated' => '#[DeprecatedOperation]',
-        'description' => "#[DescriptionFromFile('docs/endpoint.md')]",
+        'summary' => "#[Summary('Create an invoice')]",
+        'description' => "#[Description('…')]",
         'requestBody' => "#[BodyParameter(name: 'total')]",
         'x-internal' => '#[Internal]',
     ];
