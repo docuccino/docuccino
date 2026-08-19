@@ -102,7 +102,6 @@ final class Assembler
             $componentsOut['schemas'] = $componentSchemas;
         }
 
-        // Registry order is deterministic (routes process sorted) and the canonicalizer sorts keys.
         $responseRenames = $components->responseRenames();
         $componentResponses = ComponentNames::rekey($components->responses(), $responseRenames);
         if ($componentResponses !== []) {
@@ -127,6 +126,7 @@ final class Assembler
         $doc = $this->publishSchemaNames($doc, $components->schemaRenames());
         $doc = ComponentNames::rename($doc, $responseRenames, 'responses');
         $doc = $this->publishSecuritySchemeNames($doc, $schemeRenames);
+        $doc = self::orderComponents($doc);
 
         $doc['x-docuccino'] = [
             'document' => ['id' => $documentId, 'configHash' => $document->hash()],
@@ -152,6 +152,10 @@ final class Assembler
         // and transformer changes — and lands before the hash, so a prose edit or nav move shows up
         // as a (non-breaking) change.
         $doc = $this->applyContent($doc, $content, $diagnostics);
+
+        // Again, because an overlay or a transformer can add a component of its own — the shared error
+        // shapes do — and a bucket is ordered by its names or it isn't.
+        $doc = self::orderComponents($doc);
 
         $doc = $this->stampContentHash($doc);
 
@@ -505,6 +509,39 @@ final class Assembler
                 help: 'Intended? Nothing to do. Otherwise separate them with #[Group], or rename one through the tags.map config option.',
             );
         }
+    }
+
+    /**
+     * Every component bucket in ascending name order, so where a component sits is a function of what
+     * it is called and of nothing else.
+     *
+     * Registration order is not that: a warm cache hit re-registers off the fragments it restored, and
+     * an added route registers wherever it falls. The canonicalizer sorts these buckets on the way out,
+     * so the EMITTED bytes never showed it — but overlays, transformers, lints and the differ all read
+     * the document in this shape first, and a warm build handing them a different one is the same
+     * divergence one step earlier.
+     *
+     * @param  array<string, mixed>  $doc
+     * @return array<string, mixed>
+     */
+    private static function orderComponents(array $doc): array
+    {
+        if (! is_array($doc['components'] ?? null)) {
+            return $doc;
+        }
+
+        $components = [];
+        foreach ($doc['components'] as $bucket => $entries) {
+            if (is_array($entries)) {
+                ksort($entries, SORT_STRING);
+            }
+
+            $components[$bucket] = $entries;
+        }
+
+        $doc['components'] = $components;
+
+        return $doc;
     }
 
     /**

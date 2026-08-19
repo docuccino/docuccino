@@ -1001,6 +1001,12 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
         expect($warm->document->toArray())->toHaveKey('paths')
             ->and($warm->document->toArray()['paths'])->not->toBeEmpty()
             ->and((new UirEmitter)->emit($warm->document))->toBe((new UirEmitter)->emit($cold->document))
+            // The emitted bytes are a canonical PROJECTION of the document — component maps sorted, an
+            // integer-valued float indistinguishable from the int — so equal bytes are not equal builds.
+            // Overlays, transformers, lints and the differ all read the document in the shape below,
+            // which is where a value restored in another type, or a bucket restored in another order,
+            // actually shows.
+            ->and($warm->document->toArray())->toBe($cold->document->toArray())
             ->and(diagnosticRecords($warm->diagnostics))->toBe(diagnosticRecords($cold->diagnostics));
 
         // …and the warm build really was warm. Every row shares at least one route with `$before`, so
