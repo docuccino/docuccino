@@ -52,8 +52,20 @@ it('records a spread terminal as paginating, with nothing indexable about its ar
         ->and($visitor->outermostArgs)->toBeNull();
 })->with([
     'every argument spread' => ['$query->paginate(...$args)'],
-    'a spread after a literal' => ["\$query->paginate(25, ...[['*'], 'p'])"],
+    // Unpacking a keyed array binds parameters BY name, so a name written past a spread is no more
+    // knowable than a position is.
+    'a name after a spread' => ["\$query->paginate(...\$args, pageName: 'p')"],
 ]);
+
+it('reads a spread the call site wrote out, whose items ARE the arguments', function (): void {
+    // Nothing is hidden in `...[['*'], 'p']`: the items sit at the positions they take, so declining here
+    // would widen away a page key the endpoint really reads.
+    $visitor = new PaginationTerminalVisitor(PaginationTerminalVisitor::PAGINATOR_TERMINALS);
+    TraceScript::forChain("\$query->paginate(25, ...[['*'], 'p'])", 'Illuminate\\Database\\Eloquent\\Builder')($visitor);
+
+    expect($visitor->outermostArgs)->toBe([0 => 25, 1 => null, 2 => 'p'])
+        ->and($visitor->stringArg(2))->toBe('p');
+});
 
 it('answers nothing at all when the call carried a spread', function (string|int $key): void {
     // Not "absent", which a consumer reads as the framework's own default — unknown.

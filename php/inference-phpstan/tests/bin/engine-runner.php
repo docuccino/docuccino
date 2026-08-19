@@ -287,8 +287,8 @@ $result = match ($mode) {
     })(),
     'trace-rules' => (static function () use ($engine, $ref): array {
         // RulesMethodVisitor recovers a rules() method's returned array with AST-level constant folding
-        // so Rule::enum(...) descriptors survive. Returns each field's rule names + params, plus the
-        // fields that are present but unrecoverable.
+        // so Rule::enum(...) descriptors survive. Returns each field's rule names + params, the fields
+        // that are present but unrecoverable, and the ones that recovered minus a constraint they widened.
         $visitor = new RulesMethodVisitor;
         $engine->trace($ref, $visitor);
 
@@ -301,7 +301,11 @@ $result = match ($mode) {
             ], $rules);
         }
 
-        return ['fields' => $fields, 'unrecoverable' => $visitor->unrecoverableFields()];
+        return [
+            'fields' => $fields,
+            'unrecoverable' => $visitor->unrecoverableFields(),
+            'widened' => $visitor->widenedFields(),
+        ];
     })(),
     'trace-inline-rules' => (static function () use ($engine, $ref): array {
         // InlineRulesVisitor traces the controller action, so the engine's bounded descent has to reach
@@ -319,7 +323,11 @@ $result = match ($mode) {
             ], $rules);
         }
 
-        return ['fields' => $fields, 'unrecoverable' => $visitor->unrecoverableFields()];
+        return [
+            'fields' => $fields,
+            'unrecoverable' => $visitor->unrecoverableFields(),
+            'widened' => $visitor->widenedFields(),
+        ];
     })(),
     'trace-json-api-paginate' => (static function () use ($engine, $ref): array {
         // The shared PaginationTerminalVisitor recovers the jsonPaginate terminal + its outermost

@@ -81,8 +81,8 @@ final class FixtureRunner
 
     /**
      * Trace a class's `rules()` with the real RulesMethodVisitor: returns each field's rule
-     * names/params/note (so a `Rule::enum(...)` descriptor's backing values + FQCN are visible) plus
-     * the fields that are present but unrecoverable.
+     * names/params/note (so a `Rule::enum(...)` descriptor's backing values + FQCN are visible), the
+     * fields that are present but unrecoverable, and the ones that recovered minus a widened constraint.
      *
      * @return array<string, mixed>
      */

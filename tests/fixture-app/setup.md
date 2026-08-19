@@ -329,6 +329,29 @@ own (seeded from the action's parameter type):
   beside an inline renderer with its own `render()` building a 418 into a local of the same name. One file,
   two bodies: the harvest has to carry the class or each answers for the other.
 
+### Arguments assembled elsewhere and spread in
+
+Every reader that wants argument N reads a POSITION, and a spread fills its own and every later one from a
+sequence — so the slot a reader indexes is not the value the call receives. Each file below writes one such
+call in the shape an app writes it, beside the same call written out, so the pair pins what widens and what
+does not.
+
+- `app/Http/Requests/SpreadChoicesRequest.php` — a `Rule::in('any', ...$this->statuses())` and a
+  `Rule::enum(...)->only(Open, ...$this->alsoAllowed())`, plus a `visibility` field stating every value at
+  the rule. The written half is the hazard: published on its own it is a SHORTER list of legal values than
+  the endpoint accepts, so the constraint is dropped and `validation.rule-values-unread` says so.
+- `app/Http/Controllers/SpreadResponseController.php` — `response()->json(...)`, `new JsonResponse(...)`
+  and `response()->noContent(...)` all handed an argument list built by a private helper, with `index()`
+  writing the same envelope at the call site as the control. Read positionally, the argument LIST is
+  documented as the response body and the framework's default status is published for a call that states
+  its own.
+- `app/Exceptions/SpreadProblemRenderer.php` — a renderer spreading its arguments into
+  `DataProblemDocument::make()`, whose every body member reads one of those parameters. Read as "the call
+  site passed nothing", each member is deleted from a body that always carries it.
+- `app/Http/Controllers/TrashedFilterController.php` — `AllowedFilter::trashed($this->trashedFilterKey())`.
+  Spatie's documented `trashed` default is true of a call that passed NO name; this one passes one, so
+  publishing `trashed` names a query parameter the endpoint does not have.
+
 ### Page-size recovery
 
 The size argument of a paginating terminal, followed back to the request key it came from — and, just as
