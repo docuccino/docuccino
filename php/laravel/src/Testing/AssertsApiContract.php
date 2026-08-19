@@ -12,6 +12,7 @@ use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\IncomparableDocumentsException;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Extensions\Context\ExportTarget;
+use Docuccino\Core\Support\PlainText;
 use Illuminate\Testing\TestResponse;
 use JsonException;
 use PHPUnit\Framework\Assert;
@@ -107,7 +108,7 @@ trait AssertsApiContract
             Assert::fail(sprintf(
                 "There is no committed contract to compare against: %s.\n".
                 'Export one and commit it: php artisan docuccino:export',
-                $problem,
+                PlainText::of($problem),
             ));
         }
 
@@ -148,7 +149,7 @@ trait AssertsApiContract
             if ($committed === null) {
                 Assert::fail(sprintf(
                     "%s has never been written.\nExport it and commit it: php artisan docuccino:export",
-                    $build->absolute($target->path),
+                    PlainText::of($build->absolute($target->path)),
                 ));
             }
 

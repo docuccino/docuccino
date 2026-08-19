@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Contract\Coverage;
 
 use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Support\PlainText;
 
 /**
  * "Which documented operations did the suite never exercise?" — matched by stable id, listed in the
@@ -79,6 +80,7 @@ final readonly class CoverageReport
     /**
      * A report a developer can paste into a pull request, and the body of the coverage assertion.
      * Passing $minimum names the floor that was missed and the honest measured value to move it to.
+     * Labels and ids are the artifact's own strings, so both go through {@see PlainText} first.
      */
     public function render(?float $minimum = null): string
     {
@@ -96,13 +98,15 @@ final readonly class CoverageReport
             return $lines[0];
         }
 
-        $width = max(array_map(static fn (OperationCoverage $row): int => strlen($row->label), $missing));
+        // Escape before measuring, or an escaped label is wider than the column it was padded to.
+        $labels = array_map(static fn (OperationCoverage $row): string => PlainText::of($row->label), $missing);
+        $width = max(array_map(strlen(...), $labels));
 
         $lines[] = '';
         $lines[] = 'Never exercised:';
 
-        foreach ($missing as $row) {
-            $lines[] = '  '.str_pad($row->label, $width).'  '.($row->id ?? '(no id)');
+        foreach ($missing as $index => $row) {
+            $lines[] = '  '.str_pad($labels[$index], $width).'  '.($row->id === null ? '(no id)' : PlainText::of($row->id));
         }
 
         if ($minimum !== null) {

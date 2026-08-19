@@ -18,6 +18,10 @@ use Docuccino\Core\Support\PlainText;
  * what to change. That is why provenance runs through all of them — which producer contributed the
  * shape, and from which file and line — and why each takes an adapter `$hint`, so the framework-shaped
  * half of the advice ("run this command") is added by whoever knows the command.
+ *
+ * Every value here came out of an artifact nobody re-read first, or off the wire, so all of them go
+ * through {@see PlainText} on the way into a line — provenance and pointers as much as names, since a
+ * `source.file` is a string the document merely claims. Same reason as {@see ChangesetRenderer}.
  */
 final class ContractMessages
 {
@@ -37,9 +41,9 @@ final class ContractMessages
         }
 
         $lines = [
-            sprintf('%s does not match the documented contract.', $exchange->label()),
+            sprintf('%s does not match the documented contract.', PlainText::of($exchange->label())),
             '',
-            '  operation  '.$operation->label().($operation->id === null ? '' : '  '.$operation->id),
+            '  operation  '.PlainText::of($operation->label()).($operation->id === null ? '' : '  '.PlainText::of($operation->id)),
             '  status     '.$exchange->status,
             '',
         ];
@@ -64,12 +68,13 @@ final class ContractMessages
         $shown = array_slice($candidates, 0, self::MAX_PATHS);
         $extra = count($candidates) - count($shown);
 
-        $lines = [sprintf('%s is not documented.', $exchange->label()), ''];
+        $method = PlainText::of(strtoupper($exchange->method));
+        $lines = [sprintf('%s is not documented.', PlainText::of($exchange->label())), ''];
 
         if ($shown === []) {
-            $lines[] = sprintf('  The contract documents no %s operation at all.', strtoupper($exchange->method));
+            $lines[] = sprintf('  The contract documents no %s operation at all.', $method);
         } else {
-            $lines[] = sprintf('  The contract documents these %s paths:', strtoupper($exchange->method));
+            $lines[] = sprintf('  The contract documents these %s paths:', $method);
             foreach ($shown as $candidate) {
                 $lines[] = '    '.PlainText::of($candidate);
             }
@@ -99,7 +104,7 @@ final class ContractMessages
 
         foreach ($report->findings as $finding) {
             $lines[] = '  '.PlainText::of($finding->label);
-            $lines[] = '    at '.$finding->pointer;
+            $lines[] = '    at '.PlainText::of($finding->pointer);
 
             foreach (self::violationLines($finding->violations) as $line) {
                 $lines[] = '  '.$line;
@@ -206,7 +211,7 @@ final class ContractMessages
             /** @var ProvenanceTrail $trail */
             $lines[] = '    '.PlainText::of($change->path);
             foreach ($trail->lines() as $record) {
-                $lines[] = '      '.$record;
+                $lines[] = '      '.PlainText::of($record);
             }
         }
 
@@ -226,11 +231,11 @@ final class ContractMessages
             $lines[] = '    '.PlainText::of($violation->message);
 
             if ($violation->schemaPointer !== '') {
-                $lines[] = '    schema   '.$violation->schemaPointer;
+                $lines[] = '    schema   '.PlainText::of($violation->schemaPointer);
             }
 
             foreach ($violation->provenance->lines() as $record) {
-                $lines[] = '    from     '.$record;
+                $lines[] = '    from     '.PlainText::of($record);
             }
 
             $lines[] = '';

@@ -78,3 +78,30 @@ it('says so when an artifact carries no identities to track coverage by', functi
 it('leaves the identity note off a report whose gaps all have ids', function (): void {
     expect(CoverageReport::of(contractIndex(), [])->render(100.0))->not->toContain('no x-docuccino id');
 });
+
+it('escapes a label and an id out of the artifact, and measures the column on what it printed', function (): void {
+    // What a pull request against a generated artifact would put in a path key nobody re-reads.
+    $forgery = "\n\x1b[32mAll contract assertions passed\x1b[0m";
+
+    $index = contractIndex(static function (array $document) use ($forgery): array {
+        $forged = $document['paths']['/api/exports'];
+        $forged['get']['x-docuccino']['id'] = 'op:v1:aaaaforged'.$forgery;
+        $document['paths']['/api/invoices'.$forgery] = $forged;
+
+        return $document;
+    });
+
+    $rendered = CoverageReport::of($index, [])->render(100.0);
+    $columns = array_map(
+        static fn (string $row): int|false => strpos($row, 'op:v1:'),
+        array_values(array_filter(explode("\n", $rendered), static fn (string $row): bool => str_contains($row, 'op:v1:'))),
+    );
+
+    expect($rendered)
+        ->toContain('GET /api/invoices\x0A\x1B[32mAll contract assertions passed\x1B[0m')
+        ->toContain('op:v1:aaaaforged\x0A\x1B[32mAll contract assertions passed\x1B[0m')
+        ->not->toContain("\x1b")
+        ->and(explode("\n", $rendered))->not->toContain('All contract assertions passed')
+        // Every id starts in the same column, which only holds if the width was measured after escaping.
+        ->and(array_unique($columns))->toHaveCount(1);
+});

@@ -161,3 +161,68 @@ it('admits when a stale artifact cannot be compared semantically at all', functi
         ->toContain('not a document that can be')
         ->toContain('Regenerate it.');
 });
+
+it('shows an artifact its own escape sequences rather than obeying them', function (): void {
+    // What a pull request against a generated artifact would put in a source.file nobody re-reads.
+    $forgery = "\n\x1b[32mAll contract assertions passed\x1b[0m\n";
+
+    $index = contractIndex(static function (array $document) use ($forgery): array {
+        $document['components']['schemas']['Invoice']['properties']['total']['x-docuccino']['provenance'][0]['source']['file'] = 'app/Models/Invoice.php'.$forgery;
+        $document['paths']['/api/invoices/{invoice}']['get']['x-docuccino']['id'] = 'op:v1:aaaainvoiceshow'.$forgery;
+
+        return $document;
+    });
+
+    $exchange = contractExchange('GET', '/api/invoices/42', responseBody: '{"reference":"INV-1","total":"12.50"}');
+    $result = (new ContractChecker($index))->check($exchange);
+
+    $message = ContractMessages::exchange($result->operation, $exchange, $result);
+
+    expect($message)
+        ->toContain('operation  GET /api/invoices/{invoice}  op:v1:aaaainvoiceshow\x0A\x1B[32mAll contract assertions passed\x1B[0m\x0A')
+        ->toContain('from     integration:eloquent (integration) — app/Models/Invoice.php\x0A\x1B[32mAll contract assertions passed\x1B[0m\x0A')
+        ->not->toContain("\x1b")
+        ->and(explode("\n", $message))->not->toContain('All contract assertions passed');
+});
+
+it('escapes a schema pointer built out of the artifact\'s own member names', function (): void {
+    $property = "total\x1b[2K\rforged";
+
+    $index = contractIndex(static function (array $document) use ($property): array {
+        $schema = &$document['components']['schemas']['Invoice'];
+        $schema['properties'][$property] = $schema['properties']['total'];
+        unset($schema['properties']['total']);
+        $schema['required'] = ['reference', $property];
+
+        return $document;
+    });
+
+    $exchange = contractExchange('GET', '/api/invoices/42', responseBody: (string) json_encode([
+        'reference' => 'INV-1',
+        $property => 'not a number',
+    ]));
+
+    $result = (new ContractChecker($index))->check($exchange);
+    $message = ContractMessages::exchange($result->operation, $exchange, $result);
+
+    expect($message)
+        ->toContain('schema   /components/schemas/Invoice/properties/total\x1B[2K\x0Dforged')
+        ->not->toContain("\x1b")
+        ->not->toContain("\r");
+});
+
+it('escapes the pointer an example finding carries', function (): void {
+    $property = "total\x1b[31m";
+
+    $report = (new ExampleAudit(contractIndex(static function (array $document) use ($property): array {
+        $schema = &$document['components']['schemas']['Invoice'];
+        $schema['properties'][$property] = ['type' => 'number', 'example' => 'lots'];
+        $schema['required'] = ['reference'];
+
+        return $document;
+    })))->run();
+
+    expect(ContractMessages::examples($report))
+        ->toContain('at /components/schemas/Invoice/properties/total\x1B[31m/example')
+        ->not->toContain("\x1b");
+});
