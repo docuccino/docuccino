@@ -132,7 +132,7 @@ it('recovers allowedFields as type.field paths', function (): void {
         ->toBe(['articles.title', 'articles.body', 'author.name']);
 });
 
-it('detects the paginating terminal kind and folds the outermost call\'s arguments', function (string $chain, string $kind, string $terminal, array $args): void {
+it('detects the paginating terminal kind and folds the outermost call\'s arguments', function (string $chain, string $kind, string $terminal, ?array $args): void {
     $facts = traceQbSnippet($chain)->facts;
 
     expect($facts->paginates)->toBeTrue()
@@ -154,6 +154,12 @@ it('detects the paginating terminal kind and folds the outermost call\'s argumen
     // Written but unfoldable: recorded as null, so the parameter builder can tell it from absent.
     'an unfoldable page name' => [
         'QueryBuilder::for(User::class)->paginate(25, [\'*\'], $pageName)', 'length', 'paginate', [0 => 25, 1 => null, 2 => null],
+    ],
+    // A spread has no position of its own — it fills its index and every later one, so no argument is
+    // where it looks, and the whole list is unindexable rather than partly absent.
+    'a spread' => ['QueryBuilder::for(User::class)->paginate(...$args)', 'length', 'paginate', null],
+    'a spread after a literal' => [
+        "QueryBuilder::for(User::class)->paginate(25, ...[['*'], 'p'])", 'length', 'paginate', null,
     ],
 ]);
 

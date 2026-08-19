@@ -113,11 +113,13 @@ final class FileResponseVisitor implements TraceVisitor
             return;
         }
 
-        // Named arguments would put a value under a name rather than a position; nothing is read off a
-        // call whose shape we cannot index, which costs the media type and never mis-states it.
+        // Everything below is read off a POSITION, and two argument forms don't occupy one: a named
+        // argument puts its value under a name instead, and a spread holds a sequence that fills its own
+        // index and every later one. Nothing is read off a call whose shape we cannot index, which
+        // costs the media type and never mis-states it.
         $positional = [];
         foreach ($args as $arg) {
-            if ($arg->name !== null) {
+            if ($arg->name !== null || $arg->unpack) {
                 return;
             }
             $positional[] = $arg->value;

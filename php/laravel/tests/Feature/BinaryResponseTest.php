@@ -165,6 +165,40 @@ it('reads nothing off a call it cannot place', function (string $expression, str
     'first-class callable' => ['response()->download(...)', BINARY_RESPONSE_FACTORY],
 ]);
 
+it('reads nothing off a spread, on every call it knows', function (string $expression, string $receiver): void {
+    // A spread is the other form that doesn't occupy one position: it fills its own and every later one
+    // from a sequence, so the slots the reader indexes are not the values the call receives.
+    // `download('exports/invoices.pdf', ...['name.pdf'])` really offers `name.pdf`, and reading position 1
+    // would publish `invoices.pdf` — a Content-Disposition the server never sends. One row per call the
+    // table names, so the guard cannot go stale against it.
+    expect(recoveredCalls($expression, $receiver))->toBe([]);
+})->with([
+    'download' => ["response()->download('exports/invoices.pdf', ...['name.pdf'])", BINARY_RESPONSE_FACTORY],
+    'file' => ["response()->file('exports/invoices.pdf', ...[['Content-Type' => 'text/csv']])", BINARY_RESPONSE_FACTORY],
+    'stream' => ["response()->stream(\$callback, ...[200, ['Content-Type' => 'text/csv']])", BINARY_RESPONSE_FACTORY],
+    'streamDownload' => ["response()->streamDownload(\$callback, ...['report.csv'])", BINARY_RESPONSE_FACTORY],
+    'streamJson' => ["response()->streamJson(\$data, ...[200, ['Content-Type' => 'application/problem+json']])", BINARY_RESPONSE_FACTORY],
+    'eventStream' => ['response()->eventStream(...[$callback])', BINARY_RESPONSE_FACTORY],
+    'disk download' => ["\$disk->download(...['exports/invoices.pdf'])", BINARY_RESPONSE_FILESYSTEM],
+    'disk response' => ["\$disk->response('exports/invoices.pdf', null, [], ...['attachment'])", BINARY_RESPONSE_FILESYSTEM],
+    // Both facades reach the same reader through a static call, so the guard has to hold on that path too.
+    'response facade' => ["\\Illuminate\\Support\\Facades\\Response::download('exports/invoices.pdf', ...['name.pdf'])", BINARY_RESPONSE_FACTORY],
+    'storage facade' => ["\\Illuminate\\Support\\Facades\\Storage::download(...['exports/invoices.pdf'])", BINARY_RESPONSE_FACTORY],
+    // A spread beside a name is still a call nothing is read off.
+    'spread and name' => ["response()->download(...['exports/invoices.pdf'], name: 'name.pdf')", BINARY_RESPONSE_FACTORY],
+]);
+
+it('widens rather than reads through a spread inside a path helper', function (): void {
+    // The helper's own argument is a separate read, and a spread there folds to an array rather than a
+    // string — so the path is simply unknown. Octet-stream and no name is what the call still proves.
+    $calls = recoveredCalls("response()->download(storage_path(...['app/exports/invoices.pdf']))");
+
+    expect($calls)->toHaveCount(1)
+        ->and($calls[0]->mediaType)->toBe(BinaryRepresentation::OCTET_STREAM)
+        ->and($calls[0]->filename)->toBeNull()
+        ->and($calls[0]->disposition)->toBe('attachment');
+});
+
 it('falls back to what the response class alone proves', function (string $fqcn, string $mediaType, array $schema, bool $diagnosed): void {
     // No call was reached, so only the class speaks. A file body gets the octet-stream the server itself
     // falls back to; a callback-written stream gets no media type at all, which is the one case left
