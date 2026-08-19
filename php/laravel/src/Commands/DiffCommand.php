@@ -40,6 +40,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 final class DiffCommand extends Command
 {
     use GuardsEnabled;
+    use StringOptions;
 
     protected $signature = 'docuccino:diff
         {old : Path to the committed UIR/OpenAPI artifact to diff against}
@@ -114,8 +115,8 @@ final class DiffCommand extends Command
             return null;
         }
 
-        $ref = $this->option('against');
-        $json = is_string($ref) && $ref !== '' ? $this->readFromGit($ref, $path) : $this->readFromDisk($path);
+        $ref = $this->stringOption('against');
+        $json = $ref !== null ? $this->readFromGit($ref, $path) : $this->readFromDisk($path);
         if ($json === null) {
             return null;
         }

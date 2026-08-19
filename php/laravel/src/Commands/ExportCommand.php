@@ -35,6 +35,7 @@ final class ExportCommand extends Command
     use GuardsEnabled;
     use IteratesDocuments;
     use RendersDiagnostics;
+    use StringOptions;
 
     protected $signature = 'docuccino:export
         {document? : The configured document key (defaults to every document)}
@@ -282,13 +283,5 @@ final class ExportCommand extends Command
     {
         // Validated up front, so the fallback is only ever the unset flag's default.
         return ProvenanceLevel::tryFrom($this->stringOption('provenance') ?? '') ?? ProvenanceLevel::Winners;
-    }
-
-    /** An option the user actually set, as a non-empty string. */
-    private function stringOption(string $name): ?string
-    {
-        $value = $this->option($name);
-
-        return is_string($value) && $value !== '' ? $value : null;
     }
 }

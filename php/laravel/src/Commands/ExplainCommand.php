@@ -37,6 +37,7 @@ final class ExplainCommand extends Command
 {
     use GuardsEnabled;
     use IteratesDocuments;
+    use StringOptions;
 
     protected $signature = 'docuccino:explain
         {route : The operation — "POST /api/invoices", a URI, a route name, an operation id, or part of any of them}
@@ -460,14 +461,6 @@ final class ExplainCommand extends Command
         $route = $this->argument('route');
 
         return is_string($route) ? trim($route) : '';
-    }
-
-    /** An option the user actually set, as a non-empty string. */
-    private function stringOption(string $name): ?string
-    {
-        $value = $this->option($name);
-
-        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 
     /** The `--method` filter, or false having printed why it is not one. */
