@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch and explain — with every flag, default and exit code.
+description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch, coverage and explain — with every flag, default and exit code.
 ---
 
 
@@ -490,6 +490,56 @@ operation the last one built and re-analyzes only what changed.
 A rebuild that hasn't finished in 15 minutes is stopped and reported as a failed build, so an
 analysis that wedges costs you one rebuild rather than the session.
 
+## `docuccino:coverage`
+
+Report which documented operations your test suite exercised.
+
+```
+docuccino:coverage
+    {document? : The configured document key (defaults to every document)}
+    {--path=* : A coverage log directory to merge (repeatable; defaults to the document's own)}
+    {--min=0 : Fail below this percentage of documented operations}
+    {--reset : Delete the logs and exit, leaving the directory ready for a run}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `document` | configured key / all | Which document(s) to measure. Unknown → exit 1. |
+| `--path` | directory, repeatable / the document's [`coverage.log`](/laravel/reference/configuration/#coverage) | Directories to merge. Subdirectories are walked, so one path covers a tree of downloaded CI artifacts. |
+| `--min` | `0`–`100` / `0` | Floor. Below it the command exits 1. A value outside the range errors. |
+| `--reset` | flag / off | Deletes the log files in those directories and exits `0`, reporting how many. Nothing else in them is touched. |
+
+It reads the artifact your suite asserted against — never a fresh build — so the command and the
+[contract assertions](/laravel/guides/contract-testing/) can only ever be talking about the same
+operations. Operations are matched by stable `x-docuccino.id`, so a renamed route reads as still
+covered rather than as one endpoint vanishing and another appearing.
+
+**Why a command and not an assertion.** Coverage is a question about the *whole* suite, and no test can
+see the whole suite: a parallel worker holds its own share, a shard holds its own machine's, and neither
+can know when the others have finished. So each process writes a log and this merges them afterwards —
+the same shape line coverage has, where workers write and the runner merges once they are done. Turn the
+recorder on in your test bootstrap with `ApiContract::recordCoverage()`; the wiring and the CI recipe are
+on [Contract testing](/laravel/guides/contract-testing/#report-the-endpoints-your-suite-never-touched).
+
+**An incomplete merge never produces a number.** A directory that isn't there, one holding no log, and a
+file that doesn't read back as ids each fail the command with the path named, before any percentage is
+printed. A gate that quietly measured three of four shards is worse than no gate.
+
+```text
+Coverage — default
+──────────────────
+/app/storage/docuccino/coverage
+8 log files, 17 ids
+
+Docuccino contract coverage: 17 of 23 documented operations exercised (73.91%, floor 85%).
+
+Never exercised:
+  DELETE /api/invoices/{invoice}       op:v1:aaaainvoicekill
+  POST   /api/invoices/{invoice}/void  op:v1:aaaainvoicevoid
+
+Cover them, or — if this is the honest measured floor for now — move the floor to 73 and ratchet it up from there.
+```
+
 ## `docuccino:explain`
 
 Explain why one endpoint is documented the way it is, layer by layer.
@@ -729,4 +779,5 @@ What counts as failure:
 | `cache` | disabled; unknown document key |
 | `clear` | unknown document key (no enabled guard) |
 | `watch` | disabled; unknown document key; `--interval` that isn't a positive number; no documents configured. A failing rebuild does **not** stop the session — it prints and waits for the next change |
+| `coverage` | disabled; unknown document key; `--min` outside `0`–`100`; a merge that is incomplete (a directory missing, one holding no log, or a log that isn't one); no artifact to measure against, or one that isn't JSON; coverage below `--min` |
 | `explain` | disabled; unknown document key; unknown `--method` value; no operation matches the query; no field matches `--field`. Exits **`2`** — not `1` — when several operations or several fields match, so a script can tell "not found" from "be more specific" |
