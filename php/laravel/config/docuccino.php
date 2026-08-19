@@ -301,7 +301,9 @@ return [
     'on_route_error' => 'skeleton',
 
     'cache' => [
-        'enabled' => false, // the per-operation fragment cache: incremental rebuilds
+        // The per-operation fragment cache: incremental rebuilds. `docuccino:watch` turns it on for
+        // the builds it drives by setting DOCUCCINO_FRAGMENT_CACHE, which is why this reads the env.
+        'enabled' => env('DOCUCCINO_FRAGMENT_CACHE', false),
         'store' => null,    // Laravel cache store backing `docuccino:cache` (null = default store)
         // 'path' => null,  // fragment directory (default: storage_path('docuccino/fragments'))
     ],

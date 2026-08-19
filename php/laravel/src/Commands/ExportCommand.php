@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Context\ExportTarget;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\ExportDiagnostics;
 use Docuccino\Laravel\Pipeline\DocumentBuilder;
+use Docuccino\Laravel\Support\AtomicFile;
 use Docuccino\Laravel\Support\Paths;
 use Illuminate\Console\Command;
 
@@ -246,7 +247,9 @@ final class ExportCommand extends Command
             return false;
         }
 
-        if (@file_put_contents($path, $result->output) === false) {
+        // Atomic, because `docuccino:watch` re-exports on every save and an interrupted write would
+        // otherwise leave a truncated document where a whole one was.
+        if (! AtomicFile::write($path, $result->output)) {
             $this->error(sprintf('Could not write %s.', $path));
 
             return false;

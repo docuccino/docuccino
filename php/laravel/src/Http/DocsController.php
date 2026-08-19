@@ -13,6 +13,7 @@ use Docuccino\Laravel\Pipeline\DocumentBuilder;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Support\Paths;
 use Docuccino\Laravel\Viewer\ViewerDrivers;
+use Docuccino\Laravel\Watch\WatchSignal;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
@@ -20,17 +21,21 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * The runtime viewer endpoints: the driver's HTML page, the `.json` spec (per `viewer.source`:
- * generate | artifact | cache), and the driver's bundled asset. Which driver renders is
- * `viewer.driver` ({@see ViewerDrivers}); every one of them arrives here, and all three endpoints go
- * through {@see authorize()} first — a configured `viewer.gate` ability, otherwise local environment
- * only. That ordering is the gate's whole guarantee: no driver can be reached without passing it,
- * because nothing but this controller ever calls one.
+ * generate | artifact | cache), the driver's bundled asset, and the reload channel a
+ * `docuccino:watch` session refreshes an open page through. Which driver renders is `viewer.driver`
+ * ({@see ViewerDrivers}); every one of them arrives here, and all four endpoints go through
+ * {@see authorize()} first — a configured `viewer.gate` ability, otherwise local environment only.
+ * That ordering is the gate's whole guarantee: no driver and no channel can be reached without
+ * passing it, because nothing but this controller ever calls one. The reload channel additionally
+ * exists only while a watch session has published a signal, so nowhere a watcher isn't running
+ * answers it at all.
  */
 final class DocsController
 {
     public function __construct(
         private readonly DocumentBuilder $builder,
         private readonly ViewerDrivers $drivers,
+        private readonly WatchSignal $signal,
     ) {}
 
     public function show(string $document): Response
@@ -38,7 +43,53 @@ final class DocsController
         $config = $this->config($document);
         $this->authorize($config);
 
-        return $this->response($config, $this->drivers->for($config)->render(new ViewerContext($config)));
+        $rendered = $this->drivers->for($config)->render(new ViewerContext($config));
+
+        return $this->response($config, is_string($rendered) ? $this->withReload($rendered, $config) : $rendered);
+    }
+
+    /**
+     * One `text/event-stream` event naming the documentation the last `docuccino:watch` rebuild
+     * produced, and then the connection closes.
+     *
+     * Single-shot on purpose. `php artisan serve` is one process answering one request at a time, so
+     * a held stream would wedge the very server the page is loaded from — and the reconnection
+     * {@see ReloadScript} does costs one request every couple of seconds and blocks nothing.
+     */
+    public function reload(string $document): Response
+    {
+        $this->authorize($this->config($document));
+
+        $token = $this->signal->token();
+        abort_if($token === null, 404);
+
+        return new Response("retry: 2000\nevent: reload\ndata: {$token}\n\n", 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, private',
+            // Nginx buffers a proxied response by default, which holds an event until the buffer
+            // fills — for a one-event body, forever.
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    /**
+     * Splice the live-reload subscriber into a viewer page, but only while a watch session has
+     * published a signal: everywhere else the page is the static document it has always been, with
+     * nothing polling in the background. Appended when the page has no `</body>` of its own, so a
+     * viewer other than the bundled one still reloads.
+     */
+    private function withReload(string $html, DocumentConfig $config): string
+    {
+        $route = $config->viewer['route'] ?? null;
+
+        if ($this->signal->token() === null || ! is_string($route) || $route === '') {
+            return $html;
+        }
+
+        $script = ReloadScript::html(url('/'.trim($route, '/').'/reload'));
+        $position = strripos($html, '</body>');
+
+        return $position === false ? $html.$script : substr_replace($html, $script, $position, 0);
     }
 
     public function spec(string $document, TypeEngine $engine, DocumentCache $cache): Response

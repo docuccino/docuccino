@@ -107,6 +107,19 @@ time php artisan docuccino:export   # warm
 
 The first run after turning the cache on is a normal full build — it has a store to fill.
 
+## Let it rebuild for you
+
+If you're exporting by hand after every edit, [`docuccino:watch`](/laravel/reference/commands/#docuccinowatch)
+is the loop with the cache already turned on:
+
+```bash
+php artisan docuccino:watch
+```
+
+It builds once, then rebuilds whenever a file the build depends on changes — and the files it watches
+are exactly the ones this page describes, read back out of the fragment store rather than guessed
+from a pattern. An open [viewer](/laravel/guides/viewer/) refreshes itself when the document changes.
+
 ## When to leave it off
 
 The fragment cache is off by default, and that default is right for a build that runs once:
@@ -114,6 +127,7 @@ The fragment cache is off by default, and that default is right for a build that
 | Situation | Worth it? |
 | --- | --- |
 | Local iteration — export, read, tweak, export | **Yes.** This is what it's for. |
+| `docuccino:watch` | **Yes**, and you don't have to do anything: watch turns it on for the builds it runs. |
 | CI on every pull request, with the store restored between runs | **Yes** — see [caching the build in CI](/laravel/guides/production/#caching-the-build-in-ci). |
 | A release or deploy pipeline that builds once on a fresh machine | No. Every lookup misses; you pay the bookkeeping and save nothing. |
 | A one-off export you run twice a year | No. |

@@ -541,7 +541,7 @@
             "dist": {
                 "type": "path",
                 "url": "php/laravel",
-                "reference": "8fedb650e137652a2ea3f9ad3aaa613abb0b1452"
+                "reference": "f4c0e8dbcd4e85905f4acb5b5edc05bc84928853"
             },
             "require": {
                 "docuccino/attributes": "self.version",
@@ -550,6 +550,7 @@
                 "illuminate/console": "^12.0 || ^13.0",
                 "illuminate/contracts": "^12.0 || ^13.0",
                 "illuminate/database": "^12.0 || ^13.0",
+                "illuminate/process": "^12.0 || ^13.0",
                 "illuminate/routing": "^12.0 || ^13.0",
                 "illuminate/support": "^12.0 || ^13.0",
                 "php": "^8.3",

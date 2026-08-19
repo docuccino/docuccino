@@ -55,7 +55,7 @@ export default defineConfig({
 						'',
 						'- Install: `composer require docuccino/laravel` plus `composer require --dev docuccino/inference-phpstan` (the analysis engine is a dev dependency; the adapter degrades to no inference without it).',
 						'- Requirements: PHP 8.3+, Laravel 12 or 13.',
-						'- Commands: `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`.',
+						'- Commands: `docuccino:export`, `docuccino:validate`, `docuccino:diff`, `docuccino:cache`, `docuccino:clear`, `docuccino:watch`.',
 						'- Config lives in one published file, `config/docuccino.php`, organized around named `documents`.',
 						'- Docuccino never executes application code — it reads types with an embedded PHPStan/Larastan engine.',
 						'- Output is byte-deterministic, so the exported document is meant to be committed and diffed.',
