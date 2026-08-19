@@ -136,6 +136,23 @@ Choose how much of that to emit with `docuccino:export --provenance`:
 
 Provenance only exists in the UIR: the OpenAPI emitters always drop it.
 
+## Mock hints
+
+A schema node can carry `x-docuccino.mock` — `faker`, the expression a mock server evaluates for that
+property, and `seedGroup`, a name shared by properties whose values should correlate:
+
+```json
+"per_page": {
+  "x-docuccino": { "mock": { "faker": "numberBetween:1,100" } },
+  "type": "integer"
+}
+```
+
+Nothing here is a value: the document records the expression and never evaluates it, so a mock hint
+costs the format none of its determinism. Hints come from
+[`#[Mock]`](/laravel/reference/attributes/#mock) in the source; the OpenAPI emitters drop them unless
+you name a member to project the `faker` half onto, conventionally `x-faker`.
+
 ## Content layer
 
 Point [`content.dir`](/laravel/reference/configuration/#content) at a folder of Markdown and Docuccino

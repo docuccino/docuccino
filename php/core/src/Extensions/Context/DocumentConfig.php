@@ -345,6 +345,21 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The member the OpenAPI emitters project a schema's `x-docuccino.mock.faker` onto, from
+     * `export.mock_faker_key` — conventionally `x-faker`. Null (the default) drops mock hints, so a
+     * bare export stays pure OpenAPI; the UIR carries them either way.
+     *
+     * It sits under `export` because it shapes the projection and never the document, which is also
+     * what keeps it out of {@see hash()}.
+     */
+    public function mockFakerKey(): ?string
+    {
+        $key = $this->export()['mock_faker_key'] ?? null;
+
+        return is_string($key) && $key !== '' ? $key : null;
+    }
+
+    /**
      * Every artifact this document writes: `export.targets` when it holds at least one usable entry,
      * else the one-target {@see exportPath()} shorthand.
      *

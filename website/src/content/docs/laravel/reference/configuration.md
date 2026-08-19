@@ -361,6 +361,21 @@ Rules the command enforces before it builds anything:
 A broken target list fails the command with a `config.export-*` error **before** the build runs, so
 you never pay for an analysis to find out a filename was wrong.
 
+One more key sits beside them, shaping what the emitters write rather than where:
+
+```php
+'export' => [
+    'path' => 'docs/openapi.json',
+    'mock_faker_key' => 'x-faker',
+],
+```
+
+`mock_faker_key` is the member every [`#[Mock]`](/laravel/reference/attributes/#mock) faker
+expression is published under in the OpenAPI artifacts. Unset — the default — leaves them out, so a
+bare export is pure OpenAPI. The `uir` format carries the hints whichever way this is set, and
+turning it on rewrites no byte of the UIR: it shapes the projection, never the document, so
+`configHash` and the fragment cache are untouched.
+
 ### `viewer`
 
 ```php

@@ -28,6 +28,10 @@ arch('built-in integrations consume only the public extension surface')
         // integration inlining its own hierarchy walk is precisely what this list exists to prevent.
         'Docuccino\Core\Extensions\Schema\DeclarationFiles',
         'Docuccino\Core\Extensions\Schema\EnumReflection',
+        // The one reader of #[Mock], for the same reason SchemaIdentity is here: every class-hoisting
+        // mapper owes the same answer, and an integration rolling its own would fork the attribute's
+        // meaning per package.
+        'Docuccino\Core\Extensions\Schema\MockHints',
         'Docuccino\Core\Extensions\Schema\SchemaIdentity',
         'Docuccino\Core\Extensions\Schema\SchemaResult',
         'Docuccino\Core\Extensions\Validation\RecoveredRequest',

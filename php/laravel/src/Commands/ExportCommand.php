@@ -228,15 +228,15 @@ final class ExportCommand extends Command
         $ok = true;
 
         foreach ($this->targets($config) as $target) {
-            $ok = $this->write($target, $document) && $ok;
+            $ok = $this->write($target, $document, $config) && $ok;
         }
 
         return $ok;
     }
 
-    private function write(ExportTarget $target, UirDocument $document): bool
+    private function write(ExportTarget $target, UirDocument $document, DocumentConfig $config): bool
     {
-        $result = Formats::emit($target->format, $document, $this->emitOptions($target));
+        $result = Formats::emit($target->format, $document, $this->emitOptions($target, $config));
 
         $path = Paths::absolute($this->stringOption('out') ?? $target->path, base_path());
         $directory = dirname($path);
@@ -260,7 +260,7 @@ final class ExportCommand extends Command
         return true;
     }
 
-    private function emitOptions(ExportTarget $target): EmitOptions
+    private function emitOptions(ExportTarget $target, DocumentConfig $config): EmitOptions
     {
         // `--yaml` is the single-target override's say; a configured target states it in its own path.
         $yaml = $this->option('yaml') === true || $target->yaml();
@@ -268,7 +268,8 @@ final class ExportCommand extends Command
         return (new EmitOptions)
             ->withYaml($yaml && Formats::serialisesYaml($target->format))
             ->withProvenance($this->provenanceLevel())
-            ->withKeepIds($this->option('drop-ids') !== true);
+            ->withKeepIds($this->option('drop-ids') !== true)
+            ->withMockFakerKey($config->mockFakerKey());
     }
 
     private function provenanceLevel(): ProvenanceLevel

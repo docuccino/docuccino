@@ -172,6 +172,9 @@ return [
                 //     ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
                 //     ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],
                 // ],
+                // The member #[Mock] hints are published under in the OpenAPI artifacts. Absent keeps
+                // them out, so an export is pure OpenAPI; the UIR carries them either way.
+                // 'mock_faker_key' => 'x-faker',
             ],
 
             'viewer' => [

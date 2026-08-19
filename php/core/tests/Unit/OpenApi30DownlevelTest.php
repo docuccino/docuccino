@@ -386,3 +386,23 @@ it('emits nothing OpenAPI 3.0 cannot read', function (string $golden): void {
     'kitchen-sink' => ['kitchen-sink.openapi30.json'],
     'downlevel' => ['downlevel.openapi30.json'],
 ]);
+
+it('keeps a projected mock hint through the 3.0 downlevel', function (): void {
+    // The projection happens in the 3.2 pass this emitter chains off, so what arrives here is an
+    // ordinary `x-` member — and 3.0 passes those through untouched, with nothing to report.
+    $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'API', 'version' => '1.0.0'],
+        'paths' => [],
+        'components' => ['schemas' => ['S' => [
+            'type' => 'object',
+            'properties' => ['email' => ['type' => 'string', 'x-docuccino' => ['mock' => ['faker' => 'safeEmail']]]],
+        ]]],
+    ]), (new EmitOptions)->withMockFakerKey('x-faker'));
+
+    $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+
+    expect($decoded['components']['schemas']['S']['properties']['email'])->toBe(['type' => 'string', 'x-faker' => 'safeEmail'])
+        ->and(array_map(static fn ($d): string => $d->code, $result->report->diagnostics))->toBe([]);
+});
