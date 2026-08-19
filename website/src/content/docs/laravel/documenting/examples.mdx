@@ -242,6 +242,12 @@ Each becomes `"[redacted]"`, and only strings are touched — a `token_count` of
 `5`, so the example goes on satisfying its own schema. Your own `lint.leakage.patterns` apply here too:
 teach Docuccino a sensitive member name once and both the lint and the recorder learn it.
 
+A number *called* a credential — `"cvv": 123`, a numeric card number — is a secret too, and it can't be
+replaced without making the example contradict its own schema. So it is reported instead: the build
+refuses to publish that body at all and tells you where it is, with the same
+`examples.recording-unsafe` warning. Nothing but the name can speak for a number, so there the name has
+to *be* one of the heuristics rather than contain one — `token` counts, `token_count` doesn't.
+
 Half of `lint.leakage.allow` applies, and only half. A **JSON pointer** into the response body —
 `'/meta/next_page_token'` — publishes that one value, because it is a statement about that value. A bare
 **property name** silences the lint and is ignored here: it would exempt every member of that name in
