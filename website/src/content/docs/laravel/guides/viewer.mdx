@@ -1,6 +1,6 @@
 ---
 title: The viewer
-description: The bundled Scalar API reference — its routes, access control, middleware, and source modes — served from your own app with no external CDN.
+description: The bundled API reference — its drivers, routes, access control, middleware, and source modes — served from your own app with no external CDN.
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
@@ -8,6 +8,9 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 Docuccino ships an interactive [Scalar](https://scalar.com) API reference and serves it straight from
 your Laravel app — no external service, no CDN required. It has a built-in try-it-out console, so
 readers can call your API from the docs.
+
+Scalar is the default, not the only option: `viewer.driver` swaps in [Redoc](#choosing-a-driver), or
+[a renderer you write yourself](#writing-your-own-driver).
 
 <Aside type="caution" title="It's closed outside `local` until you open it">
 With `viewer.gate` unset — the default — the viewer answers only when the app environment is `local`.
@@ -23,7 +26,7 @@ With the default `viewer.route` of `/docs/api`, three routes are registered per 
 | --- | --- |
 | `GET /docs/api` | The interactive API reference page. |
 | `GET /docs/api.json` | The generated OpenAPI document. |
-| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). |
+| `GET /docs/api/assets/scalar.js` | The viewer script, served from your app (no external CDN). The filename follows the driver — `redoc.js` for Redoc. |
 
 Change the base path with `viewer.route`, or set it to `null` to register nothing for that document
 (export still works). Setting `enabled` to `false` removes the routes for every document at once.
@@ -58,6 +61,9 @@ name a gate:
 The gate guards all three routes — the HTML page, the `.json` spec and the asset; a denial is a `403`.
 The browser fetches the script over the same session as the page, so a reader who is allowed in always
 gets it.
+
+The gate runs **before** any driver does, so it applies to every driver equally, including one you
+wrote. There is no way to register a viewer that renders for a reader the gate turned away.
 
 Type the gate's user parameter as nullable if you want guests to reach it (a public docs page behind a
 token check, say); otherwise Laravel refuses the guest before your closure runs.
@@ -113,22 +119,121 @@ nothing servable the viewer generates instead and logs why.
 A UIR artifact works as an `artifact` source too: it's re-emitted through the OpenAPI emitter on the
 way out, so provenance and internal identities never reach the browser.
 
+## Choosing a driver
+
+`viewer.driver` names which renderer serves the HTML page. Two ship with the package:
+
+| `driver` | Renders | Try-it-out console |
+| --- | --- | :---: |
+| `scalar` *(default)* | [Scalar](https://scalar.com) — a single-column reference with a request console. | Yes |
+| `redoc` | [Redoc](https://github.com/Redocly/redoc) — a three-panel reference with a persistent left nav. | No |
+
+```php
+// config/docuccino.php — documents.default.viewer
+'driver' => 'redoc',
+```
+
+Both read the same `/docs/api.json` endpoint, so the document itself is identical either way — only
+the page around it changes. Pick Redoc when you want the three-panel layout and don't need readers
+firing requests from the docs; stay on Scalar when you do.
+
+Each document chooses its own driver, so an internal document can keep the console while a public one
+serves the reference-only page.
+
+<Aside type="note" title="An unknown name falls back rather than failing">
+If `driver` names something nothing registers, the page still renders — with the default driver — and
+a warning goes to your log naming the drivers that *are* registered. A typo costs you the layout you
+asked for, never the docs page.
+</Aside>
+
 ## Serving the asset
 
-By default the Scalar script is bundled with the package and served from your own app, so the viewer
-works on locked-down networks with no outbound access. It's a large file that only changes when you
-upgrade Docuccino, so it's served with long-lived immutable cache headers and costs a reader one
-download.
+By default a driver's script is bundled with the package and served from your own app, so the viewer
+works on locked-down networks with no outbound access. Both shipped drivers follow that policy — Redoc
+is not a CDN-only option. Each is a single large file that only changes when you upgrade Docuccino, so
+it's served with long-lived immutable cache headers and costs a reader one download.
 
 To load it from a CDN instead — trading the offline guarantee for a byte you don't serve — set
 `viewer.cdn`:
 
 ```php
-'cdn' => true, // loads Scalar from jsDelivr
+'cdn' => true, // loads the active driver's script from jsDelivr
 ```
+
+A document serves only the assets its **active** driver publishes: switch to `redoc` and
+`/docs/api/assets/scalar.js` returns a `404`, because the name a driver publishes is the whole
+allow-list for that route.
 
 The page title comes from the document's `info.title`, so the browser tab matches the API rather than
 saying "API Documentation".
+
+## Writing your own driver
+
+A driver is a class implementing `Docuccino\Core\Extensions\Contracts\Viewer`: a stable name for
+config to select it by, and a `render()` that returns the page.
+
+```php
+namespace App\Docs;
+
+use Docuccino\Core\Extensions\Context\ViewerContext;
+use Docuccino\Core\Extensions\Contracts\Viewer;
+
+class HouseStyleViewer implements Viewer
+{
+    public function name(): string
+    {
+        return 'house-style';
+    }
+
+    public function render(ViewerContext $context): string
+    {
+        return view('docs.house-style', [
+            'title' => $context->config->info['title'] ?? 'API Documentation',
+            'spec' => url($context->config->viewer['route'].'.json'),
+        ])->render();
+    }
+}
+```
+
+Register it the same way as any other extension, from any service provider:
+
+```php
+use App\Docs\HouseStyleViewer;
+use Docuccino\Laravel\Facades\Docuccino;
+
+Docuccino::extend(HouseStyleViewer::class);
+```
+
+…then select it by the name the class returns:
+
+```php
+'driver' => 'house-style',
+```
+
+`render()` may return a string of HTML or an Illuminate response, whichever suits the page. The
+`ViewerContext` carries the document's whole resolved config, so the route, title, servers and viewer
+bag are all in reach.
+
+Registering a driver under a name that already exists **replaces** it — return `'scalar'` from
+`name()` and every document already on the default gets your page, no config change needed.
+
+To serve your own script from the gated asset route, implement `ViewerAssets` as well:
+
+```php
+use Docuccino\Core\Extensions\Contracts\ViewerAssets;
+
+class HouseStyleViewer implements Viewer, ViewerAssets
+{
+    /** @return array<string, string> */
+    public function assets(): array
+    {
+        return ['house-style' => resource_path('js/house-style.js')];
+    }
+}
+```
+
+That map is the allow-list: the file lands at `/docs/api/assets/house-style.js`, behind the same gate
+and middleware as the page, and no other path on that route resolves to anything.
 
 <Aside type="note">
 See the [viewer configuration](/laravel/reference/configuration/#viewer) for every key and its default.

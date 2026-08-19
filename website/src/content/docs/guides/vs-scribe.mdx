@@ -52,7 +52,7 @@ The tools differ at the root, and it colors everything else:
 | Try-it-out console | Yes, in its own theme | Yes, via the bundled Scalar viewer |
 | Byte-stable output you can commit | — | Yes |
 | Semantic diff + CI version gate | — | Yes (`docuccino:diff --enforce`) |
-| Custom HTML theming | Yes, Blade templates you publish | No — Scalar is configurable, not a template layer |
+| Custom HTML theming | Yes, Blade templates you publish | Yes, by writing a viewer driver — the whole page, not a published template |
 | Generated-UI localization | Yes, via Laravel lang files | No |
 | Documented intermediate format | — | Yes (the [UIR](/uir/)) |
 
@@ -254,10 +254,13 @@ carefully before you switch — for some teams they're the whole reason to stay.
   field in a `validation.rule-unrecoverable` diagnostic rather than quietly omitting it.
 - **Fractal / league transformers** (`@transformer*`, custom serializers). Docuccino has no Fractal
   integration; you'd write a `TypeToSchema` extension.
-- **Fully Blade-customizable HTML** — publishable views, custom themes, custom example-request
-  languages. Docuccino's viewer is Scalar: configurable, but not a template layer you own. (Standalone
-  prose like Scribe's `intro.md` / `auth.md` *is* covered — Docuccino compiles a folder of Markdown
-  guides into the document; see [Adding your own pages](/laravel/guides/narrative-content/).)
+- **Publishable views and custom example-request languages.** There are no Docuccino views to publish
+  and edit; theming the page means writing a
+  [viewer driver](/laravel/guides/viewer/#writing-your-own-driver) that renders it — full control, but
+  you start from a blank page rather than from a theme. Docuccino also has no per-language
+  example-request setting: the snippet languages are whichever the driver offers. (Standalone prose
+  like Scribe's `intro.md` / `auth.md` *is* covered — Docuccino compiles a folder of Markdown guides
+  into the document; see [Adding your own pages](/laravel/guides/narrative-content/).)
 - **Hand-written custom endpoints** (`custom.*.yaml`) — an escape hatch for documenting anything at
   all, including third-party package routes (Passport, Fortify) you have no code access to. In
   Docuccino that's an OpenAPI Overlay or a `DocumentTransformer` — see

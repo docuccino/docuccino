@@ -555,7 +555,11 @@ interface VersioningPolicy { // diff enforcement: changeset severity vs info.ver
 }
 
 interface DocumentTransformer { public function transform(UirDocumentDraft $doc, DocumentContext $ctx): void; }
-interface Viewer  { public function render(ViewerContext $ctx): Response; }
+interface Viewer  { // selected by `viewer.driver`; built-ins: scalar (default), redoc
+    public function name(): string;                     // the stable driver id, e.g. `scalar`
+    public function render(ViewerContext $ctx): mixed;  // HTML, or the adapter's own response type
+}
+interface ViewerAssets { public function assets(): array; } // asset name => file; IS the allow-list
 ```
 
 **Emitters are not extensible yet.** `Docuccino\Core\Emit\Emitter` names a format and nothing else, and

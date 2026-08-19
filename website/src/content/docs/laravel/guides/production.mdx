@@ -100,9 +100,13 @@ warning, so a forgotten warm-up degrades loudly instead of serving nothing. See 
 ## Gating the viewer
 
 By default the viewer is reachable only in your `local` environment. To expose it anywhere else, name a
-`viewer.gate` ability and define it in a service provider — the gate guards the HTML and `.json`
-routes, and you should keep `throttle` in `viewer.middleware` when the spec endpoint is public. The
-[viewer guide](/laravel/guides/viewer/#access-control) walks through it step by step.
+`viewer.gate` ability and define it in a service provider — the gate guards the HTML, `.json` and
+asset routes, and you should keep `throttle` in `viewer.middleware` when the spec endpoint is public.
+The [viewer guide](/laravel/guides/viewer/#access-control) walks through it step by step.
+
+The gate is checked before any [viewer driver](/laravel/guides/viewer/#choosing-a-driver) runs, so
+switching drivers — or registering one of your own — changes what the page looks like and nothing
+about who can reach it.
 
 To turn the runtime viewer off for one document, set its `viewer.route` to `null` — export still
 works. To turn Docuccino off entirely in an environment, use the master switch:

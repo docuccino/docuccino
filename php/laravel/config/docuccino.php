@@ -189,7 +189,11 @@ return [
                 // or behind a gate), `artifact` reads export.path, `cache` serves what
                 // `docuccino:cache` warmed — prefer one of those two for an exposed viewer.
                 'source' => 'generate',
-                // 'cdn' => true, // load Scalar from a CDN instead of the asset shipped with the package
+                // Which viewer renders the page. 'scalar' (the default) has a try-it-out console;
+                // 'redoc' is a reference-only three-panel layout. Both ship their script with the
+                // package. Your own driver registers with Docuccino::extend() and is named here.
+                // 'driver' => 'scalar',
+                // 'cdn' => true, // load the driver's script from a CDN instead of the shipped asset
             ],
         ],
     ],
