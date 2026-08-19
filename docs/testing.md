@@ -10,6 +10,13 @@ coverage locally and the ratchet policy for the CI gate.
   **dataset-driven over EVERY entry, plus the unknown-entry degradation contract**. One
   tested entry in a table is not coverage. When an entry turns out to be unreachable
   (e.g. a `match` label that can never be selected), it is deleted, not tested.
+- **A dataset only proves the rows it LISTS.** Which makes a hand-maintained "full set" — an
+  attribute catalogue, a reference page, an allow-list — a second thing to prove, not a proof in
+  itself: it needs a guard that reads the **source of truth** (the directory, the config file, the
+  code that emits) and fails when the list is short. An attribute shipped with no catalogue entry
+  and the whole suite stayed green, because nothing was asking what the package ships.
+  `AttributesTest`'s catalogue guard, `ConfigReferenceSyncTest` and `DiagnosticsReferenceTest` are
+  the shape: derive one side, compare, and name what appears on only one.
 - **Stub / real splits.** `StubTypeEngine` tests prove *pipeline mechanics* only; every
   integration's recovery/parsing half also needs a **real-path** test (real reflection,
   or the real engine via the `fixture` group). Ask of every test: which half does this
@@ -19,6 +26,13 @@ coverage locally and the ratchet policy for the CI gate.
   path cannot produce pins a shape the product cannot reach. Ask of every pin: if the feature
   were absent entirely, would this still be green? Assert that the key is present, not only what
   is inside it, and build fixtures through the real path rather than constructing them.
+- **A scan that finds nothing must FAIL.** A source-scanning test — an arch rule, a reference
+  guard, a catalogue check — that silently matches zero things passes forever and proves nothing,
+  and it goes quiet at exactly the moment the scanner breaks. Assert a plausible minimum beside the
+  real assertion: well under what the tree holds today, so ordinary work never trips it, and far
+  enough above zero that a scanner which stopped recognising one of its shapes fails loudly. The
+  diagnostics and config-reference guards, the boundary arch tests and the attribute catalogue all
+  carry one.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
@@ -170,7 +184,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **95**, `laravel` **93**, `inference-phpstan` **39**.
+  an aspiration. Current floors: `core` **95**, `laravel` **93**, `inference-phpstan` **40**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

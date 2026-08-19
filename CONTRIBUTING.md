@@ -140,6 +140,33 @@ scripts, so the two cannot drift.
 Everything must be **green on all checks, always** — Pest, PHPStan at level max, Pint, and
 `composer validate`. `declare(strict_types=1)` is required in every PHP file.
 
+### Green locally is not green in CI
+
+`composer analyse` runs the PHPStan your lockfile resolved. The quality matrix also runs a leg
+pinned to an older PHPStan minor and a `--prefer-lowest` leg — both are in the matrix in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is where to read the pinned version
+rather than trusting one written down elsewhere — and they are stricter in places.
+
+The one that catches people is an **unsealed array shape** in a docblock:
+`@param array{a: string, b: ?int, ...} $spec`. The resolved PHPStan accepts it; the pinned minor
+rejects it as `missingType.iterableValue`, and the pull request goes red after review. So name
+every key. Where the same shape is described in more than one place, declare it **once** as a
+`@phpstan-type` alias on the class docblock and refer to that alias from each site —
+`php/core/src/Diff/DocumentDiffer.php`, `ComponentNames` and `ModelSchema` are the precedent.
+
+If you write anything PHPStan-sensitive, check it against the pinned minor before you open the
+pull request:
+
+```bash
+# the version the phpstan axis in ci.yml pins — 2.2.0 as this is written
+composer update --with "phpstan/phpstan:2.2.0" --no-interaction --no-progress
+composer analyse
+git checkout composer.lock && composer install --no-interaction --no-progress
+```
+
+That last line is not optional. Restore the lockfile so a version probe never lands in a commit:
+`git status` must show `composer.lock` unchanged.
+
 ### The fixture app (real-engine tests)
 
 The Laravel adapter's feature tests run against the workbench under `php/laravel/workbench/`.
@@ -185,9 +212,14 @@ Coverage protects the paths goldens never traverse. Summarised (full detail in
 - **Mapping / lookup tables** (rule maps, attribute maps, cast→format, `KnownThrowers`, enum naming)
   are tested **dataset-driven over every entry**, plus the unknown-entry degradation contract. One
   tested entry is not coverage. An unreachable entry is deleted, not tested.
+- **A dataset only proves the rows it lists.** A hand-maintained "full set" — a catalogue, a
+  reference page, an allow-list — needs its own guard, one that reads the source of truth and
+  fails when the list is short. Otherwise the thing you forgot to add is the thing nothing tests.
 - **Stub / real splits.** `StubTypeEngine` tests prove pipeline mechanics; every integration's
   recovery/parsing half also needs a real-path test (real reflection, or the real engine via the
   `fixture` group). Ask of every test: which half does this prove, and where is the other half?
+- **A scan that finds nothing must fail.** A source-scanning test matching zero things passes
+  forever and proves nothing, so assert a plausible minimum beside the real assertion.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 
 Run coverage locally (needs pcov):
@@ -213,5 +245,7 @@ template, the contracts, `#[ExtensionOrder]`, and the placement rule.
 ## Docs site
 
 The site under `website/` builds with `npm run build` (from `website/`). Content is sourced from the
-actual code and design docs — keep the `<!-- Source of truth: … -->` comments accurate. See
+actual code and design docs, and [`website/STYLE.md`](website/STYLE.md) is the binding bar for
+anything you write there — including the rule that page source carries no invisible markers, since
+neither comment syntax stays invisible in everything the site publishes. See
 [`website/README.md`](website/README.md).

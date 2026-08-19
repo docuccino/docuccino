@@ -17,6 +17,13 @@ examples that a reader can paste and run.
   each generous in tone and containing that tool's how-to-migrate material. The
   concentration principle is unchanged — no competitor references anywhere outside those
   pages. Everywhere else, Docuccino stands on its own merits.
+- **Never state a claim about another tool you cannot verify.** On those pages, every
+  sentence and every capability-matrix cell about a competitor has to come from something
+  you can actually check — its documentation, its source, its output on a real app. A
+  guessed cell is worse than an absent row: it is the first thing a reader of that page
+  will test, and being wrong about a competitor costs the whole comparison its credibility
+  (and is unfair besides). If you cannot verify it, leave the row out and say the page
+  does not cover it.
 
 ## Content quality bar
 
@@ -31,6 +38,13 @@ examples that a reader can paste and run.
 - No filler. If a page or paragraph doesn't help a reader ship something, cut it.
 - Config/attribute/command references are exhaustive AND scannable (one row per key/flag,
   behavior + default + example).
+- **Don't hardcode a count you would have to remember to update.** "Five artisan commands",
+  "all 28 attributes", "78 named rules" go stale silently, and the same number is usually
+  repeated on several pages, so the one you update is rarely the only one. Prefer prose that
+  carries no number: "every attribute the package ships", "the commands below". Where a
+  count genuinely helps the reader it needs a guard that checks it, the way
+  `ConfigReferenceSyncTest` and `DiagnosticsReferenceTest` check their pages against the
+  code. A count with no guard is a promise to remember.
 
 ## Language details
 
@@ -39,6 +53,16 @@ examples that a reader can paste and run.
   Laravel docs) and stay consistent.
 - Code examples use realistic domain names (invoices, orders, users) — not foo/bar,
   and not our workbench's internal fixtures.
+
+## Page source
+
+- **No invisible markers in page source.** There is no comment syntax that stays invisible
+  in everything the site publishes: an HTML comment (`<!-- … -->`) breaks the `.md` twin
+  route `starlight-md-txt` serves, because MDX parses it, and the MDX form (`{/* … */}`)
+  renders as a visible paragraph and leaks verbatim into `llms-full.txt`. So anything
+  machine-readable — a source-of-truth pointer, a marker a guard reads — lives in the tool
+  that needs it, not in the page. Write for the reader; keep the bookkeeping out of the
+  content.
 
 ## Information architecture
 
