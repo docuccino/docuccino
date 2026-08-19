@@ -237,9 +237,9 @@ always wins — though a named recording may join a map of named examples you wr
 one you chose too. A body whose status or media type the document doesn't describe is never published,
 and neither is one that still looks like it holds a credential.
 
-Absent — the default — publishes no recorded examples. See
-[contract testing](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples) for how
-recordings are written and reviewed.
+Absent — the default — publishes no recorded examples. See [Examples your tests
+recorded](/laravel/documenting/examples/#examples-your-tests-recorded) for how recordings are written
+and reviewed.
 
 ### `overlays`
 
@@ -523,7 +523,7 @@ legitimate server URL).
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `true` | Turn the pass on/off. |
-| `allow` | `[]` | Safelist by property name or JSON pointer. Silences both kinds of finding; for a value, use the pointer. A **name** silences the lint only — the [response recorder](/laravel/guides/contract-testing/#credentials-never-reach-the-file) redacts by name regardless, and honours a pointer alone. |
+| `allow` | `[]` | Safelist by property name or JSON pointer. Silences both kinds of finding; for a value, use the pointer. A **name** silences the lint only — the [response recorder](/laravel/documenting/examples/#credentials-never-reach-the-file) redacts by name regardless, and honours a pointer alone. |
 | `patterns` | built-in table | Extra token → label heuristics for **names**, merged over the built-in table (key = normalized token, matched when a name *contains* it). |
 
 ### Descriptions

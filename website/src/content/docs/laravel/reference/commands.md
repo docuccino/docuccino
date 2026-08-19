@@ -152,7 +152,7 @@ build as your OpenAPI file:
 - **Request bodies** are generated from each schema, so a request is runnable rather than empty, and
   every documented response is saved as an example.
 - **Your own examples win.** Where a request body, response or parameter publishes an
-  [`#[Example]`](/laravel/documenting/responses/#example-payloads), the collection sends that payload
+  [`#[Example]`](/laravel/documenting/examples/), the collection sends that payload
   rather than one derived from the shape; a map of several is read by its lowest key, the same rule
   every other reader of the document uses.
 
@@ -475,26 +475,20 @@ cache again.
 
 ### Live viewer refresh
 
-While `docuccino:watch` is running, the [viewer](/laravel/guides/viewer/) subscribes to a reload
-channel at `<viewer.route>/reload` and refreshes itself when a rebuild changes the document. A
-rebuild that changes no byte leaves the page alone.
-
-The channel sits behind exactly the same
-[`viewer.gate`](/laravel/reference/configuration/#viewer) and `viewer.middleware` as the rest of the
-viewer, and it answers only while a watch session is running — with no session, it is a `404` and the
-page carries no subscriber at all. There is nothing to switch off in production.
+While `docuccino:watch` is running, an open [viewer](/laravel/guides/viewer/) page subscribes to
+`<viewer.route>/reload` and refreshes itself when a rebuild changes the document. The channel answers
+only during a watch session, so there is nothing to switch off in production — see [live reload while
+you work](/laravel/guides/viewer/#live-reload-while-you-work).
 
 ### Why each rebuild is a new process
 
-Watch runs `docuccino:export` in a fresh PHP process rather than rebuilding in place. PHP never
-un-loads a class, so a long-lived process would keep documenting your controllers as they were when
-it started, and would never see a route you added. Spawning is cheap next to analysis, and the
-fragment cache is on disk — so the new process picks up every operation the last one built and
-re-analyzes only what actually changed.
+Watch runs `docuccino:export` in a fresh PHP process rather than rebuilding in place, so every
+rebuild documents your code as it is now — including a route or a class you added mid-session. It
+costs nothing you'd notice: the fragment cache is on disk, so the new process picks up every
+operation the last one built and re-analyzes only what changed.
 
-Nothing goes through a shell on the way, so a project path with a space or an `&` in it is spawned
-correctly on every platform. A rebuild that hasn't finished in 15 minutes is stopped and reported as
-a failed build, so an analysis that wedges costs you one rebuild rather than the session.
+A rebuild that hasn't finished in 15 minutes is stopped and reported as a failed build, so an
+analysis that wedges costs you one rebuild rather than the session.
 
 ## `docuccino:explain`
 

@@ -58,7 +58,7 @@ supported. Everything in the Docuccino column is one package.
 | …when the allow-lists live in a `QueryBuilder` subclass's constructor | ✓ | — | — |
 | Validation constraints folded into bracketed `filter[…]` parameters | ✓ | — | — |
 
-Docuccino maps 78 named Laravel rules onto schema constraints, and documents your own rule classes from
+Docuccino maps 80 named Laravel rules onto schema constraints, and documents your own rule classes from
 a [`#[RuleSchema]`](/laravel/reference/attributes/#ruleschema) on the class, with a `RuleTransformer`
 for anything it doesn't know.
 
@@ -167,7 +167,7 @@ this is the surface you get without writing an annotation — the useful list to
 against:
 
 - **Requests** — form requests, inline `validate()`, and Spatie Data objects, with the full Laravel
-  rule vocabulary (78 named Laravel rules) mapped to schema constraints.
+  rule vocabulary (80 named Laravel rules) mapped to schema constraints.
 - **Query parameters** — Spatie Query Builder filters, sorts, includes, fields and pagination, traced
   through helper methods several calls deep, folded out of the method that builds each entry, and read
   from a builder subclass's constructor when the container hands your action its builder. Validation
@@ -287,7 +287,7 @@ against how you work before you commit:
 - **The generator never runs your code to produce an example.** Examples come from inference, from
   [`#[Example]`](/laravel/reference/attributes/#example), or from responses your test suite recorded
   into committed files
-  ([recorded examples](/laravel/guides/contract-testing/#turn-your-tests-responses-into-examples)) —
+  ([recorded examples](/laravel/documenting/examples/#examples-your-tests-recorded)) —
   which the build only ever reads. There is no factory-rendered or live-response example generation
   inside the generator itself; that's the trade for one that needs no database and has no side
   effects, and an endpoint no test exercises gets an inferred or authored example.
