@@ -90,6 +90,10 @@ build as your OpenAPI file:
   credentials as `{{variable}}` references named after your security schemes.
 - **Request bodies** are generated from each schema, so a request is runnable rather than empty, and
   every documented response is saved as an example.
+- **Your own examples win.** Where a request body, response or parameter publishes an
+  [`#[Example]`](/laravel/documenting/responses/#example-payloads), the collection sends that payload
+  rather than one derived from the shape; a map of several is read by its lowest key, the same rule
+  every other reader of the document uses.
 
 Postman cannot hold a JSON Schema, so a collection is a weaker contract than the OpenAPI file — keep
 emitting both. Where something has no Postman equivalent at all (webhooks, callbacks, `mutualTLS` and
