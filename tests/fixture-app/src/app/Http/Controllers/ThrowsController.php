@@ -37,6 +37,18 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 1b: the same two calls with their status named rather than counted, which is the form a
+     * position-counting reader would see no status in at all. Statuses distinct from case 1's so the
+     * recovered value can only have come from the named argument.
+     */
+    public function namedAbortAction(int $id): void
+    {
+        abort_if($id === 0, code: 418);
+
+        abort(code: 451, message: 'gone');
+    }
+
+    /**
      * Case 2: $this->authorize(...) via AuthorizesRequests. No @throws upstream,
      * so PHPStan can only see an implicit Throwable — Layer 2 maps authorize →
      * AuthorizationException (403).
