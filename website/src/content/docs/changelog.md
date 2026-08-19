@@ -13,6 +13,13 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.6.1
+
+### Performance
+
+- **inference-phpstan**: replay a recorded file walk instead of re-running the resolver ([#128](https://github.com/docuccino/docuccino/pull/128))
+- **inference-phpstan**: harvest a file's methods, closures and assignments in one pass ([#127](https://github.com/docuccino/docuccino/pull/127))
+
 ## v0.6.0
 
 ### Breaking changes
