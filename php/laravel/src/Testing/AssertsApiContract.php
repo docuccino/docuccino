@@ -117,11 +117,11 @@ trait AssertsApiContract
             ));
         }
 
-        $old = self::decodeDocument($json, $build->absolute($target->path));
+        $old = ContractBuild::indexOf($json, $build->absolute($target->path));
         $new = $build->fresh();
 
         try {
-            $changeset = (new DocumentDiffer)->diff(UirDocument::fromArray($old), $new);
+            $changeset = (new DocumentDiffer)->diff(UirDocument::fromArray($old->document()), $new);
         } catch (IncomparableDocumentsException $exception) {
             Assert::fail($exception->getMessage());
         }
@@ -129,7 +129,7 @@ trait AssertsApiContract
         Assert::assertFalse($changeset->isBreaking(), ContractMessages::breaking(
             $changeset,
             ContractIndex::fromArray($new->toArray()),
-            ContractIndex::fromArray($old),
+            $old,
             'If the change is deliberate, re-export the artifact and raise the document version: php artisan docuccino:export',
         ));
     }
@@ -219,43 +219,19 @@ trait AssertsApiContract
         }
 
         try {
-            $decoded = json_decode($committed, true, 512, JSON_THROW_ON_ERROR);
+            $old = ContractIndex::fromJson($committed);
         } catch (JsonException) {
             return [null, null, null];
         }
 
-        if (! is_array($decoded)) {
-            return [null, null, null];
-        }
-
-        /** @var array<string, mixed> $decoded */
         $new = $build->fresh();
 
         try {
-            $changeset = (new DocumentDiffer)->diff(UirDocument::fromArray($decoded), $new);
+            $changeset = (new DocumentDiffer)->diff(UirDocument::fromArray($old->document()), $new);
         } catch (IncomparableDocumentsException) {
             return [null, null, null];
         }
 
-        return [$changeset, ContractIndex::fromArray($new->toArray()), ContractIndex::fromArray($decoded)];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function decodeDocument(string $json, string $path): array
-    {
-        try {
-            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
-            throw UnreadableContract::notJson($path, $exception->getMessage());
-        }
-
-        if (! is_array($decoded)) {
-            throw UnreadableContract::notJson($path, 'its JSON is not an object');
-        }
-
-        /** @var array<string, mixed> */
-        return $decoded;
+        return [$changeset, ContractIndex::fromArray($new->toArray()), $old];
     }
 }
