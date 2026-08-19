@@ -102,6 +102,28 @@ it('warns that a controller edit will not rebuild when nothing was stored', func
         ->assertExitCode(0);
 });
 
+it('says that a cached configuration pins the fragment cache off, and how to unpin it', function (): void {
+    // What `php artisan config:cache` leaves behind: the memo Application::configurationIsCached()
+    // answers from, with docuccino.cache.enabled baked to the env default of false.
+    app()->instance('config_loaded_from_cache', true);
+    scriptWatch(1);
+
+    $this->artisan('docuccino:watch')
+        ->expectsOutputToContain('Your configuration is cached')
+        ->expectsOutputToContain('php artisan config:clear')
+        ->assertExitCode(0);
+});
+
+it('says nothing about a cached configuration that baked the fragment cache on', function (): void {
+    app()->instance('config_loaded_from_cache', true);
+    config()->set('docuccino.cache.enabled', true);
+    scriptWatch(1);
+
+    $this->artisan('docuccino:watch')
+        ->doesntExpectOutputToContain('Your configuration is cached')
+        ->assertExitCode(0);
+});
+
 it('rebuilds when a watched file moves', function (): void {
     $watched = $this->fixture->path('app/InvoiceController.php');
     $this->fixture->storeFragment([$watched], 'watched');
