@@ -1,10 +1,10 @@
 ---
 title: Commands
-description: The seven docuccino artisan commands — export, validate, diff, cache, clear, watch and explain — with every flag, default and exit code.
+description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch and explain — with every flag, default and exit code.
 ---
 
 
-Docuccino registers seven artisan commands. Every one exits `0` on success and `1` on failure, so
+Docuccino registers the artisan commands below. Every one exits `0` on success and `1` on failure, so
 each is safe to gate a CI job on. [`docuccino:explain`](#docuccinoexplain) adds one more code — `2`,
 for a query that named several operations — so a script can tell "not found" from "be more specific".
 
@@ -16,19 +16,78 @@ Shared behavior:
   so you can always flush the cache.
 - **`{document?}` argument.** Omit it to run over *every* configured document; pass a key to run
   one. **`docuccino:diff` is the exception** — with no `{document}` it diffs the `default`
-  document only, never all of them. An unknown key errors and exits `1`. Per-document results
+  document only, never all of them. `docuccino:install` takes no `{document}` at all: it reports on
+  every configured document. An unknown key errors and exits `1`. Per-document results
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
-  deterministic order; `diff`, `clear` and `explain` print none. `watch` prints whatever the export it
-  runs prints.
+  deterministic order; `diff`, `clear` and `explain` print none. `watch` and `install` print whatever
+  the export they run prints, and nothing of their own — what they report is about your setup rather
+  than about the document, which is a console message.
 - **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
-  `diff`, `cache`, `watch`, `explain` — since inference runs a static analyzer inside the artisan
-  process.
+  `diff`, `cache`, `watch`, `explain`, `install` — since inference runs a static analyzer inside the
+  artisan process.
   Raise-only: a process already running with a higher limit is left alone, and `-1` is rejected. Same
   lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins.
   `clear` builds nothing, so it doesn't take it.
 - **Long-running.** Every command runs once and exits, except `docuccino:watch`, which stays in the
   foreground until you stop it.
+
+## `docuccino:install`
+
+Set Docuccino up in this application and generate a first document.
+
+```
+docuccino:install
+    {--force : Replace an existing config/docuccino.php with the shipped defaults}
+    {--no-export : Set up without generating a first document}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `--force` | flag / off | Replaces an existing `config/docuccino.php` with the shipped defaults. Without it an existing file is never touched — the command says it left it alone and names this flag. |
+| `--no-export` | flag / off | Finishes the setup without generating a document. Otherwise the command offers one, and `--no-interaction` takes the prompt's default, which is yes. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit before the first export runs — see the shared-behavior note above. |
+
+The one command you run once rather than on every change, and the only one that writes anything
+outside an export path. Four steps, in order:
+
+1. **Config.** Publishes `config/docuccino.php` — the same file, byte for byte, that
+   `vendor:publish --tag=docuccino-config` writes. An existing file is left exactly as it is unless
+   you pass `--force`, so a second run changes nothing.
+2. **Routes.** Reads your router and reports how many routes each configured document really matches.
+   The count comes from the same resolver a build uses — attribute exclusions, closure filters and
+   vendor package routes already subtracted — so it is the number your next export will document.
+3. **Engine.** Says whether the analysis engine is installed and, when it isn't, prints the one
+   command that fixes it alongside what the document loses meanwhile. Nothing here needs the engine:
+   the command runs, and reports, either way.
+4. **First document.** Offers to run [`docuccino:export`](#docuccinoexport), then prints the viewer
+   URL for each document and the commands worth knowing next.
+
+**When nothing matches.** The shipped [`routes.include`](/laravel/reference/configuration/#routes) is
+`api/*`, and plenty of applications version their API somewhere else. Rather than leaving you to
+guess, the routes step lists the prefixes your routes actually sit under, busiest first, and names the
+value that would pick one up:
+
+```text
+Routes
+──────
+"default" documents 0 of the 42 routes this application publishes (include: api/*).
+
+"default" matched nothing. Your routes sit under:
+
+  Prefix   Routes
+  ───────  ──────
+  v1/*     31
+  admin/*  11
+
+Set documents.default.routes.include in config/docuccino.php — e.g. ['v1/*'].
+```
+
+An application with no routes to document yet gets a sentence saying so, not a failure.
+
+Exits `1` on a disabled install, a `config/docuccino.php` it could not write, or a failed first
+export — setup succeeding while the export fails is still a failure.
 
 ## `docuccino:export`
 
@@ -669,6 +728,7 @@ What counts as failure:
 
 | Command | Exits `1` when |
 | --- | --- |
+| `install` | disabled; `config/docuccino.php` could not be written; the first export failed |
 | `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an unaccepted diagnostic matches `--fail-on` |
 | `validate` | disabled; unknown `--fail-on` value; unknown document key; **any** schema violation (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |

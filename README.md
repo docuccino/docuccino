@@ -34,7 +34,7 @@ Where do your docs need to be readable? That's what decides how you install.
 ```bash
 composer require docuccino/laravel                   # ships to production
 composer require --dev docuccino/inference-phpstan   # powers type inference
-php artisan docuccino:export                         # → docs/openapi.json
+php artisan docuccino:install                        # config, route check, → docs/openapi.json
 ```
 
 **Docs in development only**, or **hosted somewhere else** (ReadMe, Bump.sh, any OpenAPI host) — keep
@@ -43,15 +43,16 @@ nothing of Docuccino at all:
 
 ```bash
 composer require --dev docuccino/laravel docuccino/inference-phpstan
-php artisan docuccino:export                         # then upload the artifact, if it's hosted
+php artisan docuccino:install                        # then upload the artifact, if it's hosted
 ```
 
 Either way analysis is a build-time job: the inference engine (PHPStan + Larastan) runs wherever you
 generate the document, never on a production host.
 
 Then open the bundled **Scalar** viewer at `/docs/api` (available in `local` by default; gate it to
-expose it elsewhere). Publishing the config (`php artisan vendor:publish --tag="docuccino-config"`) is
-optional — the defaults are live either way. Full walkthrough:
+expose it elsewhere). `docuccino:install` publishes `config/docuccino.php`, tells you how many of your
+routes the default `api/*` pattern matches, and writes the first document — the defaults are live with
+or without the published file, and it never replaces one you already have. Full walkthrough:
 **[Getting started](https://docs.docuccino.app/laravel/getting-started/)**.
 
 ## Why Docuccino

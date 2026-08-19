@@ -25,9 +25,11 @@ use Docuccino\Laravel\Commands\ClearCommand;
 use Docuccino\Laravel\Commands\DiffCommand;
 use Docuccino\Laravel\Commands\ExplainCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
+use Docuccino\Laravel\Commands\InstallCommand;
 use Docuccino\Laravel\Commands\MemoryLimitOption;
 use Docuccino\Laravel\Commands\ValidateCommand;
 use Docuccino\Laravel\Commands\WatchCommand;
+use Docuccino\Laravel\Config\ConfigPublisher;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Config\LeakageOptions;
 use Docuccino\Laravel\Engine\ConsoleBuild;
@@ -57,6 +59,7 @@ use Docuccino\Laravel\Pipeline\FragmentStore;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Routing\ResolvedRouteIndex;
+use Docuccino\Laravel\Routing\RouteSurvey;
 use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Runtime\DocumentCache;
 use Docuccino\Laravel\Watch\ArtisanBuildRunner;
@@ -100,6 +103,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
             ->name('docuccino')
             ->hasConfigFile()
             ->hasCommands([
+                InstallCommand::class,
                 ExportCommand::class,
                 ValidateCommand::class,
                 DiffCommand::class,
@@ -123,10 +127,18 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->scoped(HandlerDeferralLog::class);
 
         // Vendor-package controller routes are excluded by default (route:list --except-vendor
-        // semantics); this is the boundary.
-        $this->app->when(LaravelRouteResolver::class)
+        // semantics); this is the boundary. The install command's route survey reads the same one, so
+        // what it reports as documentable is what a build would actually document.
+        $this->app->when([LaravelRouteResolver::class, RouteSurvey::class])
             ->needs(VendorRoutePolicy::class)
             ->give(fn (): VendorRoutePolicy => new VendorRoutePolicy($this->app->basePath('vendor')));
+
+        // `docuccino:install` publishes the same file, from the same place, that
+        // `vendor:publish --tag=docuccino-config` does.
+        $this->app->bind(ConfigPublisher::class, fn (Application $app): ConfigPublisher => new ConfigPublisher(
+            source: dirname(__DIR__).'/config/docuccino.php',
+            target: $app->configPath('docuccino.php'),
+        ));
 
         // Provenance `source.file` paths are relative to the app base path (design §4); the resolver
         // falls back to a composer-root walk for files outside it (the workbench).
