@@ -42,7 +42,10 @@ final class ArtifactLocator
 
         foreach (Formats::contractPreference() as $format) {
             foreach ($targets as $target) {
-                if ($target->format === $format) {
+                // A YAML target holds the same document, but the contract is read as JSON — the same
+                // guard {@see AssertsApiContract::staleDetail()} applies. Preferring one over a JSON
+                // target the document also exports would hand the assertions a file they cannot read.
+                if ($target->format === $format && ! $target->yaml()) {
                     return $target;
                 }
             }
