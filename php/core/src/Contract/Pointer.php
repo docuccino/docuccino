@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Contract;
 
+use Docuccino\Core\Support\Arr;
+
 /**
  * RFC 6901 pointer arithmetic — the one place `~` and `/` get escaped, so a path key like
  * `/api/invoices/{invoice}` survives being spelled as a pointer segment.
@@ -31,6 +33,12 @@ final class Pointer
     public static function escape(string $segment): string
     {
         return str_replace(['~', '/'], ['~0', '~1'], $segment);
+    }
+
+    /** The inverse. `~1` before `~0`, or an escaped `~1` would come back as a `/`. */
+    public static function unescape(string $segment): string
+    {
+        return str_replace(['~1', '~0'], ['/', '~'], $segment);
     }
 
     /**
@@ -71,14 +79,6 @@ final class Pointer
      */
     public static function read(array $document, array $segments): mixed
     {
-        $node = $document;
-        foreach ($segments as $segment) {
-            if (! is_array($node) || ! array_key_exists($segment, $node)) {
-                return null;
-            }
-            $node = $node[$segment];
-        }
-
-        return $node;
+        return Arr::valueAt($document, $segments);
     }
 }

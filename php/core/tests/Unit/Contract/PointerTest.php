@@ -15,6 +15,16 @@ it('escapes the two characters a pointer segment cannot hold', function (array $
     'an index' => [['parameters', 0], '/parameters/0'],
 ]);
 
+it('unescapes back to the segment it started as', function (array $segments): void {
+    // `~1` first on the way back, or an escaped `~1` returns as a `/` the author never wrote.
+    foreach ($segments as $segment) {
+        expect(Pointer::unescape(Pointer::escape((string) $segment)))->toBe((string) $segment);
+    }
+})->with([
+    'the characters the RFC escapes' => [['/api/invoices', 'a~b', '~/', '~1', '~0']],
+    'segments with nothing to escape' => [['paths', '', 'get', 0]],
+]);
+
 it('appends one segment to a pointer', function (): void {
     expect(Pointer::append('/paths', '/api/x'))->toBe('/paths/~1api~1x');
 });

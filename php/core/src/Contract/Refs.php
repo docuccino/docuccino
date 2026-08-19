@@ -63,11 +63,6 @@ final class Refs
      */
     private static function segments(string $ref): array
     {
-        $parts = explode('/', substr($ref, 2));
-
-        return array_map(
-            static fn (string $part): string => str_replace(['~1', '~0'], ['/', '~'], $part),
-            $parts,
-        );
+        return array_map(Pointer::unescape(...), explode('/', substr($ref, 2)));
     }
 }
