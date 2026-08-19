@@ -39,6 +39,12 @@ final class ContractChecker
         );
     }
 
+    /**
+     * One half of {@see check()}, which is the entry point — these two are separate only so a test can
+     * reach a pairing check() cannot produce.
+     *
+     * @internal
+     */
     public function response(ContractOperation $operation, Exchange $exchange): Outcome
     {
         $document = $this->index->document();
@@ -88,6 +94,11 @@ final class ContractChecker
         );
     }
 
+    /**
+     * The other half. {@see response()}.
+     *
+     * @internal
+     */
     public function request(ContractOperation $operation, Exchange $exchange): Outcome
     {
         $violations = $this->parameters($operation, $exchange);
