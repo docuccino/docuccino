@@ -96,3 +96,21 @@ it('adding an unrelated operation leaves the others reported identically', funct
     expect(array_map(static fn (object $d): string => $d->message, $after))
         ->toBe([$before[0]->message, 'GET /api/b publishes neither a summary nor a description, so the document never says what it does.', $before[1]->message]);
 });
+
+it('warns on a webhook with no prose, and points at the class rather than an action', function () use ($on): void {
+    $document = lintDocument([], webhooks: ['POST invoice.paid' => []]);
+
+    $findings = lintDiagnostics(new MissingDescriptionLint($on), $document);
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->code)->toBe('lint.missing-description')
+        ->and($findings[0]->message)->toContain('POST webhooks.invoice.paid')
+        ->and($findings[0]->help)->toContain('webhook class')
+        ->and($findings[0]->help)->toContain('lint.descriptions.allow');
+});
+
+it('stays quiet on a webhook that carries prose', function () use ($on): void {
+    $document = lintDocument([], webhooks: ['POST invoice.paid' => ['summary' => 'An invoice was paid.']]);
+
+    expect(lintDiagnostics(new MissingDescriptionLint($on), $document))->toBe([]);
+});

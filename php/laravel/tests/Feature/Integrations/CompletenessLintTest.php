@@ -123,3 +123,40 @@ it('moves no byte of the emitted document, whatever the rules are set to', funct
 
     expect($loud)->toBe($quiet);
 });
+
+it('lints a webhook the way it lints a route, and names the lever that renames it', function (): void {
+    bindStubEngine();
+
+    $result = generateDocument(withLintWebhooks());
+
+    $findings = diagnosticsCoded($result->diagnostics, 'lint.operation-id-style');
+
+    // On by default, so a #[Webhook] name no client can name a method after is caught out of the box.
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->severity)->toBe(Severity::Warning)
+        ->and($findings[0]->message)->toContain('"1 form submitted!"')
+        ->and($findings[0]->message)->toContain('POST webhooks.1 form submitted!')
+        ->and($findings[0]->help)->toContain('#[Webhook]')
+        // The class the attribute was written on, so the reader goes straight there.
+        ->and($findings[0]->source?->file)->toContain('Webhooks/Lint/FormSubmitted.php');
+});
+
+it('reports the prose and tag holes a webhook has once their rules are enabled', function (): void {
+    bindStubEngine();
+
+    $result = generateDocument(withLintWebhooks(static function (array $raw): array {
+        config()->set('docuccino.lint.descriptions.enabled', true);
+        config()->set('docuccino.lint.tags.enabled', true);
+        $raw['tags']['definitions'] = [['name' => 'Invoices', 'description' => 'Billing documents.']];
+
+        return $raw;
+    }));
+
+    $prose = array_map(static fn ($d): string => $d->message, diagnosticsCoded($result->diagnostics, 'lint.missing-description'));
+    $tags = array_map(static fn ($d): string => $d->message, diagnosticsCoded($result->diagnostics, 'lint.undocumented-tag'));
+
+    // The webhook with no docblock, alongside the workbench routes that have none.
+    expect(implode("\n", $prose))->toContain('POST webhooks.1 form submitted!')
+        // …and the tag only the well-formed webhook carries, which nothing else would have seen.
+        ->and(implode("\n", $tags))->toContain('"Billing"');
+});

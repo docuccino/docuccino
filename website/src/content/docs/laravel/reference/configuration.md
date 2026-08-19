@@ -511,10 +511,14 @@ Deliberately operations only. Parameters and schema properties were measured on 
 fire on 40% and 98% of their populations respectively, almost all of it where there's nothing to write —
 a route-model-bound `{invoice}`, a column whose name is the whole story.
 
+[Webhooks](/laravel/documenting/webhooks/) are operations too, and are checked the same way — the
+docblock to write is the one on the `#[Webhook]` class. A webhook is named `POST webhooks.invoice.paid`
+in the message and in the safelist, since it's published under a name rather than a path.
+
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `false` | Turn the pass on/off. |
-| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`) or by `operationId`. |
+| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`, `POST webhooks.invoice.paid`) or by `operationId`. |
 
 ### Operation ids
 
@@ -526,8 +530,13 @@ codegen or arrives renamed to something nobody wrote.
 The alphabet is wider than an identifier's on purpose: `.`, `-` and `@` are what the `route-name` and
 `controller-method` [id strategies](#representation) mint, and every generator in this space folds them.
 So nothing Docuccino produces can trip this rule — a finding is always on a string somebody typed, in
-an [`#[OperationId]`](/laravel/reference/attributes/#operationid) or a route name, and can be typed
-differently. That's why it's on by default.
+an [`#[OperationId]`](/laravel/reference/attributes/#operationid), a route name or a
+[`#[Webhook]`](/laravel/documenting/webhooks/) name, and can be typed differently. That's why it's on by
+default.
+
+A webhook is published under its name, so that name *is* its `operationId` and renaming the attribute is
+what fixes it — `#[OperationId]` doesn't reach a webhook. The message and the safelist name it
+`POST webhooks.invoice.paid`.
 
 Duplicate ids are a separate check with a better vantage point: `route.duplicate-operation-id` reports
 them where the pair is met, naming both routes.
@@ -535,13 +544,14 @@ them where the pair is met, naming both routes.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `true` | Turn the pass on/off. |
-| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`) or by the id itself. |
+| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`, `POST webhooks.invoice.paid`) or by the id itself. |
 
 ### Undocumented tags
 
 `lint.undocumented-tag` warns on a tag your operations carry that [`tags.definitions`](#tags)
 never declares, so it reaches the reader as a bare heading among tags that have a summary, a
-description and a place in the hierarchy.
+description and a place in the hierarchy. A tag a [webhook](/laravel/documenting/webhooks/) puts on
+itself with `#[Group]` counts, whether or not any route carries it.
 
 It says nothing at all until the document declares at least one tag. Undeclared tags are the normal,
 correct state for an API that never curated them, and "you forgot this one" only means something once

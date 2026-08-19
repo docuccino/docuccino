@@ -87,3 +87,39 @@ it('reports one finding per offending operation, in signature order', function (
         ->and(lintDiagnostics(new OperationIdStyleLint, $document)[0]->message)->toContain('GET /api/a')
         ->and(lintDiagnostics(new OperationIdStyleLint, $document)[1]->message)->toContain('POST /api/z');
 });
+
+it('warns on a webhook name a generated client cannot name a method after, and names the lever that renames it', function (): void {
+    $document = lintDocument([], webhooks: ['POST 1 form submitted!' => ['operationId' => '1 form submitted!']]);
+
+    $findings = lintDiagnostics(new OperationIdStyleLint, $document);
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->code)->toBe('lint.operation-id-style')
+        ->and($findings[0]->message)->toContain('POST webhooks.1 form submitted!')
+        // #[OperationId] never reaches a webhook, so the help names the attribute that does.
+        ->and($findings[0]->help)->toContain('#[Webhook]')
+        ->and($findings[0]->help)->not->toContain('#[OperationId]')
+        ->and($findings[0]->help)->toContain('lint.operation_ids.allow');
+});
+
+it('names #[OperationId] for a route and #[Webhook] for a webhook', function (): void {
+    $document = lintDocument(
+        ['GET /api/users' => ['operationId' => 'list users']],
+        webhooks: ['POST bad name' => ['operationId' => 'bad name']],
+    );
+
+    $helps = array_map(static fn (object $d): ?string => $d->help, lintDiagnostics(new OperationIdStyleLint, $document));
+
+    expect($helps)->toHaveCount(2)
+        ->and($helps[0])->toContain('#[OperationId]')
+        ->and($helps[1])->toContain('#[Webhook]');
+});
+
+it('silences a webhook finding by signature and by operationId', function (string $allow): void {
+    $document = lintDocument([], webhooks: ['POST bad name' => ['operationId' => 'bad name']]);
+
+    expect(lintDiagnostics(new OperationIdStyleLint(new LintRuleOptions(allow: [$allow])), $document))->toBe([]);
+})->with([
+    'by signature' => ['POST webhooks.bad name'],
+    'by operationId' => ['bad name'],
+]);

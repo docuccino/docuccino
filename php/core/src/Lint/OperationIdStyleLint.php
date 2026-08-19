@@ -16,8 +16,8 @@ use Docuccino\Core\Extensions\Document\UirDocumentDraft;
  * one either fails codegen or arrives renamed to something nobody wrote.
  *
  * On by default because it cannot fire on anything Docuccino mints — both id strategies produce ids
- * this passes — so every finding is on a string somebody typed, in an `#[OperationId]` or a route
- * name, and can be typed differently.
+ * this passes — so every finding is on a string somebody typed, in an `#[OperationId]`, a route name
+ * or a `#[Webhook]` name, and can be typed differently.
  *
  * Diagnostics only — it never mutates the document.
  */
@@ -49,8 +49,21 @@ final class OperationIdStyleLint implements DocumentTransformer
                 code: 'lint.operation-id-style',
                 message: sprintf('operationId "%s" on %s %s, so a generated client cannot name a method after it.', $operationId, $operation->signature, $problem),
                 source: $operation->source(),
-                help: 'Give it an id built from letters, digits and . - _ @ with #[OperationId], or rename the route. If your generator copes, safelist it under lint.operation_ids.allow.',
+                help: self::help($operation),
             ));
         }
+    }
+
+    /**
+     * Which lever renames it. A webhook is published under its `#[Webhook]` name and never reaches
+     * the operation extensions, so `#[OperationId]` would do nothing there.
+     */
+    private static function help(LintOperation $operation): string
+    {
+        $lever = $operation->webhook
+            ? 'Rename the #[Webhook] to a name built from letters, digits and . - _ @ — a webhook is published under its name.'
+            : 'Give it an id built from letters, digits and . - _ @ with #[OperationId], or rename the route.';
+
+        return $lever.' If your generator copes, safelist it under lint.operation_ids.allow.';
     }
 }

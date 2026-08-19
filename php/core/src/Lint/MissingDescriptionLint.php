@@ -14,7 +14,8 @@ use Docuccino\Core\Extensions\Document\UirDocumentDraft;
  * Warns on an operation that publishes neither a summary nor a description — the one completeness
  * hole a reader of the document cannot work around, since nothing else says what the endpoint does.
  *
- * Deliberately operations only. Parameters and schema properties were measured on the workbench and
+ * Deliberately operations only — routes and webhooks alike, since a webhook class has a docblock to
+ * write in just as an action does. Parameters and schema properties were measured on the workbench and
  * fire on 40% and 98% of their populations, almost all of it where there is nothing to write (a
  * route-model-bound `{user}`, a column whose name is the whole story) — a rule that fires there
  * trains people to ignore the channel. Off by default for the same reason at a different scale: on
@@ -45,7 +46,10 @@ final class MissingDescriptionLint implements DocumentTransformer
                 code: 'lint.missing-description',
                 message: sprintf('%s publishes neither a summary nor a description, so the document never says what it does.', $operation->signature),
                 source: $operation->source(),
-                help: 'Give the action a docblock — its first line becomes the summary and the rest the description — or write one in an overlay. If it is genuinely self-describing, safelist it under lint.descriptions.allow.',
+                help: sprintf(
+                    'Give the %s a docblock — its first line becomes the summary and the rest the description — or write one in an overlay. If it is genuinely self-describing, safelist it under lint.descriptions.allow.',
+                    $operation->webhook ? 'webhook class' : 'action',
+                ),
             ));
         }
     }

@@ -92,3 +92,27 @@ it('reports undeclared tags in name order whatever order the routes arrive in', 
         ->and($messages($forwards)[0])->toContain('"Alpha"')
         ->and($messages($forwards)[1])->toContain('"Zebra"');
 });
+
+it('sees a tag only a webhook carries, and names the webhook as the example', function () use ($on): void {
+    $document = lintDocument(
+        ['GET /api/invoices' => ['tags' => ['Invoices']]],
+        [['name' => 'Invoices', 'description' => 'Billing documents.']],
+        ['POST form.submitted' => ['tags' => ['Forms']]],
+    );
+
+    $findings = lintDiagnostics(new UndocumentedTagLint($on), $document);
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->message)->toContain('"Forms"')
+        ->and($findings[0]->message)->toContain('POST webhooks.form.submitted');
+});
+
+it('names a route ahead of a webhook when both carry the undeclared tag', function () use ($on): void {
+    $document = lintDocument(
+        ['GET /api/forms' => ['tags' => ['Forms']]],
+        [['name' => 'Invoices']],
+        ['POST form.submitted' => ['tags' => ['Forms']]],
+    );
+
+    expect(lintDiagnostics(new UndocumentedTagLint($on), $document)[0]->message)->toContain('GET /api/forms');
+});

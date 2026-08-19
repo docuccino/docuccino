@@ -633,11 +633,19 @@ when a registration path exists and the `emit()` signature settles.
     and `UndocumentedTagLint` are the completeness ones, sharing `LintRuleOptions` (off-switch +
     safelist) and `LintOperation` (the signature-ordered walk, so a finding's place never depends
     on the order its route was met).
+    `LintOperation` walks BOTH headings: a webhook is an operation too, and its operationId, its
+    prose and its tags are all author-typed. It is named `METHOD webhooks.<name>` — the differ's
+    vocabulary, and what a webhook's own diagnostics already say — which keeps it out of the space a
+    path template occupies, since a path always begins with `/`. Where the lever differs the help
+    does: `#[OperationId]` never reaches a webhook, so the rename it names is the `#[Webhook]`.
     **Every one of them owes a firing population before it ships**, per the diagnostics rule:
     measured against the workbench, the prose rule fires on 2 of 23 operations (both actionable) and
     the other two fire zero times; only the operationId rule is on by default, because it is the only
-    one whose worst case is bounded — it cannot fire on anything Docuccino mints. The rules
-    considered and rejected on the same measurement are worth keeping in mind before adding
+    one whose worst case is bounded — it cannot fire on anything Docuccino mints. The webhook half of
+    that population is 3 operations across the goldens and 0 hits on all three rules, so extending the
+    walk added no noise to anything shipped — and every hit it CAN produce names a `#[Webhook]`
+    argument or a class docblock, which is the most actionable population any of the three has. The
+    rules considered and rejected on the same measurement are worth keeping in mind before adding
     another: parameter descriptions 35/88, schema-property descriptions 224/229, missing examples
     110/117, missing operationId 110/117, no-error-responses 67/117.
   - Pipeline engine = core (`Core\Pipeline\{Assembler, FragmentCache, OperationPipeline,

@@ -68,3 +68,44 @@ it('silences a subject named in the safelist and nothing else', function (): voi
         ->and($options->silences(null, null))->toBeFalse()
         ->and((new LintRuleOptions)->silences('GET /api/ping'))->toBeFalse();
 });
+
+it('finds a webhook under every method a path item can carry, named the way the differ names it', function (string $method): void {
+    $operations = LintOperation::all(['webhooks' => ['invoice.paid' => [$method => ['summary' => 'Paid.']]]]);
+
+    expect($operations)->toHaveCount(1)
+        ->and($operations[0]->signature)->toBe(strtoupper($method).' webhooks.invoice.paid')
+        ->and($operations[0]->webhook)->toBeTrue();
+})->with(PathItem::METHODS);
+
+it('degrades to nothing on a document with no readable webhooks', function (mixed $webhooks): void {
+    expect(LintOperation::all(['webhooks' => $webhooks]))->toBe([]);
+})->with([
+    'not a map' => ['invoice.paid'],
+    'items that are not maps' => [['invoice.paid' => 'post']],
+    'operations that are not maps' => [['invoice.paid' => ['post' => 'ok']]],
+]);
+
+it('answers the paths before the webhooks, each in signature order', function (): void {
+    $operations = LintOperation::all([
+        'webhooks' => ['z.late' => ['post' => []], 'a.early' => ['post' => []]],
+        'paths' => ['/api/z' => ['post' => []], '/api/a' => ['get' => []]],
+    ]);
+
+    expect(array_map(static fn (LintOperation $o): string => $o->signature, $operations))
+        ->toBe(['GET /api/a', 'POST /api/z', 'POST webhooks.a.early', 'POST webhooks.z.late'])
+        ->and(array_map(static fn (LintOperation $o): bool => $o->webhook, $operations))
+        ->toBe([false, false, true, true]);
+});
+
+it('adding a webhook moves nothing about the operations already there', function (): void {
+    $signatures = static fn (array $document): array => array_map(
+        static fn (LintOperation $o): string => $o->signature,
+        LintOperation::all($document),
+    );
+
+    $before = ['paths' => ['/api/a' => ['get' => []]], 'webhooks' => ['b.happened' => ['post' => []]]];
+    $after = ['paths' => ['/api/a' => ['get' => []]], 'webhooks' => ['a.happened' => ['post' => []], 'b.happened' => ['post' => []]]];
+
+    expect($signatures($before))->toBe(['GET /api/a', 'POST webhooks.b.happened'])
+        ->and($signatures($after))->toBe(['GET /api/a', 'POST webhooks.a.happened', 'POST webhooks.b.happened']);
+});

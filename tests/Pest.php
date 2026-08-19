@@ -1047,24 +1047,52 @@ function lintDiagnostics(DocumentTransformer $rule, array $document): array
 }
 
 /**
- * A minimal assembled document: operations keyed `METHOD /path`, plus the top-level tag declarations.
+ * A minimal assembled document: operations keyed `METHOD /path`, webhooks keyed `METHOD name`, plus
+ * the top-level tag declarations.
  *
  * @param  array<string, array<string, mixed>>  $operations
  * @param  list<array<string, mixed>>  $tags
+ * @param  array<string, array<string, mixed>>  $webhooks
  * @return array<string, mixed>
  */
-function lintDocument(array $operations, array $tags = []): array
+function lintDocument(array $operations, array $tags = [], array $webhooks = []): array
 {
-    $paths = [];
-    foreach ($operations as $signature => $operation) {
-        [$method, $path] = explode(' ', $signature, 2);
-        $paths[$path][strtolower($method)] = $operation;
-    }
+    $keyed = static function (array $nodes): array {
+        $out = [];
+        foreach ($nodes as $signature => $node) {
+            [$method, $name] = explode(' ', $signature, 2);
+            $out[$name][strtolower($method)] = $node;
+        }
 
-    $document = ['info' => ['title' => 'T', 'version' => '1'], 'paths' => $paths];
+        return $out;
+    };
+
+    $document = ['info' => ['title' => 'T', 'version' => '1'], 'paths' => $keyed($operations)];
     if ($tags !== []) {
         $document['tags'] = $tags;
     }
+    if ($webhooks !== []) {
+        $document['webhooks'] = $keyed($webhooks);
+    }
 
     return $document;
+}
+
+/**
+ * Point the `default` document at the lint webhook fixtures, the way the shipped config documents it —
+ * a directory relative to the application base path — by basing the app on the adapter package, so the
+ * fixtures sit inside it exactly as `app/Webhooks` sits inside a real application.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $then  further config to mutate
+ * @return callable(array<string, mixed>): array<string, mixed>
+ */
+function withLintWebhooks(?callable $then = null): callable
+{
+    app()->setBasePath(dirname(__DIR__).'/php/laravel');
+
+    return static function (array $raw) use ($then): array {
+        $raw['webhooks'] = ['dir' => 'tests/Fixtures/Webhooks/Lint'];
+
+        return $then === null ? $raw : $then($raw);
+    };
 }
