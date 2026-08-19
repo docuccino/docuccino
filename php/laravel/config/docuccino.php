@@ -72,11 +72,11 @@ return [
             ],
 
             // 'default' documents the framework's own JSON error shapes, 'problem-details' the
-            // RFC 9457 (application/problem+json) preset, 'none' emits no error responses. A bag also
-            // picks how a 422 models its `errors`:
-            // ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'] — 'map' (field →
-            // messages) is the default, 'pointer-list' a list of {detail, pointer} objects.
+            // RFC 9457 (application/problem+json) preset, 'none' emits no error responses.
             'error_responses' => 'default',
+            // The bag form also picks how a 422 models its `errors`: 'map' (field to messages) is the
+            // default, 'pointer-list' a list of {detail, pointer} objects.
+            // 'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
 
             'tags' => [
                 // How an operation with no #[Group] is tagged: 'controller' (InvoiceController →
@@ -173,7 +173,8 @@ return [
             'export' => [
                 'path' => 'docs/openapi.json',
                 // A list of targets REPLACES `path`: one build, one artifact per entry. One target per
-                // format, and the extension picks the serialisation (.yaml/.yml emit YAML).
+                // format — openapi-3.2, openapi-3.1, openapi-3.0, uir, postman — and the extension
+                // picks the serialisation (.yaml/.yml emit YAML).
                 // 'targets' => [
                 //     ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
                 //     ['format' => 'openapi-3.1', 'path' => 'docs/openapi-3.1.yaml'],

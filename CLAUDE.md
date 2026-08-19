@@ -178,7 +178,9 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   Under-keying is a correctness bug and over-keying only a cost — key more when in doubt.
 - **Config surface**: `php/laravel/config/docuccino.php` is framework-config style — every
   option present, optional ones commented out, one short comment each. A key the code reads must
-  appear there, and the website's configuration reference must stay in sync with it. It must also stay
+  appear there, and the website's configuration reference must document it — key for key, commented
+  options included, which `ConfigReferenceSyncTest` checks in both directions (a new section of that
+  page needs a line in `CONFIG_REFERENCE_SECTIONS`). It must also stay
   **pure data** — no imports, no class references, `env()` the only call — so a dev-only install
   survives a `--no-dev` production boot, which loads every `config/` file (`ShippedConfigTest`).
 - **Comment style**: comments are small and informal. Class docblocks are 1–3 short sentences
