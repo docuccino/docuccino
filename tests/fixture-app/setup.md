@@ -348,6 +348,9 @@ does not.
 - `app/Exceptions/SpreadProblemRenderer.php` — a renderer spreading its arguments into
   `DataProblemDocument::make()`, whose every body member reads one of those parameters. Read as "the call
   site passed nothing", each member is deleted from a body that always carries it.
+- `app/Http/Controllers/TrashedFilterController.php` — `AllowedFilter::trashed($this->trashedFilterKey())`.
+  Spatie's documented `trashed` default is true of a call that passed NO name; this one passes one, so
+  publishing `trashed` names a query parameter the endpoint does not have.
 
 ### Page-size recovery
 

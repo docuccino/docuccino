@@ -778,3 +778,18 @@ it('widens a rule whose values are spread in, rather than publishing the half it
     expect($trace['widened'])->toBe(['status', 'priority'])
         ->and($trace['unrecoverable'])->toBe([]);
 })->group('fixture');
+
+it('leaves a soft-delete filter unresolved when its key is not written at the call', function (): void {
+    // Spatie documents `AllowedFilter::trashed()` as filtering on `trashed`, which is true of a call that
+    // passed NO name. This one passes one it reads from config, so the endpoint accepts some other key and
+    // publishing `trashed` names a query parameter it does not have.
+    $trace = FixtureRunner::traceQbEnrich(
+        'app/Http/Controllers/TrashedFilterController.php',
+        'App\\Http\\Controllers\\TrashedFilterController',
+        'index',
+    );
+
+    expect(array_map(static fn (array $filter): string => $filter['name'], $trace['filters']))->toBe(['status'])
+        ->and($trace['unresolved'])->toHaveCount(1)
+        ->and($trace['unresolved'][0])->toContain('TrashedFilterController.php');
+})->group('fixture');
