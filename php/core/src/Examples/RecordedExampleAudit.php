@@ -50,7 +50,12 @@ final readonly class RecordedExampleAudit implements DocumentTransformer
             $context->report(new Diagnostic(
                 severity: Severity::Info,
                 code: 'examples.recordings-empty',
-                message: sprintf('No response recordings were found in %s, so the document publishes none.', $store->directory),
+                // The configured spelling, not the resolved one: a diagnostic naming a build machine's
+                // layout reads differently on every checkout and points at nothing the reader wrote.
+                message: sprintf(
+                    'No response recordings were found in %s, so the document publishes none.',
+                    $context->config->recordingsDir() ?? $store->directory,
+                ),
                 help: 'Record some by registering Docuccino\\Laravel\\Testing\\ApiContract::record() in your test bootstrap and running the suite, or drop examples.recordings from the document config.',
             ));
 
