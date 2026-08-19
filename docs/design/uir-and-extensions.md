@@ -436,7 +436,7 @@ RouteResolvers → RouteCollection
 Phases: `Parameters | Request | Responses | Errors | Security | Overrides | Finalize`.
 Per-route failure → skeleton operation (config `on_route_error: skeleton|omit`) + error
 diagnostic. Diagnostics: `{severity, code, message, source, routeSignature, help}`,
-deterministic ordering, `--fail-on=error|warning|none`.
+deterministic ordering, `--fail-on=none|error|warning|info|hint` (a severity floor).
 
 Core value objects: `RouteContext{route, action reflection, inspection (lazy TypeEngine
 handle), attributes, docblocks, document}`; `OperationDraft` whose every write goes

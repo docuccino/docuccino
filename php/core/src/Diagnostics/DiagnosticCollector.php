@@ -77,7 +77,7 @@ final class DiagnosticCollector
 
         return [
             $diagnostic->routeSignature ?? '',
-            self::rank($diagnostic->severity),
+            -$diagnostic->severity->rank(),
             $diagnostic->code,
             $diagnostic->message,
             $source->file,
@@ -85,15 +85,5 @@ final class DiagnosticCollector
             $source->symbol ?? '',
             $diagnostic->help ?? '',
         ];
-    }
-
-    private static function rank(Severity $severity): int
-    {
-        return match ($severity) {
-            Severity::Error => 0,
-            Severity::Warning => 1,
-            Severity::Info => 2,
-            Severity::Hint => 3,
-        };
     }
 }

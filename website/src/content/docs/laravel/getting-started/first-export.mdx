@@ -295,12 +295,16 @@ a failing build:
 php artisan docuccino:export --fail-on=warning
 ```
 
+The value is a floor — anything that severity or louder fails the run.
 <Badge text="--fail-on=none" variant="default" /> never fails on severity (the default),
-<Badge text="--fail-on=warning" variant="caution" /> fails on warnings and errors, and
-<Badge text="--fail-on=error" variant="danger" /> fails only on errors. Whichever you pick, a route
-whose analysis fails still leaves a stub operation and a diagnostic behind rather than aborting the
-run, so one bad controller never costs you the rest of your docs. Set `on_route_error` to `'omit'` if
-you'd rather such a route vanished from the document than appeared as a stub.
+<Badge text="--fail-on=error" variant="danger" /> fails only on errors,
+<Badge text="--fail-on=warning" variant="caution" /> adds warnings,
+<Badge text="--fail-on=info" variant="note" /> adds the places Docuccino documented less than your
+code describes, and <Badge text="--fail-on=hint" variant="tip" /> catches everything it reported.
+Whichever you pick, a route whose analysis fails still leaves a stub operation and a diagnostic
+behind rather than aborting the run, so one bad controller never costs you the rest of your docs.
+Set `on_route_error` to `'omit'` if you'd rather such a route vanished from the document than
+appeared as a stub.
 
 If your own export came out thinner than the one above — parameters but no response bodies, an
 `engine.not-installed` warning, or nothing at all — [Troubleshooting](/laravel/guides/troubleshooting/)

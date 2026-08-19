@@ -34,7 +34,7 @@ docuccino:export
     {document? : The configured document key (defaults to every document)}
     {--format= : uir | openapi-3.2 | openapi-3.1 | openapi-3.0 | postman — writes this one format instead of the configured targets}
     {--out= : Output path (defaults to the matching target, else the document export path)}
-    {--fail-on=none : none | warning | error — the severity that makes the command exit non-zero}
+    {--fail-on=none : none | error | warning | info | hint — the quietest severity that still makes the command exit non-zero}
     {--provenance=winners : none | winners | full — UIR provenance detail}
     {--drop-ids : Omit the flat x-docuccino-id member OpenAPI output carries by default (the artifact then diffs by method + path)}
     {--yaml : Emit YAML instead of JSON}
@@ -46,7 +46,7 @@ docuccino:export
 | `document` | any configured key / all documents | Which document(s) to export. Unknown key → exit 1. |
 | `--format` | `uir` \| `openapi-3.2` \| `openapi-3.1` \| `openapi-3.0` \| `postman` / all configured targets | Writes **only** this format, replacing the document's [`export.targets`](/laravel/reference/configuration/#export) for that run. `uir` → raw UIR; `openapi-3.1` and `openapi-3.0` → the downlevel emitters; `postman` → a [Postman Collection v2.1.0](#postman-collections). An invalid value errors (no silent fallback). |
 | `--out` | path / the matching target, else [`export.path`](/laravel/reference/configuration/#export) | Overrides the output path — resolved against `base_path()` unless already absolute, and missing directories are created. Rejected when it would have to hold several artifacts at once: more than one document configured and no `document` argument, or a document with several [`export.targets`](/laravel/reference/configuration/#export) and no `--format` — in both cases each write would clobber the last. Name a document, pass `--format`, or configure per-document targets. |
-| `--fail-on` | `none` \| `warning` \| `error` / `none` | Severity that makes the exit code non-zero: `warning` fails on any warning or error; `error` fails only on errors; `none` never fails on severity. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. |
+| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | The quietest severity that still fails the run: anything reported at that severity **or louder** makes the exit code non-zero, and `none` never fails on severity. `error` catches errors only, `warning` adds warnings, `info` adds the recovery reports — an unrecoverable payload, a model with no readable columns, a validation rule that could not be read — and `hint` catches everything the build said. An invalid value errors (no silent fallback) — a typo must not quietly remove the gate. |
 | `--provenance` | `none` \| `winners` \| `full` / `winners` | UIR provenance detail. `full` keeps every record including its `overrode` trail, `winners` keeps the records but drops the trails, `none` strips provenance entirely. An invalid value errors (no silent fallback). Only `--format=uir` carries provenance — the OpenAPI emitters always drop it. |
 | `--drop-ids` | flag / off | Omits the flat `x-docuccino-id` member. OpenAPI exports carry it **by default**: `x-docuccino` itself never survives emission (it holds provenance — source file, line, symbol — which has no business in a published spec), but the id is an opaque hash of members the document already publishes, and it is what lets [`docuccino:diff`](#docuccinodiff) pair a committed artifact by identity instead of by method + path. Drop it if you want bytes indistinguishable from a hand-written spec, accepting the weaker diff. No effect on `--format=uir`, which carries identities natively. |
 | `--yaml` | flag / off | Emit YAML instead of JSON, for the single-target `--format` override. Configured targets state it in their own path instead (`.yaml`/`.yml`). Rejected with `--format=uir` and `--format=postman`, which have no YAML form. |
@@ -111,14 +111,14 @@ Validate the generated document(s) against the bundled UIR schema.
 ```
 docuccino:validate
     {document? : The configured document key (defaults to every document)}
-    {--fail-on=none : none | warning | error — extra diagnostic severity that also fails (a schema violation always fails)}
+    {--fail-on=none : none | error | warning | info | hint — quietest extra severity that also fails (a schema violation always fails)}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
 
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `document` | configured key / all | Which document(s) to validate. Unknown → exit 1. |
-| `--fail-on` | `none` \| `warning` \| `error` / `none` | *Additional* severity that also fails. Independent of the schema check. An invalid value errors, as it does on `export`. |
+| `--fail-on` | `none` \| `error` \| `warning` \| `info` \| `hint` / `none` | *Additional* severity floor that also fails, read exactly as it is on [`export`](#docuccinoexport). Independent of the schema check. An invalid value errors, as it does on `export`. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit; validation generates the document first, so it needs `export`'s headroom. |
 
 **A schema violation always fails**, even with the default `--fail-on=none` — `--fail-on` only adds
