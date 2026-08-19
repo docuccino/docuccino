@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use Docuccino\Core\Diagnostics\DiagnosticDocs;
 
 require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
 
@@ -200,4 +201,99 @@ it('names the construction sites whose code is not written beside it', function 
         'Pipeline/DocumentGenerator.php',
         'Support/MachineDependentValue.php',
     ]);
+});
+
+/*
+ * The links a build prints. A link to an anchor that is not there is worse than no link: it tells the
+ * reader the page has moved on without them. These hold the map in DiagnosticDocs to the page it
+ * points at, in both directions.
+ */
+
+/** The section anchors the page really publishes, slugified the way a heading becomes an id. */
+function diagnosticReferenceAnchors(): array
+{
+    $anchors = [];
+
+    foreach (explode("\n", diagnosticReferencePage()) as $line) {
+        if (preg_match('/^## (.+)$/', trim($line), $m) !== 1) {
+            continue;
+        }
+
+        $slug = strtolower($m[1]);
+        $slug = preg_replace('/[^a-z0-9 -]/', '', $slug) ?? '';
+        $anchors[] = trim(preg_replace('/\s+/', '-', trim($slug)) ?? '', '-');
+    }
+
+    return $anchors;
+}
+
+it('points every emitted code at an anchor the page has', function (): void {
+    $anchors = diagnosticReferenceAnchors();
+    $codes = array_keys(diagnostic_codes(diagnosticSourceDirectories()));
+
+    // Anti-vacuity: a scan that found no codes, or a page with no sections, would pass every
+    // assertion below while proving nothing.
+    expect($codes)->not->toBeEmpty()
+        ->and($anchors)->not->toBeEmpty();
+
+    $missing = [];
+    foreach ($codes as $code) {
+        $url = DiagnosticDocs::urlFor($code);
+
+        if (! str_contains($url, '#')) {
+            $missing[] = $code.' (no section mapped)';
+
+            continue;
+        }
+
+        $anchor = substr($url, strpos($url, '#') + 1);
+
+        if (! in_array($anchor, $anchors, true)) {
+            $missing[] = $code.' -> #'.$anchor;
+        }
+    }
+
+    expect($missing)->toBe([]);
+});
+
+it('maps no prefix the page cannot answer for', function (): void {
+    $anchors = diagnosticReferenceAnchors();
+    $prefixes = DiagnosticDocs::prefixes();
+
+    expect($prefixes)->not->toBeEmpty();
+
+    $dead = [];
+    foreach ($prefixes as $prefix) {
+        $anchor = substr(DiagnosticDocs::urlFor($prefix.'.probe'), strpos(DiagnosticDocs::urlFor($prefix.'.probe'), '#') + 1);
+
+        if (! in_array($anchor, $anchors, true)) {
+            $dead[] = $prefix.' -> #'.$anchor;
+        }
+    }
+
+    expect($dead)->toBe([]);
+});
+
+/*
+ * The HOST as well as the anchor. The anchor test above proves the fragment names a section that
+ * exists; it says nothing about which site the link points AT, and a link to the wrong host is
+ * broken in a way no page-source check can see. The docs site's own canonical URL is the one
+ * `website/astro.config.mjs` builds against, so read it from there rather than repeating it.
+ */
+it('points at the site the docs are actually published to', function (): void {
+    $config = (string) file_get_contents(dirname(__DIR__, 2).'/website/astro.config.mjs');
+
+    expect(preg_match("/site:\s*'([^']+)'/", $config, $m))->toBe(1);
+
+    $site = rtrim($m[1], '/');
+    $url = DiagnosticDocs::urlFor('engine.not-installed');
+
+    expect($site)->not->toBeEmpty()
+        ->and($url)->toStartWith($site.'/');
+
+    // And the CNAME the deploy actually serves from, which is what a reader's browser resolves.
+    $cname = trim((string) file_get_contents(dirname(__DIR__, 2).'/website/public/CNAME'));
+
+    expect($cname)->not->toBeEmpty()
+        ->and($url)->toStartWith('https://'.$cname.'/');
 });

@@ -14,6 +14,9 @@ naming the exact class, route or file it's about, and usually a line of help. Th
 exhaustive list. If you're working back from a symptom rather than from a code, start at
 [Troubleshooting](/laravel/guides/troubleshooting/).
 
+Every code a build reports prints a link to this page beneath it, the first time that code
+appears in a run — so a code you met in your terminal is one click from what it means.
+
 ## Severities
 
 A diagnostic's severity is what `--fail-on` gates on: pass it a floor and anything that loud or
