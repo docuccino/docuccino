@@ -36,6 +36,7 @@ use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Registry\IntegrationToggles;
+use Docuccino\Laravel\Routing\OasPath;
 use Docuccino\Laravel\Routing\RouteContextBuilder;
 use Docuccino\Laravel\Webhooks\WebhookCollector;
 use Docuccino\Laravel\Webhooks\WebhookDeclaration;
@@ -282,7 +283,7 @@ final class DocumentGenerator
         string $configHash,
         array $extensionClasses,
     ): ?OperationFragment {
-        $path = $this->oasPath($descriptor->uri);
+        $path = OasPath::of($descriptor->uri);
         // Naming the specific method keeps multi-method routes' diagnostics distinct.
         $signature = $descriptor->signature($method);
         // Minted here rather than at freeze time, so an extension keyed on the operation's identity
@@ -724,12 +725,5 @@ final class DocumentGenerator
         }
 
         return $diagnostics;
-    }
-
-    private function oasPath(string $uri): string
-    {
-        $path = preg_replace('/\{([^}]+)\?}/', '{$1}', $uri);
-
-        return $path ?? $uri;
     }
 }

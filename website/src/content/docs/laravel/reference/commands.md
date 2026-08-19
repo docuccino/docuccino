@@ -1,11 +1,12 @@
 ---
 title: Commands
-description: The six docuccino artisan commands — export, validate, diff, cache, clear and watch — with every flag, default and exit code.
+description: The seven docuccino artisan commands — export, validate, diff, cache, clear, watch and explain — with every flag, default and exit code.
 ---
 
 
-Docuccino registers six artisan commands. Every one exits `0` on success and `1` on failure, so
-each is safe to gate a CI job on.
+Docuccino registers seven artisan commands. Every one exits `0` on success and `1` on failure, so
+each is safe to gate a CI job on. [`docuccino:explain`](#docuccinoexplain) adds one more code — `2`,
+for a query that named several operations — so a script can tell "not found" from "be more specific".
 
 Shared behavior:
 
@@ -18,10 +19,11 @@ Shared behavior:
   document only, never all of them. An unknown key errors and exits `1`. Per-document results
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
-  deterministic order; `diff` and `clear` print none. `watch` prints whatever the export it runs
-  prints.
+  deterministic order; `diff`, `clear` and `explain` print none. `watch` prints whatever the export it
+  runs prints.
 - **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
-  `diff`, `cache`, `watch` — since inference runs a static analyzer inside the artisan process.
+  `diff`, `cache`, `watch`, `explain` — since inference runs a static analyzer inside the artisan
+  process.
   Raise-only: a process already running with a higher limit is left alone, and `-1` is rejected. Same
   lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins.
   `clear` builds nothing, so it doesn't take it.
@@ -435,9 +437,235 @@ Nothing goes through a shell on the way, so a project path with a space or an `&
 correctly on every platform. A rebuild that hasn't finished in 15 minutes is stopped and reported as
 a failed build, so an analysis that wedges costs you one rebuild rather than the session.
 
+## `docuccino:explain`
+
+Explain why one endpoint is documented the way it is, layer by layer.
+
+```
+docuccino:explain
+    {route : The operation — "POST /api/invoices", a URI, a route name, an operation id, or part of any of them}
+    {document? : The configured document key (defaults to every document)}
+    {--method= : Narrow a URI several verbs answer (get, post, put, patch, delete, …)}
+    {--field= : Explain one field, printing every value in full (e.g. requestBody, responses.201.description)}
+    {--json : Print the trail as JSON instead of the report}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
+```
+
+Every value in the document carries a record of who put it there —
+[provenance](/laravel/guides/how-it-works/#3-uir) — and this reads it back. Point it at an endpoint
+that looks wrong and it prints, field by field, which
+[precedence layer](/laravel/guides/how-it-works/#3-uir) won, what that value displaced, the `file:line`
+to open next, and **what to change to override it**.
+
+It reads and prints only: nothing is written, and no cache is touched.
+
+```bash
+php artisan docuccino:explain "POST /api/invoices"
+```
+
+```
+POST /api/invoices
+──────────────────
+InvoiceController@store  ·  document "default"  ·  route invoices.store
+
+Precedence, low to high — the highest rung that writes a field wins it:
+fallback › inference › integration › docblock › attribute › overlay › config
+✓ published    ✗ shadowed
+
+operation
+  requestBody
+    ✓ integration {"required":true,"content":{"application/json":{"schema…
+        integration:form-request · app/Http/Controllers/InvoiceController.php:38
+    → set it with #[BodyParameter(name: 'total')]
+  summary
+    ✓ attribute   "Raise an invoice"
+        app/Http/Controllers/InvoiceController.php:36
+    ✗ docblock    "Store a new invoice."
+    → edit the attribute above, or outrank it with an overlay
+
+responses.201
+  description
+    ✓ attribute   "The invoice as stored."
+        app/Http/Controllers/InvoiceController.php:36
+    ✗ fallback    "Created"
+    → edit the attribute above, or outrank it with an overlay
+
+responses.422  → #/components/responses/UnprocessableEntity
+  from integration:implicit-response · app/Http/Controllers/InvoiceController.php:38 · implicit:validated-request
+  component
+    ✓ integration "UnprocessableEntity"
+    → set it with #[ErrorComponent('InvoiceNotFound')] on the exception or its render method
+  description
+    ✓ integration "Unprocessable Entity"
+    → set it with #[Response(status: 422, description: '…')]
+
+5 fields · 7 contributions · 2 shadowed
+A shadowed value is recorded by producer only — the trail keeps what lost, not where it came from.
+1 value shortened to fit — `--field=<name>` prints one in full.
+```
+
+**Reading it.** Each block is one node of the document, named the way you would point at it — the
+operation itself, then its parameters, request body and responses, then anything they `$ref`. Under
+each field is the stack of layers that reached it: `✓` is the value the document publishes, and every
+`✗` under it is a value a lower rung wrote and lost with. A `→` after a node name is the component it
+points at; a `from` line means every field on that node came from the same place, and a `→` line under
+it means they all take the same override.
+
+The rung is always spelled out beside its color, so the report reads the same piped to a file, under
+`--no-ansi`, and in a CI log. A confidence only appears when it is low enough to act on — a mapper
+that converted a type cleanly reports `0.9`, so printing it everywhere would just teach you to skip
+it. The precedence ladder prints **only when something was actually shadowed**; on an endpoint where
+nothing competed it would be explaining a competition that never happened.
+
+### The `→` line: what to change
+
+Knowing which layer won is only half an answer. The other half is derivable from it, so each field
+gets one line saying how to take it:
+
+| The winning rung | What the line says |
+| --- | --- |
+| `fallback`, `inference`, `integration`, `docblock`, **and an attribute writes that field** | The attribute, spelled with this endpoint's own values — `set it with #[QueryParameter(name: 'filter[status]')]` |
+| `fallback`, `inference`, `integration`, `docblock`, and **no** attribute writes it | The generic truth — `no attribute writes this — an overlay outranks docblock` |
+| `attribute` | `edit the attribute above, or outrank it with an overlay` — the `file:line` above it is the attribute |
+| `overlay` | `edit the overlay that set it; only config outranks an overlay` |
+| `config` | `config is the top rung — edit config/docuccino.php` |
+
+An attribute is named **only where it genuinely writes that field on that node**: `#[Group]` really is
+what sets `tags`, and `#[ErrorComponent]` — not `#[Response]` — is what names a shared error body. A
+lever that would do nothing is worse than no lever, so everywhere else the answer is the generic one,
+which is still actionable: an [overlay](/laravel/guides/customizing-output/) can write any field at
+all, and it outranks everything except `config`.
+
+### `--field`: one field, whole
+
+The scannable report shortens a long value to keep the columns readable — and the value you are
+debugging is exactly the one likely to be long. `--field` prints one field's whole stack with every
+value in full:
+
+```bash
+php artisan docuccino:explain "POST /api/invoices" --field=requestBody
+```
+
+```
+POST /api/invoices
+──────────────────
+InvoiceController@store  ·  document "default"
+
+operation
+  requestBody
+    ✓ integration
+        integration:form-request · app/Http/Controllers/InvoiceController.php:38
+        {
+            "required": true,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "$ref": "#/components/schemas/StoreInvoiceRequest"
+                    }
+                }
+            }
+        }
+
+  → set it with #[BodyParameter(name: 'total')]
+```
+
+It is narrowed exactly as the route argument is — an exact `node.field` path, then an exact field
+name, then a fragment — and answers on the same three exit codes. A name several nodes carry
+(`description` is the usual one) lists them with the rung that won each, and exits `2`:
+
+```
+2 fields match "description".
+─────────────────────────────
+
+  Field                      Rung
+  ─────────────────────────  ───────────
+  responses.201.description  attribute
+  responses.422.description  integration
+
+php artisan docuccino:explain "POST /api/invoices" --field=responses.201.description
+```
+
+A field the trail names but the document does not carry reads `(removed by this layer)` — that layer
+wrote a deletion, which is a decision about the field rather than a missing value.
+
+### Naming the endpoint
+
+You'll usually run this straight after looking at the [viewer](/laravel/guides/viewer/) or your
+exported `openapi.json`, and both show `POST /api/invoices` — so that is the primary spelling. A
+route *name* works too but is never required: closure and unnamed routes are common, and they are
+disproportionately the ones that document badly.
+
+The argument is tried as, in order:
+
+1. an exact **route name** — `invoices.store`;
+2. an exact **operation id** — `storeInvoice`, which is what an SDK user would quote at you;
+3. a **URI**, with or without a leading method and with or without a leading slash —
+   `POST /api/invoices`, `post api/invoices`, `/api/invoices`, `api/invoices`. A base path your
+   document shares is added or taken away as needed, so `invoices` finds `/api/invoices`.
+
+Nothing matches exactly? The argument is matched as a fragment of any of the three instead, which
+turns a failed lookup into a menu:
+
+```bash
+php artisan docuccino:explain invoices
+```
+
+```
+3 operations match "invoices".
+──────────────────────────────
+
+  Method  URI                      Document  Route           Operation id
+  ──────  ───────────────────────  ────────  ──────────────  ────────────
+  GET     /api/invoices            default   invoices.index  listInvoices
+  POST    /api/invoices            default   invoices.store  storeInvoice
+  GET     /api/invoices/{invoice}  default   invoices.show   showInvoice
+
+php artisan docuccino:explain "GET /api/invoices"
+```
+
+`--method` narrows a URI several verbs answer, so `docuccino:explain api/invoices --method=post` and
+`docuccino:explain "POST /api/invoices"` are the same request. It is only needed to disambiguate —
+a URI one verb answers never asks for it.
+
+Several matches is an **answer**, not an error: the command lists them and exits `2` rather than
+picking one for you. Nothing matching at all exits `1` and prints the spellings it accepts, filled in
+with an operation your document really has.
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `route` (required) | route name \| operation id \| URI \| fragment | Which operation to explain. No match → exit 1; several → exit 2. |
+| `document` | configured key / all documents | Which document(s) to search. Every configured document is built and searched when omitted, and the answer always names the one it is about. Unknown key → exit 1. |
+| `--method` | `get` \| `post` \| `put` \| `patch` \| `delete` \| … / unset | Narrows a URI several verbs answer. An invalid value errors (no silent fallback). |
+| `--field` | field name \| `node.field` path \| fragment / unset | Explains one field with every value printed in full. No match → exit 1; several → exit 2. |
+| `--json` | flag / off | Prints the whole trail as JSON — the same `status` / exit-code pair, plus `nodes[]` carrying each field's contributions with their layer, rank, value, source and confidence. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | Raises the process memory limit; the document is generated first, so it needs `export`'s headroom. |
+
+### Why it never needs `--provenance`
+
+[`--provenance`](#docuccinoexport) is an **export** setting: it decides how much of the trail survives
+into a committed artifact, and `winners` — the default — drops the `overrode` records that say what
+was shadowed. `docuccino:explain` never reads an artifact. It builds the document in memory, where the
+trail is always complete, so the shadowed half is there whatever your export settings are.
+
+That also means an operation the report finds nothing for really did record nothing, rather than
+having had it stripped: it is a skeleton, for an action Docuccino could not reflect. The command says
+so instead of printing an empty report.
+
+### What it deliberately doesn't do
+
+The trail describes **this build**, not its history. Docuccino keeps git metadata out of the document
+on purpose — a commit SHA in the output would break byte-identical builds — so there is nothing here
+about when a value changed, or who changed it. For "what changed", commit the artifact and use
+[`docuccino:diff`](#docuccinodiff).
+
+A shadowed contribution is also recorded by producer alone: `overrode` keeps the field, the value that
+lost and the producer that wrote it, and has nowhere to record the file it came from. The report says
+so once at the bottom rather than leaving an empty column on every `✗` row.
+
 ## Exit codes
 
-Every command returns `0` on success and `1` on failure. What counts as failure:
+Every command returns `0` on success and `1` on failure, and `docuccino:explain` also returns `2`.
+What counts as failure:
 
 | Command | Exits `1` when |
 | --- | --- |
@@ -447,3 +675,4 @@ Every command returns `0` on success and `1` on failure. What counts as failure:
 | `cache` | disabled; unknown document key |
 | `clear` | unknown document key (no enabled guard) |
 | `watch` | disabled; unknown document key; `--interval` that isn't a positive number; no documents configured. A failing rebuild does **not** stop the session — it prints and waits for the next change |
+| `explain` | disabled; unknown document key; unknown `--method` value; no operation matches the query; no field matches `--field`. Exits **`2`** — not `1` — when several operations or several fields match, so a script can tell "not found" from "be more specific" |

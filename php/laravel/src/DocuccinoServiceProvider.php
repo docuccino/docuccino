@@ -23,6 +23,7 @@ use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Commands\CacheCommand;
 use Docuccino\Laravel\Commands\ClearCommand;
 use Docuccino\Laravel\Commands\DiffCommand;
+use Docuccino\Laravel\Commands\ExplainCommand;
 use Docuccino\Laravel\Commands\ExportCommand;
 use Docuccino\Laravel\Commands\MemoryLimitOption;
 use Docuccino\Laravel\Commands\ValidateCommand;
@@ -105,6 +106,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
                 CacheCommand::class,
                 ClearCommand::class,
                 WatchCommand::class,
+                ExplainCommand::class,
             ]);
     }
 

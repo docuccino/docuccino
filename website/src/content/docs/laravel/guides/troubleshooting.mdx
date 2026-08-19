@@ -24,6 +24,7 @@ Then match the symptom:
 | `Allowed memory size of … exhausted` | [The export runs out of memory](#the-export-runs-out-of-memory) |
 | The export finishes, but takes minutes every time | [The build is slow](#the-build-is-slow) |
 | Every operation has parameters but no `200` body | [Responses are missing](#responses-are-missing-everywhere) |
+| One endpoint is documented, but wrongly | [Why is this endpoint documented this way?](#why-is-this-endpoint-documented-this-way) |
 | `engine.not-installed` | [The document is thin](#the-document-is-thin) |
 | A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
 | `engine.boot-failed` | [The analyzer won't start](#the-analyzer-wont-start) |
@@ -317,6 +318,38 @@ what counts as the same one.
 
 ---
 
+## Why is this endpoint documented this way?
+
+**Symptom.** One operation is documented, but not the way you expected: a summary you didn't write, a
+response body from the wrong class, a parameter that shouldn't be optional. Nothing is missing, so
+there is no diagnostic to read.
+
+**Cause.** Something wrote that field, and something else may have written it first and lost. Docuccino
+composes each operation from seven [precedence layers](/laravel/guides/how-it-works/#3-uir), and a
+higher rung overrides a lower one field by field — so a docblock summary can be replaced by an
+attribute, and an inferred response body by an integration's.
+
+**Fix.** Ask:
+
+```bash
+php artisan docuccino:explain "POST /api/invoices"
+```
+
+[`docuccino:explain`](/laravel/reference/commands/#docuccinoexplain) prints the stack behind every
+field of that one operation: which layer won it, what it displaced, the `file:line` to open, and — on
+a `→` line under each field — what to change to override it. Name the endpoint however you already
+think of it: the method and URI the viewer shows, a route name, an operation id, or a fragment of any
+of them, which lists everything that matches. Add `--field=<name>` to see one field's values in full.
+
+<Aside type="tip" title="Read the ladder, not just the answer">
+When something *was* shadowed the report prints the precedence ladder above the answer, because most
+surprises here are a layer you forgot outranks the one you edited. If your docblock change did
+nothing, look for an `attribute`, `overlay` or `config` line above it in the stack — and take the `→`
+line under the field, which names the lever that outranks whatever is winning now.
+</Aside>
+
+---
+
 ## Reading diagnostics
 
 Diagnostics are how Docuccino tells you it recovered less than it wanted to. A handful on a large
@@ -330,9 +363,16 @@ Two flags make diagnostics more useful:
 
 <Steps>
 
-1. **See what won each field.** `--provenance=full` records which source — inference, docblock,
-   attribute, overlay, config — produced every value in the document, so you can tell "inference
-   never ran" from "inference ran and lost to something else".
+1. **See what won each field.** [`docuccino:explain`](/laravel/reference/commands/#docuccinoexplain)
+   reads that back for one endpoint at the terminal, so you can tell "inference never ran" from
+   "inference ran and lost to something else".
+
+   ```bash
+   php artisan docuccino:explain "POST /api/invoices"
+   ```
+
+   For the whole document at once, `--provenance=full` keeps the same records — every contribution
+   and everything it shadowed — in an exported UIR file:
 
    ```bash
    php artisan docuccino:export --format=uir --provenance=full

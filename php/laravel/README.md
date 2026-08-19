@@ -42,7 +42,9 @@ php artisan docuccino:export
 ```
 
 Other commands: `docuccino:diff`, `docuccino:validate`, `docuccino:cache`,
-`docuccino:clear`. Register your own extensions from any service provider:
+`docuccino:clear`, and `docuccino:explain "POST /api/invoices"` — which prints, field by field, which
+precedence layer produced each value of one endpoint and what it overrode. Register your own
+extensions from any service provider:
 
 ```php
 use Docuccino\Laravel\Facades\Docuccino;
