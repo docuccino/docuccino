@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Support;
 
-use Docuccino\Core\Examples\SharedRecordingLedger;
-
 /**
  * Write a file so no reader ever sees half of one: a temp file in the same directory, then a rename.
  *
@@ -17,7 +15,7 @@ use Docuccino\Core\Examples\SharedRecordingLedger;
  *
  * Note what the rename does to a lock: it replaces the target's inode, so a lock held ON the file
  * being written is a lock on something the next writer has already thrown away. Anything serialising
- * writers here locks a file of its own — see {@see SharedRecordingLedger}.
+ * writers here has to lock a file of its own.
  *
  * @internal
  */

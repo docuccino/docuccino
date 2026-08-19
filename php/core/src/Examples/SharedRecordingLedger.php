@@ -17,8 +17,8 @@ use JsonException;
  * the best of a set is the same whichever worker met which member of it, and the surviving file is a
  * function of the responses the suite produced rather than of the order the workers raced in.
  *
- * The lock is a file of its own rather than the recording, because the recording is replaced by a
- * rename: a lock held on it would be a lock on an inode the next writer has already replaced. Both it
+ * The lock is a file of its own rather than the recording, for the reason {@see AtomicFile} states:
+ * the recording is replaced by a rename, so a lock on it is a lock on a discarded inode. Both it
  * and the session sit under the system temp directory keyed by the recordings directory and the RUN,
  * so a later run of the same suite starts from the file as it stands rather than from what the last
  * one was accumulating, and neither ever appears in the tree an author commits.
