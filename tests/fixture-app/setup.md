@@ -329,6 +329,18 @@ own (seeded from the action's parameter type):
   beside an inline renderer with its own `render()` building a 418 into a local of the same name. One file,
   two bodies: the harvest has to carry the class or each answers for the other.
 
+### Arguments assembled elsewhere and spread in
+
+Every reader that wants argument N reads a POSITION, and a spread fills its own and every later one from a
+sequence — so the slot a reader indexes is not the value the call receives. Each file below writes one such
+call in the shape an app writes it, beside the same call written out, so the pair pins what widens and what
+does not.
+
+- `app/Http/Requests/SpreadChoicesRequest.php` — a `Rule::in('any', ...$this->statuses())` and a
+  `Rule::enum(...)->only(Open, ...$this->alsoAllowed())`, plus a `visibility` field stating every value at
+  the rule. The written half is the hazard: published on its own it is a SHORTER list of legal values than
+  the endpoint accepts, so the constraint is dropped and `validation.rule-values-unread` says so.
+
 ### Page-size recovery
 
 The size argument of a paginating terminal, followed back to the request key it came from — and, just as
