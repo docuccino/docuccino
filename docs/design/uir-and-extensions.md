@@ -605,11 +605,10 @@ one does. And every recording DIAGNOSTIC comes from `Core\Examples\RecordedExamp
 simply another operation's, and a transformer runs on every build, so warm reports what cold reports
 without any of it having to ride a cached fragment.
 
-Recording under a PARALLEL runner is allowed where coverage is not, and the difference is not a
-loosened rule but a different question. Coverage is a whole-suite aggregate no worker can take: none of
-them knows when the others have finished, and merging fixes the data rather than the timing. A recording
-is per-operation, and `outranks()` is a total order on the bodies themselves, so the best of a set does
-not depend on which worker met which member of it — workers only have to take turns.
+Recording and COVERAGE both survive a parallel runner, and they survive it differently, because they
+are different questions. A recording is per-operation, and `outranks()` is a total order on the bodies
+themselves, so the best of a set does not depend on which worker met which member of it — workers only
+have to take turns.
 `Core\Examples\SharedRecordingLedger` gives them one: an exclusive `flock` on a lock file of its own
 (the recording is replaced by a rename, so a lock held ON it is a lock on a discarded inode), around a
 read-compare-write against a scratch SESSION holding the file as it stood before the run plus the run's
@@ -620,6 +619,27 @@ rewritten. Both live under the system temp directory keyed by the recordings dir
 and no later run repeats), so a second run starts from the file as it stands and neither ever appears in
 the tree an author commits. Where the platform cannot name the run, or the lock cannot be taken,
 recording refuses and writes nothing: a half-merged recording is worse than none.
+
+Coverage needs none of that, and gets none of it. It is a whole-suite AGGREGATE, so no worker can answer
+it at all — not because the data is split but because none of them knows when the others have finished,
+and a shard does not even share a machine with the ones it would have to wait for. So it is not asked
+inside the run. `CoverageLog` has each process append the ids it met to a file of its own, with no lock,
+because a union has nothing to reconcile; `CoverageMerge` unions N directories of those afterwards, and
+`docuccino:coverage` reports and gates. Three properties carry it:
+
+- **A name is unique per writing process, never per worker.** It carries the runner's worker token where
+  there is one — a directory of `w3.…` reads better than one of hashes — but the pid and four random
+  bytes BESIDE it, because `--shard=1/4` and `--shard=2/4` on one machine both have a worker `1` and one
+  overwriting the other is exactly the false gap the feature exists to stop. Nothing is detected: a
+  runner that sets no token is the ordinary single-process case, and a runner nobody has heard of
+  participates by writing a file like everybody else. The price is that runs accumulate rather than
+  replace, which `docuccino:coverage --reset` is for.
+- **The merged answer is a function of the run and of nothing else.** Sets have no first writer, so the
+  same ids come back whatever the worker count, whichever file each id was seen in, and whatever order
+  the directories were named — the parallel report equals the single-process one exactly.
+- **An incomplete merge is never averaged.** A directory that is not there, one holding no log, and a
+  file that does not read back as ids each take the whole merge out of gating and are named. A gate that
+  quietly measured three of four shards is worse than no gate.
 
 **Implicit responses (pre-dogfood wave).** `ThrowAnalyzer` only sees exceptions the action BODY raises;
 the framework also produces error responses from MIDDLEWARE and binding-time machinery the body never
