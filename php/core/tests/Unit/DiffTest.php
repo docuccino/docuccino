@@ -329,6 +329,51 @@ it('classifies a removed enum value as breaking', function (): void {
     expect($changes['schema.enum-value-removed']->breaking)->toBeTrue();
 });
 
+it('classifies a response enum value added as breaking', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['status'] = ['type' => 'string', 'enum' => ['draft', 'published']];
+    $new = $old;
+    $new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['status']['enum'] = ['draft', 'published', 'archived'];
+
+    $changes = changesByCode(diffOf($old, $new));
+    expect($changes)->toHaveKey('schema.enum-value-added');
+    expect($changes['schema.enum-value-added']->breaking)->toBeTrue();
+});
+
+it('classifies a response enum constraint dropped as breaking', function (): void {
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['status'] = ['type' => 'string', 'enum' => ['draft', 'published']];
+    $new = $old;
+    unset($new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['status']['enum']);
+
+    $changes = changesByCode(diffOf($old, $new));
+    expect($changes)->toHaveKey('schema.enum-removed');
+    expect($changes['schema.enum-removed']->breaking)->toBeTrue();
+});
+
+it('classifies a request enum constraint dropped as non-breaking', function (): void {
+    $new = diffBase();
+    unset($new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['schema']['enum']);
+
+    $changes = changesByCode(diffOf(diffBase(), $new));
+    expect($changes)->toHaveKey('schema.enum-removed');
+    expect($changes['schema.enum-removed']->breaking)->toBeFalse();
+});
+
+it('classifies an enum value added to a referenced component schema as breaking', function (): void {
+    // A component's audience is not knowable from a boolean, so it compares as a response — the
+    // side where an enum addition can break a reader.
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['form'] = ['$ref' => '#/components/schemas/FormData'];
+    $old['components']['schemas']['FormData']['properties']['status'] = ['type' => 'string', 'enum' => ['draft', 'published']];
+    $new = $old;
+    $new['components']['schemas']['FormData']['properties']['status']['enum'] = ['draft', 'published', 'archived'];
+
+    $changes = changesByCode(diffOf($old, $new));
+    expect($changes)->toHaveKey('schema.enum-value-added');
+    expect($changes['schema.enum-value-added']->breaking)->toBeTrue();
+});
+
 it('classifies a required request property added as breaking', function (): void {
     $old = diffBase();
     $old['paths']['/api/v1/forms/{id}']['put'] = [
