@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.7.0
+
+### Breaking changes
+
+- **core**: classify response-side enum changes as breaking ([#131](https://github.com/docuccino/docuccino/pull/131))
+  - docuccino:diff --enforce now fails changesets that add an enum value to, or drop an enum constraint from, a response schema or a referenced component schema; these previously passed as non-breaking.
+
+### Features
+
+- **core**: track component schema direction to refine enum classification ([#132](https://github.com/docuccino/docuccino/pull/132))
+
 ## v0.6.1
 
 ### Performance
