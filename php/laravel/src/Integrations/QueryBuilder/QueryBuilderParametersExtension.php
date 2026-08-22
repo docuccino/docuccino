@@ -215,8 +215,11 @@ final class QueryBuilderParametersExtension implements OperationExtension
      */
     private function applyColumn(QbEntry $filter, FilterColumn $column, RouteContext $context, bool $asArray): QbEntry
     {
+        // Whatever the outcome — an enum's file, a foreign-key hop's related model, a refusal that read
+        // files to refuse — the resolution's inputs key the fragment.
+        $context->recordDependencyFiles($column->dependencyFiles);
+
         if ($column->isEnum() && $column->enum !== null) {
-            $context->recordDependencyFiles($column->dependencyFiles);
             $schema = $context->converter()->convert(new EnumT($column->enum, EnumReflection::names($column->enum)));
 
             return $filter->withColumn($schema, enumTyped: $asArray);
@@ -304,11 +307,12 @@ final class QueryBuilderParametersExtension implements OperationExtension
     private function nudgePartialOnEnum(QbEntry $filter, string $model, RouteContext $context): void
     {
         $column = $this->columns->resolve($model, $filter->column());
+        // Recorded before the enum check: whether the nudge fires at all is a fact of these files.
+        $context->recordDependencyFiles($column->dependencyFiles);
         if (! $column->isEnum()) {
             return;
         }
 
-        $context->recordDependencyFiles($column->dependencyFiles);
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'query-builder.partial-on-enum',

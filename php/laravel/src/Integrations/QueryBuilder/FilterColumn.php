@@ -31,10 +31,30 @@ final readonly class FilterColumn
         public array $dependencyFiles = [],
     ) {}
 
-    /** No recognised cast — the filter keeps its plain-string shape. */
-    public static function none(): self
+    /**
+     * No recognised shape — the filter keeps its plain-string form. A refusal still carries the files
+     * it read to refuse: edited, any of them could become an answer, and a warm fragment must see that.
+     *
+     * @param  list<string>  $dependencyFiles
+     */
+    public static function none(array $dependencyFiles = []): self
     {
-        return new self(self::KIND_NONE);
+        return new self(self::KIND_NONE, dependencyFiles: $dependencyFiles);
+    }
+
+    /**
+     * The same column with `$files` joined onto its dependency set.
+     *
+     * @param  list<string>  $files
+     */
+    public function withDependencyFiles(array $files): self
+    {
+        return new self(
+            $this->kind,
+            $this->enum,
+            $this->scalarSchema,
+            array_values(array_unique([...$this->dependencyFiles, ...$files])),
+        );
     }
 
     /**

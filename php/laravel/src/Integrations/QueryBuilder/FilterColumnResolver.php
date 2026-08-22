@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
+use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
+use Docuccino\Laravel\Integrations\Eloquent\BelongsToReader;
 use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
+use Illuminate\Support\Str;
 
 /**
  * Resolves the typed schema a subject model pins for an exact-filter column — its cast, or the
@@ -18,13 +21,16 @@ use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
  * PHPStan, no engine, so it runs equally in-process (the parameters extension) and out-of-process
  * (the real-engine fixture proof).
  *
- * Only the subject model's own columns are typed; a relation-path column (`posts.title`) or an
- * unresolvable model degrades to {@see FilterColumn::none()} (the filter stays a plain string).
+ * A column nothing on the model types may still be a `belongsTo` foreign key, in which case the
+ * RELATED model's referenced key types it ({@see BelongsToReader}). A relation-path column
+ * (`posts.title`) or an unresolvable model degrades to {@see FilterColumn::none()} (the filter stays a
+ * plain string).
  */
 final class FilterColumnResolver
 {
     public function __construct(
         private readonly EloquentModelReflector $reflector = new EloquentModelReflector,
+        private readonly BelongsToReader $belongsTo = new BelongsToReader,
     ) {}
 
     /**
@@ -37,13 +43,13 @@ final class FilterColumnResolver
             return FilterColumn::none();
         }
 
-        return $this->ownColumn($model, $column) ?? FilterColumn::none();
+        return $this->ownColumn($model, $column) ?? $this->foreignKeyColumn($model, $column);
     }
 
     /**
      * The shape the model's own declarations pin for `$column`: a uuid/ulid key format first, then the
      * column's cast, then the plain key schema. Null only when the column has no cast and is not the
-     * key — the one case something else (a foreign-key hop, one day) could still answer.
+     * key — the one case the foreign-key hop could still answer.
      */
     private function ownColumn(string $model, string $column): ?FilterColumn
     {
@@ -76,5 +82,44 @@ final class FilterColumnResolver
         }
 
         return $isKey ? FilterColumn::scalar($facts['keySchema']) : null;
+    }
+
+    /**
+     * The shape a `belongsTo` relation's referenced key pins for a foreign-key column. The column must
+     * be exactly ONE relation's foreign key — zero or several matches refuse, so the answer is a
+     * function of the declarations and never of method order. The referenced column (the ownerKey, else
+     * the related key) resolves through {@see ownColumn()} on the related model — deliberately no
+     * second hop, and a refusal there (an uncast non-key ownerKey, a custom caster) propagates.
+     */
+    private function foreignKeyColumn(string $model, string $column): FilterColumn
+    {
+        $relations = $this->belongsTo->relations($model);
+        if ($relations === []) {
+            return FilterColumn::none();
+        }
+
+        // EVERY related model's declaration joins the dependency set, match or not: a change to any
+        // related $primaryKey changes which default foreign keys exist, so it can create or remove a
+        // match for this very column, and a warm fragment must see that.
+        $files = [];
+        $matches = [];
+        foreach ($relations as $relation) {
+            $files = [...$files, ...DeclarationFiles::of($relation['related'])];
+            $foreignKey = $relation['foreignKey']
+                ?? Str::snake($relation['relation']).'_'.$this->reflector->facts($relation['related'])['keyName'];
+            if ($foreignKey === $column) {
+                $matches[] = $relation;
+            }
+        }
+        $files = array_values(array_unique($files));
+
+        if (count($matches) !== 1) {
+            return FilterColumn::none($files);
+        }
+
+        $referenced = $matches[0]['ownerKey'] ?? $this->reflector->facts($matches[0]['related'])['keyName'];
+
+        return ($this->ownColumn($matches[0]['related'], $referenced) ?? FilterColumn::none())
+            ->withDependencyFiles($files);
     }
 }
