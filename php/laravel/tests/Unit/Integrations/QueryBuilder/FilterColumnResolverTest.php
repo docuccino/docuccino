@@ -5,6 +5,11 @@ declare(strict_types=1);
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumn;
 use Docuccino\Laravel\Integrations\QueryBuilder\FilterColumnResolver;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\FilterCastModel;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Locker;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Passcard;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Turnstile;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Vault;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Waybill;
 use Workbench\App\Enums\WidgetStatus;
 
 /**
@@ -43,3 +48,22 @@ it('degrades to none for a non-model subject', function (): void {
     expect((new FilterColumnResolver)->resolve('Not\\A\\Model', 'status')->kind)
         ->toBe(FilterColumn::KIND_NONE);
 });
+
+/**
+ * A filter on the model's primary key types off the key schema, mirroring the path-parameter
+ * precedence: a HasUuids/HasUlids format outranks a cast, `$keyType` decides the rest, and an
+ * unrecognised custom caster on the key still falls back to the declared key type.
+ */
+it('types a primary-key filter from the model\'s key schema', function (string $model, array $scalarSchema): void {
+    $resolved = (new FilterColumnResolver)->resolve($model, 'id');
+
+    expect($resolved->kind)->toBe(FilterColumn::KIND_SCALAR)
+        ->and($resolved->scalarSchema)->toBe($scalarSchema);
+})->with([
+    'HasUuids key' => [Vault::class, ['type' => 'string', 'format' => 'uuid']],
+    'HasUlids key' => [Waybill::class, ['type' => 'string', 'format' => 'ulid']],
+    'default int key' => [FilterCastModel::class, ['type' => 'integer']],
+    'string keyType' => [Passcard::class, ['type' => 'string']],
+    'uuid format beats a stale string cast' => [Locker::class, ['type' => 'string', 'format' => 'uuid']],
+    'custom caster on the key falls back to the key type' => [Turnstile::class, ['type' => 'integer']],
+]);

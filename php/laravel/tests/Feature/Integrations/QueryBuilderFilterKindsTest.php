@@ -44,6 +44,7 @@ function runFilterKinds(string $chain): array
 }
 
 $chain = 'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
+    ."AllowedFilter::exact('id'), "                                                          // exact on the primary key → the key schema
     ."'name', "                                                                              // bare, uncast → plain string, no nudge
     ."'status', "                                                                            // bare, enum-cast → partial-on-enum nudge
     ."AllowedFilter::scope('minScore'), "                                                    // scope int value
@@ -58,6 +59,9 @@ $chain = 'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFil
 
 it('types each recovered filter kind off the model and applies the custom-filter attribute', function () use ($chain): void {
     [$byName] = runFilterKinds($chain);
+
+    // Exact filter on the primary key → the model's key schema (Gadget keys on a default int id).
+    expect($byName['filter[id]']['schema']['type'])->toBe('integer');
 
     // Bare uncast filter → plain string, generic description.
     expect($byName['filter[name]']['schema']['type'])->toBe('string')
