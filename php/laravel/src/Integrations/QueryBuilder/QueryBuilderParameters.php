@@ -11,7 +11,7 @@ use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 /**
  * Turns recovered {@see QueryBuilderFacts} into query-parameter specs. The facts themselves are
  * policy-independent; this is the only place their EXPRESSION is decided — bracketed `filter[status]`
- * params vs one `filter` deep-object, comma strings vs exploded arrays, sparse fieldsets, pagination,
+ * params vs one `filter` deep-object, comma-serialised enum lists for sort/include, sparse fieldsets, pagination,
  * and how a column cast surfaces (an enum becomes a comma-serialised array so Spatie's whereIn split
  * stays valid; a native cast is just its scalar type). Names come from {@see QueryBuilderConfig}, shapes
  * from the {@see RepresentationPolicy}. Pure and deterministic, so every branch is dataset-testable.
@@ -54,8 +54,8 @@ final class QueryBuilderParameters
     {
         return [
             ...$this->filterParameters($facts, $policy, $config),
-            ...$this->sortParameters($facts, $policy, $config),
-            ...$this->includeParameters($facts, $policy, $config),
+            ...$this->sortParameters($facts, $config),
+            ...$this->includeParameters($facts, $config),
             ...$this->fieldParameters($facts, $policy, $config),
             ...$this->paginationParameters($facts),
         ];
@@ -115,9 +115,7 @@ final class QueryBuilderParameters
         }
 
         if ($filter->enumTyped && $filter->columnSchema !== null) {
-            $schema = ['type' => 'array', 'items' => $filter->columnSchema];
-
-            return [$this->withDefault($schema, $filter), 'form', false];
+            return [$this->withDefault(self::commaList($filter->columnSchema), $filter), 'form', false];
         }
 
         $schema = $filter->columnSchema ?? self::schemaWithoutColumn($filter);
@@ -147,7 +145,7 @@ final class QueryBuilderParameters
         if ($filter->kind === 'trashed') {
             $schema = self::trashedSchema();
         } elseif ($filter->enumTyped && $filter->columnSchema !== null) {
-            $schema = ['type' => 'array', 'items' => $filter->columnSchema];
+            $schema = self::commaList($filter->columnSchema);
         } else {
             $schema = $filter->columnSchema ?? self::schemaWithoutColumn($filter);
         }
@@ -209,45 +207,48 @@ final class QueryBuilderParameters
     }
 
     /**
+     * The allow-list is a closed set the trace fully recovered, so the value domain is stated as an
+     * enum regardless of strict mode — exactly as `filter[trashed]` and enum-cast filters already are.
+     * Strict mode governs only the documented 400, which travels separately. Comma-serialised
+     * (`form`, `explode: false`) so `?sort=a,-b` stays the wire form; both `lists` styles now express
+     * this one shape.
+     *
      * @return list<QueryParameterSpec>
      */
-    private function sortParameters(QueryBuilderFacts $facts, RepresentationPolicy $policy, QueryBuilderConfig $config): array
+    private function sortParameters(QueryBuilderFacts $facts, QueryBuilderConfig $config): array
     {
         if ($facts->sorts === []) {
             return [];
         }
 
         // Spatie's `-name` convention: every allowed sort has an ascending and a descending form.
+        // AllowedSort ltrim()s a leading `-` off the allow-listed name, so the base is the stripped one.
         $values = [];
         foreach ($facts->sorts as $sort) {
-            $values[] = $sort->name;
-            $values[] = '-'.$sort->name;
+            $name = ltrim($sort->name, '-');
+            if (! in_array($name, $values, true)) {
+                $values[] = $name;
+                $values[] = '-'.$name;
+            }
         }
 
         $names = array_map(static fn (QbEntry $s): string => $s->name, $facts->sorts);
         $description = sprintf('Sort by: %s (prefix `-` for descending).', implode(', ', $names));
 
-        if ($policy->listsAsArray()) {
-            $schema = ['type' => 'array', 'items' => ['type' => 'string', 'enum' => $values]];
-            if ($facts->defaultSorts !== []) {
-                $schema['default'] = $facts->defaultSorts;
-            }
-
-            return [new QueryParameterSpec($config->sort, $schema, $description, style: 'form', explode: false)];
-        }
-
-        $schema = ['type' => 'string'];
+        $schema = self::commaList(['type' => 'string', 'enum' => $values]);
         if ($facts->defaultSorts !== []) {
-            $schema['default'] = implode(',', $facts->defaultSorts);
+            // What applies when the parameter is omitted — the defaultSort chain as written, and an
+            // array because several defaults compose (`defaultSort('a', '-b')`).
+            $schema['default'] = $facts->defaultSorts;
         }
 
-        return [new QueryParameterSpec($config->sort, $schema, $description)];
+        return [new QueryParameterSpec($config->sort, $schema, $description, style: 'form', explode: false)];
     }
 
     /**
      * @return list<QueryParameterSpec>
      */
-    private function includeParameters(QueryBuilderFacts $facts, RepresentationPolicy $policy, QueryBuilderConfig $config): array
+    private function includeParameters(QueryBuilderFacts $facts, QueryBuilderConfig $config): array
     {
         if ($facts->includes === []) {
             return [];
@@ -256,17 +257,77 @@ final class QueryBuilderParameters
         $names = array_map(static fn (QbEntry $i): string => $i->name, $facts->includes);
         $description = sprintf('Include related resources: %s.', implode(', ', $names));
 
-        if ($policy->listsAsArray()) {
-            return [new QueryParameterSpec(
-                $config->include,
-                ['type' => 'array', 'items' => ['type' => 'string', 'enum' => $names]],
-                $description,
-                style: 'form',
-                explode: false,
-            )];
+        return [new QueryParameterSpec(
+            $config->include,
+            self::commaList(['type' => 'string', 'enum' => self::includeValues($facts->includes, $config)]),
+            $description,
+            style: 'form',
+            explode: false,
+        )];
+    }
+
+    /**
+     * Every include name the allow-list legalizes, in Spatie's own generation order. A bare-string
+     * entry is expanded exactly as `AddsIncludesToQuery::generateIncludesFromString()` expands it — a
+     * Count/Exists-suffixed name is that include alone; anything else yields its cumulative
+     * relationship partials, each dot-less partial also minting its Count and Exists forms — while a
+     * factory-built `AllowedInclude` legalizes only its own name. Deduped keeping first occurrence,
+     * so the set is a function of the allow-list alone.
+     *
+     * @param  list<QbEntry>  $includes
+     * @return list<string>
+     */
+    private static function includeValues(array $includes, QueryBuilderConfig $config): array
+    {
+        $values = [];
+        foreach ($includes as $include) {
+            foreach (self::legalizedIncludeNames($include, $config) as $name) {
+                if (! in_array($name, $values, true)) {
+                    $values[] = $name;
+                }
+            }
         }
 
-        return [new QueryParameterSpec($config->include, ['type' => 'string'], $description)];
+        return $values;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function legalizedIncludeNames(QbEntry $include, QueryBuilderConfig $config): array
+    {
+        if ($include->kind !== 'default') {
+            return [$include->name];
+        }
+
+        if (str_ends_with($include->name, $config->countSuffix) || str_ends_with($include->name, $config->existsSuffix)) {
+            return [$include->name];
+        }
+
+        $names = [];
+        $partial = null;
+        foreach (explode('.', $include->name) as $segment) {
+            $partial = $partial === null ? $segment : $partial.'.'.$segment;
+            $names[] = $partial;
+            if (! str_contains($partial, '.')) {
+                $names[] = $partial.$config->countSuffix;
+                $names[] = $partial.$config->existsSuffix;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * A comma-serialised list parameter's schema (`style: form, explode: false` at the call sites that
+     * carry style).
+     *
+     * @param  array<string, mixed>  $items
+     * @return array<string, mixed>
+     */
+    private static function commaList(array $items): array
+    {
+        return ['type' => 'array', 'items' => $items];
     }
 
     /**

@@ -26,6 +26,9 @@ final class QueryBuilderConfigDigestContributor implements EnvironmentDigestCont
             $this->config->fields,
             $this->config->append,
             $this->config->strict ? 'strict' : 'lenient',
+            // The suffixes shape the documented include enum, so renaming one must re-document.
+            $this->config->countSuffix,
+            $this->config->existsSuffix,
         ]);
     }
 }

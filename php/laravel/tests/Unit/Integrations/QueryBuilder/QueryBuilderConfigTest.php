@@ -76,6 +76,16 @@ it('is strict by default and only relaxes when every invalid-query exception is 
         ])->strict)->toBeFalse();
 });
 
+it('reads the include Count/Exists suffixes, degrading each to the package default', function (): void {
+    // Absent bag and absent/ill-typed entries → Spatie's defaults; published values are honored.
+    expect(QueryBuilderConfig::fromArray([])->countSuffix)->toBe('Count')
+        ->and(QueryBuilderConfig::fromArray([])->existsSuffix)->toBe('Exists')
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 'Cnt', 'exists' => 'Has']])->countSuffix)->toBe('Cnt')
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 'Cnt', 'exists' => 'Has']])->existsSuffix)->toBe('Has')
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 123]])->countSuffix)->toBe('Count')
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => 'nope'])->existsSuffix)->toBe('Exists');
+});
+
 it('brackets filter and fields member keys under the effective parameter names', function (): void {
     $config = QueryBuilderConfig::fromArray(['parameters' => ['filter' => 'f', 'fields' => 'flds']]);
 

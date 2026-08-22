@@ -76,54 +76,120 @@ it('expresses filters as a single deepObject param under the deepObject policy',
         ]);
 });
 
-it('expresses sort as a comma string with a default by default', function (): void {
+it('expresses sort as a comma-serialised enum array under either list style', function (RepresentationPolicy $policy): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
         $f->sorts = [new QbEntry('name', 'default'), new QbEntry('created_at', 'field')];
         $f->defaultSorts = ['name'];
     });
 
-    $specs = (new QueryBuilderParameters)->build($facts, bracketedPolicy());
+    $specs = (new QueryBuilderParameters)->build($facts, $policy);
 
     expect($specs)->toHaveCount(1);
     expect($specs[0]->name)->toBe('sort')
-        ->and($specs[0]->schema)->toBe(['type' => 'string', 'default' => 'name'])
-        ->and($specs[0]->style)->toBeNull()
-        ->and($specs[0]->description)->toContain('prefix `-` for descending');
-});
-
-it('expresses sort as an exploded array with an enum incl. the descending forms under the array policy', function (): void {
-    $facts = factsWith(function (QueryBuilderFacts $f): void {
-        $f->sorts = [new QbEntry('name', 'default'), new QbEntry('created_at', 'field')];
-        $f->defaultSorts = ['name'];
-    });
-
-    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy());
-
-    expect($specs[0]->name)->toBe('sort')
         ->and($specs[0]->style)->toBe('form')
         ->and($specs[0]->explode)->toBeFalse()
+        ->and($specs[0]->description)->toContain('prefix `-` for descending')
         ->and($specs[0]->schema)->toBe([
             'type' => 'array',
             'items' => ['type' => 'string', 'enum' => ['name', '-name', 'created_at', '-created_at']],
             'default' => ['name'],
         ]);
+})->with([
+    'comma' => [new RepresentationPolicy],
+    'array' => [new RepresentationPolicy(listStyle: 'array')],
+]);
+
+it('composes several default sorts into an array default, a descending one as written', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->sorts = [new QbEntry('issued_at', 'default'), new QbEntry('total', 'default')];
+        $f->defaultSorts = ['-issued_at', 'total'];
+    });
+
+    $schema = (new QueryBuilderParameters)->build($facts, bracketedPolicy())[0]->schema;
+
+    expect($schema['default'])->toBe(['-issued_at', 'total'])
+        ->and($schema['items']['enum'])->toContain('-issued_at');
 });
 
-it('expresses include as a comma string by default and an exploded array under the array policy', function (RepresentationPolicy $policy, array $expected): void {
+it('strips the descending prefix off an allow-listed sort name and dedupes both directions', function (): void {
+    // `allowedSorts('-name')` legalizes the base name in both directions — AllowedSort ltrim()s it.
     $facts = factsWith(function (QueryBuilderFacts $f): void {
-        $f->includes = [new QbEntry('author', 'default'), new QbEntry('comments', 'default')];
+        $f->sorts = [new QbEntry('-name', 'default'), new QbEntry('name', 'default')];
+    });
+
+    $schema = (new QueryBuilderParameters)->build($facts, bracketedPolicy())[0]->schema;
+
+    expect($schema['items']['enum'])->toBe(['name', '-name']);
+});
+
+it('expresses include as a comma-serialised enum array under either list style', function (RepresentationPolicy $policy): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->includes = [new QbEntry('author', 'relationship'), new QbEntry('comments', 'relationship')];
     });
 
     $specs = (new QueryBuilderParameters)->build($facts, $policy);
 
     expect($specs[0]->name)->toBe('include')
-        ->and($specs[0]->schema)->toBe($expected);
+        ->and($specs[0]->style)->toBe('form')
+        ->and($specs[0]->explode)->toBeFalse()
+        ->and($specs[0]->schema)->toBe([
+            'type' => 'array',
+            'items' => ['type' => 'string', 'enum' => ['author', 'comments']],
+        ]);
 })->with([
-    'comma' => [new RepresentationPolicy, ['type' => 'string']],
-    'array' => [new RepresentationPolicy(listStyle: 'array'), [
-        'type' => 'array',
-        'items' => ['type' => 'string', 'enum' => ['author', 'comments']],
-    ]],
+    'comma' => [new RepresentationPolicy],
+    'array' => [new RepresentationPolicy(listStyle: 'array')],
+]);
+
+/**
+ * The include enum mirrors Spatie's own allow-list expansion: a bare string legalizes its cumulative
+ * relationship partials plus Count/Exists forms for each dot-less partial, a suffixed bare string is
+ * that include alone, and a factory-built entry legalizes only its own name.
+ */
+it('expands the include enum exactly as Spatie legalizes each allow-list entry', function (array $includes, array $enum, ?QueryBuilderConfig $config): void {
+    $facts = factsWith(function (QueryBuilderFacts $f) use ($includes): void {
+        $f->includes = $includes;
+    });
+
+    $specs = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config ?? new QueryBuilderConfig);
+
+    expect($specs[0]->schema['items']['enum'])->toBe($enum);
+})->with([
+    'bare top-level string mints Count and Exists' => [
+        [new QbEntry('customer', 'default')],
+        ['customer', 'customerCount', 'customerExists'],
+        null,
+    ],
+    'bare nested string mints cumulative partials, suffixes on the dot-less one' => [
+        [new QbEntry('posts.comments', 'default')],
+        ['posts', 'postsCount', 'postsExists', 'posts.comments'],
+        null,
+    ],
+    'bare string already suffixed is that include alone' => [
+        [new QbEntry('customerCount', 'default')],
+        ['customerCount'],
+        null,
+    ],
+    'factory entries legalize only their own name' => [
+        [new QbEntry('posts.comments', 'relationship'), new QbEntry('postsCount', 'count')],
+        ['posts.comments', 'postsCount'],
+        null,
+    ],
+    'single bare entry still an enum array' => [
+        [new QbEntry('customer', 'default')],
+        ['customer', 'customerCount', 'customerExists'],
+        null,
+    ],
+    'overlapping expansions dedupe keeping first occurrence' => [
+        [new QbEntry('posts.comments', 'default'), new QbEntry('posts', 'default')],
+        ['posts', 'postsCount', 'postsExists', 'posts.comments'],
+        null,
+    ],
+    'configured suffixes shape the minted forms' => [
+        [new QbEntry('customer', 'default')],
+        ['customer', 'customerCnt', 'customerHas'],
+        new QueryBuilderConfig(countSuffix: 'Cnt', existsSuffix: 'Has'),
+    ],
 ]);
 
 it('groups sparse fields into fields[type] params by default', function (): void {

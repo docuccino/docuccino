@@ -25,6 +25,10 @@ final readonly class QueryBuilderConfig
         // The package throws InvalidFilter/Sort/Includes (400) for anything unknown unless EVERY
         // `disable_*_exception` is set. On by default, so QB operations document a 400.
         public bool $strict = true,
+        // `query-builder.suffixes.*`: a bare-string include also legalizes its Count/Exists forms
+        // under these suffixes, so they shape the documented include enum.
+        public string $countSuffix = 'Count',
+        public string $existsSuffix = 'Exists',
     ) {}
 
     /**
@@ -39,6 +43,7 @@ final readonly class QueryBuilderConfig
         }
 
         $parameters = is_array($config['parameters'] ?? null) ? $config['parameters'] : [];
+        $suffixes = is_array($config['suffixes'] ?? null) ? $config['suffixes'] : [];
 
         return new self(
             filter: self::string($parameters, 'filter', 'filter'),
@@ -51,6 +56,8 @@ final readonly class QueryBuilderConfig
                 && ($config['disable_invalid_sort_query_exception'] ?? false) === true
                 && ($config['disable_invalid_includes_query_exception'] ?? false) === true
             ),
+            countSuffix: self::string($suffixes, 'count', 'Count'),
+            existsSuffix: self::string($suffixes, 'exists', 'Exists'),
         );
     }
 
