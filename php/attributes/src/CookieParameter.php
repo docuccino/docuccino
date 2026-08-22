@@ -17,6 +17,7 @@ final readonly class CookieParameter
         public string $name,
         public ?string $type = null,
         public ?string $description = null,
+        public ?string $format = null,
         public bool $required = false,
         public mixed $example = null,
     ) {}
