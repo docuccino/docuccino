@@ -12,6 +12,7 @@ use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderTraceVisitor;
 use Docuccino\Laravel\Tests\Support\StubTraceScope;
+use Docuccino\Laravel\Tests\Support\TraceScript;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
@@ -60,24 +61,6 @@ function traceQbSnippet(
     }
 
     return $visitor;
-}
-
-/**
- * What the engine hands back for one folded return: the folded value plus the returned expression itself
- * (AST-only, since it belongs to the callee's file). Folded through the same stub scope the visitor sees, so
- * the fixture reads like the real answer.
- *
- * @return array{0: ?ConstValue, 1: ?Node\Expr}
- */
-function qbFoldOf(string $expression): array
-{
-    $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php '.$expression.';') ?? [];
-    $statement = $ast[0] ?? null;
-    $expr = $statement instanceof Node\Stmt\Expression ? $statement->expr : null;
-
-    return $expr === null
-        ? [null, null]
-        : [(new StubTraceScope(new ClassT('Spatie\\QueryBuilder\\QueryBuilder')))->constantValueOf($expr), $expr];
 }
 
 /**
@@ -396,7 +379,7 @@ it('recovers an entry the call site cannot name from the value its method return
     // `ListFilters`-style wrapper below keeps its call-site descriptor rather than being deferred.
     $facts = traceQbSnippet(
         "ListQueryBuilder::for(User::class)->allowedFilters([\$this->termFilter(), ListFilters::enum('status')])",
-        foldedReturns: ['termFilter' => qbFoldOf("AllowedFilter::callback('q', function (\$q, \$v) { \$q->where('title', \$v); })")],
+        foldedReturns: ['termFilter' => TraceScript::foldOf("AllowedFilter::callback('q', function (\$q, \$v) { \$q->where('title', \$v); })")],
     )->facts;
 
     expect(entryPairs($facts->filters))->toBe([['q', 'callback'], ['status', 'enum']])
@@ -417,7 +400,7 @@ it('expands a folded array return into one entry per item, each with its own com
 
     $facts = traceQbSnippet(
         'ListQueryBuilder::for(User::class)->allowedFilters(...$this->allowedFilters())',
-        foldedReturns: ['allowedFilters' => qbFoldOf($helper)],
+        foldedReturns: ['allowedFilters' => TraceScript::foldOf($helper)],
     )->facts;
 
     expect(entryPairs($facts->filters))->toBe([['status', 'exact'], ['email', 'partial']])
@@ -433,7 +416,7 @@ it('takes a synchronous engine\'s fold answer, leaving no placeholder token in t
     // the reserved placeholder token is documented as a filter name.
     $inner = new StubTraceScope(
         new ClassT('Spatie\\QueryBuilder\\QueryBuilder'),
-        ['termFilter' => qbFoldOf("AllowedFilter::exact('status')")],
+        ['termFilter' => TraceScript::foldOf("AllowedFilter::exact('status')")],
     );
 
     $eager = new class($inner) implements FoldsCallReturns, TypeScope
@@ -477,7 +460,7 @@ it('takes a synchronous engine\'s fold answer, leaving no placeholder token in t
 it('recovers a sort and a default sort built by a method', function (): void {
     $facts = traceQbSnippet(
         'ListQueryBuilder::for(User::class)->allowedSorts($this->createdAtSort())->defaultSort($this->createdAtSort())',
-        foldedReturns: ['createdAtSort' => qbFoldOf("AllowedSort::field('created_at')")],
+        foldedReturns: ['createdAtSort' => TraceScript::foldOf("AllowedSort::field('created_at')")],
     )->facts;
 
     expect(entryPairs($facts->sorts))->toBe([['created_at', 'field']])
@@ -496,7 +479,7 @@ it('degrades a deferred entry the engine could not fold, leaving no placeholder 
     // Never queued — vendor, magic or over-budget, which is what the engine says by declining.
     'fold declined' => ['ListQueryBuilder::for(User::class)->allowedFilters(...$this->allowedFilters())', []],
     // Folded, but to a descriptor no name can be read out of.
-    'fold unusable' => ['ListQueryBuilder::for(User::class)->allowedFilters($this->termFilter())', ['termFilter' => qbFoldOf('AllowedFilter::exact($dynamic)')]],
+    'fold unusable' => ['ListQueryBuilder::for(User::class)->allowedFilters($this->termFilter())', ['termFilter' => TraceScript::foldOf('AllowedFilter::exact($dynamic)')]],
 ]);
 
 it('diagnoses an unresolvable call site once, however many entries it answered with', function (): void {
@@ -506,7 +489,7 @@ it('diagnoses an unresolvable call site once, however many entries it answered w
 
     $facts = traceQbSnippet(
         'ListQueryBuilder::for(User::class)->allowedFilters(...$this->allowedFilters())',
-        foldedReturns: ['allowedFilters' => qbFoldOf($helper)],
+        foldedReturns: ['allowedFilters' => TraceScript::foldOf($helper)],
     )->facts;
 
     expect($facts->filters)->toBe([])
@@ -551,7 +534,7 @@ it('upgrades a named factory entry with the custom filter class its body fold wr
     // concrete FQCN before answering) and the `F::class` string.
     $facts = traceQbSnippet(
         "QueryBuilder::for(User::class)->allowedFilters([\\Workbench\\App\\Filters\\PublicIdFilter::allowed('position_id')])",
-        foldedReturns: ['allowed' => qbFoldOf($body)],
+        foldedReturns: ['allowed' => TraceScript::foldOf($body)],
     )->facts;
 
     expect(entryPairs($facts->filters))->toBe([['position_id', 'allowed']])
@@ -581,14 +564,14 @@ it('leaves a named factory entry untouched when its body fold answers with anyth
     // Never queued — the engine declines a vendor or unresolvable callee.
     'fold declined' => ['allowed', []],
     // Folded to a non-custom factory — call-site typing already answers those.
-    'fold non-custom' => ['allowed', ['allowed' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('legacy_id')")]],
+    'fold non-custom' => ['allowed', ['allowed' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('legacy_id')")]],
 ]);
 
 it('does not upgrade a factory entry that types off a backed-enum class-string argument', function (): void {
     // A call-site enum argument is the more specific fact; the wrapped-class fold never contests it.
     $facts = traceQbSnippet(
         "QueryBuilder::for(User::class)->allowedFilters([ListFilters::enum('status', \\Workbench\\App\\Enums\\WidgetStatus::class)])",
-        foldedReturns: ['enum' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('status', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
+        foldedReturns: ['enum' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('status', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
     )->facts;
 
     expect($facts->filters[0]->factoryEnum)->toBe('Workbench\\App\\Enums\\WidgetStatus')
@@ -600,7 +583,7 @@ it('recovers the wrapped filter class of a name-less factory entry from the same
     // kind, AND — through the folded instance value — the filter class the body wraps.
     $facts = traceQbSnippet(
         'QueryBuilder::for(User::class)->allowedFilters([$this->sharedFilter()])',
-        foldedReturns: ['sharedFilter' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('q', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
+        foldedReturns: ['sharedFilter' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('q', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
     )->facts;
 
     expect(entryPairs($facts->filters))->toBe([['q', 'custom']])

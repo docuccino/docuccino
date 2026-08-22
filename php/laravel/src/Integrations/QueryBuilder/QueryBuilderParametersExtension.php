@@ -201,10 +201,8 @@ final class QueryBuilderParametersExtension implements OperationExtension
         }
 
         if ($filter->factoryClass !== null) {
+            // The factory file itself is already recorded by recordFactoryFile().
             $facts = $this->customFilters->read($filter->factoryClass);
-            if ($facts->file !== null) {
-                $context->recordDependencyFiles([$facts->file]);
-            }
             if ($facts->attribute !== null) {
                 return $this->applyCustomAttribute($filter, $facts->attribute, $context);
             }

@@ -62,4 +62,22 @@ final class TraceScript
             $scope->drainReturnFolds();
         };
     }
+
+    /**
+     * What the engine hands back for one folded return: the folded value plus the returned expression
+     * itself (AST-only, since it belongs to the callee's file). Folded through the same stub scope the
+     * visitor sees, so a fixture reads like the real answer.
+     *
+     * @return array{0: ?ConstValue, 1: ?Node\Expr}
+     */
+    public static function foldOf(string $expression): array
+    {
+        $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php '.$expression.';') ?? [];
+        $statement = $ast[0] ?? null;
+        $expr = $statement instanceof Node\Stmt\Expression ? $statement->expr : null;
+
+        return $expr === null
+            ? [null, null]
+            : [(new StubTraceScope(new ClassT('Spatie\\QueryBuilder\\QueryBuilder')))->constantValueOf($expr), $expr];
+    }
 }

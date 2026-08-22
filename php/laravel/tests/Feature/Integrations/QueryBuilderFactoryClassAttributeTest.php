@@ -8,14 +8,9 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Inference\ActionRef;
-use Docuccino\Core\Inference\ConstValue;
-use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
-use Docuccino\Laravel\Tests\Support\StubTraceScope;
 use Docuccino\Laravel\Tests\Support\TraceScript;
-use PhpParser\Node;
-use PhpParser\ParserFactory;
 
 /**
  * End-to-end proof that a SHARED custom filter class can declare its schema once, class-level, for
@@ -49,31 +44,13 @@ function runFactoryClassAttribute(string $chain, array $foldedReturns = []): arr
     return [$byName, $context->dependencyFiles()];
 }
 
-/**
- * The answer the engine's return fold gives for one factory body, folded through the same stub scope
- * the visitor sees. The real engine resolves `new self` to the concrete FQCN before answering, so the
- * scripted body writes the class out fully qualified.
- *
- * @return array{0: ?ConstValue, 1: ?Node\Expr}
- */
-function factoryFoldOf(string $expression): array
-{
-    $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php '.$expression.';') ?? [];
-    $statement = $ast[0] ?? null;
-    $expr = $statement instanceof Node\Stmt\Expression ? $statement->expr : null;
-
-    return $expr === null
-        ? [null, null]
-        : [(new StubTraceScope(new ClassT('Spatie\\QueryBuilder\\QueryBuilder')))->constantValueOf($expr), $expr];
-}
-
 it('applies the wrapped filter class attribute through its own static factory (the new-self idiom)', function (): void {
     [$byName, $dependencyFiles] = runFactoryClassAttribute(
         'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
             ."\\Workbench\\App\\Filters\\PublicIdFilter::allowed('position_id'),"
             .'])->paginate()',
         foldedReturns: [
-            'allowed' => factoryFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('position_id', new \\Workbench\\App\\Filters\\PublicIdFilter, 'position_id')"),
+            'allowed' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('position_id', new \\Workbench\\App\\Filters\\PublicIdFilter, 'position_id')"),
         ],
     );
 
@@ -94,7 +71,7 @@ it('applies the wrapped filter class attribute through a wrapper factory on anot
             ."\\Workbench\\App\\Support\\FilterFactory::publicId('owner_id'),"
             .'])->paginate()',
         foldedReturns: [
-            'publicId' => factoryFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('owner_id', new \\Workbench\\App\\Filters\\PublicIdFilter, 'owner_id')"),
+            'publicId' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('owner_id', new \\Workbench\\App\\Filters\\PublicIdFilter, 'owner_id')"),
         ],
     );
 
@@ -139,7 +116,7 @@ it('ignores a fold that answers with a non-custom factory kind', function (): vo
             ."\\Workbench\\App\\Support\\FilterFactory::boolean('active'),"
             .'])->paginate()',
         foldedReturns: [
-            'boolean' => factoryFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('active')"),
+            'boolean' => TraceScript::foldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('active')"),
         ],
     );
 
@@ -147,8 +124,8 @@ it('ignores a fold that answers with a non-custom factory kind', function (): vo
 });
 
 it('applies format from a class attribute on a directly registered custom filter', function (): void {
-    // Fix (a) alone, no factory in sight: AllowedFilter::custom at the call site, format read off the
-    // class attribute exactly as the route-level layer would read it.
+    // No factory in sight: AllowedFilter::custom at the call site, format read off the class
+    // attribute exactly as the route-level layer would read it.
     [$byName] = runFactoryClassAttribute(
         'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
             ."AllowedFilter::custom('pub', \\Workbench\\App\\Filters\\PublicIdFilter::class),"
@@ -158,4 +135,18 @@ it('applies format from a class attribute on a directly registered custom filter
     expect($byName['filter[pub]']['schema']['type'])->toBe('string')
         ->and($byName['filter[pub]']['schema']['format'])->toBe('uuid')
         ->and($byName['filter[pub]']['description'])->toBe('A uuid public identifier.');
+});
+
+it('lets an explicit format override the one the type implied', function (): void {
+    // `type: 'date'` implies `format: date`; the attribute's own format is the more precise claim and
+    // must win, exactly as it does at route level.
+    [$byName] = runFactoryClassAttribute(
+        'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
+            ."AllowedFilter::custom('archived_since', \\Workbench\\App\\Filters\\ArchivedSinceFilter::class),"
+            .'])->paginate()',
+    );
+
+    expect($byName['filter[archived_since]']['schema']['type'])->toBe('string')
+        ->and($byName['filter[archived_since]']['schema']['format'])->toBe('date-time')
+        ->and($byName['filter[archived_since]']['description'])->toBe('Archived at or after this instant.');
 });
