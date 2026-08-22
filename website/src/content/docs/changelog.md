@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.1
+
+### Bug fixes
+
+- **laravel**: type QB filters off their declared column binding ([#137](https://github.com/docuccino/docuccino/pull/137))
+
 ## v0.8.0
 
 ### Breaking changes
