@@ -9,7 +9,6 @@ use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Laravel\Integrations\Eloquent\BelongsToReader;
 use Docuccino\Laravel\Integrations\Eloquent\CastSchema;
 use Docuccino\Laravel\Integrations\Eloquent\EloquentModelReflector;
-use Illuminate\Support\Str;
 
 /**
  * Resolves the typed schema a subject model pins for an exact-filter column — its cast, or the
@@ -86,35 +85,36 @@ final class FilterColumnResolver
 
     /**
      * The shape a `belongsTo` relation's referenced key pins for a foreign-key column. The column must
-     * be exactly ONE relation's foreign key — zero or several matches refuse, so the answer is a
-     * function of the declarations and never of method order. The referenced column (the ownerKey, else
-     * the related key) resolves through {@see ownColumn()} on the related model — deliberately no
+     * be exactly ONE readable relation's foreign key — zero or several matches refuse, so the answer is
+     * a function of the declarations and never of method order. The referenced column (the ownerKey,
+     * else the related key) resolves through {@see ownColumn()} on the related model — deliberately no
      * second hop, and a refusal there (an uncast non-key ownerKey, a custom caster) propagates.
      */
     private function foreignKeyColumn(string $model, string $column): FilterColumn
     {
-        $relations = $this->belongsTo->relations($model);
-        if ($relations === []) {
+        ['readable' => $readable, 'refused' => $refused] = $this->belongsTo->relations($model);
+        if ($readable === [] && $refused === []) {
             return FilterColumn::none();
         }
 
-        // EVERY related model's declaration joins the dependency set, match or not: a change to any
-        // related $primaryKey changes which default foreign keys exist, so it can create or remove a
-        // match for this very column, and a warm fragment must see that.
+        // EVERY related declaration joins the dependency set — match or not, refused or not: a change
+        // to any related $primaryKey changes which default foreign keys exist, so it can create or
+        // remove a match for this very column, and a warm fragment must see that.
         $files = [];
-        $matches = [];
-        foreach ($relations as $relation) {
+        foreach ([...$readable, ...$refused] as $relation) {
             $files = [...$files, ...DeclarationFiles::of($relation['related'])];
-            $foreignKey = $relation['foreignKey']
-                ?? Str::snake($relation['relation']).'_'.$this->reflector->facts($relation['related'])['keyName'];
-            if ($foreignKey === $column) {
-                $matches[] = $relation;
-            }
         }
         $files = array_values(array_unique($files));
 
-        if (count($matches) !== 1) {
-            return FilterColumn::none($files);
+        $matches = array_values(array_filter($readable, static fn (array $relation): bool => $relation['foreignKey'] === $column));
+
+        // A refused relation was read only in part: its literal foreign key contests the column, and
+        // one with no readable key could serve ANY column — either way no answer here is safely
+        // exclusive, and a vague-but-true string beats a precise-but-false format.
+        $vetoed = array_filter($refused, static fn (array $refusal): bool => $refusal['foreignKey'] === $column || $refusal['foreignKey'] === null) !== [];
+
+        if ($vetoed || count($matches) !== 1) {
+            return FilterColumn::none()->withDependencyFiles($files);
         }
 
         $referenced = $matches[0]['ownerKey'] ?? $this->reflector->facts($matches[0]['related'])['keyName'];

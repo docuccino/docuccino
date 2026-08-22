@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
 use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
+use Illuminate\Support\Str;
 use PhpParser\Node;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Stmt\ClassMethod;
@@ -15,25 +16,36 @@ use Throwable;
 
 /**
  * Reads a model's `belongsTo` relations statically: reflection finds the candidate methods, the
- * declaring file's AST supplies the call's LITERAL arguments. The model is never instantiated. A
- * relation whose arguments aren't literals is omitted rather than guessed — a guessed foreign key
- * would type the wrong column.
+ * declaring file's AST supplies the call's LITERAL arguments. The model is never instantiated. A call
+ * that can't be read whole surfaces as a REFUSAL rather than vanishing — the consumer must know a
+ * partially-readable relation exists, both to key caches on what was read and to refuse columns the
+ * unreadable part could own. Only a related class that doesn't load stays invisible: there is no file
+ * to record. A `getKeyName()` override in a method body — not the `$primaryKey` property — is
+ * invisible to the default-key computation, as it is for path parameters.
  *
- * @phpstan-type BelongsToRelation array{relation: string, related: class-string, foreignKey: ?string, ownerKey: ?string}
+ * @phpstan-type BelongsToRelation array{related: class-string, foreignKey: string, ownerKey: ?string}
+ * @phpstan-type BelongsToRefusal array{related: ?string, foreignKey: ?string}
+ * @phpstan-type BelongsToRelations array{readable: list<BelongsToRelation>, refused: list<BelongsToRefusal>}
  */
 final class BelongsToReader
 {
-    /** @var array<string, list<BelongsToRelation>> */
+    public function __construct(
+        private readonly EloquentModelReflector $reflector = new EloquentModelReflector,
+    ) {}
+
+    /** @var array<string, BelongsToRelations> */
     private array $memo = [];
 
     /** Laravel's `belongsTo()` parameters, in signature order — positional args map onto these names. */
     private const PARAMETERS = ['related', 'foreignKey', 'ownerKey', 'relation'];
 
     /**
-     * Every statically readable `belongsTo` relation the model declares, `relation` being the name that
-     * feeds Laravel's default-foreign-key computation (the literal 4th argument, else the method name).
+     * Every `belongsTo` relation the model declares. `readable` entries carry a CONCRETE foreign key —
+     * the explicit literal, else Laravel's own default (`snake($relation).'_'.<related key name>`).
+     * `refused` entries are calls read only in part: the literal foreign key when that argument alone
+     * was readable (null is a wildcard), and the related class when the argument names one that loads.
      *
-     * @return list<BelongsToRelation>
+     * @return BelongsToRelations
      */
     public function relations(string $model): array
     {
@@ -41,18 +53,19 @@ final class BelongsToReader
     }
 
     /**
-     * @return list<BelongsToRelation>
+     * @return BelongsToRelations
      */
     private function read(string $model): array
     {
+        $relations = ['readable' => [], 'refused' => []];
         if (! class_exists($model)) {
-            return [];
+            return $relations;
         }
 
         try {
             $methods = (new ReflectionClass($model))->getMethods(ReflectionMethod::IS_PUBLIC);
         } catch (Throwable) {
-            return [];
+            return $relations;
         }
 
         // Candidates grouped by declaring file so each file parses once; a relation method is public,
@@ -72,15 +85,19 @@ final class BelongsToReader
             }
         }
 
-        $relations = [];
-        foreach ($byFile as $file => $methods) {
+        foreach ($byFile as $file => $names) {
             $nodes = ParsedClassFile::methods($file);
-            foreach ($methods as $method) {
-                $node = $nodes[$method] ?? null;
-                $relation = $node === null ? null : self::fromMethod($method, $node);
-                if ($relation !== null) {
-                    $relations[] = $relation;
+            foreach ($names as $name) {
+                $node = $nodes[$name] ?? null;
+                if ($node === null) {
+                    continue;
                 }
+
+                $result = $this->fromMethod($name, $node);
+                if ($result['readable'] !== null) {
+                    $relations['readable'][] = $result['readable'];
+                }
+                $relations['refused'] = [...$relations['refused'], ...$result['refused']];
             }
         }
 
@@ -88,42 +105,79 @@ final class BelongsToReader
     }
 
     /**
-     * The relation one method body declares, or null. Exactly one `$this->belongsTo(...)` call may
-     * appear (a chained `->withDefault()` still contains exactly one), and every argument must be a
-     * literal.
+     * What one method body declares. A single fully-literal `$this->belongsTo(...)` call (a chained
+     * `->withDefault()` still contains exactly one) is readable; several calls in one body (a
+     * conditional relation) are each a refusal — which one runs is a runtime fact — as is a call with
+     * a non-literal argument or a target that isn't a loadable model.
      *
-     * @return BelongsToRelation|null
+     * @return array{readable: BelongsToRelation|null, refused: list<BelongsToRefusal>}
      */
-    private static function fromMethod(string $method, ClassMethod $node): ?array
+    private function fromMethod(string $method, ClassMethod $node): array
     {
-        $calls = array_filter(
+        $calls = array_values(array_filter(
             (new NodeFinder)->findInstanceOf($node->stmts ?? [], MethodCall::class),
             static fn (MethodCall $call): bool => $call->var instanceof Node\Expr\Variable
                 && $call->var->name === 'this'
                 && $call->name instanceof Node\Identifier
                 && $call->name->toString() === 'belongsTo'
                 && ! $call->isFirstClassCallable(),
-        );
+        ));
+        if ($calls === []) {
+            return ['readable' => null, 'refused' => []];
+        }
+
         if (count($calls) !== 1) {
-            return null;
+            return ['readable' => null, 'refused' => array_map(self::refusal(...), $calls)];
         }
 
-        $arguments = self::arguments(array_values($calls)[0]);
-        if ($arguments === null) {
-            return null;
-        }
-
-        $related = $arguments['related'] ?? null;
-        if (! is_string($related) || ! class_exists($related) || ! EloquentModelReflector::isModel($related)) {
-            return null;
+        $arguments = self::arguments($calls[0]);
+        $related = $arguments === null ? null : ($arguments['related'] ?? null);
+        if ($arguments === null || $related === null || ! class_exists($related) || ! EloquentModelReflector::isModel($related)) {
+            return ['readable' => null, 'refused' => [self::refusal($calls[0])]];
         }
 
         return [
-            'relation' => $arguments['relation'] ?? $method,
-            'related' => $related,
-            'foreignKey' => $arguments['foreignKey'] ?? null,
-            'ownerKey' => $arguments['ownerKey'] ?? null,
+            'readable' => [
+                'related' => $related,
+                'foreignKey' => $arguments['foreignKey']
+                    ?? Str::snake($arguments['relation'] ?? $method).'_'.$this->reflector->facts($related)['keyName'],
+                'ownerKey' => $arguments['ownerKey'] ?? null,
+            ],
+            'refused' => [],
         ];
+    }
+
+    /**
+     * What a partially-readable call still discloses: its literal foreign key — a named column no
+     * other answer may safely claim — and its related class when the argument names one that loads.
+     * Positional mapping stops at an unpack; past it, positions are unknowable.
+     *
+     * @return BelongsToRefusal
+     */
+    private static function refusal(MethodCall $call): array
+    {
+        $related = null;
+        $foreignKey = null;
+        $positional = true;
+        foreach ($call->getArgs() as $index => $arg) {
+            if ($arg->unpack) {
+                $positional = false;
+
+                continue;
+            }
+
+            $name = $arg->name?->toString() ?? ($positional ? (self::PARAMETERS[$index] ?? null) : null);
+            if ($name === 'related') {
+                $class = self::className($arg->value);
+                $related = $class !== false && class_exists($class) ? $class : null;
+            }
+            if ($name === 'foreignKey') {
+                $value = self::literal($arg->value);
+                $foreignKey = $value === false ? null : $value;
+            }
+        }
+
+        return ['related' => $related, 'foreignKey' => $foreignKey];
     }
 
     /**

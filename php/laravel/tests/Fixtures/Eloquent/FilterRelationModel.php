@@ -4,20 +4,21 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Tests\Fixtures\Eloquent;
 
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
- * A model fixture whose `belongsTo` relations cover every shape the filter foreign-key hop reads:
- * default and explicit foreign keys, named arguments, owner keys, a renamed related primary key — and
- * the refusals: a non-literal argument, a `morphTo`, two relations contesting one column. Only ever
- * reflected — never queried.
+ * A model fixture whose `belongsTo` relations cover every READABLE shape the filter foreign-key hop
+ * types: default and explicit foreign keys, named arguments, owner keys, a renamed related primary
+ * key, a string-literal class name — plus the shapes that yield nothing at all (a `morphTo`, a
+ * first-class callable, non-relation helpers) and two relations contesting one column. Deliberately
+ * carries NO partially-readable `belongsTo` (see the veto fixtures for those). Only ever reflected —
+ * never queried.
  */
 final class FilterRelationModel extends Model
 {
-    private const DYNAMIC_KEY = 'dynamic_id';
-
     /**
      * Default foreign key (`vault_id`) to a uuid-keyed model.
      *
@@ -130,13 +131,51 @@ final class FilterRelationModel extends Model
     }
 
     /**
-     * A non-literal foreign-key argument — the relation can't be read.
+     * A string-literal class name works exactly as a `::class` fetch does (`ancient_id`, uuid).
      *
      * @return BelongsTo<Vault, $this>
      */
-    public function dynamic(): BelongsTo
+    public function ancient(): BelongsTo
     {
-        return $this->belongsTo(Vault::class, self::DYNAMIC_KEY);
+        return $this->belongsTo('Docuccino\\Laravel\\Tests\\Fixtures\\Eloquent\\Vault', 'ancient_id');
+    }
+
+    /**
+     * An owner key naming an ENUM-cast column on the related model.
+     *
+     * @return BelongsTo<FilterCastModel, $this>
+     */
+    public function flagged(): BelongsTo
+    {
+        return $this->belongsTo(FilterCastModel::class, 'flagged_key', 'status');
+    }
+
+    /**
+     * A first-class callable references `belongsTo` without calling it — not a relation.
+     */
+    public function vaultResolver(): Closure
+    {
+        return $this->belongsTo(...);
+    }
+
+    /**
+     * A helper needing an argument is not a zero-argument relation accessor — were the candidate
+     * filter to break, its literal `pivot_id` would surface and fail the reader's exact-set pin.
+     *
+     * @return BelongsTo<Vault, $this>
+     */
+    public function pivotTo(string $context): BelongsTo
+    {
+        return $this->belongsTo(Vault::class, 'pivot_id');
+    }
+
+    /**
+     * A static constructor is not a relation accessor (a static body can never call `$this->belongsTo`,
+     * so this exclusion is unobservable from the outside — the method is here for the candidate set).
+     */
+    public static function archived(): self
+    {
+        return new self;
     }
 
     /**
