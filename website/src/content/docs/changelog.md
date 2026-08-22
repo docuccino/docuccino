@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.3
+
+### Features
+
+- **laravel**: type QB foreign-key filters off the related model's key ([#142](https://github.com/docuccino/docuccino/pull/142))
+- **laravel**: type QB filters off the subject model's primary key ([#141](https://github.com/docuccino/docuccino/pull/141))
+
+### Bug fixes
+
+- **laravel**: let a shared filter class declare its schema via a class-level attribute ([#143](https://github.com/docuccino/docuccino/pull/143))
+
 ## v0.8.2
 
 ### Features
