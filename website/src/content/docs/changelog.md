@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.2
+
+### Features
+
+- **website**: add robots.txt pointing crawlers at the sitemap ([#139](https://github.com/docuccino/docuccino/pull/139))
+
 ## v0.8.1
 
 ### Bug fixes
