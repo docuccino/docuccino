@@ -7,6 +7,13 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.8.0
+
+### Breaking changes
+
+- add format to the parameter attributes ([#135](https://github.com/docuccino/docuccino/pull/135))
+  - `$format` sits before `$required` in the constructors of `QueryParameter`, `HeaderParameter`, `CookieParameter` and `BodyParameter`, so positional arguments past `$description` shift by one; named arguments are unaffected.
+
 ## v0.6.0
 
 ### Breaking changes

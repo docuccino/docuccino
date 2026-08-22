@@ -13,6 +13,13 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.0
+
+### Breaking changes
+
+- **attributes**: add format to the parameter attributes ([#135](https://github.com/docuccino/docuccino/pull/135))
+  - `$format` sits before `$required` in the constructors of `QueryParameter`, `HeaderParameter`, `CookieParameter` and `BodyParameter`, so positional arguments past `$description` shift by one; named arguments are unaffected.
+
 ## v0.7.0
 
 ### Breaking changes
