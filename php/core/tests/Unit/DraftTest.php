@@ -169,6 +169,14 @@ it('omits the schema when a parameter states its shape through content instead',
     expect($parameter->freeze()->toArray())->not->toHaveKey('schema');
 });
 
+it('omits the schema when a parameter states its shape through a $ref instead', function (): void {
+    $draft = new OperationDraft;
+    $parameter = $draft->parameter('query', 'shared');
+    $parameter->set('$ref', '#/components/parameters/Shared', Contribution::attribute());
+
+    expect($parameter->freeze()->toArray())->not->toHaveKey('schema');
+});
+
 it('carries schema mock hints through freeze into x-docuccino.mock', function (): void {
     $schema = (new SchemaDraft)->assignMock(['faker' => 'numberBetween:1,100']);
     $schema->set('type', 'integer', Contribution::inference());
