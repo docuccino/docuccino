@@ -118,6 +118,7 @@ public function __construct(
     public string $name,
     public ?string $type = null,
     public ?string $description = null,
+    public ?string $format = null,
     public bool $required = false,
     public mixed $default = null,
     public mixed $example = null,
@@ -126,6 +127,7 @@ public function __construct(
 
 ```php
 #[QueryParameter(name: 'page', type: 'integer', description: 'Page number', default: 1, example: 2)]
+#[QueryParameter(name: 'from', type: 'string', format: 'date-time', description: 'Only items created after this moment.')]
 public function index(): AnonymousResourceCollection { /* … */ }
 ```
 
@@ -147,7 +149,7 @@ public function __construct(
 )
 ```
 
-Path params are inherently required (no `required` param); adds an OAS `format`.
+Path params are inherently required (no `required` param).
 
 ```php
 #[PathParameter(name: 'uuid', type: 'string', description: 'User id', format: 'uuid', example: '9b1…')]
@@ -161,6 +163,7 @@ public function __construct(
     public string $name,
     public ?string $type = null,
     public ?string $description = null,
+    public ?string $format = null,
     public bool $required = false,
     public mixed $example = null,
 )
@@ -178,6 +181,7 @@ public function __construct(
     public string $name,
     public ?string $type = null,
     public ?string $description = null,
+    public ?string $format = null,
     public bool $required = false,
     public mixed $example = null,
 )
@@ -195,6 +199,7 @@ public function __construct(
     public string $name,
     public ?string $type = null,
     public ?string $description = null,
+    public ?string $format = null,
     public bool $required = false,
     public mixed $example = null,
 )
