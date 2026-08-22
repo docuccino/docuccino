@@ -75,11 +75,13 @@ follows it. There's no `per_page` beside it here because `paginate(20)` fixes th
 hand the size to a helper that reads it off the request and
 [that key is documented too](/laravel/documenting/requests/#the-page-size-key).
 
-## Typed filters from your model's casts
+## Typed filters from your model
 
-When an **exact** filter's column has an [Eloquent cast](https://laravel.com/docs/eloquent-mutators#attribute-casting),
-Docuccino types the parameter from that cast instead of defaulting to a string. It reads the subject
-model straight from `QueryBuilder::for(Invoice::class)` — no annotation, no extra config.
+When an **exact** filter names a column Docuccino can type, the parameter gets a real schema instead
+of defaulting to a string. It reads the subject model straight from `QueryBuilder::for(Invoice::class)`
+— no annotation, no extra config — and answers from three places: the column's
+[Eloquent cast](https://laravel.com/docs/eloquent-mutators#attribute-casting), the model's primary
+key, and the related model behind a `belongsTo` foreign key.
 
 The biggest win is enum casts. Cast a column to a
 [backed enum](https://laravel.com/docs/eloquent-mutators#enum-casting) and the filter documents its
@@ -163,9 +165,78 @@ Other casts map to their natural scalar type:
 | `AsArrayObject`, `AsFluent`, `AsEncryptedArrayObject` | `type: object` |
 | `AsCollection`, `AsEncryptedCollection` | `type: array` |
 | A backed enum | `type: array` of the backing values (above) |
-| Anything else (`decimal`, `hashed`, `AsEnumCollection`, an unrecognized custom caster, no cast) | `type: string` |
+| Anything else (`decimal`, `hashed`, `AsEnumCollection`, an unrecognized custom caster) | `type: string` |
 
-If Docuccino can't resolve the subject model, every filter falls back to a string.
+An **uncast** column isn't necessarily a plain string either: the model's primary key and its
+`belongsTo` foreign keys are typed [from the model itself](#keys-and-foreign-keys-without-a-cast);
+every other uncast column stays a string. If Docuccino can't resolve the subject model, every filter
+falls back to a string.
+
+### Keys and foreign keys, without a cast
+
+The columns clients filter on most — ids — rarely carry a cast: Laravel has no built-in `uuid` cast,
+and a `foreignUuid()` column type lives in a migration, where no static reader can see it. Docuccino
+types these from what the model itself declares:
+
+- **The primary key.** An exact filter on the key column follows the key's declaration: `HasUuids`
+  documents `type: string` with `format: uuid`, `HasUlids` the `ulid` format — either wins over a
+  stale cast on the key — and otherwise `$keyType` decides between an `integer` and a plain string.
+  It's the same answer the model's [route-bound path parameter](/laravel/documenting/requests/#path-parameters)
+  gets, so a filter and a path segment can never describe the same key differently.
+- **`belongsTo` foreign keys.** A filter on a foreign-key column is typed off the key it references:
+  the related model's primary key, or the column a written `ownerKey` names — through that column's
+  own cast or key declaration.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Models/Customer.php
+	final class Customer extends Model
+	{
+	    use HasUuids;
+	}
+
+	// app/Models/Invoice.php — also HasUuids; customer_id is a foreignUuid column, no cast anywhere
+	public function customer(): BelongsTo
+	{
+	    return $this->belongsTo(Customer::class);
+	}
+
+	// app/Http/Controllers/InvoiceController.php
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([AllowedFilter::exact('id'), AllowedFilter::exact('customer_id')]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{ "name": "filter[customer_id]", "in": "query", "required": false,
+	  "description": "Exact-match filter",
+	  "schema": { "type": "string", "format": "uuid" } },
+	{ "name": "filter[id]", "in": "query", "required": false,
+	  "description": "Exact-match filter",
+	  "schema": { "type": "string", "format": "uuid" } }
+	```
+	</TabItem>
+</Tabs>
+
+The foreign-key hop is deliberately literal-minded. It reads relations written the idiomatic way —
+`return $this->belongsTo(Customer::class);` with literal arguments, positional or named, chained
+modifiers like `->withDefault()` included — and computes the default foreign key exactly as Laravel
+does (`snake($relation).'_'.$related->getKeyName()`, honoring a literal `$relation` argument).
+Anything it would have to guess at, it refuses, and the filter stays a plain string:
+
+- a computed argument — a variable class name, a built key string — is never guessed from, and it
+  guards as well as declines: a relation whose foreign key is written but whose other arguments
+  aren't refuses exactly that column, while one whose foreign key is itself computed could serve any
+  column, so it suppresses foreign-key typing across the whole model;
+- a conditional relation — two `belongsTo` calls in one method — refuses both arms' written keys
+  rather than picking one;
+- an `ownerKey` naming a column that is neither the related model's key nor cast has no known type;
+- a column two relations both claim as their foreign key has no single truthful answer;
+- a `morphTo()` column's related model varies per row, so it has no single key to reference.
+
+Editing any `belongsTo` target re-documents the endpoint — every named related class's file joins
+the build's dependency set exactly as the subject model's does, refused relations included.
 
 ### What each filter kind infers
 
@@ -174,7 +245,7 @@ it reads only what the kind actually exposes:
 
 | Filter kind | What's inferred | How to override |
 | --- | --- | --- |
-| `exact('status')` | The column's cast. A backed enum becomes a comma `whereIn` array of its values. | Comment, docblock, or `#[QueryParameter]`. |
+| `exact('status')` | The column's cast — or, uncast, [the key or foreign key](#keys-and-foreign-keys-without-a-cast) it is. A backed enum becomes a comma `whereIn` array of its values. | Comment, docblock, or `#[QueryParameter]`. |
 | `partial('name')` / a bare `'name'` | A substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `scope('popular')` | The `scopePopular` scope's **value parameter** type — a native scalar, or a backed enum (values + descriptions). | Type the scope parameter; or `#[QueryParameter]`. |
 | `callback('active', fn)` | The column of a single `$query->where('active', $value)` in the closure, then that column's cast. | Comment above the entry, or `#[QueryParameter]`. |
@@ -185,8 +256,10 @@ it reads only what the kind actually exposes:
 | `trashed()` | A fixed `with` / `only` string enum, with the omitted-value default explained. | — |
 
 A single-value comparison (scope, callback, operator) documents an enum as one value; only `exact`
-uses the comma `whereIn` array. `AllowedFilter::trashed()` called with no name is documented under
-Spatie's own default name, `filter[trashed]`.
+uses the comma `whereIn` array. Wherever a kind reads a column's cast, the
+[key and foreign-key typing](#keys-and-foreign-keys-without-a-cast) applies too — an uncast id column
+types the same through `exact`, `operator`, a callback, or a custom filter. `AllowedFilter::trashed()`
+called with no name is documented under Spatie's own default name, `filter[trashed]`.
 
 Anything Docuccino can't reduce to one column or a known type — a non-equality operator
 (`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path (`customer.name`) —
@@ -196,7 +269,7 @@ stays a plain string. It never guesses.
 
 If you funnel the recurring filter idioms through a small factory that returns an `AllowedFilter`,
 Docuccino types the filter from the **call site** — the arguments you write there name the filter, so
-the factory body never has to be opened:
+the typing never depends on opening the factory body:
 
 ```php
 final class ListFilters
@@ -215,9 +288,13 @@ final class ListFilters
 Any argument that is a **backed-enum class-string** names the filter's value domain, so it's documented
 with that enum's backing values and `#[CaseDescription]` prose directly (a single-value comparison, so
 a scalar enum — not the `whereIn` array). With no enum argument, the filter's key is taken as the
-column and typed off the model cast (so a `boolean`/`uuid` idiom types correctly); a name that isn't a
-column — a multi-column search — stays a plain string. Spatie's own `AllowedFilter::*` factories are
-unaffected.
+column and typed off the model — its cast, or its [key/foreign-key type](#keys-and-foreign-keys-without-a-cast),
+so a `boolean`/`uuid` idiom types correctly; a name that isn't a column — a multi-column search —
+stays a plain string. Spatie's own `AllowedFilter::*` factories are unaffected.
+
+One further fact **is** read from inside a foldable factory body: the custom filter class it wraps,
+so a shared filter class can [declare its schema once](#shared-filter-classes-declared-once) for
+every call site.
 
 Sometimes the call site names nothing at all: the entry is built by a method, and the filter's public
 name is written inside it. Docuccino then folds what that method **returns**, with the call-site
@@ -360,8 +437,8 @@ AllowedFilter::exact('status')->default('sent')->nullable();
 For a `custom` filter, Docuccino reads the column from a single `$query->where(...)` in the class's
 `__invoke` — just like a callback. When the body is more involved, document the parameter with a
 `#[QueryParameter]` **on the filter class itself**. Its `name` argument is ignored in this position
-(the parameter's name is the one you gave `AllowedFilter::custom`); `type`, `description`, `example`,
-and `default` are applied to the filter's parameter:
+(the parameter's name is the one you gave `AllowedFilter::custom`); `type`, `format`, `description`,
+`example`, and `default` are applied to the filter's parameter:
 
 <Tabs>
 	<TabItem label="Your code">
@@ -396,9 +473,72 @@ and `default` are applied to the filter's parameter:
 </Tabs>
 
 `type` accepts a scalar name (`int`, `string`, `bool`, `float`) or a backed-enum class-string, which
-documents that enum's values. The class attribute is an override of inference, not the last word: a
+documents that enum's values. `format` composes exactly as it does at route level: it applies after
+`type` — an explicit format wins over one the type implied — and it works alone, riding the default
+string schema, so `#[QueryParameter(name: 'ignored', format: 'uuid')]` documents
+`type: string, format: uuid`. The class attribute is an override of inference, not the last word: a
 `#[QueryParameter('filter[popular]')]` on the controller action still wins over it, so a caller can
-refine a shared filter per endpoint.
+refine a shared filter per endpoint — and a backed-enum argument written at a factory call site
+(above) also stays ahead of the wrapped class's attribute, being the more specific declaration.
+
+### Shared filter classes, declared once
+
+A reusable filter class tends to be registered through a small static factory rather than a literal
+`AllowedFilter::custom(...)` at every call site. The class-level attribute travels through that too:
+when the factory body is a **single unconditional return** of `AllowedFilter::custom(...)` — the same
+fold rule as every other helper, and vendor bodies are never opened — Docuccino recovers the filter
+class it wraps (`new UuidFilter(...)`, `new self`, or a `UuidFilter::class` argument) and reads its
+attribute, its `__invoke` column, exactly as if the `AllowedFilter::custom` call sat at the call site.
+
+So a filter enforcing a rule at runtime can publish that rule once, for every endpoint that uses it:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Filters/UuidFilter.php — rejects anything that isn't a UUID with a 422
+	#[QueryParameter(name: 'ignored', format: 'uuid', description: 'Matches one record by its public id.')]
+	final class UuidFilter implements Filter
+	{
+	    public function __invoke(Builder $query, mixed $value, string $property): void
+	    {
+	        if (! is_string($value) || ! Str::isUuid($value)) {
+	            throw ValidationException::withMessages([$property => 'Must be a valid UUID.']);
+	        }
+
+	        $query->where($property, $value);
+	    }
+
+	    public static function allowed(string $key, ?string $column = null): AllowedFilter
+	    {
+	        return AllowedFilter::custom($key, new self, $column ?? $key);
+	    }
+	}
+
+	// Any list endpoint:
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([UuidFilter::allowed('customer_id'), UuidFilter::allowed('position_id')]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{ "name": "filter[customer_id]", "in": "query", "required": false,
+	  "description": "Matches one record by its public id.",
+	  "schema": { "type": "string", "format": "uuid" } },
+	{ "name": "filter[position_id]", "in": "query", "required": false,
+	  "description": "Matches one record by its public id.",
+	  "schema": { "type": "string", "format": "uuid" } }
+	```
+	</TabItem>
+</Tabs>
+
+A wrapper factory on another class works the same way — `ListFilters::uuid('customer_id')` returning
+`AllowedFilter::custom($key, new UuidFilter)` reads the attribute off `UuidFilter`. And a factory
+whose body can't fold (one that branches, say) can carry the attribute **on the factory class
+itself** instead; failing both, the call-site column typing above stands, and nothing is guessed.
+
+Two things to keep at the call site: `->default()` and `->nullable()` chained **inside** a named
+factory's body aren't merged onto the entry — chain them where you register the filter — and the
+published parameter names still come from the `allowedFilters` keys, never from the class.
 
 ## Sparse fieldsets
 
@@ -598,7 +738,8 @@ Four things are outside what the trace models today, and none produces a diagnos
 - **A page key renamed to something unreadable** — `->paginate(20, ['*'], $key)` documents no page
   parameter at all, since a guessed `page` would name a key the endpoint never reads.
 - **Relationship-path columns** (`customer.name`) — the filter is documented, but as a plain string;
-  only the subject model's own columns are typed from casts.
+  only columns on the subject model's own table are typed. A `belongsTo` foreign key needs no dotted
+  path: `customer_id` [types off the related key](#keys-and-foreign-keys-without-a-cast) directly.
 - **Pagination that doesn't run through a query builder** — a terminal called on anything but a
   builder isn't recognized, and `pagination_terminals` doesn't change that (see
   [the receiver rule](#custom-pagination-terminals)). Declare `page` and `per_page` with

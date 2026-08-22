@@ -135,7 +135,8 @@ A bracketed `name` (`filter[status]`) patches a flat `filter[status]` parameter,
 document uses the `deepObject` filter style — the `status` property of the `filter` object parameter.
 The same attribute works in either representation. Placed on a **Spatie Query Builder custom filter
 class**, `#[QueryParameter]` documents that filter (its `name` is ignored — the name comes from
-`AllowedFilter::custom`); see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
+`AllowedFilter::custom`), whether the filter is registered inline or through a factory of your own
+that wraps it; see [Query Builder → custom filter classes](/laravel/packages/query-builder/#custom-filter-classes).
 
 ### `#[PathParameter]`
 
