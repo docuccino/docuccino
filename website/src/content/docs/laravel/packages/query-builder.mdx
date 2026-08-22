@@ -225,13 +225,18 @@ modifiers like `->withDefault()` included — and computes the default foreign k
 does (`snake($relation).'_'.$related->getKeyName()`, honoring a literal `$relation` argument).
 Anything it would have to guess at, it refuses, and the filter stays a plain string:
 
-- a computed argument — a variable class name, a built key string — is never guessed from;
+- a computed argument — a variable class name, a built key string — is never guessed from, and it
+  guards as well as declines: a relation whose foreign key is written but whose other arguments
+  aren't refuses exactly that column, while one whose foreign key is itself computed could serve any
+  column, so it suppresses foreign-key typing across the whole model;
+- a conditional relation — two `belongsTo` calls in one method — refuses both arms' written keys
+  rather than picking one;
 - an `ownerKey` naming a column that is neither the related model's key nor cast has no known type;
 - a column two relations both claim as their foreign key has no single truthful answer;
 - a `morphTo()` column's related model varies per row, so it has no single key to reference.
 
-Editing the related model re-documents the endpoint — its file joins the build's dependency set
-exactly as the subject model's does.
+Editing any `belongsTo` target re-documents the endpoint — every named related class's file joins
+the build's dependency set exactly as the subject model's does, refused relations included.
 
 ### What each filter kind infers
 
