@@ -543,3 +543,66 @@ it('degrades an unresolvable entry\'s file to its basename when there is no path
     expect($facts->unresolved)->toHaveCount(1)
         ->and($facts->unresolved[0])->toStartWith('allowedFilters entry at UserQuery.php:');
 });
+
+it('upgrades a named factory entry with the custom filter class its body fold wraps', function (string $body): void {
+    // `PublicIdFilter::allowed('position_id')` names the filter at the call site, so the entry records
+    // outright — and the body fold then names the ONE fact only it holds: the wrapped filter class.
+    // Both recoverable forms: the folded `new F(...)` instance (the engine resolves `self` to the
+    // concrete FQCN before answering) and the `F::class` string.
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(User::class)->allowedFilters([\\Workbench\\App\\Filters\\PublicIdFilter::allowed('position_id')])",
+        foldedReturns: ['allowed' => qbFoldOf($body)],
+    )->facts;
+
+    expect(entryPairs($facts->filters))->toBe([['position_id', 'allowed']])
+        ->and($facts->filters[0]->filterClass)->toBe('Workbench\\App\\Filters\\PublicIdFilter')
+        // Call-site typing is kept beneath it — the extension's fallback when the class says nothing.
+        ->and($facts->filters[0]->typeColumn)->toBe('position_id')
+        ->and($facts->filters[0]->factoryClass)->toBe('Workbench\\App\\Filters\\PublicIdFilter')
+        ->and($facts->unresolved)->toBe([]);
+})->with([
+    'new-instance form' => ["\\Spatie\\QueryBuilder\\AllowedFilter::custom('position_id', new \\Workbench\\App\\Filters\\PublicIdFilter, 'position_id')"],
+    'class-string form' => ["\\Spatie\\QueryBuilder\\AllowedFilter::custom('position_id', \\Workbench\\App\\Filters\\PublicIdFilter::class)"],
+]);
+
+it('leaves a named factory entry untouched when its body fold answers with anything else', function (string $method, array $foldedReturns): void {
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(User::class)->allowedFilters([\\Workbench\\App\\Filters\\LegacyKeyFilter::{$method}('legacy_id')])",
+        foldedReturns: $foldedReturns,
+    )->facts;
+
+    // No upgrade, no diagnostic: the call-site entry stands exactly as recorded.
+    expect(entryPairs($facts->filters))->toBe([['legacy_id', $method]])
+        ->and($facts->filters[0]->filterClass)->toBeNull()
+        ->and($facts->unresolved)->toBe([]);
+})->with([
+    // A branching body the engine could not fold.
+    'fold failed' => ['allowed', ['allowed' => [null, null]]],
+    // Never queued — the engine declines a vendor or unresolvable callee.
+    'fold declined' => ['allowed', []],
+    // Folded to a non-custom factory — call-site typing already answers those.
+    'fold non-custom' => ['allowed', ['allowed' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::exact('legacy_id')")]],
+]);
+
+it('does not upgrade a factory entry that types off a backed-enum class-string argument', function (): void {
+    // A call-site enum argument is the more specific fact; the wrapped-class fold never contests it.
+    $facts = traceQbSnippet(
+        "QueryBuilder::for(User::class)->allowedFilters([ListFilters::enum('status', \\Workbench\\App\\Enums\\WidgetStatus::class)])",
+        foldedReturns: ['enum' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('status', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
+    )->facts;
+
+    expect($facts->filters[0]->factoryEnum)->toBe('Workbench\\App\\Enums\\WidgetStatus')
+        ->and($facts->filters[0]->filterClass)->toBeNull();
+});
+
+it('recovers the wrapped filter class of a name-less factory entry from the same fold that names it', function (): void {
+    // `$this->sharedFilter()` writes nothing at the call site: the ONE fold answers for the name, the
+    // kind, AND — through the folded instance value — the filter class the body wraps.
+    $facts = traceQbSnippet(
+        'QueryBuilder::for(User::class)->allowedFilters([$this->sharedFilter()])',
+        foldedReturns: ['sharedFilter' => qbFoldOf("\\Spatie\\QueryBuilder\\AllowedFilter::custom('q', new \\Workbench\\App\\Filters\\PublicIdFilter)")],
+    )->facts;
+
+    expect(entryPairs($facts->filters))->toBe([['q', 'custom']])
+        ->and($facts->filters[0]->filterClass)->toBe('Workbench\\App\\Filters\\PublicIdFilter');
+});
