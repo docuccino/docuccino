@@ -83,7 +83,20 @@ it('reads the include Count/Exists suffixes, degrading each to the package defau
         ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 'Cnt', 'exists' => 'Has']])->countSuffix)->toBe('Cnt')
         ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 'Cnt', 'exists' => 'Has']])->existsSuffix)->toBe('Has')
         ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => 123]])->countSuffix)->toBe('Count')
-        ->and(QueryBuilderConfig::fromArray(['suffixes' => 'nope'])->existsSuffix)->toBe('Exists');
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => 'nope'])->existsSuffix)->toBe('Exists')
+        // An empty suffix is a value Spatie honors (Str::endsWith skips empty needles), not an omission.
+        ->and(QueryBuilderConfig::fromArray(['suffixes' => ['count' => '']])->countSuffix)->toBe('');
+});
+
+it('reads the value delimiter, keeping an empty one and degrading an ill-typed one', function (): void {
+    // Spatie splits list values on `query-builder.delimiter`; `''` means no splitting and is honored
+    // as written, so only an absent or ill-typed entry falls back to the comma.
+    expect(QueryBuilderConfig::fromArray([])->delimiter)->toBe(',')
+        ->and(QueryBuilderConfig::fromArray([])->splitsOnComma())->toBeTrue()
+        ->and(QueryBuilderConfig::fromArray(['delimiter' => '|'])->delimiter)->toBe('|')
+        ->and(QueryBuilderConfig::fromArray(['delimiter' => '|'])->splitsOnComma())->toBeFalse()
+        ->and(QueryBuilderConfig::fromArray(['delimiter' => ''])->delimiter)->toBe('')
+        ->and(QueryBuilderConfig::fromArray(['delimiter' => 123])->delimiter)->toBe(',');
 });
 
 it('brackets filter and fields member keys under the effective parameter names', function (): void {

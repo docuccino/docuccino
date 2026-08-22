@@ -92,12 +92,6 @@ final readonly class RepresentationPolicy
         return $this->filterStyle === 'deepObject';
     }
 
-    /** Whether `sort`/`include` lists are expressed as an exploded array parameter. */
-    public function listsAsArray(): bool
-    {
-        return $this->listStyle === 'array';
-    }
-
     private static function keyword(mixed $value, string $default): string
     {
         return is_string($value) && $value !== '' ? $value : $default;
