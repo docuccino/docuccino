@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 /**
- * The typed shape a subject-model cast pins for an exact-filter column, resolved by
+ * The typed shape a subject model pins for an exact-filter column, resolved by
  * {@see FilterColumnResolver}: an enum (its FQCN — the extension expands it through the shared enum
- * machinery to backing values + `x-enumDescriptions`), a native cast scalar schema, or none (no
- * recognised cast → the filter stays a plain string). `dependencyFiles` are the files the resolution
- * read (the enum's declaring file) so they join the fragment-cache key.
+ * machinery to backing values + `x-enumDescriptions`), a scalar schema from a native cast or the
+ * primary key, or none (nothing types the column → the filter stays a plain string).
+ * `dependencyFiles` are the files the resolution read (the enum's declaring file) so they join the
+ * fragment-cache key.
  */
 final readonly class FilterColumn
 {
