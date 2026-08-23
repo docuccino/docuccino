@@ -116,9 +116,9 @@ answer between schema and prose):
 One Spatie setting changes the shape itself: a custom `delimiter` in `config/query-builder.php` —
 read from the same config as the [parameter names](#renamed-parameter-keys). The array modelling
 above **is** OpenAPI's comma serialization, so under any other separator it would document requests
-your API doesn't parse. `sort`, `include`, and enum filters degrade to a plain string with the
-separator and the values named in the description; an empty delimiter turns splitting off entirely,
-so the single-value schema emits directly:
+your API doesn't parse. `sort`, `include`, each [fields group](#sparse-fieldsets), and enum filters
+degrade to a plain string with the separator and the values named in the description; an empty
+delimiter turns splitting off entirely, so the single-value schema emits directly:
 
 ```json
 { "name": "sort", "in": "query", "required": false,
@@ -494,7 +494,10 @@ private function referenceFilter(): AllowedFilter
 
 An entry Docuccino can't fold is never guessed at: it's left out of the spec, you get a
 `query-builder.unresolved-entry` warning naming the file and line, and every other entry on the list is
-documented as usual. Three more shapes stay out of reach:
+documented as usual. What the recovered entries no longer are is the *whole* list, so a sort, include
+or fields allow-list missing one entry is documented as a plain string rather than an enum — an enum
+short of a value would tell a generated client to reject a value your endpoint accepts. The other
+allow-lists on the same endpoint keep their enums. Three more shapes stay out of reach:
 
 - **A hand-off to another method.** The fold reads one body; it doesn't step into a second, so
   `return $this->buildFilter($key);` stays unresolved. A factory *call* in there is fine —
@@ -747,11 +750,12 @@ The bare group's values fall back to the subject model's `@property` prose; a pr
 another type's columns, so its values are described by comments only — `fields[customer]` above is
 named but undescribed until one is written.
 
-Fields degrade exactly where sorts and includes do — [below Spatie v7](#sorts-and-includes-are-enums-of-the-allow-list)
-and under a [custom `delimiter`](#sorts-and-includes-are-enums-of-the-allow-list) — plus one switch of
-their own: Spatie's `convert_field_names_to_snake_case` makes camel-case respellings of every
-allow-listed field legal too, so with it enabled the enum would under-claim, and each fields
-parameter stays a plain string with the values named in its description.
+Fields degrade exactly where sorts and includes do, and nowhere else: [below Spatie
+v7](#sorts-and-includes-are-enums-of-the-allow-list), under a [custom
+`delimiter`](#sorts-and-includes-are-enums-of-the-allow-list), and where an entry of that same
+allow-list [could not be recovered](#limits-and-how-youre-told). Spatie's
+`convert_field_names_to_snake_case` changes only the column names it puts in the `SELECT`; the
+allow-list is still validated exactly as you wrote it, so the enum stays true either way.
 
 ## Strict mode and the `400` response
 
@@ -926,7 +930,7 @@ the build:
 
 | Situation | Diagnostic | What lands in the spec |
 | --- | --- | --- |
-| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
+| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted and every other entry is documented; that list loses its enum (a short one would be false), the others keep theirs |
 | A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | The page parameter only |
 | A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
 | Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
