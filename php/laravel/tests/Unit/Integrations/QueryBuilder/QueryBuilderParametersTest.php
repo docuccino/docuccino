@@ -185,6 +185,36 @@ it('emits single-value item schemas when an empty delimiter disables splitting',
         ->and($byName['filter[status]']->description)->not->toContain('whereIn');
 });
 
+/**
+ * Below spatie/laravel-query-builder v7 the enum grammar itself is unproven — the explicit factory
+ * minted Count/Exists + partials there, and the old config keys are not read — so sort and include
+ * degrade to the vague-true plain string: defaults in prose, no separator note (v5/v6 configured the
+ * delimiter another way). Filter typing is cast-driven, not grammar-driven, so it is untouched.
+ */
+it('degrades sort and include to plain strings on a pre-v7 package', function (int $major): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->sorts = [new QbEntry('name', 'default')];
+        $f->includes = [new QbEntry('author', 'relationship')];
+        $f->filters = [(new QbEntry('status', 'exact'))->withColumn(enumColumnSchema(), enumTyped: true)];
+        $f->defaultSorts = ['-created_at'];
+    });
+    $config = new QueryBuilderConfig(delimiter: '|', spatieMajor: $major);
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($byName['sort']->schema)->toBe(['type' => 'string'])
+        ->and($byName['sort']->style)->toBeNull()
+        ->and($byName['sort']->explode)->toBeNull()
+        ->and($byName['sort']->description)->toBe('Sort by: name (prefix `-` for descending). Defaults to `-created_at`.')
+        ->and($byName['include']->schema)->toBe(['type' => 'string'])
+        ->and($byName['include']->description)->toBe('Include related resources: author.')
+        ->and($byName['filter[status]']->schema)->toBe(['type' => 'string'])
+        ->and($byName['filter[status]']->description)->toContain('Accepts a `|`-separated list of values (matched as `whereIn`).');
+})->with([
+    'v6' => [6],
+    'v5' => [5],
+]);
+
 it('strips the descending prefix off an allow-listed sort name and dedupes both directions', function (): void {
     // `allowedSorts('-name')` legalizes the base name in both directions — AllowedSort ltrim()s it.
     $facts = factsWith(function (QueryBuilderFacts $f): void {
