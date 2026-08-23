@@ -2841,7 +2841,7 @@
             },
             "name": "filter[name]",
             "in": "query",
-            "description": "Partial-match filter",
+            "description": "Substring match on `name`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -2886,7 +2886,7 @@
             },
             "name": "filter[status]",
             "in": "query",
-            "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+            "description": "Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).",
             "required": false,
             "style": "form",
             "explode": false,
@@ -3737,7 +3737,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "5f2fa7f04d876587d654542b680caee47345866b9fdf48bc1e55e33f72a81989",
-      "contentHash": "93cf8a30cd2642b9fad7989a03c2c63c7ae459d6ed3647dea35478aae29da73d"
+      "contentHash": "3eb2804f7ee4daa5d7fd1f2cc480246fc1b03c696c7d297fe3b36a01fb66b0de"
     },
     "generator": {
       "name": "docuccino/laravel",
