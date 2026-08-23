@@ -12,13 +12,24 @@ namespace Docuccino\Core\Draft;
  */
 final class DeprecationNote
 {
+    /**
+     * Marked, because a reader meeting the paragraph on its own — a description dumped without the
+     * deprecated flag beside it — has nothing else to tell them what it is about. The mark is also how
+     * a format with no `deprecated` member of its own tells that the prose already says it.
+     */
+    private const string MARK = '**Deprecated:**';
+
     /** The note for a reason, or null where the reason says nothing. */
     public static function paragraph(?string $reason): ?string
     {
         $reason = trim($reason ?? '');
 
-        // Marked, because a reader meeting the paragraph on its own — a description dumped without the
-        // deprecated flag beside it — has nothing else to tell them what it is about.
-        return $reason === '' ? null : '**Deprecated:** '.$reason;
+        return $reason === '' ? null : self::MARK.' '.$reason;
+    }
+
+    /** Whether prose already carries a note, so saying it again would only say it twice. */
+    public static function marks(string $description): bool
+    {
+        return str_contains($description, self::MARK);
     }
 }
