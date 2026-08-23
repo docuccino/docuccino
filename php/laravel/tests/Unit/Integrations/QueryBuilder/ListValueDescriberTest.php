@@ -2,26 +2,12 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Inference\ClassMetadata;
-use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Core\Inference\PropertyMetadata;
-use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
-use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
-
 /**
  * Dataset coverage over the model-prose lookups the describer answers: an include name from its
  * relation method's docblock summary (snake→camel included), a sort name from the `@property`
  * summary the engine recovered — and every no-answer shape degrading to null, a method that is not
  * a relation included.
  */
-function almanacDescriber(): ListValueDescriber
-{
-    return new ListValueDescriber(Almanac::class, new ClassMetadata(Almanac::class, [
-        new PropertyMetadata('title', new UnknownT('test'), 'The almanac\'s display title.'),
-        new PropertyMetadata('issued_at', new UnknownT('test')),
-    ]));
-}
-
 it('answers an include name from the relation method docblock summary', function (string $name, ?string $expected): void {
     expect(almanacDescriber()->include($name))->toBe($expected);
 })->with([
@@ -37,8 +23,8 @@ it('answers an include name from the relation method docblock summary', function
     'an Eloquent method the base model documents' => ['getTable', null],
 ]);
 
-it('answers a sort name from the @property summary the engine recovered', function (string $column, ?string $expected): void {
-    expect(almanacDescriber()->sort($column))->toBe($expected);
+it('answers a sort or fields column from the @property summary the engine recovered', function (string $column, ?string $expected): void {
+    expect(almanacDescriber()->column($column))->toBe($expected);
 })->with([
     'described column' => ['title', 'The almanac\'s display title.'],
     'column with no prose' => ['issued_at', null],
