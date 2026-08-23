@@ -336,8 +336,8 @@ action — becomes the request body schema.
 	  "type": "object",
 	  "properties": {
 	    "customer_id": { "type": "integer" },
-	    "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"] },
-	    "due_at":      { "type": ["string", "null"], "format": "date" }
+	    "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"], "example": "GBP" },
+	    "due_at":      { "type": ["string", "null"], "format": "date", "example": "2024-01-01" }
 	  },
 	  "required": ["customer_id", "currency"]
 	}
@@ -346,8 +346,10 @@ action — becomes the request body schema.
 </Tabs>
 
 Either way documents a body with `customer_id`, `currency` (as an enum), and `due_at`, with the right
-required fields and formats. `requestBody.required` is `true` as soon as at least one field is
-required, and omitted when every field is optional.
+required fields and formats — and with [an example on each field whose rules pin
+one](#examples-come-with-the-rules), so the body is something a reader can send rather than an empty
+box. `requestBody.required` is `true` as soon as at least one field is required, and omitted when every
+field is optional.
 
 Because a **form request** is a single named source class, its body is hoisted to a
 `#/components/schemas/StoreInvoiceRequest` component and the operation `$ref`s it — so the same
@@ -532,6 +534,49 @@ are ignored, and the class needn't implement any interface — so a rule from a 
 moment its author adds the attribute. Nothing is instantiated and `validate()` never runs. A rule class
 with no `#[RuleSchema]` keeps the `validation.rule-unrecoverable` diagnostic; closures stay opaque.
 </Aside>
+
+### Examples come with the rules
+
+A property whose rules pin a value gets an `example` too, without you writing one. A write endpoint's
+try-it panel and every generated snippet start filled in rather than blank:
+
+| The rules say | The example |
+| --- | --- |
+| `email` / `url` / `ip` / `uuid` / `ulid` | `user@example.com` · `https://example.com` · `192.0.2.1` · a sample UUID / ULID |
+| `date` (and an ISO `date_format`) | `2024-01-01` |
+| `in:GBP,USD,EUR`, `Rule::enum(Currency::class)` | `GBP` — the first member, the one every viewer and generator shows |
+| `integer\|min:18`, `numeric\|between:0,10`, `gte:1` | the lowest legal value: `18`, `1`, `1` |
+| `string\|max:100`, `size:5`, `min:12` | a sample of a length the bound allows |
+| `digits:5` | `12345` — a digit run, so leading zeros stay possible |
+| `alpha`, `alpha_dash`, `starts_with:ACME-`, `ends_with:.png` | a value the pattern accepts |
+| `boolean` | `true` |
+| `json` · `timezone` | `{}` · `UTC` |
+
+Two things are true of every one of them. They are **constant**: the same rules always produce the
+same bytes, and nothing is read from the clock, the machine's timezone or its locale — a document
+rebuilt tomorrow is byte-identical. And they are **valid**: each candidate is checked against the
+property's finished schema, by the same JSON Schema validator
+[contract testing](/laravel/guides/contract-testing/) audits your own examples with, before it is
+published. An example that would fail the endpoint's own validation is worse than no example, so it is
+simply not published.
+
+That is also the whole story of when a property gets nothing:
+
+- **the rules pin only a type.** A bare `string` or `integer` gets no example: `"type": "string"`
+  already tells a generator that much, and `"string"` as a value would be bytes without a fact.
+- **the constraint lives outside the schema.** `decimal:2` cannot be met by any JSON number (they
+  carry no trailing zeros); `before:tomorrow` and `gt:other_field` are settled at request time; a
+  `file` upload's bytes are not an illustration. Each of those withdraws the example rather than
+  guessing.
+- **the value contradicts the schema.** `date_format:d/m/Y` publishes `"format": "date"`, so the
+  `01/01/2024` the endpoint actually wants would sit beside a keyword it fails. Nothing is published,
+  and the description still names the format.
+- **nothing fits.** `min:10|max:5`, or an `email` under `max:5`.
+
+Anything you write outranks all of it — a `#[BodyParameter(example: …)]`, a
+`#[RuleSchema(example: …)]` on your own rule class, or an
+[`#[Example]`](/laravel/documenting/examples/) for the body as a whole. See
+[Example payloads](/laravel/documenting/examples/) for the full ladder.
 
 ## Validation rule reference
 
