@@ -134,6 +134,7 @@ what it would have had.
 | `example-file.invalid` | warning | An `#[Example(file: …)]` file didn't decode — not `.json`/`.yaml`/`.yml`, unparseable, or empty | Fix the file; the message quotes the parser |
 | `example-file.escapes-base-path` | error | An `#[Example(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root; a path that leaves it is refused by design |
 | `attribute.description-unusable` | warning | A `#[Description]` carries both `text:` and `file:`, or neither, so it says nothing certain and nothing was documented | Give it exactly one of the two; the message says which half is wrong. See [`#[Description]`](/laravel/reference/attributes/#description) |
+| `attribute.unreadable` | warning | A Docuccino attribute at the named declaration could not be instantiated — usually a typo'd argument — so it was ignored | Check the arguments at that declaration against the attribute's constructor; the message names what it threw |
 | `description-file.missing` | warning | A `#[Description(file: …)]` names a file that isn't there | Create it or fix the path, which is read relative to your application root. Docuccino watches it either way, so the description appears the moment the file does |
 | `description-file.escapes-base-path` | error | A `#[Description(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root — see [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) |
 
