@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Registry;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\ConfigPaths;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
@@ -24,6 +25,9 @@ use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
  *   `controller`.
  * - An `integrations.query_builder.filter_descriptions` key naming no filter kind. The sentence under it
  *   can never be reached, so the override looks like it did nothing.
+ * - A `representation.examples.formats` sample that is not a string. `format` is a string keyword, so
+ *   nothing could publish it; the same code covers a sample a field's own rules reject, which only the
+ *   build can find out.
  * - A `tags.definitions` `parent` that {@see DocumentConfig::tagDefinitions()} dropped, because it
  *   names no defined tag or would close a cycle — OAS 3.2 allows neither.
  * - A path-like key pointing outside the app base path. {@see ConfigPaths} can't relativise it, so it
@@ -120,6 +124,19 @@ final class ConfigDiagnostics
             );
         }
 
+        foreach (self::unpublishableFormatSamples($document) as $format => $type) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'config.format-sample-rejected',
+                message: sprintf(
+                    'The example configured for format "%s" is %s rather than a string, and `format` only ever constrains a string, so nothing can publish it — the format is illustrated as if it had never been configured.',
+                    $format,
+                    $type,
+                ),
+                help: sprintf('Set representation.examples.formats.%s to a string, or drop the key.', $format),
+            );
+        }
+
         foreach (ConfigPaths::machineDependent($document->raw) as $outside) {
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Info,
@@ -154,6 +171,28 @@ final class ConfigDiagnostics
         }
 
         return $unknown;
+    }
+
+    /**
+     * The `representation.examples.formats` entries that could never reach a document, as format => the
+     * type that was written there. {@see RepresentationPolicy::fromConfig()} drops these, and this is what
+     * says so; a string sample that a particular field's rules reject is reported by the build, under the
+     * same code, because only the build knows the field.
+     *
+     * @return array<string, string>
+     */
+    private static function unpublishableFormatSamples(DocumentConfig $document): array
+    {
+        $examples = Hydrate::map($document->representation['examples'] ?? null);
+
+        $unpublishable = [];
+        foreach (Hydrate::map($examples['formats'] ?? null) as $format => $sample) {
+            if (! is_string($sample)) {
+                $unpublishable[(string) $format] = get_debug_type($sample);
+            }
+        }
+
+        return $unpublishable;
     }
 
     /**

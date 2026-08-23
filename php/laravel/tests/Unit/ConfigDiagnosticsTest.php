@@ -15,14 +15,17 @@ use Docuccino\Laravel\Registry\IntegrationToggles;
  * dropped tags.definitions `parent` — are surfaced as info diagnostics so a misconfiguration is
  * discoverable.
  */
-function configDoc(array $integrations = [], array $tags = []): DocumentConfig
+function configDoc(array $integrations = [], array $tags = [], array $representation = []): DocumentConfig
 {
     $raw = [];
     if ($integrations !== []) {
         $raw['integrations'] = $integrations;
     }
+    if ($representation !== []) {
+        $raw['representation'] = $representation;
+    }
 
-    return new DocumentConfig('default', [], tags: $tags, raw: $raw);
+    return new DocumentConfig('default', [], tags: $tags, representation: $representation, raw: $raw);
 }
 
 it('emits an info diagnostic when an always-on producer carries an enabled switch', function (string $key): void {
@@ -178,6 +181,50 @@ it('does not flag a filter_descriptions key that names a real filter kind', func
     static fn (string $kind): array => [$kind],
     QueryBuilderParameters::filterKinds(),
 ));
+
+/**
+ * `format` only ever constrains a string, so a non-string sample could not be published by anything —
+ * the policy drops it, and this is what stops the drop being silent. A sample a particular FIELD's rules
+ * reject is the build's to report, under the same code, because only the build knows the field.
+ */
+it('emits a warning for a format sample that is not a string', function (mixed $sample, string $type): void {
+    $diagnostics = ConfigDiagnostics::for(configDoc(representation: [
+        'examples' => ['formats' => ['email' => $sample]],
+    ]));
+
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->severity)->toBe(Severity::Warning)
+        ->and($diagnostics[0]->code)->toBe('config.format-sample-rejected')
+        ->and($diagnostics[0]->message)->toBe(sprintf(
+            'The example configured for format "email" is %s rather than a string, and `format` only ever constrains a string, so nothing can publish it — the format is illustrated as if it had never been configured.',
+            $type,
+        ))
+        ->and($diagnostics[0]->help)->toBe('Set representation.examples.formats.email to a string, or drop the key.');
+})->with([
+    'an int' => [42, 'int'],
+    'a bool' => [true, 'bool'],
+    'null' => [null, 'null'],
+    'a nested array' => [['jane@example.com'], 'array'],
+]);
+
+it('says nothing about a representation.examples.formats map of strings', function (mixed $formats): void {
+    expect(ConfigDiagnostics::for(configDoc(representation: ['examples' => ['formats' => $formats]])))->toBe([]);
+})->with([
+    'an empty map' => [[]],
+    'one format' => [['email' => 'jane@example.com']],
+    'several' => [['email' => 'jane@example.com', 'hostname' => 'api.example.net']],
+    // A format nothing uses is not an error — examples are demand-driven.
+    'a format no schema carries' => [['iban' => 'GB33BUKB20201555555555']],
+    'a non-array where the map should be' => ['jane@example.com'],
+]);
+
+it('says nothing about a representation bag with no examples in it', function (array $representation): void {
+    expect(ConfigDiagnostics::for(configDoc(representation: $representation)))->toBe([]);
+})->with([
+    'only the other keywords' => [['operation_id' => 'controller-method', 'nullable' => 'anyof']],
+    'an empty examples bag' => [['examples' => []]],
+    'a non-array examples bag' => [['examples' => 'nonsense']],
+]);
 
 it('says nothing about a query_builder bag with no filter_descriptions in it', function (mixed $bag): void {
     expect(ConfigDiagnostics::for(configDoc(['query_builder' => $bag])))->toBe([]);

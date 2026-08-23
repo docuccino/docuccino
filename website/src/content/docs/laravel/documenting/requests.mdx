@@ -573,6 +573,25 @@ That is also the whole story of when a property gets nothing:
   and the description still names the format.
 - **nothing fits.** `min:10|max:5`, or an `email` under `max:5`.
 
+The per-format samples in the first rows are defaults you can replace. They are
+documentation-reserved values by design (RFC 2606 / 5737 / 3849), so nothing there names a real
+resource — but if your API reads better with your own, set them per format:
+
+```php
+'representation' => [
+    'examples' => [
+        'formats' => ['email' => 'jane@example.com', 'hostname' => 'api.example.net'],
+    ],
+],
+```
+
+It is a **merge**: the two formats above are replaced and every other format keeps its default. A
+format the table doesn't know can be added the same way. And a configured sample earns no exemption
+from the rule above — it is validated against each field's finished schema like a derived one, and on a
+field whose rules reject it the built-in sample is published there instead, with a
+`config.format-sample-rejected` warning naming the format, your value and the keyword it failed. A
+sample for a format no schema uses is not an error; examples are demand-driven.
+
 Anything you write outranks all of it — a `#[BodyParameter(example: …)]`, a
 `#[RuleSchema(example: …)]` on your own rule class, or an
 [`#[Example]`](/laravel/documenting/examples/) for the body as a whole. See

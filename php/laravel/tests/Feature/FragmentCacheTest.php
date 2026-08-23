@@ -361,6 +361,23 @@ it('invalidates fragments when the query-builder delimiter changes (booted-app c
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
 
+it('invalidates fragments when a format example sample is configured', function (): void {
+    fragmentCacheDir('fragments');
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
+    generateDocument()->document;
+    $engine->analyzeCount = 0;
+
+    // A format sample moves the synthesized `example` on every property carrying that format, and it is
+    // part of `representation` — so `document.configHash` is the hash that already covers it, exactly as
+    // it covers `representation.operation_id`. A warm fragment must not serve the old sample.
+    config()->set('docuccino.documents.default.representation.examples.formats', ['email' => 'jane@example.com']);
+    generateDocument()->document;
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+});
+
 it('invalidates fragments when a query-builder filter description is configured', function (): void {
     fragmentCacheDir('fragments');
     $engine = new CountingTypeEngine(WorkbenchEngine::make());

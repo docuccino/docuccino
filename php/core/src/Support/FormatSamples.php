@@ -13,6 +13,13 @@ namespace Docuccino\Core\Support;
  * Every value is a constant. Nothing here is derived from the clock, the locale or the environment —
  * a sample that moved with the date would move the document with it.
  *
+ * A document can replace individual samples (`representation.examples.formats`, arriving as
+ * `RepresentationPolicy::$formatSamples`). The merge happens HERE, at the one lookup, so the table stays
+ * the single answer to "what does an email look like" whether or not a caller was handed the map. The
+ * synthesized property example is handed it, because a representation policy reaches it; the collection
+ * exporter is not — an emitter is given `EmitOptions`, never a policy — so a collection's fabricated
+ * request body still illustrates with the constants below.
+ *
  * @internal
  */
 final class FormatSamples
@@ -45,10 +52,16 @@ final class FormatSamples
         'password' => 'secret',
     ];
 
-    /** The sample for a format, or null where the format is one this table doesn't know. */
-    public static function for(string $format): ?string
+    /**
+     * The sample for a format, or null where neither the overrides nor this table knows it. An override
+     * wins for the format it names and changes nothing else — the merge is per format, so a document
+     * that restates one sample keeps every other constant below.
+     *
+     * @param  array<string, string>  $overrides  the document's configured samples, by format
+     */
+    public static function for(string $format, array $overrides = []): ?string
     {
-        return self::SAMPLES[$format] ?? null;
+        return $overrides[$format] ?? self::SAMPLES[$format] ?? null;
     }
 
     /**

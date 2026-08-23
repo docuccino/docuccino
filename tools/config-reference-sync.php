@@ -85,6 +85,9 @@ const CONFIG_REFERENCE_OPAQUE = [
     // Filter kind => your own sentence. The kinds are a closed set Docuccino owns, so a typo there is
     // caught by the `config.unknown-filter-kind` diagnostic rather than by this guard.
     'documents.*.integrations.query_builder.filter_descriptions',
+    // JSON Schema `format` => your own sample. The formats are the spec's, not ours, and a format no
+    // schema uses is not an error — examples are demand-driven.
+    'documents.*.representation.examples.formats',
 ];
 
 /**

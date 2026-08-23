@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Validation;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 
 /**
@@ -53,29 +54,41 @@ final class RequestSchemaBuilder
      * Give every LEAF an `example` its own rules earn ({@see FieldExample}). Run once the whole tree
      * exists, so a node is judged on its finished keywords rather than on whichever rule came last —
      * and so a node that turned out to be a container is skipped, its children illustrating it.
+     *
+     * Returns what synthesis had to report, in tree order — a configured format sample a field's own
+     * rules reject.
+     *
+     * @return list<Diagnostic>
      */
-    public function synthesizeExamples(): void
+    public function synthesizeExamples(RepresentationPolicy $policy = new RepresentationPolicy): array
     {
-        self::walk($this->root);
+        return self::walk($this->root, $policy, '');
     }
 
-    private static function walk(FieldNode $node): void
+    /**
+     * @return list<Diagnostic>
+     */
+    private static function walk(FieldNode $node, RepresentationPolicy $policy, string $path): array
     {
         if ($node->properties !== []) {
-            foreach ($node->properties as $child) {
-                self::walk($child);
+            $diagnostics = [];
+            foreach ($node->properties as $name => $child) {
+                $diagnostics = [...$diagnostics, ...self::walk($child, $policy, self::join($path, (string) $name))];
             }
 
-            return;
+            return $diagnostics;
         }
 
         if ($node->items !== null) {
-            self::walk($node->items);
-
-            return;
+            return self::walk($node->items, $policy, self::join($path, '*'));
         }
 
-        FieldExample::attach($node);
+        return FieldExample::attach($node, $policy, $path);
+    }
+
+    private static function join(string $path, string $segment): string
+    {
+        return $path === '' ? $segment : $path.'.'.$segment;
     }
 
     /**

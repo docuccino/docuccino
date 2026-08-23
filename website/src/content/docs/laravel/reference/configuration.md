@@ -299,6 +299,9 @@ examples.
     //     'components' => true,    // true (hoist a paginated envelope to one component per item type
     //                              // and paginator kind) | false (inline on every operation)
     // ],
+    // 'examples' => [
+    //     'formats' => ['email' => 'jane@example.com'], // format => the sample examples illustrate with
+    // ],
 ],
 ```
 
@@ -315,6 +318,7 @@ from "API changed".
 | `enums.naming` | `names` \| `none` \| `x-enumNames` \| `x-enum-varnames` | `names` | SDK member-name hints on enum schemas. The default `names` emits both spellings (`x-enum-varnames` for OpenAPI Generator and the TypeScript toolchain, `x-enumNames` for NSwag); a single-key keyword pins one tool's shape; `none` turns hints off. Read by the [Enum integration](/laravel/documenting/schemas/#enums) and the [Query Builder sort/include enums](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
 | `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
 | `errors.components` | `true` \| `false` | `true` | Whether a repeated error body hoists to shared components — its shape into `#/components/schemas`, and the whole response into `#/components/responses` where operations state it identically (`true`) — or every copy is inlined (`false`). |
+| `examples.formats` | a `format` → sample map | `[]` | The value a [synthesized example](/laravel/documenting/requests/#examples-come-with-the-rules) illustrates a JSON Schema `format` with, **merged** over the built-in table: a format you leave out keeps its documentation-reserved default (RFC 2606 / 5737 / 3849), and a format the built-ins don't know can be added. A configured sample is held to the same rule as a derived one — it is validated against the finished keywords of every field carrying that format, and one that a field's rules reject falls back to the built-in sample for that field with a `config.format-sample-rejected` warning naming the format, the value and the keyword. Configuring a format no schema uses is not an error; examples are demand-driven. It changes the document's `configHash`, so it retires warm fragments. |
 | `pagination.components` | `true` \| `false` | `true` | Whether a [paginated envelope](/laravel/documenting/responses/#pagination) hoists to one `#/components/schemas` entry per item type and paginator kind — `ArticleResourcePage`, `ArticleResourceCursorPage` — that every paginated operation `$ref`s (`true`), or the whole envelope is restated on each of them (`false`). Hoisting means an SDK generator mints one page type per item type instead of one per endpoint. An envelope whose item type could not be identified, or whose item schema is not itself a component, stays inline either way. |
 
 The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
