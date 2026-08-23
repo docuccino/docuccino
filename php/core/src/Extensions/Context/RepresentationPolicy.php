@@ -20,6 +20,10 @@ use Docuccino\Core\Extensions\Schema\EnumDecoration;
  * - `enumComponents`: whether a reflectable enum hoists to a named component (deduped by FQCN) that
  *   use sites `$ref`, or is inlined at each one. Hoisting is the better output — one canonical,
  *   described enum shared everywhere; `false` restores the inline form byte-for-byte.
+ * - `paginationComponents`: whether a page-of-X envelope hoists to one named component per item type
+ *   and paginator kind that each paginated operation `$ref`s, or is restated inline on every one of
+ *   them. Hoisting is the better output — an SDK generator mints one page type per item type instead
+ *   of one per operation; `false` restores the inline form byte-for-byte.
  * - `nullable`: how "single type plus null" is expressed — `type-array` (`type: [x, null]`) |
  *   `anyof` (a `{type: null}` branch).
  * - `filterStyle` (Query Builder): `bracketed` (flat `filter[status]` params, `fields[articles]` for
@@ -47,6 +51,7 @@ final readonly class RepresentationPolicy
         public string $resourceWrap = '',
         public bool $enumComponents = true,
         public bool $errorComponents = true,
+        public bool $paginationComponents = true,
     ) {}
 
     /**
@@ -63,6 +68,9 @@ final readonly class RepresentationPolicy
         $errors = $representation['errors'] ?? null;
         $errorComponents = is_array($errors) ? ($errors['components'] ?? null) : null;
 
+        $pagination = $representation['pagination'] ?? null;
+        $paginationComponents = is_array($pagination) ? ($pagination['components'] ?? null) : null;
+
         return new self(
             operationId: self::keyword($representation['operation_id'] ?? null, 'route-name'),
             enumNaming: self::keyword($enumNaming, 'names'),
@@ -72,6 +80,7 @@ final readonly class RepresentationPolicy
             resourceWrap: self::normalizeWrap($resourceWrap),
             enumComponents: ! ($enumComponents === false),
             errorComponents: ! ($errorComponents === false),
+            paginationComponents: ! ($paginationComponents === false),
         );
     }
 

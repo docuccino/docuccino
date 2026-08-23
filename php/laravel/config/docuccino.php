@@ -134,6 +134,10 @@ return [
                 //     'components' => true,    // true hoists an error body repeated across operations to one
                 //                              // $ref'd components.responses entry; false inlines every copy
                 // ],
+                // 'pagination' => [
+                //     'components' => true,    // true hoists a paginated envelope to one $ref'd component per
+                //                              // item type and paginator kind; false inlines every copy
+                // ],
             ],
 
             // The policy `docuccino:diff --enforce` holds a changeset to.

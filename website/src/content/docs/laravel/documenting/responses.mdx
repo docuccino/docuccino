@@ -67,6 +67,46 @@ Each response's `description` is the standard reason phrase for its status — `
 `201 Created`, `202 Accepted`, `204 No Content`, and so on — so you don't hand-write them. Responses
 are emitted in ascending status order, whatever order your return paths appear in.
 
+### Pagination
+
+A paginated collection's `{ data, links, meta }` envelope is defined once, as a component named after
+the item type and the paginator you used, and every endpoint returning that page points at it:
+
+```json
+"responses": {
+  "200": {
+    "description": "OK",
+    "content": {
+      "application/json": { "schema": { "$ref": "#/components/schemas/InvoiceResourcePage" } }
+    }
+  }
+}
+```
+
+```json
+"InvoiceResourcePage": {
+  "type": "object",
+  "properties": {
+    "data": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceResource" } },
+    "links": { "type": "object", "properties": { "first": {}, "last": {}, "prev": {}, "next": {} } },
+    "meta": { "type": "object", "properties": { "current_page": {}, "total": {} } }
+  },
+  "required": ["data", "links", "meta"]
+}
+```
+
+`simplePaginate()` gives you `InvoiceResourceSimplePage` and `cursorPaginate()` gives you
+`InvoiceResourceCursorPage`, because those pages carry different members — a simple page has no
+`total`, a cursor page has tokens instead of page numbers. Two endpoints paginating the same resource
+the same way share one component, so a generated client gets one page type per resource rather than
+one per endpoint.
+
+The name comes from the item type and the paginator alone, so adding or removing an unrelated endpoint
+never renames it. Where the item type can't be identified — an untyped collection generic, a resource
+the analyzer can't read — the envelope is written out on the endpoint instead of being named after a
+guess. Set [`representation.pagination.components`](/laravel/reference/configuration/#representation)
+to `false` to write it out everywhere.
+
 ### Media types
 
 A response is `application/json` unless the payload itself says otherwise. A first-party JSON:API
