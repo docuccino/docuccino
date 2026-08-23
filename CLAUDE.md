@@ -74,6 +74,16 @@ change serves one at the other's expense, say so out loud rather than letting it
   one. An unconstrained-but-honest shape costs a client some type safety; a confidently wrong
   one costs them a runtime failure. When recovery is partial, widen rather than guess — and say
   so with a diagnostic rather than degrading quietly.
+- **A closed set owes the document an enum**: any value domain the application enforces at runtime
+  is a closed set — an allow-list (Query Builder's filters, sorts, includes and fields), an enum
+  cast, a validation `in:` rule, an implicit enum route binding, a `whereIn` — and the document says
+  so or it is under-describing what the server will accept. Publishing `type: string` where the set
+  is known costs the consumer type safety and leaves their generated client unable to enumerate the
+  options; publishing an enum NARROWER than what the server accepts is worse, because it marks a
+  working request invalid. So a published enum must equal the validation surface, and where recovery
+  of that surface is partial — one entry of a rule whose values could not be read, one allow-list
+  member behind an expression that would not fold — widen the whole parameter to a string with a
+  diagnostic rather than publish the short enum.
 - **Conventional commits** (`feat(laravel): …`, `fix(core): …`), NO Co-Authored-By trailers.
   Merges are **squash-only and the PR title is the message that lands**, so the title is gated
   (`.github/workflows/pr-title.yml` → `tools/pr-title-lint.php`): a conventional type, an optional
@@ -116,6 +126,13 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   `<Name>Integration` registrar via the public Registrar API, `class_exists` conditional
   registration, imports only the public surface (`IntegrationsArchTest` is the definition;
   extend its allow-list only with justification — never duplicate a core utility to dodge it).
+- **A vendor package's grammar is a function of the version the app resolved**, not of the version
+  the integration was written against. Recover against what `composer.lock` actually installed
+  (`Composer\InstalledVersions`), and where the installed major predates the grammar the integration
+  implements, degrade to the vague-but-true shape with a diagnostic rather than publish a confident
+  claim in another version's dialect. The anti-pattern is an integration that declares no constraint
+  on the package it activates on — `class_exists` is a presence check, not a version check — and
+  then emits its current major's grammar unconditionally.
 - **Public API boundary**: `@internal` marks non-public core, enforced in two halves.
   `IntegrationsArchTest` reads IMPORTS — a built-in integration may consume only the allow-listed
   public surface. `CoreBoundaryArchTest` reads REFLECTION — no public method or property of the
@@ -169,6 +186,15 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   summaries and examples address someone who cannot see the codebase, so they never carry
   tooling advice, attribute names or "pin this with…" guidance. Guidance for the author is a
   diagnostic, which is where they will actually see it.
+- **The document is COMPILED, not only read**: an SDK generator and a viewer take it as input, so a
+  fact the build proved is owed in machine-readable form wherever prose states it — an ability named
+  in a description and carried in `x-permissions` is the shape; a value list spelled out in a
+  description with no `enum` beside it, or a pagination envelope described but never componentized,
+  is prose no generator can read. And anything minted into the document becomes an identifier in
+  somebody's generated client, so it is either identifier-safe or it carries the names that make it
+  so (`x-enum-varnames`/`x-enumNames` beside a value like `-total`). A decoration standard adopted
+  anywhere is owed everywhere the same kind of fact appears — ONE enum-decoration policy covering
+  component enums and parameter enums both, never one per producer.
 - **Coverage standards (binding)**: every mapping/lookup table gets a dataset test over
   EVERY entry + unknown-entry degradation; stub-engine tests prove mechanics only — the
   parsing/recovery half needs real-path tests (fixture group). Negative paths are coverage.
