@@ -2739,6 +2739,18 @@
                   "-name",
                   "created_at",
                   "-created_at"
+                ],
+                "x-enum-varnames": [
+                  "Name",
+                  "NameDesc",
+                  "CreatedAt",
+                  "CreatedAtDesc"
+                ],
+                "x-enumNames": [
+                  "Name",
+                  "NameDesc",
+                  "CreatedAt",
+                  "CreatedAtDesc"
                 ]
               }
             }
@@ -3281,10 +3293,21 @@
           "published",
           "archived"
         ],
-        "x-enumDescriptions": {
-          "draft": "Not yet visible to applicants.",
-          "published": "Live and accepting traffic."
-        }
+        "x-enum-descriptions": [
+          "Not yet visible to applicants.",
+          "Live and accepting traffic.",
+          ""
+        ],
+        "x-enum-varnames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ],
+        "x-enumNames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
       }
     },
     "responses": {
@@ -3400,7 +3423,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "94201d8762854c81e0339989335efbb54aec3f6f6a92b868be5c89489a0de1af",
-      "contentHash": "d4b1ece9162cceeaba1135f8e2a7869706a204fb7b07bb584c31522813bbece0"
+      "contentHash": "629ce6a0e7e4f600edba1c99e6b07c4f8a0383066518ced0c708115071871f86"
     },
     "generator": {
       "name": "docuccino/laravel",

@@ -17,6 +17,7 @@ use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
+use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\ThrowConfidence;
@@ -80,11 +81,14 @@ final class QueryBuilderParametersExtension implements OperationExtension
             return;
         }
 
-        $this->enrichFilters($facts, $context);
+        $metadata = $this->enrichFilters($facts, $context);
+        $describer = $facts->subjectModel !== null && $metadata !== null
+            ? new ListValueDescriber($facts->subjectModel, $metadata)
+            : null;
 
         $contribution = Contribution::integration('query-builder', $context->actionSource());
 
-        foreach ($this->builder->build($facts, $context->representation(), $this->config) as $spec) {
+        foreach ($this->builder->build($facts, $context->representation(), $this->config, $describer) as $spec) {
             $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
@@ -92,6 +96,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $this->reportNoAllowLists($facts, $context);
         $this->reportDefaultConfig($context);
         $this->reportLegacyPackage($facts, $context);
+        $this->reportEnumNameCollisions($facts, $context);
         $this->documentStrictModeError($operation, $context);
     }
 
@@ -133,21 +138,23 @@ final class QueryBuilderParametersExtension implements OperationExtension
      * Enriches each filter with the subject model's cast for its column. The model's reflected shape and
      * any enum-cast file join the fragment-cache key, so editing either invalidates the warm fragment.
      */
-    private function enrichFilters(QueryBuilderFacts $facts, RouteContext $context): void
+    private function enrichFilters(QueryBuilderFacts $facts, RouteContext $context): ?ClassMetadata
     {
         if ($facts->subjectModel === null) {
-            return;
+            return null;
         }
 
         $model = $facts->subjectModel;
-        $context->recordDependencyFiles(
-            $context->engine->classMetadata(new ClassRef($model))->dependencyFiles,
-        );
+        $metadata = $context->engine->classMetadata(new ClassRef($model));
+        $context->recordDependencyFiles($metadata->dependencyFiles);
 
         $facts->filters = array_map(
             fn (QbEntry $filter): QbEntry => $this->enrichFilter($filter, $model, $context),
             $facts->filters,
         );
+
+        // The same metadata answers the sort values' @property prose downstream.
+        return $metadata;
     }
 
     /**
@@ -413,6 +420,43 @@ final class QueryBuilderParametersExtension implements OperationExtension
             routeSignature: $context->route->signature(),
             help: 'Upgrade to spatie/laravel-query-builder ^7 to document the sort/include allow-lists as enums.',
         ));
+    }
+
+    /**
+     * Two values minting one SDK member name were published under strict value-derived names instead
+     * — fires only where the author can act (rename an allow-list entry), which is also the only
+     * place the collision can arise. Silent wherever {@see QueryBuilderConfig::mintsNames()} says the
+     * lists degraded to plain strings: no enum was published, so no name was either.
+     */
+    private function reportEnumNameCollisions(QueryBuilderFacts $facts, RouteContext $context): void
+    {
+        if (! $this->config->mintsNames()) {
+            return;
+        }
+
+        $lists = [
+            $this->config->sort => QueryBuilderParameters::sortValues($facts),
+            $this->config->include => QueryBuilderParameters::includeValues($facts->includes, $this->config),
+        ];
+
+        foreach ($lists as $parameter => $values) {
+            $collisions = ListValueNames::collisions($values);
+            if ($collisions === []) {
+                continue;
+            }
+
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Info,
+                code: 'query-builder.enum-name-collision',
+                message: sprintf(
+                    'Values %s of the "%s" parameter would share one SDK enum member name, so distinct value-derived names were published instead.',
+                    implode(', ', array_map(static fn (string $value): string => sprintf('"%s"', $value), $collisions)),
+                    $parameter,
+                ),
+                routeSignature: $context->route->signature(),
+                help: 'Rename one of the colliding allow-list entries so each value mints its own member name.',
+            ));
+        }
     }
 
     private function reportDefaultConfig(RouteContext $context): void
