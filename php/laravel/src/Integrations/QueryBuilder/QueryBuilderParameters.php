@@ -582,7 +582,7 @@ final class QueryBuilderParameters
         if ($policy->filtersDeepObject()) {
             $properties = [];
             foreach ($groups as $type => $columns) {
-                $prose = sprintf('Comma-separated fields: %s.', implode(', ', $columns));
+                $prose = sprintf('Fields to return: %s.', implode(', ', $columns));
                 [$schema, $prose] = self::listSchema($columns, $prose, $config, $policy->enumNaming, self::fieldDescriptions($facts, $type, $columns, $describer), $facts->partial('fields'));
                 $schema['description'] = $prose;
                 $properties[$type === '' ? '_' : $type] = $schema;
@@ -602,7 +602,7 @@ final class QueryBuilderParameters
             $specs[] = self::commaListSpec(
                 $type === '' ? $config->fields : $config->fieldsKey($type),
                 $columns,
-                sprintf('Comma-separated fields: %s.', implode(', ', $columns)),
+                sprintf('Fields to return: %s.', implode(', ', $columns)),
                 $config,
                 $policy->enumNaming,
                 self::fieldDescriptions($facts, $type, $columns, $describer),

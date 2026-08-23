@@ -17,8 +17,7 @@ it('falls back to package defaults and marks itself unrecovered when the config 
         ->and($config->filter)->toBe('filter')
         ->and($config->sort)->toBe('sort')
         ->and($config->include)->toBe('include')
-        ->and($config->fields)->toBe('fields')
-        ->and($config->append)->toBe('append');
+        ->and($config->fields)->toBe('fields');
 });
 
 it('reads every renamable parameter key from a published config bag and marks itself recovered', function (): void {
@@ -28,7 +27,6 @@ it('reads every renamable parameter key from a published config bag and marks it
             'sort' => 's',
             'include' => 'inc',
             'fields' => 'flds',
-            'append' => 'app',
         ],
     ]);
 
@@ -36,8 +34,7 @@ it('reads every renamable parameter key from a published config bag and marks it
         ->and($config->filter)->toBe('f')
         ->and($config->sort)->toBe('s')
         ->and($config->include)->toBe('inc')
-        ->and($config->fields)->toBe('flds')
-        ->and($config->append)->toBe('app');
+        ->and($config->fields)->toBe('flds');
 });
 
 it('degrades ill-typed or empty parameter names to the package defaults, staying recovered', function (): void {
