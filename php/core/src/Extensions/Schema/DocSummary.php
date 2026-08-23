@@ -4,40 +4,33 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Schema;
 
+use Docuccino\Core\TypeGrammar\DocBlockReader;
+
 /**
- * The first prose paragraph of a docblock — the one home for summary extraction, shared by enum-case
- * descriptions and the adapter's relation-method reads. Hand-rolled marker stripping (not tag
- * parsing) so core stays free of the phpdoc-parser dependency.
+ * A docblock's first prose paragraph, on one line — the shape a per-VALUE description wants, where the
+ * OAS summary/description split wants the whole prose. A thin front for {@see DocBlockReader}, so one
+ * grammar (and one inline-tag rule) stands behind every description core publishes.
  */
 final class DocSummary
 {
-    /**
-     * Strip the markers and per-line `*`, stop at the first blank or `@tag` line, collapse to one
-     * trimmed string; null when there is no prose.
-     */
+    /** Stateless, so one reader serves every call — a description is asked for per enum case. */
+    private static ?DocBlockReader $reader = null;
+
+    /** Null when the docblock is absent (reflection's `false`) or carries no prose. */
     public static function of(string|false $doc): ?string
     {
         if ($doc === false) {
             return null;
         }
 
-        $body = preg_replace('#^\s*/\*\*+|\*+/\s*$#', '', $doc) ?? '';
-        $paragraph = [];
-        foreach (preg_split('/\r?\n/', $body) ?: [] as $line) {
-            $line = trim(ltrim(trim($line), '*'));
-
-            if ($line === '' || str_starts_with($line, '@')) {
-                if ($paragraph !== []) {
-                    break;
-                }
-
-                continue;
-            }
-
-            $paragraph[] = $line;
+        self::$reader ??= new DocBlockReader;
+        $prose = self::$reader->summary($doc);
+        if ($prose === null) {
+            return null;
         }
 
-        $summary = trim(implode(' ', $paragraph));
+        $parts = preg_split('/\R{2,}/', $prose, 2);
+        $summary = trim((string) preg_replace('/\s+/', ' ', $parts[0] ?? $prose));
 
         return $summary === '' ? null : $summary;
     }

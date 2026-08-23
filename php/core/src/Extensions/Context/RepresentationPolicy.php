@@ -12,10 +12,9 @@ use Docuccino\Core\Extensions\Schema\EnumDecoration;
  * absent config yields exactly those defaults.
  *
  * - `operationId`: `route-name` | `controller-method`.
- * - `enumNaming`: `names` | `none` | `x-enumNames` | `x-enum-varnames` — SDK member-name hints
- *   emitted alongside the enum; the `enum` members themselves never change. The default `names`
- *   emits both spellings ({@see EnumDecoration}); the single-key
- *   keywords pin one tool's shape; `none` turns hints off.
+ * - `enumNaming`: `names` (the default) | `none` | `x-enumNames` | `x-enum-varnames` — which SDK
+ *   member-name hints ride alongside the enum; the `enum` members themselves never change.
+ *   {@see EnumDecoration} owns what each keyword emits.
  * - `errorComponents`: whether an error response body repeated across operations hoists to one shared
  *   `components.responses` entry each operation `$ref`s; `false` inlines every copy.
  * - `enumComponents`: whether a reflectable enum hoists to a named component (deduped by FQCN) that

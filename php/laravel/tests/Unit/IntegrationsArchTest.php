@@ -27,9 +27,9 @@ arch('built-in integrations consume only the public extension surface')
         // fact inheritance decided (a static `$wrap`, a `render()` on a parent, an action trait). Every
         // integration inlining its own hierarchy walk is precisely what this list exists to prevent.
         'Docuccino\Core\Extensions\Schema\DeclarationFiles',
-        // The one docblock-summary reader and the one enum-decoration rulebook: the QB integration
-        // describing include/sort values must read prose and emit hint keys EXACTLY as core's enum
-        // mapper does, or the document carries two decoration standards.
+        // The summary front for core's one docblock reader, and the one enum-decoration rulebook: the
+        // QB integration describing include/sort values must read prose and emit hint keys EXACTLY as
+        // core's enum mapper does, or the document carries two decoration standards.
         'Docuccino\Core\Extensions\Schema\DocSummary',
         'Docuccino\Core\Extensions\Schema\EnumDecoration',
         'Docuccino\Core\Extensions\Schema\EnumReflection',

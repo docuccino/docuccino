@@ -16,6 +16,7 @@ use Workbench\App\Enums\Season;
 use Workbench\App\Enums\WidgetKind;
 use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
+use Workbench\App\Enums\WidgetTier;
 
 /**
  * Convert a type and hand back both the emitted schema and the components the conversion hoisted, so
@@ -143,6 +144,24 @@ it('documents an int-backed enum with an integer type and integer values', funct
             'x-enum-descriptions' => ['Handled when idle.', '', 'Jumps the queue.'],
             'x-enum-varnames' => ['Low', 'Normal', 'High'],
             'x-enumNames' => ['Low', 'Normal', 'High'],
+        ]);
+});
+
+/**
+ * `0,1,2` is the one backing run whose value-keyed map is a PHP LIST — PHP re-coerces the numeric-string
+ * keys straight back to ints — so this is the enum that proves the map still emits as a JSON object.
+ * The map's contract is completeness, and `["a","b","c"]` is not a map at all.
+ */
+it('emits the descriptions map as an object for a contiguous zero-based int-backed enum', function (): void {
+    [, $components] = convertEnumFull(new EnumT(WidgetTier::class, ['Free', 'Standard', 'Premium']));
+
+    $encoded = json_encode($components['WidgetTier']['x-enumDescriptions']);
+
+    expect($encoded)->toBe('{"0":"No paid features.","1":"The paid default.","2":"Everything, plus support."}')
+        ->and((array) $components['WidgetTier']['x-enumDescriptions'])->toBe([
+            0 => 'No paid features.',
+            1 => 'The paid default.',
+            2 => 'Everything, plus support.',
         ]);
 });
 
