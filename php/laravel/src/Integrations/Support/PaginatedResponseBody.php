@@ -24,9 +24,9 @@ use Docuccino\Laravel\Integrations\TimacdonaldJsonApi\TimacdonaldResourceReflect
  * `data` wrapper on paginated responses even under `withoutWrapping`, so a leftover bare-array `items`
  * keyword is removed.
  *
- * The envelope itself is hoisted to one shared component per item type and kind where it can be
- * ({@see PageComponent}), so the body becomes a `$ref` and every keyword the inline form wrote comes
- * back off.
+ * The envelope's `links`/`meta` are hoisted to one component per shape ({@see PaginationParts}), and the
+ * envelope itself to one per item type and kind where it can be ({@see PageComponent}) — so the body
+ * becomes a `$ref` and every keyword the inline form wrote comes back off.
  */
 final class PaginatedResponseBody
 {
@@ -64,11 +64,11 @@ final class PaginatedResponseBody
             return;
         }
 
-        $envelope = match ($kind) {
-            'simple' => PaginationEnvelope::simple($items),
-            'cursor' => PaginationEnvelope::cursor($items),
-            default => PaginationEnvelope::length($items),
-        };
+        $envelope = PaginationParts::hoist(
+            $context->converter(),
+            PaginationEnvelope::of($kind, $items),
+            PaginationEnvelope::parts($kind),
+        );
 
         $item = $collection->typeArgs[0] ?? null;
         $reference = PageComponent::reference(

@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Laravel\Integrations\Support\PageComponent;
+use Docuccino\Laravel\Integrations\Support\PaginationParts;
 use Docuccino\Laravel\Integrations\Support\SpatieDataEnvelope;
 
 /**
@@ -216,9 +217,13 @@ final class DataSchema implements TypeToSchema
         $kind = $this->reflector->collectionKind($type->fqcn);
         if ($kind === 'length' || $kind === 'cursor') {
             $dataKey = $this->wrap->key(null) ?? 'data';
-            $schema = $kind === 'length'
-                ? SpatieDataEnvelope::length($items, $dataKey)
-                : SpatieDataEnvelope::cursor($items, $dataKey);
+
+            // The envelope's links/meta are one component per shape; only `data` is per Data class.
+            $schema = PaginationParts::hoist(
+                $context,
+                SpatieDataEnvelope::of($kind, $items, $dataKey),
+                SpatieDataEnvelope::parts($kind),
+            );
 
             // One page-of-X component per Data class and kind, so N paginated operations share it.
             $reference = PageComponent::reference(

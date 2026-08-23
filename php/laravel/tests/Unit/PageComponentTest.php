@@ -27,11 +27,7 @@ $items = ['$ref' => '#/components/schemas/ArticleResource'];
 
 it('names a page of an item type after the item and the kind', function (string $kind, string $expected) use ($converter, $items): void {
     $context = $converter();
-    $envelope = match ($kind) {
-        'simple' => PaginationEnvelope::simple($items),
-        'cursor' => PaginationEnvelope::cursor($items),
-        default => PaginationEnvelope::length($items),
-    };
+    $envelope = PaginationEnvelope::of($kind, $items);
 
     // The item is a component of its own in any real build, so it is registered here too — the page
     // claims its name beside the item's, and may never be the thing that moves it.
@@ -61,13 +57,13 @@ it('covers every paginator kind the terminal table can report', function () use 
     expect($kinds)->toHaveCount(3);
 
     foreach ($kinds as $kind) {
-        expect(PageComponent::reference($converter(), $kind, ArticleResource::class, $items, PaginationEnvelope::length($items)))
+        expect(PageComponent::reference($converter(), $kind, ArticleResource::class, $items, PaginationEnvelope::of('length', $items)))
             ->not->toBeNull();
     }
 });
 
 it('leaves an envelope inline where it cannot name one', function (string $case) use ($converter, $items): void {
-    $envelope = PaginationEnvelope::length($items);
+    $envelope = PaginationEnvelope::of('length', $items);
 
     $reference = match ($case) {
         // A kind outside the table: better no component than one named after a guess.

@@ -121,10 +121,21 @@ it('does not move a route it did not touch', function (callable $baseline, calla
     ],
 
     // The same item type paginated a second way. Both pages are facets of one identity, so the kinds
-    // must separate them without either being the one that had to move.
+    // must separate them without either being the one that had to move. The cursor page also SHARES the
+    // subject's `links` component, so the projection covers a hoisted envelope member arriving twice.
     'the same item type paginated by cursor beside by page' => [
         static fn (Router $r) => $r->get('api/zz-page-articles', [PagesController::class, 'articles']),
         static fn (Router $r) => $r->get('api/aaa-page-cursor', [PagesController::class, 'cursorArticles']),
+        'GET /api/zz-page-articles',
+        PaginationEngine::factory(),
+    ],
+
+    // A page whose envelope members are shapes the document had not seen: a simple page shares neither
+    // `links` nor `meta` with a length-aware one. Those components are named for their shapes, so two
+    // arriving beside the subject's may not renumber the ones it points at.
+    'a paginator whose envelope members are new shapes' => [
+        static fn (Router $r) => $r->get('api/zz-page-articles', [PagesController::class, 'articles']),
+        static fn (Router $r) => $r->get('api/aaa-page-simple', [PagesController::class, 'simpleArticles']),
         'GET /api/zz-page-articles',
         PaginationEngine::factory(),
     ],

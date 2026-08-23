@@ -21,9 +21,11 @@ use Docuccino\Core\Extensions\Schema\EnumDecoration;
  *   use sites `$ref`, or is inlined at each one. Hoisting is the better output — one canonical,
  *   described enum shared everywhere; `false` restores the inline form byte-for-byte.
  * - `paginationComponents`: whether a page-of-X envelope hoists to one named component per item type
- *   and paginator kind that each paginated operation `$ref`s, or is restated inline on every one of
- *   them. Hoisting is the better output — an SDK generator mints one page type per item type instead
- *   of one per operation; `false` restores the inline form byte-for-byte.
+ *   and paginator kind that each paginated operation `$ref`s — and its `links`/`meta` to one component
+ *   per shape, which the page then `$ref`s in turn — or is restated inline on every one of them.
+ *   Hoisting is the better output — an SDK generator mints one page type per item type instead of one
+ *   per operation, over one set of envelope members instead of one per page; `false` restores the
+ *   inline form byte-for-byte.
  * - `nullable`: how "single type plus null" is expressed — `type-array` (`type: [x, null]`) |
  *   `anyof` (a `{type: null}` branch).
  * - `filterStyle` (Query Builder): `bracketed` (flat `filter[status]` params, `fields[articles]` for
