@@ -50,9 +50,9 @@ the real list of allowed filters and sorts.
 	```json
 	"parameters": [
 	  { "name": "filter[customer_id]", "in": "query", "required": false,
-	    "description": "Partial-match filter", "schema": { "type": "string" } },
+	    "description": "Substring match on `customer_id`.", "schema": { "type": "string" } },
 	  { "name": "filter[status]", "in": "query", "required": false,
-	    "description": "Partial-match filter", "schema": { "type": "string" } },
+	    "description": "Substring match on `status`.", "schema": { "type": "string" } },
 	  { "name": "include", "in": "query", "required": false,
 	    "description": "Include related resources: customer, lines.",
 	    "style": "form", "explode": false,
@@ -76,8 +76,8 @@ and `page` are all documented, alongside a paginated response. The excerpt is tr
 each value enum also carries [per-value descriptions](#describing-the-values) and
 [SDK member names](#sdk-ready-member-names).
 
-A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why those
-two say so. Rename the page key at the call site — `->paginate(20, ['*'], 'p')` — and the document
+A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why both
+descriptions say substring. Rename the page key at the call site — `->paginate(20, ['*'], 'p')` — and the document
 follows it. There's no `per_page` beside it here because `paginate(20)` fixes the size at that call site;
 hand the size to a helper that reads it off the request and
 [that key is documented too](/laravel/documenting/requests/#the-page-size-key).
@@ -265,7 +265,7 @@ exact allowed values — including per-case descriptions when you annotate the e
 	  "name": "filter[status]",
 	  "in": "query",
 	  "required": false,
-	  "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+	  "description": "Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).",
 	  "style": "form",
 	  "explode": false,
 	  "schema": {
@@ -358,10 +358,10 @@ types these from what the model itself declares:
 	<TabItem label="Generated OpenAPI">
 	```json
 	{ "name": "filter[customer_id]", "in": "query", "required": false,
-	  "description": "Exact-match filter",
+	  "description": "Exact match on `customer_id`.",
 	  "schema": { "type": "string", "format": "uuid" } },
 	{ "name": "filter[id]", "in": "query", "required": false,
-	  "description": "Exact-match filter",
+	  "description": "Exact match on `id`.",
 	  "schema": { "type": "string", "format": "uuid" } }
 	```
 	</TabItem>
@@ -530,6 +530,38 @@ AllowedFilter::exact('status', 'status_code');
 ```
 
 ## Describing filters
+
+### The generated description states the contract
+
+Every filter is described without you writing anything, and the description says what the parameter
+*does* — the match it performs and the key it performs it on — rather than naming the kind you built
+it from. The reader can't see your allow-list, so a label like "custom filter" tells them nothing:
+
+| Filter kind | Generated description |
+| --- | --- |
+| `exact('status')` | Exact match on `status`. |
+| `partial('name')` / a bare `'name'` | Substring match on `name`. |
+| `beginsWithStrict('name')` | Prefix match on `name`. |
+| `endsWithStrict('name')` | Suffix match on `name`. |
+| `operator('score', …)` | Compares `score` against the value. |
+| `belongsTo('customer')` | Matches records belonging to the given `customer`. |
+| `trashed()` | Soft-delete filter: `with` includes soft-deleted records, `only` returns only soft-deleted; omit to exclude them. |
+| `scope('popular')`, `callback('active', fn)`, `custom('flag', F::class)` | Filters the result set by `popular`. |
+
+The last row is the honest answer, not a gap: the matching a scope, a closure, or a custom filter
+class performs is your code's, so the description states that the parameter filters and on which key,
+and claims no semantics it can't see. A filter built by [your own factory](#filter-factories-a-listfilters-style-helper)
+gets the same line, and so does any kind a future Spatie release adds. A wrong "exact match" would
+point a generated client at a contract that doesn't exist; a vague one only costs it a hint.
+
+The name in the description is always the **public** one — the key a client sends. An
+[internal column](#internal-column-names) is used for cast lookup and never surfaces:
+`AllowedFilter::exact('status', 'status_code')` is described as *"Exact match on `status`."*
+
+Anything you write yourself wins outright — a [comment above the entry](#a-comment-becomes-the-description)
+or a `#[QueryParameter]` replaces the generated line entirely. The
+[`whereIn`, `null`, separator, and default notes](#defaults-and-nullable-filters) are appended either
+way, because they describe the request form rather than the matching.
 
 ### A comment becomes the description
 
