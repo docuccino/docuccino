@@ -279,6 +279,14 @@ class HouseStyleViewer implements Viewer, ViewerAssets
 That map is the allow-list: the file lands at `/docs/api/assets/house-style.js`, behind the same gate
 and middleware as the page, and no other path on that route resolves to anything.
 
+If your driver's pinned build doesn't implement the newest OpenAPI minor, implement
+`ViewerSpecVersion` and return the one it does — `'3.0'`, `'3.1'` or `'3.2'`. The spec endpoint then
+downlevels to that version for your driver alone, and `docuccino:cache` stores the payload under it,
+so switching drivers is a cache miss rather than the previous driver's version served on. Tolerating
+a newer minor is not implementing it: a build that parses 3.2 by treating it as 3.1 drops the newer
+minor's semantics without saying so, so it should declare `'3.1'`. Declare nothing and your driver is
+served the newest format Docuccino emits.
+
 <Aside type="note">
 See the [viewer configuration](/laravel/reference/configuration/#viewer) for every key and its default.
 </Aside>
