@@ -55,6 +55,7 @@ $chain = 'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFil
     ."AllowedFilter::custom('sc', \\Workbench\\App\\Filters\\ScoreFilter::class), "          // custom __invoke body (score int)
     ."AllowedFilter::custom('from', \\Workbench\\App\\Filters\\DateFilter::class, 'starts_at'), " // generic custom, declared internal name → datetime cast
     ."AllowedFilter::custom('starts_at', \\Workbench\\App\\Filters\\DateFilter::class), "    // generic custom, no internal name → its own name is the column
+    ."AllowedFilter::custom('opaque', \\Workbench\\App\\Filters\\CompositeFilter::class), "  // custom nothing can type → explicit unconstrained schema
     .'AllowedFilter::trashed(),'                                                             // trashed with/only enum
     .'])->paginate()';
 
@@ -96,6 +97,11 @@ it('types each recovered filter kind off the model and applies the custom-filter
     expect($byName['filter[from]']['schema']['type'])->toBe('string')
         ->and($byName['filter[from]']['schema']['format'])->toBe('date-time')
         ->and($byName['filter[starts_at]']['schema']['format'])->toBe('date-time');
+
+    // A custom filter nothing can type (multi-clause __invoke, no attribute, no column binding) still
+    // publishes an explicit unconstrained schema — a parameter without one is invalid OAS, not vague.
+    expect($byName['filter[opaque]'])->toHaveKey('schema')
+        ->and($byName['filter[opaque]']['schema'])->toBe([]);
 
     // Trashed → fixed with/only enum.
     expect($byName['filter[trashed]']['schema']['enum'])->toBe(['with', 'only']);
