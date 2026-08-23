@@ -909,7 +909,8 @@ be true of that type hint:
   nothing of its own, so there is nothing to trace.
 
 Neither case is silent: as long as a paginating terminal is reached you still get the pagination
-parameters plus a `query-builder.no-allowlists-recovered` info diagnostic naming the action.
+parameters, and a `query-builder.no-allowlists-recovered` info diagnostic names the action whenever
+nothing else about the builder was recovered either.
 </Aside>
 
 ## Configuration
@@ -980,7 +981,7 @@ the build:
 | Situation | Diagnostic | What lands in the spec |
 | --- | --- | --- |
 | An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted and every other entry is documented; that list loses its enum (a short one would be false), the others keep theirs |
-| A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | The page parameter only |
+| A paginating terminal reached, but no allow-lists and no default sort recovered from the chain | `query-builder.no-allowlists-recovered` (info), naming the action | The page parameter only |
 | A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
 | Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
 | spatie/laravel-query-builder older than v7 | `query-builder.legacy-package-version` (info) | `sort`/`include`/`fields` as plain strings, values named in the description |

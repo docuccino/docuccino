@@ -392,12 +392,18 @@ final class QueryBuilderParametersExtension implements OperationExtension
      * A paginating terminal was reached but not one allow-list entry turned up, recovered or unresolved
      * — usually the chain lives behind an indirection the trace couldn't follow. Names the action so the
      * loss isn't silent.
+     *
+     * Silent, though, once a `defaultSort()` turned up: that is a chain call where an allow-list would
+     * sit, so empty allow-lists beside it are the endpoint's truth rather than a recovery miss. Only a
+     * chain call counts — the subject model, the terminal and its arguments are all readable without
+     * descending into the chain at all.
      */
     private function reportNoAllowLists(QueryBuilderFacts $facts, RouteContext $context): void
     {
         if (! $facts->paginates
             || $facts->filters !== [] || $facts->sorts !== [] || $facts->includes !== [] || $facts->fields !== []
             || $facts->unresolved !== []
+            || $facts->defaultSorts !== []
         ) {
             return;
         }
@@ -405,7 +411,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'query-builder.no-allowlists-recovered',
-            message: sprintf('A paginating Query Builder terminal was reached in %s but no allowed filters/sorts/includes were recovered.', $context->actionRef->symbol()),
+            message: sprintf('A paginating Query Builder terminal was reached in %s, but no allow-lists and no default sort were recovered from the chain.', $context->actionRef->symbol()),
             routeSignature: $context->route->signature(),
             help: 'If this endpoint offers filters/sorts, declare them via allowedFilters()/allowedSorts() somewhere the trace reaches: a method returning your QueryBuilder subclass is followed, and so is the constructor of a QueryBuilder subclass the action is type-hinted on (type-hint the subclass itself, not an interface or the base builder). Otherwise this is expected.',
         ));
