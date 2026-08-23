@@ -33,6 +33,12 @@ coverage locally and the ratchet policy for the CI gate.
   enough above zero that a scanner which stopped recognising one of its shapes fails loudly. The
   diagnostics and config-reference guards, the boundary arch tests and the attribute catalogue all
   carry one.
+- **A driver's contract includes what its pinned version renders.** A viewer or emitter driver ships
+  a bundle, and what that bundle actually renders or accepts is half of what the driver promises — so
+  a test that asserts the markup the driver wrote, or the bytes it handed over, is not a test of the
+  contract. A driver shipped serving a document version its own pinned bundle only half-supported,
+  and the markup-only test stayed green throughout. Pin what the pinned version does with the
+  document it is given, not only what the driver wrapped around it.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
