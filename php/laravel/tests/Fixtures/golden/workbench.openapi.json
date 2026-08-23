@@ -982,6 +982,18 @@
                   "-name",
                   "created_at",
                   "-created_at"
+                ],
+                "x-enum-varnames": [
+                  "Name",
+                  "NameDesc",
+                  "CreatedAt",
+                  "CreatedAtDesc"
+                ],
+                "x-enumNames": [
+                  "Name",
+                  "NameDesc",
+                  "CreatedAt",
+                  "CreatedAtDesc"
                 ]
               }
             }
@@ -1391,10 +1403,21 @@
           "published",
           "archived"
         ],
-        "x-enumDescriptions": {
-          "draft": "Not yet visible to applicants.",
-          "published": "Live and accepting traffic."
-        }
+        "x-enum-descriptions": [
+          "Not yet visible to applicants.",
+          "Live and accepting traffic.",
+          ""
+        ],
+        "x-enum-varnames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ],
+        "x-enumNames": [
+          "Draft",
+          "Published",
+          "Archived"
+        ]
       }
     },
     "responses": {
