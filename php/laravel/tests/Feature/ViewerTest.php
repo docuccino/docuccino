@@ -64,6 +64,21 @@ it('serves the generated OpenAPI JSON', function (): void {
         ->toBe(file_get_contents(dirname(__DIR__).'/Fixtures/golden/workbench.openapi.json'));
 });
 
+// The bundled Redoc implements 3.1 (a 3.2 document is merely tolerated, aliased to 3.1), so its spec
+// endpoint serves the downlevel — while the default driver keeps the newest format.
+it('serves each driver the OpenAPI version it implements', function (string $driver, string $version): void {
+    config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
+    config()->set('docuccino.documents.default.viewer.driver', $driver);
+    Gate::before(static fn ($user = null): bool => true);
+
+    $json = json_decode((string) $this->get('/docs/api.json')->getContent(), true);
+
+    expect($json['openapi'])->toStartWith($version);
+})->with([
+    'redoc' => ['redoc', '3.1'],
+    'scalar' => ['scalar', '3.2'],
+]);
+
 it('serves the bundled Scalar asset to an authorized viewer', function (): void {
     config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
     Gate::before(static fn ($user = null): bool => true);
@@ -228,8 +243,29 @@ it('serves source=cache when warm, and falls back to generate when cold', functi
     expect($this->get('/docs/api.json')->assertOk()->getContent())->toContain('/api/forms');
 
     // Warm the cache with a sentinel and confirm it is served verbatim.
-    app(DocumentCache::class)->put('default', '{"cached":true}');
+    app(DocumentCache::class)->put('default', '{"cached":true}', 'openapi-3.2');
     expect($this->get('/docs/api.json')->assertOk()->getContent())->toBe('{"cached":true}');
+});
+
+it('re-emits rather than serving a payload cached for the format another driver was on', function (): void {
+    config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
+    config()->set('docuccino.documents.default.viewer.source', 'cache');
+    Gate::before(static fn ($user = null): bool => true);
+
+    // Warmed while the document was on Scalar, which is served 3.2.
+    app(DocumentCache::class)->put('default', '{"cached":"3.2"}', 'openapi-3.2');
+    expect($this->get('/docs/api.json')->assertOk()->getContent())->toBe('{"cached":"3.2"}');
+
+    // Switching to Redoc changes the version the endpoint serves, so the warm entry no longer
+    // answers: without this the endpoint would serve 3.2 bytes to a 3.1 viewer indefinitely.
+    config()->set('docuccino.documents.default.viewer.driver', 'redoc');
+    Log::shouldReceive('warning')->withAnyArgs();
+
+    $served = $this->get('/docs/api.json')->assertOk()->getContent();
+
+    expect($served)->not->toBe('{"cached":"3.2"}')
+        ->and($served)->toContain('"openapi": "3.1.')
+        ->and($served)->toContain('/api/forms');
 });
 
 it('opts into the CDN when viewer.cdn is true', function (): void {
@@ -253,7 +289,7 @@ it('opts into the CDN when viewer.cdn is true', function (): void {
 */
 
 dataset('viewer drivers', [
-    'scalar' => ['scalar', 'id="api-reference"', 'scalar', 'cdn.jsdelivr.net/npm/@scalar/api-reference'],
+    'scalar' => ['scalar', 'id="api-reference"', 'scalar', 'cdn.jsdelivr.net/npm/@scalar/api-reference@1'],
     'redoc' => ['redoc', '<redoc spec-url=', 'redoc', 'cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js'],
 ]);
 

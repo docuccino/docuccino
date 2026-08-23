@@ -228,6 +228,7 @@ And these cover the rest of the surface:
 | `TagMapper` | Customize how raw tags map to display tags. | `map(string $tag): string` |
 | `Viewer` | Render the docs page yourself, selected by name through `viewer.driver`. See [the viewer guide](/laravel/guides/viewer/#writing-your-own-driver). | `name(): string`, `render(ViewerContext $context): mixed` |
 | `ViewerAssets` | Ship a script with your viewer and serve it from the gated asset route instead of a CDN. | `assets(): array` |
+| `ViewerSpecVersion` | Declare the OpenAPI minor your viewer's pinned build actually implements (`'3.0'`, `'3.1'` or `'3.2'`), so the spec endpoint downlevels to it instead of serving a version the build reads by aliasing. | `specVersion(): string` |
 
 The resolver contracts are **chains resolved per document**, and each returns a "not mine" value —
 `null`, or `[]` for `resolveStatuses()` — to defer to the next implementation. The first one that

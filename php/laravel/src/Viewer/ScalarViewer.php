@@ -16,7 +16,9 @@ use Docuccino\Core\Extensions\Contracts\ViewerAssets;
  */
 final class ScalarViewer implements Viewer, ViewerAssets
 {
-    private const string CDN_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
+    // Pinned to the shipped bundle's major, like the Redoc driver's `redoc@2` — an unpinned CDN can
+    // float to a build whose behavior nothing here has verified.
+    private const string CDN_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1';
 
     public function name(): string
     {
