@@ -403,22 +403,25 @@ final class QueryBuilderParametersExtension implements OperationExtension
     }
 
     /**
-     * The sort/include value enums encode v7's minting grammar, so an older install degrades them to
-     * plain strings ({@see QueryBuilderParameters::commaListSpec()}) — said only where a list was
-     * actually recovered, per route the way {@see reportDefaultConfig()} is.
+     * The sort, include and fields value enums encode v7's minting grammar, so an older install
+     * degrades all three to plain strings ({@see QueryBuilderParameters::listSchema()}) — said only
+     * where one of those lists was actually recovered, per route the way {@see reportDefaultConfig()}
+     * is.
      */
     private function reportLegacyPackage(QueryBuilderFacts $facts, RouteContext $context): void
     {
-        if (! $this->config->legacyPackage() || ($facts->sorts === [] && $facts->includes === [])) {
+        if (! $this->config->legacyPackage()
+            || ($facts->sorts === [] && $facts->includes === [] && $facts->fields === [])
+        ) {
             return;
         }
 
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'query-builder.legacy-package-version',
-            message: 'spatie/laravel-query-builder below v7 is installed, so the sort/include allow-lists are documented as plain strings rather than value enums.',
+            message: 'spatie/laravel-query-builder below v7 is installed, so the sort/include/fields allow-lists are documented as plain strings rather than value enums.',
             routeSignature: $context->route->signature(),
-            help: 'Upgrade to spatie/laravel-query-builder ^7 to document the sort/include allow-lists as enums.',
+            help: 'Upgrade to spatie/laravel-query-builder ^7 to document the sort/include/fields allow-lists as enums.',
         ));
     }
 
@@ -434,13 +437,16 @@ final class QueryBuilderParametersExtension implements OperationExtension
             return;
         }
 
-        $lists = [
-            $this->config->sort => QueryBuilderParameters::sortValues($facts),
-            $this->config->include => QueryBuilderParameters::includeValues($facts->includes, $this->config),
-        ];
-
-        // Snake-case field conversion degrades the fields groups to plain strings — no names minted.
-        if (! $this->config->snakeCaseFields) {
+        // Only the lists that published an enum: one whose recovery was partial widened to a plain
+        // string, exactly as the config-driven degrades do, so it minted no names either.
+        $lists = [];
+        if (! $facts->partial('sorts')) {
+            $lists[$this->config->sort] = QueryBuilderParameters::sortValues($facts);
+        }
+        if (! $facts->partial('includes')) {
+            $lists[$this->config->include] = QueryBuilderParameters::includeValues($facts->includes, $this->config);
+        }
+        if (! $facts->partial('fields')) {
             foreach (QueryBuilderParameters::fieldValues($facts->fields) as $type => $columns) {
                 $lists[$type === '' ? $this->config->fields : $this->config->fieldsKey($type)] = $columns;
             }

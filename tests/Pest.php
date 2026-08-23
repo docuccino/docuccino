@@ -23,7 +23,9 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceVisitor;
@@ -32,12 +34,14 @@ use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Testing\ApiContract;
+use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
@@ -177,6 +181,19 @@ function specsByName(array $specs): array
     }
 
     return $byName;
+}
+
+/**
+ * The Almanac fixture's model-prose lookups — its relation docblocks and the `@property` summaries an
+ * engine would have recovered. Shared by the describer's own suite and the parameter suite that reads
+ * through it, so both ask exactly the same model the same questions.
+ */
+function almanacDescriber(): ListValueDescriber
+{
+    return new ListValueDescriber(Almanac::class, new ClassMetadata(Almanac::class, [
+        new PropertyMetadata('title', new UnknownT('test'), 'The almanac\'s display title.'),
+        new PropertyMetadata('issued_at', new UnknownT('test')),
+    ]));
 }
 
 /**

@@ -3,25 +3,24 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
-use Docuccino\Core\Inference\ClassMetadata;
-use Docuccino\Core\Inference\DType\UnknownT;
-use Docuccino\Core\Inference\PropertyMetadata;
-use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\QueryBuilder\QbEntry;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderFacts;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Support\RequestPageSizeKey;
-use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 
-/** The enum column schema an exact filter is enriched with (backing values + case descriptions). */
+/**
+ * The enum column schema an exact filter is enriched with: backing values plus the case prose exactly
+ * as the emitter attaches it. `archived` carries none, so the value-keyed map is withheld (its contract
+ * is completeness) and the prose travels index-parallel — a partial map is a shape nothing can produce.
+ */
 function enumColumnSchema(): array
 {
     return [
         'type' => 'string',
         'enum' => ['draft', 'published', 'archived'],
-        'x-enumDescriptions' => ['draft' => 'Not yet.', 'published' => 'Live.'],
+        'x-enum-descriptions' => ['Not yet.', 'Live.', ''],
     ];
 }
 
@@ -41,15 +40,6 @@ function factsWith(callable $mutate): QueryBuilderFacts
 function bracketedPolicy(): RepresentationPolicy
 {
     return new RepresentationPolicy;
-}
-
-/** The model-prose lookups the description tests lean on — Almanac's relations and @property lines. */
-function almanacQbDescriber(): ListValueDescriber
-{
-    return new ListValueDescriber(Almanac::class, new ClassMetadata(Almanac::class, [
-        new PropertyMetadata('title', new UnknownT('test'), 'The almanac\'s display title.'),
-        new PropertyMetadata('issued_at', new UnknownT('test')),
-    ]));
 }
 
 function deepObjectPolicy(): RepresentationPolicy
@@ -212,9 +202,11 @@ it('emits single-value item schemas when an empty delimiter disables splitting',
 
 /**
  * Below spatie/laravel-query-builder v7 the enum grammar itself is unproven — the explicit factory
- * minted Count/Exists + partials there, and the old config keys are not read — so sort and include
- * degrade to the vague-true plain string: defaults in prose, no separator note (v5/v6 configured the
- * delimiter another way). Filter typing is cast-driven, not grammar-driven, so it is untouched.
+ * minted Count/Exists + partials there, and the old config keys are not read — so sort, include and
+ * the fields groups all degrade to the vague-true plain string: defaults in prose, no separator note
+ * (a pre-v7 install configured the delimiter another way). Filter typing is cast-driven, not
+ * grammar-driven, so it is untouched. The `< 7` boundary itself is proven over majors in
+ * QueryBuilderConfigTest.
  */
 it('degrades sort and include to plain strings on a pre-v7 package', function (int $major): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
@@ -235,10 +227,71 @@ it('degrades sort and include to plain strings on a pre-v7 package', function (i
         ->and($byName['include']->description)->toBe('Include related resources: author.')
         ->and($byName['filter[status]']->schema)->toBe(['type' => 'string'])
         ->and($byName['filter[status]']->description)->toContain('Accepts a `|`-separated list of values (matched as `whereIn`).');
+})->with(['v6' => [6]]);
+
+/**
+ * An allow-list entry the trace could not fold leaves its SIBLINGS recovered — each of them true, and
+ * their set short. A closed enum over a short set tells a generated client to reject a value the server
+ * accepts, so that ONE list widens to the honest plain string; the others keep their enums. The author
+ * already hears about it through `query-builder.unresolved-entry`.
+ */
+it('widens only the list an unresolved entry belongs to', function (string $bucket, array $degraded, array $kept): void {
+    $facts = factsWith(function (QueryBuilderFacts $f) use ($bucket): void {
+        $f->sorts = [new QbEntry('name', 'default')];
+        $f->includes = [new QbEntry('author', 'relationship')];
+        $f->fields = [new QbEntry('articles.title', 'field')];
+        $f->unresolvedLists = [$bucket => true];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    foreach ($degraded as $name) {
+        expect($byName[$name]->schema)->toBe(['type' => 'string'])
+            ->and($byName[$name]->style)->toBeNull();
+    }
+
+    foreach ($kept as $name) {
+        expect($byName[$name]->schema['type'])->toBe('array')
+            ->and($byName[$name]->schema['items'])->toHaveKey('enum');
+    }
 })->with([
-    'v6' => [6],
-    'v5' => [5],
+    'sorts' => ['sorts', ['sort'], ['include', 'fields[articles]']],
+    'includes' => ['includes', ['include'], ['sort', 'fields[articles]']],
+    'fields' => ['fields', ['fields[articles]'], ['sort', 'include']],
+    // A filter carries no enum of allow-listed names, so nothing widens.
+    'filters' => ['filters', [], ['sort', 'include', 'fields[articles]']],
 ]);
+
+it('widens the deepObject fields properties of a partially recovered allow-list', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [new QbEntry('articles.title', 'field')];
+        $f->unresolvedLists = ['fields' => true];
+    });
+
+    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy());
+
+    expect($specs[0]->schema['properties']['articles'])->toBe([
+        'type' => 'string',
+        'description' => 'Comma-separated fields: title.',
+    ]);
+});
+
+/**
+ * `Count` and `Exists` configured to the same suffix mint ONE value, not two — Spatie collects the
+ * generated includes with `unique(getName())`. The count registers first, so the count's wording is
+ * what a consumer reads.
+ */
+it('mints one form when the count and exists suffixes are the same, worded as the count', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->includes = [new QbEntry('customer', 'default')];
+    });
+
+    $config = new QueryBuilderConfig(countSuffix: 'Tally', existsSuffix: 'Tally');
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config)[0]->schema['items'];
+
+    expect($items['enum'])->toBe(['customer', 'customerTally'])
+        ->and($items['x-enum-descriptions'])->toBe(['', 'Count of related `customer` records.']);
+});
 
 it('strips the descending prefix off an allow-listed sort name and dedupes both directions', function (): void {
     // `allowedSorts('-name')` legalizes the base name in both directions — AllowedSort ltrim()s it.
@@ -346,7 +399,7 @@ it('describes every include value when comment, docblock and derived text cover 
         $f->includes = [new QbEntry('entries', 'default')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items['enum'])->toBe(['entries', 'entriesCount', 'entriesExists'])
         ->and($items['x-enumDescriptions'])->toBe([
@@ -366,7 +419,7 @@ it('lets an entry comment beat the relation docblock', function (): void {
         $f->includes = [(new QbEntry('entries', 'relationship'))->withColumn(null, enumTyped: false, comment: 'Entries, curated for the season.')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items['x-enumDescriptions'])->toBe(['entries' => 'Entries, curated for the season.']);
 });
@@ -376,7 +429,7 @@ it('describes a dotted entry from its comment and the dot-less partial from its 
         $f->includes = [(new QbEntry('entries.notes', 'default'))->withColumn(null, enumTyped: false, comment: 'Each entry with its margin notes.')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items['enum'])->toBe(['entries', 'entriesCount', 'entriesExists', 'entries.notes'])
         ->and($items['x-enumDescriptions'])->toBe([
@@ -392,7 +445,7 @@ it('withholds the value-keyed map when one include value has no prose, keeping t
         $f->includes = [new QbEntry('entries', 'default'), new QbEntry('errata', 'relationship')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items)->not->toHaveKey('x-enumDescriptions')
         ->and($items['x-enum-descriptions'])->toBe([
@@ -408,7 +461,7 @@ it('emits no description members at all when nothing has prose', function (): vo
         $f->includes = [new QbEntry('errata', 'relationship')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items)->not->toHaveKey('x-enumDescriptions')
         ->and($items)->not->toHaveKey('x-enum-descriptions');
@@ -419,7 +472,7 @@ it('describes sort values from comment or @property prose, marking the descendin
         $f->sorts = [new QbEntry('title', 'default')];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items['x-enumDescriptions'])->toBe([
         'title' => 'The almanac\'s display title.',
@@ -435,7 +488,7 @@ it('lets a sort comment beat the @property prose and gaps an undescribed sibling
         ];
     });
 
-    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber())[0]->schema['items'];
+    $items = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber())[0]->schema['items'];
 
     expect($items)->not->toHaveKey('x-enumDescriptions')
         ->and($items['x-enum-descriptions'])->toBe(['Alphabetical.', 'Alphabetical. (descending)', '', '']);
@@ -446,8 +499,8 @@ it('emits neither names nor descriptions under a legacy package or the none nami
         $f->sorts = [new QbEntry('title', 'default')];
     });
 
-    $legacy = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), new QueryBuilderConfig(spatieMajor: 6), almanacQbDescriber())[0];
-    $none = (new QueryBuilderParameters)->build($facts, new RepresentationPolicy(enumNaming: 'none'), describer: almanacQbDescriber())[0];
+    $legacy = (new QueryBuilderParameters)->build($facts, bracketedPolicy(), new QueryBuilderConfig(spatieMajor: 6), almanacDescriber())[0];
+    $none = (new QueryBuilderParameters)->build($facts, new RepresentationPolicy(enumNaming: 'none'), describer: almanacDescriber())[0];
 
     expect($legacy->schema)->toBe(['type' => 'string'])
         ->and($none->schema['items'])->not->toHaveKey('x-enum-varnames')
@@ -487,7 +540,7 @@ it('groups a bare field under the unbracketed fields name and describes it from 
         $f->fields = [new QbEntry('title', 'field'), new QbEntry('issued_at', 'field')];
     });
 
-    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber()));
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber()));
 
     expect(array_keys($byName))->toBe(['fields']);
     // `issued_at` has no @property prose, so the value-keyed map is withheld and the array carries the gap.
@@ -505,7 +558,7 @@ it('lets a fields entry comment beat the column prose, and leaves prefixed group
         ];
     });
 
-    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber()));
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacDescriber()));
 
     expect($byName['fields']->schema['items']['x-enumDescriptions'])->toBe(['title' => 'The short display title.'])
         // The author group's `title` is a RELATED table's column; @property prose belongs to the
@@ -541,11 +594,6 @@ it('degrades every sparse-fieldset group like the other lists', function (QueryB
         ['type' => 'string'],
         'Comma-separated fields: title, body.',
     ],
-    'snake-case field conversion accepts respellings' => [
-        new QueryBuilderConfig(snakeCaseFields: true),
-        ['type' => 'string'],
-        'Comma-separated fields: title, body.',
-    ],
     'custom delimiter' => [
         new QueryBuilderConfig(delimiter: '|'),
         ['type' => 'string'],
@@ -563,7 +611,7 @@ it('groups sparse fields into a single deepObject fields param whose properties 
         $f->fields = [new QbEntry('title', 'field'), new QbEntry('articles.title', 'field'), new QbEntry('author.name', 'field')];
     });
 
-    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy(), describer: almanacQbDescriber());
+    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy(), describer: almanacDescriber());
 
     expect($specs)->toHaveCount(1);
     expect($specs[0]->name)->toBe('fields')
@@ -576,19 +624,6 @@ it('groups sparse fields into a single deepObject fields param whose properties 
         ->and($bare['items']['enum'])->toBe(['title'])
         ->and($bare['items']['x-enumDescriptions'])->toBe(['title' => 'The almanac\'s display title.'])
         ->and($bare['description'])->toBe('Comma-separated fields: title.');
-});
-
-it('degrades the deepObject fields properties under snake-case field conversion', function (): void {
-    $facts = factsWith(function (QueryBuilderFacts $f): void {
-        $f->fields = [new QbEntry('articles.title', 'field')];
-    });
-
-    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy(), new QueryBuilderConfig(snakeCaseFields: true));
-
-    expect($specs[0]->schema['properties']['articles'])->toBe([
-        'type' => 'string',
-        'description' => 'Comma-separated fields: title.',
-    ]);
 });
 
 it('adds the selector the terminal reads, under the name that terminal was given', function (string $kind, string $terminal, ?array $args, array $expectedNames): void {

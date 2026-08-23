@@ -359,21 +359,6 @@ it('invalidates fragments when the query-builder delimiter changes (booted-app c
     expect($engine->analyzeCount)->toBeGreaterThan(0);
 });
 
-it('invalidates fragments when the field-name conversion flag changes (booted-app cache input)', function (): void {
-    fragmentCacheDir('fragments');
-    $engine = new CountingTypeEngine(WorkbenchEngine::make());
-    app()->instance(TypeEngine::class, $engine);
-
-    generateDocument()->document;
-    $engine->analyzeCount = 0;
-
-    // The conversion decides whether the fields groups can carry an enum at all.
-    config()->set('query-builder.convert_field_names_to_snake_case', true);
-    generateDocument()->document;
-
-    expect($engine->analyzeCount)->toBeGreaterThan(0);
-});
-
 it('invalidates fragments when the auth guard map changes (booted-app cache input)', function (string $key, mixed $value): void {
     // Which security integration owns a route is decided by the guard's DRIVER, so re-pointing a guard
     // re-documents every operation behind it while touching no route file. Keyed by Sanctum's

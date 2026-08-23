@@ -287,7 +287,7 @@ final class QueryBuilderParameters
             }
         }
 
-        return [self::commaListSpec($config->sort, self::sortValues($facts), $description, $config, $policy->enumNaming, $descriptions, $facts->defaultSorts)];
+        return [self::commaListSpec($config->sort, self::sortValues($facts), $description, $config, $policy->enumNaming, $descriptions, $facts->defaultSorts, $facts->partial('sorts'))];
     }
 
     /**
@@ -366,7 +366,7 @@ final class QueryBuilderParameters
             }
         }
 
-        return [self::commaListSpec($config->include, $values, $description, $config, $policy->enumNaming, $descriptions)];
+        return [self::commaListSpec($config->include, $values, $description, $config, $policy->enumNaming, $descriptions, partial: $facts->partial('includes'))];
     }
 
     /**
@@ -399,9 +399,9 @@ final class QueryBuilderParameters
      * @param  array<string, string>  $descriptions  prose keyed by value
      * @param  list<string>  $defaults
      */
-    private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, array $defaults = [], bool $aliased = false): QueryParameterSpec
+    private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, array $defaults = [], bool $partial = false): QueryParameterSpec
     {
-        [$schema, $description, $comma] = self::listSchema($values, $description, $config, $naming, $descriptions, $aliased);
+        [$schema, $description, $comma] = self::listSchema($values, $description, $config, $naming, $descriptions, $partial);
 
         $onSchema = $comma && $defaults !== [] && array_diff($defaults, $values) === [];
         if ($onSchema) {
@@ -420,21 +420,21 @@ final class QueryBuilderParameters
      * The schema half of the comma list, shared with each sparse-fieldset group — every degrade
      * identical: the vague-true plain string wherever {@see QueryBuilderConfig::mintsNames()} says no
      * enum reaches the document (below v7, whose minting grammar differed and whose config keys we
-     * don't read; or under a delimiter the comma-array form would misdescribe) and where `$aliased`
-     * says the app accepts respellings of the values (fields under
-     * `convert_field_names_to_snake_case`); the separator named in prose where it is not the comma;
-     * the single-value item schema when nothing splits. A degraded string has no enum to decorate,
-     * and the collision report reads the same predicate.
+     * don't read; or under a delimiter the comma-array form would misdescribe) and where `$partial`
+     * says the trace lost an entry of THIS list, so the recovered values are true but their set is
+     * not; the separator named in prose where it is not the comma; the single-value item schema when
+     * nothing splits. A degraded string has no enum to decorate, and the collision report reads the
+     * same predicates.
      *
      * @param  list<string>  $values
      * @param  array<string, string>  $descriptions  prose keyed by value
      * @return array{0: array<string, mixed>, 1: string, 2: bool} schema, description, whether the comma form applies
      */
-    private static function listSchema(array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, bool $aliased = false): array
+    private static function listSchema(array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, bool $partial = false): array
     {
-        if (! $config->mintsNames() || $aliased) {
+        if (! $config->mintsNames() || $partial) {
             // A pre-v7 install configured the delimiter another way, so there is no separator to name.
-            $note = $config->legacyPackage() || $aliased ? '' : self::separatorNote($config);
+            $note = $config->legacyPackage() ? '' : self::separatorNote($config);
 
             return [['type' => 'string'], $description.$note, false];
         }
@@ -559,10 +559,9 @@ final class QueryBuilderParameters
 
     /**
      * One parameter per recovered fields type-group, each an enum of that group's allow-listed
-     * columns — the same closed-set rule and degrades as sort/include ({@see listSchema()}), plus one
-     * of its own: `convert_field_names_to_snake_case` makes Spatie accept respellings of every value,
-     * so the groups fall back to plain strings there. Spatie validates a request key against the
-     * qualifier written in the allow-list (`ensureAllFieldsExist()` prepends and diffs), which is
+     * columns — the same closed-set rule and the same degrades as sort/include ({@see listSchema()}).
+     * Spatie validates a request key against the qualifier written in the allow-list
+     * (`ensureAllFieldsExist()` prepends and diffs, with no case conversion of its own), which is
      * exactly the grouping here; the bare group is also accepted unbracketed (`fields=id` parses to
      * the subject table).
      *
@@ -584,7 +583,7 @@ final class QueryBuilderParameters
             $properties = [];
             foreach ($groups as $type => $columns) {
                 $prose = sprintf('Comma-separated fields: %s.', implode(', ', $columns));
-                [$schema, $prose] = self::listSchema($columns, $prose, $config, $policy->enumNaming, self::fieldDescriptions($facts, $type, $columns, $describer), $config->snakeCaseFields);
+                [$schema, $prose] = self::listSchema($columns, $prose, $config, $policy->enumNaming, self::fieldDescriptions($facts, $type, $columns, $describer), $facts->partial('fields'));
                 $schema['description'] = $prose;
                 $properties[$type === '' ? '_' : $type] = $schema;
             }
@@ -607,7 +606,7 @@ final class QueryBuilderParameters
                 $config,
                 $policy->enumNaming,
                 self::fieldDescriptions($facts, $type, $columns, $describer),
-                aliased: $config->snakeCaseFields,
+                partial: $facts->partial('fields'),
             );
         }
 

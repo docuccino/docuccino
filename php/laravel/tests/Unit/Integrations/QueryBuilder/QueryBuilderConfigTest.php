@@ -99,14 +99,6 @@ it('reads the value delimiter, keeping an empty one and degrading an ill-typed o
         ->and(QueryBuilderConfig::fromArray(['delimiter' => 123])->delimiter)->toBe(',');
 });
 
-it('reads the snake-case field conversion flag, off unless explicitly true', function (): void {
-    // With the conversion on, Spatie also accepts camel respellings of every allow-listed field,
-    // so the fields groups degrade to plain strings rather than under-claiming enums.
-    expect(QueryBuilderConfig::fromArray([])->snakeCaseFields)->toBeFalse()
-        ->and(QueryBuilderConfig::fromArray(['convert_field_names_to_snake_case' => true])->snakeCaseFields)->toBeTrue()
-        ->and(QueryBuilderConfig::fromArray(['convert_field_names_to_snake_case' => 1])->snakeCaseFields)->toBeFalse();
-});
-
 it('brackets filter and fields member keys under the effective parameter names', function (): void {
     $config = QueryBuilderConfig::fromArray(['parameters' => ['filter' => 'f', 'fields' => 'flds']]);
 

@@ -130,6 +130,27 @@ it('describes and names sparse-fieldset values end to end, bare group under the 
         ->and($related['x-enum-varnames'])->toBe(['Frequency']);
 });
 
+it('reads a sort entry comment off the real allow-list source, both directions', function (): void {
+    $chain = <<<'PHP'
+    QueryBuilder::for(\Workbench\App\Models\Gadget::class)->allowedSorts([
+        // Alphabetical by shelf label.
+        'label',
+        'score',
+    ])->paginate()
+    PHP;
+
+    [$byName] = runListMetadata($chain);
+
+    // The comment beats the model's @property prose for `label`; `score` has no comment and falls
+    // back to it, so both directions of both bases are described.
+    expect($byName['sort']['schema']['items']['x-enumDescriptions'])->toBe([
+        'label' => 'Alphabetical by shelf label.',
+        '-label' => 'Alphabetical by shelf label. (descending)',
+        'score' => 'The gadget\'s popularity score.',
+        '-score' => 'The gadget\'s popularity score. (descending)',
+    ]);
+});
+
 it('reports a member-name collision inside one fields group', function (): void {
     [$byName, $diagnostics] = runListMetadata(
         "QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFields(['articles.beta_gamma', 'articles.betaGamma'])->paginate()",
