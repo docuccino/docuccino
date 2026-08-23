@@ -91,6 +91,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $this->reportUnresolved($facts, $context);
         $this->reportNoAllowLists($facts, $context);
         $this->reportDefaultConfig($context);
+        $this->reportLegacyPackage($facts, $context);
         $this->documentStrictModeError($operation, $context);
     }
 
@@ -391,6 +392,26 @@ final class QueryBuilderParametersExtension implements OperationExtension
             message: sprintf('A paginating Query Builder terminal was reached in %s but no allowed filters/sorts/includes were recovered.', $context->actionRef->symbol()),
             routeSignature: $context->route->signature(),
             help: 'If this endpoint offers filters/sorts, declare them via allowedFilters()/allowedSorts() somewhere the trace reaches: a method returning your QueryBuilder subclass is followed, and so is the constructor of a QueryBuilder subclass the action is type-hinted on (type-hint the subclass itself, not an interface or the base builder). Otherwise this is expected.',
+        ));
+    }
+
+    /**
+     * The sort/include value enums encode v7's minting grammar, so an older install degrades them to
+     * plain strings ({@see QueryBuilderParameters::commaListSpec()}) — said only where a list was
+     * actually recovered, per route the way {@see reportDefaultConfig()} is.
+     */
+    private function reportLegacyPackage(QueryBuilderFacts $facts, RouteContext $context): void
+    {
+        if (! $this->config->legacyPackage() || ($facts->sorts === [] && $facts->includes === [])) {
+            return;
+        }
+
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'query-builder.legacy-package-version',
+            message: 'spatie/laravel-query-builder below v7 is installed, so the sort/include allow-lists are documented as plain strings rather than value enums.',
+            routeSignature: $context->route->signature(),
+            help: 'Upgrade to spatie/laravel-query-builder ^7 to document the sort/include allow-lists as enums.',
         ));
     }
 

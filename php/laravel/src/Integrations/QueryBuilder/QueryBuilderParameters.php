@@ -317,6 +317,13 @@ final class QueryBuilderParameters
      */
     private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, array $defaults = []): QueryParameterSpec
     {
+        // Below v7 the minting grammar these values encode differs (the explicit factory itself minted
+        // Count/Exists + partials) and the old config keys aren't read, so the enum could be false in
+        // either direction — the vague-true string stands in, defaults in prose.
+        if ($config->legacyPackage()) {
+            return new QueryParameterSpec($name, ['type' => 'string'], self::withDefaultsNote($description, $defaults));
+        }
+
         $items = ['type' => 'string', 'enum' => $values];
         $onSchema = $defaults !== [] && array_diff($defaults, $values) === [];
 
