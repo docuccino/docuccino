@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Workbench\App\Enums\Season;
+use Workbench\App\Enums\WidgetKind;
 use Workbench\App\Enums\WidgetPriority;
 use Workbench\App\Enums\WidgetStatus;
 
@@ -50,14 +51,15 @@ function convertEnum(EnumT $enum, array $representation = []): array
 it('hoists a backed enum to a $ref-ed component carrying its values and case descriptions', function (): void {
     [$schema, $components] = convertEnumFull(new EnumT(WidgetStatus::class, ['Draft', 'Published', 'Archived']));
 
+    // Archived carries no prose, so the value-keyed map is withheld (Redoc hides values missing from
+    // it) and the index-parallel array says the same thing with an empty-string gap.
     expect($schema)->toBe(['$ref' => '#/components/schemas/WidgetStatus'])
         ->and($components['WidgetStatus'])->toBe([
             'type' => 'string',
             'enum' => ['draft', 'published', 'archived'],
-            'x-enumDescriptions' => [
-                'draft' => 'Not yet visible to applicants.',
-                'published' => 'Live and accepting traffic.',
-            ],
+            'x-enum-descriptions' => ['Not yet visible to applicants.', 'Live and accepting traffic.', ''],
+            'x-enum-varnames' => ['Draft', 'Published', 'Archived'],
+            'x-enumNames' => ['Draft', 'Published', 'Archived'],
         ]);
 });
 
@@ -70,10 +72,9 @@ it('inlines the enum schema byte-for-byte when the components policy is opted ou
     expect($schema)->toBe([
         'type' => 'string',
         'enum' => ['draft', 'published', 'archived'],
-        'x-enumDescriptions' => [
-            'draft' => 'Not yet visible to applicants.',
-            'published' => 'Live and accepting traffic.',
-        ],
+        'x-enum-descriptions' => ['Not yet visible to applicants.', 'Live and accepting traffic.', ''],
+        'x-enum-varnames' => ['Draft', 'Published', 'Archived'],
+        'x-enumNames' => ['Draft', 'Published', 'Archived'],
     ])->and($components)->toBe([]);
 });
 
@@ -94,15 +95,30 @@ it('dedupes one enum to a single component across many references', function ():
         ->and(array_keys($registry->schemas()))->toBe(['WidgetStatus']);
 });
 
-it('falls back to a case docblock summary for x-enumDescriptions when no attribute is present', function (): void {
+it('falls back to a case docblock summary for the descriptions when no attribute is present', function (): void {
     [, $components] = convertEnumFull(new EnumT(Season::class, ['Summer', 'Winter', 'Spring']));
 
-    expect($components['Season']['x-enumDescriptions'])->toBe([
+    expect($components['Season']['x-enum-descriptions'])->toBe([
         // Summer: docblock summary used (no attribute).
-        'summer' => 'Warm and dry.',
+        'Warm and dry.',
         // Winter: the attribute wins over its docblock.
-        'winter' => 'Cold and wet.',
-        // Spring: neither attribute nor docblock → omitted.
+        'Cold and wet.',
+        // Spring: neither attribute nor docblock → the index-parallel gap.
+        '',
+    ])
+        // One case undescribed → the value-keyed map is withheld (its contract is completeness).
+        ->and($components['Season'])->not->toHaveKey('x-enumDescriptions');
+});
+
+it('emits the value-keyed descriptions map when every case carries prose', function (): void {
+    [, $components] = convertEnumFull(new EnumT(WidgetKind::class, ['Physical', 'Digital']));
+
+    expect($components['WidgetKind']['x-enumDescriptions'])->toBe([
+        'physical' => 'A shippable, tangible widget.',
+        'digital' => 'A download; nothing ships.',
+    ])->and($components['WidgetKind']['x-enum-descriptions'])->toBe([
+        'A shippable, tangible widget.',
+        'A download; nothing ships.',
     ]);
 });
 
@@ -124,10 +140,9 @@ it('documents an int-backed enum with an integer type and integer values', funct
         ->and($components['WidgetPriority'])->toBe([
             'type' => 'integer',
             'enum' => [1, 5, 10],
-            'x-enumDescriptions' => [
-                '1' => 'Handled when idle.',
-                '10' => 'Jumps the queue.',
-            ],
+            'x-enum-descriptions' => ['Handled when idle.', '', 'Jumps the queue.'],
+            'x-enum-varnames' => ['Low', 'Normal', 'High'],
+            'x-enumNames' => ['Low', 'Normal', 'High'],
         ]);
 });
 
@@ -142,8 +157,18 @@ it('emits x-enum-varnames when the naming policy asks for that strategy', functi
         ->and($components['WidgetStatus'])->not->toHaveKey('x-enumNames');
 });
 
-it('emits no name hints under the default (none) naming strategy', function (): void {
+it('emits both hint spellings under the default naming strategy', function (): void {
     [, $components] = convertEnumFull(new EnumT(WidgetStatus::class, ['Draft', 'Published', 'Archived']));
+
+    expect($components['WidgetStatus']['x-enum-varnames'])->toBe(['Draft', 'Published', 'Archived'])
+        ->and($components['WidgetStatus']['x-enumNames'])->toBe(['Draft', 'Published', 'Archived']);
+});
+
+it('emits no name hints when the naming policy is opted out', function (): void {
+    [, $components] = convertEnumFull(
+        new EnumT(WidgetStatus::class, ['Draft', 'Published', 'Archived']),
+        ['enums' => ['naming' => 'none']],
+    );
 
     expect($components['WidgetStatus'])->not->toHaveKey('x-enumNames')
         ->and($components['WidgetStatus'])->not->toHaveKey('x-enum-varnames');
@@ -175,10 +200,9 @@ it('inlines nullable enum composition when components are opted out (both polici
         [
             'type' => ['string', 'null'],
             'enum' => ['draft', 'published', 'archived'],
-            'x-enumDescriptions' => [
-                'draft' => 'Not yet visible to applicants.',
-                'published' => 'Live and accepting traffic.',
-            ],
+            'x-enum-descriptions' => ['Not yet visible to applicants.', 'Live and accepting traffic.', ''],
+            'x-enum-varnames' => ['Draft', 'Published', 'Archived'],
+            'x-enumNames' => ['Draft', 'Published', 'Archived'],
         ],
     ],
     'anyof expresses null as a branch' => [
@@ -188,10 +212,9 @@ it('inlines nullable enum composition when components are opted out (both polici
                 [
                     'type' => 'string',
                     'enum' => ['draft', 'published', 'archived'],
-                    'x-enumDescriptions' => [
-                        'draft' => 'Not yet visible to applicants.',
-                        'published' => 'Live and accepting traffic.',
-                    ],
+                    'x-enum-descriptions' => ['Not yet visible to applicants.', 'Live and accepting traffic.', ''],
+                    'x-enum-varnames' => ['Draft', 'Published', 'Archived'],
+                    'x-enumNames' => ['Draft', 'Published', 'Archived'],
                 ],
                 ['type' => 'null'],
             ],
@@ -202,8 +225,12 @@ it('inlines nullable enum composition when components are opted out (both polici
 it('keeps an enum it cannot reflect inline (no honest name to hoist), falling back to case names', function (): void {
     [$schema, $components] = convertEnumFull(new EnumT('App\\Enums\\Missing', ['Open', 'Closed']));
 
-    expect($schema)->toBe(['type' => 'string', 'enum' => ['Open', 'Closed']])
-        ->and($components)->toBe([]);
+    expect($schema)->toBe([
+        'type' => 'string',
+        'enum' => ['Open', 'Closed'],
+        'x-enum-varnames' => ['Open', 'Closed'],
+        'x-enumNames' => ['Open', 'Closed'],
+    ])->and($components)->toBe([]);
 });
 
 it('degrades to a plain string schema when no values or case names are known', function (): void {

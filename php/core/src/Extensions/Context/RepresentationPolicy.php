@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Extensions\Context;
 
+use Docuccino\Core\Extensions\Schema\EnumDecoration;
+
 /**
  * The per-document representation policy: separates *what was inferred* from *how it's expressed in
- * the spec*. Every keyword defaults to today's behaviour (see the constructor), so an absent config
- * reproduces the same output byte-for-byte.
+ * the spec*. Each keyword defaults to the shape most consumers handle best (see the constructor); an
+ * absent config yields exactly those defaults.
  *
  * - `operationId`: `route-name` | `controller-method`.
- * - `enumNaming`: `none` | `x-enumNames` | `x-enum-varnames` — codegen name hints emitted alongside
- *   the enum; the `enum` members themselves never change.
+ * - `enumNaming`: `names` | `none` | `x-enumNames` | `x-enum-varnames` — SDK member-name hints
+ *   emitted alongside the enum; the `enum` members themselves never change. The default `names`
+ *   emits both spellings ({@see EnumDecoration}); the single-key
+ *   keywords pin one tool's shape; `none` turns hints off.
  * - `errorComponents`: whether an error response body repeated across operations hoists to one shared
  *   `components.responses` entry each operation `$ref`s; `false` inlines every copy.
  * - `enumComponents`: whether a reflectable enum hoists to a named component (deduped by FQCN) that
@@ -37,7 +41,7 @@ final readonly class RepresentationPolicy
 
     public function __construct(
         public string $operationId = 'route-name',
-        public string $enumNaming = 'none',
+        public string $enumNaming = 'names',
         public string $nullable = 'type-array',
         public string $filterStyle = 'bracketed',
         public string $listStyle = 'comma',
@@ -62,7 +66,7 @@ final readonly class RepresentationPolicy
 
         return new self(
             operationId: self::keyword($representation['operation_id'] ?? null, 'route-name'),
-            enumNaming: self::keyword($enumNaming, 'none'),
+            enumNaming: self::keyword($enumNaming, 'names'),
             nullable: self::keyword($representation['nullable'] ?? null, 'type-array'),
             filterStyle: self::keyword($representation['filters'] ?? null, 'bracketed'),
             listStyle: self::keyword($representation['lists'] ?? null, 'comma'),
