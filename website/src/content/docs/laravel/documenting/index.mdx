@@ -107,7 +107,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 | [First-party JSON:API resources](/laravel/packages/timacdonald-json-api/#which-one-runs) | JSON:API documents from Laravel's own `JsonApiResource`, plus its `include` / `fields[TYPE]` parameters | Laravel 13+ — activates when the `JsonApiResource` class exists | [`integrations.api_resources`](/laravel/reference/configuration/#integrations) |
 | [JSON:API resources (timacdonald)](/laravel/packages/timacdonald-json-api/) | Pre-13 JSON:API documents from `timacdonald/json-api` resources — identical output to the first-party support, plus `include` / `fields[TYPE]` | [`timacdonald/json-api`](https://github.com/timacdonald/json-api) | [`integrations.timacdonald_json_api`](/laravel/reference/configuration/#integrations) |
 | [Eloquent models](/laravel/documenting/schemas/) | Model schemas from columns, refined by `$visible` / `$hidden` / `$appends` / casts — including polymorphic `MorphTo` as a discriminated `oneOf` | Built in | [`integrations.eloquent`](/laravel/reference/configuration/#integrations) |
-| [Enums](/laravel/documenting/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and optional codegen name hints | Built in — always on | [`representation.enums`](/laravel/reference/configuration/#representation) |
+| [Enums](/laravel/documenting/schemas/) | Backed enums by their backing values, `#[CaseDescription]` prose as `x-enumDescriptions`, and codegen name hints (on by default) | Built in — always on | [`representation.enums`](/laravel/reference/configuration/#representation) |
 
 ### Error responses
 

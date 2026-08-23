@@ -208,7 +208,8 @@ its backing). Add per-case descriptions with
 	    "draft": "Created but not yet sent to the customer",
 	    "sent":  "Sent and awaiting payment",
 	    "paid":  "Paid in full"
-	  }
+	  },
+	  "x-enum-varnames": ["Draft", "Sent", "Paid"]
 	}
 	```
 	</TabItem>
@@ -220,11 +221,17 @@ descriptions live in exactly one place. A nullable enum can't carry `null` on a 
 as `anyOf: [{ "$ref": … }, { "type": "null" }]`. Prefer the old inline expression (the enum's
 `type`/`enum` repeated at every use site)? Set `representation.enums.components` to `false`.
 
-Descriptions are emitted as `x-enumDescriptions`. A case with no `#[CaseDescription]` falls back to its
-docblock summary — the first prose line of the case's doc comment — and the attribute wins when both are
-present. A case with neither is simply absent from the map. To also emit codegen name hints alongside
-(never instead of) the values, set `representation.enums.naming` to `x-enumNames` or
-`x-enum-varnames`.
+A case with no `#[CaseDescription]` falls back to its docblock summary — the first prose line of the
+case's doc comment — and the attribute wins when both are present. The value-keyed
+`x-enumDescriptions` map appears only when **every** case is described (some renderers hide cases
+missing from it); the same prose always also ships as the parallel `x-enum-descriptions` array —
+the spelling code generators read — with an empty slot for an undescribed case, so partial prose is
+never lost. Codegen name hints are on by default — `x-enum-varnames` as in the excerpt, plus
+`x-enumNames` carrying the same names for NSwag — governed by
+[`representation.enums.naming`](/laravel/reference/configuration/#representation): `names` emits
+both, a single-key keyword pins one tool's, `none` keeps documents lean. The same hints, from the
+same switch, decorate the
+[Query Builder value enums](/laravel/packages/query-builder/#sdk-ready-member-names).
 
 A **pure** enum — one with no backing type — has no values to publish, so it's documented as a string
 schema listing its case names.

@@ -19,7 +19,7 @@ parameters:
 | `allowedFilters` | one `filter[<name>]` each | The filter's kind (or your comment), plus any `whereIn` / `null` notes |
 | `allowedSorts` | `sort` | "Sort by: issued_at, total (prefix `-` for descending)." |
 | `allowedIncludes` | `include` | "Include related resources: customer, lines." |
-| `allowedFields` | `fields[<type>]` | "Comma-separated fields: id, total." |
+| `allowedFields` | `fields[<type>]`, or bare `fields` | "Comma-separated fields: id, total." |
 | a paginating terminal | `page`, or `cursor` | "Page number." / "Opaque cursor for the next/previous page." |
 
 `->defaultSort('issued_at')` becomes the `sort` parameter's `default`. Includes cover relationships
@@ -72,7 +72,9 @@ the real list of allowed filters and sorts.
 </Tabs>
 
 You wrote no parameter annotations — yet `filter[status]`, `filter[customer_id]`, `sort`, `include`,
-and `page` are all documented, alongside a paginated response.
+and `page` are all documented, alongside a paginated response. The excerpt is trimmed for the page:
+each value enum also carries [per-value descriptions](#describing-the-values) and
+[SDK member names](#sdk-ready-member-names).
 
 A bare string in `allowedFilters` is a **partial** (substring) filter in Spatie, which is why those
 two say so. Rename the page key at the call site — `->paginate(20, ['*'], 'p')` — and the document
@@ -114,9 +116,9 @@ answer between schema and prose):
 One Spatie setting changes the shape itself: a custom `delimiter` in `config/query-builder.php` —
 read from the same config as the [parameter names](#renamed-parameter-keys). The array modelling
 above **is** OpenAPI's comma serialization, so under any other separator it would document requests
-your API doesn't parse. `sort`, `include`, and enum filters degrade to a plain string with the
-separator and the values named in the description; an empty delimiter turns splitting off entirely,
-so the single-value schema emits directly:
+your API doesn't parse. `sort`, `include`, each [fields group](#sparse-fieldsets), and enum filters
+degrade to a plain string with the separator and the values named in the description; an empty
+delimiter turns splitting off entirely, so the single-value schema emits directly:
 
 ```json
 { "name": "sort", "in": "query", "required": false,
@@ -128,6 +130,98 @@ The enum states what is *meaningful* whatever the strict-mode setting: an unknow
 never useful, whether Spatie [rejects it with a `400`](#strict-mode-and-the-400-response) (strict
 mode, the default) or silently ignores it. Strict mode decides which of those the document's error
 responses describe — not the value domain.
+
+<Aside type="note" title="Spatie Query Builder ^7 for the value enums">
+The enums on this page follow v7's allow-list grammar. On an older install the grammar differs, so
+`sort`, `include`, and `fields` are documented as plain strings — the values still named in each
+description — and a `query-builder.legacy-package-version` diagnostic notes that upgrading to `^7`
+restores the enums.
+</Aside>
+
+### Describing the values
+
+Every value in these enums can carry its own description, and most of them can be described without
+writing anything new. Docuccino answers from three places, most explicit first:
+
+1. **A comment above the allow-list entry** — the same mechanism
+   [filter comments](#a-comment-becomes-the-description) use, now on sort, include, and fields
+   entries too. One comment in a shared query class describes that value on every endpoint using
+   the list.
+2. **Prose you already wrote on the model.** An include falls back to its relation method's
+   docblock summary; a sort (and a bare fields entry) falls back to the column's `@property`
+   description — the same text the response body's schema shows, so the two can never disagree.
+3. **A derived line for the names Spatie mints.** The `Count`/`Exists` forms a bare include
+   legalizes are described mechanically — "Count of related `customer` records." / "Whether related
+   `customer` records exist." — which both explains them and marks them as machine-made.
+
+A described sort documents its `-` form with the same text plus ` (descending)`. Dotted include
+paths and `type.`-prefixed fields groups take comments only — their prose lives on another model,
+where no static reader can safely follow.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Models/Invoice.php
+	/** The customer this invoice bills. */
+	public function customer(): BelongsTo
+	{
+	    return $this->belongsTo(Customer::class);
+	}
+
+	// app/Http/Controllers/InvoiceController.php
+	QueryBuilder::for(Invoice::class)->allowedIncludes([
+	    'customer',
+	    // Line items, one per SKU.
+	    'lines',
+	]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{ "name": "include", "in": "query", "required": false,
+	  "description": "Include related resources: customer, lines.",
+	  "style": "form", "explode": false,
+	  "schema": { "type": "array", "items": {
+	    "type": "string",
+	    "enum": ["customer", "customerCount", "customerExists",
+	             "lines", "linesCount", "linesExists"],
+	    "x-enumDescriptions": {
+	      "customer": "The customer this invoice bills.",
+	      "customerCount": "Count of related `customer` records.",
+	      "customerExists": "Whether related `customer` records exist.",
+	      "lines": "Line items, one per SKU.",
+	      "linesCount": "Count of related `lines` records.",
+	      "linesExists": "Whether related `lines` records exist."
+	    },
+	    "x-enum-varnames": ["Customer", "CustomerCount", "CustomerExists",
+	                        "Lines", "LinesCount", "LinesExists"]
+	  } } }
+	```
+	</TabItem>
+</Tabs>
+
+The value-keyed `x-enumDescriptions` map appears only when **every** value is described — some
+renderers hide values missing from it — and the same prose always ships in parallel as
+`x-enum-descriptions`, the array spelling code generators read, with an empty slot for any value
+that has none. Both are trimmed together here, as is `x-enumNames` (the same names,
+[NSwag's spelling](#sdk-ready-member-names)).
+
+### SDK-ready member names
+
+Values like `-total` are exact wire bytes but hostile identifiers: class-enum SDK generators must
+mint a member name from each value, and their sanitizers collide on the `-` pair or mangle dots. So
+every value enum ships its member names — `x-enum-varnames` (OpenAPI Generator, the TypeScript
+toolchain) and `x-enumNames` (NSwag), same names in both — minted from the value alone: `total` →
+`Total`, `-total` → `TotalDesc`, `customer.address` → `CustomerAddress`. Adding a value never
+renames a neighbor, so a generated SDK's enum members stay put as the API grows.
+
+The same hints ship on [component enums](/laravel/documenting/schemas/#enums) — one decoration
+standard everywhere — governed by one switch,
+[`representation.enums.naming`](/laravel/reference/configuration/#representation): the default
+`names` emits both spellings, a single-key keyword pins one tool's, and `none` keeps documents
+lean. In the rare case two values in one enum would mint the same member name, Docuccino publishes
+distinct value-derived names instead and emits a `query-builder.enum-name-collision` diagnostic —
+the fix is renaming one of the colliding allow-list entries.
 
 ## Typed filters from your model
 
@@ -400,7 +494,10 @@ private function referenceFilter(): AllowedFilter
 
 An entry Docuccino can't fold is never guessed at: it's left out of the spec, you get a
 `query-builder.unresolved-entry` warning naming the file and line, and every other entry on the list is
-documented as usual. Three more shapes stay out of reach:
+documented as usual. What the recovered entries no longer are is the *whole* list, so a sort, include
+or fields allow-list missing one entry is documented as a plain string rather than an enum — an enum
+short of a value would tell a generated client to reject a value your endpoint accepts. The other
+allow-lists on the same endpoint keep their enums. Three more shapes stay out of reach:
 
 - **A hand-off to another method.** The fold reads one body; it doesn't step into a second, so
   `return $this->buildFilter($key);` stays unresolved. A factory *call* in there is fine —
@@ -470,11 +567,13 @@ still appends the `whereIn` and `null` notes so the request form stays documente
 
 - the comment's **last line must sit immediately above** the entry — a blank line between them means
   it belongs to nothing;
-- the entry must be an item of the array literal you pass to `allowedFilters([...])`, which is the
+- the entry must be an item of the array literal you pass to the allow-list method, which is the
   normal way to write it.
 
-Comments describe **filters**. Sorts, includes, and fields carry a generated description instead (the
-allowed values and the `-` descending convention).
+On a **filter** entry the comment becomes the whole parameter's description, as above. On a sort,
+include, or fields entry it describes that **value** inside the parameter's enum instead — see
+[Describing the values](#describing-the-values) — while the parameter's own description stays
+generated (the allowed values and the `-` descending convention).
 
 ### Defaults and nullable filters
 
@@ -599,16 +698,64 @@ published parameter names still come from the `allowedFilters` keys, never from 
 
 ## Sparse fieldsets
 
-`allowedFields` entries are grouped by their `type.field` prefix, one parameter per type:
+`allowedFields` entries are grouped by their type prefix — everything before the **last** dot, which
+is how Spatie itself splits them, so `schema.articles.title` belongs to the `schema.articles` group —
+one parameter per type. A bare field name has no type to bracket, so it lands on the unbracketed
+`fields` parameter, which Spatie reads as the subject model's own columns. Each group is a closed
+set, so each parameter is [an enum of its allow-list](#sorts-and-includes-are-enums-of-the-allow-list),
+in the same comma-list modelling as `sort` and `include` — and its values take
+[comments and `@property` prose](#describing-the-values) the same way:
 
-```php
-->allowedFields(['invoices.id', 'invoices.total', 'customer.name'])
-// → fields[invoices]  "Comma-separated fields: id, total."
-// → fields[customer]  "Comma-separated fields: name."
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Models/Invoice.php
+	/**
+	 * @property int $total The grand total in minor units.
+	 */
 
-A bare field name with no `type.` prefix has no type to bracket, so it lands on the unbracketed
-`fields` parameter instead.
+	QueryBuilder::for(Invoice::class)->allowedFields([
+	    // The human-readable invoice number.
+	    'number',
+	    'total',
+	    'customer.name',
+	]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{ "name": "fields", "in": "query", "required": false,
+	  "description": "Comma-separated fields: number, total.",
+	  "style": "form", "explode": false,
+	  "schema": { "type": "array", "items": {
+	    "type": "string", "enum": ["number", "total"],
+	    "x-enumDescriptions": {
+	      "number": "The human-readable invoice number.",
+	      "total": "The grand total in minor units."
+	    },
+	    "x-enum-varnames": ["Number", "Total"]
+	  } } },
+	{ "name": "fields[customer]", "in": "query", "required": false,
+	  "description": "Comma-separated fields: name.",
+	  "style": "form", "explode": false,
+	  "schema": { "type": "array", "items": {
+	    "type": "string", "enum": ["name"],
+	    "x-enum-varnames": ["Name"]
+	  } } }
+	```
+	</TabItem>
+</Tabs>
+
+The bare group's values fall back to the subject model's `@property` prose; a prefixed group names
+another type's columns, so its values are described by comments only — `fields[customer]` above is
+named but undescribed until one is written.
+
+Fields degrade exactly where sorts and includes do, and nowhere else: [below Spatie
+v7](#sorts-and-includes-are-enums-of-the-allow-list), under a [custom
+`delimiter`](#sorts-and-includes-are-enums-of-the-allow-list), and where an entry of that same
+allow-list [could not be recovered](#limits-and-how-youre-told). Spatie's
+`convert_field_names_to_snake_case` changes only the column names it puts in the `SELECT`; the
+allow-list is still validated exactly as you wrote it, so the enum stays true either way.
 
 ## Strict mode and the `400` response
 
@@ -783,15 +930,24 @@ the build:
 
 | Situation | Diagnostic | What lands in the spec |
 | --- | --- | --- |
-| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted; every other entry is documented |
+| An allow-list entry that isn't a literal or a factory call (built from a variable, a `match`, a loop, or returned by a method that branches or can't be folded) | `query-builder.unresolved-entry` **(warning)**, naming the file and line | The entry is omitted and every other entry is documented; that list loses its enum (a short one would be false), the others keep theirs |
 | A paginating terminal reached, but no allow-lists recovered at all | `query-builder.no-allowlists-recovered` (info), naming the action | The page parameter only |
 | A `partial` filter over an enum-cast column | `query-builder.partial-on-enum` (info) | The filter, as a plain string |
 | Spatie's config unreadable | `query-builder.default-config` (info) | Default parameter names |
+| spatie/laravel-query-builder older than v7 | `query-builder.legacy-package-version` (info) | `sort`/`include`/`fields` as plain strings, values named in the description |
+| Two enum values minting one SDK member name | `query-builder.enum-name-collision` (info) | Distinct value-derived names — rename an allow-list entry to clear it |
 
 Four things are outside what the trace models today, and none produces a diagnostic:
 
-- **`allowedAppends`** — no `append` parameter is documented. Add one with
-  `#[QueryParameter('append')]` if your clients use it.
+- **Appends** — Spatie removed `allowedAppends` from the package (v7 keeps only the request-side
+  plumbing), so there is no allow-list to read and no `append` parameter is documented. An app that
+  implements appends itself — reading `$request->appends()` off Spatie's `QueryBuilderRequest` —
+  declares the parameter once:
+
+  ```php
+  #[QueryParameter('append', description: 'Comma-separated accessors to append to each result.')]
+  public function index() { /* … */ }
+  ```
 - **A page key renamed to something unreadable** — `->paginate(20, ['*'], $key)` documents no page
   parameter at all, since a guessed `page` would name a key the endpoint never reads.
 - **Relationship-path columns** (`customer.name`) — the filter is documented, but as a plain string;

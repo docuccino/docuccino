@@ -96,7 +96,11 @@ code. Here's a list endpoint you'd write anyway, and the operation it produces:
 	        "schema": {
 	          "type": "array",
 	          "default": ["-issued_at"],
-	          "items": { "type": "string", "enum": ["issued_at", "-issued_at", "total", "-total"] }
+	          "items": {
+	            "type": "string",
+	            "enum": ["issued_at", "-issued_at", "total", "-total"],
+	            "x-enum-varnames": ["IssuedAt", "IssuedAtDesc", "Total", "TotalDesc"]
+	          }
 	        }
 	      }
 	    ],
