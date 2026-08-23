@@ -55,12 +55,17 @@ the real list of allowed filters and sorts.
 	    "description": "Partial-match filter", "schema": { "type": "string" } },
 	  { "name": "include", "in": "query", "required": false,
 	    "description": "Include related resources: customer, lines.",
-	    "schema": { "type": "string" } },
+	    "style": "form", "explode": false,
+	    "schema": { "type": "array", "items": { "type": "string",
+	      "enum": ["customer", "customerCount", "customerExists",
+	               "lines", "linesCount", "linesExists"] } } },
 	  { "name": "page", "in": "query", "required": false, "description": "Page number.",
 	    "schema": { "type": "integer", "default": 1, "minimum": 1 } },
 	  { "name": "sort", "in": "query", "required": false,
 	    "description": "Sort by: issued_at, total (prefix `-` for descending).",
-	    "schema": { "type": "string" } }
+	    "style": "form", "explode": false,
+	    "schema": { "type": "array", "items": { "type": "string",
+	      "enum": ["issued_at", "-issued_at", "total", "-total"] } } }
 	]
 	```
 	</TabItem>
@@ -74,6 +79,55 @@ two say so. Rename the page key at the call site — `->paginate(20, ['*'], 'p')
 follows it. There's no `per_page` beside it here because `paginate(20)` fixes the size at that call site;
 hand the size to a helper that reads it off the request and
 [that key is documented too](/laravel/documenting/requests/#the-page-size-key).
+
+## Sorts and includes are enums of the allow-list
+
+The allow-lists are closed sets, so `sort` and `include` document their exact legal values — not a
+free string with the values buried in prose. Both accept comma-separated lists
+(`sort=-issued_at,total`), so both are modeled the way [enum filters](#typed-filters-from-your-model)
+are: an array with `style: form, explode: false`, the serialization that produces the comma form,
+with the values as the item enum.
+
+- **`sort`** lists every allowed sort in both directions — `issued_at` and `-issued_at` — so a
+  client picking from the enum gets descending without decoding the `-` convention from the
+  description (it's still explained there too). An allow-listed `->defaultSort('issued_at')` becomes
+  `"default": ["issued_at"]` — an array, because the parameter is one, and because several defaults
+  compose: `->defaultSort('-issued_at', 'total')` documents `["-issued_at", "total"]`.
+- **`include`** lists everything the allow-list makes legal, which is more than the names you wrote:
+  a bare string like `'lines'` also permits `linesCount` and `linesExists` in Spatie, and a nested
+  `'customer.address'` permits `customer` on the way — so those appear in the enum too. The
+  `Count`/`Exists` suffixes are read from Spatie's own config if you've renamed them. An include
+  built with an `AllowedInclude::*` factory permits only its own name, and that's what's documented.
+
+A `default` only lands on the schema when it belongs there. Spatie lets `defaultSort()` name a sort
+that isn't in the allow-list — it applies when the parameter is omitted, but a client can't *send*
+it — and a value outside the enum would make the schema contradict itself. An out-of-enum default
+moves to the description instead (and one such default moves them all, rather than splitting the
+answer between schema and prose):
+
+```json
+{ "name": "sort", "in": "query", "required": false, "style": "form", "explode": false,
+  "description": "Sort by: name (prefix `-` for descending). Defaults to `-created_at`.",
+  "schema": { "type": "array", "items": { "type": "string", "enum": ["name", "-name"] } } }
+```
+
+One Spatie setting changes the shape itself: a custom `delimiter` in `config/query-builder.php` —
+read from the same config as the [parameter names](#renamed-parameter-keys). The array modelling
+above **is** OpenAPI's comma serialization, so under any other separator it would document requests
+your API doesn't parse. `sort`, `include`, and enum filters degrade to a plain string with the
+separator and the values named in the description; an empty delimiter turns splitting off entirely,
+so the single-value schema emits directly:
+
+```json
+{ "name": "sort", "in": "query", "required": false,
+  "description": "Sort by: name (prefix `-` for descending). Values are separated by `|`. Defaults to `-name`.",
+  "schema": { "type": "string" } }
+```
+
+The enum states what is *meaningful* whatever the strict-mode setting: an unknown sort or include is
+never useful, whether Spatie [rejects it with a `400`](#strict-mode-and-the-400-response) (strict
+mode, the default) or silently ignores it. Strict mode decides which of those the document's error
+responses describe — not the value domain.
 
 ## Typed filters from your model
 
@@ -261,9 +315,12 @@ uses the comma `whereIn` array. Wherever a kind reads a column's cast, the
 types the same through `exact`, `operator`, a callback, or a custom filter. `AllowedFilter::trashed()`
 called with no name is documented under Spatie's own default name, `filter[trashed]`.
 
-Anything Docuccino can't reduce to one column or a known type — a non-equality operator
-(`GREATER_THAN`), a multi-clause closure or `__invoke`, a dotted relation path (`customer.name`) —
-stays a plain string. It never guesses.
+Anything Docuccino can't reduce to one column or a known type is documented at exactly the certainty
+that remains. It never guesses. A kind whose value is a string by construction — a non-equality
+operator (`GREATER_THAN`), a dotted relation path (`customer.name`) — stays a plain string. A
+multi-clause closure or `__invoke` is different: a `callback` or `custom` filter takes whatever its
+own code takes, so its parameter publishes an explicit **empty schema** — unconstrained, rather than
+pinned to a `type` the filter's code could contradict.
 
 ### Filter factories (a `ListFilters`-style helper)
 
