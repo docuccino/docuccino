@@ -3309,7 +3309,8 @@
           },
           "body": {
             "type": "string",
-            "maxLength": 500
+            "maxLength": 500,
+            "example": "example"
           },
           "heading": {
             "type": "string"
@@ -3560,18 +3561,21 @@
           },
           "name": {
             "type": "string",
-            "maxLength": 100
+            "maxLength": 100,
+            "example": "example"
           },
           "quantity": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "example": 1
           },
           "role": {
             "type": "string",
             "enum": [
               "admin",
               "user"
-            ]
+            ],
+            "example": "admin"
           }
         },
         "required": [
@@ -3737,7 +3741,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "d74edbb0d3229a32fdc9eaa557e0099b3d6453491fbb44b517a56c9103a569b7",
-      "contentHash": "a2aa29d54fff2254ec36864599ea1d2bb97ee59cc6bf48d469c51ba570176bf2"
+      "contentHash": "4532a91ab633892f8f86503f56334c5496b7feda49a6257d61855838f3a4dc74"
     },
     "generator": {
       "name": "docuccino/laravel",
