@@ -6,8 +6,10 @@ namespace Docuccino\Laravel\Integrations\QueryBuilder;
 
 use Docuccino\Core\Extensions\Schema\DocSummary;
 use Docuccino\Core\Inference\ClassMetadata;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Str;
 use ReflectionMethod;
+use ReflectionNamedType;
 use Throwable;
 
 /**
@@ -45,7 +47,7 @@ final class ListValueDescriber
                 continue;
             }
 
-            if (! $reflection->isPublic() || $reflection->isStatic()) {
+            if (! self::isRelation($reflection)) {
                 continue;
             }
 
@@ -53,6 +55,24 @@ final class ListValueDescriber
         }
 
         return null;
+    }
+
+    /**
+     * Whether a method is a relation the include name could name. An include is a request value, so a
+     * name that happens to match some other method — `getTable()`, anything a base model declares —
+     * would otherwise publish Illuminate's own author-facing prose to API consumers. The declared return
+     * type is the evidence: a relation method typed only in a docblock keeps its prose to itself, which
+     * costs a description and never states something untrue.
+     */
+    private static function isRelation(ReflectionMethod $method): bool
+    {
+        if (! $method->isPublic() || $method->isStatic()) {
+            return false;
+        }
+
+        $type = $method->getReturnType();
+
+        return $type instanceof ReflectionNamedType && ! $type->isBuiltin() && is_a($type->getName(), Relation::class, true);
     }
 
     /** The column's `@property` docblock prose, exactly as a response body would describe it. */

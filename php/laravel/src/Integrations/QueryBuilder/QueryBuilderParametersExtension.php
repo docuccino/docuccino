@@ -425,11 +425,12 @@ final class QueryBuilderParametersExtension implements OperationExtension
     /**
      * Two values minting one SDK member name were published under strict value-derived names instead
      * — fires only where the author can act (rename an allow-list entry), which is also the only
-     * place the collision can arise.
+     * place the collision can arise. Silent wherever {@see QueryBuilderConfig::mintsNames()} says the
+     * lists degraded to plain strings: no enum was published, so no name was either.
      */
     private function reportEnumNameCollisions(QueryBuilderFacts $facts, RouteContext $context): void
     {
-        if ($this->config->legacyPackage()) {
+        if (! $this->config->mintsNames()) {
             return;
         }
 

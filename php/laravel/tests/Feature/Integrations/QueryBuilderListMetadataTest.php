@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
 use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParametersExtension;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Workbench\App\Models\Gadget;
@@ -25,7 +26,7 @@ use Workbench\App\Models\Gadget;
  *
  * @return array{0: array<string, array<string, mixed>>, 1: list<Diagnostic>, 2: list<string>}
  */
-function runListMetadata(string $chain): array
+function runListMetadata(string $chain, ?QueryBuilderConfig $config = null): array
 {
     $gadgetFile = (string) (new ReflectionClass(Gadget::class))->getFileName();
 
@@ -47,7 +48,7 @@ function runListMetadata(string $chain): array
     );
 
     $operation = new OperationDraft;
-    (new QueryBuilderParametersExtension)->handle($operation, $context);
+    (new QueryBuilderParametersExtension($config ?? new QueryBuilderConfig))->handle($operation, $context);
 
     $byName = [];
     foreach ($operation->freeze()->parameters as $parameter) {
@@ -115,3 +116,24 @@ it('publishes distinct value-derived names and one diagnostic when two values co
     expect($collisions)->toHaveCount(1)
         ->and($collisions[0]->message)->toBe('Values "alpha.beta", "alphaBeta" of the "include" parameter would share one SDK enum member name, so distinct value-derived names were published instead.');
 });
+
+/**
+ * The report has to read the same predicate the emission does: wherever the lists degrade to plain
+ * strings no member name was published, so telling the author that "distinct value-derived names were
+ * published instead" would name output nobody can find.
+ */
+it('says nothing about member names where the lists degraded to plain strings', function (QueryBuilderConfig $config): void {
+    [$byName, $diagnostics] = runListMetadata(
+        "QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedIncludes(['alpha.beta', 'alphaBeta'])->paginate()",
+        $config,
+    );
+
+    $codes = array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics);
+
+    expect($byName['include']['schema']['type'])->toBe('string')
+        ->and($byName['include']['schema'])->not->toHaveKey('items')
+        ->and($codes)->not->toContain('query-builder.enum-name-collision');
+})->with([
+    'a custom delimiter' => [new QueryBuilderConfig(delimiter: '|')],
+    'a pre-v7 package' => [new QueryBuilderConfig(spatieMajor: 6)],
+]);

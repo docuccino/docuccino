@@ -134,3 +134,17 @@ it('treats only majors below the supported one as legacy', function (int $major,
     'v7' => [7, false],
     'a future major' => [8, false],
 ]);
+
+/**
+ * The one predicate the list emitter and the collision report share. Every combination that drops the
+ * enum has to answer false here, or the report claims member names the document never published.
+ */
+it('mints names only where an allow-list is published as an enum', function (QueryBuilderConfig $config, bool $mints): void {
+    expect($config->mintsNames())->toBe($mints);
+})->with([
+    'the defaults' => [new QueryBuilderConfig, true],
+    'no splitting at all still enums one value' => [new QueryBuilderConfig(delimiter: ''), true],
+    'a custom delimiter degrades to a plain string' => [new QueryBuilderConfig(delimiter: '|'), false],
+    'a pre-v7 package degrades to a plain string' => [new QueryBuilderConfig(spatieMajor: 6), false],
+    'both at once' => [new QueryBuilderConfig(delimiter: '|', spatieMajor: 6), false],
+]);

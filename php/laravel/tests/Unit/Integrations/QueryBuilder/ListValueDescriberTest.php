@@ -11,7 +11,8 @@ use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 /**
  * Dataset coverage over the model-prose lookups the describer answers: an include name from its
  * relation method's docblock summary (snake→camel included), a sort name from the `@property`
- * summary the engine recovered — and every no-answer shape degrading to null.
+ * summary the engine recovered — and every no-answer shape degrading to null, a method that is not
+ * a relation included.
  */
 function almanacDescriber(): ListValueDescriber
 {
@@ -30,6 +31,10 @@ it('answers an include name from the relation method docblock summary', function
     'tag-only docblock has no prose' => ['appendices', null],
     'dotted path never hops to the related model' => ['entries.notes', null],
     'no such method' => ['ghosts', null],
+    // An include is a request value: a name colliding with a model method must not publish that
+    // method's author-facing prose — Illuminate's own, for anything the base model declares.
+    'a project method that is not a relation' => ['circulation', null],
+    'an Eloquent method the base model documents' => ['getTable', null],
 ]);
 
 it('answers a sort name from the @property summary the engine recovered', function (string $column, ?string $expected): void {

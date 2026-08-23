@@ -398,7 +398,8 @@ final class QueryBuilderParameters
      *
      * The items schema carries the SDK decoration ({@see EnumDecoration}): minted member names always,
      * per-value prose in the shapes tools consume — on the comma form and the no-splitting single-value
-     * form alike; a custom delimiter has no enum to decorate.
+     * form alike. Where {@see QueryBuilderConfig::mintsNames()} says no enum is published there is
+     * nothing to decorate, and the collision report reads that same predicate.
      *
      * @param  list<string>  $values
      * @param  array<string, string>  $descriptions  prose keyed by value
@@ -406,11 +407,15 @@ final class QueryBuilderParameters
      */
     private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, array $defaults = []): QueryParameterSpec
     {
-        // Below v7 the minting grammar these values encode differs (the explicit factory itself minted
-        // Count/Exists + partials) and the old config keys aren't read, so the enum could be false in
-        // either direction — the vague-true string stands in, defaults in prose.
-        if ($config->legacyPackage()) {
-            return new QueryParameterSpec($name, ['type' => 'string'], self::withDefaultsNote($description, $defaults));
+        if (! $config->mintsNames()) {
+            // Below v7 the minting grammar these values encode differs (the explicit factory itself
+            // minted Count/Exists + partials) and the old config keys aren't read; under a custom
+            // delimiter the comma-array form would document a wire form Spatie rejects. Either way the
+            // vague-true string stands in — defaults in prose, and the separator named where the
+            // package is new enough to have honoured the one we read.
+            $note = $config->legacyPackage() ? '' : sprintf(' Values are separated by `%s`.', $config->delimiter);
+
+            return new QueryParameterSpec($name, ['type' => 'string'], self::withDefaultsNote($description.$note, $defaults));
         }
 
         $items = EnumDecoration::apply(
@@ -419,24 +424,20 @@ final class QueryBuilderParameters
             ListValueNames::names($values),
             $descriptions,
         );
-        $onSchema = $defaults !== [] && array_diff($defaults, $values) === [];
-
-        if ($config->splitsOnComma()) {
-            $schema = self::commaList($items);
-            if ($onSchema) {
-                // The defaultSort chain as written, an array because several defaults compose.
-                $schema['default'] = $defaults;
-            }
-
-            return new QueryParameterSpec($name, $schema, self::withDefaultsNote($description, $onSchema ? [] : $defaults), style: 'form', explode: false);
+        if (! $config->splitsOnComma()) {
+            // No splitting at all: one value per request is the whole contract, so the item enum IS
+            // the parameter's shape and a default cannot ride an array type.
+            return new QueryParameterSpec($name, $items, self::withDefaultsNote($description, $defaults));
         }
 
-        $description = self::withDefaultsNote(
-            $config->delimiter === '' ? $description : $description.sprintf(' Values are separated by `%s`.', $config->delimiter),
-            $defaults,
-        );
+        $onSchema = $defaults !== [] && array_diff($defaults, $values) === [];
+        $schema = self::commaList($items);
+        if ($onSchema) {
+            // The defaultSort chain as written, an array because several defaults compose.
+            $schema['default'] = $defaults;
+        }
 
-        return new QueryParameterSpec($name, $config->delimiter === '' ? $items : ['type' => 'string'], $description);
+        return new QueryParameterSpec($name, $schema, self::withDefaultsNote($description, $onSchema ? [] : $defaults), style: 'form', explode: false);
     }
 
     /**

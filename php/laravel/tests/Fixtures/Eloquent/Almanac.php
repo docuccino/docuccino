@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A model fixture whose relation docblocks feed the include-value describer: one plainly documented,
- * one reached through the snake→camel lookup, one undocumented, one tag-only. Only ever reflected.
+ * one reached through the snake→camel lookup, one undocumented, one tag-only, plus a documented method
+ * that is not a relation at all. Only ever reflected.
  *
  * @property string $title The almanac's display title.
  * @property string $issued_at
@@ -40,5 +41,11 @@ final class Almanac extends Model
     public function appendices(): HasMany
     {
         return $this->hasMany(FilterCastModel::class);
+    }
+
+    /** How many copies were printed — a helper, not a relation Spatie could legalize. */
+    public function circulation(): int
+    {
+        return 0;
     }
 }

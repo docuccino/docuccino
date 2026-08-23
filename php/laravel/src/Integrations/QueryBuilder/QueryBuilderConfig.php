@@ -98,6 +98,17 @@ final readonly class QueryBuilderConfig
         return $this->delimiter === ',';
     }
 
+    /**
+     * Whether an allow-list is published as a value enum, and therefore whether the SDK member names
+     * that ride on it reach the document at all. The one predicate both the emitter and the collision
+     * report read: a custom delimiter degrades the list to a plain string exactly as an old package
+     * does, so a report deriving its own answer would claim names nobody can see.
+     */
+    public function mintsNames(): bool
+    {
+        return ! $this->legacyPackage() && ($this->splitsOnComma() || $this->delimiter === '');
+    }
+
     /** The bracketed `filter[<name>]`-style key for a filter member. */
     public function filterKey(string $name): string
     {
