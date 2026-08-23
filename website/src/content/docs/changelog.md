@@ -13,6 +13,24 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.4
+
+### Features
+
+- **core**: project tag groups and pass viewer configuration through ([#158](https://github.com/docuccino/docuccino/pull/158))
+- **laravel**: document sparse fieldsets as enums of the allow-list ([#154](https://github.com/docuccino/docuccino/pull/154))
+- **laravel**: describe and name the include and sort enum values ([#153](https://github.com/docuccino/docuccino/pull/153))
+- **laravel**: document include and sort as enums of the allow-list ([#148](https://github.com/docuccino/docuccino/pull/148))
+
+### Bug fixes
+
+- **laravel**: serve each viewer the OpenAPI version it implements ([#157](https://github.com/docuccino/docuccino/pull/157))
+- **laravel**: report unreadable attributes, inherit class-level ones, read @deprecated ([#161](https://github.com/docuccino/docuccino/pull/161))
+- **laravel**: type string-backed enum route bindings from the enum ([#160](https://github.com/docuccino/docuccino/pull/160))
+- **core**: flag unions whose empty branch erases the typed contract ([#162](https://github.com/docuccino/docuccino/pull/162))
+- **laravel**: degrade include and sort typing on spatie/laravel-query-builder below v7 ([#152](https://github.com/docuccino/docuccino/pull/152))
+- **core**: emit an explicit empty schema for untyped parameters ([#147](https://github.com/docuccino/docuccino/pull/147))
+
 ## v0.8.3
 
 ### Features
