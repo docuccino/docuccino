@@ -82,6 +82,9 @@ const CONFIG_REFERENCE_OPAQUE = [
     'documents.*.tags.map',
     // Token => label heuristics, both halves yours.
     'lint.leakage.patterns',
+    // Filter kind => your own sentence. The kinds are a closed set Docuccino owns, so a typo there is
+    // caught by the `config.unknown-filter-kind` diagnostic rather than by this guard.
+    'documents.*.integrations.query_builder.filter_descriptions',
 ];
 
 /**

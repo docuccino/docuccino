@@ -332,7 +332,10 @@ own bag**, and all are optional.
     'api_resources' => ['wrap' => true],                          // top-level resource `data` wrapping
     'sanctum'       => ['modes' => ['token', 'stateful'], 'cookie' => 'myapp_session'],
     'passport'      => ['url' => 'https://auth.example.com'],      // oauth2 flow base URL
-    'query_builder' => ['pagination_terminals' => ['paginateList']], // extra paginating method names
+    'query_builder' => [
+        'pagination_terminals' => ['paginateList'],                // extra paginating method names
+        'filter_descriptions'  => ['exact' => 'Matches `%field%` exactly.'], // per-kind prose
+    ],
     'permission'    => ['enabled' => true],                       // opt in — off by default
 ],
 ```
@@ -371,6 +374,7 @@ The table below lists the additional options each bag accepts beyond `enabled`.
 | `sanctum` | `cookie` | `session.cookie` | Stateful cookie name. |
 | `passport` | `url` | `app.url` | oauth2 flow base URL. |
 | `query_builder` | `pagination_terminals` | `[]` | Extra method names that count as paginating terminals during the trace — [on a query-builder receiver only](/laravel/packages/query-builder/#custom-pagination-terminals). |
+| `query_builder` | `filter_descriptions` | `[]` | Filter kind → the sentence that leads that kind's description, **merged** over the built-in table: a kind you leave out keeps its default. `%field%` is the one supported token and interpolates the filter's **public** name; a sentence with no token is published as written. A key naming no filter kind reports `config.unknown-filter-kind`. An [entry comment](/laravel/packages/query-builder/#a-comment-becomes-the-description) still wins over it, and the `whereIn`/`null`/separator/default notes are still appended — see [overriding the generated prose](/laravel/packages/query-builder/#overriding-the-generated-prose). |
 | `permission` | `enabled` | `false` | Opt in to document `role:`/`permission:` requirements (`x-permissions`). Off by default so authorization names are not published unintentionally. |
 
 ### `export`

@@ -563,6 +563,61 @@ or a `#[QueryParameter]` replaces the generated line entirely. The
 [`whereIn`, `null`, separator, and default notes](#defaults-and-nullable-filters) are appended either
 way, because they describe the request form rather than the matching.
 
+### Overriding the generated prose
+
+The table above is the default, not the last word. If your API's own voice says it differently — or a
+kind's sentence reads wrong for your domain — set the lead sentence per kind:
+
+```php
+'integrations' => [
+    'query_builder' => [
+        'filter_descriptions' => [
+            'exact'  => 'Matches `%field%` exactly.',
+            'custom' => 'Narrows the result set by `%field%`, as configured for your account.',
+        ],
+    ],
+],
+```
+
+It's a **merge**, not a replacement: the two kinds above are overridden and every other kind keeps its
+default sentence, so naming one does not blank the rest.
+
+**`%field%` is the one supported token.** It interpolates the filter's **public** name — the key a
+client sends, never an [internal column](#internal-column-names) — and nothing else in the string is
+interpolated, so a sentence with no token is published exactly as written (`trashed` ships one).
+
+Everything else about the description is unchanged. The request-form notes still compose after the
+configured lead, in the same order they compose after a default one:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	QueryBuilder::for(Invoice::class)
+	    ->allowedFilters([
+	        AllowedFilter::exact('status'),
+	    ]);
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	{
+	  "name": "filter[status]",
+	  "in": "query",
+	  "required": false,
+	  "description": "Matches `status` exactly. Accepts a comma-separated list of values (matched as `whereIn`).",
+	  "style": "form",
+	  "explode": false,
+	  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceStatus" } }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+A [comment above the entry](#a-comment-becomes-the-description) still wins: the comment describes
+*that* filter, a configured sentence describes *every* filter of that kind. And a key naming no filter
+kind — the kinds are the left column of the table above — is reported as `config.unknown-filter-kind`
+rather than silently doing nothing.
+
 ### A comment becomes the description
 
 Write a comment directly above an allow-list entry and it becomes that filter's description — the

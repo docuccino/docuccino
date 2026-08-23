@@ -9,6 +9,8 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Laravel\Config\ConfigPaths;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderConfig;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 
 /**
  * Config-shape info diagnostics (design §9) — the misconfigurations that would otherwise be silent
@@ -20,6 +22,8 @@ use Docuccino\Laravel\Config\ConfigPaths;
  *   whole bag under it is read by nobody.
  * - An unknown `tags.default_strategy`, which {@see DocumentConfig::tagDefaultStrategy()} coerces to
  *   `controller`.
+ * - An `integrations.query_builder.filter_descriptions` key naming no filter kind. The sentence under it
+ *   can never be reached, so the override looks like it did nothing.
  * - A `tags.definitions` `parent` that {@see DocumentConfig::tagDefinitions()} dropped, because it
  *   names no defined tag or would close a cycle — OAS 3.2 allows neither.
  * - A path-like key pointing outside the app base path. {@see ConfigPaths} can't relativise it, so it
@@ -104,6 +108,18 @@ final class ConfigDiagnostics
                 );
         }
 
+        foreach (self::unknownFilterKinds($document) as $kind) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Info,
+                code: 'config.unknown-filter-kind',
+                message: sprintf(
+                    "integrations.query_builder.filter_descriptions names filter kind '%s', which no Query Builder filter has — the sentence under it is never used.",
+                    $kind,
+                ),
+                help: sprintf('Filter kinds are: %s.', implode(', ', QueryBuilderParameters::filterKinds())),
+            );
+        }
+
         foreach (ConfigPaths::machineDependent($document->raw) as $outside) {
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Info,
@@ -117,6 +133,27 @@ final class ConfigDiagnostics
         }
 
         return $diagnostics;
+    }
+
+    /**
+     * The `integrations.query_builder.filter_descriptions` keys naming no filter kind, in config order.
+     * Non-string sentences are dropped by {@see QueryBuilderConfig::withFilterDescriptions()} and are not
+     * reported here — the key itself is the actionable half.
+     *
+     * @return list<string>
+     */
+    private static function unknownFilterKinds(DocumentConfig $document): array
+    {
+        $kinds = QueryBuilderParameters::filterKinds();
+        $unknown = [];
+
+        foreach (array_keys(Hydrate::map($document->integration('query_builder')['filter_descriptions'] ?? null)) as $kind) {
+            if (! in_array((string) $kind, $kinds, true)) {
+                $unknown[] = (string) $kind;
+            }
+        }
+
+        return $unknown;
     }
 
     /**

@@ -153,6 +153,7 @@ exact key.
 | `config.unknown-tag-strategy` | info | `tags.default_strategy` isn't a strategy Docuccino has, so it fell back to `controller` | Set it to `controller` or `none` — see [Tags](/laravel/reference/configuration/#tags) |
 | `config.unknown-tag-parent` | info | A tag in `tags.definitions` is parented to a tag no definition declares, so the link was dropped | Declare the parent, or remove the `parent` key. OpenAPI requires a parent tag to exist |
 | `config.tag-parent-cycle` | info | A `tags.definitions` parent link closes a cycle, so it was dropped to keep the hierarchy a tree | Re-parent one of the tags in the cycle the message names |
+| `config.unknown-filter-kind` | info | A key in `integrations.query_builder.filter_descriptions` names no Query Builder filter kind, so the sentence under it is never used | Use one of the kinds the message lists — see [overriding the generated prose](/laravel/packages/query-builder/#overriding-the-generated-prose) |
 | `config.export-no-targets` | error | `export.targets` is set but holds no entries, so the document has nowhere to go | Remove the key to fall back to `export.path`, or list at least one `{format, path}` entry |
 | `config.export-target-shape` | error | An `export.targets` entry isn't a `{format, path}` pair with both members set to a non-empty string | Fix the entry — see [Export targets](/laravel/reference/configuration/#export) |
 | `config.export-unknown-format` | error | An export target names a format Docuccino doesn't emit | Use one of the formats the message lists |

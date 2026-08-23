@@ -161,6 +161,10 @@ return [
                 // 'query_builder' => [
                 //     'enabled' => true,
                 //     'pagination_terminals' => ['paginateList'], // your own paginating method names
+                //     // Filter kind => the sentence that leads its description, merged over the
+                //     // built-ins (kinds you leave out keep theirs). `%field%` is the one supported
+                //     // token: the filter's public name.
+                //     'filter_descriptions' => ['exact' => 'Matches `%field%` exactly.'],
                 // ],
                 // 'json_api_paginate' => ['enabled' => true],
                 // 'timacdonald_json_api' => ['enabled' => true],

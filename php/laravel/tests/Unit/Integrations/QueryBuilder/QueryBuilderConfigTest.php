@@ -145,3 +145,37 @@ it('mints names only where an allow-list is published as an enum', function (Que
     'a pre-v7 package degrades to a plain string' => [new QueryBuilderConfig(spatieMajor: 6), false],
     'both at once' => [new QueryBuilderConfig(delimiter: '|', spatieMajor: 6), false],
 ]);
+
+/**
+ * `filter_descriptions` is the one member that comes from Docuccino's own per-document bag rather than
+ * the package's, so it arrives through a seam of its own. What lands here is data: strings keyed by
+ * whatever the document wrote, every non-string sentence dropped (a description is a string) and every
+ * key kept as configured — an unknown one simply never matches a filter, and `ConfigDiagnostics` names
+ * it rather than this silently rewriting somebody's config.
+ */
+it('keeps the string sentences a document configured, dropping the rest', function (mixed $configured, array $expected): void {
+    expect((new QueryBuilderConfig)->withFilterDescriptions($configured)->filterDescriptions)->toBe($expected);
+})->with([
+    'nothing configured' => [null, []],
+    'an empty bag' => [[], []],
+    'one kind' => [['exact' => 'Matches `%field%` exactly.'], ['exact' => 'Matches `%field%` exactly.']],
+    'several kinds, in config order' => [
+        ['partial' => 'Contains `%field%`.', 'exact' => 'Is `%field%`.'],
+        ['partial' => 'Contains `%field%`.', 'exact' => 'Is `%field%`.'],
+    ],
+    'a key naming no kind is kept as configured' => [['wibble' => 'Hm.'], ['wibble' => 'Hm.']],
+    'a non-string sentence is dropped' => [['exact' => ['nope'], 'partial' => 'Contains `%field%`.'], ['partial' => 'Contains `%field%`.']],
+    'a scalar sentence is not coerced' => [['exact' => 42], []],
+    'a whole non-array bag' => ['Exact match.', []],
+]);
+
+it('leaves every other member of the config alone when the descriptions are threaded on', function (): void {
+    $config = QueryBuilderConfig::fromArray(['parameters' => ['filter' => 'f'], 'delimiter' => '|'], 6);
+    $with = $config->withFilterDescriptions(['exact' => 'Is `%field%`.']);
+
+    expect($with->filter)->toBe('f')
+        ->and($with->delimiter)->toBe('|')
+        ->and($with->spatieMajor)->toBe(6)
+        ->and($with->recovered)->toBeTrue()
+        ->and($config->filterDescriptions)->toBe([]);
+});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Laravel\Integrations\QueryBuilder\QueryBuilderParameters;
 use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Registry\IntegrationToggles;
 
@@ -129,3 +130,60 @@ it('does not flag a tag hierarchy whose parents all resolve', function (): void 
         ['name' => 'Refunds', 'parent' => 'Invoices'],
     ]])))->toBe([]);
 });
+
+/**
+ * A filter-description override keyed on a kind nothing has is the config equivalent of a scan that
+ * matches nothing: the document looks configured and the prose never moves. Reported once per build,
+ * beside the other config-shape no-ops, rather than once per Query Builder route.
+ */
+it('emits an info diagnostic for a filter_descriptions key naming no filter kind', function (): void {
+    $diagnostics = ConfigDiagnostics::for(configDoc([
+        'query_builder' => ['filter_descriptions' => ['exactt' => 'Matches `%field%` exactly.']],
+    ]));
+
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->severity)->toBe(Severity::Info)
+        ->and($diagnostics[0]->code)->toBe('config.unknown-filter-kind')
+        ->and($diagnostics[0]->message)->toBe(
+            "integrations.query_builder.filter_descriptions names filter kind 'exactt', which no Query Builder filter has — the sentence under it is never used.",
+        )
+        // The help lists the kinds that exist, read off the table itself.
+        ->and($diagnostics[0]->help)->toBe(
+            'Filter kinds are: default, partial, exact, beginsWithStrict, endsWithStrict, scope, callback, custom, operator, trashed, belongsTo.',
+        );
+});
+
+it('flags every unknown filter kind, in config order, and no known one', function (): void {
+    $diagnostics = ConfigDiagnostics::for(configDoc([
+        'query_builder' => ['filter_descriptions' => [
+            'zzz' => 'One.',
+            'exact' => 'Matches `%field%` exactly.',
+            'aaa' => 'Two.',
+        ]],
+    ]));
+
+    expect(array_map(static fn ($d): string => $d->code, $diagnostics))->toBe([
+        'config.unknown-filter-kind',
+        'config.unknown-filter-kind',
+    ])
+        ->and($diagnostics[0]->message)->toContain("'zzz'")
+        ->and($diagnostics[1]->message)->toContain("'aaa'");
+});
+
+it('does not flag a filter_descriptions key that names a real filter kind', function (string $kind): void {
+    expect(ConfigDiagnostics::for(configDoc([
+        'query_builder' => ['filter_descriptions' => [$kind => 'A sentence about `%field%`.']],
+    ])))->toBe([]);
+})->with(array_map(
+    static fn (string $kind): array => [$kind],
+    QueryBuilderParameters::filterKinds(),
+));
+
+it('says nothing about a query_builder bag with no filter_descriptions in it', function (mixed $bag): void {
+    expect(ConfigDiagnostics::for(configDoc(['query_builder' => $bag])))->toBe([]);
+})->with([
+    'an empty bag' => [[]],
+    'only the other options' => [['enabled' => true, 'pagination_terminals' => ['paginateList']]],
+    'an empty description map' => [['filter_descriptions' => []]],
+    'a non-array where the map should be' => [['filter_descriptions' => 'Exact match.']],
+]);
