@@ -37,8 +37,8 @@ it('answers an include name from the relation method docblock summary', function
     'an Eloquent method the base model documents' => ['getTable', null],
 ]);
 
-it('answers a sort name from the @property summary the engine recovered', function (string $column, ?string $expected): void {
-    expect(almanacDescriber()->sort($column))->toBe($expected);
+it('answers a sort or fields column from the @property summary the engine recovered', function (string $column, ?string $expected): void {
+    expect(almanacDescriber()->column($column))->toBe($expected);
 })->with([
     'described column' => ['title', 'The almanac\'s display title.'],
     'column with no prose' => ['issued_at', null],

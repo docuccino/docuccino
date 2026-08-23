@@ -12,7 +12,7 @@ use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 /**
  * Turns recovered {@see QueryBuilderFacts} into query-parameter specs. The facts themselves are
  * policy-independent; this is the only place their EXPRESSION is decided — bracketed `filter[status]`
- * params vs one `filter` deep-object, comma-serialised enum lists for sort/include, sparse fieldsets, pagination,
+ * params vs one `filter` deep-object, comma-serialised enum lists for sort/include and each sparse-fieldset group, pagination,
  * and how a column cast surfaces (an enum becomes a comma-serialised array so Spatie's whereIn split
  * stays valid; a native cast is just its scalar type). Names and the effective delimiter come from
  * {@see QueryBuilderConfig}; the filter/fields shapes and the enum naming policy from the
@@ -61,7 +61,7 @@ final class QueryBuilderParameters
             ...$this->filterParameters($facts, $policy, $config),
             ...$this->sortParameters($facts, $policy, $config, $describer),
             ...$this->includeParameters($facts, $policy, $config, $describer),
-            ...$this->fieldParameters($facts, $policy, $config),
+            ...$this->fieldParameters($facts, $policy, $config, $describer),
             ...$this->paginationParameters($facts),
         ];
     }
@@ -280,7 +280,7 @@ final class QueryBuilderParameters
         // the same text, marked. First occurrence wins, exactly as the value dedupe does.
         $descriptions = [];
         foreach ($bases as $base) {
-            $text = self::sortComment($facts, $base) ?? $describer?->sort($base);
+            $text = self::sortComment($facts, $base) ?? $describer?->column($base);
             if ($text !== null) {
                 $descriptions[$base] = $text;
                 $descriptions['-'.$base] = $text.' (descending)';
@@ -387,35 +387,56 @@ final class QueryBuilderParameters
     }
 
     /**
-     * The one comma-serialised list shape (`form`, `explode: false`, items enumming `$values`) sort and
-     * include share — degraded like {@see whereInSchema()} when the app splits on a custom delimiter,
-     * or to the single-value item schema when nothing splits.
+     * The one comma-serialised list parameter (`form`, `explode: false`, items enumming `$values`) sort,
+     * include and the bracketed fields groups share, its schema and degrades from {@see listSchema()}.
      *
      * A default (Spatie's `defaultSort`) lands on the schema only where every value is a member of the
      * emitted enum — a defaultSort needs no allow-listing, and a default violating its own schema would
      * be a lie — and only on the comma form, whose array type it matches. Anywhere else it is stated in
      * the description instead.
      *
-     * The items schema carries the SDK decoration ({@see EnumDecoration}): minted member names always,
-     * per-value prose in the shapes tools consume — on the comma form and the no-splitting single-value
-     * form alike. Where {@see QueryBuilderConfig::mintsNames()} says no enum is published there is
-     * nothing to decorate, and the collision report reads that same predicate.
-     *
      * @param  list<string>  $values
      * @param  array<string, string>  $descriptions  prose keyed by value
      * @param  list<string>  $defaults
      */
-    private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, array $defaults = []): QueryParameterSpec
+    private static function commaListSpec(string $name, array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, array $defaults = [], bool $aliased = false): QueryParameterSpec
     {
-        if (! $config->mintsNames()) {
-            // Below v7 the minting grammar these values encode differs (the explicit factory itself
-            // minted Count/Exists + partials) and the old config keys aren't read; under a custom
-            // delimiter the comma-array form would document a wire form Spatie rejects. Either way the
-            // vague-true string stands in — defaults in prose, and the separator named where the
-            // package is new enough to have honoured the one we read.
-            $note = $config->legacyPackage() ? '' : sprintf(' Values are separated by `%s`.', $config->delimiter);
+        [$schema, $description, $comma] = self::listSchema($values, $description, $config, $naming, $descriptions, $aliased);
 
-            return new QueryParameterSpec($name, ['type' => 'string'], self::withDefaultsNote($description.$note, $defaults));
+        $onSchema = $comma && $defaults !== [] && array_diff($defaults, $values) === [];
+        if ($onSchema) {
+            // The defaultSort chain as written, an array because several defaults compose.
+            $schema['default'] = $defaults;
+        }
+
+        $description = self::withDefaultsNote($description, $onSchema ? [] : $defaults);
+
+        return $comma
+            ? new QueryParameterSpec($name, $schema, $description, style: 'form', explode: false)
+            : new QueryParameterSpec($name, $schema, $description);
+    }
+
+    /**
+     * The schema half of the comma list, shared with each sparse-fieldset group — every degrade
+     * identical: the vague-true plain string wherever {@see QueryBuilderConfig::mintsNames()} says no
+     * enum reaches the document (below v7, whose minting grammar differed and whose config keys we
+     * don't read; or under a delimiter the comma-array form would misdescribe) and where `$aliased`
+     * says the app accepts respellings of the values (fields under
+     * `convert_field_names_to_snake_case`); the separator named in prose where it is not the comma;
+     * the single-value item schema when nothing splits. A degraded string has no enum to decorate,
+     * and the collision report reads the same predicate.
+     *
+     * @param  list<string>  $values
+     * @param  array<string, string>  $descriptions  prose keyed by value
+     * @return array{0: array<string, mixed>, 1: string, 2: bool} schema, description, whether the comma form applies
+     */
+    private static function listSchema(array $values, string $description, QueryBuilderConfig $config, string $naming, array $descriptions, bool $aliased = false): array
+    {
+        if (! $config->mintsNames() || $aliased) {
+            // A pre-v7 install configured the delimiter another way, so there is no separator to name.
+            $note = $config->legacyPackage() || $aliased ? '' : self::separatorNote($config);
+
+            return [['type' => 'string'], $description.$note, false];
         }
 
         $items = EnumDecoration::apply(
@@ -424,20 +445,18 @@ final class QueryBuilderParameters
             ListValueNames::names($values),
             $descriptions,
         );
-        if (! $config->splitsOnComma()) {
-            // No splitting at all: one value per request is the whole contract, so the item enum IS
-            // the parameter's shape and a default cannot ride an array type.
-            return new QueryParameterSpec($name, $items, self::withDefaultsNote($description, $defaults));
-        }
 
-        $onSchema = $defaults !== [] && array_diff($defaults, $values) === [];
-        $schema = self::commaList($items);
-        if ($onSchema) {
-            // The defaultSort chain as written, an array because several defaults compose.
-            $schema['default'] = $defaults;
-        }
+        return $config->splitsOnComma()
+            ? [self::commaList($items), $description, true]
+            : [$items, $description, false];
+    }
 
-        return new QueryParameterSpec($name, $schema, self::withDefaultsNote($description, $onSchema ? [] : $defaults), style: 'form', explode: false);
+    /** The separator named in prose, where values split on something other than the comma the array form serialises. */
+    private static function separatorNote(QueryBuilderConfig $config): string
+    {
+        return $config->splitsOnComma() || $config->delimiter === ''
+            ? ''
+            : sprintf(' Values are separated by `%s`.', $config->delimiter);
     }
 
     /**
@@ -539,28 +558,35 @@ final class QueryBuilderParameters
     }
 
     /**
+     * One parameter per recovered fields type-group, each an enum of that group's allow-listed
+     * columns — the same closed-set rule and degrades as sort/include ({@see listSchema()}), plus one
+     * of its own: `convert_field_names_to_snake_case` makes Spatie accept respellings of every value,
+     * so the groups fall back to plain strings there. Spatie validates a request key against the
+     * qualifier written in the allow-list (`ensureAllFieldsExist()` prepends and diffs), which is
+     * exactly the grouping here; the bare group is also accepted unbracketed (`fields=id` parses to
+     * the subject table).
+     *
+     * Per-value prose: the entry's own comment, and for the bare (subject-model) group the column's
+     * `@property` docblock. A `type.` prefix names a related table this pass can't statically map to
+     * a model, so those groups stay undescribed rather than guessed at.
+     *
      * @return list<QueryParameterSpec>
      */
-    private function fieldParameters(QueryBuilderFacts $facts, RepresentationPolicy $policy, QueryBuilderConfig $config): array
+    private function fieldParameters(QueryBuilderFacts $facts, RepresentationPolicy $policy, QueryBuilderConfig $config, ?ListValueDescriber $describer): array
     {
         if ($facts->fields === []) {
             return [];
         }
 
-        // Group `type.field` paths by their type prefix (a bare field groups under the empty prefix).
-        $byType = [];
-        foreach ($facts->fields as $field) {
-            $sep = strpos($field->name, '.');
-            $type = $sep === false ? '' : substr($field->name, 0, $sep);
-            $column = $sep === false ? $field->name : substr($field->name, $sep + 1);
-            $byType[$type][] = $column;
-        }
+        $groups = self::fieldValues($facts->fields);
 
         if ($policy->filtersDeepObject()) {
             $properties = [];
-            foreach ($byType as $type => $columns) {
-                $key = $type === '' ? '_' : $type;
-                $properties[$key] = ['type' => 'string', 'description' => sprintf('Comma-separated fields: %s.', implode(', ', $columns))];
+            foreach ($groups as $type => $columns) {
+                $prose = sprintf('Comma-separated fields: %s.', implode(', ', $columns));
+                [$schema, $prose] = self::listSchema($columns, $prose, $config, $policy->enumNaming, self::fieldDescriptions($facts, $type, $columns, $describer), $config->snakeCaseFields);
+                $schema['description'] = $prose;
+                $properties[$type === '' ? '_' : $type] = $schema;
             }
 
             return [new QueryParameterSpec(
@@ -573,15 +599,79 @@ final class QueryBuilderParameters
         }
 
         $specs = [];
-        foreach ($byType as $type => $columns) {
-            $specs[] = new QueryParameterSpec(
-                name: $type === '' ? $config->fields : $config->fieldsKey($type),
-                schema: ['type' => 'string'],
-                description: sprintf('Comma-separated fields: %s.', implode(', ', $columns)),
+        foreach ($groups as $type => $columns) {
+            $specs[] = self::commaListSpec(
+                $type === '' ? $config->fields : $config->fieldsKey($type),
+                $columns,
+                sprintf('Comma-separated fields: %s.', implode(', ', $columns)),
+                $config,
+                $policy->enumNaming,
+                self::fieldDescriptions($facts, $type, $columns, $describer),
+                aliased: $config->snakeCaseFields,
             );
         }
 
         return $specs;
+    }
+
+    /**
+     * A group per type prefix (bare fields under the empty prefix), columns deduped keeping first, in
+     * allow-list order. Split on the LAST dot — Spatie's request parsing takes the field as
+     * `afterLast('.')` and everything before it as the table key. Public because the extension mints
+     * the same member names to report collisions; this is the one derivation of the groups.
+     *
+     * @param  list<QbEntry>  $fields
+     * @return array<string, list<string>>
+     */
+    public static function fieldValues(array $fields): array
+    {
+        $groups = [];
+        foreach ($fields as $field) {
+            [$type, $column] = self::fieldParts($field->name);
+            if (! in_array($column, $groups[$type] ?? [], true)) {
+                $groups[$type][] = $column;
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Per-column prose for one fields group: the entry's comment, else — bare group only — the
+     * column's `@property` docblock. First occurrence wins, exactly as the value dedupe does.
+     *
+     * @param  list<string>  $columns
+     * @return array<string, string>
+     */
+    private static function fieldDescriptions(QueryBuilderFacts $facts, string $type, array $columns, ?ListValueDescriber $describer): array
+    {
+        $comments = [];
+        foreach ($facts->fields as $field) {
+            [$fieldType, $column] = self::fieldParts($field->name);
+            if ($fieldType === $type && $field->comment !== null && ! isset($comments[$column])) {
+                $comments[$column] = $field->comment;
+            }
+        }
+
+        $descriptions = [];
+        foreach ($columns as $column) {
+            $text = $comments[$column] ?? ($type === '' ? $describer?->column($column) : null);
+            if ($text !== null) {
+                $descriptions[$column] = $text;
+            }
+        }
+
+        return $descriptions;
+    }
+
+    /**
+     * @return array{0: string, 1: string} type prefix ('' for a bare field) and column
+     */
+    private static function fieldParts(string $name): array
+    {
+        $sep = strrpos($name, '.');
+
+        return $sep === false ? ['', $name] : [substr($name, 0, $sep), substr($name, $sep + 1)];
     }
 
     /**

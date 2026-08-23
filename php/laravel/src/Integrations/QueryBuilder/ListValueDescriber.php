@@ -13,9 +13,10 @@ use ReflectionNamedType;
 use Throwable;
 
 /**
- * The prose the subject model already carries for a sort/include value: an include name answers
- * from its relation method's docblock summary, a sort name from the column's `@property` prose the
- * engine recovered — the same text the serialized column shows, so the two can never disagree.
+ * The prose the subject model already carries for a sort/include/fields value: an include name
+ * answers from its relation method's docblock summary, a sort or fields name from the column's
+ * `@property` prose the engine recovered — the same text the serialized column shows, so the two
+ * can never disagree.
  * Dotted include paths stay undescribed here (the segment lives on a related model this resolver
  * deliberately never hops to); an entry's own comment outranks both, resolved by the caller.
  *
@@ -75,8 +76,8 @@ final class ListValueDescriber
         return $type instanceof ReflectionNamedType && ! $type->isBuiltin() && is_a($type->getName(), Relation::class, true);
     }
 
-    /** The column's `@property` docblock prose, exactly as a response body would describe it. */
-    public function sort(string $column): ?string
+    /** A column's `@property` docblock prose — sorts and sparse fieldsets alike, exactly as a response body describes it. */
+    public function column(string $column): ?string
     {
         foreach ($this->metadata->properties as $property) {
             if ($property->name === $column) {

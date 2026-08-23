@@ -439,6 +439,13 @@ final class QueryBuilderParametersExtension implements OperationExtension
             $this->config->include => QueryBuilderParameters::includeValues($facts->includes, $this->config),
         ];
 
+        // Snake-case field conversion degrades the fields groups to plain strings — no names minted.
+        if (! $this->config->snakeCaseFields) {
+            foreach (QueryBuilderParameters::fieldValues($facts->fields) as $type => $columns) {
+                $lists[$type === '' ? $this->config->fields : $this->config->fieldsKey($type)] = $columns;
+            }
+        }
+
         foreach ($lists as $parameter => $values) {
             $collisions = ListValueNames::collisions($values);
             if ($collisions === []) {

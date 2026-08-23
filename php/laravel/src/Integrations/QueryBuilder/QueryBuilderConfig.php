@@ -36,6 +36,10 @@ final readonly class QueryBuilderConfig
         // `query-builder.delimiter`: what sort/include/filter values split on. The comma-array list
         // modelling is only truthful on the default; anything else degrades the lists.
         public string $delimiter = ',',
+        // `query-builder.convert_field_names_to_snake_case`: when on, Spatie also accepts camel
+        // respellings of every allow-listed field, so a fields enum would under-claim — the field
+        // groups degrade to plain strings.
+        public bool $snakeCaseFields = false,
         // The installed package major. Below v7 the include grammar differs (the explicit factory
         // itself minted Count/Exists + partials) and the old config keys are not read, so the
         // sort/include enums degrade to plain strings.
@@ -70,6 +74,7 @@ final readonly class QueryBuilderConfig
             countSuffix: self::rawString($suffixes, 'count', 'Count'),
             existsSuffix: self::rawString($suffixes, 'exists', 'Exists'),
             delimiter: self::rawString($config, 'delimiter', ','),
+            snakeCaseFields: ($config['convert_field_names_to_snake_case'] ?? false) === true,
             spatieMajor: $spatieMajor,
         );
     }

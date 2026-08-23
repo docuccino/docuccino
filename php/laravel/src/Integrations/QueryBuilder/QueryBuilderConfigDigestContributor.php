@@ -31,6 +31,8 @@ final class QueryBuilderConfigDigestContributor implements EnvironmentDigestCont
             $this->config->existsSuffix,
             // The delimiter decides whether lists carry the comma-array contract at all.
             $this->config->delimiter,
+            // Snake-case conversion decides whether the fields groups can carry an enum.
+            $this->config->snakeCaseFields ? 'snake-fields' : 'fields-as-written',
         ]);
     }
 }

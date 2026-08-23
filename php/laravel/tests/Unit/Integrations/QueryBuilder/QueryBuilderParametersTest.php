@@ -459,30 +459,136 @@ it('emits neither names nor descriptions under a legacy package or the none nami
         ]);
 });
 
-it('groups sparse fields into fields[type] params by default', function (): void {
+it('expresses each sparse-fieldset group as a comma-serialised enum of its columns', function (): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
-        $f->fields = [new QbEntry('articles.title', 'field'), new QbEntry('articles.body', 'field'), new QbEntry('author.name', 'field')];
+        $f->fields = [
+            new QbEntry('articles.title', 'field'),
+            new QbEntry('articles.body', 'field'),
+            // A repeated entry dedupes keeping first, exactly as sort/include values do.
+            new QbEntry('articles.title', 'field'),
+            new QbEntry('author.name', 'field'),
+        ];
     });
 
     $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
 
     expect(array_keys($byName))->toBe(['fields[articles]', 'fields[author]']);
-    expect($byName['fields[articles]']->schema)->toBe(['type' => 'string'])
-        ->and($byName['fields[articles]']->description)->toBe('Comma-separated fields: title, body.');
+    expect($byName['fields[articles]']->style)->toBe('form')
+        ->and($byName['fields[articles]']->explode)->toBeFalse()
+        ->and($byName['fields[articles]']->description)->toBe('Comma-separated fields: title, body.')
+        ->and($byName['fields[articles]']->schema['type'])->toBe('array')
+        ->and($byName['fields[articles]']->schema['items']['enum'])->toBe(['title', 'body'])
+        ->and($byName['fields[articles]']->schema['items']['x-enum-varnames'])->toBe(['Title', 'Body'])
+        ->and($byName['fields[author]']->schema['items']['enum'])->toBe(['name']);
 });
 
-it('groups sparse fields into a single deepObject fields param under the deepObject policy', function (): void {
+it('groups a bare field under the unbracketed fields name and describes it from its @property prose', function (): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
-        $f->fields = [new QbEntry('articles.title', 'field'), new QbEntry('author.name', 'field')];
+        $f->fields = [new QbEntry('title', 'field'), new QbEntry('issued_at', 'field')];
     });
 
-    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy());
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber()));
+
+    expect(array_keys($byName))->toBe(['fields']);
+    // `issued_at` has no @property prose, so the value-keyed map is withheld and the array carries the gap.
+    expect($byName['fields']->schema['items']['enum'])->toBe(['title', 'issued_at'])
+        ->and($byName['fields']->schema['items'])->not->toHaveKey('x-enumDescriptions')
+        ->and($byName['fields']->schema['items']['x-enum-descriptions'])->toBe(['The almanac\'s display title.', ''])
+        ->and($byName['fields']->schema['items']['x-enum-varnames'])->toBe(['Title', 'IssuedAt']);
+});
+
+it('lets a fields entry comment beat the column prose, and leaves prefixed groups undescribed', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [
+            (new QbEntry('title', 'field'))->withColumn(null, enumTyped: false, comment: 'The short display title.'),
+            new QbEntry('author.title', 'field'),
+        ];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), describer: almanacQbDescriber()));
+
+    expect($byName['fields']->schema['items']['x-enumDescriptions'])->toBe(['title' => 'The short display title.'])
+        // The author group's `title` is a RELATED table's column; @property prose belongs to the
+        // subject model, so the group stays undescribed rather than guessed at.
+        ->and($byName['fields[author]']->schema['items'])->not->toHaveKey('x-enumDescriptions')
+        ->and($byName['fields[author]']->schema['items'])->not->toHaveKey('x-enum-descriptions');
+});
+
+it('splits a fields entry on its last dot, mirroring how Spatie keys the request', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [new QbEntry('schema.articles.title', 'field')];
+    });
+
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
+
+    expect(array_keys($byName))->toBe(['fields[schema.articles]'])
+        ->and($byName['fields[schema.articles]']->schema['items']['enum'])->toBe(['title']);
+});
+
+it('degrades every sparse-fieldset group like the other lists', function (QueryBuilderConfig $config, array $schema, string $description): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [new QbEntry('articles.title', 'field'), new QbEntry('articles.body', 'field')];
+    });
+
+    $spec = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config))['fields[articles]'];
+
+    expect($spec->schema)->toBe($schema)
+        ->and($spec->description)->toBe($description)
+        ->and($spec->style)->toBeNull();
+})->with([
+    'legacy package' => [
+        new QueryBuilderConfig(spatieMajor: 6),
+        ['type' => 'string'],
+        'Comma-separated fields: title, body.',
+    ],
+    'snake-case field conversion accepts respellings' => [
+        new QueryBuilderConfig(snakeCaseFields: true),
+        ['type' => 'string'],
+        'Comma-separated fields: title, body.',
+    ],
+    'custom delimiter' => [
+        new QueryBuilderConfig(delimiter: '|'),
+        ['type' => 'string'],
+        'Comma-separated fields: title, body. Values are separated by `|`.',
+    ],
+    'empty delimiter selects a single field' => [
+        new QueryBuilderConfig(delimiter: ''),
+        ['type' => 'string', 'enum' => ['title', 'body'], 'x-enum-varnames' => ['Title', 'Body'], 'x-enumNames' => ['Title', 'Body']],
+        'Comma-separated fields: title, body.',
+    ],
+]);
+
+it('groups sparse fields into a single deepObject fields param whose properties carry the enums', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [new QbEntry('title', 'field'), new QbEntry('articles.title', 'field'), new QbEntry('author.name', 'field')];
+    });
+
+    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy(), describer: almanacQbDescriber());
 
     expect($specs)->toHaveCount(1);
     expect($specs[0]->name)->toBe('fields')
         ->and($specs[0]->style)->toBe('deepObject')
         ->and($specs[0]->schema['type'])->toBe('object')
-        ->and(array_keys($specs[0]->schema['properties']))->toBe(['articles', 'author']);
+        ->and(array_keys($specs[0]->schema['properties']))->toBe(['_', 'articles', 'author']);
+
+    $bare = $specs[0]->schema['properties']['_'];
+    expect($bare['type'])->toBe('array')
+        ->and($bare['items']['enum'])->toBe(['title'])
+        ->and($bare['items']['x-enumDescriptions'])->toBe(['title' => 'The almanac\'s display title.'])
+        ->and($bare['description'])->toBe('Comma-separated fields: title.');
+});
+
+it('degrades the deepObject fields properties under snake-case field conversion', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->fields = [new QbEntry('articles.title', 'field')];
+    });
+
+    $specs = (new QueryBuilderParameters)->build($facts, deepObjectPolicy(), new QueryBuilderConfig(snakeCaseFields: true));
+
+    expect($specs[0]->schema['properties']['articles'])->toBe([
+        'type' => 'string',
+        'description' => 'Comma-separated fields: title.',
+    ]);
 });
 
 it('adds the selector the terminal reads, under the name that terminal was given', function (string $kind, string $terminal, ?array $args, array $expectedNames): void {

@@ -103,6 +103,45 @@ it('falls back to the relation docblock when the include entry carries no commen
         ->toBe('A belongsTo whose default foreign key (`beacon_id`) types off the related model\'s uuid key.');
 });
 
+it('describes and names sparse-fieldset values end to end, bare group under the unbracketed name', function (): void {
+    $chain = <<<'PHP'
+    QueryBuilder::for(\Workbench\App\Models\Gadget::class)->allowedFields([
+        // The gadget's shelf label.
+        'label',
+        'score',
+        'beacons.frequency',
+    ])->paginate()
+    PHP;
+
+    [$byName] = runListMetadata($chain);
+
+    $bare = $byName['fields']['schema']['items'];
+    expect($bare['enum'])->toBe(['label', 'score'])
+        ->and($bare['x-enumDescriptions'])->toBe([
+            'label' => 'The gadget\'s shelf label.',
+            'score' => 'The gadget\'s popularity score.',
+        ])
+        ->and($bare['x-enum-varnames'])->toBe(['Label', 'Score']);
+
+    // A prefixed group names a related table this pass can't map to a model — undescribed, still named.
+    $related = $byName['fields[beacons]']['schema']['items'];
+    expect($related['enum'])->toBe(['frequency'])
+        ->and($related)->not->toHaveKey('x-enumDescriptions')
+        ->and($related['x-enum-varnames'])->toBe(['Frequency']);
+});
+
+it('reports a member-name collision inside one fields group', function (): void {
+    [$byName, $diagnostics] = runListMetadata(
+        "QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFields(['articles.beta_gamma', 'articles.betaGamma'])->paginate()",
+    );
+
+    expect($byName['fields[articles]']['schema']['items']['enum'])->toBe(['beta_gamma', 'betaGamma']);
+
+    $collisions = array_values(array_filter($diagnostics, fn ($d): bool => $d->code === 'query-builder.enum-name-collision'));
+    expect($collisions)->toHaveCount(1)
+        ->and($collisions[0]->message)->toContain('"fields[articles]"');
+});
+
 it('publishes distinct value-derived names and one diagnostic when two values contest a member name', function (): void {
     [$byName, $diagnostics] = runListMetadata(
         "QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedIncludes(['alpha.beta', 'alphaBeta'])->paginate()",
