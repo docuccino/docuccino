@@ -205,6 +205,7 @@ return [
                 // package. Your own driver registers with Docuccino::extend() and is named here.
                 // 'driver' => 'scalar',
                 // 'cdn' => true, // load the driver's script from a CDN instead of the shipped asset
+                // 'configuration' => [], // passed verbatim to Scalar's data-configuration (theme, layout, …)
             ],
         ],
     ],

@@ -187,8 +187,16 @@ undefined tag emits a `config.unknown-tag-parent` info diagnostic; a link that c
 so the emitted hierarchy is always a tree. Because the array is sorted before the parents are
 resolved, the result never depends on the order you wrote the definitions in.
 
+Wherever a hierarchy is emitted, the document also carries it as `x-tagGroups` at the root: a list of
+`{name, tags}` groups, one per root tag, each listing that root and its descendants in hierarchy
+order. `parent` is the OpenAPI-native statement of the same forest; `x-tagGroups` is the de-facto
+convention most renderers read a grouped sidebar from, and neither has to be understood for the other
+to work. Flat tags emit no `x-tagGroups` at all.
+
 `summary`, `parent` and `kind` are OpenAPI 3.2 only. Exporting 3.1 drops them, each with its own
-`downlevel.tag-*` warning — the tags themselves stay, flattened.
+`downlevel.tag-*` warning — the tags themselves stay. A `parent` dropped from a document that carries
+`x-tagGroups` costs only the native member; where nothing carries the groups, the hierarchy really is
+flattened and nesting the names ("Billing / Invoices") is the way back.
 
 ### `webhooks`
 
@@ -433,6 +441,7 @@ turning it on rewrites no byte of the UIR: it shapes the projection, never the d
     'source' => 'generate', // generate | artifact | cache
     // 'driver' => 'scalar', // scalar | redoc, or a driver you registered
     // 'cdn' => false,       // true loads the driver's script from a CDN instead of the bundled asset
+    // 'configuration' => [], // passed verbatim to Scalar's data-configuration (theme, layout, …)
 ],
 ```
 
@@ -444,6 +453,7 @@ turning it on rewrites no byte of the UIR: it shapes the projection, never the d
 | `source` | `'generate'` | `generate` rebuilds on every request (fine for local/gated); `artifact` re-emits the committed `export.path`; `cache` serves the `docuccino:cache`-warmed payload (cold cache falls back to generate). |
 | `driver` | `'scalar'` | Which renderer serves the HTML page: `scalar` (with a try-it-out console) or `redoc` (reference only), or the name of a [driver you registered](/laravel/guides/viewer/#writing-your-own-driver). An unregistered name falls back to `scalar` and logs a warning. |
 | `cdn` | `false` | `true` loads the active driver's script from jsDelivr instead of the bundle shipped with the package. |
+| `configuration` | `[]` | Passed verbatim to [Scalar's `data-configuration`](https://github.com/scalar/scalar/blob/main/documentation/configuration.md) — theme, layout, `hideModels`, and the rest of Scalar's own options. Ignored by drivers that take no page configuration. |
 
 :::caution[Multi-tenant or domain-gated apps: override `middleware`]
 The default includes `web`, which is right for a single-domain app (and a `gate`-protected viewer needs
