@@ -139,3 +139,24 @@ it('does not nudge when a partial filter targets a non-enum column', function ()
     $codes = array_map(static fn ($d): string => $d->code, $diagnostics);
     expect($codes)->not->toContain('query-builder.partial-on-enum');
 });
+
+it('emits sort and include as comma-serialised enum arrays end to end', function (): void {
+    [$byName] = runFilterKinds(
+        'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)'
+        ."->allowedSorts(['name', 'score'])->defaultSort('-name')"
+        ."->allowedIncludes(['maker.region', 'partsCount'])->paginate()",
+    );
+
+    expect($byName['sort']['style'])->toBe('form')
+        ->and($byName['sort']['explode'])->toBeFalse()
+        ->and($byName['sort']['schema']['type'])->toBe('array')
+        ->and($byName['sort']['schema']['items']['enum'])->toBe(['name', '-name', 'score', '-score'])
+        ->and($byName['sort']['schema']['default'])->toBe(['-name']);
+
+    // The bare nested string legalizes its partials and their Count/Exists forms exactly as Spatie
+    // does; the already-suffixed one is that include alone.
+    expect($byName['include']['style'])->toBe('form')
+        ->and($byName['include']['explode'])->toBeFalse()
+        ->and($byName['include']['schema']['items']['enum'])
+        ->toBe(['maker', 'makerCount', 'makerExists', 'maker.region', 'partsCount']);
+});
