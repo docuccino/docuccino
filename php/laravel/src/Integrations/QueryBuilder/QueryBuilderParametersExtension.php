@@ -297,19 +297,28 @@ final class QueryBuilderParametersExtension implements OperationExtension
      * Folds the attribute's schema/description/format/default/example into the filter. Its `name` is
      * ignored — the parameter name is always the `AllowedFilter` name. A route-level attribute still
      * overrides this downstream.
+     *
+     * The class attribute speaks for EVERY call site, so anything the entry itself says is the narrower
+     * claim and wins: a comment above the entry over `description`, a chained `->default()` over
+     * `default`. Not a contradiction of the fallback < inference < integration < docblock < attribute
+     * ladder — both facts arrive here, at the integration layer, and this resolves them within it.
+     * `type`/`format`/`example` have no per-entry rival, so the attribute is simply the only claim.
      */
     private function applyCustomAttribute(QbEntry $filter, QueryParameter $attribute, RouteContext $context): QbEntry
     {
         $default = is_scalar($attribute->default) ? $attribute->default : null;
+        // Passing null preserves what the entry carries, so the narrower claim wins by not being offered
+        // a replacement.
+        $overridesDefault = $default !== null && ! $filter->hasDefault;
 
         // Description/default/example are type-independent, so set them first and let the type supply
         // the schema afterwards — applyColumn preserves them.
         $filter = $filter->withColumn(
             null,
             enumTyped: false,
-            comment: $attribute->description,
-            hasDefault: $default !== null,
-            default: $default,
+            comment: $filter->comment === null ? $attribute->description : null,
+            hasDefault: $overridesDefault,
+            default: $overridesDefault ? $default : null,
             example: $attribute->example,
         );
 
