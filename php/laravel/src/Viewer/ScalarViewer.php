@@ -29,8 +29,15 @@ final class ScalarViewer implements Viewer, ViewerAssets
     {
         $page = new ViewerPage($context);
 
+        // `viewer.configuration` rides Scalar's own data-configuration attribute verbatim — theme,
+        // layout, hideModels and friends are Scalar's contract, not one restated here.
+        $configuration = $context->config->viewer['configuration'] ?? null;
+        $attribute = is_array($configuration) && $configuration !== []
+            ? sprintf(' data-configuration="%s"', $page->attr((string) json_encode($configuration)))
+            : '';
+
         return $page->render([
-            sprintf('<script id="api-reference" data-url="%s"></script>', $page->specUrl()),
+            sprintf('<script id="api-reference" data-url="%s"%s></script>', $page->specUrl(), $attribute),
             sprintf('<script src="%s"></script>', $page->scriptSrc('scalar', self::CDN_SRC)),
         ]);
     }

@@ -272,7 +272,7 @@ something equivalent and the louder one means it had to drop it.
 | `downlevel.query-method` | warning | The 3.2 `query` HTTP method has no 3.1 spelling, so the operation isn't in the emitted document | Keep the 3.2 artifact for consumers that need it |
 | `downlevel.additional-operations` | warning | The 3.2 `additionalOperations` member has no 3.1 spelling and was dropped | Model custom methods with a standard method for 3.1 toolchains |
 | `downlevel.tag-summary` | warning | A tag's 3.2 `summary` was dropped; 3.1 tags fall back to their `name` for display | Nothing, or lead the tag's `description` with the same sentence |
-| `downlevel.tag-parent` | warning | A tag's 3.2 `parent` was dropped, so the tag hierarchy flattens | Nest the naming instead — "Billing / Invoices" |
+| `downlevel.tag-parent` | warning | A tag's 3.2 `parent` was dropped. Where the document also carries the hierarchy as [`x-tagGroups`](/laravel/reference/configuration/#tags) — which a generated document does — only the native member is lost; where it doesn't, the hierarchy flattens | Nothing, when `x-tagGroups` is there. Otherwise nest the naming instead — "Billing / Invoices" |
 | `downlevel.tag-kind` | warning | A tag's 3.2 `kind` was dropped, so 3.1 consumers treat every tag the same | Nothing |
 | `downlevel.webhooks` | warning | `webhooks` was dropped; OpenAPI 3.0 doesn't define it | Keep the 3.1 or 3.2 artifact for consumers that need the webhook contract |
 | `downlevel.component-path-items` | warning | `components.pathItems` was dropped; OpenAPI 3.0 doesn't define it | Inline the path item at each use site if 3.0 consumers need it |

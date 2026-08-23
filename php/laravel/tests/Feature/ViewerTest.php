@@ -64,6 +64,44 @@ it('serves the generated OpenAPI JSON', function (): void {
         ->toBe(file_get_contents(dirname(__DIR__).'/Fixtures/golden/workbench.openapi.json'));
 });
 
+// The tag forest reaches the page in the form the bundled viewers actually render — `x-tagGroups` —
+// in the newest format and the 3.1 downlevel alike (the downlevel drops only the `parent` member).
+it('projects a tag hierarchy as x-tagGroups through the spec endpoint', function (string $driver): void {
+    config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
+    config()->set('docuccino.documents.default.viewer.driver', $driver);
+    config()->set('docuccino.documents.default.tags.definitions', [
+        ['name' => 'Billing'],
+        ['name' => 'Invoices', 'parent' => 'Billing'],
+    ]);
+    Gate::before(static fn ($user = null): bool => true);
+
+    $json = json_decode((string) $this->get('/docs/api.json')->getContent(), true);
+
+    expect($json['x-tagGroups'])->toBe([['name' => 'Billing', 'tags' => ['Billing', 'Invoices']]]);
+})->with(['scalar', 'redoc']);
+
+// The absence pin: an unset `viewer.configuration` must publish no attribute at all, not an empty
+// object — a viewer handed `{}` can read it as an instruction to reset its own defaults.
+it('publishes no data-configuration when viewer.configuration is unset', function (): void {
+    config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
+    Gate::before(static fn ($user = null): bool => true);
+
+    $this->get('/docs/api')
+        ->assertOk()
+        ->assertSee('id="api-reference"', false)
+        ->assertDontSee('data-configuration', false);
+});
+
+it('passes viewer.configuration to Scalar as its data-configuration attribute', function (): void {
+    config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
+    config()->set('docuccino.documents.default.viewer.configuration', ['theme' => 'kepler', 'hideModels' => true]);
+    Gate::before(static fn ($user = null): bool => true);
+
+    $this->get('/docs/api')
+        ->assertOk()
+        ->assertSee('data-configuration="{&quot;theme&quot;:&quot;kepler&quot;,&quot;hideModels&quot;:true}"', false);
+});
+
 // The bundled Redoc implements 3.1 (a 3.2 document is merely tolerated, aliased to 3.1), so its spec
 // endpoint serves the downlevel — while the default driver keeps the newest format.
 it('serves each driver the OpenAPI version it implements', function (string $driver, string $version): void {
