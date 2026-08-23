@@ -635,6 +635,30 @@ there would be noise. Turn it on when your `definitions` are meant to be the com
 | `enabled` | `false` | Turn the pass on/off. |
 | `allow` | `[]` | Safelist by tag name. |
 
+### Vacuous union
+
+`lint.vacuous-union` warns on an `anyOf` carrying an unconstrained `{}` branch: that branch accepts
+anything, so the typed branches beside it add no constraint and the schema validates like `mixed` while
+reading like a contract. It's the trace of an honest widening — one arm of the union recovered as
+"anything" — and what it cost is the shape your consumer would otherwise have validated against. The
+finding names the operation and the JSON pointer, so you can go to the arm and pin it with a return
+docblock or a [`#[Response]`](/laravel/reference/attributes/#response) on the action.
+
+The shape itself is kept: the typed branch still tells a reader what the value usually is, and dropping
+it would lose that. A branch carrying only annotations — a `description`, a `title` — counts as
+constrained, since it says something a reader acts on.
+
+On by default. Measured against a real application's export it fired once across 221 operations, all of
+it where the author could act: a union goes vacuous only where recovery gave up on an arm, which is
+exactly the case worth a line. It also can't false-fire on your data — the walk skips `x-` members and
+the values of `enum`, `examples`, `example`, `default` and `const`, so an example that happens to be
+shaped like a union is read as the value it is.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `enabled` | `true` | Turn the pass on/off. |
+| `allow` | `[]` | Safelist by operation signature (`GET /api/ping`, `POST webhooks.invoice.paid`) or by `operationId`. |
+
 ## Diagnostics
 
 ```php

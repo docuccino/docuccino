@@ -17,8 +17,8 @@ declare(strict_types=1);
 // bags, tag-object fields and credential shapes, none of which are config keys.
 //
 // Nothing is added to the page to make this work. Which part of the config a section covers is
-// stated here instead, in SECTIONS, because the page's own headings can't say it — three of the lint
-// sections are named for what they warn about rather than for their key.
+// stated here instead, in SECTIONS, because the page's own headings can't say it — several of the
+// lint sections are named for what they warn about rather than for their key.
 //
 // Requiring this file has no side effects, so tests can point it at synthetic sources.
 
@@ -51,6 +51,7 @@ const CONFIG_REFERENCE_SECTIONS = [
     '### Descriptions' => 'lint.descriptions',
     '### Operation ids' => 'lint.operation_ids',
     '### Undocumented tags' => 'lint.tags',
+    '### Vacuous union' => 'lint.vacuous_union',
     '## Diagnostics' => 'diagnostics',
     '## Engine' => 'engine',
     '## Cache' => 'cache',
