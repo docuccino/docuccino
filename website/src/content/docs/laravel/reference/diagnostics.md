@@ -27,7 +27,7 @@ louder exits non-zero.
 | **Error** | Something is missing from the document, or the document is invalid. Always worth fixing. |
 | **Warning** | Something you wrote didn't take effect, or the output is less useful than you asked for. |
 | **Info** | Docuccino recovered less than your code says and widened to stay truthful. Normal in small numbers; the same code on every action is a signal. |
-| **Hint** | Noise Docuccino dropped on purpose. Nothing to do. |
+| **Hint** | The quietest level: a note an extension chose not to make louder. Nothing Docuccino itself emits today. |
 
 ```bash
 # Fail CI on anything that isn't a recovery note.
@@ -79,7 +79,6 @@ itself — whether it ran, and where reading your code hit a bound.
 | `inference.callable-not-found` | info | A callable the trace wanted to follow has no readable body | Usually vendor code, and usually fine. If it's yours, express it as a plain method the analyzer can reach |
 | `inference.response-shape-truncated` | info | Recovering a response shape ran out of descent depth or file budget, so the response is documented as its bare declared type — true, but poorer than your code is | Shorten the helper chain between the action and the value it returns, or state the response with [`#[Response]`](/laravel/reference/attributes/#response) |
 | `inference.ambiguous-narrowing` | info | More than one return site is reachable for the narrowed type, so the first in source order was used and the recovered shape may be ambiguous | Give the action one return site per status, or pin the ones you care about with [`#[Response]`](/laravel/reference/attributes/#response) |
-| `inference.throw-noise-dropped` | hint | Implicit "this could throw anything" points were dropped so they don't become error responses | Nothing. This is the analyzer being quiet on your behalf |
 
 ## Routes, operations and names
 
