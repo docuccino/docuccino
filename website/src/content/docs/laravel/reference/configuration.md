@@ -496,6 +496,10 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
         'enabled' => false,
         'allow' => [],   // e.g. ['Internal']
     ],
+    // 'vacuous_union' => [
+    //     'enabled' => true,
+    //     'allow' => [],   // e.g. ['GET /api/ping']
+    // ],
 ],
 ```
 
@@ -510,6 +514,7 @@ with it.
 | `descriptions` | **off** | An operation publishing neither a summary nor a description. |
 | `operation_ids` | on | An `operationId` a generated client can't name a method after. |
 | `tags` | **off** | A tag your operations carry that [`tags.definitions`](#tags) never declares. |
+| `vacuous_union` | on | An `anyOf` whose empty `{}` branch accepts anything, so its typed branches add no constraint. |
 
 ### Data leakage
 
