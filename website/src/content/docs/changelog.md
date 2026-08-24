@@ -13,6 +13,26 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.9.0
+
+### Breaking changes
+
+- **core**: retract the keywords a declared schema shape supersedes ([#185](https://github.com/docuccino/docuccino/pull/185))
+  - a schema whose shape is declared by an attribute, docblock or overlay no longer publishes the inference keywords that declaration supersedes. Documents gain a closed shape where they previously advertised extra keys, and lose `type`/`items` beside a declared `$ref`.
+- **laravel**: patch a recovered request body instead of replacing it ([#184](https://github.com/docuccino/docuccino/pull/184))
+  - an operation with both a recovered request body and a `#[BodyParameter]` now publishes the recovered properties with the declared one patched in, rather than only the declared one, and gains the `422` it was previously missing. Documents affected by the old behaviour will change shape — in the direction of describing what the endpoint actually accepts.
+- **core**: name a shared error component for what it is, not for what surrounded it ([#183](https://github.com/docuccino/docuccino/pull/183))
+  - shared error components are named and grouped differently. Two operations whose error bodies differ only in wording now share one `components.responses` entry — most often gaining a named type where each previously kept an inline schema, since the wording had been keeping them below the sharing threshold — and a hoisted shape under a multi-representation response is named `Error<status>` rather than inheriting the response's claimed name. Non-plurality arms gain `summary`/`description` beside their `$ref` in 3.1/3.2 output; a 3.0 export drops that wording with a `downlevel.ref-siblings` note. Examples now merge across wordings, so an operation may advertise an example another operation recorded. A generated client written against the previous names will need regenerating.
+- **core**: let a declared response retract the placeholders it supersedes ([#181](https://github.com/docuccino/docuccino/pull/181))
+  - the `inferred-response.unpinned-redirect` diagnostic is now `lint.unpinned-redirect`. Anything filtering on the old code, or safelisting it under `diagnostics.accept`, needs the new name.
+
+### Bug fixes
+
+- **laravel**: stop three help strings prescribing a remedy that changes nothing ([#187](https://github.com/docuccino/docuccino/pull/187))
+- **laravel**: remove an ignored parameter late enough that it stays removed ([#186](https://github.com/docuccino/docuccino/pull/186))
+- **laravel**: read a docblock example as the type its schema declares ([#180](https://github.com/docuccino/docuccino/pull/180))
+- **core**: honour a document's configured format samples in the Postman collection ([#179](https://github.com/docuccino/docuccino/pull/179))
+
 ## v0.8.5
 
 ### Features
