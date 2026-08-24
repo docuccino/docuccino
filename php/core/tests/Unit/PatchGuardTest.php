@@ -83,10 +83,29 @@ it('shadows a lower-or-equal write over an existing higher owner', function (str
 
     expect($guard->resolved())->toBe(['summary' => 'higher value']);
 
+    // Losing is not vanishing: what the lower layer could not write is recorded on the winner's trail,
+    // the same as a value a higher layer displaced.
+    $records = $guard->provenance()->records;
+    expect($records)->toHaveCount(1);
+    expect($records[0]->overrode)->toHaveCount(1);
+    expect($records[0]->overrode[0]->field)->toBe('summary');
+    expect($records[0]->overrode[0]->value)->toBe('lower value');
+    expect($records[0]->overrode[0]->producer)->toBe($lower->producer);
+})->with(orderedLayerPairs());
+
+it('records nothing for a shadow that discards the value that won anyway', function (): void {
+    $guard = new PatchGuard;
+
+    $guard->apply('description', 'Not Found', Contribution::integration('framework-errors'));
+    expect($guard->apply('description', 'Not Found', Contribution::integration('implicit-response')))
+        ->toBe(PatchResult::Shadowed);
+
+    // Two producers agreeing is the overwhelming majority of shadowing, and it lost nothing — so it
+    // leaves no trail to bury the shadows that did.
     $records = $guard->provenance()->records;
     expect($records)->toHaveCount(1);
     expect($records[0]->overrode)->toBe([]);
-})->with(orderedLayerPairs());
+});
 
 it('shadows an equal-layer write of the same specificity', function (): void {
     $guard = new PatchGuard;

@@ -1117,7 +1117,12 @@ when a registration path exists and the `emit()` signature settles.
 OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
 
 - Unset field → accepted. Higher-over-lower → accepted, loser appended to `overrode`.
-- Lower/equal-over-existing → rejected (`PatchResult::Shadowed`), info diagnostic.
+- Lower/equal-over-existing → rejected (`PatchResult::Shadowed`), loser also appended to `overrode`.
+  **Never a diagnostic.** A higher layer winning is the ladder working, and the overwhelming
+  majority of shadows discard the value that won anyway — two producers agreeing — so an info
+  diagnostic here would fire dozens of times per build to report nothing. Those are not recorded
+  either; only a shadow whose value DIFFERS from the winner's leaves a trail entry, which is what
+  `--provenance=full` and `docuccino explain` read back. No caller reacts to the return value.
 - Collections merge by identity key (parameters by in+name, responses by status, content
   by media type, properties by name) — never wholesale replace.
 - `null` in an attribute = "not specified" (no write); explicit removal is a sentinel

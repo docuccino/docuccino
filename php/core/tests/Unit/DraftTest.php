@@ -45,6 +45,25 @@ it('surfaces a shadowed write when a lower layer writes over a higher owner', fu
     expect($draft->freeze()->summary)->toBe('Attribute wins');
 });
 
+/**
+ * `Shadowed` is a return value nothing in the build reads, so the trail is the only place a discarded
+ * value can be answered for. This walks it all the way to the frozen node an emitter serialises.
+ */
+it('carries a shadowed value onto the frozen node so the emitted trail can answer for it', function (): void {
+    $draft = new OperationDraft;
+
+    $draft->setSummary('Attribute wins', Contribution::attribute());
+    $draft->setSummary('Docblock loses', Contribution::docblock());
+
+    $records = $draft->freeze()->docuccino?->provenance?->toArray() ?? [];
+
+    expect($records)->toHaveCount(1)
+        ->and($records[0]['producer'])->toBe('attribute')
+        ->and($records[0]['overrode'])->toBe([
+            ['field' => 'summary', 'value' => 'Docblock loses', 'producer' => 'docblock'],
+        ]);
+});
+
 it('merges parameters by (in, name) rather than replacing the collection', function (): void {
     $draft = new OperationDraft;
 
