@@ -288,6 +288,7 @@ see exactly what a 3.0 consumer will and won't get:
 | `webhooks`, `components.pathItems`, `info.summary` | Dropped — 3.0 has no such member |
 | An SPDX `info.license.identifier` | `info.license.url`, pointing at the SPDX page |
 | A `mutualTLS` security scheme | Dropped, along with every requirement that named it |
+| An operation with no responses | A placeholder `default` response — 3.0 requires every operation to declare at least one |
 
 Everything else is identical to the 3.2 output, so keep the 3.2 or 3.1 artifact around as the
 full-fidelity copy and treat the 3.0 one as what you hand to the pinned toolchain.

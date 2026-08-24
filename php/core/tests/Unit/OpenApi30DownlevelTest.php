@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
+use Docuccino\Core\Emit\OpenApi32Emitter;
+use Docuccino\Core\Emit\ReportingEmitter;
 use Docuccino\Core\SpecValidation\Validator;
 
 /**
@@ -235,6 +240,101 @@ describe('prose beside a $ref', function (): void {
     })->with([
         'a path' => ['a path', ['paths', '/things']],
         'a path item a callback maps' => ['a path item a callback maps', ['paths', '/other', 'get', 'callbacks', 'onData', '{$request.body#/cb}']],
+    ]);
+});
+
+describe('an operation with no responses', function (): void {
+    /**
+     * The `responses` member is REQUIRED on a 3.0 Operation Object and its map carries
+     * `minProperties: 1`; 3.1 and 3.2 require neither. So the same document is valid emitted as 3.1 or
+     * 3.2 and invalid emitted as 3.0 unless the 3.0 pass answers for it.
+     *
+     * @param  array<string, mixed>  $paths
+     * @return array{array<string, mixed>, list<Diagnostic>}
+     */
+    $emit = static function (array $paths): array {
+        $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'paths' => $paths,
+        ]));
+
+        return [json_decode($result->output, true, flags: JSON_THROW_ON_ERROR), $result->report->diagnostics];
+    };
+
+    /** The one description the placeholder publishes, so the assertions below read it from one place. */
+    $placeholder = ['default' => ['description' => "This operation's responses are not described, so no status code or body is guaranteed."]];
+
+    it('gives it a default response that describes nothing', function (array $paths) use ($emit, $placeholder): void {
+        [$decoded, $diagnostics] = $emit($paths);
+
+        // No status, no media type, no schema: the degraded answer says the document is silent rather
+        // than inventing a contract a client would generate against.
+        expect($decoded['paths']['/things']['get']['responses'])->toBe($placeholder)
+            ->and(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe(['downlevel.empty-responses']);
+    })->with([
+        'no responses member' => [['/things' => ['get' => ['operationId' => 'things.index']]]],
+        'an empty responses map' => [['/things' => ['get' => ['operationId' => 'things.index', 'responses' => []]]]],
+    ]);
+
+    it('names the operation, at its pointer and as a route signature', function () use ($emit): void {
+        [, $diagnostics] = $emit(['/things/{thing}' => ['get' => []]]);
+
+        expect($diagnostics)->toHaveCount(1)
+            ->and($diagnostics[0]->severity)->toBe(Severity::Info)
+            ->and($diagnostics[0]->message)->toContain('#/paths/~1things~1{thing}/get')
+            // The signature is what puts the note beside that route's other diagnostics.
+            ->and($diagnostics[0]->routeSignature)->toBe('GET /things/{thing}')
+            ->and($diagnostics[0]->help)->toContain('#[Response]');
+    });
+
+    it('leaves an operation that documents a response alone', function () use ($emit): void {
+        [$decoded, $diagnostics] = $emit(['/things' => ['get' => ['responses' => ['204' => ['description' => 'No content']]]]]);
+
+        expect($decoded['paths']['/things']['get']['responses'])->toBe(['204' => ['description' => 'No content']])
+            ->and($diagnostics)->toBe([]);
+    });
+
+    it('reaches a callback\'s operation, which 3.0 requires just the same', function () use ($emit, $placeholder): void {
+        [$decoded, $diagnostics] = $emit(['/things' => ['post' => [
+            'responses' => ['202' => ['description' => 'Accepted']],
+            'callbacks' => ['onDone' => ['{$request.body#/cb}' => ['post' => ['operationId' => 'things.done']]]],
+        ]]]);
+
+        expect($decoded['paths']['/things']['post']['callbacks']['onDone']['{$request.body#/cb}']['post']['responses'])->toBe($placeholder)
+            ->and($diagnostics)->toHaveCount(1)
+            // A callback's key is a runtime expression, not a route, so there is no signature to claim.
+            ->and($diagnostics[0]->routeSignature)->toBeNull()
+            ->and($diagnostics[0]->message)->toContain('/callbacks/onDone/');
+    });
+
+    it('leaves a path item that is only a $ref alone', function () use ($emit): void {
+        [$decoded, $diagnostics] = $emit(['/things' => ['$ref' => '#/components/pathItems/shared']]);
+
+        expect($decoded['paths']['/things'])->toBe(['$ref' => '#/components/pathItems/shared'])
+            ->and($diagnostics)->toBe([]);
+    });
+
+    it('changes nothing for 3.1 and 3.2, which accept an operation with none', function (ReportingEmitter $emitter) use ($placeholder): void {
+        $document = UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'paths' => ['/things' => ['get' => ['operationId' => 'things.index']]],
+        ]);
+
+        $result = $emitter->emitWithReport($document, new EmitOptions);
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+
+        expect($decoded['paths']['/things']['get'])->toBe(['operationId' => 'things.index'])
+            ->and($decoded['paths']['/things']['get'])->not->toBe($placeholder)
+            ->and(array_map(static fn (Diagnostic $d): string => $d->code, $result->report->diagnostics))
+            ->not->toContain('downlevel.empty-responses');
+    })->with([
+        '3.2' => [new OpenApi32Emitter],
+        '3.1' => [new OpenApi31DownlevelEmitter],
     ]);
 });
 
