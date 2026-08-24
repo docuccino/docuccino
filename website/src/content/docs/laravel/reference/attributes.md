@@ -358,8 +358,8 @@ public function __construct(
 )
 ```
 
-Drops a documented parameter by name, optionally scoped to an `in` location. Leave `in:` off to drop
-the name wherever it appears.
+Drops a documented parameter by name, optionally scoped to an `in` location — `cookie`, `header`,
+`path` or `query`, in any case. Leave `in:` off to drop the name wherever it appears.
 
 ```php
 #[IgnoreParam(name: 'internal_flag', in: 'query')]
@@ -368,8 +368,10 @@ public function index(): AnonymousResourceCollection { /* … */ }
 
 It is the last word on the parameter, whatever documented it: a rule set recovered from a FormRequest,
 a paginator key, the route's own path segment, or a parameter attribute on the controller class an
-action opts out of. A `name:` that matches nothing is silent, because naming a key only some of a
-controller's actions document is the ordinary way a class-level declaration is written.
+action opts out of. An `in:` that names no location drops nothing and says so
+([`attribute.ignore-param-location`](/laravel/reference/diagnostics/#attributes)); a `name:` that
+matches nothing is silent, because naming a key only some of a controller's actions document is the
+ordinary way a class-level declaration is written.
 
 ### `#[IgnoreResponse]`
 

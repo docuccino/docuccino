@@ -56,6 +56,20 @@ final class IgnoredParamsController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /** A wrong-cased `in:`, which names the same location the lower-cased spelling does. */
+    #[IgnoreParam(name: 'X-Trace', in: 'Header')]
+    public function miscased(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /** An `in:` that is not a parameter location at all. */
+    #[IgnoreParam(name: 'X-Trace', in: 'body')]
+    public function nowhere(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A same-action `#[QueryParameter]` the ignore contradicts — the subtraction is the later word. */
     #[QueryParameter(name: 'draft', description: 'Whatever this said, the ignore below retracts.')]
     #[IgnoreParam(name: 'draft', in: 'query')]

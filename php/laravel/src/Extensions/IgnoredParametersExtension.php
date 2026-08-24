@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Extensions;
 
 use Docuccino\Attributes\IgnoreParam;
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -24,7 +26,11 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class IgnoredParametersExtension implements OperationExtension
 {
-    /** The OAS parameter locations, which is where a declaration naming none of them applies. */
+    /**
+     * The OAS parameter locations — where a declaration naming none of them applies, and the set the
+     * diagnostic quotes. Alphabetical, because a legal set a reader checks against is easier to read in
+     * an order they can predict than in the one OAS happens to list.
+     */
     private const array LOCATIONS = ['cookie', 'header', 'path', 'query'];
 
     public function phase(): OperationPhase
@@ -35,9 +41,46 @@ final class IgnoredParametersExtension implements OperationExtension
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
         foreach ($context->attributes->all(IgnoreParam::class) as $ignore) {
-            foreach ($ignore->in === null ? self::LOCATIONS : [$ignore->in] as $location) {
+            foreach ($this->locations($context, $ignore) as $location) {
                 $operation->removeParameter($location, $ignore->name);
             }
         }
+    }
+
+    /**
+     * The locations one declaration names: all four when it names none, and the one it names otherwise,
+     * matched case-insensitively — `in: 'Query'` says exactly what `in: 'query'` says, and a spelling the
+     * tool can understand is not worth making the author look up.
+     *
+     * A value that names no location at all is the other thing: it dropped nothing, and it cannot be read
+     * as any of four words, so it is reported rather than guessed at.
+     *
+     * @return list<string>
+     */
+    private function locations(RouteContext $context, IgnoreParam $ignore): array
+    {
+        if ($ignore->in === null) {
+            return self::LOCATIONS;
+        }
+
+        $normalized = strtolower(trim($ignore->in));
+        if (in_array($normalized, self::LOCATIONS, true)) {
+            return [$normalized];
+        }
+
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Warning,
+            code: 'attribute.ignore-param-location',
+            message: sprintf(
+                '#[IgnoreParam(name: "%s", in: "%s")] names no parameter location, so nothing was dropped.',
+                $ignore->name,
+                $ignore->in,
+            ),
+            source: $context->actionSource(),
+            routeSignature: $context->route->signature(),
+            help: 'A parameter is in cookie, header, path or query — spelled in any case. Leave `in:` off to drop the name from every location.',
+        ));
+
+        return [];
     }
 }

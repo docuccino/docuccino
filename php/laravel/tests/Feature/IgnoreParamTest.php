@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
@@ -54,6 +56,8 @@ function ignoreParamDocument(): GenerationResult
     $router->get('api/ignored/paged', [IgnoredParamsController::class, 'paged']);
     $router->get('api/ignored/forms/{form}', [IgnoredParamsController::class, 'show']);
     $router->get('api/ignored/bare', [IgnoredParamsController::class, 'bare']);
+    $router->get('api/ignored/miscased', [IgnoredParamsController::class, 'miscased']);
+    $router->get('api/ignored/nowhere', [IgnoredParamsController::class, 'nowhere']);
     $router->get('api/ignored/contradicted', [IgnoredParamsController::class, 'contradicted']);
 
     return generateDocument();
@@ -128,10 +132,35 @@ it('says nothing about an ignore whose name matches no parameter', function (): 
 
     $mentions = array_values(array_filter(
         $result->diagnostics,
-        static fn (object $diagnostic): bool => str_contains($diagnostic->message, 'per_page'),
+        static fn (Diagnostic $diagnostic): bool => str_contains($diagnostic->message, 'per_page'),
     ));
 
     // Anti-vacuity: the build did raise diagnostics, so an empty haystack is not what proves this.
     expect($result->diagnostics)->not->toBeEmpty()
         ->and($mentions)->toBe([]);
+});
+
+it('reads an `in:` in whatever case it was written', function (): void {
+    $parameters = ignoreParamParameters(ignoreParamDocument(), '/api/ignored/miscased');
+
+    expect($parameters)->toBe([['cookie', 'flavour']]);
+});
+
+it('reports an `in:` that names no parameter location, and drops nothing for it', function (): void {
+    $result = ignoreParamDocument();
+
+    $reports = array_values(array_filter(
+        $result->diagnostics,
+        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'attribute.ignore-param-location',
+    ));
+
+    expect($reports)->toHaveCount(1)
+        ->and($reports[0]->severity)->toBe(Severity::Warning)
+        // The value the author wrote, verbatim, and the name it was written beside.
+        ->and($reports[0]->message)->toContain('"body"')
+        ->and($reports[0]->message)->toContain('X-Trace')
+        // The legal set, so the reader never has to look it up.
+        ->and($reports[0]->help)->toContain('cookie, header, path or query')
+        // Nothing was dropped, which is what the report says.
+        ->and(ignoreParamParameters($result, '/api/ignored/nowhere'))->toContain(['header', 'X-Trace']);
 });
