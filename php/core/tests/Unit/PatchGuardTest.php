@@ -157,6 +157,19 @@ it('rejects a fallback write over any existing owner', function (): void {
     expect($guard->resolved())->toBe(['summary' => 'inferred value']);
 });
 
+it('names every producer that has written a field, not only the one holding it', function (): void {
+    $guard = new PatchGuard;
+
+    $guard->apply('requestBody', 'recovered', Contribution::integration('form-request'));
+    $guard->apply('requestBody', 'patched', Contribution::attribute());
+
+    // The winner is the attribute, but the integration that built what it patched is still named — the
+    // question "did a recoverer produce this?" must not turn on whether something has since patched it.
+    expect($guard->producerFor('requestBody'))->toBe('attribute')
+        ->and($guard->producersFor('requestBody'))->toBe(['attribute', 'integration:form-request'])
+        ->and($guard->producersFor('summary'))->toBe([]);
+});
+
 it('backs the precedence ranks stated in the design doc', function (): void {
     expect(Layer::Fallback->value)->toBe(5);
     expect(Layer::Inference->value)->toBe(10);

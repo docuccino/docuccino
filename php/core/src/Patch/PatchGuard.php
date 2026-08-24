@@ -111,6 +111,31 @@ final class PatchGuard
     }
 
     /**
+     * Every producer that has written this field: the current winner first, then each one recorded in
+     * its trail. A field a higher layer has since patched still names whoever built what was patched,
+     * so "did any integration recover this?" survives being overridden.
+     *
+     * @return list<string>
+     */
+    public function producersFor(string $field): array
+    {
+        $state = $this->fields[$field] ?? null;
+        if ($state === null) {
+            return [];
+        }
+
+        $producers = [$state->winner->producer];
+
+        foreach ($state->overrode as $entry) {
+            if ($entry->producer !== null) {
+                $producers[] = $entry->producer;
+            }
+        }
+
+        return array_values(array_unique($producers));
+    }
+
+    /**
      * The resolved field→value map, with {@see Remove} sentinels omitted.
      *
      * @return array<string, mixed>

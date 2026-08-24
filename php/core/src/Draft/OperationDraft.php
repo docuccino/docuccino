@@ -209,6 +209,19 @@ final class OperationDraft
         return $this->guard->producerFor($field);
     }
 
+    /**
+     * Every provenance producer that has written a field — the winner first, then its trail. What a
+     * higher layer has since patched still says who built the thing that was patched, so a consumer
+     * asking which KIND of producer settled a field is not answered differently by a body that has
+     * since picked up an attribute.
+     *
+     * @return list<string>
+     */
+    public function producersFor(string $field): array
+    {
+        return $this->guard->producersFor($field);
+    }
+
     /** The currently-resolved value of a field (Remove sentinels omitted), or null if unset. */
     public function resolvedField(string $field): mixed
     {

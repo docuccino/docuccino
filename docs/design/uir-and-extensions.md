@@ -1068,6 +1068,13 @@ when a registration path exists and the `emit()` signature settles.
       patch silently discard the whole shared component (or mutate it for every other op). Dereferencing
       keeps the `$ref` honest. Call-site partials (`include`/`exclude`/`only`/`except`) shape the
       *response* via query parameters, not the request body, so they never force the body inline.
+      **Reading `schema.properties` is also what fixes the attribute extension's position**: `requestBody`
+      is ONE guarded field every producer writes whole, so the patch keeps only the siblings it can
+      already see. `AttributeRequestBodyExtension` therefore runs at `Priorities::LATE`, behind every
+      recoverer at the default priority. Ahead of them it is not a lost merge but a lost body — the
+      one-property body wins the field at layer 40 and the recovered one is shadowed — and a lost 422
+      with it, since the implicit 422 asks which producer built the body. It asks the whole producer
+      trail rather than the winner, so a patched body still names the recoverer underneath it.
     - **Per-response property visibility is OUT OF SCOPE (2026-08-14).** `#[Hidden]` is document-wide and
       stays that way: the property contribution happens during type→schema conversion, where no operation
       and no status are in scope, and a class is ONE component because component identity is pinned to the
