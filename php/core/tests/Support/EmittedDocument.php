@@ -31,6 +31,12 @@ final class EmittedDocument
      * first — `map` vs `sequence` is the failure that shipped — then scalar values, which catch YAML's
      * own coercions (an unquoted `y`, a bare `1.0`, a date read back as something else).
      *
+     * Presence is asked with `property_exists()`/`array_key_exists()` rather than `?? null`, because
+     * `null` is a value a document really emits: three `closedAt` positions in `postman-surface` are
+     * genuinely null, and under `??` a member DROPPED there read as a member written null — identical
+     * on both sides, reported as agreement. That is the blindness this comparison exists to remove,
+     * at exactly the Schema Object and example positions the meta-schemas leave unconstrained.
+     *
      * @return list<string>
      */
     public static function differences(mixed $json, mixed $yaml, string $pointer = ''): array
@@ -46,10 +52,15 @@ final class EmittedDocument
             $differences = [];
 
             foreach (get_object_vars($json) as $key => $value) {
-                $differences = [
-                    ...$differences,
-                    ...self::differences($value, $yaml->{$key} ?? null, $pointer.'/'.self::escape((string) $key)),
-                ];
+                $at = $pointer.'/'.self::escape((string) $key);
+
+                if (! property_exists($yaml, (string) $key)) {
+                    $differences[] = sprintf('%s: json carries a member yaml does not', $at);
+
+                    continue;
+                }
+
+                $differences = [...$differences, ...self::differences($value, $yaml->{$key}, $at)];
             }
 
             foreach (array_diff(array_keys(get_object_vars($yaml)), array_keys(get_object_vars($json))) as $key) {
@@ -64,7 +75,13 @@ final class EmittedDocument
             $differences = [];
 
             foreach ($json as $index => $value) {
-                $differences = [...$differences, ...self::differences($value, $yaml[$index] ?? null, $pointer.'/'.$index)];
+                if (! array_key_exists($index, $yaml)) {
+                    $differences[] = sprintf('%s: json carries an item yaml does not', $pointer.'/'.$index);
+
+                    continue;
+                }
+
+                $differences = [...$differences, ...self::differences($value, $yaml[$index], $pointer.'/'.$index)];
             }
 
             if (count($yaml) > count($json)) {

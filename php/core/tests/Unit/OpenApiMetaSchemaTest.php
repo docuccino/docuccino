@@ -144,6 +144,29 @@ it('reports an empty map written as a sequence, and nothing when it is written a
 });
 
 /**
+ * The other half of the oracle's negative path, on a REAL emission. `postman-surface` emits a genuinely
+ * null `closedAt` at three example positions, and a member DROPPED at one of them used to read as a member
+ * written null — the comparison answered "no differences" while the YAML had lost a member the JSON
+ * carries. Nothing else sees it: the meta-schema is asserted here to stay silent on the same mutation,
+ * because an example's members are exactly what it leaves unconstrained.
+ */
+it('sees a null-valued member the YAML dropped, where the meta-schema cannot', function (): void {
+    [$json, $yaml] = metaSchemaEmissions('postman-surface.uir.json', 'openapi-3.2');
+
+    $example = $yaml->paths->{'/accounts'}->post->responses->{'201'}->content->{'application/json'}->example;
+
+    expect(property_exists($example, 'closedAt'))->toBeTrue()
+        ->and($example->closedAt)->toBeNull()
+        ->and(EmittedDocument::differences($json, $yaml))->toBe([]);
+
+    unset($example->closedAt);
+
+    expect(EmittedDocument::differences($json, $yaml))
+        ->toBe(['/paths/~1accounts/post/responses/201/content/application~1json/example/closedAt: json carries a member yaml does not'])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $yaml))->toBe([]);
+});
+
+/**
  * A scan that finds nothing must fail. These are the counts the assertions above are worth: well under
  * what the tree holds today, far enough above zero that a fixture glob which stopped matching, or an
  * emitter that started returning empty output, fails here instead of passing on nothing.
