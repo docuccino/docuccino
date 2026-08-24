@@ -137,6 +137,16 @@ what it would have had.
 | `description-file.missing` | warning | A `#[Description(file: …)]` names a file that isn't there | Create it or fix the path, which is read relative to your application root. Docuccino watches it either way, so the description appears the moment the file does |
 | `description-file.escapes-base-path` | error | A `#[Description(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root — see [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) |
 
+## Docblock tags
+
+A docblock tag can only hold text, so a value written in one has to be read back as the type it
+describes. Where the text doesn't read as that type, nothing is published — an example of the wrong
+type would be copied out of the document and rejected by your own API.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `docblock.example-untypable` | warning | An `@example` (or a `#[RuleSchema(example: …)]`) doesn't read as the type declared beside it — `@example n/a` on an `int`, say — so no example was published | Write the example as the value the property really is: `@example false` for a boolean, `@example 7` for an integer, a JSON literal (`@example ["a", "b"]`) for an array or object. The message names the property, the type and the text |
+
 ## Configuration
 
 Everything Docuccino read out of `config/docuccino.php` and couldn't use. Every code here names the
