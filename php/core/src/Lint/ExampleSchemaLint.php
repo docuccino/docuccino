@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Lint;
 
+use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\Examples\ExampleAudit;
 use Docuccino\Core\Contract\Examples\ExampleFinding;
@@ -25,9 +26,9 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
  * inference cannot be wrong about on its own: it is there because somebody wrote it. So the check runs
  * on every build, and the author hears about it where they will actually look.
  *
- * Diagnostics only — it never touches the document. Pinned to run last so the pointers it publishes are
- * the pointers the emitted document has, and so it sees a body already hoisted into a shared component
- * rather than the inline copy.
+ * Diagnostics only — it never touches the document. Pinned to run last so it sees a body already
+ * hoisted into a shared component rather than the inline copy, and it audits the CANONICAL form of the
+ * draft ({@see published()}) so what it holds to the schema is what the artifact will carry.
  *
  * A schema the validator will not read is reported as `lint.example-uncheckable` rather than thrown: a
  * lint runs on every build, so one that can end a build has taken the whole document hostage to a
@@ -41,6 +42,7 @@ final class ExampleSchemaLint implements DocumentTransformer
 
     public function __construct(
         private readonly LintRuleOptions $options = new LintRuleOptions,
+        private readonly Canonicalizer $canonicalizer = new Canonicalizer,
     ) {}
 
     public function transform(UirDocumentDraft $document, DocumentContext $context): void
@@ -49,7 +51,7 @@ final class ExampleSchemaLint implements DocumentTransformer
             return;
         }
 
-        $report = (new ExampleAudit(ContractIndex::fromArray($document->toArray())))->run();
+        $report = (new ExampleAudit(ContractIndex::fromArray($this->published($document->toArray()))))->run();
 
         foreach ($report->findings as $finding) {
             if ($this->options->silences($finding->pointer, $finding->label)) {
@@ -91,6 +93,24 @@ final class ExampleSchemaLint implements DocumentTransformer
                     .'lint.examples.allow accepts the pointer meanwhile.',
             ));
         }
+    }
+
+    /**
+     * The draft in the form the emitters publish it in.
+     *
+     * A transformer is handed the assembled document as PHP arrays, and an array cannot tell an empty
+     * object from an empty list. {@see Canonicalizer} is the one place that decides which is which on
+     * the way out — the empty schema an `array<string, mixed>` puts under `additionalProperties`
+     * becomes `{}` there, and nowhere earlier — so a check reading the draft directly is reading a
+     * document nobody ships, and can report a finding, or refuse a schema, about a shape that never
+     * reaches the artifact. It also sorts, so the pointers a finding names are the artifact's own.
+     *
+     * @param  array<string, mixed>  $document
+     * @return array<string, mixed>
+     */
+    private function published(array $document): array
+    {
+        return $this->canonicalizer->canonicalize($document);
     }
 
     /**
