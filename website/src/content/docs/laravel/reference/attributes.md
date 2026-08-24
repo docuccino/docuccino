@@ -667,6 +667,11 @@ name in any generated client — and changes nothing else about the response, in
 shared at all: an error only one operation states stays inline and has no component to name until a
 second operation states it too.
 
+What it does not name is one body a response offers *beside* another. Where a response states two
+representations — an RFC 9457 problem body under `application/problem+json` and a plain-JSON alternative,
+say — the name stays on the response and each shape publishes under its status, because a name standing
+for the whole response cannot say which of them it means.
+
 Where several methods on one render path carry it, the one **nearest the answer** wins: the arm that
 returned the body beats the helper that built it, so marking a shared `problem()` helper names only the
 arms that said nothing themselves. Attributes cannot go on `match` arms, so a `match (true)` renderer

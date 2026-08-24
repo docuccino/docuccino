@@ -493,22 +493,53 @@ description and headers included — that response is hoisted too, and each oper
 | Hoisted | Not hoisted |
 | --- | --- |
 | The body shape of a `4xx`/`5xx` two or more operations state identically | A shape no other operation shares |
-| A response two or more operations state identically, however each illustrates it | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
+| A response two or more operations state identically, however each illustrates or describes it | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
 
 **How an operation illustrates an error is never part of its contract.** Two `403`s returning the same
 body with different example messaging are one `Forbidden`, and the shared response carries both examples.
 Where the operations agree on one illustration it stays the media type's single `example`; where they
 don't, they become an `examples` map keyed from each body's own content, so adding or removing an
-endpoint never renames another one's example. A difference in `description`, though, *does* keep two
-responses apart: that is what the response says, not how it is illustrated.
+endpoint never renames another one's example.
+
+**Neither is how it describes one.** Two operations answering `404` with the same body share one
+component even where each words it differently: the shared response publishes the wording the most
+operations state, and an operation that says something else keeps its own words beside its `$ref`, where
+OpenAPI 3.1 and 3.2 define a reference's `summary` and `description` as overriding the ones it points at.
+
+<Tabs>
+	<TabItem label="On the operations">
+	```json
+	// The wording most operations state — nothing to override
+	"404": { "$ref": "#/components/responses/NotFound" }
+
+	// One taxonomy endpoint, in its own words
+	"404": {
+	  "$ref": "#/components/responses/NotFound",
+	  "description": "No taxonomy term matches the given slug"
+	}
+	```
+	</TabItem>
+	<TabItem label="Why it matters">
+	```text
+	Before: two components, Error404_nuowcygb and Error404_dl33vd2k — same body,
+	        same headers, different words — so one endpoint's phrasing renamed the
+	        404 type the other 145 operations published under.
+	After:  one NotFound, and every operation keeps the words it was given.
+	```
+	</TabItem>
+</Tabs>
+
+An OpenAPI 3.0 export drops that override — 3.0 ignores anything beside a `$ref` — and says so with a
+`downlevel.ref-siblings` note, so a 3.0 reader sees the shared component's own wording.
 
 Names you chose yourself survive that merge. Where an operation's error carries
 [`#[Example(name: …)]`](/laravel/documenting/examples/#illustrating-something-other-than-the-success-response), the shared response
 publishes your key next to the generated ones, so annotating one route never changes what the others
 publish. The exception is two operations giving one name to two different examples: only you can say
-which body that name means, so those responses are left where they are and the build reports
-`components.example-name-conflict` naming the key. Rename one, or make them agree, and the operations
-share a component again.
+which body that name means, so neither gets it — each example publishes under that name plus a hash of
+its own content, and the build reports `components.example-name-conflict` naming the key. Rename one, or
+make them agree, and the name is published as you wrote it. The component they share is never what pays
+for the disagreement.
 
 Every [`429`](/laravel/documenting/rate-limiting/) is identical — rate-limit headers are documented by
 meaning, never by value — so throttled routes share both.
@@ -590,6 +621,13 @@ Your exceptions get the same treatment, and you say what they are called by mark
 </Tabs>
 
 Same status, same body, same description — only the name a generated client gives the type changes.
+
+**It names the response, and the shape under it where that shape is the whole response.** A `404`
+answered with one body publishes both as `ResourceMissing`, which is what lets a client catch the name
+you chose. A response that offers two representations — a problem body and a plain-JSON alternative, say —
+keeps the name on the response, and each shape publishes under its status: `components.schemas` and
+`components.responses` hold different kinds of thing, and calling one of two bodies `ResourceMissing`
+would say it is the error when it may be the alternative beside it.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
