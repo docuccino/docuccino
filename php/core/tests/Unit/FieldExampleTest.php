@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
@@ -12,6 +14,7 @@ use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationField;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Core\Extensions\Validation\ValidationSchema;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Support\FormatSamples;
 use Opis\JsonSchema\Validator as OpisValidator;
@@ -22,9 +25,9 @@ use Opis\JsonSchema\Validator as OpisValidator;
  * `kw` rule writes one, a `propose` rule offers a value only it could know. That is exactly the split
  * the Laravel vocabulary uses — its own table is pinned in ValidationVocabularyTest.
  */
-function exampleContext(): SchemaContext
+function exampleContext(RepresentationPolicy $policy = new RepresentationPolicy): SchemaContext
 {
-    return new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+    return new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, $policy);
 }
 
 /**
@@ -36,7 +39,22 @@ function exampleContext(): SchemaContext
  * @param  list<array<int, string|null>>  $steps
  * @return array<string, mixed>
  */
-function exampleProperty(array $steps): array
+function exampleProperty(array $steps, RepresentationPolicy $policy = new RepresentationPolicy): array
+{
+    $schema = exampleConversion($steps, $policy)->schema;
+
+    $property = $schema['properties']['f'] ?? [];
+
+    return is_array($property) ? $property : [];
+}
+
+/**
+ * The same conversion, unwrapped — the whole {@see ValidationSchema}, so a test can read the
+ * diagnostics synthesis raised alongside the schema it produced.
+ *
+ * @param  list<array<int, string|null>>  $steps
+ */
+function exampleConversion(array $steps, RepresentationPolicy $policy = new RepresentationPolicy): ValidationSchema
 {
     $transformer = new class implements RuleTransformer
     {
@@ -80,13 +98,8 @@ function exampleProperty(array $steps): array
         array_keys($rules),
     );
 
-    $schema = (new DefaultValidationRulesToSchema([$transformer]))
-        ->convert(new RuleSet(['f' => $rules]), exampleContext())
-        ->schema;
-
-    $property = $schema['properties']['f'] ?? [];
-
-    return is_array($property) ? $property : [];
+    return (new DefaultValidationRulesToSchema([$transformer]))
+        ->convert(new RuleSet(['f' => $rules]), exampleContext($policy));
 }
 
 /** `['type', '"string"']` shorthand for one keyword write. */
@@ -286,4 +299,193 @@ it('lists exactly the formats it is expected to answer for, and nothing for any 
 
     expect(FormatSamples::for('iban'))->toBeNull()
         ->and(FormatSamples::for(''))->toBeNull();
+});
+
+/**
+ * The merge is per format, at the one lookup, so the table stays the single answer: an override answers
+ * for the format it names and for nothing else, and a format the table doesn't know can be added.
+ */
+it('merges configured samples over the table, format by format', function (array $overrides, string $format, ?string $expected): void {
+    expect(FormatSamples::for($format, $overrides))->toBe($expected);
+})->with([
+    'no overrides at all' => [[], 'email', 'user@example.com'],
+    'the format overridden' => [['email' => 'jane@example.com'], 'email', 'jane@example.com'],
+    'a sibling overridden leaves this one alone' => [['hostname' => 'api.example.net'], 'email', 'user@example.com'],
+    'the sibling itself' => [['hostname' => 'api.example.net'], 'hostname', 'api.example.net'],
+    'a format the table does not know can be added' => [['iban' => 'GB33BUKB20201555555555'], 'iban', 'GB33BUKB20201555555555'],
+    'an unrelated override answers nothing for an unknown format' => [['email' => 'jane@example.com'], 'iban', null],
+    'an override never invents an answer for the empty format' => [['email' => 'jane@example.com'], '', null],
+]);
+
+/**
+ * `representation.examples.formats` reaches synthesis through the representation policy, the same route
+ * `enums.naming` travels. Overriding one format moves that format's example and nothing else.
+ */
+it('illustrates a format with the sample the document configured', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => 'jane@example.com']]]);
+
+    expect(exampleProperty([kw('type', '"string"'), kw('format', '"email"')], $policy)['example'] ?? null)
+        ->toBe('jane@example.com')
+        // A format nobody overrode keeps its documentation-reserved constant.
+        ->and(exampleProperty([kw('type', '"string"'), kw('format', '"uuid"')], $policy)['example'] ?? null)
+        ->toBe('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+});
+
+it('adds a sample for a format the built-in table has none for', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['iban' => 'GB33BUKB20201555555555']]]);
+
+    expect(exampleProperty([kw('type', '"string"'), kw('format', '"iban"')], $policy)['example'] ?? null)
+        ->toBe('GB33BUKB20201555555555');
+});
+
+it('publishes the same property with no configuration and with an empty one', function (array $configured): void {
+    $steps = [kw('type', '"string"'), kw('format', '"email"')];
+    $policy = RepresentationPolicy::fromConfig($configured);
+
+    expect(exampleProperty($steps, $policy))->toBe(exampleProperty($steps))
+        ->and(exampleConversion($steps, $policy)->diagnostics)->toBe([]);
+})->with([
+    'nothing configured' => [[]],
+    'an empty examples bag' => [['examples' => []]],
+    'an empty formats map' => [['examples' => ['formats' => []]]],
+    'a format nothing uses — examples are demand-driven, so this is not an error' => [['examples' => ['formats' => ['iban' => 'GB33BUKB20201555555555']]]],
+    // Restating the built-in value is not an override at all, so it cannot be rejected either.
+    'the built-in value restated' => [['examples' => ['formats' => ['email' => 'user@example.com']]]],
+    'a non-array where the map should be' => [['examples' => ['formats' => 'user@example.com']]],
+    'a non-string sample, which the adapter reports instead' => [['examples' => ['formats' => ['email' => ['nope']]]]],
+]);
+
+/**
+ * The honest half, and the reason this is a feature rather than a decoration: a configured sample is
+ * held to the same rule as a derived one — validated against the field's FINISHED keywords — and one
+ * that fails is named and replaced by the built-in sample, never dropped in silence. The message names
+ * the format, the value and the keyword, so the reader can fix the config without guessing which field
+ * refused it.
+ */
+it('falls back to the built-in sample and says so when a configured one fails the field rules', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => 'jane.doe+billing@example.com']]]);
+    $conversion = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), kw('maxLength', '20')], $policy);
+
+    $property = $conversion->schema['properties']['f'] ?? [];
+
+    expect($property['example'] ?? null)->toBe('user@example.com')
+        ->and($conversion->diagnostics)->toHaveCount(1)
+        ->and($conversion->diagnostics[0]->severity)->toBe(Severity::Warning)
+        ->and($conversion->diagnostics[0]->code)->toBe('config.format-sample-rejected')
+        ->and($conversion->diagnostics[0]->message)->toBe(
+            'The example configured for format "email" ("jane.doe+billing@example.com") does not satisfy the rules on field "f": maxLength. The built-in sample ("user@example.com") is published instead.',
+        )
+        ->and($conversion->diagnostics[0]->help)->toBe(
+            'Set representation.examples.formats.email to a value every field carrying that format accepts, or drop the key.',
+        );
+});
+
+it('publishes no example where the rejected format had no built-in sample to fall back on', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['iban' => 'GB33BUKB20201555555555']]]);
+    // A `pattern` is what pins this field, so no length bound earns a filler prefix either: nothing is
+    // published, which is the honest answer when both the configured sample and the fallback are gone.
+    $conversion = exampleConversion([kw('type', '"string"'), kw('format', '"iban"'), kw('pattern', '"^[0-9]+$"')], $policy);
+
+    expect($conversion->schema['properties']['f'] ?? [])->not->toHaveKey('example')
+        ->and($conversion->diagnostics)->toHaveCount(1)
+        ->and($conversion->diagnostics[0]->message)->toBe(
+            'The example configured for format "iban" ("GB33BUKB20201555555555") does not satisfy the rules on field "f": pattern. The format has no built-in sample to fall back on, so the field publishes none.',
+        );
+});
+
+it('names the keyword that refused a configured sample', function (string $keyword, string $json, string $sample, string $reported): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => $sample]]]);
+    $conversion = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), kw($keyword, $json)], $policy);
+
+    expect($conversion->diagnostics)->toHaveCount(1)
+        ->and($conversion->diagnostics[0]->message)->toContain(': '.$reported.'.');
+})->with([
+    'a length ceiling' => ['maxLength', '20', 'jane.doe+billing@example.com', 'maxLength'],
+    'a length floor' => ['minLength', '40', 'jane@example.com', 'minLength'],
+    'a pattern' => ['pattern', '"^[a-z]+$"', 'jane@example.com', 'pattern'],
+    'the format itself' => ['title', '"Contact"', 'not-an-email', 'format'],
+]);
+
+/**
+ * A field that never asked for the format is untouched, and a rejection on one field does not withdraw
+ * the sample from another the rules DO accept — the check is per field, on that field's keywords.
+ */
+it('rejects a configured sample only on the fields whose rules refuse it', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => 'jane@example.com']]]);
+
+    $roomy = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), kw('maxLength', '40')], $policy);
+    $tight = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), kw('maxLength', '8')], $policy);
+
+    expect($roomy->schema['properties']['f']['example'] ?? null)->toBe('jane@example.com')
+        ->and($roomy->diagnostics)->toBe([])
+        ->and($tight->schema['properties']['f'] ?? [])->not->toHaveKey('example')
+        ->and($tight->diagnostics)->toHaveCount(1);
+});
+
+/**
+ * Determinism, for the configured value as much as for a derived one: the same config produces the same
+ * bytes and the same diagnostic every run, and the order the formats were written in is not an input.
+ */
+it('publishes a configured sample and its rejection byte-identically across runs', function (): void {
+    $configured = ['examples' => ['formats' => ['email' => 'jane@example.com', 'hostname' => 'api.example.net']]];
+    $reversed = ['examples' => ['formats' => ['hostname' => 'api.example.net', 'email' => 'jane@example.com']]];
+
+    $run = static function (array $representation, array $steps): string {
+        $conversion = exampleConversion($steps, RepresentationPolicy::fromConfig($representation));
+
+        return (string) json_encode([
+            $conversion->schema,
+            array_map(static fn (Diagnostic $d): array => [$d->code, $d->message], $conversion->diagnostics),
+        ]);
+    };
+
+    $accepted = [kw('type', '"string"'), kw('format', '"email"')];
+    $rejected = [kw('type', '"string"'), kw('format', '"email"'), kw('maxLength', '8')];
+
+    expect($run($configured, $accepted))->toBe($run($configured, $accepted))
+        ->and($run($reversed, $accepted))->toBe($run($configured, $accepted))
+        ->and($run($configured, $rejected))->toBe($run($configured, $rejected))
+        ->and($run($reversed, $rejected))->toBe($run($configured, $rejected))
+        ->and($run($configured, $accepted))->toContain('jane@example.com');
+});
+
+/**
+ * An author's own example is the contract as they stated it, and a suppressing rule ruled every value
+ * out. Neither is a place a configured sample gets to speak.
+ */
+it('never lets a configured sample override an authored example or revive a suppressed one', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => 'jane@example.com']]]);
+
+    $authored = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), kw('example', '"mine@example.org"')], $policy);
+    $suppressed = exampleConversion([kw('type', '"string"'), kw('format', '"email"'), ['propose', null]], $policy);
+
+    expect($authored->schema['properties']['f']['example'] ?? null)->toBe('mine@example.org')
+        ->and($authored->diagnostics)->toBe([])
+        ->and($suppressed->schema['properties']['f'] ?? [])->not->toHaveKey('example')
+        ->and($suppressed->diagnostics)->toBe([]);
+});
+
+/**
+ * The policy reader is the seam, so it takes the same shape of coercion as its neighbours: strings
+ * survive, everything else is dropped rather than guessed at.
+ */
+it('reads examples.formats as strings keyed by format, dropping anything else', function (mixed $configured, array $expected): void {
+    expect(RepresentationPolicy::fromConfig(['examples' => ['formats' => $configured]])->formatSamples)->toBe($expected);
+})->with([
+    'absent' => [null, []],
+    'empty' => [[], []],
+    'one format' => [['email' => 'jane@example.com'], ['email' => 'jane@example.com']],
+    'several, in config order' => [
+        ['hostname' => 'api.example.net', 'email' => 'jane@example.com'],
+        ['hostname' => 'api.example.net', 'email' => 'jane@example.com'],
+    ],
+    'a non-string sample is dropped' => [['email' => ['nope'], 'hostname' => 'api.example.net'], ['hostname' => 'api.example.net']],
+    'a scalar sample is not coerced' => [['email' => 42], []],
+    'a non-array map' => ['jane@example.com', []],
+]);
+
+it('defaults the format samples to empty, so an absent config changes nothing', function (): void {
+    expect(RepresentationPolicy::fromConfig([])->formatSamples)->toBe([])
+        ->and((new RepresentationPolicy)->formatSamples)->toBe([])
+        ->and(RepresentationPolicy::fromConfig(['examples' => 'nonsense'])->formatSamples)->toBe([]);
 });

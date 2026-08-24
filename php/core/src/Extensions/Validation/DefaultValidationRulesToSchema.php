@@ -46,7 +46,7 @@ final readonly class DefaultValidationRulesToSchema implements ValidationRulesTo
         }
 
         // After every field, never during: an example is judged on the schema the whole rule set left.
-        $builder->synthesizeExamples();
+        $diagnostics = [...$diagnostics, ...$builder->synthesizeExamples($context->representation())];
 
         $schema = $builder->build($context->representation());
         $mediaType = $builder->isMultipart() ? 'multipart/form-data' : 'application/json';

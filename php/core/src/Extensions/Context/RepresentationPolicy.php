@@ -31,6 +31,10 @@ use Docuccino\Core\Extensions\Schema\EnumDecoration;
  * - `listStyle` (Query Builder): accepted for compatibility — both keywords now express `sort`/
  *   `include` the same way, a comma-serialised (`form`, `explode: false`) array whose items enum
  *   the allow-list.
+ * - `formatSamples` (`examples.formats`): JSON Schema `format` → the value a synthesized example uses
+ *   for it, MERGED over {@see FormatSamples} per format. A configured sample is still validated against
+ *   the field's finished keywords before publication, exactly as a derived one is; one that fails falls
+ *   back to the built-in sample with a diagnostic rather than disappearing.
  * - `resourceWrap` (API Resources): document-level override of Laravel's top-level resource `data`
  *   wrapping (`integrations.api_resources.wrap`). `''` defers to each resource's static `$wrap`;
  *   `'disabled'` unwraps everything — the escape hatch for a global
@@ -42,6 +46,9 @@ final readonly class RepresentationPolicy
     /** The `resourceWrap` sentinel meaning "no wrapping" (a global `withoutWrapping()` escape hatch). */
     public const WRAP_DISABLED = 'disabled';
 
+    /**
+     * @param  array<string, string>  $formatSamples  JSON Schema `format` => the configured sample
+     */
     public function __construct(
         public string $operationId = 'route-name',
         public string $enumNaming = 'names',
@@ -52,6 +59,7 @@ final readonly class RepresentationPolicy
         public bool $enumComponents = true,
         public bool $errorComponents = true,
         public bool $paginationComponents = true,
+        public array $formatSamples = [],
     ) {}
 
     /**
@@ -71,6 +79,8 @@ final readonly class RepresentationPolicy
         $pagination = $representation['pagination'] ?? null;
         $paginationComponents = is_array($pagination) ? ($pagination['components'] ?? null) : null;
 
+        $examples = $representation['examples'] ?? null;
+
         return new self(
             operationId: self::keyword($representation['operation_id'] ?? null, 'route-name'),
             enumNaming: self::keyword($enumNaming, 'names'),
@@ -81,7 +91,27 @@ final readonly class RepresentationPolicy
             enumComponents: ! ($enumComponents === false),
             errorComponents: ! ($errorComponents === false),
             paginationComponents: ! ($paginationComponents === false),
+            formatSamples: self::formatSamples(is_array($examples) ? ($examples['formats'] ?? null) : null),
         );
+    }
+
+    /**
+     * `examples.formats` as data: strings keyed by format, everything else dropped. A `format` keyword is
+     * a string keyword, so a non-string sample could never be published — the adapter reports the drop
+     * rather than this guessing at a coercion.
+     *
+     * @return array<string, string>
+     */
+    private static function formatSamples(mixed $configured): array
+    {
+        $samples = [];
+        foreach (is_array($configured) ? $configured : [] as $format => $sample) {
+            if (is_string($sample)) {
+                $samples[(string) $format] = $sample;
+            }
+        }
+
+        return $samples;
     }
 
     /**

@@ -12,6 +12,11 @@ use Docuccino\Core\Extensions\Contracts\EnvironmentDigestContributor;
  * `query-builder.parameters.filter` changes every documented QB parameter name but touches no route
  * file, so it must key the warm-fragment cache. Gated with the QueryBuilder integration; the same
  * {@see QueryBuilderConfig} the extension is wired from is injected so the digest tracks the live bag.
+ *
+ * Only the PACKAGE's bag belongs here. `QueryBuilderConfig::$filterDescriptions` comes from Docuccino's
+ * own per-document `integrations.query_builder` bag, which `DocumentConfig::hash()` already folds into
+ * the `configHash` the fragment key is built from — and this contributor is document-agnostic, so a
+ * per-document value could not be read here truthfully anyway.
  */
 final class QueryBuilderConfigDigestContributor implements EnvironmentDigestContributor
 {

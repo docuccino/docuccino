@@ -931,7 +931,186 @@ it('leaves no filter kind out of the description dataset', function (): void {
     expect($kinds)->toBe([
         'default', 'partial', 'exact', 'beginsWithStrict', 'endsWithStrict',
         'scope', 'callback', 'custom', 'operator', 'trashed', 'belongsTo',
-    ]);
+    ])
+        // The published set a document's overrides are validated against has to be the same table, or the
+        // diagnostic would refuse a kind that works (or accept one that does nothing).
+        ->and(QueryBuilderParameters::filterKinds())->toBe($kinds);
+});
+
+/**
+ * A document may state a kind's lead sentence itself. The semantics are a MERGE over the built-in
+ * table, per kind: whatever a document names is overridden and every other kind keeps its default, so
+ * naming one sentence never blanks the rest.
+ */
+it('merges configured kind sentences over the built-in table, kind by kind', function (array $configured, array $expected): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact'), new QbEntry('email', 'partial'), new QbEntry('flag', 'custom')];
+    });
+
+    $config = (new QueryBuilderConfig)->withFilterDescriptions($configured);
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect([
+        $byName['filter[status]']->description,
+        $byName['filter[email]']->description,
+        $byName['filter[flag]']->description,
+    ])->toBe($expected);
+})->with([
+    'override none' => [[], [
+        'Exact match on `status`.',
+        'Substring match on `email`.',
+        'Filters the result set by `flag`.',
+    ]],
+    'override one' => [['exact' => 'Matches `%field%` exactly.'], [
+        'Matches `status` exactly.',
+        'Substring match on `email`.',
+        'Filters the result set by `flag`.',
+    ]],
+    'override several' => [['exact' => 'Matches `%field%` exactly.', 'custom' => 'Narrows by `%field%`.'], [
+        'Matches `status` exactly.',
+        'Substring match on `email`.',
+        'Narrows by `flag`.',
+    ]],
+    'override every kind these filters use' => [
+        ['exact' => 'A. `%field%`', 'partial' => 'B. `%field%`', 'custom' => 'C. `%field%`'],
+        ['A. `status`', 'B. `email`', 'C. `flag`'],
+    ],
+    // A key naming no kind can never match, so nothing moves. `ConfigDiagnostics` is where it is named.
+    'a kind nothing has' => [['wibble' => 'Never seen.'], [
+        'Exact match on `status`.',
+        'Substring match on `email`.',
+        'Filters the result set by `flag`.',
+    ]],
+]);
+
+/**
+ * `%field%` is the one token a configured sentence spends, and it spends it on the PUBLIC name exactly
+ * as a built-in sentence does. Nothing else is interpolated, so a sentence carrying no token — or one
+ * carrying something token-shaped that isn't ours — is published as written.
+ */
+it('interpolates %field% in a configured sentence, and only that', function (string $sentence, string $expected): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact', internal: 'status_code')];
+    });
+
+    $config = (new QueryBuilderConfig)->withFilterDescriptions(['exact' => $sentence]);
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($byName['filter[status]']->description)->toBe($expected);
+})->with([
+    'once' => ['Matches `%field%` exactly.', 'Matches `status` exactly.'],
+    'twice' => ['`%field%` must equal `%field%`.', '`status` must equal `status`.'],
+    'a constant sentence, like the trashed default' => ['Only settled invoices.', 'Only settled invoices.'],
+    'another token shape is not ours' => ['Matches %column% on `%field%`.', 'Matches %column% on `status`.'],
+    'the public name, never the internal column' => ['Filter by `%field%`.', 'Filter by `status`.'],
+]);
+
+/**
+ * The notes describe the request FORM rather than the matching, so they compose after a configured lead
+ * exactly as after a default one — same notes, same order, same sentence-terminating rule.
+ */
+it('appends every note after a configured lead in the same order as after a default one', function (string $sentence, string $expected): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry(
+            'status',
+            'exact',
+            nullable: true,
+            columnSchema: enumColumnSchema(),
+            enumTyped: true,
+        )];
+    });
+
+    $config = (new QueryBuilderConfig)->withFilterDescriptions($sentence === '' ? [] : ['exact' => $sentence]);
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($byName['filter[status]']->description)->toBe($expected);
+})->with([
+    'the default lead' => ['', 'Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.'],
+    'a configured lead' => ['Matches `%field%` exactly.', 'Matches `status` exactly. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.'],
+    // The lead is terminated before the notes are appended, whoever wrote it.
+    'a configured lead with no full stop' => ['Matches `%field%` exactly', 'Matches `status` exactly. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.'],
+]);
+
+it('composes the custom-separator notes after a configured lead too', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact', columnSchema: enumColumnSchema(), enumTyped: true)];
+    });
+
+    $config = (new QueryBuilderConfig(delimiter: '|'))->withFilterDescriptions(['exact' => 'Matches `%field%` exactly.']);
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($byName['filter[status]']->description)->toBe(
+        'Matches `status` exactly. Accepts a `|`-separated list of values (matched as `whereIn`). Values: draft, published, archived.',
+    );
+});
+
+/**
+ * A comment describes THIS filter; a configured sentence describes every filter of that kind. So the
+ * narrower one still wins, and the configured sentence changes nothing about that ordering.
+ */
+it('lets an entry comment beat a configured kind sentence', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [
+            new QbEntry('status', 'exact', comment: 'The lifecycle stage of the invoice.'),
+            new QbEntry('email', 'exact'),
+        ];
+    });
+
+    $config = (new QueryBuilderConfig)->withFilterDescriptions(['exact' => 'Matches `%field%` exactly.']);
+    $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config));
+
+    expect($byName['filter[status]']->description)->toBe('The lifecycle stage of the invoice.')
+        ->and($byName['filter[email]']->description)->toBe('Matches `email` exactly.');
+});
+
+/**
+ * The feature's floor: with nothing configured, and with an empty bag configured, the parameters are the
+ * SAME VALUES — so a document that never sets the key cannot move a byte. Both filter styles, because
+ * the deepObject one carries the description on a property instead.
+ */
+it('emits identical parameters with no configuration and with an empty one', function (RepresentationPolicy $policy): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [
+            new QbEntry('status', 'exact', columnSchema: enumColumnSchema(), enumTyped: true),
+            new QbEntry('email', 'partial'),
+            new QbEntry('flag', 'custom'),
+        ];
+        $f->sorts = [new QbEntry('name', 'default')];
+    });
+
+    $bare = (new QueryBuilderParameters)->build($facts, $policy);
+    $empty = (new QueryBuilderParameters)->build($facts, $policy, (new QueryBuilderConfig)->withFilterDescriptions([]));
+
+    expect($empty)->toEqual($bare);
+})->with([
+    'bracketed' => [bracketedPolicy()],
+    'deepObject' => [deepObjectPolicy()],
+]);
+
+/**
+ * Determinism: the same configured sentences produce the same bytes every run, and the ORDER the
+ * document happened to write them in is not one of the inputs.
+ */
+it('builds the same description whatever order the configured kinds were written in', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact'), new QbEntry('email', 'partial')];
+    });
+
+    $descriptions = static function (array $configured) use ($facts): array {
+        $config = (new QueryBuilderConfig)->withFilterDescriptions($configured);
+
+        return array_map(
+            static fn (QueryParameterSpec $spec): ?string => $spec->description,
+            specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy(), $config)),
+        );
+    };
+
+    $forwards = $descriptions(['exact' => 'Is `%field%`.', 'partial' => 'Contains `%field%`.']);
+    $backwards = $descriptions(['partial' => 'Contains `%field%`.', 'exact' => 'Is `%field%`.']);
+
+    expect($forwards)->toBe(['filter[status]' => 'Is `status`.', 'filter[email]' => 'Contains `email`.'])
+        ->and($backwards)->toBe($forwards)
+        ->and($descriptions(['exact' => 'Is `%field%`.', 'partial' => 'Contains `%field%`.']))->toBe($forwards);
 });
 
 /**

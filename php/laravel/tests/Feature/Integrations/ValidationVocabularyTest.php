@@ -19,9 +19,9 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
  * Exercises the Laravel rule vocabulary (the transformer set + effect-order ranking) driving the
  * core chain — the Laravel-side counterpart to the core driver's vocabulary-free unit test.
  */
-function vocabularyContext(): SchemaConverter
+function vocabularyContext(RepresentationPolicy $policy = new RepresentationPolicy): SchemaConverter
 {
-    return new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, new RepresentationPolicy);
+    return new SchemaConverter(DefaultTypeMappers::all(), new NullTypeEngine, new ComponentRegistry, $policy);
 }
 
 /**
@@ -29,7 +29,7 @@ function vocabularyContext(): SchemaConverter
  *
  * @param  array<string, string>  $fields
  */
-function convertLaravelRules(array $fields): ValidationSchema
+function convertLaravelRules(array $fields, RepresentationPolicy $policy = new RepresentationPolicy): ValidationSchema
 {
     $set = [];
     foreach ($fields as $field => $pipe) {
@@ -38,7 +38,7 @@ function convertLaravelRules(array $fields): ValidationSchema
 
     $ordered = (new RuleOrdering)->order(new RuleSet($set));
 
-    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext());
+    return (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, vocabularyContext($policy));
 }
 
 /**
@@ -436,6 +436,57 @@ it('raises an info diagnostic for a rule no transformer handles', function (): v
         ->and($result->diagnostics)->toHaveCount(1)
         ->and($result->diagnostics[0]->code)->toBe('validation.rule-unhandled');
 });
+
+/**
+ * The real Laravel vocabulary honouring `representation.examples.formats`: an `email` rule still writes
+ * `format: email`, and the sample beside it is the one the document configured. Only the formats named
+ * move — this is the merge, seen from the vocabulary that produces the formats in the first place.
+ */
+it('illustrates a Laravel format rule with the document\'s configured sample', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => [
+        'email' => 'jane@example.com',
+        'ip' => '198.51.100.7',
+    ]]]);
+
+    $schema = convertLaravelRules([
+        'contact' => 'required|email',
+        'host' => 'required|ip',
+        'site' => 'required|url',
+        'ref' => 'required|uuid',
+    ], $policy)->schema;
+
+    expect($schema['properties']['contact'])->toBe(['type' => 'string', 'format' => 'email', 'example' => 'jane@example.com'])
+        ->and($schema['properties']['host'])->toBe(['type' => 'string', 'format' => 'ip', 'example' => '198.51.100.7'])
+        // Not configured, so untouched: the documentation-reserved constants stand.
+        ->and($schema['properties']['site'])->toBe(['type' => 'string', 'format' => 'uri', 'example' => 'https://example.com'])
+        ->and($schema['properties']['ref'])->toBe(['type' => 'string', 'format' => 'uuid', 'example' => '3fa85f64-5717-4562-b3fc-2c963f66afa6']);
+});
+
+it('falls back to the built-in sample where a later Laravel rule narrows the field past the configured one', function (): void {
+    $policy = RepresentationPolicy::fromConfig(['examples' => ['formats' => ['email' => 'jane.doe+billing@example.com']]]);
+
+    $result = convertLaravelRules(['contact' => 'required|email|max:20'], $policy);
+
+    expect($result->schema['properties']['contact'])
+        ->toBe(['type' => 'string', 'format' => 'email', 'maxLength' => 20, 'example' => 'user@example.com'])
+        ->and(array_map(static fn ($d): string => $d->code, $result->diagnostics))->toBe(['config.format-sample-rejected'])
+        ->and($result->diagnostics[0]->message)->toContain('field "contact"')
+        ->and($result->diagnostics[0]->message)->toContain('maxLength');
+});
+
+it('emits byte-identical properties when no format sample is configured', function (array $configured): void {
+    $fields = ['contact' => 'required|email', 'site' => 'required|url', 'ref' => 'required|uuid'];
+
+    $bare = convertLaravelRules($fields);
+    $configuredResult = convertLaravelRules($fields, RepresentationPolicy::fromConfig($configured));
+
+    expect(json_encode($configuredResult->schema))->toBe(json_encode($bare->schema))
+        ->and($configuredResult->diagnostics)->toBe([]);
+})->with([
+    'nothing configured' => [[]],
+    'an empty formats map' => [['examples' => ['formats' => []]]],
+    'a format none of these fields carries' => [['examples' => ['formats' => ['duration' => 'PT1H']]]],
+]);
 
 it('describes the field-reference forms of date-comparison and numeric-comparison rules', function (): void {
     // A field-reference comparison target is a runtime relationship: the numeric bound isn't a literal

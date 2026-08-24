@@ -88,7 +88,7 @@ final class QueryBuilderParametersExtension implements OperationExtension
 
         $contribution = Contribution::integration('query-builder', $context->actionSource());
 
-        foreach ($this->builder->build($facts, $context->representation(), $this->config, $describer) as $spec) {
+        foreach ($this->builder->build($facts, $context->representation(), $this->effectiveConfig($context), $describer) as $spec) {
             $spec->applyTo($operation->parameter('query', $spec->name), $contribution);
         }
 
@@ -510,5 +510,18 @@ final class QueryBuilderParametersExtension implements OperationExtension
         $terminals = $context->document->integration('query_builder')['pagination_terminals'] ?? null;
 
         return is_array($terminals) ? array_values(array_filter($terminals, 'is_string')) : [];
+    }
+
+    /**
+     * The package config the provider recovered, plus this DOCUMENT's own filter-description overrides —
+     * recovered here rather than in the provider because the bag is per-document, exactly like
+     * {@see customTerminals()}. It rides the document's `configHash`, so a changed sentence retires
+     * warm fragments on its own.
+     */
+    private function effectiveConfig(RouteContext $context): QueryBuilderConfig
+    {
+        return $this->config->withFilterDescriptions(
+            $context->document->integration('query_builder')['filter_descriptions'] ?? null,
+        );
     }
 }

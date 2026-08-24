@@ -33,8 +33,12 @@ final class QueryBuilderParameters
     /** Filter kinds whose value type is user code's to decide — never guessed. See {@see schemaWithoutColumn()}. */
     private const OPAQUE_KINDS = ['callback', 'custom'];
 
-    /** The token {@see FILTER_DESCRIPTIONS} spends on the filter's public name. */
-    private const FIELD_TOKEN = '%field%';
+    /**
+     * The token {@see FILTER_DESCRIPTIONS} spends on the filter's public name. Public API: a sentence
+     * configured under `integrations.query_builder.filter_descriptions` may spend it too, and it is the
+     * ONLY token those sentences interpolate — anything else is published verbatim.
+     */
+    public const FIELD_TOKEN = '%field%';
 
     /**
      * The vague-but-true prose for a filter whose matching lives in user code, and the degrade for a kind
@@ -48,6 +52,9 @@ final class QueryBuilderParameters
      * name. Never the internal column (`exact('status', 'status_code')` documents `status`): the reader
      * cannot see the codebase, and the column is not what they send. Kinds whose matching is user code's
      * carry {@see OPAQUE_DESCRIPTION} rather than invent semantics.
+     *
+     * The closed set of kinds a document may override — {@see filterKinds()} publishes it, and
+     * `QueryBuilderConfig::$filterDescriptions` is merged over it per kind.
      *
      * @var array<string, string>
      */
@@ -225,7 +232,9 @@ final class QueryBuilderParameters
     /** A filter's description: its comment (else the kind's contract sentence), plus whereIn/nullable notes. */
     private function filterDescription(QbEntry $filter, QueryBuilderConfig $config): string
     {
-        $base = $filter->comment ?? self::filterKindDescription($filter);
+        // The entry's own comment describes THIS filter, so it still outranks a per-kind sentence, which
+        // describes every filter of that kind.
+        $base = $filter->comment ?? self::filterKindDescription($filter, $config);
 
         $notes = [];
         if ($filter->enumTyped) {
@@ -708,11 +717,30 @@ final class QueryBuilderParameters
         return array_values(array_filter([$page, $size]));
     }
 
-    /** The kind's contract sentence, with the public name substituted. {@see FILTER_DESCRIPTIONS} */
-    private static function filterKindDescription(QbEntry $filter): string
+    /**
+     * The kind's contract sentence, with the public name substituted. A document's configured sentence
+     * for this kind wins over {@see FILTER_DESCRIPTIONS}; every kind it does not name keeps its default,
+     * which is what makes the setting a merge rather than a replacement. A configured sentence spends
+     * {@see FIELD_TOKEN} exactly as a built-in one does, and one carrying no token is published as
+     * written — a constant sentence is legal (`trashed` ships one).
+     */
+    private static function filterKindDescription(QbEntry $filter, QueryBuilderConfig $config): string
     {
-        $template = self::FILTER_DESCRIPTIONS[$filter->kind] ?? self::OPAQUE_DESCRIPTION;
+        $template = $config->filterDescriptions[$filter->kind]
+            ?? self::FILTER_DESCRIPTIONS[$filter->kind]
+            ?? self::OPAQUE_DESCRIPTION;
 
         return str_replace(self::FIELD_TOKEN, $filter->name, $template);
+    }
+
+    /**
+     * Every filter kind {@see FILTER_DESCRIPTIONS} describes — the source of truth for what a document
+     * may override, so the config diagnostic and the catalogue test read the table rather than a copy.
+     *
+     * @return list<string>
+     */
+    public static function filterKinds(): array
+    {
+        return array_keys(self::FILTER_DESCRIPTIONS);
     }
 }
