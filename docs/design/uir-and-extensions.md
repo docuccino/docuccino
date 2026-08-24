@@ -1125,6 +1125,16 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   `--provenance=full` and `docuccino explain` read back. No caller reacts to the return value.
 - Collections merge by identity key (parameters by in+name, responses by status, content
   by media type, properties by name) — never wholesale replace.
+- A whole schema written as ONE declared shape (`SchemaDraft::declareShape()`, for a converted type)
+  retracts the keywords it replaced but did not restate. Schema keywords compose as a conjunction, so a
+  superseded one left standing publishes what nobody declared: a map inference's `additionalProperties`
+  beside a declared closed shape says extra keys are allowed, and an inferred `type`/`items` beside a
+  declared `$ref` says the body must satisfy both — legal in a Schema Object, applied by 3.1/3.2, and
+  hoisted into an `allOf` by the 3.0 downlevel. `Draft\SchemaKeywords` classifies every keyword once:
+  shape keywords go unless restated, a refinement goes once the declared type no longer admits it
+  (`minLength` under a declared object; a `format` or an `enum` survives a restated type), annotations
+  never go, and a keyword it does not know is never retracted. Each retraction is an ordinary guarded
+  `Remove`, so it is bounded by precedence like every other write.
 - `null` in an attribute = "not specified" (no write); explicit removal is a sentinel
   (`Remove::field()`, `#[Hidden]`, `#[IgnoreParam]`, `#[IgnoreResponse]`).
 - Within a layer, more-specific target beats less-specific (method attr > class attr).

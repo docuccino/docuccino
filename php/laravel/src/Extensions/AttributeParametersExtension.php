@@ -99,9 +99,7 @@ final class AttributeParametersExtension implements OperationExtension
         $parameter->setDescription($description, $contribution);
 
         if ($type !== null) {
-            foreach ($context->converter()->toSchema($this->types->parse($type))->schema as $keyword => $value) {
-                $parameter->schema()->set($keyword, $value, $contribution);
-            }
+            $parameter->schema()->declareShape($context->converter()->toSchema($this->types->parse($type))->schema, $contribution);
         }
 
         // After the type keywords, so an explicit format wins over one the type string implied.
@@ -156,9 +154,7 @@ final class AttributeParametersExtension implements OperationExtension
         $contribution = Contribution::attribute($context->actionSource());
 
         if ($type !== null) {
-            foreach ($context->converter()->toSchema($this->types->parse($type))->schema as $keyword => $value) {
-                $property->set($keyword, $value, $contribution);
-            }
+            $property->declareShape($context->converter()->toSchema($this->types->parse($type))->schema, $contribution);
         }
         if ($format !== null) {
             $property->set('format', $format, $contribution);
