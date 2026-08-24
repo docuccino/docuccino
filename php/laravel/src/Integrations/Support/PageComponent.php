@@ -24,8 +24,13 @@ use Docuccino\Core\Support\Fqcn;
  * Two things keep an envelope INLINE. An item type nothing identified has no name to be derived
  * from, and one whose schema is not already a component of its own would put the quality of a
  * conversion into the component's bytes — two routes converting one class differently would then
- * publish one body under one identity, and the registry dedupes on identity. Both stay exactly as
- * they were emitted before: vague, but true.
+ * publish one body under one identity, and the registry dedupes on identity. Both keep the envelope on
+ * the operation: vague, but true.
+ *
+ * Its `links`/`meta` are hoisted either way ({@see PaginationParts}). Neither reason above reaches them:
+ * those shapes are a function of the paginator kind alone, so they are the same bytes whether the item
+ * type was named or converted well, and an envelope stuck on the operation duplicates them just as
+ * badly as a component would.
  */
 final class PageComponent
 {

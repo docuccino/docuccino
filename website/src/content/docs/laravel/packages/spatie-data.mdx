@@ -332,23 +332,52 @@ alongside the counters (or the cursor tokens, with no `total`). All three member
 serialized, so all three are required:
 
 ```json
-{
+"InvoiceDataPage": {
   "type": "object",
   "properties": {
     "data":  { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceData" } },
-    "links": { "type": "array", "items": { "type": "object", "properties": {
-      "url": { "type": ["string", "null"] }, "label": { "type": "string" }, "active": { "type": "boolean" }
-    } } },
-    "meta":  { "type": "object", "properties": {
-      "current_page": { "type": "integer" }, "last_page": { "type": "integer" },
-      "per_page": { "type": "integer" }, "total": { "type": "integer" },
-      "first_page_url": { "type": ["string", "null"] }, "last_page_url": { "type": ["string", "null"] },
-      "next_page_url": { "type": ["string", "null"] }, "prev_page_url": { "type": ["string", "null"] }
-    } }
+    "links": { "type": "array", "items": { "$ref": "#/components/schemas/PaginationLink" } },
+    "meta":  { "$ref": "#/components/schemas/DataPaginationMeta" }
   },
   "required": ["data", "links", "meta"]
 }
 ```
+
+`data` is the only member restated per Data class — OpenAPI has no generics, so a page of invoices and
+a page of contacts are two components. The members that depend on the paginator and not on what you
+paginated are shared, named for the shapes they are:
+
+```json
+"PaginationLink": {
+  "type": "object",
+  "properties": {
+    "url": { "type": ["string", "null"] },
+    "label": { "type": "string" },
+    "active": { "type": "boolean" }
+  }
+},
+"DataPaginationMeta": {
+  "type": "object",
+  "properties": {
+    "current_page": { "type": "integer" },
+    "first_page_url": { "type": ["string", "null"] },
+    "from": { "type": ["integer", "null"] },
+    "last_page": { "type": "integer" },
+    "last_page_url": { "type": ["string", "null"] },
+    "next_page_url": { "type": ["string", "null"] },
+    "path": { "type": ["string", "null"] },
+    "per_page": { "type": "integer" },
+    "prev_page_url": { "type": ["string", "null"] },
+    "to": { "type": ["integer", "null"] },
+    "total": { "type": "integer" }
+  }
+}
+```
+
+The cursor envelope carries the same `PaginationLink` list and its own `DataCursorPaginationMeta` —
+cursor tokens and neighbouring page URLs, with no `total`. Both are separate from the components a
+Laravel resource page uses, because the shapes are genuinely different; see
+[pagination](/laravel/documenting/responses/#pagination).
 
 A paginated collection is always wrapped by Spatie, so its wrap key simply names the envelope's items
 key — never a second layer around it.

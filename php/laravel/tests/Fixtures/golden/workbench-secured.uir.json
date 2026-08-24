@@ -3260,68 +3260,10 @@
             }
           },
           "links": {
-            "type": "object",
-            "properties": {
-              "first": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "last": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "next": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "prev": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/PaginationLinks"
           },
           "meta": {
-            "type": "object",
-            "properties": {
-              "current_page": {
-                "type": "integer"
-              },
-              "from": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "last_page": {
-                "type": "integer"
-              },
-              "path": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "per_page": {
-                "type": "integer"
-              },
-              "to": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "total": {
-                "type": "integer"
-              }
-            }
+            "$ref": "#/components/schemas/PaginationMeta"
           }
         },
         "required": [
@@ -3403,6 +3345,76 @@
         "required": [
           "id"
         ]
+      },
+      "PaginationLinks": {
+        "x-docuccino": {
+          "id": "sch:v1:ygkjpxjgdcdk6bvw"
+        },
+        "type": "object",
+        "properties": {
+          "first": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prev": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PaginationMeta": {
+        "x-docuccino": {
+          "id": "sch:v1:7fi652lnus2kwipy"
+        },
+        "type": "object",
+        "properties": {
+          "current_page": {
+            "type": "integer"
+          },
+          "from": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_page": {
+            "type": "integer"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "to": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
       },
       "ProblemDetails": {
         "x-docuccino": {
@@ -3678,7 +3690,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "94201d8762854c81e0339989335efbb54aec3f6f6a92b868be5c89489a0de1af",
-      "contentHash": "dff86fb3766158973a7294f7f9e39842af0f21a466cd0780cf5a072f67a76e23"
+      "contentHash": "f2e5a686720ea5502c1825574d520bf519d3e55631cae5a9b346332740684626"
     },
     "generator": {
       "name": "docuccino/laravel",

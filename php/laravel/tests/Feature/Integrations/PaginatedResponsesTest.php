@@ -21,11 +21,15 @@ it('wraps a paginated resource collection in the length-aware envelope', functio
     // The envelope is a shared page component; the operation points at it.
     $schema = resolveSchema($document, $op['responses']['200']['content']['application/json']['schema']);
 
+    // …and the envelope's own members are components too, so the page states only `data` itself.
+    $links = resolveSchema($document, $schema['properties']['links']);
+    $meta = resolveSchema($document, $schema['properties']['meta']);
+
     expect($schema['type'])->toBe('object')
         ->and($schema['required'])->toBe(['data', 'links', 'meta'])
         ->and($schema['properties']['data']['items'])->toHaveKey('$ref')
-        ->and(array_keys($schema['properties']['links']['properties']))->toBe(['first', 'last', 'prev', 'next'])
-        ->and($schema['properties']['meta']['properties'])->toHaveKeys(['current_page', 'last_page', 'total']);
+        ->and(array_keys($links['properties']))->toBe(['first', 'last', 'prev', 'next'])
+        ->and($meta['properties'])->toHaveKeys(['current_page', 'last_page', 'total']);
 });
 
 it('documents how to ask for the next page of a paginated resource collection', function (): void {
