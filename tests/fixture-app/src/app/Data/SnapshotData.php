@@ -31,11 +31,15 @@ final class SnapshotData extends Data
         /** Inline request context as it stood at submit. */
         public readonly array $context,
 
+        // A free-form map with an `@example` — the pair that ended a released export. The prose above
+        // the property is published to API consumers, so the reason it is here stays out here.
         /**
          * Inline candidate profile state as it stood at submit: identity, contact details and whatever
          * else the tenant's profile schema carried.
          *
          * @var array<string, mixed>
+         *
+         * @example {"first_name": "Ada", "last_name": "Lovelace"}
          */
         public readonly array $candidate,
 
