@@ -13,6 +13,24 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.8.5
+
+### Features
+
+- **laravel**: share the pagination envelope links and meta across page components ([#177](https://github.com/docuccino/docuccino/pull/177))
+- **laravel**: let a document override filter descriptions and format samples ([#176](https://github.com/docuccino/docuccino/pull/176))
+- **core**: synthesize a property example from the validation rules a request recovers ([#171](https://github.com/docuccino/docuccino/pull/171))
+- **laravel**: share one page component per item type and paginator kind ([#169](https://github.com/docuccino/docuccino/pull/169))
+
+### Bug fixes
+
+- **laravel**: stop the diagnostics channel drowning in noise nobody can act on ([#175](https://github.com/docuccino/docuccino/pull/175))
+- **laravel**: stamp coverage-span tests from one base and let a reason replace the generic note ([#174](https://github.com/docuccino/docuccino/pull/174))
+- **laravel**: let a QB entry's own comment and default outrank its filter class attribute ([#173](https://github.com/docuccino/docuccino/pull/173))
+- **laravel**: describe each Query Builder filter by the match it performs ([#170](https://github.com/docuccino/docuccino/pull/170))
+- **laravel**: declare the packages the integrations target, and name the real fields separator ([#168](https://github.com/docuccino/docuccino/pull/168))
+- **core**: publish the reason a deprecated operation carries ([#167](https://github.com/docuccino/docuccino/pull/167))
+
 ## v0.8.4
 
 ### Features
