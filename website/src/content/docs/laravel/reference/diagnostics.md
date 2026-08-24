@@ -27,7 +27,7 @@ louder exits non-zero.
 | **Error** | Something is missing from the document, or the document is invalid. Always worth fixing. |
 | **Warning** | Something you wrote didn't take effect, or the output is less useful than you asked for. |
 | **Info** | Docuccino recovered less than your code says and widened to stay truthful. Normal in small numbers; the same code on every action is a signal. |
-| **Hint** | Noise Docuccino dropped on purpose. Nothing to do. |
+| **Hint** | The quietest level: a note an extension chose not to make louder. Nothing Docuccino itself emits today. |
 
 ```bash
 # Fail CI on anything that isn't a recovery note.
@@ -79,7 +79,6 @@ itself — whether it ran, and where reading your code hit a bound.
 | `inference.callable-not-found` | info | A callable the trace wanted to follow has no readable body | Usually vendor code, and usually fine. If it's yours, express it as a plain method the analyzer can reach |
 | `inference.response-shape-truncated` | info | Recovering a response shape ran out of descent depth or file budget, so the response is documented as its bare declared type — true, but poorer than your code is | Shorten the helper chain between the action and the value it returns, or state the response with [`#[Response]`](/laravel/reference/attributes/#response) |
 | `inference.ambiguous-narrowing` | info | More than one return site is reachable for the narrowed type, so the first in source order was used and the recovered shape may be ambiguous | Give the action one return site per status, or pin the ones you care about with [`#[Response]`](/laravel/reference/attributes/#response) |
-| `inference.throw-noise-dropped` | hint | Implicit "this could throw anything" points were dropped so they don't become error responses | Nothing. This is the analyzer being quiet on your behalf |
 
 ## Routes, operations and names
 
@@ -178,7 +177,7 @@ correct-but-vaguer document rather than dropping the endpoint.
 | `eloquent.unresolved-eager-load` | info | A relation named in `$with` couldn't be resolved to a related model, so it's omitted from the schema | Give the relation method a generic return type — e.g. `HasMany<LineItem, $this>` |
 | `eloquent.unmapped-morph` | info | A morph variant has no `Relation::morphMap()` alias, so the union is emitted without a discriminator | Register an alias in `Relation::enforceMorphMap([...])` for every variant, so a stable discriminator can be emitted |
 | `query-builder.unresolved-entry` | warning | A Query Builder allow-list entry couldn't be resolved statically, so it's omitted from the docs and that list is documented as a plain string rather than a value enum | Use a literal value or a factory call — `AllowedFilter::exact('status')` — so it can be recovered |
-| `query-builder.no-allowlists-recovered` | info | A paginating Query Builder terminal was reached, but no allowed filters, sorts or includes were recovered | Expected when the endpoint offers none. Otherwise declare them somewhere the trace reaches — see [query objects](/laravel/packages/query-builder/#query-objects-allow-lists-in-a-separate-class) |
+| `query-builder.no-allowlists-recovered` | info | A paginating terminal was reached and no allow-lists and no default sort were recovered from the chain, so it is behind an indirection the trace couldn't follow | Declare the allow-lists somewhere the trace reaches — see [query objects](/laravel/packages/query-builder/#query-objects-allow-lists-in-a-separate-class). An endpoint whose chain WAS read and simply offers no filters or sorts doesn't report this |
 | `query-builder.partial-on-enum` | info | A partial-match filter over an enum-cast column can't have its values enumerated | Use `AllowedFilter::exact()` so the enum's values are documented — see [partial filters over an enum column](/laravel/packages/query-builder/#partial-filters-over-an-enum-column) |
 | `query-builder.default-config` | info | The package's config wasn't readable, so documented parameter names use its defaults (`filter`/`sort`/`include`/`fields`) | Publish it — `php artisan vendor:publish --tag=query-builder-config` — so custom names reach the docs |
 | `query-builder.legacy-package-version` | info | spatie/laravel-query-builder below v7 is installed, so the sort/include/fields allow-lists are documented as plain strings rather than value enums | Upgrade to spatie/laravel-query-builder `^7` to document the sort/include/fields allow-lists as enums |
