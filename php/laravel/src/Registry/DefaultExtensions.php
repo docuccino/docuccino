@@ -25,6 +25,7 @@ use Docuccino\Laravel\Extensions\AttributeResponsesExtension;
 use Docuccino\Laravel\Extensions\AttributeSecurityExtension;
 use Docuccino\Laravel\Extensions\ErrorResponsesExtension;
 use Docuccino\Laravel\Extensions\FrameworkResponseTypeToSchema;
+use Docuccino\Laravel\Extensions\IgnoredParametersExtension;
 use Docuccino\Laravel\Extensions\ImplicitResponsesExtension;
 use Docuccino\Laravel\Extensions\InferredResponsesExtension;
 use Docuccino\Laravel\Extensions\PathParametersExtension;
@@ -82,6 +83,9 @@ final class DefaultExtensions
             AttributeOverridesExtension::class,
             // Reads a committed file of responses a test suite recorded; nothing is executed here.
             RecordedExamplesExtension::class,
+            // Finalize: every parameter every producer contributes now exists, so the subtractive
+            // #[IgnoreParam] can drop one without a later producer writing it back.
+            IgnoredParametersExtension::class,
             // Finalize: every response, parameter and request body a #[Example] could name now exists.
             AttributeExamplesExtension::class,
             RouteServersExtension::class,
