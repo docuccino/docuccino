@@ -68,7 +68,20 @@
               }
             }
           }
+        },
+        "callbacks": {
+          "onCreated": {
+            "{$request.body#/callbackUrl}": {
+              "post": { "operationId": "things.created.callback" }
+            }
+          }
         }
+      }
+    },
+    "/things/deferred": {
+      "get": {
+        "operationId": "things.deferred",
+        "summary": "An operation whose responses the build could not recover"
       }
     }
   },
