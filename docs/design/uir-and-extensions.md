@@ -132,6 +132,25 @@ a generated client gets — one error type instead of one per operation — and 
 operation DESCRIBES or ILLUSTRATES the error, so `description`, `headers` and the media type's own
 examples stay outside it and are the response pass's business.
 
+**A declared name names the RESPONSE, and reaches the shape under it only where that shape is the whole
+of it.** The two buckets hold different kinds of thing, so publishing an anonymous body as
+`components.schemas.ValidationError` because the response around it claimed that name asserts the body IS
+that error. Where the response states one representation the assertion is true, and the two buckets
+publishing one concept under one name is the point of the claim — a client catches `NotFound`, and the
+shape underneath is `NotFound` too. Where it states SEVERAL it is a guess, and it was wrong in the case
+that found this: a 422 answered with an RFC 9457 problem body under `application/problem+json` and a
+union of challenge shapes under `application/json` had the union published as the named validation error,
+beside the response component that correctly held the problem body. So the claim reaches a shape only at
+a single-representation response; each shape of a multi-representation one asks for its status instead,
+and two anonymous ones there contest that name and climb like any other pair.
+
+The claim is out of such a shape's dedupe SCOPE for the same reason: a name that cannot describe a shape
+must not tell two of them apart either. Scoping by it hoisted one union twice — once under the claim,
+once under the status, identical members and two ids — which hands a client two names for one type. The
+claim still scopes what it does name: two producers naming two different errors that happen to spell one
+body get a component each, and an undeclared body's own representation never moves because someone
+elsewhere learned to name theirs.
+
 **Responses second**, over the rewritten document: a whole response — description, headers, and by now
 a schema `$ref` — that two or more operations state identically is hoisted too. Second so the response
 it hoists points at the shared shape instead of carrying its own anonymous copy; a code generator names

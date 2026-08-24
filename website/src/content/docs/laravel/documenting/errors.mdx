@@ -591,6 +591,13 @@ Your exceptions get the same treatment, and you say what they are called by mark
 
 Same status, same body, same description — only the name a generated client gives the type changes.
 
+**It names the response, and the shape under it where that shape is the whole response.** A `404`
+answered with one body publishes both as `ResourceMissing`, which is what lets a client catch the name
+you chose. A response that offers two representations — a problem body and a plain-JSON alternative, say —
+keeps the name on the response, and each shape publishes under its status: `components.schemas` and
+`components.responses` hold different kinds of thing, and calling one of two bodies `ResourceMissing`
+would say it is the error when it may be the alternative beside it.
+
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
 class doesn't change it: an error only one operation states stays inline, so a one-off error publishes no

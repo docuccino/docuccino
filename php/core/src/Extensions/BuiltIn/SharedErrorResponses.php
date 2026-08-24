@@ -28,7 +28,9 @@ use Docuccino\Core\Support\Json;
  *
  * What REPEATS decides whether a body is hoisted; what its producer DECLARED
  * ({@see ResponseDraft::claimComponentName()}) decides only what the component is called — so a
- * declaration can add a component and never take one away. Design §"Shared error components".
+ * declaration can add a component and never take one away. It names the RESPONSE, and reaches the shape
+ * inside it only where that shape is the whole of it ({@see schemaSites()}). Design §"Shared error
+ * components".
  *
  * A media type's `example` and its `examples` map are how an operation ILLUSTRATES the body, not what the
  * body IS, so the second pass keeps both out of the key and republishes every arm's illustration on the
@@ -224,22 +226,31 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * Every hoistable node of one response, as `[pointer into the response, body]`. A schema pass reads
-     * one per media type; a response pass reads the response itself.
+     * Every hoistable node of one response, as `[pointer into the response, body, the name claimed for
+     * it]`. A schema pass reads one per media type; a response pass reads the response itself.
+     *
+     * A producer's claim names the RESPONSE, and it reaches the shape underneath only where the response
+     * states exactly ONE representation — there the shape IS the named error's body, and the two buckets
+     * publish one concept under one name. A response offering several says nothing about which of them
+     * the name belongs to, so each shape asks for its status instead: `components.schemas` and
+     * `components.responses` hold different kinds of thing, and a shape named after the response
+     * enclosing it asserts it is that error when it may be the alternative representation beside it.
      *
      * @param  array<array-key, mixed>  $response
-     * @return list<array{list<array-key>, array<array-key, mixed>}>
+     * @return list<array{list<array-key>, array<array-key, mixed>, string|null}>
      */
     private static function schemaSites(array $response): array
     {
         /** @var array<array-key, mixed> $content */
         $content = $response['content'];
 
+        $claim = count($content) === 1 ? self::claimed($response) : null;
+
         $out = [];
         foreach ($content as $mediaType => $media) {
             $schema = is_array($media) ? ($media['schema'] ?? null) : null;
             if (is_array($schema) && self::isHoistable($schema)) {
-                $out[] = [['content', $mediaType, 'schema'], $schema];
+                $out[] = [['content', $mediaType, 'schema'], $schema, $claim];
             }
         }
 
@@ -248,11 +259,11 @@ final class SharedErrorResponses implements DocumentTransformer
 
     /**
      * @param  array<array-key, mixed>  $response
-     * @return list<array{list<array-key>, array<array-key, mixed>}>
+     * @return list<array{list<array-key>, array<array-key, mixed>, string|null}>
      */
     private static function responseSites(array $response): array
     {
-        return [[[], $response]];
+        return [[[], $response, self::claimed($response)]];
     }
 
     /**
@@ -432,7 +443,7 @@ final class SharedErrorResponses implements DocumentTransformer
      * the status and the body, which no declaration has a say in ({@see shareable()}).
      *
      * @param  array<array-key, mixed>  $paths
-     * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>}>  $sites
+     * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>, string|null}>  $sites
      * @param  callable(array<array-key, mixed>): array{array<array-key, mixed>, Illustrations, Authored}  $split
      * @param  array<string, string>  $aliases  the shapes pass one published, resolved away before grouping
      * @return array<string, Occurrence>
@@ -446,11 +457,10 @@ final class SharedErrorResponses implements DocumentTransformer
                 continue;
             }
 
-            $name = self::claimed($response);
-            $scope = self::scope((string) $status, $name);
             $rejected = self::rejected($response);
 
-            foreach ($sites($response) as [, $body]) {
+            foreach ($sites($response) as [, $body, $name]) {
+                $scope = self::scope((string) $status, $name);
                 [$stripped, $illustrations, $authored] = $split(self::stripProvenance($body));
                 $key = self::key($scope, $stripped);
 
@@ -665,9 +675,10 @@ final class SharedErrorResponses implements DocumentTransformer
                         implode(', ', $published),
                         $bucket,
                     ),
-                help: $incumbent
+                help: ($incumbent
                     ? 'The component already holding the name was published before this pass ran and cannot move. Give the error body a name of its own with #[ErrorComponent], or rename the component holding this one, and it publishes under a plain name again.'
-                    : 'A shared error body is named after its status unless something names it, and a name belongs to one body only while it holds it alone. Nothing to do if these really are different errors and the derived names read well enough; otherwise have the operations state one body, or name each body with #[ErrorComponent] — one name per body, since a name spread over an exception family, or over a method answering at several statuses, is contested the same way.',
+                    : 'A shared error body is named after its status unless something names it, and a name belongs to one body only while it holds it alone. Nothing to do if these really are different errors and the derived names read well enough; otherwise have the operations state one body, or name each body with #[ErrorComponent] — one name per body, since a name spread over an exception family, or over a method answering at several statuses, is contested the same way.'
+                ).($bucket === 'schemas' ? ' A declared name names the response, so it names the shape under it only where the response states one representation; a response offering several says nothing about which of them is the one it named.' : ''),
             );
         }
 
@@ -680,8 +691,8 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * @param  array<array-key, mixed>  $paths
      * @param  array<string, string>  $names
-     * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>}>  $sites
-     * @param  callable(array<array-key, mixed>): array{array<array-key, mixed>, Illustrations}  $split
+     * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>, string|null}>  $sites
+     * @param  callable(array<array-key, mixed>): array{array<array-key, mixed>, Illustrations, Authored}  $split
      * @return array<array-key, mixed>
      */
     private static function rewrite(array $paths, array $names, callable $sites, callable $split, string $prefix): array
@@ -704,9 +715,8 @@ final class SharedErrorResponses implements DocumentTransformer
                         continue;
                     }
 
-                    $scope = self::scope((string) $status, self::claimed($response));
-
-                    foreach ($sites($response) as [$pointer, $body]) {
+                    foreach ($sites($response) as [$pointer, $body, $claim]) {
+                        $scope = self::scope((string) $status, $claim);
                         [$stripped] = $split(self::stripProvenance($body));
                         $name = $names[self::key($scope, $stripped)] ?? null;
                         if ($name === null) {
@@ -818,7 +828,9 @@ final class SharedErrorResponses implements DocumentTransformer
 
     /**
      * What distinguishes one publication of a body from another carrying the same bytes: its status and
-     * the name a producer declared for it. Why both halves: design §"Shared error components".
+     * the name claimed for the node being published — which for a shape is the enclosing response's
+     * claim only where it speaks for that shape ({@see schemaSites()}). Why both halves: design
+     * §"Shared error components".
      */
     private static function scope(string $status, ?string $name): string
     {
