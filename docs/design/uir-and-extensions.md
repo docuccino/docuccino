@@ -1137,6 +1137,22 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   `Remove`, so it is bounded by precedence like every other write.
 - `null` in an attribute = "not specified" (no write); explicit removal is a sentinel
   (`Remove::field()`, `#[Hidden]`, `#[IgnoreParam]`, `#[IgnoreResponse]`).
+- **A subtraction has no layer, only a position.** The guard settles which of two WRITES to a field
+  wins; removing a collection member is not a write, so nothing shadows it — and nothing stops a
+  producer that runs later from creating the member again, which is a removal that silently did
+  nothing. So a pass that removes runs AFTER every pass that could produce: `#[IgnoreParam]` is
+  `Laravel\Extensions\IgnoredParametersExtension` in Finalize (the parameter phase's own producers, the
+  request phase's validation recovery, and the parameter attributes have all contributed by then),
+  ahead of `AttributeExamplesExtension` so an `#[Example]` naming something it dropped reports a
+  missing target. The alternative — recording the suppression so the creating `??=` refuses — was
+  rejected: it puts a new invariant into `OperationDraft` for one caller's sake, and `removeParameter()`
+  would stop meaning what its name says. Note the residue: a member whose schema hoisted before it was
+  removed leaves the component behind, because nothing prunes `components.schemas` by reachability —
+  `ResponseDraft::isBodyless()` is the same hazard, avoided there by asking BEFORE converting a payload.
+  That residue is why `#[IgnoreResponse]` is not the same fix: a response carries a body that hoists, so
+  the producers that outlive its removal (`RateLimitResponsesExtension`, `ErrorResponsesExtension`, the
+  LATE resource-collection ones) have to CONSULT the attribute the way `ImplicitResponsesExtension`
+  already does, rather than be reordered behind it.
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
 - Within the docblock layer, `@summary`/`@description` beat the free-prose split, and declaring
   EITHER hands both fields to the tags — the prose above them was written for whoever maintains
