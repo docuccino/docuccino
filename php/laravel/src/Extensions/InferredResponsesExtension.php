@@ -50,7 +50,10 @@ final class InferredResponsesExtension implements OperationExtension
 
     /**
      * The OAS range key a redirect documents under: `RedirectResponse` takes any 3xx and the return site
-     * names none of them, so the range is what the code proves and 302 would be a guess.
+     * names none of them, so the range is what the code proves and 302 would be a guess. Whether it is
+     * still there once every layer has spoken belongs to the document lint of the same name, not here: an
+     * attribute retires it ({@see OperationDraft::supersedeStatusRange()}), and a diagnostic raised from
+     * this side would tell an author who pinned the code to pin it again.
      */
     private const REDIRECT_STATUS = '3XX';
 
@@ -137,28 +140,6 @@ final class InferredResponsesExtension implements OperationExtension
             // PHP coerced the '200' key to int; the draft API and reason table want the string back.
             $this->emit($operation, $context, (string) $status, $bucket['payloads'], $bucket['location'], $producer, $bucket['headers'], $bucket['bodies']);
         }
-
-        if (isset($byStatus['3XX'])) {
-            $this->reportUnpinnedRedirect($context);
-        }
-    }
-
-    /**
-     * The return site redirects but doesn't say to what code, so the response lands on the `3XX` range.
-     * Pinning it is advice for the API's author, hence a diagnostic rather than a description consumers read.
-     */
-    private function reportUnpinnedRedirect(RouteContext $context): void
-    {
-        $context->components->addDiagnostic(new Diagnostic(
-            severity: Severity::Info,
-            code: 'inferred-response.unpinned-redirect',
-            message: sprintf(
-                '%s returns a redirect whose exact 3xx status is not stated at the return site, so it is documented as the 3XX range.',
-                $context->actionRef->symbol(),
-            ),
-            routeSignature: $context->route->signature(),
-            help: 'Pin it with #[Response(302)] (or the code this endpoint always answers with) when the redirect is not conditional.',
-        ));
     }
 
     /**

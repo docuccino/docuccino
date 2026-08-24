@@ -311,9 +311,16 @@ What gets documented instead is only what the class itself proves:
 
 The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
 302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
-site says which. Docuccino says so with an `inferred-response.unpinned-redirect` info diagnostic naming
-the action; pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the endpoint
-always answers with one code.
+site says which. Pin it with [`#[Response(status: 302)]`](/laravel/reference/attributes/#response) when
+the endpoint always answers with one code, and declare each code where it answers with several — a
+declared 3xx **retires** the range, taking the `Location` header with it, so the document says exactly
+one thing about the redirect rather than a precise answer and a vague one side by side.
+
+The [`lint.unpinned-redirect`](/laravel/reference/diagnostics/#lint-rules) info diagnostic reads the
+finished document and reports either shape it should not find there: the range on its own, and the range
+still standing beside a code. An [overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice)
+is applied after the document is built, so naming the code there cannot retract the range the attribute
+does — remove the `3XX` response in the same overlay.
 
 A bare `JsonResponse` or `Illuminate\Http\Response` loses the body itself, so it is announced rather
 than silent: each raises an `inferred-response.payload-unrecoverable` info diagnostic naming the action.

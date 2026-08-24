@@ -16,6 +16,7 @@ use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\UndocumentedTagLint;
+use Docuccino\Core\Lint\UnpinnedRedirectLint;
 use Docuccino\Core\Lint\VacuousUnionLint;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
@@ -130,6 +131,7 @@ final class DefaultExtensions
             UndocumentedTagLint::class,
             VacuousUnionLint::class,
             ExampleSchemaLint::class,
+            UnpinnedRedirectLint::class,
             // Diagnostics-only too: what is wrong with the committed recordings, said once per document.
             RecordedExampleAudit::class,
         ];
