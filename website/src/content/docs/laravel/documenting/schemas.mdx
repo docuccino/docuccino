@@ -174,8 +174,11 @@ apart reliably:
 
 **Custom date serialization.** A model that overrides `serializeDate()` chooses its own wire format for
 every date attribute, which can't be known statically — so its date and datetime columns are documented
-as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. Pin an exact
-format with an annotation if your clients need one.
+as a plain `string` (no `format`), with an info diagnostic noting the format is unknowable. Nothing you
+can annotate puts the `format` back — no attribute carries one for a column, and a docblock type has no
+format to state — so if your clients need an exact one, state it in an
+[overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice). That corrects the document;
+the notice keeps naming the model.
 
 ## Enums
 
