@@ -13,7 +13,6 @@ use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Identity\IdentityGenerator;
-use Docuccino\Core\Patch\Layer;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Json;
 
@@ -331,9 +330,9 @@ final class SharedErrorResponses implements DocumentTransformer
      * with its name: a name that cannot describe a body must not tell two of them apart either, and
      * keeping it in the scope would only send two identically-carried bodies back up the ladder together.
      *
-     * What that argument does NOT cover is a name an AUTHOR wrote about the response
-     * ({@see authored()}). A producer names the error it rendered and cannot see the representation
-     * another producer put beside it; someone annotating the operation can, so their name stands however
+     * What that argument does NOT cover is a claim that says of itself that it names the whole response
+     * ({@see namesResponse()}). A producer names the error it rendered and cannot see the representation
+     * another producer put beside it; something written AT the operation can, so its name stands however
      * many the response states — a name they can override is the point of having one at all.
      *
      * @param  array<array-key, mixed>  $response
@@ -350,25 +349,28 @@ final class SharedErrorResponses implements DocumentTransformer
             return [[[], $response, self::claimed($response)]];
         }
 
-        $authored = self::authored($response) ? self::claimed($response) : null;
+        $whole = self::namesResponse($response) ? self::claimed($response) : null;
 
-        return [[[], $response, $authored ?? self::carries($content, $minted)]];
+        return [[[], $response, $whole ?? self::carries($content, $minted)]];
     }
 
     /**
-     * Whether the standing claim is a name someone WROTE rather than one a producer worked out — read off
-     * the layer of the provenance record owning the field, which is the document's own record of who said
-     * what and travels on the response like the name does. `attribute` and up is an annotation, an overlay
-     * or a config entry: all three are written by someone looking at the operation, who can see every
-     * representation it answers with. Below it is a producer speaking for the body it built.
+     * Whether the standing claim says of itself that it names the whole response rather than the one body
+     * its claimer built ({@see ResponseDraft::COMPONENT_NAMES_RESPONSE}) — the claimer's own statement,
+     * frozen beside the name and travelling with it.
+     *
+     * Only the claimer knows: the layer it wrote at cannot say, since `#[ErrorComponent]` on an exception
+     * class writes at `attribute` and speaks for the error that class IS, seeing nothing of the
+     * representation another producer put beside it at the same status.
      *
      * @param  array<array-key, mixed>  $response
      */
-    private static function authored(array $response): bool
+    private static function namesResponse(array $response): bool
     {
-        $layer = Layer::fromLabel(self::claimLayer($response) ?? '');
+        $extension = $response[self::PROVENANCE] ?? null;
+        $facts = is_array($extension) ? ($extension['facts'] ?? null) : null;
 
-        return $layer !== null && $layer->value >= Layer::Attribute->value;
+        return is_array($facts) && ($facts[ResponseDraft::COMPONENT_NAMES_RESPONSE] ?? null) === true;
     }
 
     /**
@@ -1178,34 +1180,12 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * The producer that declared the name — the one fact in the document that says whose mistake an
-     * illegal name is.
+     * The producer that declared the name, read off the provenance record owning the field — the one
+     * fact in the document that says whose mistake an illegal name is.
      *
      * @param  array<array-key, mixed>  $response
      */
     private static function declarer(array $response): ?string
-    {
-        return self::claimRecord($response, 'producer');
-    }
-
-    /**
-     * The precedence layer the name was written at ({@see authored()}).
-     *
-     * @param  array<array-key, mixed>  $response
-     */
-    private static function claimLayer(array $response): ?string
-    {
-        return self::claimRecord($response, 'layer');
-    }
-
-    /**
-     * One member of the provenance record owning the claim. A hand-built document or an overlay may
-     * leave no such record, and then nothing here knows who said it — which reads as a producer, the
-     * conservative half of every question asked of it.
-     *
-     * @param  array<array-key, mixed>  $response
-     */
-    private static function claimRecord(array $response, string $member): ?string
     {
         $extension = $response[self::PROVENANCE] ?? null;
         $records = is_array($extension) ? ($extension['provenance'] ?? null) : null;
@@ -1220,9 +1200,9 @@ final class SharedErrorResponses implements DocumentTransformer
 
             $fields = $record['fields'] ?? null;
             if (is_array($fields) && in_array(ResponseDraft::COMPONENT, $fields, true)) {
-                $value = $record[$member] ?? null;
+                $producer = $record['producer'] ?? null;
 
-                return is_string($value) ? $value : null;
+                return is_string($producer) ? $producer : null;
             }
         }
 

@@ -124,7 +124,11 @@ final class AttributeResponsesExtension implements OperationExtension
                 continue;
             }
 
-            $operation->response($status)->claimComponentName($names[0], Contribution::attribute($context->actionSource()));
+            $operation->response($status)->claimComponentName(
+                $names[0],
+                Contribution::attribute($context->actionSource()),
+                namesResponse: true,
+            );
         }
     }
 

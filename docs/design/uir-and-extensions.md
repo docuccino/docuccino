@@ -156,6 +156,17 @@ function of its own bytes, so neither body is named after the other's existence 
 the body that is genuinely it. The three above publish as
 `AuthenticationChallengeProblemDetailsData`; the seventy-five keep `ValidationError`.
 
+**The one claim that does describe a response stating several is one that says so.** A producer names the
+error it rendered and cannot see what another put beside it — that is the whole argument above — but
+something naming the response AT the operation can, and a name an author may override is the point of
+having one at all. So the claim carries the statement: `claimComponentName()` takes a `$namesResponse`
+flag, frozen beside the name as `x-docuccino.facts.componentNamesResponse`, and only a claim carrying it
+reaches a multi-representation response. Nothing a reader can compute off the finished response tells the
+two apart, and the precedence LAYER least of all: `#[ErrorComponent]` on an exception class writes at
+`attribute` and still speaks for the one error that class is, so ranking on the layer would hand the
+reported topology straight back. Only the claimer knows, which is the same reason `$isStatusDefault`
+travels with the write.
+
 Every representation has to name a shape, or the response takes its status. A name assembled from the
 shapes that happened to be readable would speak for part of the body and say nothing about the rest,
 which is the assertion this whole area refuses; `Error422` is vague and true. Names the hoist itself

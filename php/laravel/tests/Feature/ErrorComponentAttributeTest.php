@@ -25,6 +25,7 @@ use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\OtherThingMissingException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\OverridingApiException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\ThingMissingException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\UndeclaredException;
+use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\ValidationFailedException;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
@@ -57,6 +58,10 @@ const DECLARED_ERROR_ACTIONS = [
     'tenth' => DeclaredErrorsController::class.'::tenth',
     'eleventh' => DeclaredErrorsController::class.'::eleventh',
     'twelfth' => DeclaredErrorsController::class.'::twelfth',
+    'thirteenth' => DeclaredErrorsController::class.'::thirteenth',
+    'fourteenth' => DeclaredErrorsController::class.'::fourteenth',
+    'fifteenth' => DeclaredErrorsController::class.'::fifteenth',
+    'sixteenth' => DeclaredErrorsController::class.'::sixteenth',
 ];
 
 /**
@@ -259,6 +264,29 @@ it('lets the #[Response] that declares a status outrank the exception class\'s #
         ->toBe('#/components/responses/DeclaredConflict')
         ->and($document['paths']['/api/zz-declared-first']['get']['responses']['409']['$ref'])
         ->toBe('#/components/responses/ResourceMissing');
+});
+
+it('keeps an exception class\'s name off a response answering with more than its body', function (): void {
+    // The topology the multi-representation rule exists to refuse, with the declaration on the anchor
+    // that cannot see past the body it raises. `#[ErrorComponent]` is written on an exception CLASS: it
+    // speaks for the error that class is, and knows nothing of the representation another producer put
+    // beside it at the same status. So its name describes the one-representation body and not the pair,
+    // and asking for it on both would send the seventy-five operations answering with the first up the
+    // ladder behind the two answering with the second — `ValidationError_5lwwjnmg` for a rename nobody
+    // asked for. Only a name written ABOUT the operation may reach a response stating several.
+    $document = declaringBuild([
+        'thirteenth' => [ValidationFailedException::class, 422],
+        'fourteenth' => [ValidationFailedException::class, 422],
+        'fifteenth' => [ValidationFailedException::class, 422],
+        'sixteenth' => [ValidationFailedException::class, 422],
+    ])->document->toArray();
+
+    $names = array_keys($document['components']['responses']);
+
+    expect($names)->toContain('ValidationError')
+        ->and(array_filter($names, static fn (string $n): bool => str_starts_with($n, 'ValidationError_')))->toBe([])
+        ->and($document['paths']['/api/zz-declared-fifteenth']['get']['responses']['422']['$ref'])
+        ->toBe('#/components/responses/ValidationError');
 });
 
 it('names an undeclared exception\'s error after its status, as it always did', function (): void {

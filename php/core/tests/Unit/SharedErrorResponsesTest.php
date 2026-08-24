@@ -142,14 +142,14 @@ function twoNamedRepresentationBody(string $description = 'Unprocessable Entity'
 }
 
 /**
- * The same claim, recorded at a named precedence layer — which is how the document says whether a name
- * was WRITTEN by someone looking at the operation or worked out by a producer that built one of its
- * representations.
+ * The same claim, saying of itself that it names the WHOLE response — every representation the status
+ * answers with — rather than the one body its claimer built. The claimer's own statement, since nothing
+ * a reader can compute off the finished response tells the two apart.
  */
-function layeredBody(string $name, array $body, string $layer): array
+function wholeResponseBody(string $name, array $body): array
 {
     $claimed = claimedBody($name, $body);
-    $claimed['x-docuccino']['provenance'] = [['producer' => 'p', 'layer' => $layer, 'fields' => ['component']]];
+    $claimed['x-docuccino']['facts']['componentNamesResponse'] = true;
 
     return $claimed;
 }
@@ -1397,12 +1397,13 @@ it('names a multi-representation body the same however the document spells it', 
         ->and($emit($one))->toBe($emit($two));
 });
 
-it('lets a name someone WROTE reach a multi-representation response', function (string $layer, string $published): void {
+it('lets a claim that names the whole response reach a multi-representation one', function (array $body, string $published): void {
     // The half the multi-representation rule must not swallow. A producer names the error it rendered and
     // cannot see what another producer put beside it, so its name does not describe the whole response —
-    // but someone annotating the operation can see all of it, and a name they can override is the point
-    // of having one. `attribute` and up is written by such a person; below it is a producer.
-    $body = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), $layer);
+    // something naming the response AT the operation can, and only it knows so. The claimer says which it
+    // is; nothing a reader can compute off the finished response tells the two apart, and the layer least
+    // of all, since `#[ErrorComponent]` on an exception class writes at `attribute` and speaks for one
+    // body.
     $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
 
     $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
@@ -1410,35 +1411,38 @@ it('lets a name someone WROTE reach a multi-representation response', function (
     expect(array_keys($doc['components']['responses']))->toBe([$published])
         ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/'.$published);
 })->with([
-    ['fallback', 'AuthenticationChallengeProblemDetailsData'],
-    ['inference', 'AuthenticationChallengeProblemDetailsData'],
-    ['integration', 'AuthenticationChallengeProblemDetailsData'],
-    ['docblock', 'AuthenticationChallengeProblemDetailsData'],
-    ['attribute', 'AuthenticationChallenge'],
-    ['overlay', 'AuthenticationChallenge'],
-    ['config', 'AuthenticationChallenge'],
-    // A layer nothing knows, and a record that owns no `component` field at all: both read as a producer,
-    // which is the conservative half of the question.
-    ['not-a-layer', 'AuthenticationChallengeProblemDetailsData'],
+    'names the whole response' => [
+        fn (): array => wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody()),
+        'AuthenticationChallenge',
+    ],
+    // Everything else is a producer speaking for the body it built, however high it wrote: a claim
+    // saying nothing, one at the top of the ladder, and one whose statement is not the `true` that
+    // means it. All three read as a producer, which is the conservative half of the question.
+    'says nothing' => [
+        fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody()),
+        'AuthenticationChallengeProblemDetailsData',
+    ],
+    'says nothing, at the config layer' => [
+        fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'config'),
+        'AuthenticationChallengeProblemDetailsData',
+    ],
+    'says something else' => [
+        function (): array {
+            $body = claimedBody('AuthenticationChallenge', twoNamedRepresentationBody());
+            $body['x-docuccino']['facts']['componentNamesResponse'] = 'yes';
+
+            return $body;
+        },
+        'AuthenticationChallengeProblemDetailsData',
+    ],
 ]);
 
-it('reads a claim nobody\'s provenance owns as a producer\'s', function (): void {
-    // `claimedBody()` records no provenance for the field, which is what a hand-built document or an
-    // overlay leaves behind — so there is nobody to have written it, and the derived name stands.
-    $body = claimedBody('AuthenticationChallenge', twoNamedRepresentationBody());
-    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
-
-    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
-
-    expect(array_keys($doc['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData']);
-});
-
-it('keeps a written name in the dedupe scope it names', function (): void {
+it('keeps a whole-response name in the dedupe scope it names', function (): void {
     // The claim scopes exactly what it names. Two authors naming two different errors that happen to
     // carry the same representations get a component each; two bodies where only one was named do not
     // collapse onto one name, and the unnamed one publishes what it would have published alone.
-    $named = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'attribute');
-    $other = layeredBody('SignInIncomplete', twoNamedRepresentationBody(), 'attribute');
+    $named = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());
+    $other = wholeResponseBody('SignInIncomplete', twoNamedRepresentationBody());
     $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
 
     $doc = errorDocWithSchemas([
@@ -1451,14 +1455,14 @@ it('keeps a written name in the dedupe scope it names', function (): void {
         ->and(responseRefAt($doc, '/c', '422'))->toBe('#/components/responses/SignInIncomplete');
 });
 
-it('reports a written name two different bodies contest, rather than picking one', function (): void {
+it('reports a whole-response name two different bodies contest, rather than picking one', function (): void {
     // An author's name is authoritative and still not magic: two different bodies asking for it is a
     // question only they can settle, and the ladder answers it the way it answers every other contest.
-    $one = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'attribute');
-    $two = layeredBody('AuthenticationChallenge', ['description' => 'Unprocessable Entity', 'content' => [
+    $one = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());
+    $two = wholeResponseBody('AuthenticationChallenge', ['description' => 'Unprocessable Entity', 'content' => [
         'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
         'application/vnd.api+json' => ['schema' => ['$ref' => '#/components/schemas/AuthenticationChallenge']],
-    ]], 'attribute');
+    ]]);
 
     $paths = ['paths' => array_map(static fn (array $r): array => ['get' => ['responses' => $r]], [
         '/a' => ['422' => $one], '/b' => ['422' => $one],

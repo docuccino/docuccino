@@ -87,4 +87,32 @@ final class DeclaredErrorsController
     {
         return [];
     }
+
+    /**
+     * The reported topology: a 422 answered with a second representation beside the error tier's, thrown
+     * from a class whose `#[ErrorComponent]` speaks for the body IT raises and cannot see the one put
+     * beside it. Paired with `fourteenth` so the two-representation body repeats and publishes.
+     */
+    #[Response(status: 422, mediaType: 'application/problem+json', type: 'array{detail: string}')]
+    public function thirteenth(): array
+    {
+        return [];
+    }
+
+    #[Response(status: 422, mediaType: 'application/problem+json', type: 'array{detail: string}')]
+    public function fourteenth(): array
+    {
+        return [];
+    }
+
+    /** The same class's error answered with ONE representation, which is the body its name describes. */
+    public function fifteenth(): array
+    {
+        return [];
+    }
+
+    public function sixteenth(): array
+    {
+        return [];
+    }
 }
