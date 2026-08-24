@@ -137,6 +137,16 @@ what it would have had.
 | `description-file.missing` | warning | A `#[Description(file: …)]` names a file that isn't there | Create it or fix the path, which is read relative to your application root. Docuccino watches it either way, so the description appears the moment the file does |
 | `description-file.escapes-base-path` | error | A `#[Description(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root — see [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) |
 
+## Docblock tags
+
+A docblock tag can only hold text, so a value written in one has to be read back as the type it
+describes. Where the text doesn't read as that type, nothing is published — an example of the wrong
+type would be copied out of the document and rejected by your own API.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `docblock.example-untypable` | warning | An `@example` (or a `#[RuleSchema(example: …)]`) doesn't read as the type declared beside it — `@example n/a` on an `int`, say — so no example was published | Write the example as the value the property really is: `@example false` for a boolean, `@example 7` for an integer, a JSON literal (`@example ["a", "b"]`) for an array or object. The message names the property, the type and the text |
+
 ## Configuration
 
 Everything Docuccino read out of `config/docuccino.php` and couldn't use. Every code here names the
@@ -255,6 +265,7 @@ Document-quality rules. `lint.data-leakage` is on by default; the rest are opt-i
 | `lint.data-leakage` | warning | A schema property, example or default value looks like a credential | Hide it (`#[Hidden]`, or drop it from the resource), or safelist it under `lint.leakage.allow` — see [Data leakage](/laravel/reference/configuration/#data-leakage) |
 | `lint.missing-description` | warning | An operation publishes neither a summary nor a description, so the document never says what it does | Give the action a docblock — its first line becomes the summary — or write one in an overlay. See [Descriptions](/laravel/reference/configuration/#descriptions) |
 | `lint.operation-id-style` | warning | An `operationId` a generated client can't name a method after: empty, leading with a digit, or outside letters, digits and `.` `-` `_` `@` | Give it an id with [`#[OperationId]`](/laravel/reference/attributes/#operationid), or rename the route. See [Operation ids](/laravel/reference/configuration/#operation-ids) |
+| `lint.example-mismatch` | warning | A published example doesn't satisfy the schema it sits beside — a string where the type says `boolean`, a number under a `minimum` | Correct the example, or widen the schema if the example is what your API really accepts. Where the example is right and the schema merely under-describes it, accept the pointer under `lint.examples.allow` |
 | `lint.vacuous-union` | info | An `anyOf` in the operation carries an unconstrained `{}` branch, so the value validates as anything and the typed branches beside it add no constraint | Pin the arm that recovered as "anything" — a return docblock or [`#[Response]`](/laravel/reference/attributes/#response) — or accept the operation under `lint.vacuous_union.allow` |
 | `lint.undocumented-tag` | warning | Operations carry a tag `tags.definitions` never declares, so it publishes without the summary, description and parent the declared ones have | Add an entry for it, or map it onto a declared tag with `tags.map` or [`#[Group]`](/laravel/reference/attributes/#group). See [Undocumented tags](/laravel/reference/configuration/#undocumented-tags) |
 

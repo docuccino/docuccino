@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\BuiltIn\EnumSchema;
 use Docuccino\Core\Extensions\BuiltIn\SharedErrorResponses;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Lint\ExampleSchemaLint;
 use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
@@ -128,6 +129,7 @@ final class DefaultExtensions
             OperationIdStyleLint::class,
             UndocumentedTagLint::class,
             VacuousUnionLint::class,
+            ExampleSchemaLint::class,
             // Diagnostics-only too: what is wrong with the committed recordings, said once per document.
             RecordedExampleAudit::class,
         ];
