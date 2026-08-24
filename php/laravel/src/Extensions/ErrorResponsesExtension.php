@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Extensions;
 
+use Docuccino\Attributes\ErrorComponent;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
@@ -47,6 +48,8 @@ final class ErrorResponsesExtension implements OperationExtension
         if ($context->document->errorResponses === 'none') {
             return;
         }
+
+        $this->reportUnreadDeclarations($context);
 
         /** @var array<string, array<string, DeclaredErrorComponent>> $declared */
         $declared = [];
@@ -139,6 +142,31 @@ final class ErrorResponsesExtension implements OperationExtension
             foreach ($declarations as $declaration) {
                 $response->claimComponentName($declaration->name, Contribution::attribute($this->declarationSource($context, $declaration)));
             }
+        }
+    }
+
+    /**
+     * One warning per `#[ErrorComponent]` written where nothing reads it. `TARGET_METHOD` permits the
+     * attribute on a controller action and `AttributeCollector` materialises it, but the anchors that are
+     * READ are an exception class and a render method the engine analysed — so an author who names the
+     * error they want renamed on the action answering it gets their old names back and no explanation.
+     * Every declaration reaching a ROUTE's attribute set is by definition on the action or its
+     * controller, which is exactly the placement nothing consults.
+     */
+    private function reportUnreadDeclarations(RouteContext $context): void
+    {
+        foreach ($context->attributes->all(ErrorComponent::class) as $declaration) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Warning,
+                code: 'attribute.error-component-unread',
+                message: sprintf(
+                    '#[ErrorComponent(\'%s\')] on an action or its controller names nothing: the attribute names an error where the error is defined, not where an operation answers with it.',
+                    $declaration->name,
+                ),
+                source: $context->actionSource(),
+                routeSignature: $context->route->signature(),
+                help: 'Put it on the exception class the error is raised from, or on the render method that builds the body. For a body the operation declares itself, name it with the `component:` argument of the #[Response] that declares it.',
+            ));
         }
     }
 

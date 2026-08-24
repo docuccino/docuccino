@@ -49,6 +49,14 @@ const DECLARED_ERROR_ACTIONS = [
     'second' => DeclaredErrorsController::class.'::second',
     'third' => DeclaredErrorsController::class.'::third',
     'fourth' => DeclaredErrorsController::class.'::fourth',
+    'fifth' => DeclaredErrorsController::class.'::fifth',
+    'sixth' => DeclaredErrorsController::class.'::sixth',
+    'seventh' => DeclaredErrorsController::class.'::seventh',
+    'eighth' => DeclaredErrorsController::class.'::eighth',
+    'ninth' => DeclaredErrorsController::class.'::ninth',
+    'tenth' => DeclaredErrorsController::class.'::tenth',
+    'eleventh' => DeclaredErrorsController::class.'::eleventh',
+    'twelfth' => DeclaredErrorsController::class.'::twelfth',
 ];
 
 /**
@@ -154,6 +162,103 @@ afterEach(function (): void {
     removeFragmentCacheDirs('warm');
     removeFragmentCacheDirs('cold');
     removeFragmentCacheDirs('declared');
+});
+
+it('names nothing from an #[ErrorComponent] on the action, and says so', function (string $case, array $byAction, string $published): void {
+    // Reported as the attribute "changing nothing": an author put `#[ErrorComponent]` on the three
+    // controller methods answering the error they wanted named, re-exported, and got the same names back.
+    // `TARGET_METHOD` permits the placement and `AttributeCollector` even materialises it, but the two
+    // anchors that are READ are an exception class ({@see DeclaredErrorComponent::on()}) and a render
+    // method the engine analysed (`ReturnSite::$component`) — an action is neither, so nothing consults
+    // it. It loses to the weakest name there is, the status default, which is how little it does.
+    //
+    // The row with a `#[Response]`-declared body is the reported case exactly: a body an operation
+    // states itself, which no `#[ErrorComponent]` reader ever visits.
+    $result = declaringBuild($byAction);
+    $document = $result->document->toArray();
+
+    $misplaced = array_values(array_filter(
+        $result->diagnostics,
+        static fn ($d): bool => $d->code === 'attribute.error-component-unread',
+    ));
+
+    expect($document['components']['responses'])->toHaveKey($published)
+        ->and($document['components']['responses'])->not->toHaveKey('ActionNamed')
+        ->and($document['components']['schemas'] ?? [])->not->toHaveKey('ActionNamed')
+        // …and the placement is reported rather than ignored, naming both anchors that do work.
+        ->and($misplaced)->toHaveCount(2)
+        ->and($misplaced[0]->severity)->toBe(Severity::Warning)
+        ->and($misplaced[0]->message)->toContain('ActionNamed')
+        ->and($misplaced[0]->help)->toContain('exception class')
+        ->and($misplaced[0]->help)->toContain('render method');
+})->with([
+    ['a body the error tiers built', [
+        'fifth' => [UndeclaredException::class, 409],
+        'sixth' => [UndeclaredException::class, 409],
+    ], 'Conflict'],
+    ['a body the operation declared', [
+        'seventh' => [UndeclaredException::class, 409],
+        'eighth' => [UndeclaredException::class, 409],
+    ], 'Error410'],
+]);
+
+it('publishes a declared error response under the name its #[Response] gives it', function (): void {
+    // The anchor `#[ErrorComponent]` cannot be: a body the operation states itself. Named at the site
+    // that declares it, which is where the author already is and where the status and the media type are
+    // written down — so nothing has to be inferred about which of an operation's errors is meant.
+    $document = declaringBuild([
+        'ninth' => [UndeclaredException::class, 409],
+        'tenth' => [UndeclaredException::class, 409],
+    ])->document->toArray();
+
+    expect($document['components']['responses'])->toHaveKey('DeclaredGone')
+        ->and($document['components']['responses'])->not->toHaveKey('Error410')
+        // One representation, so the name reaches the shape under it too — one concept, one name.
+        ->and($document['components']['schemas'])->toHaveKey('DeclaredGone')
+        ->and($document['paths']['/api/zz-declared-ninth']['get']['responses']['410']['$ref'])
+        ->toBe('#/components/responses/DeclaredGone');
+});
+
+it('takes neither name when two #[Response] declarations name one status differently', function (): void {
+    // A response component covers every representation of a status, so a status has one name. Picking one
+    // of two would make a published type name a function of attribute order; neither is claimed, the body
+    // keeps the name it would have had, and the author is told which two strings disagreed.
+    $result = declaringBuild([
+        'eleventh' => [UndeclaredException::class, 409],
+        'ninth' => [UndeclaredException::class, 409],
+    ]);
+    $document = $result->document->toArray();
+
+    $contested = array_values(array_filter(
+        $result->diagnostics,
+        static fn ($d): bool => $d->code === 'attribute.response-component-contested',
+    ));
+
+    expect($document['components']['responses'])->not->toHaveKey('SecondName')
+        ->and($contested)->toHaveCount(1)
+        ->and($contested[0]->severity)->toBe(Severity::Warning)
+        ->and($contested[0]->message)->toContain('"DeclaredGone"')
+        ->and($contested[0]->message)->toContain('"SecondName"')
+        ->and($contested[0]->help)->toContain('one name');
+});
+
+it('lets the #[Response] that declares a status outrank the exception class\'s #[ErrorComponent]', function (): void {
+    // Both contribute at `attribute`, so the guard cannot order them and the specificity rule decides:
+    // the declaration nearest the operation wins. The mechanism is the one already written down — a
+    // declaration replaces the status DEFAULT and nothing a producer named itself
+    // ({@see DeclaredErrorComponent::mayReplace()}) — so the class anchor finds the status already named.
+    $document = declaringBuild([
+        'twelfth' => [ThingMissingException::class, 409],
+        'first' => [ThingMissingException::class, 409],
+    ])->document->toArray();
+
+    expect($document['components']['responses'])->toHaveKey('DeclaredConflict')
+        ->and($document['components']['responses'])->toHaveKey('ResourceMissing')
+        // …and each operation resolves to the name written nearest it.
+        ->and($document['paths']['/api/zz-declared-twelfth']['get']['responses']['409']['$ref'])
+        ->toBe('#/components/responses/DeclaredConflict')
+        ->and($document['paths']['/api/zz-declared-first']['get']['responses']['409']['$ref'])
+        ->toBe('#/components/responses/ResourceMissing');
 });
 
 it('names an undeclared exception\'s error after its status, as it always did', function (): void {

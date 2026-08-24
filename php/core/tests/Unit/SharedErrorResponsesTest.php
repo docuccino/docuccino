@@ -141,6 +141,19 @@ function twoNamedRepresentationBody(string $description = 'Unprocessable Entity'
     ];
 }
 
+/**
+ * The same claim, recorded at a named precedence layer — which is how the document says whether a name
+ * was WRITTEN by someone looking at the operation or worked out by a producer that built one of its
+ * representations.
+ */
+function layeredBody(string $name, array $body, string $layer): array
+{
+    $claimed = claimedBody($name, $body);
+    $claimed['x-docuccino']['provenance'] = [['producer' => 'p', 'layer' => $layer, 'fields' => ['component']]];
+
+    return $claimed;
+}
+
 /** The one representation the rest of the document answers that status with. */
 function oneNamedRepresentationBody(string $description = 'Unprocessable Entity'): array
 {
@@ -1382,6 +1395,92 @@ it('names a multi-representation body the same however the document spells it', 
     expect(array_keys($one['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
         ->and(array_keys($two['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
         ->and($emit($one))->toBe($emit($two));
+});
+
+it('lets a name someone WROTE reach a multi-representation response', function (string $layer, string $published): void {
+    // The half the multi-representation rule must not swallow. A producer names the error it rendered and
+    // cannot see what another producer put beside it, so its name does not describe the whole response —
+    // but someone annotating the operation can see all of it, and a name they can override is the point
+    // of having one. `attribute` and up is written by such a person; below it is a producer.
+    $body = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), $layer);
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe([$published])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/'.$published);
+})->with([
+    ['fallback', 'AuthenticationChallengeProblemDetailsData'],
+    ['inference', 'AuthenticationChallengeProblemDetailsData'],
+    ['integration', 'AuthenticationChallengeProblemDetailsData'],
+    ['docblock', 'AuthenticationChallengeProblemDetailsData'],
+    ['attribute', 'AuthenticationChallenge'],
+    ['overlay', 'AuthenticationChallenge'],
+    ['config', 'AuthenticationChallenge'],
+    // A layer nothing knows, and a record that owns no `component` field at all: both read as a producer,
+    // which is the conservative half of the question.
+    ['not-a-layer', 'AuthenticationChallengeProblemDetailsData'],
+]);
+
+it('reads a claim nobody\'s provenance owns as a producer\'s', function (): void {
+    // `claimedBody()` records no provenance for the field, which is what a hand-built document or an
+    // overlay leaves behind — so there is nobody to have written it, and the derived name stands.
+    $body = claimedBody('AuthenticationChallenge', twoNamedRepresentationBody());
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData']);
+});
+
+it('keeps a written name in the dedupe scope it names', function (): void {
+    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
+    // carry the same representations get a component each; two bodies where only one was named do not
+    // collapse onto one name, and the unnamed one publishes what it would have published alone.
+    $named = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'attribute');
+    $other = layeredBody('SignInIncomplete', twoNamedRepresentationBody(), 'attribute');
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas([
+        '/a' => ['422' => $named], '/b' => ['422' => $named],
+        '/c' => ['422' => $other], '/d' => ['422' => $other],
+    ], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['AuthenticationChallenge', 'SignInIncomplete'])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/AuthenticationChallenge')
+        ->and(responseRefAt($doc, '/c', '422'))->toBe('#/components/responses/SignInIncomplete');
+});
+
+it('reports a written name two different bodies contest, rather than picking one', function (): void {
+    // An author's name is authoritative and still not magic: two different bodies asking for it is a
+    // question only they can settle, and the ladder answers it the way it answers every other contest.
+    $one = layeredBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'attribute');
+    $two = layeredBody('AuthenticationChallenge', ['description' => 'Unprocessable Entity', 'content' => [
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+        'application/vnd.api+json' => ['schema' => ['$ref' => '#/components/schemas/AuthenticationChallenge']],
+    ]], 'attribute');
+
+    $paths = ['paths' => array_map(static fn (array $r): array => ['get' => ['responses' => $r]], [
+        '/a' => ['422' => $one], '/b' => ['422' => $one],
+        '/c' => ['422' => $two], '/d' => ['422' => $two],
+    ]), 'components' => ['schemas' => [
+        'ProblemDetailsData' => ['type' => 'object'],
+        'AuthenticationChallenge' => ['type' => 'object'],
+    ]]];
+
+    $names = array_keys(transformedErrorDoc($paths)['components']['responses']);
+    $collision = array_values(array_filter(
+        errorDocReport($paths),
+        static fn ($d): bool => $d->code === 'components.name-collision',
+    ));
+
+    expect($names)->toHaveCount(2)
+        ->and($names)->each->toMatch('/^AuthenticationChallenge_[a-z2-7]{8}$/')
+        ->and($collision)->toHaveCount(1)
+        // …and the help names both anchors that can settle it, and no action that cannot.
+        ->and($collision[0]->help)->toContain('#[ErrorComponent]')
+        ->and($collision[0]->help)->toContain('component: argument of the #[Response]')
+        ->and($collision[0]->help)->not->toContain('state one body');
 });
 
 it('falls back to the status where a representation names no shape of its own', function (): void {

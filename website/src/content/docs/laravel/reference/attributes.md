@@ -73,6 +73,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $mediaType = null,
+    public ?string $component = null,
 )
 ```
 
@@ -85,6 +86,25 @@ producer had documented the same body under, which the default deliberately does
 #[Response(status: 404, description: 'User not found')]
 public function show(int $id): UserResource { /* … */ }
 ```
+
+`component:` names the [shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+the status's error response publishes under — the anchor for a body the operation declares itself, which
+[`#[ErrorComponent]`](#errorcomponent) never sees because it names errors where they are *defined*. It
+names the response in `components.responses`, and the shape under it where the status states one
+representation; `type:` already names the schema after the class it points at.
+
+```php
+#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', component: 'AuthenticationChallenge')]
+public function completeMfa(Request $request): SuccessData { /* … */ }
+```
+
+Three things it does not do. It **renames a shared component; it does not create one** — a body only one
+operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares a body,
+so a name there names nothing. And a response component covers *every* representation of a status, so the
+name is the status's: two declarations at one status naming different components is reported
+(`attribute.response-component-contested`) and neither is used, rather than one of them winning by
+attribute order. It outranks an `#[ErrorComponent]` on the exception class the action throws, which is
+the specificity rule — the declaration nearest the operation wins.
 
 ### `#[ResponseHeader]`
 
@@ -675,10 +695,20 @@ name in any generated client — and changes nothing else about the response, in
 shared at all: an error only one operation states stays inline and has no component to name until a
 second operation states it too.
 
+**Two anchors, and neither of them is the action.** `TARGET_METHOD` lets PHP accept the attribute on a
+controller method, and nothing reads it there: it names an error where the error is *defined*, not where
+an operation happens to answer with it. An action is where several errors meet and the attribute carries
+no status, so there is nothing for it to name — a placement that does nothing is reported as
+`attribute.error-component-unread`. To name a body **the operation declares itself**, with `#[Response]`,
+use that attribute's [`component:`](#response) argument, which has the status and the media type written
+beside it.
+
 What it does not name is one body a response offers *beside* another. Where a response states two
 representations — an RFC 9457 problem body under `application/problem+json` and a plain-JSON alternative,
-say — the name stays on the response and each shape publishes under its status, because a name standing
-for the whole response cannot say which of them it means.
+say — each shape publishes under its status, and so does the response: a name standing for the whole
+response cannot say which representation it means, so the response is named after the components its
+representations reference instead. A name written on the operation with `#[Response(component:)]` *is*
+about the whole response, and does name it.
 
 Where several methods on one render path carry it, the one **nearest the answer** wins: the arm that
 returned the body beats the helper that built it, so marking a shared `problem()` helper names only the

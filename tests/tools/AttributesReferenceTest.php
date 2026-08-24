@@ -57,6 +57,44 @@ it('states the count the package actually ships, everywhere it states one', func
         ->and(array_unique(array_map(intval(...), $matches[1])))->toBe([$expected]);
 });
 
+it('documents every constructor parameter every attribute takes', function (): void {
+    // The page prints each attribute's constructor verbatim, and a signature nobody checks is a promise
+    // to remember — a parameter added to a shipped attribute goes undocumented with the suite green.
+    // Read off reflection rather than the page, and a new argument fails here until it is written down.
+    $page = attributesReferencePage();
+
+    $missing = [];
+    $counted = 0;
+    foreach (shippedAttributeNames() as $name) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $section = attributeReferenceSection($page, $name);
+
+        foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
+            $counted++;
+            if (! str_contains($section, '$'.$parameter->getName())) {
+                $missing[] = $name.'::$'.$parameter->getName();
+            }
+        }
+    }
+
+    expect($counted)->toBeGreaterThan(40)
+        ->and($missing)->toBe([]);
+});
+
+/** One attribute's reference section: from its heading to the next one, so a neighbour cannot cover for it. */
+function attributeReferenceSection(string $page, string $name): string
+{
+    $start = strpos($page, '### `#['.$name.']`');
+    if ($start === false) {
+        return '';
+    }
+
+    $next = strpos($page, "\n### ", $start + 1);
+
+    return $next === false ? substr($page, $start) : substr($page, $start, $next - $start);
+}
+
 it('gives every attribute a reference section of its own', function (): void {
     $page = attributesReferencePage();
 
