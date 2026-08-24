@@ -78,6 +78,14 @@ it('turns a throwing transformer into an error diagnostic and still assembles th
         // Naming the transformer is the point: the reader's next move is finding out whose it is.
         ->and($failed[0]->message)->toContain('DocumentTransformer@anonymous')
         ->and($failed[0]->help)->toContain('report it')
+        // An anonymous class carries its own DECLARING FILE inside `::class` — absolute, behind a NUL
+        // byte, with a per-process counter after the line number. None of the three may reach a
+        // published diagnostic: the path is relative to the package root (there being no application
+        // base path here), and the counter, which two runs need not agree on, is gone.
+        ->and($failed[0]->message)->not->toContain("\0")
+        ->and($failed[0]->message)->toContain('declared in tests/Unit/AssemblerTransformerGuardTest.php:')
+        ->and($failed[0]->message)->not->toContain(dirname(__DIR__, 4))
+        ->and($failed[0]->message)->toMatch('/AssemblerTransformerGuardTest\.php:\d+ threw/')
         // And the document is there, which is the whole reason for catching at all.
         ->and($result->document['paths'])->toHaveKey('/api/reports');
 });

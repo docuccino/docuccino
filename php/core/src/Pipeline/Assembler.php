@@ -18,8 +18,10 @@ use Docuccino\Core\Identity\ContentHasher;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Overlay\OverlayApplier;
 use Docuccino\Core\Overlay\OverlayDocument;
+use Docuccino\Core\Provenance\ClassNames;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Provenance\SourcePathResolver;
 use Docuccino\Core\Support\PlainText;
 use Throwable;
 
@@ -44,14 +46,21 @@ final class Assembler
 
     private const DIALECT = 'https://spec.openapis.org/oas/3.2/dialect/base';
 
+    private readonly MessagePaths $messagePaths;
+
+    private readonly ClassNames $classNames;
+
     public function __construct(
         private readonly string $generatorName,
         private readonly IdentityGenerator $identity = new IdentityGenerator,
         private readonly ContentHasher $contentHasher = new ContentHasher,
         private readonly OverlayApplier $overlays = new OverlayApplier,
         private readonly ContentResolver $content = new ContentResolver,
-        private readonly MessagePaths $messagePaths = new MessagePaths(new RootRelativeSourcePathResolver('')),
-    ) {}
+        private readonly SourcePathResolver $paths = new RootRelativeSourcePathResolver(''),
+    ) {
+        $this->messagePaths = new MessagePaths($this->paths);
+        $this->classNames = new ClassNames($this->paths);
+    }
 
     /**
      * @param  list<OperationFragment>  $fragments
@@ -648,8 +657,10 @@ final class Assembler
             code: 'document.transformer-failed',
             message: sprintf(
                 'The document transformer %s threw: %s.',
-                $transformer::class,
-                $reason === '' ? $failure::class : rtrim(PlainText::of($this->messagePaths->relative($reason)), '.'),
+                $this->classNames->of($transformer),
+                $reason === ''
+                    ? $this->classNames->of($failure)
+                    : rtrim(PlainText::of($this->messagePaths->relative($reason)), '.'),
             ),
             help: 'The rest of the document was built and written. A built-in transformer throwing is a '
                 .'bug in Docuccino — report it with the message above; one of your own, or a package\'s, '

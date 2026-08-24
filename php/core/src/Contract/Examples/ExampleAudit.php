@@ -8,6 +8,7 @@ use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Contract\SchemaCheck;
+use Docuccino\Core\Provenance\ClassNames;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Support\PlainText;
@@ -43,10 +44,15 @@ final class ExampleAudit
 
     private readonly MessagePaths $messagePaths;
 
+    private readonly ClassNames $classNames;
+
     public function __construct(private readonly ContractIndex $index)
     {
         $this->schema = new SchemaCheck($index);
-        $this->messagePaths = new MessagePaths(new RootRelativeSourcePathResolver(''));
+
+        $paths = new RootRelativeSourcePathResolver('');
+        $this->messagePaths = new MessagePaths($paths);
+        $this->classNames = new ClassNames($paths);
     }
 
     public function run(): ExampleReport
@@ -86,14 +92,14 @@ final class ExampleAudit
      * Why the validator would not take the schema, in its own words. A thrown message is somebody
      * else's text, so it is relativised before it goes anywhere: a diagnostic naming the build machine
      * would make one machine's document differ from another's. An exception with nothing to say is
-     * named by its class, which says more than an empty string does.
+     * named by its class instead, through {@see ClassNames} — an anonymous one names a file too.
      */
     private function reason(Throwable $refused): string
     {
         $message = trim($refused->getMessage());
 
         return $message === ''
-            ? $refused::class
+            ? $this->classNames->of($refused)
             : rtrim(PlainText::of($this->messagePaths->relative($message)), '.');
     }
 
