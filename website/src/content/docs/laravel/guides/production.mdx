@@ -267,8 +267,9 @@ server per tenant:
 ```
 
 The viewer renders the variable as an editable field, and the value flows into try-it-out requests.
-Server variables are emitted verbatim — see [`servers`](/laravel/reference/configuration/#servers) in
-the configuration reference.
+The `default` is what every OpenAPI version requires of a variable and what the viewer starts from, so
+give each one a value you actually serve — see [`servers`](/laravel/reference/configuration/#servers)
+in the configuration reference.
 
 ### Routes bound to a host
 

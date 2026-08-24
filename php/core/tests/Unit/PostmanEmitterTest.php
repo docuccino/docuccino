@@ -713,11 +713,22 @@ it('says a document with no servers needs a host before anything will run', func
         ->and(postmanCodes(loadFixture('tag-hierarchy.uir.json')))->toContain('postman.no-server');
 });
 
-it('reports a server variable it cannot suggest a value for', function (): void {
-    expect(postmanCodes(loadFixture('postman-surface.uir.json')))->toContain('postman.server-variable-no-default');
+it('reports a server variable that declares no default, at the code every producer reports it at', function (): void {
+    // One fact, one code: the OpenAPI emitters raise `server.variable-no-default` for the same variable.
+    expect(postmanCodes(loadFixture('postman-surface.uir.json')))->toContain('server.variable-no-default');
 
     // …and still falls back to the first enum entry rather than leaving it blank.
     expect(array_column(postman(loadFixture('postman-surface.uir.json'))['variable'], 'value', 'key')['version'])->toBe('v1');
+});
+
+it('publishes a variable blank where nothing in the document names a legal value', function (): void {
+    $document = loadFixture('tag-hierarchy.uir.json');
+    $document['servers'] = [['url' => 'https://{tenant}.example.com', 'variables' => ['tenant' => ['description' => 'Your tenant']]]];
+
+    // A collection cannot leave the variable out the way a document can — the request would carry an
+    // unresolved template — so it is published empty for a person to fill in, and said so.
+    expect(array_column(postman($document)['variable'], 'value', 'key')['tenant'])->toBe('')
+        ->and(postmanCodes($document))->toContain('server.variable-no-default');
 });
 
 it('yields to the base URL when a server variable would collide with it', function (): void {

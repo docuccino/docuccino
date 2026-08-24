@@ -81,8 +81,12 @@ Maps to OAS `info`, and any other OAS `info` field you add (`contact`, `license`
 ],
 ```
 
-Emitted verbatim as OAS `servers`, including server variables. For a worked multitenant subdomain
-example (`{tenant}.example.com`), see [Deploying to production](/laravel/guides/production/#multitenant-base-urls).
+Emitted as OAS `servers`, including server variables. Every OpenAPI version requires a `default` on a
+variable, so give each one a value you serve: without it, a variable that declares an `enum` publishes
+the first of those values and one that declares neither is left out of the document altogether, both
+with a [`server.variable-no-default`](/laravel/reference/diagnostics/#servers) warning. For a worked
+multitenant subdomain example (`{tenant}.example.com`), see
+[Deploying to production](/laravel/guides/production/#multitenant-base-urls).
 
 ### `routes`
 
