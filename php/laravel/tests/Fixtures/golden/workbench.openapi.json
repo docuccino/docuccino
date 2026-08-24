@@ -591,7 +591,7 @@
           {
             "name": "fields",
             "in": "query",
-            "description": "Comma-separated fields: reference, opened_at.",
+            "description": "Fields to return: reference, opened_at.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -621,7 +621,7 @@
           {
             "name": "fields[entries]",
             "in": "query",
-            "description": "Comma-separated fields: id.",
+            "description": "Fields to return: id.",
             "required": false,
             "style": "form",
             "explode": false,

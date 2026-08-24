@@ -1755,7 +1755,7 @@
             },
             "name": "fields",
             "in": "query",
-            "description": "Comma-separated fields: reference, opened_at.",
+            "description": "Fields to return: reference, opened_at.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -1822,7 +1822,7 @@
             },
             "name": "fields[entries]",
             "in": "query",
-            "description": "Comma-separated fields: id.",
+            "description": "Fields to return: id.",
             "required": false,
             "style": "form",
             "explode": false,
@@ -3806,7 +3806,7 @@
     "document": {
       "id": "doc:default",
       "configHash": "5f2fa7f04d876587d654542b680caee47345866b9fdf48bc1e55e33f72a81989",
-      "contentHash": "1d5a80f1899aaebd6ca6e9771660ff5082ffb9413f64a5aeb7e5822ab19e3ee6"
+      "contentHash": "51bf9a3326c4df995630fad40cfd7367d581d7a2a3bf26e6f7f8332ab0bfd72b"
     },
     "generator": {
       "name": "docuccino/laravel",

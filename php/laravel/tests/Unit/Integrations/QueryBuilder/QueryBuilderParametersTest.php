@@ -272,7 +272,7 @@ it('widens the deepObject fields properties of a partially recovered allow-list'
 
     expect($specs[0]->schema['properties']['articles'])->toBe([
         'type' => 'string',
-        'description' => 'Comma-separated fields: title.',
+        'description' => 'Fields to return: title.',
     ]);
 });
 
@@ -528,7 +528,7 @@ it('expresses each sparse-fieldset group as a comma-serialised enum of its colum
     expect(array_keys($byName))->toBe(['fields[articles]', 'fields[author]']);
     expect($byName['fields[articles]']->style)->toBe('form')
         ->and($byName['fields[articles]']->explode)->toBeFalse()
-        ->and($byName['fields[articles]']->description)->toBe('Comma-separated fields: title, body.')
+        ->and($byName['fields[articles]']->description)->toBe('Fields to return: title, body.')
         ->and($byName['fields[articles]']->schema['type'])->toBe('array')
         ->and($byName['fields[articles]']->schema['items']['enum'])->toBe(['title', 'body'])
         ->and($byName['fields[articles]']->schema['items']['x-enum-varnames'])->toBe(['Title', 'Body'])
@@ -592,17 +592,17 @@ it('degrades every sparse-fieldset group like the other lists', function (QueryB
     'legacy package' => [
         new QueryBuilderConfig(spatieMajor: 6),
         ['type' => 'string'],
-        'Comma-separated fields: title, body.',
+        'Fields to return: title, body.',
     ],
     'custom delimiter' => [
         new QueryBuilderConfig(delimiter: '|'),
         ['type' => 'string'],
-        'Comma-separated fields: title, body. Values are separated by `|`.',
+        'Fields to return: title, body. Values are separated by `|`.',
     ],
     'empty delimiter selects a single field' => [
         new QueryBuilderConfig(delimiter: ''),
         ['type' => 'string', 'enum' => ['title', 'body'], 'x-enum-varnames' => ['Title', 'Body'], 'x-enumNames' => ['Title', 'Body']],
-        'Comma-separated fields: title, body.',
+        'Fields to return: title, body.',
     ],
 ]);
 
@@ -623,7 +623,7 @@ it('groups sparse fields into a single deepObject fields param whose properties 
     expect($bare['type'])->toBe('array')
         ->and($bare['items']['enum'])->toBe(['title'])
         ->and($bare['items']['x-enumDescriptions'])->toBe(['title' => 'The almanac\'s display title.'])
-        ->and($bare['description'])->toBe('Comma-separated fields: title.');
+        ->and($bare['description'])->toBe('Fields to return: title.');
 });
 
 it('adds the selector the terminal reads, under the name that terminal was given', function (string $kind, string $terminal, ?array $args, array $expectedNames): void {

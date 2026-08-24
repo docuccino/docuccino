@@ -19,7 +19,7 @@ parameters:
 | `allowedFilters` | one `filter[<name>]` each | The filter's kind (or your comment), plus any `whereIn` / `null` notes |
 | `allowedSorts` | `sort` | "Sort by: issued_at, total (prefix `-` for descending)." |
 | `allowedIncludes` | `include` | "Include related resources: customer, lines." |
-| `allowedFields` | `fields[<type>]`, or bare `fields` | "Comma-separated fields: id, total." |
+| `allowedFields` | `fields[<type>]`, or bare `fields` | "Fields to return: id, total." |
 | a paginating terminal | `page`, or `cursor` | "Page number." / "Opaque cursor for the next/previous page." |
 
 `->defaultSort('issued_at')` becomes the `sort` parameter's `default`. Includes cover relationships
@@ -725,7 +725,7 @@ in the same comma-list modelling as `sort` and `include` — and its values take
 	<TabItem label="Generated OpenAPI">
 	```json
 	{ "name": "fields", "in": "query", "required": false,
-	  "description": "Comma-separated fields: number, total.",
+	  "description": "Fields to return: number, total.",
 	  "style": "form", "explode": false,
 	  "schema": { "type": "array", "items": {
 	    "type": "string", "enum": ["number", "total"],
@@ -736,7 +736,7 @@ in the same comma-list modelling as `sort` and `include` — and its values take
 	    "x-enum-varnames": ["Number", "Total"]
 	  } } },
 	{ "name": "fields[customer]", "in": "query", "required": false,
-	  "description": "Comma-separated fields: name.",
+	  "description": "Fields to return: name.",
 	  "style": "form", "explode": false,
 	  "schema": { "type": "array", "items": {
 	    "type": "string", "enum": ["name"],
