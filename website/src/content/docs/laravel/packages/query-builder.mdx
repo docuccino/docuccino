@@ -607,12 +607,19 @@ include, or fields entry it describes that **value** inside the parameter's enum
 [Describing the values](#describing-the-values) — while the parameter's own description stays
 generated (the allowed values and the `-` descending convention).
 
+A comment above the entry is the narrowest thing anyone can say about a filter, so it wins over a
+`description` on the [filter class](#custom-filter-classes) it registers: the class describes every
+call site, the comment describes this one. (A `#[QueryParameter]` on the *action* is narrower still,
+and stays ahead of both.)
+
 ### Defaults and nullable filters
 
 Chained modifiers are recovered too:
 
 - `->default('sent')` sets the parameter's `schema.default`. The value must be a constant — a computed
-  default can't be read statically, and the rest of the entry is still documented without it.
+  default can't be read statically, and the rest of the entry is still documented without it. A
+  `default` on the [filter class](#custom-filter-classes) covers every other call site, and a chained
+  one here wins for this entry, exactly as a comment does over the class's `description`.
 - `->nullable()` appends *"Accepts `null` to filter for absent values."* to the description. It does
   **not** add `null` as an enum value — the empty filter is a request form, not one of the enum's cases.
 
@@ -668,6 +675,15 @@ string schema, so `#[QueryParameter(name: 'ignored', format: 'uuid')]` documents
 `#[QueryParameter('filter[popular]')]` on the controller action still wins over it, so a caller can
 refine a shared filter per endpoint — and a backed-enum argument written at a factory call site
 (above) also stays ahead of the wrapped class's attribute, being the more specific declaration.
+
+The attribute sits on the class, so it describes **every** call site — which makes anything one entry
+says about itself the narrower claim, and the narrower claim wins:
+
+- a [comment above the entry](#a-comment-becomes-the-description) beats the attribute's `description`;
+- a chained [`->default()`](#defaults-and-nullable-filters) beats the attribute's `default`.
+
+`type`, `format` and `example` have no per-entry rival to lose to, so the attribute is simply the only
+claim on them.
 
 ### Shared filter classes, declared once
 
@@ -725,8 +741,9 @@ whose body can't fold (one that branches, say) can carry the attribute **on the 
 itself** instead; failing both, the call-site column typing above stands, and nothing is guessed.
 
 Two things to keep at the call site: `->default()` and `->nullable()` chained **inside** a named
-factory's body aren't merged onto the entry — chain them where you register the filter — and the
-published parameter names still come from the `allowedFilters` keys, never from the class.
+factory's body aren't merged onto the entry — chain them where you register the filter, where a
+`->default()` also outranks any `default` the class declares — and the published parameter names
+still come from the `allowedFilters` keys, never from the class.
 
 ## Sparse fieldsets
 
