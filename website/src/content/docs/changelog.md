@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.9.1
+
+### Bug fixes
+
+- **core**: audit examples against the document that ships, and never let a lint kill the export ([#189](https://github.com/docuccino/docuccino/pull/189))
+
 ## v0.9.0
 
 ### Breaking changes
