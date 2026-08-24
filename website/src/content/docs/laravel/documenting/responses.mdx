@@ -311,12 +311,22 @@ What gets documented instead is only what the class itself proves:
 
 The redirect gets the OAS `3XX` range key rather than `302`: Laravel's `RedirectResponse` defaults to
 302 but takes any 3xx (`redirect()->to($url, 301)`, `->away($url, 307)`), and nothing at the return
-site says which. Docuccino says so with an `inferred-response.unpinned-redirect` info diagnostic naming
-the action; pin it with [`#[Response]`](/laravel/reference/attributes/#response) when the endpoint
-always answers with one code.
+site says which. Pin it with [`#[Response(status: 302)]`](/laravel/reference/attributes/#response) when
+the endpoint always answers with one code, and declare each code where it answers with several — a
+declared 3xx **retires** the range, taking the `Location` header with it, so the document says exactly
+one thing about the redirect rather than a precise answer and a vague one side by side.
+
+The [`lint.unpinned-redirect`](/laravel/reference/diagnostics/#lint-rules) info diagnostic reads the
+finished document and reports either shape it should not find there: the range on its own, and the range
+still standing beside a code. An [overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice)
+is applied after the document is built, so naming the code there cannot retract the range the attribute
+does — remove the `3XX` response in the same overlay.
 
 A bare `JsonResponse` or `Illuminate\Http\Response` loses the body itself, so it is announced rather
 than silent: each raises an `inferred-response.payload-unrecoverable` info diagnostic naming the action.
+Naming the body with [`#[Response(type: …)]`](/laravel/reference/attributes/#response) — or dropping the
+response with `#[IgnoreResponse]` — silences it, since both settle the fact it reports missing. A stream
+is the one that also needs `mediaType:`, because a media type is what it lost.
 The usual cause is a collaborator whose own return type is bare —
 
 ```php
@@ -449,7 +459,10 @@ resolves the media type in this order:
 A body written by a **callback** — `stream()`, `streamDownload()` — is the one case with no honest
 fallback: nothing sets a `Content-Type`, so the framework ends up labeling it `text/html`. Docuccino
 documents it as the `*/*` range and raises an `inferred-response.payload-unrecoverable` info diagnostic,
-because that one is worth fixing:
+because that one is worth fixing. What the stream lost is its media type, so that is what settles it —
+`#[Response(type: …, mediaType: 'text/csv')]` names both, and naming the media type **retires** the `*/*`
+range rather than publishing it beside the type, since a range that accepts anything would subsume it.
+`type:` on its own leaves the media type as unstated as it found it, and the notice keeps saying so:
 
 ```php
 // Symfony labels this text/html, whatever the filename says.

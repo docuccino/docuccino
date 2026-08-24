@@ -68,6 +68,23 @@ final class SchemaDraft
         return $this;
     }
 
+    /**
+     * Take over another schema's keywords and properties, each at the contribution that wrote it — the
+     * nested half of {@see ResponseDraft::absorb()}.
+     *
+     * @internal Core-only; extensions build drafts rather than move them about.
+     */
+    public function absorb(self $other): void
+    {
+        foreach ($other->guard->contributions() as $keyword => $write) {
+            $this->guard->apply($keyword, $write['value'], $write['by']);
+        }
+
+        foreach ($other->properties as $name => $property) {
+            $this->property((string) $name)->absorb($property);
+        }
+    }
+
     /** The provenance producer of the currently-winning contribution for a field, or null if unset. */
     public function producerFor(string $field): ?string
     {
@@ -78,6 +95,27 @@ final class SchemaDraft
     public function resolvedField(string $field): mixed
     {
         return $this->guard->resolved()[$field] ?? null;
+    }
+
+    /**
+     * Whether a contribution outranks every keyword written here and in every nested property, so it
+     * speaks over the schema as a whole — the nested half of {@see ResponseDraft::isSupersededBy()}.
+     *
+     * @internal Core-only; the retraction paths ask this, extensions patch keywords.
+     */
+    public function isSupersededBy(Contribution $by): bool
+    {
+        if (! $this->guard->outranksAll($by)) {
+            return false;
+        }
+
+        foreach ($this->properties as $property) {
+            if (! $property->isSupersededBy($by)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

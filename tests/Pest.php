@@ -1368,3 +1368,27 @@ function permutationsOf(array $items): array
 
     return $orders;
 }
+
+/**
+ * The lint rules core ships: everything under `Lint/` that is a document transformer. The neighbours in
+ * there are options objects and pure helpers, so implementing the contract is what makes one a rule —
+ * no list, and a helper that grows into a lint is caught the day it does.
+ *
+ * @return list<string>
+ */
+function shippedLints(): array
+{
+    $lints = [];
+
+    foreach ((array) glob(dirname(__DIR__).'/php/core/src/Lint/*.php') as $file) {
+        $class = 'Docuccino\Core\Lint\\'.basename((string) $file, '.php');
+
+        if ((new ReflectionClass($class))->implementsInterface(DocumentTransformer::class)) {
+            $lints[] = $class;
+        }
+    }
+
+    sort($lints);
+
+    return $lints;
+}

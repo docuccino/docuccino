@@ -13,10 +13,17 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 final readonly class Response
 {
+    /**
+     * What a body with no `mediaType:` is published under. The parameter itself defaults to null so a
+     * reader can tell a media type the author NAMED from one nobody mentioned — different answers to
+     * whoever asks whether a vaguer body a producer recovered has been superseded.
+     */
+    public const string DEFAULT_MEDIA_TYPE = 'application/json';
+
     public function __construct(
         public int $status = 200,
         public ?string $type = null,
         public ?string $description = null,
-        public string $mediaType = 'application/json',
+        public ?string $mediaType = null,
     ) {}
 }

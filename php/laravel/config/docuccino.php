@@ -299,6 +299,13 @@ return [
         //     // ['#/components/schemas/Invoice/properties/status/example'].
         //     'allow' => [],
         // ],
+        // Flags a redirect the document doesn't say exactly one thing about: the 3XX range alone, or
+        // the range still standing beside a concrete 3xx.
+        // 'unpinned_redirect' => [
+        //     'enabled' => true,
+        //     // Operation signatures or operationIds to accept, e.g. ['GET /auth/callback'].
+        //     'allow' => [],
+        // ],
     ],
 
     /*

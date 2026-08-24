@@ -527,6 +527,10 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
     //     'enabled' => true,
     //     'allow' => [],   // e.g. ['#/components/schemas/Invoice/properties/status/example']
     // ],
+    // 'unpinned_redirect' => [
+    //     'enabled' => true,
+    //     'allow' => [],   // e.g. ['GET /auth/callback']
+    // ],
 ],
 ```
 
@@ -543,6 +547,7 @@ with it.
 | `tags` | **off** | A tag your operations carry that [`tags.definitions`](#tags) never declares. |
 | `vacuous_union` | on | An `anyOf` whose empty `{}` branch accepts anything, so its typed branches add no constraint. |
 | `examples` | on | A published example the schema beside it rejects. Its `allow` entries are JSON pointers, or the label the message names. |
+| `unpinned_redirect` | on | A redirect the document doesn't say exactly one thing about: the `3XX` range alone, or the range still standing beside a concrete 3xx. |
 
 ### Data leakage
 

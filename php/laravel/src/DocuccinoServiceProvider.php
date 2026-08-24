@@ -17,6 +17,7 @@ use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\UndocumentedTagLint;
+use Docuccino\Core\Lint\UnpinnedRedirectLint;
 use Docuccino\Core\Lint\VacuousUnionLint;
 use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
@@ -295,6 +296,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->bind(UndocumentedTagLint::class, static fn (): UndocumentedTagLint => new UndocumentedTagLint(self::lintRule('tags', false)));
         $this->app->bind(VacuousUnionLint::class, static fn (): VacuousUnionLint => new VacuousUnionLint(self::lintRule('vacuous_union', true)));
         $this->app->bind(ExampleSchemaLint::class, static fn (): ExampleSchemaLint => new ExampleSchemaLint(self::lintRule('examples', true)));
+        $this->app->bind(UnpinnedRedirectLint::class, static fn (): UnpinnedRedirectLint => new UnpinnedRedirectLint(self::lintRule('unpinned_redirect', true)));
 
         // json-api-paginate's parameter names and sizes are renamable in its own config; an absent bag
         // falls back to defaults plus an info diagnostic. Its response envelope (pagination mode) and

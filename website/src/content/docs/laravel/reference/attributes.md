@@ -72,11 +72,13 @@ public function __construct(
     public int $status = 200,
     public ?string $type = null,
     public ?string $description = null,
-    public string $mediaType = 'application/json',
+    public ?string $mediaType = null,
 )
 ```
 
-Declares a documented response. Repeatable, so one action can document several statuses.
+Declares a documented response. Repeatable, so one action can document several statuses. A body with no
+`mediaType:` publishes under `application/json`; naming one also **retires** any vaguer media type a
+producer had documented the same body under, which the default deliberately does not.
 
 ```php
 #[Response(status: 200, type: UserResource::class, description: 'The user')]
