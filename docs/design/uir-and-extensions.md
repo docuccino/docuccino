@@ -500,7 +500,11 @@ interface ExceptionToResponse {
 // order-stable regardless of extension evaluation order. It is deliberately not `@internal`: the
 // built-in inferred-handler tier attaches its literal-carrying error examples through exactly this
 // method, and the "no privileged back door" promise means a third-party ExceptionToResponse must be
-// able to do the same. (`guard()`, by contrast, IS `@internal`.)
+// able to do the same. supersedeMediaRange(mediaType, by) joins them: a producer that NAMES the media
+// type retires the any-media-type range a vaguer producer documented the same body under, for the same
+// reason — a built-in does it from the attribute layer, so a third party must be able to.
+// (`guard()`, `absorb()` and `isSupersededBy()` are all `@internal`: they move drafts about or arbitrate
+// whether a whole node survives, which is the pipeline's job rather than an extension's.)
 // Public READ side: isBodyless() — HTTP forbids content on 1xx/204/205/304 (RFC 9110), so content()
 // under one of those hands back a DETACHED SchemaDraft and the response freezes body-less whichever
 // producer aimed one at it (inference folding `response()->json(null, 204)`, an attribute, an

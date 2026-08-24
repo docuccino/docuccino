@@ -98,6 +98,27 @@ final class SchemaDraft
     }
 
     /**
+     * Whether a contribution outranks every keyword written here and in every nested property, so it
+     * speaks over the schema as a whole — the nested half of {@see ResponseDraft::isSupersededBy()}.
+     *
+     * @internal Core-only; the retraction paths ask this, extensions patch keywords.
+     */
+    public function isSupersededBy(Contribution $by): bool
+    {
+        if (! $this->guard->outranksAll($by)) {
+            return false;
+        }
+
+        foreach ($this->properties as $property) {
+            if (! $property->isSupersededBy($by)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * @internal Not part of the frozen extension-author surface — it hands back the (also
      * `@internal`) {@see PatchGuard}. Extensions read winning state via {@see producerFor()} /
      * {@see resolvedField()}.

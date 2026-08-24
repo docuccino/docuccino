@@ -440,3 +440,74 @@ it('reports a response superseded only by a contribution that outranks every fie
         ->and($response->isSupersededBy(Contribution::config()))->toBeTrue()
         ->and((new ResponseDraft('3XX'))->isSupersededBy(Contribution::fallback()))->toBeTrue();
 });
+
+it('reads the bodies a response owns, not only its own fields', function (): void {
+    // Retiring the node moves its content too, so a keyword written above the caller — at any depth —
+    // keeps the whole response, exactly as a field of its own would.
+    $shallow = new ResponseDraft('3XX');
+    $shallow->setDescription('Redirect', Contribution::fallback());
+    $shallow->content('application/json')->set('type', 'object', Contribution::overlay());
+
+    $nested = new ResponseDraft('3XX');
+    $nested->setDescription('Redirect', Contribution::fallback());
+    $nested->content('application/json')->set('type', 'object', Contribution::inference());
+    $nested->content('application/json')->property('url')->set('type', 'string', Contribution::overlay());
+
+    $inferred = new ResponseDraft('3XX');
+    $inferred->content('application/json')->set('type', 'object', Contribution::inference());
+
+    expect($shallow->isSupersededBy(Contribution::attribute()))->toBeFalse()
+        ->and($nested->isSupersededBy(Contribution::attribute()))->toBeFalse()
+        ->and($inferred->isSupersededBy(Contribution::attribute()))->toBeTrue();
+});
+
+it('retracts the media range a named media type supersedes', function (): void {
+    $response = new ResponseDraft('200');
+    $response->content('*/*')->set('type', 'string', Contribution::inference());
+
+    $response->supersedeMediaRange('text/csv', Contribution::attribute());
+    $response->content('text/csv')->set('type', 'string', Contribution::attribute());
+
+    expect(array_keys($response->freeze()->content ?? []))->toBe(['text/csv']);
+});
+
+it('retracts only the ranges that cover the named media type', function (string $range, string $mediaType, bool $retracted): void {
+    // A range covers a concrete type when its type half matches; a concrete key covers nothing but
+    // itself, so one representation never retires another.
+    $response = new ResponseDraft('200');
+    $response->content($range)->set('type', 'string', Contribution::inference());
+
+    $response->supersedeMediaRange($mediaType, Contribution::attribute());
+
+    expect(array_key_exists($range, $response->freeze()->content ?? []))->toBe(! $retracted);
+})->with([
+    'any media type covers everything' => ['*/*', 'text/csv', true],
+    'a type range covers its own type' => ['text/*', 'text/csv', true],
+    'a type range covers nothing else' => ['text/*', 'application/json', false],
+    'a concrete key is not a range' => ['application/json', 'text/csv', false],
+    'a parameterised key is not a range' => ['application/json; charset=utf-8', 'application/json', false],
+]);
+
+it('declares nothing when the named media type is itself a range', function (): void {
+    // Naming the range again is not naming a media type, so it supersedes nothing — including itself.
+    $response = new ResponseDraft('200');
+    $response->content('*/*')->set('type', 'string', Contribution::inference());
+
+    $response->supersedeMediaRange('*/*', Contribution::attribute());
+
+    expect(array_keys($response->freeze()->content ?? []))->toBe(['*/*']);
+});
+
+it('keeps a media range the declaration does not outrank, nested keywords included', function (): void {
+    $overlaid = new ResponseDraft('200');
+    $overlaid->content('*/*')->set('type', 'string', Contribution::overlay());
+    $overlaid->supersedeMediaRange('text/csv', Contribution::attribute());
+
+    $nested = new ResponseDraft('200');
+    $nested->content('*/*')->set('type', 'object', Contribution::inference());
+    $nested->content('*/*')->property('name')->set('type', 'string', Contribution::overlay());
+    $nested->supersedeMediaRange('text/csv', Contribution::attribute());
+
+    expect(array_keys($overlaid->freeze()->content ?? []))->toContain('*/*')
+        ->and(array_keys($nested->freeze()->content ?? []))->toContain('*/*');
+});

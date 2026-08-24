@@ -456,7 +456,9 @@ resolves the media type in this order:
 A body written by a **callback** — `stream()`, `streamDownload()` — is the one case with no honest
 fallback: nothing sets a `Content-Type`, so the framework ends up labeling it `text/html`. Docuccino
 documents it as the `*/*` range and raises an `inferred-response.payload-unrecoverable` info diagnostic,
-because that one is worth fixing:
+because that one is worth fixing. Declaring the body names the media type too, and the `*/*` range is
+**retired** rather than published beside it — a range that accepts anything would subsume the type you
+just declared:
 
 ```php
 // Symfony labels this text/html, whatever the filename says.

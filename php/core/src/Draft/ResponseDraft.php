@@ -213,6 +213,51 @@ final class ResponseDraft
     }
 
     /**
+     * Retract the media RANGE body a named media type supersedes — the response half of the retraction
+     * rule stated in full at {@see OperationDraft::supersedeStatusRange()}. The any-media-type range is
+     * what a producer documents a stream it could not read under; it also captures
+     * {@see primaryMediaType()}, and with it the response's identity and whatever an unnamed example
+     * illustrates, so leaving it beside a declared type erases the declaration.
+     *
+     * Unlike the status range there is nothing to reparent: the range body IS the shape being replaced,
+     * and a producer's guess at a stream's bytes says nothing about the type just named.
+     *
+     * A range covers a concrete type when its type half matches — the any-media-type range covers
+     * everything, `text/` + `*` covers `text/csv`.
+     */
+    public function supersedeMediaRange(string $mediaType, Contribution $by): void
+    {
+        if (str_contains($mediaType, '*')) {
+            return;
+        }
+
+        foreach ($this->content as $key => $draft) {
+            if (self::covers((string) $key, $mediaType) && $draft->isSupersededBy($by)) {
+                unset($this->content[$key]);
+            }
+        }
+    }
+
+    /**
+     * Whether a content key is a media RANGE that covers a concrete media type. Only the two shapes
+     * OpenAPI defines are ranges: the any-media-type key, and a type half followed by a wildcard.
+     * Anything else — a concrete type, a key carrying parameters — covers nothing but itself, so it is
+     * never retired by this.
+     */
+    private static function covers(string $key, string $mediaType): bool
+    {
+        if ($key === '*/*') {
+            return true;
+        }
+
+        if (! str_ends_with($key, '/*')) {
+            return false;
+        }
+
+        return str_starts_with($mediaType, substr($key, 0, -1));
+    }
+
+    /**
      * Whether HTTP forbids this response a body ({@see BODYLESS_STATUS}) — ask before converting a payload,
      * since a component hoisted for content that then gets dropped is left orphaned.
      */
@@ -287,15 +332,27 @@ final class ResponseDraft
     }
 
     /**
-     * Whether a contribution outranks everything written here, so it speaks over the response as a
-     * whole rather than field by field — asked before a node is retired
-     * ({@see OperationDraft::supersedeStatusRange()}).
+     * Whether a contribution outranks everything written here — every guarded field AND every body,
+     * down to the nested keywords, since retiring the node moves all of it. The example bags carry no
+     * layer of their own, so they simply travel with whatever the bodies decide. Asked before a node is
+     * retired ({@see OperationDraft::supersedeStatusRange()}); patching one value is what {@see set()}
+     * is for.
      *
      * @internal Core-only; the retraction paths ask this, extensions patch fields.
      */
     public function isSupersededBy(Contribution $by): bool
     {
-        return $this->guard->outranksAll($by);
+        if (! $this->guard->outranksAll($by)) {
+            return false;
+        }
+
+        foreach ($this->content as $draft) {
+            if (! $draft->isSupersededBy($by)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** The currently-resolved value of a field (Remove sentinels omitted), or null if unset. */
