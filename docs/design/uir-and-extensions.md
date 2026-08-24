@@ -130,7 +130,8 @@ order is load-bearing.
 hoisted and each `content[<media type>].schema` becomes a `$ref`. This is the pass that decides what
 a generated client gets — one error type instead of one per operation — and it must not care how an
 operation DESCRIBES or ILLUSTRATES the error, so `description`, `headers` and the media type's own
-examples stay outside it and are the response pass's business.
+examples all stay outside it. Which of those the RESPONSE pass then keys on is a separate question,
+answered below: `headers` yes, the words and the illustrations no.
 
 **A declared name names the RESPONSE, and reaches the shape under it only where that shape is the whole
 of it.** The two buckets hold different kinds of thing, so publishing an anonymous body as
@@ -157,6 +158,35 @@ it hoists points at the shared shape instead of carrying its own anonymous copy;
 an inline schema after whatever encloses it, so the other order hands back exactly the per-response
 types the first pass exists to prevent. The passes are independent, never alternatives.
 
+**A response's `summary` and `description` are prose about a body, and stay out of the key too.** Words
+do not change what a response IS — the shape pass has said so from the start, since it collapses the
+types a client is generated from whatever the responses around them say — and keying the response pass on
+them cost exactly what keying on examples cost, one field over. Six of eleven response components in the
+application that found this carried content-hash suffixes, and the widest of them, referenced by 145
+operations, was suffixed by a contest that was prose-only: two 404s with the same `$ref` and the same
+headers, differing in `description` and `example`. One taxonomy endpoint's own wording renamed the 404
+type 145 unrelated operations handed a generated client.
+
+A Response Object states ONE description, so the merge cannot carry every wording the way `examples`
+carries every illustration, and no choice among them would be true of the others. The rest travel to the
+referring node instead: from 3.1 a Reference Object states `summary` and `description` of its own, which
+override the ones it points at, so an arm keeps its words exactly where it wrote them and the body is
+stated once. Both are FIXED FIELDS of that object (OAS 3.2 §4.23) rather than members standing beside a
+`$ref`; what a Reference Object may not carry is a Specification Extension. The 3.0 downlevel drops them
+with a `downlevel.ref-siblings` note, because 3.0's Reference Object defines neither and ignores what
+stands beside a `$ref`, and prose about a response has no `allOf` to move into.
+
+Which wording the component publishes is the one the most arms state, ties settled by the wording itself:
+a function of the set, never of the walk. An arm arriving with words of its own therefore leaves every
+other arm's bytes alone; what it can do, at the count where it takes the plurality, is move which arms
+carry an override — the same ranked trade `MIN_OCCURRENCES` makes, and it moves no NAME. An arm that
+stated nothing carries nothing and takes the shared words, the way one that illustrated nothing takes the
+shared examples. That is the one place a plurality moving changes what an arm RESOLVES to, and it is a
+place with nothing to fix: an arm with no wording has none of its own to keep, and writing it the words
+the plurality happens to state would put someone else's sentence in its mouth. The blast radius is a
+response that stated no `description`, which is not a valid one. The empty wording never wins for the
+same reason: `description` is a required member.
+
 **A media type's `example` is illustration, and stays out of the key.** Two renderer arms that answer
 one status with one schema and one description, differing only in the words they fill in, are one
 contract shown twice — and keying on the example made them two components. Both then asked for the same
@@ -165,12 +195,12 @@ name, neither could keep it, and an SDK consumer was handed `BadRequest_uvscdete
 So the response pass strips `content[<media type>].example` before it groups, and republishes every
 arm's body on the one shared component — as the media type's `example` where the arms agreed on one,
 and as an `examples` MAP where they did not. Both members sit outside the schema and both are defined
-in 3.0, 3.1 and 3.2, so the `$ref` beside them stays bare (an OAS Reference Object may carry no
-siblings, OAS 3.2 §4.23.1) and nothing downlevels — where the 2020-12 alternative, `examples` INSIDE
-the schema, would cost 3.0 an `allOf` wrapper and then be flattened back to a single `example`, silently
-dropping all but one. A single illustration therefore keeps the singular member: a one-entry map would
-mint a key nobody asked for, and the bytes an unmerged document already published are the simplest
-thing that says it.
+in 3.0, 3.1 and 3.2, so they are Media Type Object members beside the `schema` rather than anything the
+schema `$ref` has to carry, and nothing downlevels — where the 2020-12 alternative, `examples` INSIDE
+the schema, is a sibling of that `$ref`, which costs 3.0 an `allOf` wrapper and is then flattened back to
+a single `example`, silently dropping all but one. A single illustration therefore keeps the singular
+member: a one-entry map would mint a key nobody asked for, and the bytes an unmerged document already
+published are the simplest thing that says it.
 
 **An authored `examples` map is illustration too, and its NAMES survive the merge.** Keeping such a map
 in the key looked like the careful answer — those keys were chosen by whoever wrote them and a document
@@ -187,11 +217,15 @@ taken, so the two kinds of key can never displace one another and no illustratio
 collision. An author's key is already a function of their declaration, so it disturbs nothing that
 `ComponentNames` would not — and it reads far better than a hash.
 
-The one case nothing here can settle is two arms giving one name to two different examples. Publishing
-either would put one arm's body behind the other's label and dropping one loses an illustration, so the
-arms are not merged: each keeps its own body, and the build reports
-`components.example-name-conflict` naming the contested key. That is a shared component the document no
-longer has, so silence would leave an author looking at a name that quietly stopped existing.
+The one case nothing here can settle is two arms giving one name to two different examples — and what it
+must not cost is the component. Publishing either body under that name would put one arm's example behind
+the other's label, and dropping one loses an illustration, so the name goes to NEITHER: each is published
+under that name plus a hash of its own content, which is the ladder every contested name in this document
+climbs, and the build reports `components.example-name-conflict` naming the key that went nowhere. The
+alternative — not merging the arms — is what keeping the wording in the key made dangerous: one bucket
+holds every wording of a contract, so two pairs that each agreed with themselves now contest across a
+wording neither shares, and dropping the group over it would delete a component all four operations were
+pointing at. An example key is not a type a client is written against; a component name is.
 
 Two limits, both about not claiming more than is true. An example only illustrates something when a
 schema is there to be illustrated, so a media type stating an example and NO shape keeps it in the key
@@ -207,15 +241,17 @@ nothing. That is the honest reading of responses the document already stated ide
 price of one type instead of one per arm.
 
 **Example keys are minted by `ComponentNames`, from the example's own content.** A key is
-`example_<hash>` — or plainly `example` where it is the only one asking — opaque on purpose. For a
-COMPONENT name opacity is a real cost — a generated client is written against it — but no code
-generator turns an example key into a type, so this is the one
-place the naming invariant can be paid for in readability rather than in meaning. In exchange the
-locality is absolute: every key is a function of its own body alone, so an arm arriving or leaving adds
-or removes its own key and renames none of the others. (Going from one arm to two does swap the
-singular `example` for a map, which is the same ranked trade `MIN_OCCURRENCES` makes when a second
-occurrence moves the first from inline to `$ref`: the shared component's NAME never moves, and the name
-is what a client is written against.)
+`example_<hash>` — or plainly `example` where it is the only one asking, or `<name>_<hash>` where it is
+one of the two examples an author gave one name — opaque on purpose. For a COMPONENT name opacity is a
+real cost — a generated client is written against it — but no code generator turns an example key into a
+type, so this is the one place the naming invariant can be paid for in readability rather than in
+meaning. In exchange the
+locality is near-absolute: every key is a function of its own body alone, so an arm arriving or leaving
+adds or removes its own key and renames none of the others. (Two arrivals do change a key: going from one
+arm to two swaps the singular `example` for a map, and an arm contesting a name moves both examples off
+it. Both are the ranked trade `MIN_OCCURRENCES` makes when a second occurrence moves the first from
+inline to `$ref` — the shared component's NAME never moves, and the name is what a client is written
+against.)
 
 **The name is declared by whoever built the body.** Both passes publish under a name a code generator
 turns into a type, so `Error404` — or `Error404_2obip4vj` where a status carries two bodies — is what an
