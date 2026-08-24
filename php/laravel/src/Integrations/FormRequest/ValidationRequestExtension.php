@@ -21,7 +21,8 @@ use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
  * traced in the action body — orders it into Laravel's effect sequence, and runs it through the shared rule
  * chain. Body verbs get a request body under the recovered media type (JSON, or multipart once a file rule
  * appears); read verbs get query parameters. Attributes still override, as this writes at the integration
- * layer.
+ * layer — and a `#[BodyParameter]` overrides by PATCHING the body this wrote, which is why the
+ * attribute body extension runs behind this one.
  */
 final class ValidationRequestExtension implements OperationExtension
 {

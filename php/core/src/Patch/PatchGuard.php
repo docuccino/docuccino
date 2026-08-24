@@ -15,10 +15,16 @@ use Docuccino\Core\Provenance\ProvenanceRecord;
  * - unset field → accepted;
  * - a strictly higher `(layer, specificity)` → accepted, and the displaced value is appended to the
  *   winner's `overrode` trail;
- * - lower-or-equal over an existing owner → {@see PatchResult::Shadowed} (the caller raises an info
- *   diagnostic); the shadowed value is discarded, never recorded;
+ * - lower-or-equal over an existing owner → {@see PatchResult::Shadowed}, and the value it could not
+ *   write is appended to that same trail;
  * - `null` → {@see PatchResult::NoOp}, meaning "not specified". {@see Remove::value()} is a real
  *   write that resolves to field-absent on freeze.
+ *
+ * A `Shadowed` result is NOT a problem report and no caller treats it as one: a higher layer winning
+ * is the ladder working, and the overwhelming majority of shadows discard the value that won anyway —
+ * two producers agreeing. So the trail is the whole channel. The one thing a shadow may never do is
+ * disappear: a discarded value that differs from the winner is recorded like a displaced one, which is
+ * what `--provenance=full` and `docuccino explain` read back.
  *
  * Provenance is rebuilt on demand: fields sharing a producer/layer/source/confidence collapse into
  * one record, and only winning fields yield records — losers survive solely inside `overrode`.
@@ -47,6 +53,16 @@ final class PatchGuard
         }
 
         if (! $by->outranks($state->winner)) {
+            // A shadow that discards the value that won anyway is two producers agreeing, and there is
+            // nothing there to have lost — recording it would bury the shadows that did lose something.
+            if ($value !== $state->value) {
+                $state->overrode[] = new OverrodeEntry(
+                    field: $field,
+                    value: $this->exportValue($value),
+                    producer: $by->producer,
+                );
+            }
+
             return PatchResult::Shadowed;
         }
 
@@ -108,6 +124,31 @@ final class PatchGuard
     public function producerFor(string $field): ?string
     {
         return ($this->fields[$field] ?? null)?->winner->producer;
+    }
+
+    /**
+     * Every producer that has written this field: the current winner first, then each one recorded in
+     * its trail. A field a higher layer has since patched still names whoever built what was patched,
+     * so "did any integration recover this?" survives being overridden.
+     *
+     * @return list<string>
+     */
+    public function producersFor(string $field): array
+    {
+        $state = $this->fields[$field] ?? null;
+        if ($state === null) {
+            return [];
+        }
+
+        $producers = [$state->winner->producer];
+
+        foreach ($state->overrode as $entry) {
+            if ($entry->producer !== null) {
+                $producers[] = $entry->producer;
+            }
+        }
+
+        return array_values(array_unique($producers));
     }
 
     /**

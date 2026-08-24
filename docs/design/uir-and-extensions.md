@@ -1068,6 +1068,13 @@ when a registration path exists and the `emit()` signature settles.
       patch silently discard the whole shared component (or mutate it for every other op). Dereferencing
       keeps the `$ref` honest. Call-site partials (`include`/`exclude`/`only`/`except`) shape the
       *response* via query parameters, not the request body, so they never force the body inline.
+      **Reading `schema.properties` is also what fixes the attribute extension's position**: `requestBody`
+      is ONE guarded field every producer writes whole, so the patch keeps only the siblings it can
+      already see. `AttributeRequestBodyExtension` therefore runs at `Priorities::LATE`, behind every
+      recoverer at the default priority. Ahead of them it is not a lost merge but a lost body — the
+      one-property body wins the field at layer 40 and the recovered one is shadowed — and a lost 422
+      with it, since the implicit 422 asks which producer built the body. It asks the whole producer
+      trail rather than the winner, so a patched body still names the recoverer underneath it.
     - **Per-response property visibility is OUT OF SCOPE (2026-08-14).** `#[Hidden]` is document-wide and
       stays that way: the property contribution happens during type→schema conversion, where no operation
       and no status are in scope, and a class is ONE component because component identity is pinned to the
@@ -1110,7 +1117,12 @@ when a registration path exists and the `emit()` signature settles.
 OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
 
 - Unset field → accepted. Higher-over-lower → accepted, loser appended to `overrode`.
-- Lower/equal-over-existing → rejected (`PatchResult::Shadowed`), info diagnostic.
+- Lower/equal-over-existing → rejected (`PatchResult::Shadowed`), loser also appended to `overrode`.
+  **Never a diagnostic.** A higher layer winning is the ladder working, and the overwhelming
+  majority of shadows discard the value that won anyway — two producers agreeing — so an info
+  diagnostic here would fire dozens of times per build to report nothing. Those are not recorded
+  either; only a shadow whose value DIFFERS from the winner's leaves a trail entry, which is what
+  `--provenance=full` and `docuccino explain` read back. No caller reacts to the return value.
 - Collections merge by identity key (parameters by in+name, responses by status, content
   by media type, properties by name) — never wholesale replace.
 - `null` in an attribute = "not specified" (no write); explicit removal is a sentinel
