@@ -70,7 +70,7 @@ it('types each recovered filter kind off the model and applies the custom-filter
     // Bare uncast filter → plain string, generic description.
     expect($byName['filter[name]']['schema']['type'])->toBe('string')
         ->and($byName['filter[name]']['schema'])->not->toHaveKey('enum')
-        ->and($byName['filter[name]']['description'])->toBe('Partial-match filter');
+        ->and($byName['filter[name]']['description'])->toBe('Substring match on `name`.');
 
     // Bare filter over an enum column is NOT enum-typed (partial), stays a string.
     expect($byName['filter[status]']['schema']['type'])->toBe('string')

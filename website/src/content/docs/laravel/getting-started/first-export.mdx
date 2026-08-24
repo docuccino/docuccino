@@ -66,14 +66,14 @@ code. Here's a list endpoint you'd write anyway, and the operation it produces:
 	      {
 	        "name": "filter[number]",
 	        "in": "query",
-	        "description": "Partial-match filter",
+	        "description": "Substring match on `number`.",
 	        "required": false,
 	        "schema": { "type": "string" }
 	      },
 	      {
 	        "name": "filter[status]",
 	        "in": "query",
-	        "description": "Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).",
+	        "description": "Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).",
 	        "required": false,
 	        "style": "form",
 	        "explode": false,

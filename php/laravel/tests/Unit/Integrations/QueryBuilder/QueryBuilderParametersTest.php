@@ -56,8 +56,8 @@ it('expresses filters as flat bracketed params by default, with kind description
 
     expect(array_keys($byName))->toBe(['filter[status]', 'filter[email]']);
     expect($byName['filter[status]']->schema)->toBe(['type' => 'string'])
-        ->and($byName['filter[status]']->description)->toBe('Exact-match filter')
-        ->and($byName['filter[email]']->description)->toBe('Partial-match filter');
+        ->and($byName['filter[status]']->description)->toBe('Exact match on `status`.')
+        ->and($byName['filter[email]']->description)->toBe('Substring match on `email`.');
 });
 
 it('expresses filters as a single deepObject param under the deepObject policy', function (): void {
@@ -74,8 +74,8 @@ it('expresses filters as a single deepObject param under the deepObject policy',
         ->and($specs[0]->schema)->toBe([
             'type' => 'object',
             'properties' => [
-                'status' => ['type' => 'string', 'description' => 'Exact-match filter'],
-                'email' => ['type' => 'string', 'description' => 'Partial-match filter'],
+                'status' => ['type' => 'string', 'description' => 'Exact match on `status`.'],
+                'email' => ['type' => 'string', 'description' => 'Substring match on `email`.'],
             ],
         ]);
 });
@@ -716,7 +716,7 @@ it('models an enum-typed exact filter as a comma-serialised array in the bracket
     expect($byName['filter[status]']->schema)->toBe(['type' => 'array', 'items' => enumColumnSchema()])
         ->and($byName['filter[status]']->style)->toBe('form')
         ->and($byName['filter[status]']->explode)->toBeFalse()
-        ->and($byName['filter[status]']->description)->toBe('Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).');
+        ->and($byName['filter[status]']->description)->toBe('Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).');
 });
 
 it('models an enum-typed exact filter as an array property under the deepObject policy', function (): void {
@@ -729,7 +729,7 @@ it('models an enum-typed exact filter as an array property under the deepObject 
     expect($specs[0]->schema['properties']['status'])->toBe([
         'type' => 'array',
         'items' => enumColumnSchema(),
-        'description' => 'Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`).',
+        'description' => 'Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`).',
     ]);
 });
 
@@ -743,7 +743,7 @@ it('emits a native (non-enum) cast schema as its scalar type keeping the plain-s
     // No array wrapping, no whereIn note, no style override — churn control for non-enum filters.
     expect($byName['filter[active]']->schema)->toBe(['type' => 'boolean'])
         ->and($byName['filter[active]']->style)->toBeNull()
-        ->and($byName['filter[active]']->description)->toBe('Exact-match filter');
+        ->and($byName['filter[active]']->description)->toBe('Exact match on `active`.');
 });
 
 /**
@@ -801,11 +801,11 @@ it('appends the nullable note to the description without adding a null enum case
     $byName = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()));
 
     expect($byName['filter[status]']->description)
-        ->toBe('Exact-match filter. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.')
+        ->toBe('Exact match on `status`. Accepts a comma-separated list of values (matched as `whereIn`). Accepts `null` to filter for absent values.')
         ->and($byName['filter[status]']->schema['items']['enum'])->toBe(['draft', 'published', 'archived']);
 });
 
-it('uses a leading comment as the description, overriding the generic kind fragment', function (): void {
+it('uses a leading comment as the description, overriding the kind sentence', function (): void {
     $facts = factsWith(function (QueryBuilderFacts $f): void {
         $f->filters = [new QbEntry('status', 'exact', comment: 'The lifecycle status.')];
     });
@@ -893,8 +893,12 @@ it('threads a custom-filter example onto the parameter in both policies', functi
     }],
 ]);
 
-it('describes every filter kind, falling back to a generic label for an unknown kind', function (string $kind, string $expected): void {
-    // Coverage standard: every FILTER_DESCRIPTIONS entry + the unknown-kind degradation ('Filter').
+/**
+ * Every FILTER_DESCRIPTIONS entry + the unknown-kind degradation. The prose states the contract — what
+ * is matched, and on which key a client sends — for a reader who cannot see the codebase, so it carries
+ * no package vocabulary; a kind whose matching is user code's states none rather than guess one.
+ */
+it('describes every filter kind as a contract, degrading an unknown kind to the vague-but-true line', function (string $kind, string $expected): void {
     $facts = factsWith(function (QueryBuilderFacts $f) use ($kind): void {
         $f->filters = [new QbEntry('thing', $kind)];
     });
@@ -903,16 +907,43 @@ it('describes every filter kind, falling back to a generic label for an unknown 
 
     expect($byName['filter[thing]']->description)->toBe($expected);
 })->with([
-    'default' => ['default', 'Partial-match filter'],
-    'partial' => ['partial', 'Partial-match filter'],
-    'exact' => ['exact', 'Exact-match filter'],
-    'beginsWithStrict' => ['beginsWithStrict', 'Begins-with filter'],
-    'endsWithStrict' => ['endsWithStrict', 'Ends-with filter'],
-    'scope' => ['scope', 'Query-scope filter'],
-    'callback' => ['callback', 'Custom filter'],
-    'custom' => ['custom', 'Custom filter'],
-    'operator' => ['operator', 'Operator filter'],
-    'belongsTo' => ['belongsTo', 'Relationship filter'],
+    'default' => ['default', 'Substring match on `thing`.'],
+    'partial' => ['partial', 'Substring match on `thing`.'],
+    'exact' => ['exact', 'Exact match on `thing`.'],
+    'beginsWithStrict' => ['beginsWithStrict', 'Prefix match on `thing`.'],
+    'endsWithStrict' => ['endsWithStrict', 'Suffix match on `thing`.'],
+    'scope' => ['scope', 'Filters the result set by `thing`.'],
+    'callback' => ['callback', 'Filters the result set by `thing`.'],
+    'custom' => ['custom', 'Filters the result set by `thing`.'],
+    'operator' => ['operator', 'Compares `thing` against the value.'],
+    'belongsTo' => ['belongsTo', 'Matches records belonging to the given `thing`.'],
     'trashed' => ['trashed', 'Soft-delete filter: `with` includes soft-deleted records, `only` returns only soft-deleted; omit to exclude them.'],
-    'unknown fallback' => ['wibble', 'Filter'],
+    'unknown fallback' => ['wibble', 'Filters the result set by `thing`.'],
 ]);
+
+/**
+ * The dataset above is hand-maintained, so it only proves the rows it lists: this reads the table itself
+ * and fails when a kind ships undescribed by it.
+ */
+it('leaves no filter kind out of the description dataset', function (): void {
+    $kinds = array_keys((array) (new ReflectionClass(QueryBuilderParameters::class))->getConstant('FILTER_DESCRIPTIONS'));
+
+    expect($kinds)->toBe([
+        'default', 'partial', 'exact', 'beginsWithStrict', 'endsWithStrict',
+        'scope', 'callback', 'custom', 'operator', 'trashed', 'belongsTo',
+    ]);
+});
+
+/**
+ * The public name is the contract; the internal column is not something a consumer can see or send.
+ */
+it('names the public filter key in the prose, never the internal column', function (): void {
+    $facts = factsWith(function (QueryBuilderFacts $f): void {
+        $f->filters = [new QbEntry('status', 'exact', internal: 'status_code')];
+    });
+
+    $description = specsByName((new QueryBuilderParameters)->build($facts, bracketedPolicy()))['filter[status]']->description;
+
+    expect($description)->toBe('Exact match on `status`.')
+        ->and($description)->not->toContain('status_code');
+});

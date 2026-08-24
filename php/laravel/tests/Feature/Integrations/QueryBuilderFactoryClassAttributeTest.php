@@ -105,7 +105,9 @@ it('keeps call-site column typing for a factory with no attribute anywhere', fun
     );
 
     expect($byName['filter[active]']['schema']['type'])->toBe('boolean')
-        ->and($byName['filter[active]']['description'])->toBe('Filter');
+        // A project factory's method is not a kind this adapter knows, so the prose claims no
+        // match semantics — only that the parameter filters, and on which public key.
+        ->and($byName['filter[active]']['description'])->toBe('Filters the result set by `active`.');
 });
 
 it('ignores a fold that answers with a non-custom factory kind', function (): void {

@@ -52,7 +52,7 @@
             },
             "name": "filter[name]",
             "in": "query",
-            "description": "Partial-match filter",
+            "description": "Substring match on `name`.",
             "required": false,
             "schema": {
               "x-docuccino": {
@@ -447,7 +447,7 @@
     "document": {
       "id": "doc:qb-list",
       "configHash": "c9f5d66df023f27dc769fb8dc2db5728d169b11f438b972bda50d0b415ecf356",
-      "contentHash": "3dc554efdf1085102be9a5aa84a43efa9111fec8e379670e5372c112d730939a"
+      "contentHash": "3c3576b3a2ef2671e016e47b077cabfe469488f259bea0b97fe74b66ebbd075f"
     },
     "generator": {
       "name": "docuccino/laravel",
