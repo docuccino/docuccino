@@ -114,7 +114,7 @@ final class TypedExample
     /** @return array{bool}|null */
     private static function boolean(string $text): ?array
     {
-        $read = filter_var($text, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+        $read = filter_var($text, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
 
         return $read === null ? null : [$read];
     }

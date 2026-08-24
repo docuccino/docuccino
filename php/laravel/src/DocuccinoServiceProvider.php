@@ -11,6 +11,7 @@ use Docuccino\Core\Examples\RecordedExampleAudit;
 use Docuccino\Core\Extensions\BuiltIn\AttributeExamplesExtension;
 use Docuccino\Core\Extensions\BuiltIn\AttributeOverridesExtension;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Lint\ExampleSchemaLint;
 use Docuccino\Core\Lint\LintRuleOptions;
 use Docuccino\Core\Lint\MissingDescriptionLint;
 use Docuccino\Core\Lint\OperationIdStyleLint;
@@ -293,6 +294,7 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         $this->app->bind(OperationIdStyleLint::class, static fn (): OperationIdStyleLint => new OperationIdStyleLint(self::lintRule('operation_ids', true)));
         $this->app->bind(UndocumentedTagLint::class, static fn (): UndocumentedTagLint => new UndocumentedTagLint(self::lintRule('tags', false)));
         $this->app->bind(VacuousUnionLint::class, static fn (): VacuousUnionLint => new VacuousUnionLint(self::lintRule('vacuous_union', true)));
+        $this->app->bind(ExampleSchemaLint::class, static fn (): ExampleSchemaLint => new ExampleSchemaLint(self::lintRule('examples', true)));
 
         // json-api-paginate's parameter names and sizes are renamable in its own config; an absent bag
         // falls back to defaults plus an info diagnostic. Its response envelope (pagination mode) and

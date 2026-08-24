@@ -523,6 +523,10 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
     //     'enabled' => true,
     //     'allow' => [],   // e.g. ['GET /api/ping']
     // ],
+    // 'examples' => [
+    //     'enabled' => true,
+    //     'allow' => [],   // e.g. ['#/components/schemas/Invoice/properties/status/example']
+    // ],
 ],
 ```
 
@@ -538,6 +542,7 @@ with it.
 | `operation_ids` | on | An `operationId` a generated client can't name a method after. |
 | `tags` | **off** | A tag your operations carry that [`tags.definitions`](#tags) never declares. |
 | `vacuous_union` | on | An `anyOf` whose empty `{}` branch accepts anything, so its typed branches add no constraint. |
+| `examples` | on | A published example the schema beside it rejects. Its `allow` entries are JSON pointers, or the label the message names. |
 
 ### Data leakage
 

@@ -291,6 +291,14 @@ return [
         //     // Operation signatures or operationIds to accept, e.g. ['GET /api/ping'].
         //     'allow' => [],
         // ],
+        // Checks every published example against the schema beside it — a consumer copies an example
+        // and sends it back, so one the schema rejects is worse than none.
+        // 'examples' => [
+        //     'enabled' => true,
+        //     // JSON pointers, or the label the message names, e.g.
+        //     // ['#/components/schemas/Invoice/properties/status/example'].
+        //     'allow' => [],
+        // ],
     ],
 
     /*
