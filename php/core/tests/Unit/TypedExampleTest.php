@@ -251,3 +251,30 @@ it('spells a union and an unknown type in the message the same way it reads them
     'no type it knows' => [null, 'a value this schema can carry'],
     'a type nobody knows' => ['widget', 'a value this schema can carry'],
 ]);
+
+it('publishes an id-keyed object literal as the object it was written as', function (string $text, string $expected): void {
+    // A PHP array cannot represent an object whose member names re-key to a `0..n-1` run: those come
+    // back out as a JSON LIST, and an id-keyed map published as `["Widget","Cog"]` beside `type: object`
+    // is the same lie `{}` as `[]` was. Every other numeric spelling an array carries perfectly well.
+    $read = TypedExample::of($text, 'object');
+
+    expect($read)->not->toBeNull()
+        ->and(json_encode($read[0]))->toBe($expected);
+})->with([
+    'zero-based and contiguous, the one shape an array cannot carry' => [
+        '{"0": "Widget", "1": "Cog"}',
+        '{"0":"Widget","1":"Cog"}',
+    ],
+    'one-based, which an array carries as a map' => [
+        '{"1": "Widget", "2": "Cog"}',
+        '{"1":"Widget","2":"Cog"}',
+    ],
+    'sparse' => ['{"3": "Widget", "9": "Cog"}', '{"3":"Widget","9":"Cog"}'],
+    'nested inside a named member' => ['{"by_id": {"0": "Widget"}}', '{"by_id":{"0":"Widget"}}'],
+]);
+
+it('still reads a genuine list as a list beside an id-keyed object', function (): void {
+    // The other half: `type: array` must not start taking objects just because they look like lists.
+    expect(TypedExample::of('{"0": "a"}', 'array'))->toBeNull()
+        ->and(json_encode(TypedExample::of('["a"]', 'array')[0] ?? null))->toBe('["a"]');
+});
