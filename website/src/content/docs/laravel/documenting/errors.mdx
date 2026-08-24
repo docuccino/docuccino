@@ -768,9 +768,9 @@ declaration nearest the operation wins.
 
 It renames a shared component and does not create one, exactly as `#[ErrorComponent]` does: a body only
 one operation states stays inline and has nothing to name. And because a response component covers every
-representation of a status, the name is the status's — two declarations at one status naming different
-components is reported as `attribute.response-component-contested` and neither is used, rather than one
-winning by attribute order.
+representation of a status, the name is the status's — where two declarations at one status name
+different components the nearer one wins, a method's over its controller's, the same way every other
+argument of the attribute settles.
 
 #### When neither attribute is enough
 

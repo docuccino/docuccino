@@ -19,6 +19,7 @@ use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\DeclaredErrorsController;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\EscapedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\HttpConflictException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\InheritedApiException;
+use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\InheritingErrorsController;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\MalformedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\MistypedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\OtherThingMissingException;
@@ -224,27 +225,29 @@ it('publishes a declared error response under the name its #[Response] gives it'
         ->toBe('#/components/responses/DeclaredGone');
 });
 
-it('takes neither name when two #[Response] declarations name one status differently', function (): void {
-    // A response component covers every representation of a status, so a status has one name. Picking one
-    // of two would make a published type name a function of attribute order; neither is claimed, the body
-    // keeps the name it would have had, and the author is told which two strings disagreed.
+it('takes the nearest name when two #[Response] declarations name one status differently', function (): void {
+    // A response component covers every representation of a status, so a status has one name — and which
+    // one is the question the guard answers for every other field of the attribute: the first writer over
+    // a most-specific-first set, so the nearest declaration wins. `component:` settles no differently, and
+    // the name that lost is on the provenance trail where every other shadowed value is.
     $result = declaringBuild([
         'eleventh' => [UndeclaredException::class, 409],
         'ninth' => [UndeclaredException::class, 409],
     ]);
     $document = $result->document->toArray();
 
-    $contested = array_values(array_filter(
-        $result->diagnostics,
-        static fn ($d): bool => $d->code === 'attribute.response-component-contested',
-    ));
+    $response = $document['paths']['/api/zz-declared-eleventh']['get']['responses']['410'];
+    $shadowed = [];
+    foreach ($response['x-docuccino']['provenance'] ?? [] as $record) {
+        foreach ($record['overrode'] ?? [] as $entry) {
+            if ($entry['field'] === 'component') {
+                $shadowed[] = $entry['value'];
+            }
+        }
+    }
 
-    expect($document['components']['responses'])->not->toHaveKey('SecondName')
-        ->and($contested)->toHaveCount(1)
-        ->and($contested[0]->severity)->toBe(Severity::Warning)
-        ->and($contested[0]->message)->toContain('"DeclaredGone"')
-        ->and($contested[0]->message)->toContain('"SecondName"')
-        ->and($contested[0]->help)->toContain('one name');
+    expect($response['x-docuccino']['facts']['component'])->toBe('DeclaredGone')
+        ->and($shadowed)->toBe(['SecondName']);
 });
 
 it('lets the #[Response] that declares a status outrank the exception class\'s #[ErrorComponent]', function (): void {
@@ -287,6 +290,28 @@ it('keeps an exception class\'s name off a response answering with more than its
         ->and(array_filter($names, static fn (string $n): bool => str_starts_with($n, 'ValidationError_')))->toBe([])
         ->and($document['paths']['/api/zz-declared-fifteenth']['get']['responses']['422']['$ref'])
         ->toBe('#/components/responses/ValidationError');
+});
+
+it('lets an action\'s component: beat the one its base controller declares', function (): void {
+    // `AttributeCollector` walks the controller's parents, and the set it builds is most-specific-first
+    // precisely so a child's declaration beats the base's. Every other `#[Response]` field settles that
+    // way — the guard takes the first writer at equal contribution — and `component:` settles that way
+    // too, so a base-controller default overridden on one action is an override rather than a standoff.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-inheriting-overrides', [InheritingErrorsController::class, 'overrides']);
+    $router->get('api/zz-inheriting-inherits', [InheritingErrorsController::class, 'inherits']);
+
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+
+    $result = generateDocument();
+    $document = $result->document->toArray();
+
+    $facts = static fn (string $uri): mixed => $document['paths'][$uri]['get']['responses']['410']['x-docuccino']['facts']['component'] ?? null;
+
+    expect($facts('/api/zz-inheriting-overrides'))->toBe('ActionGone')
+        ->and($facts('/api/zz-inheriting-inherits'))->toBe('BaseGone')
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.response-component-contested'))->toBeEmpty();
 });
 
 it('names an undeclared exception\'s error after its status, as it always did', function (): void {

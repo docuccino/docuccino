@@ -380,13 +380,16 @@ for choosing among an operation's statuses that the attribute gives it no way to
 is unambiguous, and it is the only anchor that reaches a body **nothing threw**: `#[ErrorComponent]` is read
 off the exception classes a route signals and the render methods on their path, and a `4xx` an operation
 declares for itself is on neither. It claims through the same `claimComponentName()` at `attribute`, so
-there is still one naming path. Two of them at one status naming different components is an authoring error
-rather than something to settle — a response component covers every representation of a status, so the name
-is the status's, and awarding it to one would make a published type name a function of attribute order:
-neither is claimed and `attribute.response-component-contested` names both. Against the class anchor the
-existing rule already answers: `mayReplace()` lets a declaration replace the status DEFAULT and nothing a
-producer named itself, so a `#[Response]` claim standing at `Responses` is found by `ErrorResponsesExtension`
-at `Errors` and left alone — the declaration nearest the operation wins, which is the specificity rule. It
+there is still one naming path. It goes to the guard exactly as every other argument of the attribute does,
+so two of them at one status naming different components settle the way `description:` does: first writer
+over a most-specific-first `AttributeSet`, which is a child action overriding its base controller's default
+rather than the two cancelling out, and the name that lost travels on the provenance trail like every other
+shadowed value. A bespoke "use neither and warn" here bought nothing the guard does not, and cost the
+inherited case its documented answer. Against the class anchor the `#[Response]` claim carries
+`specificity: 1`, so the documented precedence — the declaration nearest the operation wins — is in the
+tuple `outranks()` compares rather than in `Responses` happening to run before `Errors`; `mayReplace()`
+still holds `ErrorResponsesExtension` off a status something already named, which is what keeps it from
+reporting a contest nobody can act on. It
 does NOT force componentization: what repeats decides that, here as everywhere, so a name on a body one
 operation states waits inline for a second stater exactly as `#[ErrorComponent]` does. Hoisting on a name
 would put one entry per one-off error in the bucket, which this section already rejected on its own terms.

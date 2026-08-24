@@ -10,6 +10,8 @@ use Docuccino\Attributes\ResponseHeader;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
+use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
@@ -53,6 +55,7 @@ final class AttributeResponsesExtension implements OperationExtension
 
             $response->setDescription('OK', Contribution::fallback());
             $response->setDescription($attribute->description, Contribution::attribute($context->actionSource()));
+            $this->claimDeclaredComponent($response, $attribute, $context);
 
             if ($attribute->type === null) {
                 continue;
@@ -82,7 +85,6 @@ final class AttributeResponsesExtension implements OperationExtension
             $response->content($mediaType)->declareShape($schema, Contribution::attribute($context->actionSource()));
         }
 
-        $this->applyDeclaredComponents($operation, $context);
         $this->applyResponseHeaders($operation, $context, $imports);
     }
 
@@ -92,63 +94,25 @@ final class AttributeResponsesExtension implements OperationExtension
      * `#[ErrorComponent]` cannot reach a body an operation states itself (it is read off the exception
      * classes a route throws and the render methods on their path), so this is the anchor for one.
      *
-     * A response component covers ALL of a status's content, so the name belongs to the status rather
-     * than to the one representation the attribute declared — which is why two `#[Response]`s naming one
-     * status differently is an authoring error rather than something to settle. Neither is claimed: a
-     * published name is what a generated client calls the type, and picking one would make that a
-     * function of attribute order.
+     * Handed to the guard exactly as every other field of the attribute is, so the answers agree: two
+     * declarations at one status settle first-writer-wins over the {@see AttributeSet}'s
+     * most-specific-first order, which is a child action overriding its base controller's default rather
+     * than the two cancelling out, and a shadowed name that differed travels on the provenance trail.
+     *
+     * `namesResponse:` because a response component covers ALL of a status's content: the name is the
+     * status's, written at the operation by someone who can see every representation it answers with,
+     * which is what lets it reach a response stating several ({@see ResponseDraft::claimComponentName()}).
+     * `specificity: 1` puts its documented precedence over the exception class's `#[ErrorComponent]` —
+     * the declaration nearest the operation wins — into the tuple the guard compares, rather than
+     * leaving it to `Responses` happening to run before `Errors`.
      */
-    private function applyDeclaredComponents(OperationDraft $operation, RouteContext $context): void
+    private function claimDeclaredComponent(ResponseDraft $response, Response $attribute, RouteContext $context): void
     {
-        /** @var array<string, list<string>> $byStatus */
-        $byStatus = [];
-        foreach ($context->attributes->all(Response::class) as $attribute) {
-            if ($attribute->component === null) {
-                continue;
-            }
-
-            $status = (string) $attribute->status;
-            $byStatus[$status] ??= [];
-            if (! in_array($attribute->component, $byStatus[$status], true)) {
-                $byStatus[$status][] = $attribute->component;
-            }
-        }
-
-        foreach ($byStatus as $key => $names) {
-            $status = (string) $key;
-
-            if (count($names) > 1) {
-                sort($names);
-                $this->reportComponentContest($context, $status, $names);
-
-                continue;
-            }
-
-            $operation->response($status)->claimComponentName(
-                $names[0],
-                Contribution::attribute($context->actionSource()),
-                namesResponse: true,
-            );
-        }
-    }
-
-    /**
-     * @param  list<string>  $names
-     */
-    private function reportComponentContest(RouteContext $context, string $status, array $names): void
-    {
-        $context->components->addDiagnostic(new Diagnostic(
-            severity: Severity::Warning,
-            code: 'attribute.response-component-contested',
-            message: sprintf(
-                'Two #[Response(status: %s)] declarations name different components for one status (%s), so neither was used and the body keeps the name it would have had.',
-                $status,
-                implode(' and ', array_map(static fn (string $name): string => sprintf('"%s"', $name), $names)),
-            ),
-            source: $context->actionSource(),
-            routeSignature: $context->route->signature(),
-            help: 'A response component covers every representation of one status, so a status has one name. Put `component:` on one of the declarations, or spell the same name on both.',
-        ));
+        $response->claimComponentName(
+            $attribute->component,
+            Contribution::attribute($context->actionSource(), specificity: 1),
+            namesResponse: true,
+        );
     }
 
     private function reportBodylessBody(RouteContext $context, string $status, string $type): void
