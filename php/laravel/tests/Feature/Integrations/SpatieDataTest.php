@@ -82,10 +82,16 @@ it('renders a paginated DataCollection as spatie\'s own length-aware envelope', 
     // The two-arg shape spatie's own generics (`@template TKey of array-key, @template TValue`) and the
     // docblock parser produce: [TKey=int, TValue=AuthorData]. The item type is the *last* arg — reading
     // typeArgs[0] would document the items as `{type: integer}`, i.e. the key.
-    $paginated = $converter->toSchema(new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema;
+    // The envelope is a component of its own — one page-of-AuthorData for the whole document.
+    [$name, $paginated] = convertedComponent(
+        $converter,
+        $converter->toSchema(new ClassT('Spatie\\LaravelData\\PaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema,
+    );
+
     // Spatie's own shape, not the Laravel resource envelope: data/links/meta all required, `links` an
     // array of {url,label,active} objects, `meta` carrying the *_page_url members.
-    expect($paginated['type'])->toBe('object')
+    expect($name)->toBe('AuthorDataPage')
+        ->and($paginated['type'])->toBe('object')
         ->and($paginated['required'])->toBe(['data', 'links', 'meta'])
         ->and($paginated['properties']['data']['type'])->toBe('array')
         ->and($paginated['properties']['data']['items'])->toHaveKey('$ref')
@@ -121,9 +127,14 @@ it('reads the collection ITEM type from the last generic arg across arities', fu
 it('renders a cursor-paginated DataCollection as spatie\'s cursor envelope', function (): void {
     $converter = new SchemaConverter([new DataSchema, ...DefaultTypeMappers::all()], spatieDataEngine(), new ComponentRegistry);
 
-    $cursor = $converter->toSchema(new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema;
+    [$name, $cursor] = convertedComponent(
+        $converter,
+        $converter->toSchema(new ClassT('Spatie\\LaravelData\\CursorPaginatedDataCollection', [ScalarT::int(), new ClassT(AuthorData::class)]))->schema,
+    );
+
     // Cursor: empty `links` array, cursor tokens + neighbouring page URLs in meta, no total/last_page.
-    expect($cursor['required'])->toBe(['data', 'links', 'meta'])
+    expect($name)->toBe('AuthorDataCursorPage')
+        ->and($cursor['required'])->toBe(['data', 'links', 'meta'])
         ->and($cursor['properties']['links']['type'])->toBe('array')
         ->and($cursor['properties']['meta']['properties'])->toHaveKeys(['next_cursor', 'prev_cursor', 'next_page_url', 'prev_page_url'])
         ->and($cursor['properties']['meta']['properties'])->not->toHaveKey('total');

@@ -153,6 +153,30 @@ function schemaConverter(): SchemaConverter
 }
 
 /**
+ * A schema a conversion handed back as a `$ref`, resolved through that converter's own registry: the
+ * name the document would publish it under, and the body. A paginated envelope hoists to a component
+ * of its own, so a test asserting on the envelope's SHAPE reads it here rather than off the result.
+ *
+ * The name is the settled one, never the registration slot — a slot is first-come and a test pinned to
+ * one would pass while the document published something else.
+ *
+ * @param  array<string, mixed>  $schema
+ * @return array{string, array<string, mixed>}
+ */
+function convertedComponent(SchemaConverter $converter, array $schema): array
+{
+    $prefix = '#/components/schemas/';
+    expect($schema['$ref'] ?? null)->toBeString()->toStartWith($prefix);
+
+    $slot = substr((string) $schema['$ref'], strlen($prefix));
+    $registry = $converter->components();
+
+    expect($registry->schemas())->toHaveKey($slot);
+
+    return [$registry->schemaRenames()[$slot] ?? $slot, $registry->schemas()[$slot]];
+}
+
+/**
  * A rule set through the shared validation chain, as a JSON Schema object — the same normalise → order →
  * convert sequence {@see DataRequestExtension} runs. `normalize: false` gives the un-normalised set, which
  * is what {@see RuleSetNormalizer} exists to prevent reaching the chain.

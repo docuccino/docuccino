@@ -295,6 +295,10 @@ examples.
     // 'errors' => [
     //     'components' => true,    // true (hoist a repeated error body to shared components) | false (inline)
     // ],
+    // 'pagination' => [
+    //     'components' => true,    // true (hoist a paginated envelope to one component per item type
+    //                              // and paginator kind) | false (inline on every operation)
+    // ],
 ],
 ```
 
@@ -311,6 +315,7 @@ from "API changed".
 | `enums.naming` | `names` \| `none` \| `x-enumNames` \| `x-enum-varnames` | `names` | SDK member-name hints on enum schemas. The default `names` emits both spellings (`x-enum-varnames` for OpenAPI Generator and the TypeScript toolchain, `x-enumNames` for NSwag); a single-key keyword pins one tool's shape; `none` turns hints off. Read by the [Enum integration](/laravel/documenting/schemas/#enums) and the [Query Builder sort/include enums](/laravel/packages/query-builder/#sorts-and-includes-are-enums-of-the-allow-list). |
 | `enums.components` | `true` \| `false` | `true` | Whether each reflectable enum hoists to a shared `#/components/schemas` entry that properties and query-parameter item schemas `$ref` (`true`), or its `type`/`enum`/`x-enumDescriptions` are inlined at every use site (`false`). |
 | `errors.components` | `true` \| `false` | `true` | Whether a repeated error body hoists to shared components — its shape into `#/components/schemas`, and the whole response into `#/components/responses` where operations state it identically (`true`) — or every copy is inlined (`false`). |
+| `pagination.components` | `true` \| `false` | `true` | Whether a [paginated envelope](/laravel/documenting/responses/#pagination) hoists to one `#/components/schemas` entry per item type and paginator kind — `ArticleResourcePage`, `ArticleResourceCursorPage` — that every paginated operation `$ref`s (`true`), or the whole envelope is restated on each of them (`false`). Hoisting means an SDK generator mints one page type per item type instead of one per endpoint. An envelope whose item type could not be identified, or whose item schema is not itself a component, stays inline either way. |
 
 The hoist is narrow — 4xx/5xx only, only bodies that repeat, only responses with `content`, never one
 already a `$ref` — and [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) resolves references
