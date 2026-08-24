@@ -367,8 +367,23 @@ method the built-in inferred-handler support uses to attach its error-response e
 back door. `claimComponentName(?string $name, $by)` names the shared component an error body publishes
 under — see below.
 
-A **`SchemaDraft`** adds `property(string $name): self` for nesting into an object's properties and
-`hasProperty(string $name): bool`.
+A **`SchemaDraft`** adds `property(string $name): self` for nesting into an object's properties,
+`hasProperty(string $name): bool`, and `declareShape(array $schema, $by)` for writing a whole schema in
+one go.
+
+Reach for `declareShape()` whenever you have a converted type in hand and were about to write its
+keywords in a loop. A schema's keywords compose as a conjunction, so writing them one at a time leaves
+the ones your shape replaced standing beside it — an inferred `additionalProperties` next to your closed
+`properties` publishes a body open to keys you never named, and an inferred `type`/`items` next to your
+`$ref` says the body must satisfy both. `declareShape()` states the shape whole: the keywords it leaves
+out are retracted wherever your contribution outranks them, the refinements that still hold for the type
+you declared (a `format`, an `enum`) stay, and annotations such as `description` are never touched.
+
+```php
+$body = $operation->response('200')->content('application/json');
+
+$body->declareShape($context->converter()->toSchema($type)->schema, $by);
+```
 
 ### Naming the component an error publishes under
 

@@ -8,6 +8,7 @@ use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
+use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -30,6 +31,7 @@ use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
@@ -144,6 +146,31 @@ function documentForReturn(DType $returnType, array $classes = [], ?callable $tr
         $result->diagnostics,
         $result,
     ];
+}
+
+/**
+ * A schema draft with `$standing` written keyword by keyword, then `$declaration` written as one
+ * declared shape ({@see SchemaDraft::declareShape()}), frozen and stripped of its provenance — so a
+ * test reads exactly what the document would publish.
+ *
+ * @param  array<string, mixed>  $standing
+ * @param  array<string, mixed>  $declaration
+ * @return array<string, mixed>
+ */
+function frozenShape(array $standing, array $declaration, ?Contribution $standingBy = null, ?Contribution $by = null): array
+{
+    $draft = new SchemaDraft;
+
+    foreach ($standing as $keyword => $value) {
+        $draft->set($keyword, $value, $standingBy ?? Contribution::inference());
+    }
+
+    $draft->declareShape($declaration, $by ?? Contribution::attribute());
+
+    $frozen = $draft->freeze()->toArray();
+    unset($frozen['x-docuccino']);
+
+    return $frozen;
 }
 
 /** The plain type→schema chain the validation suites convert against: the core mappers, no engine. */

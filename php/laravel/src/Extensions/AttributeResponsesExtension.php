@@ -76,10 +76,10 @@ final class AttributeResponsesExtension implements OperationExtension
 
             $mediaType = $attribute->mediaType ?? Response::DEFAULT_MEDIA_TYPE;
 
+            // One declared shape, not a keyword-by-keyword patch: whatever a producer worked out about
+            // the body it replaces comes off with it (SchemaDraft::declareShape()).
             $schema = $context->converter()->toSchema($this->types->parse($attribute->type, $imports))->schema;
-            foreach ($schema as $keyword => $value) {
-                $response->content($mediaType)->set($keyword, $value, Contribution::attribute($context->actionSource()));
-            }
+            $response->content($mediaType)->declareShape($schema, Contribution::attribute($context->actionSource()));
         }
 
         $this->applyResponseHeaders($operation, $context, $imports);
