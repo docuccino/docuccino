@@ -18,6 +18,10 @@ use Docuccino\Core\Identity\ContentHasher;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Overlay\OverlayApplier;
 use Docuccino\Core\Overlay\OverlayDocument;
+use Docuccino\Core\Provenance\MessagePaths;
+use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Support\PlainText;
+use Throwable;
 
 /**
  * Merges operation fragments into a UIR document array: places operations under their path and method
@@ -25,7 +29,8 @@ use Docuccino\Core\Overlay\OverlayDocument;
  * identity + generator metadata, applies overlays and document transformers, then computes the content
  * hash. Two operations contesting one slot — duplicate identities, or a path and method a fragment
  * already holds — are error diagnostics, and the first claimant keeps the slot; nothing is ever
- * silently overwritten.
+ * silently overwritten. A document transformer that throws is an error diagnostic too, never an
+ * exception out of the build ({@see transformerFailed()}).
  *
  * @internal
  */
@@ -45,6 +50,7 @@ final class Assembler
         private readonly ContentHasher $contentHasher = new ContentHasher,
         private readonly OverlayApplier $overlays = new OverlayApplier,
         private readonly ContentResolver $content = new ContentResolver,
+        private readonly MessagePaths $messagePaths = new MessagePaths(new RootRelativeSourcePathResolver('')),
     ) {}
 
     /**
@@ -610,7 +616,11 @@ final class Assembler
         $draft = new UirDocumentDraft($doc);
         $context = new DocumentContext($document, $documentId);
         foreach ($transformers as $transformer) {
-            $transformer->transform($draft, $context);
+            try {
+                $transformer->transform($draft, $context);
+            } catch (Throwable $failure) {
+                $diagnostics[] = $this->transformerFailed($transformer, $failure);
+            }
         }
 
         foreach ($context->diagnostics->all() as $diagnostic) {
@@ -618,5 +628,32 @@ final class Assembler
         }
 
         return $draft->toArray();
+    }
+
+    /**
+     * The last transformer threw. Every other transformer still runs and the document is still emitted,
+     * because a document with one transformer's contribution missing is worth incomparably more to the
+     * author than a stack trace and no file — and a lint, which contributes nothing to the document at
+     * all, must never be able to end a build. It is an ERROR rather than a warning: whatever the failed
+     * transformer had already written to the draft stays written, so the document may be neither what it
+     * was before nor what it would have been, and `--fail-on=error` is how a pipeline refuses to ship
+     * one. The transformer is named because the reader's next move is to find out whose it is.
+     */
+    private function transformerFailed(DocumentTransformer $transformer, Throwable $failure): Diagnostic
+    {
+        $reason = trim($failure->getMessage());
+
+        return new Diagnostic(
+            severity: Severity::Error,
+            code: 'document.transformer-failed',
+            message: sprintf(
+                'The document transformer %s threw: %s.',
+                $transformer::class,
+                $reason === '' ? $failure::class : rtrim(PlainText::of($this->messagePaths->relative($reason)), '.'),
+            ),
+            help: 'The rest of the document was built and written. A built-in transformer throwing is a '
+                .'bug in Docuccino — report it with the message above; one of your own, or a package\'s, '
+                .'is a bug there.',
+        );
     }
 }

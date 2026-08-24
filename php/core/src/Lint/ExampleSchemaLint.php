@@ -28,6 +28,10 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
  * Diagnostics only — it never touches the document. Pinned to run last so the pointers it publishes are
  * the pointers the emitted document has, and so it sees a body already hoisted into a shared component
  * rather than the inline copy.
+ *
+ * A schema the validator will not read is reported as `lint.example-uncheckable` rather than thrown: a
+ * lint runs on every build, so one that can end a build has taken the whole document hostage to a
+ * check nobody asked for. It names the schema, which is the half to go and look at.
  */
 #[ExtensionOrder(priority: Priorities::LAST)]
 final class ExampleSchemaLint implements DocumentTransformer
@@ -64,6 +68,27 @@ final class ExampleSchemaLint implements DocumentTransformer
                     .'schema rejects is worse than none. Correct the example, or widen the schema if the '
                     .'example is what the API really accepts — and where the example is right and the '
                     .'schema merely under-describes it, accept the pointer under lint.examples.allow.',
+            ));
+        }
+
+        foreach ($report->uncheckable as $site) {
+            if ($this->options->silences($site->pointer, $site->label)) {
+                continue;
+            }
+
+            $context->report(new Diagnostic(
+                severity: Severity::Warning,
+                code: 'lint.example-uncheckable',
+                message: sprintf(
+                    'The example at %s was not checked: the validator would not read the schema at %s — %s.',
+                    $site->pointer,
+                    $site->schemaPointer,
+                    $site->reason,
+                ),
+                help: 'The example may be right or wrong; this build does not know. The schema is the '
+                    .'half to look at — the pointer names it — and a schema no validator will read is a '
+                    .'bug in Docuccino rather than in the application, so it is worth reporting. '
+                    .'lint.examples.allow accepts the pointer meanwhile.',
             ));
         }
     }

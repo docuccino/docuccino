@@ -136,6 +136,40 @@ it('keeps a message readable when one example breaks many rules at once', functi
         ->and($findings[0]->message)->toEndWith('(and 2 more).');
 });
 
+/*
+ * The rule this lint broke and now keeps. A lint contributes nothing to the document, so it can only
+ * ever cost a build: an exception from the validator used to end `docuccino:export` with a stack trace
+ * and no file at all, on an ordinary free-form map that happened to carry an example.
+ */
+it('reports a schema the validator will not read, rather than ending the build', function () use ($on): void {
+    $document = exampleLintDocument(
+        ['type' => 'object', 'additionalProperties' => ['first_name', 'last_name']],
+        ['first_name' => 'Ada'],
+    );
+
+    $findings = lintDiagnostics(new ExampleSchemaLint($on), $document);
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->severity)->toBe(Severity::Warning)
+        ->and($findings[0]->code)->toBe('lint.example-uncheckable')
+        ->and($findings[0]->message)->toContain('/paths/~1api~1widgets/get/responses/200/content/application~1json/example')
+        ->and($findings[0]->message)->toContain('additionalProperties must be a json schema')
+        ->and($findings[0]->help)->toContain('lint.examples.allow');
+});
+
+it('accepts an uncheckable site safelisted the same two ways a mismatch is', function (string $accept): void {
+    $options = new LintRuleOptions(enabled: true, allow: [$accept]);
+    $document = exampleLintDocument(
+        ['type' => 'object', 'additionalProperties' => ['first_name']],
+        ['first_name' => 'Ada'],
+    );
+
+    expect(lintDiagnostics(new ExampleSchemaLint($options), $document))->toBe([]);
+})->with([
+    'by pointer' => ['/paths/~1api~1widgets/get/responses/200/content/application~1json/example'],
+    'by label' => ['GET /api/widgets → 200 application/json'],
+]);
+
 it('says nothing that would make one build differ from another', function () use ($on): void {
     // Provenance rides along with every finding and it names files; a diagnostic carrying one would make
     // the output a function of the machine that produced it.
