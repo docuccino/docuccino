@@ -139,9 +139,10 @@ return [
                 //                              // item type and paginator kind; false inlines every copy
                 // ],
                 // 'examples' => [
-                //     // JSON Schema `format` => the value synthesized examples illustrate it with,
-                //     // merged over the built-ins. Still validated against each field's own rules; one
-                //     // that fails falls back to the built-in sample and says so.
+                //     // JSON Schema `format` => the value Docuccino illustrates it with — synthesized
+                //     // examples and a Postman collection's fabricated bodies alike — merged over the
+                //     // built-ins. Still validated against each field's own rules; one that fails falls
+                //     // back to the built-in sample and says so.
                 //     'formats' => ['email' => 'jane@example.com'],
                 // ],
             ],
