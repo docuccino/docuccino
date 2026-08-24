@@ -114,7 +114,7 @@ A webhook class reads the attributes a controller reads, so nothing here is new 
 | --- | --- |
 | [`#[Group]`](/laravel/reference/attributes/#group) | Tags the webhook, so it groups with the endpoints it belongs beside. |
 | [`#[Response]`](/laravel/reference/attributes/#response) | Documents a status your sender acts on, beside the default `200` acknowledgement. |
-| [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Marks a webhook you are retiring. |
+| [`#[DeprecatedOperation]`](/laravel/reference/attributes/#deprecatedoperation) | Marks a webhook you are retiring, and publishes its `reason:` in the description. The class's `@deprecated` docblock tag says the same thing. |
 | [`#[Internal]`](/laravel/reference/attributes/#internal) | Flags it `x-internal: true`. |
 | [`#[InDocs]`](/laravel/reference/attributes/#indocs) | Pins it to named documents. |
 | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Keeps it out entirely. |

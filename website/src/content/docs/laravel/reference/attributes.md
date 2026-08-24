@@ -488,6 +488,29 @@ Marks an operation (or every operation on a controller) deprecated, with an opti
 public function legacyIndex(): AnonymousResourceCollection { /* … */ }
 ```
 
+`deprecated: true` is the fact a client generator and a viewer read; the reason is the why, and the
+description is the only member OpenAPI gives it. So a reason joins the operation's description as its
+own paragraph, marked:
+
+```
+Lists every user.
+
+**Deprecated:** Use /v2/users instead
+```
+
+The `@deprecated` docblock tag is the same thing spelled another way: the tag marks the operation and
+the text after it is the reason, published exactly as the attribute's is. Where both are written, the
+attribute wins — as it does for every other field.
+
+```php
+/**
+ * Lists every user.
+ *
+ * @deprecated Use /v2/users instead
+ */
+public function legacyIndex(): AnonymousResourceCollection { /* … */ }
+```
+
 ### `#[Unauthenticated]`
 
 Targets `CLASS | METHOD | FUNCTION`. Marker. Clears any inferred security requirement.
