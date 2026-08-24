@@ -454,6 +454,68 @@ function kitchenSink(): array
 }
 
 /**
+ * A UIR document holding an empty collection at every position an emitter can reach, map and
+ * sequence both. The distinction is carried by the PHP type alone — `stdClass` is a map, `array` is
+ * a sequence — so a writer that collapses the two is only visible in the emitted bytes.
+ *
+ * @return array<string, mixed>
+ */
+function emptyCollectionPositions(): array
+{
+    return [
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Empty collection positions', 'version' => '1.0.0'],
+        'servers' => [['url' => 'https://example.com', 'variables' => []]],
+        'security' => [['apiKey' => []]],
+        'tags' => [],
+        'paths' => [
+            '/things' => [
+                'get' => [
+                    'operationId' => 'things.index',
+                    'parameters' => [],
+                    'requestBody' => ['content' => []],
+                    'responses' => [
+                        '200' => [
+                            'description' => 'OK',
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => ['type' => 'object'],
+                                    'encoding' => [],
+                                    'examples' => [],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        'webhooks' => [],
+        'components' => [
+            'schemas' => [
+                'FreeForm' => [
+                    'type' => 'object',
+                    'properties' => [],
+                    'additionalProperties' => [],
+                    'required' => [],
+                    'enum' => [],
+                    'allOf' => [],
+                ],
+            ],
+            'responses' => [],
+            'parameters' => [],
+            'examples' => [],
+            'requestBodies' => [],
+            'headers' => [],
+            'securitySchemes' => [],
+            'links' => [],
+            'callbacks' => [],
+            'pathItems' => [],
+        ],
+    ];
+}
+
+/**
  * Reads a committed golden artifact byte-for-byte.
  */
 function loadGolden(string $name): string

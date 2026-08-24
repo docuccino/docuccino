@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Canonical\Canonicalizer;
+use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Emit\YamlSerializer;
 use Symfony\Component\Yaml\Yaml;
 
 beforeEach(function (): void {
     $this->yaml = new YamlSerializer;
+    $this->json = new CanonicalJsonSerializer;
     $this->canonicalizer = new Canonicalizer;
 });
 
@@ -76,6 +78,58 @@ it('writes the paths of a routeless document as a map', function (): void {
 
     expect($yaml)->toContain("paths: {  }\n")
         ->and($yaml)->toContain("security: []\n");
+});
+
+it('writes each empty collection position with the kind OAS requires there', function (string $needle): void {
+    $yaml = (new YamlSerializer)->serialize((new Canonicalizer)->canonicalize(emptyCollectionPositions()));
+
+    expect($yaml)->toContain($needle);
+})->with([
+    // Maps — an empty sequence here is spec-invalid.
+    'webhooks is a map' => ['webhooks: {  }'],
+    'components.schemas.properties is a map' => ['properties: {  }'],
+    'additionalProperties is a schema object' => ['additionalProperties: {  }'],
+    'components.examples is a map' => ['examples: {  }'],
+    'components.requestBodies is a map' => ['requestBodies: {  }'],
+    'components.headers is a map' => ['headers: {  }'],
+    'components.securitySchemes is a map' => ['securitySchemes: {  }'],
+    'components.links is a map' => ['links: {  }'],
+    'components.callbacks is a map' => ['callbacks: {  }'],
+    'components.pathItems is a map' => ['pathItems: {  }'],
+    'components.responses is a map' => ['responses: {  }'],
+    'components.parameters is a map' => ['parameters: {  }'],
+    'server variables is a map' => ['variables: {  }'],
+    'media type encoding is a map' => ['encoding: {  }'],
+    'request body content is a map' => ['content: {  }'],
+    // Sequences — these are genuinely arrays and must NOT become maps.
+    'tags is a sequence' => ['tags: []'],
+    'operation parameters is a sequence' => ['parameters: []'],
+    'required is a sequence' => ['required: []'],
+    'enum is a sequence' => ['enum: []'],
+    'allOf is a sequence' => ['allOf: []'],
+    'security requirement scopes is a sequence' => ['apiKey: []'],
+]);
+
+it('agrees with the canonical JSON writer on every empty collection it emits', function (): void {
+    // The cross-check that would have caught the sequence bug: both writers take the same canonical
+    // value, so a map in one must be a map in the other. Before the fix this read 0 maps / 22
+    // sequences in YAML against JSON's 16 / 6.
+    $canonical = $this->canonicalizer->canonicalize(emptyCollectionPositions());
+
+    $json = $this->json->serialize($canonical);
+    $yaml = $this->yaml->serialize($canonical);
+
+    $jsonMaps = preg_match_all('/:\s\{\}/', $json);
+    $jsonSequences = preg_match_all('/:\s\[\]/', $json);
+    $yamlMaps = preg_match_all('/:\s\{\s+\}$/m', $yaml);
+    $yamlSequences = preg_match_all('/:\s\[\]$/m', $yaml);
+
+    // A scan that stopped matching must fail rather than pass silently.
+    expect($jsonMaps)->toBeGreaterThan(10)
+        ->and($jsonSequences)->toBeGreaterThan(5);
+
+    expect($yamlMaps)->toBe($jsonMaps)
+        ->and($yamlSequences)->toBe($jsonSequences);
 });
 
 it('renders multi-line strings as literal blocks deterministically', function (): void {
