@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\Schema;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Support\EmptyObject;
 use JsonException;
 use stdClass;
 
@@ -29,9 +30,9 @@ use stdClass;
  * that case to its schema.
  *
  * `{}` and `[]` decode to the same PHP array, so an object literal is read off an OBJECT-decode and an
- * empty one is carried on as a {@see stdClass} — the codebase's standing way to say `{}` — because an
- * empty array is a list and a list is not an object. On a free-form map that is the natural example to
- * write, and it used to be the one literal refused despite being valid.
+ * empty one is carried on as the shared {@see EmptyObject} — the codebase's standing way to say `{}` —
+ * because an empty array is a list and a list is not an object. On a free-form map that is the natural
+ * example to write, and it used to be the one literal refused despite being valid.
  */
 final class TypedExample
 {
@@ -166,9 +167,9 @@ final class TypedExample
     /**
      * The decoded literal as the shape the rest of the pipeline reads: an object becomes an associative
      * array, which is what every emitter, lint and hash downstream expects — except an EMPTY one, which
-     * stays a {@see stdClass} because an empty array is a list and a list is not an object. That is the
-     * same distinction {@see CanonicalJsonSerializer} already relies on, and it
-     * has to survive from here on: `example` is data, so the canonicalizer passes it through untouched
+     * travels as the shared {@see EmptyObject} because an empty array is a list and a list is not an
+     * object. That is the same distinction {@see CanonicalJsonSerializer} already relies on, and it has
+     * to survive from here on: `example` is data, so the canonicalizer passes it through untouched
      * rather than re-deriving its object-ness.
      */
     private static function associative(mixed $shape): mixed
@@ -176,7 +177,7 @@ final class TypedExample
         if ($shape instanceof stdClass) {
             $members = (array) $shape;
 
-            return $members === [] ? $shape : array_map(self::associative(...), $members);
+            return $members === [] ? EmptyObject::get() : array_map(self::associative(...), $members);
         }
 
         return is_array($shape) ? array_map(self::associative(...), $shape) : $shape;

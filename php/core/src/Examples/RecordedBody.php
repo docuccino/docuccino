@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Examples;
 
+use Docuccino\Core\Support\EmptyObject;
 use JsonException;
 use stdClass;
 
@@ -11,9 +12,9 @@ use stdClass;
  * Reading a JSON body into the shape the rest of the pipeline expects, and writing it back.
  *
  * Objects decode to associative arrays, which is what every draft, canonicaliser and emitter here
- * takes — except an EMPTY one, which stays a {@see stdClass} because `[]` and `{}` are different
- * claims and an example that swapped one for the other would contradict its own schema. That is the
- * same convention the canonical serializer already asks callers to follow.
+ * takes — except an EMPTY one, which stays the shared {@see EmptyObject} because `[]` and `{}` are
+ * different claims and an example that swapped one for the other would contradict its own schema.
+ * That is the same convention the canonical serializer already asks callers to follow.
  *
  * @internal
  */
@@ -51,7 +52,11 @@ final class RecordedBody
                 $named = $named || is_string($key);
             }
 
-            return $named ? $out : (object) $out;
+            if ($named) {
+                return $out;
+            }
+
+            return $out === [] ? EmptyObject::get() : (object) $out;
         }
 
         if (is_array($value)) {

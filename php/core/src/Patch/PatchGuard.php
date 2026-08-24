@@ -55,6 +55,8 @@ final class PatchGuard
         if (! $by->outranks($state->winner)) {
             // A shadow that discards the value that won anyway is two producers agreeing, and there is
             // nothing there to have lost — recording it would bury the shadows that did lose something.
+            // On an object `!==` is instance identity, which is why `{}` travels as one shared instance
+            // (`Support\EmptyObject`) rather than a fresh one per producer.
             if ($value !== $state->value) {
                 $state->overrode[] = new OverrodeEntry(
                     field: $field,

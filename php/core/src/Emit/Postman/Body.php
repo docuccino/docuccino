@@ -9,7 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\SchemaExampleFactory;
 use Docuccino\Core\Support\Arr;
-use stdClass;
+use Docuccino\Core\Support\EmptyObject;
 
 /**
  * Turns a request body's Media Type Object into Postman's `body` member.
@@ -100,7 +100,7 @@ final class Body
 
         // An object with no properties must serialise as `{}`; an empty PHP array would render `[]`,
         // which is a body that lies about its own shape.
-        return rtrim((new CanonicalJsonSerializer)->serialize($value ?? new stdClass), "\n");
+        return rtrim((new CanonicalJsonSerializer)->serialize($value ?? EmptyObject::get()), "\n");
     }
 
     /**
