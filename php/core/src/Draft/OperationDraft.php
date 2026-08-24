@@ -19,6 +19,13 @@ use Docuccino\Core\Support\Hydrate;
  */
 final class OperationDraft
 {
+    /**
+     * The OAS range key a redirect is published under when nothing names its code. Public because this
+     * is the class that retires it ({@see supersedeStatusRange()}), so whoever else reads the key names
+     * it from here rather than spelling it again.
+     */
+    public const string REDIRECT_RANGE = '3XX';
+
     private readonly PatchGuard $guard;
 
     /**
@@ -121,6 +128,44 @@ final class OperationDraft
     public function removeResponse(string $status): void
     {
         unset($this->responses[$status]);
+    }
+
+    /**
+     * Hand the redirect range's findings to a concrete 3xx a producer has just DECLARED — the one full
+     * statement of the retraction rule; the other retraction sites point here.
+     *
+     * `3XX` stands in for ONE status nobody named: a `RedirectResponse` takes any 3xx and the return
+     * site says which only sometimes. Once something above the range's own layer names a member of the
+     * class, the unknown is known, and publishing both would tell a consumer that any OTHER 3xx may
+     * happen too — which is exactly what the declaration denied. The range cannot be narrowed to "301
+     * or 302" instead, because a range is not a member set; an endpoint that really answers with
+     * several codes declares each of them, and each declaration lands as its own response.
+     *
+     * Standing in is all the range was for, so it never OWNED what it collected: its fields, bodies and
+     * examples move onto the declared status at the contributions that wrote them
+     * ({@see ResponseDraft::absorb()}). The `Location` header is the case that matters — a redirect
+     * proves it, and it is a fact about the response rather than about the key it was filed under.
+     *
+     * Only the redirect class is retired. An error range is the other kind of range: `4XX` carrying a
+     * problem body says "any 4xx answers like this", which IS a member set, and declaring 404 denies
+     * nothing about 409 — so a declared error code adds a response and retires no range. And only a
+     * range `$by` outranks whole is retired ({@see ResponseDraft::isSupersededBy()}): one an author
+     * published at overlay or config level is their document rather than ours to edit.
+     */
+    public function supersedeStatusRange(string $status, Contribution $by): void
+    {
+        if (preg_match('/^3\d\d$/D', $status) !== 1) {
+            return;
+        }
+
+        $range = $this->responses[self::REDIRECT_RANGE] ?? null;
+
+        if ($range === null || ! $range->isSupersededBy($by)) {
+            return;
+        }
+
+        unset($this->responses[self::REDIRECT_RANGE]);
+        $this->response($status)->absorb($range);
     }
 
     /**

@@ -47,6 +47,11 @@ final class AttributeResponsesExtension implements OperationExtension
             $status = (string) $attribute->status;
             $response = $operation->response($status);
 
+            // Naming a code is also a statement about the range inference put it in
+            // ({@see OperationDraft::supersedeStatusRange()}): a pinned 302 retires the 3XX a redirect
+            // landed on, so the document doesn't answer the same question twice, vaguely and exactly.
+            $operation->supersedeStatusRange($status, Contribution::attribute($context->actionSource()));
+
             $response->setDescription('OK', Contribution::fallback());
             $response->setDescription($attribute->description, Contribution::attribute($context->actionSource()));
 

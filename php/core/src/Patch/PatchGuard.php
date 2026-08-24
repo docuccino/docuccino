@@ -66,6 +66,44 @@ final class PatchGuard
         return isset($this->fields[$field]);
     }
 
+    /**
+     * Whether `$by` outranks the winning contribution of every field written here — so a producer at
+     * that layer speaks over the whole node rather than only the fields it happens to touch. A guard
+     * nothing has written yet answers true: there is nothing there to outrank.
+     */
+    public function outranksAll(Contribution $by): bool
+    {
+        foreach ($this->fields as $state) {
+            if (! $by->outranks($state->winner)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Every winning field as `(value, contribution)`, {@see Remove} sentinels omitted — so a draft that
+     * takes over another's facts can replay them at the layers that wrote them, rather than at whichever
+     * layer happens to be moving them.
+     *
+     * @return array<string, array{value: mixed, by: Contribution}>
+     */
+    public function contributions(): array
+    {
+        $out = [];
+
+        foreach ($this->fields as $field => $state) {
+            if ($state->value instanceof Remove) {
+                continue;
+            }
+
+            $out[$field] = ['value' => $state->value, 'by' => $state->winner];
+        }
+
+        return $out;
+    }
+
     /** The `producer` of the currently-winning contribution for a field, null if unset. */
     public function producerFor(string $field): ?string
     {

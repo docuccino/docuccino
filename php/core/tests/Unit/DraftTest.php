@@ -290,3 +290,153 @@ it('carries a declared name across the merge into the operation it applies to', 
 
     expect($frozen?->toArray()['x-docuccino']['facts'])->toBe(['component' => 'NotFound']);
 });
+
+it('retracts the redirect range a declared concrete status supersedes', function (): void {
+    // The range key stands in for the ONE status nobody named. Once something names it, publishing both
+    // would tell a consumer that any other member of the class may happen too — which is exactly what
+    // the declaration denied.
+    $draft = new OperationDraft;
+
+    $range = $draft->response('3XX');
+    $range->setDescription('Redirect', Contribution::fallback());
+    $range->set('headers', ['Location' => ['schema' => ['type' => 'string']]], Contribution::inference());
+
+    $draft->response('302')->setDescription('Follow the Location header.', Contribution::attribute());
+    $draft->supersedeStatusRange('302', Contribution::attribute());
+
+    $frozen = $draft->freeze()->responses['302'];
+
+    expect($draft->responseStatuses())->toBe(['302'])
+        ->and($frozen->description)->toBe('Follow the Location header.')
+        ->and($frozen->headers)->toBe(['Location' => ['schema' => ['type' => 'string']]]);
+});
+
+it('reparents every fact the retired range held, at the layer that wrote it', function (): void {
+    // Standing in for the unknown code was all the range was for, so it never owned what it collected:
+    // a body, its examples and a component claim reach the declared status with their provenance, and
+    // whatever the declaration already states at a higher layer stays the declaration's.
+    $draft = new OperationDraft;
+
+    $range = $draft->response('3XX');
+    $range->setDescription('Redirect', Contribution::fallback());
+    $range->claimComponentName('Redirected', Contribution::inference());
+    $range->content('application/json')->set('type', 'object', Contribution::inference());
+    $range->content('application/json')->property('url')->set('type', 'string', Contribution::inference());
+    $range->declareExamples('application/json', ['moved' => ['value' => ['url' => '/a']]]);
+    $range->illustrateExamples('application/json', ['recorded' => ['value' => ['url' => '/b']]]);
+    $range->content('text/plain')->set('type', 'string', Contribution::inference());
+    $range->declareExamples('text/plain', [], '/a');
+    $range->setExample('text/plain', '/ignored-in-favour-of-the-declaration');
+
+    $draft->response('303')->setDescription('See Other', Contribution::attribute());
+    $draft->supersedeStatusRange('303', Contribution::attribute());
+
+    $frozen = $draft->freeze()->responses['303'];
+    $json = $frozen->content['application/json'] ?? [];
+
+    expect($draft->responseStatuses())->toBe(['303'])
+        ->and($frozen->description)->toBe('See Other')
+        ->and($frozen->toArray()['x-docuccino']['facts'])->toBe(['component' => 'Redirected'])
+        ->and($json['schema']['properties']['url']['type'] ?? null)->toBe('string')
+        ->and($json['schema']['properties']['url']['x-docuccino']['provenance'][0]['layer'] ?? null)->toBe('inference')
+        ->and(array_keys($json['examples'] ?? []))->toBe(['moved', 'recorded'])
+        ->and($frozen->content['text/plain']['example'] ?? null)->toBe('/a');
+});
+
+it('drops a reparented body the declared status may not carry', function (): void {
+    // 304 is bodyless, and the bodyless rule is enforced at the write — so a range that collected a
+    // body hands over everything but that, rather than smuggling one past it.
+    $draft = new OperationDraft;
+
+    $range = $draft->response('3XX');
+    $range->set('headers', ['Location' => ['schema' => ['type' => 'string']]], Contribution::inference());
+    $range->content('application/json')->set('type', 'object', Contribution::inference());
+
+    $draft->supersedeStatusRange('304', Contribution::attribute());
+
+    $frozen = $draft->freeze()->responses['304'];
+
+    expect($frozen->content)->toBeNull()
+        ->and($frozen->headers)->toHaveKey('Location');
+});
+
+it('leaves a range of another class alone when a status is declared', function (string $status): void {
+    // A declared 200 or 404 says nothing about which redirect an endpoint answers with, so the honest
+    // range survives beside it.
+    $draft = new OperationDraft;
+    $draft->response('3XX')->setDescription('Redirect', Contribution::fallback());
+    $draft->response($status)->setDescription('Declared', Contribution::attribute());
+
+    $draft->supersedeStatusRange($status, Contribution::attribute());
+
+    expect($draft->responseStatuses())->toContain('3XX');
+})->with(['success' => ['200'], 'not found' => ['404'], 'server error' => ['503']]);
+
+it('retires no range but the redirect one', function (string $range, string $status): void {
+    // An error range is a member set — "any 4xx answers like this" — so a declared member denies
+    // nothing about the others and the range stays. Only 3XX stands for one unknown code.
+    $draft = new OperationDraft;
+    $draft->response($range)->setDescription('Problem', Contribution::inference());
+
+    $draft->supersedeStatusRange($status, Contribution::attribute());
+
+    expect($draft->responseStatuses())->toBe([$range]);
+})->with([
+    'informational' => ['1XX', '103'],
+    'success' => ['2XX', '201'],
+    'client error' => ['4XX', '404'],
+    'server error' => ['5XX', '503'],
+]);
+
+it('keeps a range the declaration does not outrank', function (): void {
+    // A range an author wrote at overlay level is their document; an attribute below it may add a
+    // concrete status, but not retire what they published.
+    $draft = new OperationDraft;
+    $draft->response('3XX')->setDescription('Redirect', Contribution::overlay());
+
+    $draft->supersedeStatusRange('302', Contribution::attribute());
+
+    expect($draft->responseStatuses())->toContain('3XX');
+});
+
+it('reads only a concrete status as superseding a range', function (string $status): void {
+    // Nothing but a three-digit status names a member of a class: a range supersedes no range, and a
+    // key HTTP has no number for supersedes nothing at all.
+    $draft = new OperationDraft;
+    $draft->response('3XX')->setDescription('Redirect', Contribution::fallback());
+
+    $draft->supersedeStatusRange($status, Contribution::attribute());
+
+    expect($draft->responseStatuses())->toContain('3XX');
+})->with([
+    'the range itself' => ['3XX'],
+    'the default response' => ['default'],
+    'a bare class digit' => ['3'],
+    'a four-digit number' => ['3021'],
+    'nothing at all' => [''],
+]);
+
+it('is silent when there is no range to retract', function (): void {
+    $draft = new OperationDraft;
+    $draft->response('302')->setDescription('Found', Contribution::attribute());
+
+    $draft->supersedeStatusRange('302', Contribution::attribute());
+
+    expect($draft->responseStatuses())->toBe(['302']);
+});
+
+it('reports a response superseded only by a contribution that outranks every field on it', function (): void {
+    // Field-level patching settles one value; this settles whether the node still says anything the
+    // document needs, so ONE field written above the caller is enough to keep it.
+    $response = new ResponseDraft('3XX');
+    $response->setDescription('Redirect', Contribution::fallback());
+
+    expect($response->isSupersededBy(Contribution::attribute()))->toBeTrue()
+        ->and($response->isSupersededBy(Contribution::fallback()))->toBeFalse();
+
+    $response->set('headers', ['Location' => []], Contribution::overlay());
+
+    expect($response->isSupersededBy(Contribution::attribute()))->toBeFalse()
+        ->and($response->isSupersededBy(Contribution::config()))->toBeTrue()
+        ->and((new ResponseDraft('3XX'))->isSupersededBy(Contribution::fallback()))->toBeTrue();
+});

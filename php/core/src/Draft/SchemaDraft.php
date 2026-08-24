@@ -68,6 +68,23 @@ final class SchemaDraft
         return $this;
     }
 
+    /**
+     * Take over another schema's keywords and properties, each at the contribution that wrote it — the
+     * nested half of {@see ResponseDraft::absorb()}.
+     *
+     * @internal Core-only; extensions build drafts rather than move them about.
+     */
+    public function absorb(self $other): void
+    {
+        foreach ($other->guard->contributions() as $keyword => $write) {
+            $this->guard->apply($keyword, $write['value'], $write['by']);
+        }
+
+        foreach ($other->properties as $name => $property) {
+            $this->property((string) $name)->absorb($property);
+        }
+    }
+
     /** The provenance producer of the currently-winning contribution for a field, or null if unset. */
     public function producerFor(string $field): ?string
     {

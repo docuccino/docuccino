@@ -170,6 +170,49 @@ final class ResponseDraft
     }
 
     /**
+     * Take over another response's facts, each at the contribution that wrote it — how
+     * {@see OperationDraft::supersedeStatusRange()} hands a retired range's findings to the status that
+     * retired it. Every field, body and example arrives as if its original producer had written it here,
+     * so this response keeps whatever it already states at a higher layer and inherits the rest with its
+     * provenance intact. Content aimed at a bodyless status is dropped at the write like any other
+     * ({@see BODYLESS_STATUS}).
+     *
+     * @internal Core-only; extensions build drafts rather than move them about.
+     */
+    public function absorb(self $other): void
+    {
+        foreach ($other->guard->contributions() as $field => $write) {
+            if ($field === self::COMPONENT) {
+                $this->claimComponentName(Hydrate::stringOrNull($write['value']), $write['by'], $other->componentIsStatusDefault);
+
+                continue;
+            }
+
+            $this->guard->apply($field, $write['value'], $write['by']);
+        }
+
+        foreach ($other->content as $mediaType => $draft) {
+            $this->content((string) $mediaType)->absorb($draft);
+        }
+
+        foreach ($other->declaredExamples as $mediaType => $named) {
+            $this->declareExamples((string) $mediaType, $named);
+        }
+
+        foreach ($other->declaredExample as $mediaType => $example) {
+            $this->declareExamples((string) $mediaType, [], $example);
+        }
+
+        foreach ($other->illustratedExamples as $mediaType => $named) {
+            $this->illustrateExamples((string) $mediaType, $named);
+        }
+
+        foreach ($other->examples as $mediaType => $example) {
+            $this->setExample((string) $mediaType, $example);
+        }
+    }
+
+    /**
      * Whether HTTP forbids this response a body ({@see BODYLESS_STATUS}) — ask before converting a payload,
      * since a component hoisted for content that then gets dropped is left orphaned.
      */
@@ -241,6 +284,18 @@ final class ResponseDraft
     public function producerFor(string $field): ?string
     {
         return $this->guard->producerFor($field);
+    }
+
+    /**
+     * Whether a contribution outranks everything written here, so it speaks over the response as a
+     * whole rather than field by field — asked before a node is retired
+     * ({@see OperationDraft::supersedeStatusRange()}).
+     *
+     * @internal Core-only; the retraction paths ask this, extensions patch fields.
+     */
+    public function isSupersededBy(Contribution $by): bool
+    {
+        return $this->guard->outranksAll($by);
     }
 
     /** The currently-resolved value of a field (Remove sentinels omitted), or null if unset. */
