@@ -7,8 +7,10 @@ import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
 
 A schema says what a field *is*. An example says what a real call looks like — and it's the part of
 your documentation a reader pastes into their client. Inference fills in example values where the code
-states them outright; everything else on this page is how you supply the rest, either by writing one or
-by publishing the ones your tests already produce.
+states them outright, and synthesizes one for every request property whose
+[validation rules pin a value](/laravel/documenting/requests/#examples-come-with-the-rules); everything
+else on this page is how you supply the rest, either by writing one or by publishing the ones your
+tests already produce.
 
 ## On a response
 
@@ -87,6 +89,27 @@ parameter — and several named declarations publish a map here too.
 `request: true` targets the request body and `parameter:` names a parameter — path, query, header or
 cookie, whichever it turns out to be. The full argument list is in the [attribute
 reference](/laravel/reference/attributes/#example).
+
+## What sits above a synthesized example
+
+Request properties come with an example already, derived from their own validation rules and checked
+against their own schema before it is published — the
+[rules reference](/laravel/documenting/requests/#examples-come-with-the-rules) has the table and the
+cases that get nothing. It sits at the bottom of the ladder, so everything on this page displaces it:
+
+| The example on a request property comes from | Which beats |
+| --- | --- |
+| the rules, synthesized | nothing — it is the floor |
+| a `#[RuleSchema(example: …)]` on your own rule class | the synthesized one, wherever that rule applies |
+| a `#[BodyParameter(example: …)]` / `#[QueryParameter(example: …)]` | both of the above, for that one property |
+
+An `#[Example]` is a different node — the body or the parameter as a *whole*, not one property — so it
+never competes with these. A reader gets both: the payload you curated, and per-field values inside the
+schema for the fields it doesn't mention.
+
+Nothing synthesized ever silently replaces something you wrote, and nothing you write is held to the
+schema by the synthesis — [contract testing](/laravel/guides/contract-testing/) is what checks an
+example you wrote yourself.
 
 ## Examples from a file
 
