@@ -592,6 +592,11 @@ field whose rules reject it the built-in sample is published there instead, with
 `config.format-sample-rejected` warning naming the format, your value and the keyword it failed. A
 sample for a format no schema uses is not an error; examples are demand-driven.
 
+Your samples reach every value Docuccino invents, not only the ones in the schema: a
+[Postman collection](/laravel/reference/commands/#docuccinoexport) fills its request bodies, saved
+response examples and URL variables from the same table, so the email in the body a teammate presses
+Send on is the email the document publishes.
+
 Anything you write outranks all of it — a `#[BodyParameter(example: …)]`, a
 `#[RuleSchema(example: …)]` on your own rule class, or an
 [`#[Example]`](/laravel/documenting/examples/) for the body as a whole. See
