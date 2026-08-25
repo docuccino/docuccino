@@ -16,6 +16,19 @@ namespace Docuccino\Core\Support;
 final class ConfinedPath
 {
     /**
+     * What to tell an author whose `file:` was refused for escaping the base, and what to tell one
+     * whose confined path held no readable file — the two outcomes {@see resolve()} distinguishes,
+     * and so the two sentences this class owns. They are stated here rather than at each reporter
+     * because a remedy that no longer matches the rule sends the author to fix something that was
+     * never wrong, and a copy is free to drift from the rule exactly as a copy of the guard would be.
+     * The wording addresses a `file:` attribute argument, which is what every site reporting these
+     * outcomes today is reading; a configured path refused the same way wants a sentence of its own.
+     */
+    public const string FILE_ESCAPED_HELP = 'Point `file:` at a path inside the application, written relative to its root.';
+
+    public const string FILE_MISSING_HELP = 'Create the file, or correct the path — it is read relative to the application root.';
+
+    /**
      * The absolute path $relative resolves to under $base, or null when it escapes. A returned path
      * is confined but may not exist: callers treat a read failure as "absent", which is a different
      * thing from this null, meaning "rejected escape".

@@ -289,6 +289,17 @@ final class ComponentNames
     }
 
     /**
+     * The character class in words, for a diagnostic telling an author why the name they wrote was
+     * refused. It lives beside the pattern it restates for the same reason the pattern lives here and
+     * nowhere else — a second copy of the sentence drifts from the rule exactly as a second copy of
+     * the pattern would. Every site that reports a refused name draws from here;
+     * {@see ComponentRegistry::LEGAL_NAME_HELP} is the same string for an extension author, who
+     * cannot see this class. Internal, as everything on this class is: the extension author's view of
+     * it is the public one.
+     */
+    public const string LEGAL_NAME_HELP = 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.';
+
+    /**
      * Whether a name is already one a `$ref` can carry — the question {@see sanitize()} answers by
      * force. The character class lives here and nowhere else: a second copy of it is how a name this
      * class would rewrite comes to be accepted somewhere upstream.
