@@ -578,44 +578,193 @@ describe('schema dialect conversions', function (): void {
     });
 });
 
-it('emits nothing OpenAPI 3.0 cannot read', function (string $golden): void {
-    $document = json_decode(loadGolden($golden), true, flags: JSON_THROW_ON_ERROR);
-
+/**
+ * Everything an OpenAPI 3.0 reader rejects in an emitted document, read POSITIONALLY — the way the
+ * emitter reads it. A banned schema keyword is only a keyword where a schema object stands, so a
+ * component or a property merely SPELLED like one (`components.schemas.const`, a body property named
+ * `if`) is the name it looks like rather than a keyword; and `jsonSchemaDialect` and `webhooks` are
+ * document members, so they only mean anything at the root.
+ *
+ * The walk mirrors the emitter's: a `schema` member anywhere plus every entry of `components.schemas`,
+ * and from each of those the seven positions a schema nests another at. `x-` members and the members
+ * whose value is user data are not descended into, or an example keyed like a schema position would be
+ * read as one — the mistake this scan exists to catch.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array{rejections: list<string>, positions: int}
+ */
+function downlevel30Scan(array $document): array
+{
     $banned = [
         ...OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS,
         ...OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS,
         'const',
-        'jsonSchemaDialect',
-        'webhooks',
     ];
 
-    $found = [];
-    $scan = function (mixed $node) use (&$scan, $banned, &$found): void {
+    $rejections = [];
+    $positions = 0;
+    $escape = static fn (string $token): string => str_replace(['~', '/'], ['~0', '~1'], $token);
+
+    $schema = function (array $node, string $pointer) use (&$schema, $banned, $escape, &$rejections, &$positions): void {
+        $positions++;
+
+        foreach ($banned as $keyword) {
+            if (array_key_exists($keyword, $node)) {
+                $rejections[] = $pointer.'/'.$keyword;
+            }
+        }
+
+        // A 2020-12 `type` array is the other thing a 3.0 validator rejects outright.
+        if (is_array($node['type'] ?? null)) {
+            $rejections[] = $pointer.'/type is an array';
+        }
+
+        foreach (['items', 'not', 'additionalProperties'] as $keyword) {
+            $subschema = $node[$keyword] ?? null;
+
+            if (is_array($subschema)) {
+                $schema($subschema, $pointer.'/'.$keyword);
+            }
+        }
+
+        foreach (['allOf', 'anyOf', 'oneOf'] as $keyword) {
+            $branches = $node[$keyword] ?? null;
+
+            if (! is_array($branches)) {
+                continue;
+            }
+
+            foreach (array_values($branches) as $index => $branch) {
+                if (is_array($branch)) {
+                    $schema($branch, $pointer.'/'.$keyword.'/'.$index);
+                }
+            }
+        }
+
+        $properties = $node['properties'] ?? null;
+
+        if (is_array($properties)) {
+            foreach ($properties as $name => $property) {
+                if (is_array($property)) {
+                    $schema($property, $pointer.'/properties/'.$escape((string) $name));
+                }
+            }
+        }
+    };
+
+    $components = function (array $map, string $pointer) use ($schema, $escape): void {
+        foreach ($map as $name => $member) {
+            if (is_array($member)) {
+                $schema($member, $pointer.'/'.$escape((string) $name));
+            }
+        }
+    };
+
+    $walk = function (mixed $node, string $pointer) use (&$walk, $schema, $components, $escape): void {
         if (! is_array($node)) {
             return;
         }
 
         foreach ($node as $key => $value) {
-            if (in_array((string) $key, $banned, true)) {
-                $found[] = (string) $key;
+            $key = (string) $key;
+
+            if (str_starts_with($key, 'x-') || in_array($key, ['const', 'default', 'enum', 'example', 'examples'], true)) {
+                continue;
             }
 
-            // A 2020-12 `type` array is the other thing a 3.0 validator rejects outright.
-            if ($key === 'type' && is_array($value)) {
-                $found[] = 'type array';
-            }
+            $child = $pointer.'/'.$escape($key);
 
-            $scan($value);
+            if ($key === 'schema' && is_array($value)) {
+                $schema($value, $child);
+            } elseif ($key === 'schemas' && $pointer === '#/components' && is_array($value)) {
+                $components($value, $child);
+            } else {
+                $walk($value, $child);
+            }
         }
     };
-    $scan($document);
 
-    expect($found)->toBe([]);
+    foreach (['jsonSchemaDialect', 'webhooks'] as $member) {
+        if (array_key_exists($member, $document)) {
+            $rejections[] = '#/'.$member;
+        }
+    }
+
+    $walk($document, '#');
+
+    sort($rejections);
+
+    return ['rejections' => $rejections, 'positions' => $positions];
+}
+
+it('emits nothing OpenAPI 3.0 cannot read', function (string $golden, int $positions): void {
+    $scan = downlevel30Scan(json_decode(loadGolden($golden), true, flags: JSON_THROW_ON_ERROR));
+
+    // The count is the anti-vacuity half: a walk that stopped reaching schemas would report no
+    // rejections forever, and pass.
+    expect($scan['rejections'])->toBe([])
+        ->and($scan['positions'])->toBeGreaterThanOrEqual($positions);
 })->with([
-    'worked-example' => ['worked-example.openapi30.json'],
-    'kitchen-sink' => ['kitchen-sink.openapi30.json'],
-    'downlevel' => ['downlevel.openapi30.json'],
+    'worked-example' => ['worked-example.openapi30.json', 8],
+    'kitchen-sink' => ['kitchen-sink.openapi30.json', 8],
+    'downlevel' => ['downlevel.openapi30.json', 24],
 ]);
+
+describe('the scan that guards the 3.0 emission', function (): void {
+    it('reads a keyword by the position it stands at, not by its spelling', function (): void {
+        // Nothing here is a keyword: one is a component name, one is a property name, and 3.0 reads
+        // both as the names they are.
+        $emitted = (new OpenApi30DownlevelEmitter)->emit(UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'paths' => ['/things' => ['get' => ['responses' => ['200' => [
+                'description' => 'OK',
+                'content' => ['application/json' => ['schema' => [
+                    'type' => 'object',
+                    'properties' => ['if' => ['type' => 'string'], 'unevaluatedProperties' => ['type' => 'string']],
+                ]]],
+            ]]]]],
+            'components' => ['schemas' => ['const' => ['type' => 'string'], 'contains' => ['type' => 'string']]],
+        ]));
+
+        $scan = downlevel30Scan(json_decode($emitted, true, flags: JSON_THROW_ON_ERROR));
+
+        expect($scan['rejections'])->toBe([])
+            ->and($scan['positions'])->toBe(5);
+    });
+
+    it('still finds a banned construct standing where 3.0 reads it as one', function (array $document, array $rejections): void {
+        expect(downlevel30Scan($document)['rejections'])->toBe($rejections);
+    })->with([
+        'a component schema' => [
+            ['components' => ['schemas' => ['S' => ['type' => 'object', 'if' => ['type' => 'string']]]]],
+            ['#/components/schemas/S/if'],
+        ],
+        'a property schema' => [
+            ['components' => ['schemas' => ['S' => ['properties' => ['a' => ['$comment' => 'aside']]]]]],
+            ['#/components/schemas/S/properties/a/$comment'],
+        ],
+        'an allOf branch' => [
+            ['components' => ['schemas' => ['S' => ['allOf' => [['type' => 'string'], ['const' => 1]]]]]],
+            ['#/components/schemas/S/allOf/1/const'],
+        ],
+        'an items schema' => [
+            ['components' => ['schemas' => ['S' => ['items' => ['prefixItems' => []]]]]],
+            ['#/components/schemas/S/items/prefixItems'],
+        ],
+        'an inline body schema' => [
+            ['paths' => ['/things' => ['get' => ['responses' => ['200' => ['content' => ['application/json' => [
+                'schema' => ['type' => ['string', 'null']],
+            ]]]]]]]],
+            ['#/paths/~1things/get/responses/200/content/application~1json/schema/type is an array'],
+        ],
+        'the document members 3.0 lacks' => [
+            ['jsonSchemaDialect' => 'https://json-schema.org/draft/2020-12/schema', 'webhooks' => []],
+            ['#/jsonSchemaDialect', '#/webhooks'],
+        ],
+    ]);
+});
 
 it('keeps a projected mock hint through the 3.0 downlevel', function (): void {
     // The projection happens in the 3.2 pass this emitter chains off, so what arrives here is an
