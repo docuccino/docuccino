@@ -92,9 +92,11 @@ local environment. Nothing else to configure —
 		documented with zero configuration.
 	</Card>
 	<Card title="Deterministic output" icon="approve-check">
-		The same code always produces byte-for-byte identical output — no timestamps, no absolute
-		paths, no shuffling. Commit the file and your diffs stay clean; a tool upgrade moves at most a
-		single `generator` version line (and nothing at all in the OpenAPI export).
+		The same code on the same version always produces byte-for-byte identical output — no
+		timestamps, no absolute paths, no shuffling. Commit the file and your day-to-day diffs stay
+		clean. Upgrading is the one thing that moves bytes without a code change: a release that
+		corrects what a document says changes it on purpose and names it in the changelog, so
+		`docuccino:diff` shows you what moved before you commit it.
 	</Card>
 	<Card title="A diff you can gate CI on" icon="seti:git">
 		`docuccino:diff --enforce` compares two versions of your API and enforces a versioning policy.

@@ -20,15 +20,16 @@ Shared behavior:
   every configured document. An unknown key errors and exits `1`. Per-document results
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
-  deterministic order; `diff`, `clear` and `explain` print none. `watch` and `install` print whatever
-  the export they run prints, and nothing of their own — what they report is about your setup rather
-  than about the document, which is a console message.
+  deterministic order; `diff`, `clear`, `coverage` and `explain` print none. `watch` and `install`
+  print whatever the export they run prints, and nothing of their own — what they report is about your
+  setup rather than about the document, which is a console message.
 - **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
   `diff`, `cache`, `watch`, `explain`, `install` — since inference runs a static analyzer inside the
   artisan process.
   Raise-only: a process already running with a higher limit is left alone, and `-1` is rejected. Same
   lever as [`engine.memory_limit`](/laravel/reference/configuration/#engine), and the flag wins.
-  `clear` builds nothing, so it doesn't take it.
+  `clear` and `coverage` build nothing — one flushes the cache, the other reads an artifact your suite
+  already asserted against — so neither takes it.
 - **Long-running.** Every command runs once and exits, except `docuccino:watch`, which stays in the
   foreground until you stop it.
 
@@ -601,7 +602,7 @@ responses.422  → #/components/responses/UnprocessableEntity
   from integration:implicit-response · app/Http/Controllers/InvoiceController.php:38 · implicit:validated-request
   component
     ✓ integration "UnprocessableEntity"
-    → set it with #[ErrorComponent('InvoiceNotFound')] on the exception or its render method
+    → set it with #[Response(status: 422, errorComponent: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method
   description
     ✓ integration "Unprocessable Entity"
     → set it with #[Response(status: 422, description: '…')]
@@ -639,7 +640,8 @@ gets one line saying how to take it:
 
 An attribute is named **only where it genuinely writes that field on that node**: `#[Group]` really is
 what sets `tags`, and the name a shared error body publishes under is written by `#[ErrorComponent]` or
-by `#[Response(errorComponent:)]` — never by `#[Response]`'s other arguments. A
+by `#[Response(errorComponent:)]` — never by `#[Response]`'s other arguments. Where a field takes more
+than one anchor the line names them all, listing the one written on the action first. A
 lever that would do nothing is worse than no lever, so everywhere else the answer is the generic one,
 which is still actionable: an [overlay](/laravel/guides/customizing-output/) can write any field at
 all, and it outranks everything except `config`.

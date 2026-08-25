@@ -410,12 +410,27 @@ Targets `CLASS | METHOD | FUNCTION`, repeatable.
 public function __construct(public int $status)
 ```
 
-Drops an auto-inferred response by status code.
+Drops a documented response by status code.
 
 ```php
 #[IgnoreResponse(status: 500)]
 public function show(int $id): UserResource { /* … */ }
 ```
+
+It is the last word on that status, whatever documented it: an inferred return type, a `#[Response]` on
+the same action, the `429` a [rate limiter](/laravel/documenting/rate-limiting/) documents, the `400`
+[Query Builder](/laravel/packages/query-builder/) strict mode adds, or an
+[error](/laravel/documenting/errors/) an exception the action throws produces. Every producer asks
+before it builds anything, so a dropped status takes the components its body would have hoisted with it
+rather than leaving them published and referenced by nothing.
+
+It drops **exactly** the status it names and no other. There is no positive form, so a class-level and a
+method-level declaration never contest each other — both apply, and the action drops the union. It
+cannot name a range key such as `3XX`, since `status:` is an `int`, and that is the answer in both
+directions: an ignore takes a status away and establishes nothing, so it neither retires the range a
+member sits in nor narrows one. A `status:` that matches nothing is silent, exactly as `#[IgnoreParam]`'s
+unmatched `name:` is, because listing a status only some of a controller's actions document is the
+ordinary way a class-level declaration is written.
 
 ## Metadata
 

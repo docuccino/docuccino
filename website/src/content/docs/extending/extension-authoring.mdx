@@ -459,13 +459,32 @@ The rest of the rules:
 
 #### Overriding a built-in name
 
-Docuccino's own tiers name Laravel's errors `NotFound`, `Unauthorized`, `Forbidden`,
-`UnprocessableEntity`, `TooManyRequests` and `BadRequest`. Three supported ways to change that, in the
-order to reach for them.
+Docuccino's own tiers name Laravel's errors `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`,
+`MethodNotAllowed`, `Conflict`, `UnprocessableEntity`, `TooManyRequests`, `InternalServerError` and
+`ServiceUnavailable` — the full table, with what produces each, is on [Error
+responses](/laravel/documenting/errors/#shared-errors-are-named-after-the-error). Four supported ways to
+change one, in the order to reach for them.
 
 <Steps>
 
-1. **Mark the exception.** For your own exception classes this is the whole job — no extension, no
+1. **Name the response on the operation that declares it.** Where the action declares the status itself
+   with `#[Response]`, its `errorComponent:` argument names the response — no extension, and the highest of
+   the four, so it stands over anything the paths below claim:
+
+   ```php
+   use Docuccino\Attributes\Response;
+
+   #[Response(status: 422, type: SignInChallenge::class, errorComponent: 'AuthenticationChallenge')]
+   public function completeMfa(Request $request): SuccessData { /* … */ }
+   ```
+
+   It is also the only anchor that reaches a body **nothing threw**, which is why it is not simply a
+   spelling of the attribute below: `#[ErrorComponent]` is read off the exception classes a route signals
+   and the render methods on their path, and a status an operation declares for itself is on neither.
+   Full behavior: [Name one operation's
+   error](/laravel/documenting/errors/#name-one-operations-error-wherever-the-body-came-from).
+
+2. **Mark the exception.** For your own exception classes this is the whole job — no extension, no
    registration:
 
    ```php
@@ -482,7 +501,7 @@ order to reach for them.
    different bodies needs the mapper below, which sees each body as it builds it — or when the exception
    isn't yours to mark. Full behavior: [`#[ErrorComponent]`](/laravel/reference/attributes/#errorcomponent).
 
-2. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
+3. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
    the first mapper that both supports the throw and answers, and an unannotated extension sorts at
    `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
    (`LAST`), so yours wins over both, body and name together, with no `#[ExtensionOrder]` at all. Two
@@ -517,7 +536,7 @@ order to reach for them.
    }
    ```
 
-3. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
+4. **Keep the body, rename the component.** An `OperationExtension` in the `Finalize` phase claims a
    name over whatever the built-in claimed. The claim is guarded like every other write, so
    [precedence](#every-write-carries-a-contribution) decides — and the tiers do not all claim at one
    layer. The generic fallback claims at `fallback`; the framework-error and rate-limit tiers claim at
@@ -547,7 +566,7 @@ order to reach for them.
 :::caution
 An overlay cannot do this. Overlays are applied *before* the shared-error hoist runs, so at overlay
 time `components.responses.*` does not exist yet and targeting it raises `overlay.target-missing`. Use
-one of the three paths above — see [Overlays](/laravel/guides/customizing-output/) for what overlays are
+one of the four paths above — see [Overlays](/laravel/guides/customizing-output/) for what overlays are
 for.
 :::
 

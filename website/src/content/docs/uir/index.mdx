@@ -86,10 +86,11 @@ keys sorted by code point, a fixed order of HTTP methods, parameters sorted by l
 		Regenerating without code changes produces a byte-for-byte identical file — clean diffs, every
 		time.
 	</Card>
-	<Card title="Stable across upgrades" icon="rocket">
-		The content hash excludes tool metadata, so upgrading Docuccino moves only the `generator`
-		version line — the rest of the document is untouched (and the OpenAPI export, which drops that
-		metadata, is identical).
+	<Card title="Upgrades you can see" icon="rocket">
+		The content hash excludes tool metadata, so a version bump on its own moves the `generator`
+		line and leaves `contentHash` exactly where it was. A release that corrects what a document
+		says does move it — deliberately, and named in the changelog — so run `docuccino:diff` against
+		the committed artifact when you upgrade, rather than reading the new one cold.
 	</Card>
 </CardGrid>
 

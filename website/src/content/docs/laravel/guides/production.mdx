@@ -301,7 +301,15 @@ A local `http://` app documents its hosted routes over `http` for the same reaso
 
 A templated host (`{tenant}.example.com`) becomes a server variable, the same shape as the
 document-level example above; any variable your base path still names is carried over beside it, since
-an operation-level server has to define every variable in its own URL.
+an operation-level server has to define every variable in its own URL. Only those are carried: a
+variable the document declares for a segment this operation no longer has belongs to the host that was
+just replaced, so it is left behind rather than published against a URL that never mentions it.
+
+A variable derived from the host defaults to the placeholder's own name — `{tenant}` defaults to
+`tenant` — which is as close to a value as the routes can honestly get, and it wins if the document
+also declares a variable of that name. The whole entry is written at the `fallback` layer, the lowest
+there is, so an [overlay](/laravel/guides/customizing-output/) replaces it outright when the real
+values are something you'd rather state than derive.
 
 If the host itself comes from the environment — `Route::domain(config('app.admin_domain'))` with
 `ADMIN_DOMAIN=admin.myapp.test` — the build reports it as a

@@ -200,7 +200,8 @@ warmed cache with `viewer.source: 'cache'` plus `docuccino:cache` in your deploy
 
 ## Other formats and paths
 
-`docuccino:export` emits OpenAPI 3.2 by default, and five other artifacts on request:
+`docuccino:export` emits OpenAPI 3.2 by default. `--format` picks another; `--yaml` is a *serialization*
+rather than a format, so it applies to whichever of them you asked for:
 
 <Tabs>
 	<TabItem label="OpenAPI 3.2 (default)">
@@ -218,10 +219,14 @@ warmed cache with `viewer.source: 'cache'` plus `docuccino:cache` in your deploy
 	php artisan docuccino:export --format=openapi-3.0 --out=public/openapi.json
 	```
 	</TabItem>
-	<TabItem label="YAML">
+	<TabItem label="YAML (a serialization)">
 	```bash
 	php artisan docuccino:export --yaml --out=docs/openapi.yaml
+	php artisan docuccino:export --format=openapi-3.0 --yaml --out=docs/openapi-3.0.yaml
 	```
+
+	Available on the three OpenAPI formats. UIR and Postman are parsed by tools that read JSON and
+	nothing else, so a `.yaml` path on either is refused rather than filled with JSON.
 	</TabItem>
 	<TabItem label="Raw UIR">
 	```bash
@@ -270,9 +275,20 @@ The path's extension picks the serialization — no `--yaml` needed. See
 Reach for `--format=openapi-3.0` when something downstream is pinned to 3.0 — AWS API Gateway,
 an older code generator, a validator that predates 3.1. It writes `openapi: 3.0.4`.
 
-3.0 is a smaller spec than the one Docuccino builds against, so a few things change shape on the way
-down. Each one prints a `downlevel.*` diagnostic naming the JSON pointer it happened at, so you can
-see exactly what a 3.0 consumer will and won't get:
+3.0 is a smaller spec than the one Docuccino builds against, so things change shape on the way down.
+Each one prints a `downlevel.*` diagnostic naming the JSON pointer it happened at, so you can see
+exactly what a 3.0 consumer will and won't get.
+
+A 3.0 export is produced **through** the 3.1 one, so it carries everything the 3.1 target drops as well
+as its own losses. The first group below is what 3.1 already gives up; the rest is 3.0's:
+
+| In 3.2 | In the 3.1 and 3.0 exports |
+| --- | --- |
+| The `query` HTTP method | Dropped — the operation is not in the emitted document |
+| `additionalOperations` | Dropped — model custom methods with a standard method |
+| A tag's `summary` | Dropped — tags fall back to their `name` for display |
+| A tag's `parent` | Dropped; the hierarchy survives as `x-tagGroups`, which a generated document carries |
+| A tag's `kind` | Dropped — consumers treat every tag the same |
 
 | In 3.1 / 3.2 | In the 3.0 export |
 | --- | --- |
@@ -284,14 +300,16 @@ see exactly what a 3.0 consumer will and won't get:
 | `exclusiveMinimum: 0` | `minimum: 0` with `exclusiveMinimum: true` |
 | `contentEncoding: base64` | `format: byte` |
 | A `description` beside a `$ref` | Hoisted, with the `$ref` moved into an `allOf` |
-| `if` / `then` / `else`, `prefixItems`, `patternProperties`, `contentMediaType`, `unevaluatedProperties` | Dropped — 3.0 cannot express them |
+| `$anchor`, `$defs`, `$id`, `$schema`, `additionalItems`, `contains`, `contentMediaType`, `contentSchema`, `definitions`, `dependentRequired`, `dependentSchemas`, `else`, `if`, `maxContains`, `minContains`, `patternProperties`, `prefixItems`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` | Dropped — 3.0 cannot express them |
 | `webhooks`, `components.pathItems`, `info.summary` | Dropped — 3.0 has no such member |
 | An SPDX `info.license.identifier` | `info.license.url`, pointing at the SPDX page |
 | A `mutualTLS` security scheme | Dropped, along with every requirement that named it |
 | An operation with no responses | A placeholder `default` response — 3.0 requires every operation to declare at least one |
 
-Everything else is identical to the 3.2 output, so keep the 3.2 or 3.1 artifact around as the
-full-fidelity copy and treat the 3.0 one as what you hand to the pinned toolchain.
+Everything the two tables don't name is identical to the 3.2 output. Keep the 3.2 artifact around as
+the full-fidelity copy — it is the only one that loses nothing — and treat the 3.0 one as what you hand
+to the pinned toolchain. The [diagnostics reference](/laravel/reference/diagnostics/#emitting-openapi-31-and-30)
+has a row per `downlevel.*` code, including the ones that only fire on documents using the construct.
 
 <Aside type="note" title="`--out` and multiple documents">
 `--out` writes a single file, so it can't take a run over *several* documents — the later ones would

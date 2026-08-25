@@ -125,11 +125,22 @@ The file joins that endpoint's build dependencies, so editing it regenerates the
 when you create a file that wasn't there yet. A file Docuccino can't read raises a diagnostic and the
 example is left out; nothing partial is ever published.
 
-<Aside type="tip" title="Two YAML spellings to know about">
+<Aside type="tip" title="Three YAML spellings to know about">
 YAML can express things JSON cannot. `.nan`, `.inf` and `-.inf` parse but have no JSON form, so a file
-holding one is refused with an `example-file.invalid` diagnostic rather than published. And an unquoted
+holding one is refused with an `example-file.invalid` diagnostic rather than published. An unquoted
 `2020-01-01` is a *date* to YAML, so it publishes as a number — write `'2020-01-01'` to keep it a
-string. JSON files have neither problem.
+string. And an **empty mapping** publishes as `[]` rather than `{}`: the YAML reader hands back one
+kind of array for both, so `{}` and `[]` in a `.yaml` or `.yml` file are the same value by the time
+Docuccino sees them. JSON files have none of the three.
+</Aside>
+
+<Aside type="caution" title="Spelling an empty object">
+`{}` is a real payload — a free-form map with nothing in it — and it survives being published, but only
+from a spelling that can say it. An `@example {}` docblock and a `.json` file holding `{}` both publish
+`{}`. The other two spellings cannot: an empty mapping in a `.yaml` or `.yml` file publishes `[]`, as
+above, and `#[Example(value: [])]` publishes `[]` too, because PHP has one array literal for both and
+the attribute is handed the array itself. When the payload you mean is `{}`, put it in a `.json` file
+or write it in a docblock.
 </Aside>
 
 ## Illustrating something other than the success response

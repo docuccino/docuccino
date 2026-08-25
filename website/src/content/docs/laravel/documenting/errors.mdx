@@ -572,11 +572,19 @@ often the document states that status and those bytes, and never on what anyone 
 your own handler renders as `{"message": …}` is hoisted exactly as it was, under `Error404`, and the
 framework's identical `404` is hoisted beside it under `NotFound`.
 
-:::caution[These names changed]
-Before **v0.5**, shared error components were named `Error404`, `Error422` and so on. Regenerating turns
-them into the names above, and any client you generate from the document renames its error types to
-match. The document's contract is unchanged — same statuses, same bodies — but a `catch (Error404)` in
-hand-written client code needs updating once.
+:::caution[These names move across releases]
+The rules that pick them have changed more than once. Everything before **v0.5** published `Error404`,
+`Error422` and so on; **v0.9** changed which bodies group together and what a shape under a
+multi-representation response is called. Each such change renames the error types in a client generated
+from the document. The contract is unchanged every time — same statuses, same bodies — but a
+hand-written `catch` on the old name needs updating.
+
+Two habits make that uneventful. Run
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) against the committed artifact when you
+upgrade, so a rename is something you read before you ship it. And declare the names your consumers
+depend on, with [`#[ErrorComponent]`](#name-your-own-errors-with-errorcomponent) or
+[`#[Response(errorComponent:)]`](#name-one-operations-error-wherever-the-body-came-from) — a name you
+wrote down does not move when a default does.
 :::
 
 A name goes to more than one component only when two bodies genuinely contest it. When that happens the
@@ -638,6 +646,10 @@ reports `attribute.error-component-unread` rather than leaving you to wonder —
 declaration. One on a base **controller** is silent, because it would say the same thing on every route
 of every child, and nothing it changes was ever going to be different. For one status of one operation,
 name it with `#[Response(errorComponent:)]` instead.
+
+You get that warning whether or not the document publishes error responses at all: a misplaced attribute
+is misplaced under [`error_responses => 'none'`](/laravel/reference/configuration/#error_responses) too,
+which is what an application that never published a config file resolves to.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
@@ -752,7 +764,7 @@ it built, then `#[ErrorComponent]` on the render method, then `#[ErrorComponent]
 then the status default in the table above. The chain resolves to the first mapper that answers, so a
 mapper that must beat the renderer Docuccino read orders itself ahead of it.
 
-#### Name one operation's error, wherever the body came from
+### Name one operation's error, wherever the body came from
 
 `#[ErrorComponent]` names an error where the error is *defined* — an exception class, or the method that
 renders one — so every operation answering with it publishes that name. `#[Response(errorComponent:)]`
@@ -761,10 +773,30 @@ neither `#[ErrorComponent]` anchor can reach at all — a `4xx` your operation d
 thrown and no renderer built it — and equally a body an exception the action throws produced, where it
 simply wins as the declaration nearest the operation:
 
-```php
-#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
-public function completeMfa(Request $request): SuccessData { /* … */ }
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	use Docuccino\Attributes\Response;
+
+	#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
+	public function completeMfa(Request $request): SuccessData { /* … */ }
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	// Every operation that states the same 422
+	"422": { "$ref": "#/components/responses/AuthenticationChallenge" }
+
+	// components.responses
+	"AuthenticationChallenge": {
+	  "description": "Unprocessable Entity",
+	  "content": {
+	    "application/json": { "schema": { "$ref": "#/components/schemas/SignInChallenge" } }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
 This is the escape hatch for a name the defaults get wrong, and the one that reaches a response offering
 two representations — a name written on the operation is about the whole response, unlike one a renderer
@@ -777,15 +809,28 @@ representation of a status, the name is the status's — where two declarations 
 different components the nearer one wins, a method's over its controller's, the same way every other
 argument of the attribute settles.
 
+**The shapes under it are a separate question, and the answer there is deliberate rather than a gap.** A
+response component covers every representation of a status; a schema component is **one shape**. So where
+the status states a single representation the shape is the whole of the named error and takes the name
+with it. Where it states two, naming either shape after the response would assert that shape *is* the
+error you named, when it may be the alternative sitting beside it. Neither takes it, and your name stays
+on the response.
+
+**Name the shapes themselves instead.** A shape `type:` points at is already named after that class — as
+`SignInChallenge` is above — and [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) renames it
+where the class name isn't what you want a client to see. What falls back to `Error<status>` is a shape
+nothing named at all, so finding `Error422` under a nicely-named response means one representation has no
+declaration of its own, not that the attribute was ignored.
+
 Where the name can reach nothing at all, the build says so with
 `attribute.error-component-unreachable`: on a status below `400`, which shares no error body, and on one
 a mapper answered with a `$ref` to a component that was named where that component is defined.
 
-#### When neither attribute is enough
+### When neither attribute is enough
 
 | | |
 | --- | --- |
-| A body no renderer of yours builds | Nothing on the path to mark. Register an `ExceptionToResponse` and name each body as you build it — a mapper's name always wins, which is what makes it the escape hatch. |
+| A body no renderer of yours builds | Nothing on the path to mark. Register an `ExceptionToResponse` and name each body as you build it. The name travels with the body and beats both `#[ErrorComponent]` anchors — a `#[Response(errorComponent:)]` on the operation is the one thing above it, so an action that declares the status names it there instead. |
 | An exception you didn't write, with no renderer either | You can't mark a framework or vendor class. Rename the component a built-in claimed from an `OperationExtension` instead. |
 
 Both are in [naming the component an error publishes
