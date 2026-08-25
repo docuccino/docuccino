@@ -137,6 +137,29 @@ jobs:
       - name: Pest line coverage (per-package honest floors — ratchet upward, never down)
         run: composer test:coverage
 
+  types:
+    name: Type coverage gate (PHP 8.4)
+    runs-on: ubuntu-latest
+    # A job of its own rather than a step after line coverage, because the two share nothing and
+    # failing together costs a re-run of the slow one: line coverage is ~370s and type coverage ~37s,
+    # against ~13s of checkout-and-install, so paying that setup twice buys back the whole line-coverage
+    # run on every type-coverage retry — and the answer arrives in under a minute instead of after both.
+    #
+    # `coverage: none` on purpose: type coverage is static analysis and never reads a pcov counter, so
+    # instrumenting this run would add a moving part to the gate that historically reports red most.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, json
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
       # The plugin writes its cache non-atomically and re-reads it, so a run can die parsing a file
       # it truncated itself. Clear it only on failure — clearing first forces the cold path, which
       # is the slow one. A genuine shortfall fails both attempts; only the parse error survives one.
@@ -218,7 +241,7 @@ jobs:
   gate:
     name: CI gate
     runs-on: ubuntu-latest
-    needs: [quality, schema-copies, coverage, fixture]
+    needs: [quality, schema-copies, coverage, types, fixture]
     # The ONLY status check main's ruleset requires. Requiring the individual jobs
     # by name would couple the ruleset to the matrix: every leg is a separate check
     # name carrying a version string (`Quality PHP 8.4 (phpstan ~2.2.0)`), so adding
@@ -239,5 +262,6 @@ jobs:
           echo "::error::CI gate failed — quality=${{ needs.quality.result }}" \
                "schema-copies=${{ needs['schema-copies'].result }}" \
                "coverage=${{ needs.coverage.result }}" \
+               "types=${{ needs.types.result }}" \
                "fixture=${{ needs.fixture.result }}"
           exit 1

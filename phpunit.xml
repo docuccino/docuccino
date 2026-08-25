@@ -6,8 +6,11 @@
          cacheDirectory="build/phpunit">
     <php>
         <!-- The inference suite boots PHPStan/Larastan in-process; the whole run accumulates past
-             the 128M default (the `analyse` script raises the same limit for the same reason). -->
-        <ini name="memory_limit" value="1G"/>
+             the 128M default (the `analyse` script raises the same limit for the same reason). The
+             headroom above that is for the parallel COVERAGE merge, which is the one step that holds
+             every worker's coverage at once: at 1G it died in `CoverageMerger::addCoverageFromFile`
+             with the suite already green, so the cap read as "parallel coverage is unsupported". -->
+        <ini name="memory_limit" value="4G"/>
     </php>
     <testsuites>
         <testsuite name="core">
