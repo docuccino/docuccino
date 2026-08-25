@@ -711,7 +711,8 @@ final class Canonicalizer
         $out = [];
         foreach ($node as $key => $value) {
             $key = (string) $key;
-            $out[$key] = str_starts_with($key, 'x-') ? $this->extension($key, $value) : $this->canonicalizeGeneric($value);
+            // As in `build()`: an `x-*` member is somebody else's vocabulary, verbatim.
+            $out[$key] = str_starts_with($key, 'x-') ? $value : $this->canonicalizeGeneric($value);
         }
 
         return $out;
