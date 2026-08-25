@@ -16,33 +16,14 @@ use stdClass;
  *
  * Handlers take `mixed` and pass malformed values through untouched, so canonicalisation is
  * total. Empty object-typed members become {@see stdClass} so the serializer writes `{}` not
- * `[]`; `x-*` members other than `x-docuccino` pass through verbatim, bar the object-valued ones
- * in {@see OBJECT_EXTENSIONS}.
+ * `[]`; `x-*` members other than `x-docuccino` pass through verbatim, since the shape of somebody
+ * else's vocabulary is theirs to state and {@see JsonValue} is what preserves it on the way in.
  *
  * @internal
  */
 final class Canonicalizer
 {
     private const array PARAMETER_IN_RANK = ['path' => 0, 'query' => 1, 'header' => 2, 'cookie' => 3];
-
-    /**
-     * The `x-*` members whose value is a JSON OBJECT. A fragment comes back from JSON as assoc arrays,
-     * where PHP re-coerces a numeric-string key to an int — so a map keyed `0,1,2…` (`x-enumDescriptions`
-     * is keyed by enum value) arrives as a LIST, and an empty one is indistinguishable from an empty
-     * list. Restoring the object here is what makes a warm build's bytes, and the identities hashed off
-     * them, equal a cold build's.
-     *
-     * Named rather than inferred, and that is the long-term shape: after the round trip the VALUE cannot
-     * answer the question — `x-enum-descriptions` beside it is genuinely a list and must stay one — so
-     * only the keyword's own contract knows which it is. A new map-valued extension therefore owes a
-     * line here; one whose keys can never be a `0..n` run loses nothing by having it.
-     *
-     * The fragment cache no longer needs this: it reads its entries through {@see JsonValue}, which
-     * keeps an index-keyed object an object. What still does is any caller handing us a document some
-     * OTHER associative decode produced — a committed artifact read for a diff, most of all — where the
-     * shape is genuinely gone by the time it arrives.
-     */
-    private const array OBJECT_EXTENSIONS = ['x-enumDescriptions'];
 
     /**
      * @param  array<string, mixed>  $document
@@ -108,20 +89,11 @@ final class Canonicalizer
 
         foreach ($unknown as $key => $value) {
             $key = (string) $key;
-            $out[$key] = str_starts_with($key, 'x-') ? $this->extension($key, $value) : $this->canonicalizeGeneric($value);
+            // An `x-*` member is somebody else's vocabulary: verbatim, whatever shape it is in.
+            $out[$key] = str_starts_with($key, 'x-') ? $value : $this->canonicalizeGeneric($value);
         }
 
         return $out;
-    }
-
-    /** An `x-*` member verbatim, save for the object shape {@see OBJECT_EXTENSIONS} names. */
-    private function extension(string $key, mixed $value): mixed
-    {
-        if (! in_array($key, self::OBJECT_EXTENSIONS, true) || ! is_array($value) || ! array_is_list($value)) {
-            return $value;
-        }
-
-        return (object) $value;
     }
 
     /**
