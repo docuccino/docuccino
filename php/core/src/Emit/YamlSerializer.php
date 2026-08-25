@@ -18,6 +18,13 @@ use Symfony\Component\Yaml\Yaml;
  * is a genuine sequence and DUMP_EMPTY_ARRAY_AS_SEQUENCE writes it `[]`. Casting objects to arrays
  * here would collapse the two and emit `paths: []`, which is spec-invalid.
  *
+ * Map KEYS need the same care for the same reason. Every OpenAPI map is keyed by a string — a status
+ * code, a component name, a media type — but PHP coerces a numeric-string array key to an int before
+ * the dumper ever sees it, and an unquoted `200:` is a YAML integer where JSON's `"200"` is a string.
+ * DUMP_NUMERIC_KEY_AS_STRING writes `'200':` instead, so the two serialisations of one document carry
+ * the same node type at every position. It cannot make a sequence look like a map: the key is only
+ * emitted where the collection is already a mapping.
+ *
  * @internal
  */
 final class YamlSerializer
@@ -30,7 +37,8 @@ final class YamlSerializer
     {
         $flags = Yaml::DUMP_OBJECT_AS_MAP
             | Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
-            | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE;
+            | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE
+            | Yaml::DUMP_NUMERIC_KEY_AS_STRING;
 
         return Yaml::dump($value, self::BLOCK_DEPTH, self::INDENT, $flags);
     }
