@@ -19,11 +19,18 @@ use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\TypeGrammar\ImportContext;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
+use Docuccino\Laravel\Support\IgnoredResponses;
 
 /**
  * Applies the response attributes as the attribute layer: `#[Response]` (per status, with a
  * parsed body type), `#[IgnoreResponse]` removals, and `#[ResponseHeader]` (grouped and merged per
  * status). Examples are the core attribute-examples extension's, which runs once every response exists.
+ *
+ * The removal is a BACKSTOP and not the mechanism: every built-in producer consults
+ * {@see IgnoredResponses} before it converts anything, because a response removed after its body was
+ * converted leaves the components that body hoisted behind. What the sweep still catches is a producer
+ * this package does not own — a third-party extension in an earlier phase — where an orphan is the
+ * lesser of the two defects. This extension's own writes below consult like every other producer.
  */
 final class AttributeResponsesExtension implements OperationExtension
 {
@@ -50,6 +57,14 @@ final class AttributeResponsesExtension implements OperationExtension
 
         foreach ($context->attributes->all(Response::class) as $attribute) {
             $status = (string) $attribute->status;
+
+            // Same action, same layer: the ignore is the retraction, so it wins over the declaration —
+            // and it wins BEFORE the declared type is parsed and converted, which is where a named class
+            // would hoist a component nothing would then reference.
+            if (IgnoredResponses::drops($context, $status)) {
+                continue;
+            }
+
             $response = $operation->response($status);
 
             // Naming a code is also a statement about the range inference put it in
@@ -140,6 +155,10 @@ final class AttributeResponsesExtension implements OperationExtension
             }
 
             $status = (string) $attribute->status;
+            if (IgnoredResponses::drops($context, $status)) {
+                continue;
+            }
+
             $illegal[$status."\0".$name] = [$status, $name];
         }
 
@@ -179,6 +198,10 @@ final class AttributeResponsesExtension implements OperationExtension
         $byStatus = [];
         foreach ($context->attributes->all(ResponseHeader::class) as $header) {
             $status = (string) $header->status;
+            if (IgnoredResponses::drops($context, $status)) {
+                continue;
+            }
+
             $schema = $header->type !== null
                 ? $context->converter()->toSchema($this->types->parse($header->type, $imports))->schema
                 : ['type' => 'string'];
