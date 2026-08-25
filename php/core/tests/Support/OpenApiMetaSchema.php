@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Core\Tests\Support;
 
 use Docuccino\Core\Emit\Formats;
-use Opis\JsonSchema\Errors\ErrorFormatter;
-use Opis\JsonSchema\Errors\ValidationError;
-use Opis\JsonSchema\JsonPointer;
 use Opis\JsonSchema\Validator;
 use RuntimeException;
 use stdClass;
@@ -88,34 +85,10 @@ final class OpenApiMetaSchema
      */
     public static function findings(string $format, mixed $instance): array
     {
-        $gates = self::keyGateFindings($format, $instance);
-
-        $result = self::validator($format)->validate($instance, 'https://docuccino.test/'.$format.'.json');
-
-        $error = $result->error();
-        if ($error === null) {
-            return $gates;
-        }
-
-        $formatter = new ErrorFormatter;
-        $findings = $gates;
-
-        foreach ($formatter->formatKeyed(
-            $error,
-            static fn (ValidationError $e): string => sprintf(
-                '%s: %s (schema %s)',
-                $e->keyword(),
-                (new ErrorFormatter)->formatErrorMessage($e),
-                self::pointer($e->schema()->info()->path()),
-            ),
-            static fn (ValidationError $e): string => self::pointer($e->data()->fullPath()),
-        ) as $pointer => $messages) {
-            foreach ((array) $messages as $message) {
-                $findings[] = ($pointer === '' ? '/' : $pointer).' '.$message;
-            }
-        }
-
-        return $findings;
+        return [
+            ...self::keyGateFindings($format, $instance),
+            ...SchemaFindings::of(self::validator($format), $instance, 'https://docuccino.test/'.$format.'.json'),
+        ];
     }
 
     /**
@@ -297,17 +270,6 @@ final class OpenApiMetaSchema
     private static function escape(string $token): string
     {
         return str_replace(['~', '/'], ['~0', '~1'], $token);
-    }
-
-    /**
-     * A JSON pointer a person can read. opis percent-encodes tokens on the way out, which turns the two
-     * things a reader navigates by — `$defs` and a templated path segment — into `%24defs` and `%7Bid%7D`.
-     *
-     * @param  list<int|string>  $path
-     */
-    private static function pointer(array $path): string
-    {
-        return rawurldecode(JsonPointer::pathToString($path));
     }
 
     /** The parsed, cached validator for $format. Parsing a 39KB meta-schema per assertion is the cost. */
