@@ -76,7 +76,7 @@ final class Body
 
         // XML from a JSON Schema would be a guess, and a guessed body is worse than an empty one the
         // consumer fills in knowingly.
-        self::reportMediaType($base, $signature, $diagnostics);
+        self::reportMediaType($base, $diagnostics);
 
         return $base === 'application/octet-stream'
             ? ['mode' => 'formdata', 'formdata' => [['key' => 'file', 'type' => 'file', 'src' => null]]]
@@ -222,11 +222,13 @@ final class Body
 
     /**
      * Deduplicated by media type across the WHOLE document: a document with 300 XML endpoints owes its
-     * reader one warning naming `application/xml`, not 300 that bury every other diagnostic.
+     * reader one warning naming `application/xml`, not 300 that bury every other diagnostic. That is
+     * also why it carries no route signature — the one warning would name whichever route was met
+     * first, which is a fact about encounter order rather than about the media type.
      *
      * @param  list<Diagnostic>  $diagnostics
      */
-    private static function reportMediaType(string $base, string $signature, array &$diagnostics): void
+    private static function reportMediaType(string $base, array &$diagnostics): void
     {
         foreach ($diagnostics as $diagnostic) {
             if ($diagnostic->code === 'postman.body-media-type' && str_contains($diagnostic->message, sprintf('`%s`', $base))) {

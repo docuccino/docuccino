@@ -215,7 +215,7 @@ final readonly class Url
     {
         $name = self::nameOf($parameter);
         $required = ($parameter['required'] ?? false) === true;
-        $schema = $this->schemaOf($parameter, $components);
+        $schema = self::schemaOf($parameter);
 
         // A parameter whose schema admits no value is not one the consumer may send, so it gets no
         // entry at all rather than an empty one they would try to fill in.
@@ -510,7 +510,7 @@ final readonly class Url
         $stated = $this->examples->illustration($parameter);
 
         return $this->scalar($stated === null
-            ? $this->examples->value($this->schemaOf($parameter, $components), $components)
+            ? $this->examples->value(self::schemaOf($parameter), $components)
             : $stated[0]);
     }
 
@@ -537,11 +537,14 @@ final readonly class Url
     }
 
     /**
+     * The parameter's own schema, taken as written: a `$ref` here would need no resolving, since a
+     * deepObject's properties are always inline and everything else hands the schema on to
+     * {@see SchemaExampleFactory}, which resolves against the components itself.
+     *
      * @param  array<string, mixed>  $parameter
-     * @param  array<string, mixed>  $components
      * @return array<string, mixed>
      */
-    private function schemaOf(array $parameter, array $components): array
+    private static function schemaOf(array $parameter): array
     {
         $schema = $parameter['schema'] ?? null;
 
