@@ -284,6 +284,9 @@ and keeping the 3.2 artifact alongside costs you nothing.
 Where a code is `info or warning`, the quieter one means Docuccino rewrote the construct into
 something equivalent and the louder one means it had to drop it.
 
+`downlevel.empty-responses` is the one that isn't only about the older target: it reports a gap in the
+document itself, which 3.0 is simply the first version to reject.
+
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `downlevel.query-method` | warning | The 3.2 `query` HTTP method has no 3.1 spelling, so the operation isn't in the emitted document | Keep the 3.2 artifact for consumers that need it |
@@ -296,6 +299,7 @@ something equivalent and the louder one means it had to drop it.
 | `downlevel.info-summary` | warning | `info.summary` was dropped; OpenAPI 3.0 doesn't define it | Lead `info.description` with the same sentence |
 | `downlevel.license-identifier` | info or warning | The SPDX `info.license.identifier` became `info.license.url`, or was dropped where a `url` was already set | Nothing |
 | `downlevel.mutual-tls` | warning | A `mutualTLS` security scheme was dropped, along with every requirement naming it | Document mutual TLS in prose for 3.0 consumers, or keep the 3.1 artifact |
+| `downlevel.empty-responses` | info | An operation documents no responses, and OpenAPI 3.0 requires every operation to declare at least one, so the 3.0 artifact carries a placeholder `default` response that describes no status or body | Name what the endpoint returns — [`#[Response]`](/laravel/reference/attributes/#response), a return docblock, or an [overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) — so every artifact carries the real shape |
 | `downlevel.multi-type` | info or warning | A multi-type `type` became an `anyOf` of single-type branches, or was dropped where the schema already composes | Nothing |
 | `downlevel.null-type` | warning | A null-only type became an untyped `nullable: true`; OpenAPI 3.0 has no `null` type | Nothing, though 3.0 consumers see a looser schema |
 | `downlevel.nullable-composition` | info | A `{type: null}` branch moved onto its parent as `nullable: true` | Nothing |

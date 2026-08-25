@@ -13,8 +13,9 @@ use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
  * emitted to every OpenAPI version and read back against the published schema for that version.
  *
  * Core's own fixtures are hand-written and small; these are the whole workbench, so they carry shapes no
- * hand-written fixture reaches — and the first run of this file found one (see
- * {@see adapterMetaSchemaKnownFindings()}).
+ * hand-written fixture reaches — and the first run of this file found one: thirteen operations across
+ * seven of these documents recovered no responses, which 3.1 and 3.2 accept and 3.0 requires. The 3.0
+ * emitter answers that with a placeholder `default` response now, so nothing here is pinned.
  *
  * JSON only, for now. The YAML half of the same battery is blocked on the `YamlSerializer` cast that
  * writes every empty map as `[]`: these documents hold empty maps at eight positions, so a YAML pass here
@@ -56,43 +57,6 @@ function adapterMetaSchemaGoldens(): array
     return $goldens;
 }
 
-/**
- * The one spec violation these documents are KNOWN to carry, pinned per operation so it cannot grow
- * quietly.
- *
- * `responses` is REQUIRED on an OpenAPI 3.0 Operation Object and optional from 3.1 on. An operation whose
- * responses the build could not recover — a deferred handler, a handler that threw during analysis — is
- * emitted with none, which 3.1 and 3.2 accept and 3.0 does not. So the 3.0 downlevel emitter publishes an
- * invalid Operation Object rather than an honest degraded one, in JSON as much as in YAML. What 3.0 wants
- * instead is a product decision (a `default` response, or dropping the operation with a diagnostic), so
- * this pins the current behaviour rather than guessing at it.
- *
- * @return list<string>
- */
-function adapterMetaSchemaKnownFindings(string $golden, string $format): array
-{
-    /** Golden => the operations emitted with no `responses`, in document order. */
-    $missing = [
-        'handler-diagnostics.uir.json' => ['/paths/~1api~1zz-deferring/get'],
-        'workbench-auth.uir.json' => ['/paths/~1api~1wave-d~1feed/get', '/paths/~1api~1wave-d~1publish/post'],
-        'workbench-content.uir.json' => ['/paths/~1api~1broken/get', '/paths/~1api~1ping/get'],
-        'workbench-pointer-list.uir.json' => ['/paths/~1api~1broken/get', '/paths/~1api~1ping/get'],
-        'workbench-secured.uir.json' => ['/paths/~1api~1broken/get', '/paths/~1api~1ping/get'],
-        'workbench-webhooks.uir.json' => ['/paths/~1api~1broken/get', '/paths/~1api~1ping/get'],
-        'workbench.uir.json' => ['/paths/~1api~1broken/get', '/paths/~1api~1ping/get'],
-    ];
-
-    if ($format !== 'openapi-3.0') {
-        return [];
-    }
-
-    return array_map(
-        static fn (string $operation): string => $operation
-            .' required: The required properties (responses) are missing (schema /definitions/Operation)',
-        $missing[$golden] ?? [],
-    );
-}
-
 it('emits JSON that answers to its own OpenAPI meta-schema', function (string $golden, string $format): void {
     $document = UirDocument::fromArray(json_decode(
         (string) file_get_contents(golden($golden)),
@@ -102,7 +66,7 @@ it('emits JSON that answers to its own OpenAPI meta-schema', function (string $g
 
     $emitted = json_decode(Formats::emit($format, $document, new EmitOptions)->output, flags: JSON_THROW_ON_ERROR);
 
-    expect(OpenApiMetaSchema::findings($format, $emitted))->toBe(adapterMetaSchemaKnownFindings($golden, $format));
+    expect(OpenApiMetaSchema::findings($format, $emitted))->toBe([]);
 })->with(adapterMetaSchemaSubjects());
 
 /**

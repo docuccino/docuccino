@@ -100,6 +100,31 @@
               }
             }
           }
+        },
+        "callbacks": {
+          "onCreated": {
+            "{$request.body#/callbackUrl}": {
+              "post": {
+                "operationId": "things.created.callback",
+                "responses": {
+                  "default": {
+                    "description": "This operation's responses are not described, so no status code or body is guaranteed."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/things/deferred": {
+      "get": {
+        "operationId": "things.deferred",
+        "summary": "An operation whose responses the build could not recover",
+        "responses": {
+          "default": {
+            "description": "This operation's responses are not described, so no status code or body is guaranteed."
+          }
         }
       }
     }

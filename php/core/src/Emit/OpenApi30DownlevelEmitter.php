@@ -19,6 +19,8 @@ use Docuccino\Core\Support\Arr;
  *
  * Document level: `webhooks`, `components.pathItems`, `info.summary` and `mutualTLS` security
  * schemes have no 3.0 home; `info.license.identifier` becomes an SPDX URL when there is no `url`.
+ * Operation level: `responses` is REQUIRED from 3.0's side and optional from 3.1 on, so an operation
+ * that documents none gains a placeholder `default` ({@see UNDESCRIBED_RESPONSE}).
  * Schema level: nullable type-arrays become `nullable: true`, `const` becomes a single-value `enum`,
  * schema `examples` become `example`, numeric exclusive bounds become the boolean form, `$ref`
  * siblings hoist into an `allOf` wrapper, and {@see UNSUPPORTED_SCHEMA_KEYWORDS} is dropped.
@@ -75,6 +77,19 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     /** Members whose value is user data the schema walk must not descend into. */
     private const array OPAQUE_MEMBERS = ['const', 'default', 'enum', 'example', 'examples'];
+
+    /**
+     * The 3.0 Path Item Object's operation members. `query` and `additionalOperations` are 3.2-only and
+     * the 3.1 downlevel has already dropped them by the time this emitter runs.
+     */
+    private const array OPERATION_MEMBERS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+
+    /**
+     * What the placeholder `default` response says. Addressed to whoever reads the API rather than to
+     * whoever built it: it states what the document does not say and claims nothing about a status, a
+     * media type or a body, since claiming any of those would be inventing a contract.
+     */
+    private const string UNDESCRIBED_RESPONSE = "This operation's responses are not described, so no status code or body is guaranteed.";
 
     public function __construct(
         private OpenApi31DownlevelEmitter $oas31 = new OpenApi31DownlevelEmitter,
@@ -357,6 +372,10 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             $node = $this->dropRefProse(Arr::stringKeyed($node), $pointer, $diagnostics);
         }
 
+        if (! $list && ! self::isReference($pointer)) {
+            $node = $this->completeResponses(Arr::stringKeyed($node), $pointer, $diagnostics);
+        }
+
         $out = [];
 
         foreach ($node as $key => $value) {
@@ -423,6 +442,61 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
         );
 
         return $node;
+    }
+
+    /**
+     * A path item's operations, each carrying the `responses` 3.0 requires. 3.1 and 3.2 accept an
+     * operation with none — a deferred handler, a handler that threw while it was being read — but 3.0
+     * makes the member REQUIRED and its map `minProperties: 1`, so what would otherwise be an invalid
+     * Operation Object gains a `default` response with a description and nothing else: an honest degraded
+     * answer rather than an invented status, media type or schema.
+     *
+     * Repeated inline rather than componentized. There is no body to share, so a `$ref` would cost the
+     * reader a hop and every generated client a type name, both for one sentence saying nothing.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  list<Diagnostic>  $diagnostics
+     * @return array<string, mixed>
+     */
+    private function completeResponses(array $item, string $pointer, array &$diagnostics): array
+    {
+        foreach (self::OPERATION_MEMBERS as $method) {
+            $operation = $item[$method] ?? null;
+
+            if (! is_array($operation) || (array_key_exists('responses', $operation) && $operation['responses'] !== [])) {
+                continue;
+            }
+
+            $operation['responses'] = ['default' => ['description' => self::UNDESCRIBED_RESPONSE]];
+            $item[$method] = $operation;
+
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Info,
+                code: 'downlevel.empty-responses',
+                message: sprintf(
+                    'Added a placeholder `default` response to the operation at %s, which documents none; OpenAPI 3.0 requires every operation to declare at least one.',
+                    self::pointer($pointer, $method),
+                ),
+                routeSignature: self::routeSignature($pointer, $method),
+                help: 'Name what the endpoint returns — a #[Response] attribute, a return docblock, or an overlay — so the artifact carries the real shape rather than a placeholder.',
+            );
+        }
+
+        return $item;
+    }
+
+    /**
+     * `GET /api/ping` for a path item under `paths`, so a note lands beside that route's other
+     * diagnostics; null for a callback's path item, whose key is a runtime expression rather than a route.
+     * The message names the JSON pointer either way.
+     */
+    private static function routeSignature(string $pointer, string $method): ?string
+    {
+        $tokens = explode('/', $pointer);
+
+        return count($tokens) === 3 && $tokens[1] === 'paths'
+            ? strtoupper($method).' '.str_replace(['~1', '~0'], ['/', '~'], $tokens[2])
+            : null;
     }
 
     /** A child JSON Pointer, with the RFC 6901 escapes a path template needs. */
