@@ -708,8 +708,10 @@ second operation states it too.
 controller method, and nothing reads it there: it names an error where the error is *defined*, not where
 an operation happens to answer with it. An action is where several errors meet and the attribute carries
 no status, so there is nothing for it to name — a placement that does nothing is reported as
-`attribute.error-component-unread`. To name a body **the operation declares itself**, with `#[Response]`,
-use that attribute's [`errorComponent:`](#response) argument, which has the status and the media type written
+`attribute.error-component-unread`, for the action's own declaration. One inherited from a base
+controller is silent: it would say the same thing on every route under it, and the names it fails to
+change are the names they would have been anyway. To name **one status of one operation**, use
+`#[Response]`'s [`errorComponent:`](#response) argument, which has the status and the media type written
 beside it.
 
 What it does not name is one body a response offers *beside* another. Where a response states two

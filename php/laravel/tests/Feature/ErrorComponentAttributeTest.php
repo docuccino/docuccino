@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Laravel\Facades\Docuccino;
+use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\BaseNamedController;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\DeclaredErrorsController;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\EscapedNameException;
 use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\HttpConflictException;
@@ -111,8 +112,9 @@ function declaringEngine(array $byAction): callable
  * document. Route URIs sort after everything the workbench states, so nothing here can perturb it.
  *
  * @param  array<string, array{class-string, int}>  $byAction  action name → `[FQCN, status]`
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  */
-function declaringBuild(array $byAction): GenerationResult
+function declaringBuild(array $byAction, ?callable $mutateConfig = null): GenerationResult
 {
     /** @var Router $router */
     $router = app('router');
@@ -122,7 +124,7 @@ function declaringBuild(array $byAction): GenerationResult
 
     app()->instance(TypeEngine::class, declaringEngine($byAction)());
 
-    return generateDocument();
+    return generateDocument($mutateConfig);
 }
 
 /**
@@ -197,7 +199,8 @@ it('names nothing from an #[ErrorComponent] on the action, and says so', functio
     expect($document['components']['responses'])->toHaveKey($published)
         ->and($document['components']['responses'])->not->toHaveKey('ActionNamed')
         ->and($document['components']['schemas'] ?? [])->not->toHaveKey('ActionNamed')
-        // …and the placement is reported rather than ignored, naming both anchors that do work.
+        // …and the placement is reported rather than ignored, naming both anchors that do work: once per
+        // route, because the attribute is on each of the two actions.
         ->and($misplaced)->toHaveCount(2)
         ->and($misplaced[0]->severity)->toBe(Severity::Warning)
         ->and($misplaced[0]->message)->toContain('ActionNamed')
@@ -318,6 +321,39 @@ it('lets an action\'s component: beat the one its base controller declares', fun
     expect($facts('/api/zz-inheriting-overrides'))->toBe('ActionGone')
         ->and($facts('/api/zz-inheriting-inherits'))->toBe('BaseGone')
         ->and(diagnosticsCoded($result->diagnostics, 'attribute.response-component-contested'))->toBeEmpty();
+});
+
+it('stays quiet about an #[ErrorComponent] a base controller declares for every action under it', function (): void {
+    // Measured before it was narrowed: one attribute, on one base, warned on all six routes of one child
+    // — one mistake told once per route, and linear in the API from there. Nothing in a route-scoped,
+    // fragment-cached pass can say it once instead: a per-build "already said" set makes what the
+    // document reports a function of which routes came from cache, and a warm build reporting less than
+    // a cold one is a silent degradation rather than a saving. So the report is the action's own
+    // declaration, which is one route and one report by construction; the inherited placement changes no
+    // name either way, and says nothing about names that were already what they will be.
+    /** @var Router $router */
+    $router = app('router');
+    foreach (['a', 'b', 'c', 'd', 'e', 'f'] as $action) {
+        $router->get('api/zz-based-'.$action, [BaseNamedController::class, $action]);
+    }
+
+    app()->instance(TypeEngine::class, WorkbenchEngine::make());
+
+    expect(diagnosticsCoded(generateDocument()->diagnostics, 'attribute.error-component-unread'))->toBeEmpty();
+});
+
+it('reports an #[ErrorComponent] on an action even where the build documents no errors', function (): void {
+    // `error_responses => 'none'` is what an application with no config key resolves to, and it used to
+    // take the report with it: the check sat behind `ErrorResponsesExtension`'s early return. A misplaced
+    // attribute is misplaced whether or not errors are being documented, so it is asked at `Finalize`,
+    // which nothing gates.
+    $result = declaringBuild(['fifth' => [UndeclaredException::class, 409]], static function (array $raw): array {
+        $raw['error_responses'] = 'none';
+
+        return $raw;
+    });
+
+    expect(diagnosticsCoded($result->diagnostics, 'attribute.error-component-unread'))->toHaveCount(1);
 });
 
 it('reports an errorComponent: no component key could carry', function (): void {

@@ -365,7 +365,16 @@ nothing for the reader to reconcile, so nothing is reported.
 **The action is not a third anchor, and `#[Response(errorComponent:)]` is what stands in its place.** `TARGET_METHOD`
 lets PHP accept `#[ErrorComponent]` on a controller method and `AttributeCollector` materialises it, so an
 author naming the error they want renamed on the action answering it got their old names back and nothing
-said why — the reported case, and the placement is now `attribute.error-component-unread`. Making it READ
+said why — the reported case, and the placement is now `attribute.error-component-unread`, raised for the
+ACTION's own declaration only. `AttributeCollector` walks the controller's parents, so reporting off the
+route's whole set says one mistake once per route of every child — six routes for one attribute on one
+base, measured, and linear in the API from there. A route-scoped pass has nowhere to collapse that: a
+per-build "already said" set makes what the document reports a function of which routes came from the
+fragment cache, and a warm build reporting less than a cold one is a silent degradation. So the placement
+that is one report per declaration stays, and the one that would be N does not; nothing about the emitted
+names differs either way. It is raised from `Finalize` rather than from the error chain, so
+`error_responses => 'none'` — the value an application with no config key resolves to — does not take it
+with it. Making it READ
 there is the wrong fix, for a reason the attribute's own shape gives: it carries a name and nothing else,
 and its two anchors are per-BODY by construction — an exception class raises one error, a render method
 answers with one body. An action is neither. It answers at every error status its validation, its

@@ -634,8 +634,10 @@ that.
 **It names errors where they are defined, so it does not go on the action.** PHP will let you write
 `#[ErrorComponent]` on a controller method and nothing reads it there — an action is where several of
 your errors meet, and the attribute carries no status, so there is nothing for it to name. The build
-reports `attribute.error-component-unread` rather than leaving you to wonder. For a body the operation
-declares with `#[Response]`, name it there.
+reports `attribute.error-component-unread` rather than leaving you to wonder — for the action's own
+declaration. One on a base **controller** is silent, because it would say the same thing on every route
+of every child, and nothing it changes was ever going to be different. For one status of one operation,
+name it with `#[Response(errorComponent:)]` instead.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
