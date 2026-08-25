@@ -4,6 +4,7 @@ declare(strict_types=1);
 use Docuccino\Core\Diagnostics\DiagnosticDocs;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Support\ConfinedPath;
+use Docuccino\Laravel\Support\ErrorComponentDiagnostic;
 
 require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
 
@@ -408,6 +409,10 @@ it('states a rule a diagnostic restates in one file only', function (string $sen
     expect($holders)->toBe([$owner]);
 })->with([
     [ComponentNames::LEGAL_NAME_HELP, 'ComponentNames.php'],
+    // A MESSAGE rather than a help sentence, and the same drift risk for the same reason: it had already
+    // reached two producers as byte-identical copies, so the row is what keeps the next reader of
+    // `#[ErrorComponent]` drawing on the owner instead of typing the sentence out a third time.
+    [ErrorComponentDiagnostic::ILLEGAL_NAME_MESSAGE, 'ErrorComponentDiagnostic.php'],
     [ConfinedPath::FILE_ESCAPED_HELP, 'ConfinedPath.php'],
     [ConfinedPath::FILE_MISSING_HELP, 'ConfinedPath.php'],
     // The config-facing half of the same two refusals. Same rule, same owner, a different place for the
@@ -463,9 +468,12 @@ it('reports each of those with the rule its owner states', function (array $cons
     expect($restating)->toBe([])
         ->and(count($reporters))->toBeGreaterThanOrEqual($floor);
 })->with([
-    // `ComponentRegistry::LEGAL_NAME_HELP` is an alias of the owner's constant, not a copy — it is how
-    // an integration, which may only import the public surface, draws on the same sentence.
-    [['ComponentNames::LEGAL_NAME_HELP', 'ComponentRegistry::LEGAL_NAME_HELP'], ['components.name-invalid', 'attribute.error-component-invalid'], 4],
+    // `ComponentRegistry::LEGAL_NAME_HELP` is an alias of the owner's constant, not a copy — it is how a
+    // caller that may only see the public surface draws on the same sentence. Three reporters, not four:
+    // the two that described one `#[ErrorComponent]` mistake in byte-identical duplicates now share
+    // ErrorComponentDiagnostic, which reports for both. The floor still equals the count, so a reporter
+    // deleted — or a scan that stopped seeing one — drops below it.
+    [['ComponentNames::LEGAL_NAME_HELP', 'ComponentRegistry::LEGAL_NAME_HELP'], ['components.name-invalid', 'attribute.error-component-invalid'], 3],
     // Two codes with reporters on both sides of the attribute/config line, so either constant of the
     // pair satisfies a row: an attribute reader owes the `file:` wording and a config reader the
     // configured-path wording, and both are drawn from the one owner.
