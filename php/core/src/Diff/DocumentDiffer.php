@@ -768,8 +768,13 @@ final class DocumentDiffer
     }
 
     /**
+     * The schema each media type declares, RAW: a boolean is a legal Schema Object at this slot and the
+     * one whose meaning a reader cannot afford to lose, so what it is worth is {@see SchemaComparator}'s
+     * question. Keeping only the arrays dropped the member, and a comparison that never sees a member
+     * reports the media type itself removed.
+     *
      * @param  array<string, mixed>|null  $content
-     * @return array<string, array<string, mixed>>
+     * @return array<string, mixed>
      */
     private static function contentSchemas(?array $content): array
     {
@@ -779,8 +784,8 @@ final class DocumentDiffer
 
         $out = [];
         foreach ($content as $media => $entry) {
-            if (is_array($entry) && isset($entry['schema']) && is_array($entry['schema'])) {
-                $out[(string) $media] = Arr::stringKeyed($entry['schema']);
+            if (is_array($entry) && array_key_exists('schema', $entry)) {
+                $out[(string) $media] = is_array($entry['schema']) ? Arr::stringKeyed($entry['schema']) : $entry['schema'];
             }
         }
 
@@ -788,7 +793,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<string, mixed>
      */
     private static function requestBodySchemas(Operation $op): array
     {

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Diff\DocumentDiffer;
+use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
+use Docuccino\Core\Identity\ContentHasher;
 use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
 
 /**
@@ -195,6 +198,156 @@ it('publishes a boolean at every slot a Schema Object hangs off something that i
         ->toContain('"Nonsense": {}')
         // Once each for the parameter, the header and the media type.
         ->and(substr_count($serialized, '"schema": false'))->toBe(3);
+});
+
+/*
+ * The diff half. `items: {type: string}` → `items: false` is the tightest narrowing an array's element
+ * contract has — "any string" becomes "no element may exist" — and it reported NO change while the
+ * document's `contentHash` moved, so `docuccino:diff` said the document had changed, named nothing and
+ * raised no breaking verdict. At `properties` it did speak, and lied: the property was reported REMOVED
+ * when it had been forbidden, and through the model's own hydration the same edit surfaced as
+ * `schema.type-removed`, which is classed non-breaking — the strictest narrowing in the language
+ * passing an `--enforce` release gate as safe.
+ */
+
+/**
+ * One subschema slot on a schema, or the slot left out entirely.
+ *
+ * @return array<string, mixed>
+ */
+function booleanSubschemaAt(string $keyword, mixed $value): array
+{
+    if ($value === 'absent') {
+        return ['type' => $keyword === 'items' ? 'array' : 'object'];
+    }
+
+    $slot = $keyword === 'properties' ? ['properties' => ['a' => $value]] : [$keyword => $value];
+
+    return ['type' => $keyword === 'items' ? 'array' : 'object', ...$slot];
+}
+
+/** @return array<string, array{string}> */
+function booleanSubschemaDiffPositions(): array
+{
+    return ['properties' => ['properties'], 'items' => ['items'], 'additionalProperties' => ['additionalProperties']];
+}
+
+it('reports a boolean subschema arriving and going, and classes it the same on both sides', function (string $keyword): void {
+    $typed = ['type' => 'string'];
+    $path = $keyword === 'properties' ? 'S.properties.a' : 'S.'.$keyword;
+
+    $pairs = [
+        // A schema that admits nothing arriving is the tightest narrowing there is, whichever
+        // direction the schema serves.
+        'typed → false' => [$typed, false, ['schema.always-invalid-added' => true]],
+        'true → false' => [true, false, ['schema.always-invalid-added' => true]],
+        'empty → false' => [[], false, ['schema.always-invalid-added' => true]],
+        'absent → false' => ['absent', false, ['schema.always-invalid-added' => true]],
+        // And going is the exact inverse: nothing was valid, now something is.
+        'false → typed' => [false, $typed, ['schema.always-invalid-removed' => false]],
+        'false → true' => [false, true, ['schema.always-invalid-removed' => false]],
+        'false → absent' => [false, 'absent', ['schema.always-invalid-removed' => false]],
+        // `true` IS the empty schema, so it is read as one rather than as a value of its own: losing a
+        // type widens, and two spellings of "anything" are not a change at all.
+        'typed → true' => [$typed, true, ['schema.type-removed' => false]],
+        'true → empty' => [true, [], []],
+        'false → false' => [false, false, []],
+    ];
+
+    foreach ($pairs as $label => [$old, $new, $expected]) {
+        foreach ([true, false] as $request) {
+            $changes = (new SchemaComparator)->compare(
+                booleanSubschemaAt($keyword, $old),
+                booleanSubschemaAt($keyword, $new),
+                'S',
+                'sch:v1:0000000000000000',
+                $request,
+            );
+
+            $reported = [];
+            foreach ($changes as $change) {
+                // Every change reported for this pair is about the slot, never about the schema above it.
+                expect($change->path)->toStartWith($path, $keyword.' '.$label);
+                $reported[$change->code] = $change->breaking;
+            }
+
+            expect($reported)->toBe($expected, $keyword.' · '.$label.' · '.($request ? 'request' : 'response'));
+        }
+    }
+})->with(booleanSubschemaDiffPositions());
+
+it('reads an absent subschema as the empty one, so a constraint arriving there is reported', function (string $keyword): void {
+    // The other half of reading these three positions at all: `items` and `additionalProperties` were
+    // compared only when BOTH sides carried a readable one, so a constraint appearing at either was
+    // silent. An absent `items` constrains no element and `additionalProperties` defaults to `true`, so
+    // absent is the empty schema — and a type arriving over it narrows.
+    $changes = (new SchemaComparator)->compare(
+        booleanSubschemaAt($keyword, 'absent'),
+        booleanSubschemaAt($keyword, ['type' => 'string']),
+        'S',
+        'sch:v1:0000000000000000',
+        request: true,
+    );
+
+    expect(array_map(static fn ($c): string => $c->code.($c->breaking ? '!' : ''), $changes))
+        ->toBe(['schema.type-added!']);
+})->with(['items' => ['items'], 'additionalProperties' => ['additionalProperties']]);
+
+it('names the narrowing a boolean makes on the path a diff actually runs', function (): void {
+    $document = static fn (mixed $items): UirDocument => UirDocument::fromArray([
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'API', 'version' => '1.0.0'],
+        'paths' => ['/things' => ['get' => [
+            'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
+            'operationId' => 'things.index',
+            'responses' => ['200' => [
+                'x-docuccino' => ['id' => 'res:v1:bbbbbbbbbbbbbbbb'],
+                'description' => 'ok',
+                'content' => ['application/json' => ['schema' => ['type' => 'array', 'items' => $items]]],
+            ]],
+        ]]],
+    ]);
+
+    $changeset = (new DocumentDiffer)->diff($document(['type' => 'string']), $document(false));
+
+    expect(array_map(static fn ($c): string => $c->code, $changeset->changes))->toBe(['schema.always-invalid-added'])
+        ->and($changeset->changes[0]->breaking)->toBeTrue()
+        ->and($changeset->changes[0]->path)->toBe('GET /things responses 200 application/json schema.items')
+        // The symptom that started this: the bytes moved, so a diff that named nothing was reporting a
+        // document it could not describe.
+        ->and((new ContentHasher)->hash($document(['type' => 'string'])->toArray()))
+        ->not->toBe((new ContentHasher)->hash($document(false)->toArray()));
+});
+
+it('sees a boolean at the media type schema slot rather than reporting the media type gone', function (): void {
+    $document = static fn (mixed $schema): UirDocument => UirDocument::fromArray([
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'API', 'version' => '1.0.0'],
+        'paths' => ['/things' => ['post' => [
+            'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
+            'operationId' => 'things.store',
+            'requestBody' => ['content' => ['application/json' => ['schema' => $schema]]],
+            'responses' => ['201' => [
+                'x-docuccino' => ['id' => 'res:v1:bbbbbbbbbbbbbbbb'],
+                'description' => 'made',
+                'content' => ['application/json' => ['schema' => $schema]],
+            ]],
+        ]]],
+    ]);
+
+    $reported = static fn (mixed $old, mixed $new): array => array_map(
+        static fn ($c): string => $c->code.($c->breaking ? '!' : ''),
+        (new DocumentDiffer)->diff($document($old), $document($new))->changes,
+    );
+
+    // A schema the differ could not read used to be dropped, and a media type it never saw read as one
+    // the response had stopped offering — a breaking verdict for a thing that had not happened.
+    expect($reported(['type' => 'object'], false))
+        ->toBe(['schema.always-invalid-added!', 'schema.always-invalid-added!'])
+        ->and($reported(false, ['type' => 'object']))
+        ->toBe(['schema.always-invalid-removed', 'schema.always-invalid-removed']);
 });
 
 it('widens a value that is no schema at all to a vague-but-valid one', function (string $keyword): void {
