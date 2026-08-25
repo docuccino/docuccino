@@ -527,6 +527,38 @@ function literalSetDeclarations(string $source, array $members, int $threshold =
 }
 
 /**
+ * Every subschema-carrying keyword one PHP source NAMES, sorted.
+ *
+ * The mirror of {@see literalSetDeclarations()}, and the opposite question: that one asks whether a set
+ * is being COPIED, and so walks past a subscript; this asks which keywords a reader actually reads, and
+ * a subscript is the commonest way to read one. Which keywords count comes from {@see SchemaKeywords},
+ * so a reader taught a new position is a reader whose coverage dataset has gone short.
+ *
+ * @return list<string>
+ */
+function subschemaKeywordsNamedIn(string $source): array
+{
+    $found = [];
+
+    foreach (PhpToken::tokenize($source) as $token) {
+        if (! $token->is(T_CONSTANT_ENCAPSED_STRING)) {
+            continue;
+        }
+
+        $literal = stripcslashes(substr($token->text, 1, -1));
+
+        if (SchemaKeywords::positionOf($literal) !== null) {
+            $found[$literal] = true;
+        }
+    }
+
+    $keywords = array_keys($found);
+    sort($keywords, SORT_STRING);
+
+    return $keywords;
+}
+
+/**
  * Whether the string literal at $index is LISTING a keyword rather than using one. A copy of a set
  * enumerates its members; two other things name a member and are not copies at all:
  *
