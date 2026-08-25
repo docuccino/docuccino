@@ -85,6 +85,15 @@ coverage locally and the ratchet policy for the CI gate.
   emit null — `postman-surface` does, at three `closedAt` positions. Deleting a member there read as
   agreement and the oracle reported no differences, at exactly the unconstrained positions it exists to
   cover. Ask presence with `property_exists()`/`array_key_exists()` and report the two cases apart.
+- **A difference that exists only in the BYTES survives every oracle that parses first.** Both guards
+  above — the meta-schema validation and the kind comparison — read a parsed graph, so anything the
+  parse normalises away is invisible to them by construction. The known instance is **mapping-key
+  quoting**: every `responses` map is keyed by status code, and `json_decode`, `Yaml::parse` and
+  `get_object_vars` all answer `int(200)` for that key, quoted or not. So YAML emitted `200:` where
+  JSON emitted `"200":` in every document the product had ever written, and the two oracles compared
+  int to int and agreed. The parse boundary is where this class hides; anyone adding an oracle should
+  assume a graph comparison cannot see it, and pin such a fix with an assertion over the raw bytes
+  rather than letting a golden diff stand as the only record.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
