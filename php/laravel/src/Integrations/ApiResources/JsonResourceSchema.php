@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Schema\MockHints;
+use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
@@ -67,8 +68,15 @@ final class JsonResourceSchema implements TypeToSchema
             $object = $this->toArray->analyze($type->fqcn, 'toArray', $context);
 
             // A resource's keys come from toArray, not from properties, so only the class-level
-            // #[Mock] form can name one.
-            return $object === null ? null : MockHints::applyTo($context, $object, $type->fqcn);
+            // #[Mock] form can name one; a real property carrying prose still publishes it where its
+            // name is one of those keys.
+            if ($object === null) {
+                return null;
+            }
+
+            $object = PropertyAnnotations::applyTo($context, $object, $type->fqcn);
+
+            return MockHints::applyTo($context, $object, $type->fqcn);
         });
 
         return $this->wrapTopLevel($result, $type->fqcn, $context);

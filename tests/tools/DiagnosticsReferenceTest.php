@@ -33,6 +33,96 @@ function diagnosticReferencePage(): string
     );
 }
 
+/**
+ * Every test the packages carry, as one string. Only the package suites — the guards under
+ * `tests/tools/` read the code list itself, so counting them would let a code satisfy this by being
+ * documented.
+ */
+function diagnosticTestCorpus(): string
+{
+    $root = dirname(__DIR__, 2);
+    $corpus = '';
+    $files = 0;
+
+    foreach (['core', 'laravel', 'inference-phpstan'] as $package) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+            $root.'/php/'.$package.'/tests',
+            FilesystemIterator::SKIP_DOTS,
+        ));
+
+        foreach ($iterator as $entry) {
+            if ($entry instanceof SplFileInfo && $entry->isFile()) {
+                $corpus .= file_get_contents($entry->getPathname());
+                $files++;
+            }
+        }
+    }
+
+    // A corpus that stopped being read would make every code look unprovoked, which fails loudly — but
+    // one that shrank to a handful of files would fail confusingly, so the size is pinned too.
+    expect($files)->toBeGreaterThan(400);
+
+    return $corpus;
+}
+
+/**
+ * Codes no test names, and why. The reason has to be structural, and the guard checks the structure:
+ * an excused code must be raised ONLY by the analyser package, whose real paths run against the
+ * fixture app rather than in-process — so nothing in core or the adapter can ever be excused here.
+ *
+ * @return array<string, string>
+ */
+function diagnosticUnprovokedCodes(): array
+{
+    return [
+        'inference.callable-failed' => 'PhpStanTypeEngine::analyzeCallable is total against a real PHPStan container; FileAnalyzer is final, so there is no seam to make one throw without booting the fixture app.',
+        'inference.callable-not-found' => 'Same seam: it needs a real container to hand back a callable with no analysable body.',
+    ];
+}
+
+it('names every code the packages emit in at least one test', function (): void {
+    // DiagnosticsReferenceTest proves every code is DOCUMENTED; nothing proved any was ever reached.
+    // Three Postman codes could have had their whole branch deleted with the suite green. This is a
+    // reference scan, not a provocation trace — a test that names a code may only be constructing one —
+    // but a code no test names has certainly never been seen raised.
+    $emitted = diagnostic_codes(diagnosticSourceDirectories());
+    $corpus = diagnosticTestCorpus();
+    $excused = diagnosticUnprovokedCodes();
+
+    $unnamed = [];
+    foreach (array_keys($emitted) as $code) {
+        if (! str_contains($corpus, $code) && ! isset($excused[$code])) {
+            $unnamed[] = $code;
+        }
+    }
+
+    expect($unnamed)->toBe([], 'codes no test names')
+        ->and(count($emitted))->toBeGreaterThan(100);
+});
+
+it('excuses only codes the analyser package alone can raise', function (): void {
+    $root = dirname(__DIR__, 2);
+    $engine = diagnostic_codes([$root.'/php/inference-phpstan/src']);
+    $inProcess = diagnostic_codes([$root.'/php/core/src', $root.'/php/laravel/src']);
+
+    $wrong = [];
+    foreach (diagnosticUnprovokedCodes() as $code => $reason) {
+        if (! isset($engine[$code])) {
+            $wrong[] = $code.': not raised by the analyser package';
+        }
+        if (isset($inProcess[$code])) {
+            $wrong[] = $code.': raised in-process too, so a test can reach it';
+        }
+        if (trim($reason) === '') {
+            $wrong[] = $code.': excused without saying why';
+        }
+    }
+
+    expect($wrong)->toBe([])
+        ->and(count($engine))->toBeGreaterThan(5)
+        ->and(count($inProcess))->toBeGreaterThan(100);
+});
+
 it('documents every code the packages emit, and no code they do not', function (): void {
     $emitted = diagnostic_codes(diagnosticSourceDirectories());
     $documented = diagnostic_documented_codes(diagnosticReferencePage());

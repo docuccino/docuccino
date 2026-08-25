@@ -136,6 +136,25 @@ it('reports a throttle on a limiter name nothing registered, and documents the s
         ->and($result->has(Severity::Info))->toBeTrue();
 });
 
+it('says which throttle the one documented 429 came from when a route carries several', function (): void {
+    // OpenAPI has one 429 per operation, so a route behind two throttles documents the first and the
+    // reader is told the rest are still enforced — silence here reads as "one limit", which is a lie
+    // about what the server does.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/double-throttle', [FormController::class, 'index'])->middleware(['throttle:60,1', 'throttle:10,1']);
+
+    bindStubEngine();
+    $result = generateDocument();
+
+    $reported = diagnosticsCoded($result->diagnostics, 'rate-limit.multiple-throttles');
+
+    expect($reported)->toHaveCount(1)
+        ->and($reported[0]->message)->toContain('2 throttle middleware')
+        ->and($reported[0]->routeSignature)->toBe('GET /api/double-throttle')
+        ->and($result->document->toArray()['paths']['/api/double-throttle']['get']['responses'])->toHaveKey('429');
+});
+
 it('reports nothing for a registered named limiter, however dynamic it is', function (): void {
     // A conditional limiter documents exactly what a literal one does, so there is nothing to say about
     // either. Registration is the only thing checked.

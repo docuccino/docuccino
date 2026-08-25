@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Schema\MockHints;
+use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Extensions\Schema\TypedExample;
 use Docuccino\Core\Inference\ClassMetadata;
@@ -162,8 +163,10 @@ final class DataSchema implements TypeToSchema
                 $object['required'] = $required;
             }
 
-            // #[MapName] can rename a property on the wire, so a hint follows the property to whatever
-            // key it publishes under.
+            // #[MapName] can rename a property on the wire, so a declaration follows the property to
+            // whatever key it publishes under.
+            $object = PropertyAnnotations::applyTo($context, $object, $fqcn, $keys);
+
             return MockHints::applyTo($context, $object, $fqcn, $keys);
         }, $facts['schemaName'], $facts['schemaId']);
     }

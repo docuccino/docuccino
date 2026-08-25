@@ -440,6 +440,11 @@ public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */
 There is no `file:` form on purpose. A summary is one line; long prose is what `#[Description]` is
 for, and that one does read a file.
 
+The `PROPERTY` target is accepted, and a schema property has a `description` and no `summary` — so a
+`#[Summary]` on one is reported as
+[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
+Use [`#[Description]`](#description) for a property's one line.
+
 ### `#[Description]`
 
 Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
@@ -471,6 +476,19 @@ operation's cache dependencies whether or not it exists yet, so the description 
 you write it, and editing it invalidates just that fragment. See
 [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) for when to reach
 for a file over a standalone guide page.
+
+**On a property** it sets that field's `description` in the schema, over whatever the property's
+docblock said — an attribute outranks a docblock here as it does on an action, so one docblock can go
+on addressing whoever maintains the class.
+
+```php
+#[Description(text: 'The tenant that owns the invoice.')]
+public string $tenant;
+```
+
+Inline `text:` only. A schema mapper has no application root to resolve a path against, so a `file:`
+declaration on a property is reported as
+[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
 
 ### `#[Group]`
 
@@ -805,8 +823,20 @@ have, a file it can't read — is dropped the same way, with a diagnostic naming
 guessed at. So is a payload no JSON document can hold: `INF`, `-INF` and `NAN` have no JSON form,
 whether they arrive through `value:` or as YAML's `.nan` and `.inf` in a `file:`. See the [diagnostics reference](/laravel/reference/diagnostics/).
 
-For a field-level example, an `@example` docblock line on the property is read when the schema comes
-from a [Data class](/laravel/packages/spatie-data/):
+**On a property** it pins that field's `example` in the schema, on any class the document hoists — a
+plain DTO, a [Data class](/laravel/packages/spatie-data/), a model, a resource:
+
+```php
+#[Example('acme-corp')]
+public string $tenant;
+
+#[Example(value: false)]
+public bool $settled;
+```
+
+An attribute argument is a real PHP value, so `false` stays a boolean. The `@example` docblock line
+read on a [Data class](/laravel/packages/spatie-data/) property can only carry text, and the
+attribute beats it where both are written:
 
 ```php
 /**
@@ -816,6 +846,17 @@ from a [Data class](/laravel/packages/spatie-data/):
  */
 public string $tenant;
 ```
+
+A property publishes one bare value, not an Example Object, so `name:`, `summary:`, `description:`,
+`file:`, `externalValue:`, `status:`, `mediaType:`, `parameter:` and `request:` have nowhere to go
+there and are reported as
+[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes). Two declarations on
+one property leave the first standing. Everything else is what the action-level form is for.
+
+The `PARAMETER` target is accepted and has no effect of its own. A promoted constructor property is
+already reached through `PROPERTY`, and for an action's parameter there are two spellings that do
+work: `#[Example(parameter: 'page', …)]` on the action, or the `example:` argument of
+[`#[QueryParameter]`](#queryparameter) and its siblings.
 
 ### `#[CaseDescription]`
 

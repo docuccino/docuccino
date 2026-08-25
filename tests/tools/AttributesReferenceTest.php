@@ -95,6 +95,161 @@ function attributeReferenceSection(string $page, string $name): string
     return $next === false ? substr($page, $start) : substr($page, $start, $next - $start);
 }
 
+/**
+ * The `#[Attribute]` flag every target name the page may print stands for. A name outside this map is
+ * a failure rather than a skip — a guard that quietly ignores prose it does not recognise is how the
+ * prose drifts in the first place.
+ *
+ * @return array<string, int>
+ */
+function attributeTargetFlags(): array
+{
+    return [
+        'CLASS' => Attribute::TARGET_CLASS,
+        'METHOD' => Attribute::TARGET_METHOD,
+        'FUNCTION' => Attribute::TARGET_FUNCTION,
+        'PROPERTY' => Attribute::TARGET_PROPERTY,
+        'PARAMETER' => Attribute::TARGET_PARAMETER,
+        'CLASS_CONSTANT' => Attribute::TARGET_CLASS_CONSTANT,
+    ];
+}
+
+/**
+ * The sentence the page states an attribute's targets in: its own if it has one, otherwise the intro
+ * of the `##` group it sits in — the five parameter attributes share one statement rather than
+ * repeating it. Empty when neither says anything, which is itself a failure.
+ */
+function attributeTargetSentence(string $page, string $name): string
+{
+    foreach ([attributeReferenceSection($page, $name), attributeReferenceGroupIntro($page, $name)] as $text) {
+        if (preg_match('/\b[Tt]argets?\b.*?\.(?=\s|$)/s', $text, $match) === 1) {
+            return $match[0];
+        }
+    }
+
+    return '';
+}
+
+/** The prose between an attribute's `##` group heading and the first `###` under it. */
+function attributeReferenceGroupIntro(string $page, string $name): string
+{
+    $start = strpos($page, '### `#['.$name.']`');
+    if ($start === false) {
+        return '';
+    }
+
+    $group = strrpos(substr($page, 0, $start), "\n## ");
+    if ($group === false) {
+        return '';
+    }
+
+    $next = strpos($page, "\n### ", $group);
+
+    return $next === false ? '' : substr($page, $group, $next - $group);
+}
+
+/**
+ * The `#[Attribute]` flags one section's prose claims, or null when it claims none. The page writes
+ * targets in backticks, either as one run (`CLASS | METHOD`) or one span each — so every backticked
+ * span that looks like target constants is read, and one holding a name this vocabulary doesn't know
+ * fails rather than being passed over. `repeatable` comes off the same sentence, negated first, so
+ * "not repeatable" is not a claim that it is.
+ */
+function referencedAttributeFlags(string $page, string $name): ?int
+{
+    $sentence = attributeTargetSentence($page, $name);
+    if ($sentence === '' || preg_match_all('/`([^`]+)`/', $sentence, $matches) === 0) {
+        return null;
+    }
+
+    $known = attributeTargetFlags();
+    $flags = 0;
+    $named = 0;
+    foreach ($matches[1] as $span) {
+        $pieces = preg_split('/[|,\s]+/', trim($span), flags: PREG_SPLIT_NO_EMPTY) ?: [];
+
+        // A span with no constant-shaped piece is ordinary prose — `#[Hidden]`, a config key. One that
+        // has any is read whole, so `CLASS | THING` is a failure rather than a silent CLASS.
+        if (array_filter($pieces, static fn (string $piece): bool => preg_match('/^[A-Z][A-Z_]*$/', $piece) === 1) === []) {
+            continue;
+        }
+
+        foreach ($pieces as $piece) {
+            if (! isset($known[$piece])) {
+                return null;
+            }
+            $flags |= $known[$piece];
+            $named++;
+        }
+    }
+
+    if ($named === 0) {
+        return null;
+    }
+
+    if (! str_contains($sentence, 'not repeatable') && str_contains($sentence, 'repeatable')) {
+        $flags |= Attribute::IS_REPEATABLE;
+    }
+
+    return $flags;
+}
+
+it('states the targets and repeatability every attribute really declares', function (): void {
+    // The page's "Targets `…`" line is the only place a reader learns where an attribute may be
+    // written, and nothing read it before this: the flags and the prose could drift apart, and did.
+    $page = attributesReferencePage();
+
+    $wrong = [];
+    $seen = 0;
+    foreach (shippedAttributeNames() as $name) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $declared = attributeFlagsOf($class);
+        $documented = referencedAttributeFlags($page, $name);
+
+        if ($documented === null) {
+            $wrong[] = $name.': the page states no targets';
+
+            continue;
+        }
+
+        $seen |= $documented;
+        if ($documented !== $declared) {
+            $wrong[] = sprintf('%s: page says %s, the attribute declares %s', $name, attributeFlagNames($documented), attributeFlagNames($declared));
+        }
+    }
+
+    // Every target name the vocabulary knows is claimed somewhere, so a regex that stopped matching
+    // one of them fails here rather than passing on a thinner page.
+    expect($wrong)->toBe([])
+        ->and(attributeFlagNames($seen))->toBe('CLASS | METHOD | FUNCTION | PROPERTY | PARAMETER | CLASS_CONSTANT | repeatable');
+});
+
+/** @param  class-string  $class */
+function attributeFlagsOf(string $class): int
+{
+    $declarations = (new ReflectionClass($class))->getAttributes(Attribute::class);
+
+    return $declarations === [] ? Attribute::TARGET_ALL : $declarations[0]->newInstance()->flags;
+}
+
+/** A bitmask spelled the way the page spells it, for a failure message that names the difference. */
+function attributeFlagNames(int $flags): string
+{
+    $names = [];
+    foreach (attributeTargetFlags() as $name => $flag) {
+        if (($flags & $flag) === $flag) {
+            $names[] = $name;
+        }
+    }
+
+    if (($flags & Attribute::IS_REPEATABLE) === Attribute::IS_REPEATABLE) {
+        $names[] = 'repeatable';
+    }
+
+    return $names === [] ? '(nothing)' : implode(' | ', $names);
+}
+
 it('gives every attribute a reference section of its own', function (): void {
     $page = attributesReferencePage();
 
@@ -104,4 +259,122 @@ it('gives every attribute a reference section of its own', function (): void {
     ));
 
     expect($missing)->toBe([]);
+});
+
+require_once dirname(__DIR__, 2).'/tools/attribute-target-readers.php';
+require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
+
+/**
+ * The packages a declaration can be read by.
+ *
+ * @return list<string>
+ */
+function attributeReaderSourceDirectories(): array
+{
+    $root = dirname(__DIR__, 2);
+
+    return [$root.'/php/core/src', $root.'/php/laravel/src', $root.'/php/inference-phpstan/src'];
+}
+
+/**
+ * Every declared target that is NOT an ordinary `effect` — read, and changing the document. Two other
+ * verdicts exist, and each costs something a bare allow-list entry does not:
+ *
+ *   - `diagnostic`: read, and what it does is tell the author it cannot be honoured. It cites the code
+ *     it raises, which has to be one the packages really emit.
+ *   - `documented-inert`: NOT read, and the reference page says so in as many words. It cites the
+ *     sentence, which has to be in that attribute's own section and to name the target.
+ *
+ * The third verdict is the point. Without it a dead surface is closed by adding a line here, which is
+ * how four of them shipped; with it, closing one costs a public admission or a real diagnostic.
+ *
+ * @return array<string, array<string, array{0: string, 1: string}>>
+ */
+function attributeInertTargets(): array
+{
+    return [
+        'Example' => [
+            'PARAMETER' => ['documented-inert', 'The `PARAMETER` target is accepted and has no effect of its own.'],
+        ],
+        'Internal' => [
+            'PROPERTY' => ['documented-inert', 'is accepted but has no effect on a schema today'],
+        ],
+        'Summary' => [
+            'PROPERTY' => ['diagnostic', 'attribute.property-unsupported'],
+        ],
+    ];
+}
+
+it('reads every target every attribute declares, or says in public that it does not', function (): void {
+    // An attribute that declares a target nothing reads is a promise the document never keeps, and the
+    // suite stays green either way — the reflection sweep behind this found four such surfaces at once.
+    // The reader side is derived by scanning the packages; the exceptions above are the only cells
+    // allowed to have no reader, and each has to pay for the exemption.
+    $readers = attribute_target_readers(attributeReaderSourceDirectories());
+    $page = attributesReferencePage();
+    $emitted = diagnostic_codes(attributeReaderSourceDirectories());
+    $exceptions = attributeInertTargets();
+
+    $wrong = [];
+    $pairs = 0;
+    $surfaces = [];
+    foreach (shippedAttributeNames() as $name) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $read = $readers[$name] ?? [];
+        $section = attributeReferenceSection($page, $name);
+
+        foreach (explode(' | ', attributeFlagNames(attributeFlagsOf($class) & ~Attribute::IS_REPEATABLE)) as $target) {
+            [$verdict, $citation] = $exceptions[$name][$target] ?? ['effect', ''];
+            $cell = '#['.$name.'] on '.$target;
+            $hasReader = in_array($target, $read, true);
+
+            if ($hasReader) {
+                $pairs++;
+                $surfaces[$target] = true;
+            }
+
+            if ($verdict !== 'documented-inert' && ! $hasReader) {
+                $wrong[] = $cell.': declared '.$verdict.', and nothing reads it';
+            }
+
+            if ($verdict === 'documented-inert' && $hasReader) {
+                $wrong[] = $cell.': declared inert, and something reads it — give it the `effect` verdict';
+            }
+
+            // Whatever excuses a cell has to be public: the sentence for an inert one, the code for a
+            // diagnostic one, and an inert cell has to name the target it is disowning.
+            if ($verdict !== 'effect' && ! str_contains($section, $citation)) {
+                $wrong[] = $cell.': the reference section does not carry "'.$citation.'"';
+            }
+
+            if ($verdict === 'documented-inert' && ! str_contains($section, '`'.$target.'`')) {
+                $wrong[] = $cell.': its disclosure does not name the target';
+            }
+
+            if ($verdict === 'diagnostic' && ! isset($emitted[$citation])) {
+                $wrong[] = $cell.': cites '.$citation.', which the packages do not emit';
+            }
+        }
+    }
+
+    // An exception has to be a target something really declares, so one cannot outlive the surface it
+    // excuses.
+    foreach ($exceptions as $name => $targets) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $declared = explode(' | ', attributeFlagNames(attributeFlagsOf($class)));
+        foreach (array_keys($targets) as $target) {
+            if (! in_array($target, $declared, true)) {
+                $wrong[] = '#['.$name.'] on '.$target.': excused, and no longer declared';
+            }
+        }
+    }
+
+    ksort($surfaces);
+
+    // A scan matching nothing must fail rather than pass, so the shape of what it found is pinned too.
+    expect($wrong)->toBe([])
+        ->and($pairs)->toBeGreaterThan(60)
+        ->and(array_keys($surfaces))->toBe(['CLASS', 'CLASS_CONSTANT', 'FUNCTION', 'METHOD', 'PROPERTY']);
 });

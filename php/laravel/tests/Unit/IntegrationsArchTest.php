@@ -37,6 +37,8 @@ arch('built-in integrations consume only the public extension surface')
         // mapper owes the same answer, and an integration rolling its own would fork the attribute's
         // meaning per package.
         'Docuccino\Core\Extensions\Schema\MockHints',
+        // The one reader of the property-target prose attributes, here for the same reason MockHints is.
+        'Docuccino\Core\Extensions\Schema\PropertyAnnotations',
         'Docuccino\Core\Extensions\Schema\SchemaIdentity',
         'Docuccino\Core\Extensions\Schema\SchemaResult',
         // Same exemption, same reason as EnumDecoration above: the ONE reading of an authored example
