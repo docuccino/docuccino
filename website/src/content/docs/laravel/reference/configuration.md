@@ -373,8 +373,8 @@ documenting role and permission names would publish your application's internal 
 taxonomy, so it is explicit opt-in. When a package is installed but its integration is disabled, the
 build emits one `integration.disabled` info diagnostic per document, so the switch is discoverable.
 
-There are **eleven** toggleable bags, each keyed by its config name — set
-`integrations.<key>.enabled` to turn one off (or, for `permission`, on):
+Every toggleable bag is keyed by its config name — set `integrations.<key>.enabled` to turn one off
+(or, for `permission`, on):
 
 | Key | Package / source | `enabled` default |
 | --- | --- | --- |
