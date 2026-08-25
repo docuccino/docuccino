@@ -211,22 +211,49 @@ it('leaves a keyword it cannot read exactly where it found it', function (string
         ->toBe(['type' => 'object', $keyword => true]);
 })->with([
     'a vendor extension' => ['x-internal'],
-    'a keyword from a later vocabulary' => ['unevaluatedProperties'],
+    'a keyword from a later vocabulary' => ['propertyDependencies'],
 ]);
 
 it('classifies every schema keyword the canonicalizer orders', function (): void {
     // The classification is the thing that goes stale — a hand list already did — so it is checked
     // against the canonicalizer's own schema keyword set rather than against a second copy of itself.
     $source = (string) file_get_contents(__DIR__.'/../../src/Canonical/Canonicalizer.php');
-    $body = preg_split('/private function canonicalizeSchema/', $source)[1] ?? '';
-    $body = preg_split('/\n    \}/', $body)[0] ?? '';
+    $list = preg_split('/private const array SCHEMA_ORDER = \[/', $source)[1] ?? '';
+    $list = preg_split('/\n    \];/', $list)[0] ?? '';
 
-    preg_match_all("/'([^']+)' =>/", $body, $matches);
+    preg_match_all("/'([^']+)',/", $list, $matches);
     $keywords = $matches[1];
 
     // A scan that stopped matching would turn this into a test of nothing.
-    expect($keywords)->toHaveCount(52)
+    expect($keywords)->toHaveCount(55)
         ->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items', 'description');
 
     expect(array_values(array_diff($keywords, array_keys(SchemaKeywords::classification()))))->toBe([]);
+});
+
+it('classifies every keyword it gives a subschema position', function (): void {
+    // The two halves of the same table: a keyword whose value is a subschema describes the value's
+    // shape by definition, so one knowing a keyword the other does not is the list going stale.
+    foreach ([
+        SchemaKeywords::POSITION_SCHEMA,
+        SchemaKeywords::POSITION_SCHEMA_MAP,
+        SchemaKeywords::POSITION_SCHEMA_LIST,
+        SchemaKeywords::POSITION_STRING_LIST_MAP,
+    ] as $position) {
+        expect(SchemaKeywords::at($position))->not->toBeEmpty();
+    }
+
+    $positioned = [
+        ...SchemaKeywords::objectValued(),
+        ...SchemaKeywords::at(SchemaKeywords::POSITION_SCHEMA_LIST),
+    ];
+
+    expect($positioned)->toHaveCount(20);
+
+    foreach ($positioned as $keyword) {
+        // `$defs` carries subschemas but says nothing about the value carrying it, so it is the one
+        // positioned keyword classified as an annotation rather than as shape.
+        expect(SchemaKeywords::classification())->toHaveKey($keyword)
+            ->and(SchemaKeywords::classification()[$keyword])->toBe($keyword === '$defs' ? 'annotation' : 'shape');
+    }
 });
