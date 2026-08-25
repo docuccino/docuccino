@@ -13,6 +13,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\EnumReflection;
 use Docuccino\Core\Extensions\Schema\MockHints;
+use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
@@ -174,7 +175,10 @@ final class ModelSchema implements TypeToSchema
                 $object['required'] = $required;
             }
 
-            // A column is a magic property, so only the class-level #[Mock] form can name one.
+            // A column is a magic property, so only the class-level #[Mock] form can name one; a real
+            // property carrying prose still publishes it where its name is a column.
+            $object = PropertyAnnotations::applyTo($context, $object, $fqcn);
+
             return MockHints::applyTo($context, $object, $fqcn);
         });
     }
