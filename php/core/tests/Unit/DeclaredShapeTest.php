@@ -219,9 +219,11 @@ it('classifies every schema keyword the canonicalizer orders', function (): void
     // against the canonicalizer's own schema keyword set rather than against a second copy of itself.
     $keywords = canonicalizerSchemaOrder();
 
-    // A scan that stopped matching would turn this into a test of nothing.
-    expect($keywords)->toHaveCount(57)
-        ->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items', 'description');
+    // A source scan that stopped matching would turn this into a test of nothing, so a floor and the
+    // names it must find. Not the exact count: adding a keyword to the order is not what this guards.
+    expect($keywords)->toHaveCount(count(array_unique($keywords)))
+        ->and(count($keywords))->toBeGreaterThan(50)
+        ->and($keywords)->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items', 'description');
 
     expect(array_values(array_diff($keywords, array_keys(SchemaKeywords::classification()))))->toBe([]);
 });
@@ -243,7 +245,7 @@ it('classifies every keyword it gives a subschema position', function (): void {
         ...SchemaKeywords::at(SchemaKeywords::POSITION_SCHEMA_LIST),
     ];
 
-    expect($positioned)->toHaveCount(22);
+    expect(count($positioned))->toBeGreaterThan(20);
 
     // The three positioned keywords that describe something OTHER than the value carrying them, and so
     // are not shape claims about it: two subschema stores, and the decoded content of a string.
@@ -256,11 +258,12 @@ it('classifies every keyword it gives a subschema position', function (): void {
 });
 
 /*
- * The guard on the defect class itself. Nine instances of it have shipped, and every one was a SECOND
- * copy of this set living somewhere else and going stale: three in the example audit, two in the 3.0
- * downlevel, three in the canonicalizer, one in the structural hash. So a constant anywhere in the
- * packages naming three or more of these keywords is either one of the copies below — each stated for a
- * reason that is not "which keywords carry subschemas" — or a copy nobody has retired yet.
+ * The guard on the one shape of this defect a guard can catch: a stale SECOND copy of the set. Nine have
+ * shipped — three in the example audit, two in the 3.0 downlevel, three in the canonicalizer, one in the
+ * structural hash. So a constant anywhere in the packages naming three or more of these keywords is
+ * either one of the copies below — each stated for a reason that is not "which keywords carry
+ * subschemas" — or a copy nobody has retired yet. The wider class is not copies at all and is described
+ * in docs/design/uir-and-extensions.md §1 "The empty-object invariant".
  */
 it('keeps the subschema keyword set in one place, so no reader can carry a stale copy', function (): void {
     $sanctioned = [
