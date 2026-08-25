@@ -27,6 +27,27 @@ The consumer cannot see the codebase: they want a type they can name in a `catch
 that does not lie. Most of the rules below are one of those two audiences made specific; when a
 change serves one at the other's expense, say so out loud rather than letting it pass as a tidy-up.
 
+**One application's report, every application's fix.** A report is evidence, not a specification —
+it is one application noticing a defect the product has for everyone. So the fix is written in the
+product's own vocabulary and sized to the defect, never to the reporter: state it without naming the
+application that asked, and a second application should recognise its own problem in that sentence.
+If the description needs "because their app does X", the shape is wrong, and the honest move is to
+find the general fact behind X and fix that.
+
+The other half is the same rule looking outward: **one instance means a class, so sweep for the
+rest.** Fixing what was reported and stopping there leaves siblings that will each arrive as their
+own report. Every large finding in this codebase has been a class rather than an instance — an empty
+object mistaken for an empty array in six separate readers, a key name used as a position in four
+members plus the test that guarded them, a diagnostic hardened in one field with its sibling left
+raw in four places. When a fix lands, say what the class is and what else you checked; a fix with no
+sweep beside it is a report closed, not a defect removed.
+
+And size a mechanism to what has been measured, not to what could be true. An argument from a
+standard or a limit is a reason to *look*, and the count is the reason to build: a guard with zero
+observed firings, sized from a bound nothing in the corpus approaches, is speculation with a
+maintenance cost — and worse, its own failure mode is usually newer and less understood than the one
+it prevents.
+
 ## ⚠️ Absolute rules
 
 - **Green on all checks, always**: `composer test` (incl. `composer test:inference-fixture`
@@ -255,6 +276,29 @@ Laravel adapter feature tests run on orchestra/testbench with the workbench app 
 `php/laravel/workbench/`; the engine's real-analysis tests run out-of-process against
 `tests/fixture-app/app`. The workbench app and `tests/Fixtures/**` are test INPUT the product
 parses — their docblocks and attributes are data, so edit them only to change what a test proves.
+
+**One working tree, one branch, one writer.** A working tree is single-threaded: `git checkout`
+rewrites every file in it, so two agents editing one tree switch branches out from under each
+other. Parallel work gets a worktree each (`git worktree add`), and the writer of a branch is the
+only process allowed to check it out. This is not a tidiness rule — every one of these has already
+happened here: a commit landing on another branch **under another agent's message**, so the change
+was correct and the history was a lie; a suite reporting green for a tree it had stopped being;
+and a warm-build assertion failing because the fragment cache honestly re-hashed files a concurrent
+checkout had rewritten, which reads exactly like a flake and is not one. **A gate result is only
+worth what the tree was during the run** — if anything else could have written to it, the number
+means nothing and the run has to be repeated in a quiet tree. Never `git checkout <file>` to undo an
+experiment either; it silently discards a neighbour's uncommitted work, so copy the file aside
+instead.
+
+The one honest pull toward sharing the main checkout is `tests/fixture-app/app`, which is gitignored
+and so absent from a fresh worktree. That does not license sharing: a task needing the fixture group
+takes the main checkout **alone**, and everything else waits or runs in a worktree with the group
+skipping. Say which happened — "233 skipped" is not a full pass, and reporting it as one is the
+failure the fixture-honesty rule exists to prevent.
+
+**zsh does not word-split an unquoted variable.** `for b in $BRANCHES` and `-- $FILES` pass one
+giant string, so a loop runs once on nonsense and a pathspec matches nothing — silently, with exit 0.
+Write the list literally, or `read` it line by line.
 
 ## Project status
 
