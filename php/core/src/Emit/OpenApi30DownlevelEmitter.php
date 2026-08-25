@@ -9,6 +9,7 @@ use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Arr;
 
 /**
@@ -24,7 +25,10 @@ use Docuccino\Core\Support\Arr;
  * that documents none gains a placeholder `default` ({@see UNDESCRIBED_RESPONSE}).
  * Schema level: nullable type-arrays become `nullable: true`, `const` becomes a single-value `enum`,
  * schema `examples` become `example`, numeric exclusive bounds become the boolean form, `$ref`
- * siblings hoist into an `allOf` wrapper, and {@see UNSUPPORTED_SCHEMA_KEYWORDS} is dropped.
+ * siblings hoist into an `allOf` wrapper, a boolean subschema becomes the 3.0 spelling of the same
+ * constraint ({@see subschema()}), and {@see UNSUPPORTED_SCHEMA_KEYWORDS} is dropped. Which members
+ * carry subschemas at all is read off {@see SchemaKeywords}, so a keyword added there is converted here
+ * with no second entry to keep in step.
  * Reference level: a Reference Object's own `summary` or `description` — 3.1's way for a reference to
  * reword what it points at — comes off, since 3.0 defines neither and ignores what stands beside a
  * `$ref`.
@@ -56,14 +60,22 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     private const string SPDX_BASE = 'https://spdx.org/licenses/';
 
-    /** 2020-12 schema keywords 3.0 cannot express at all: dropped, each with a note naming it. */
+    /**
+     * 2020-12 schema keywords 3.0 cannot express at all: dropped, each with a note naming it. 3.0's
+     * Schema Object is CLOSED — every member bar `^x-` is enumerated — so a keyword absent both from
+     * 3.0 and from this list fails 3.0's own gate whatever value it carries. A guard holds the two
+     * against the vendored meta-schema rather than against anybody's memory of the spec.
+     */
     public const array UNSUPPORTED_SCHEMA_KEYWORDS = [
         '$anchor',
         '$defs',
         '$id',
         '$schema',
+        'additionalItems',
         'contains',
         'contentMediaType',
+        'contentSchema',
+        'definitions',
         'dependentRequired',
         'dependentSchemas',
         'else',
@@ -81,11 +93,17 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     /** Annotations with no consumer-visible meaning — dropped without a note. */
     public const array SILENT_SCHEMA_KEYWORDS = ['$comment'];
 
-    /** Keywords whose value is another schema. */
-    private const array SUBSCHEMA_KEYWORDS = ['items', 'not', 'additionalProperties'];
+    /**
+     * The keywords 3.0's Schema Object does not define and this emitter answers for anyway, so their
+     * absence from 3.0 is no reason to drop them: {@see downlevelConst()}, {@see downlevelExamples()}
+     * and {@see downlevelContentEncoding()} rewrite the first three, and a lone `$ref` is a Reference
+     * Object rather than a Schema Object ({@see hoistRefSiblings()} moves anything standing beside it).
+     * Stated for the guard that reads 3.0's closed member set — nothing here branches on it.
+     */
+    public const array HANDLED_SCHEMA_KEYWORDS = ['$ref', 'const', 'contentEncoding', 'examples'];
 
-    /** Keywords whose value is a list of schemas. */
-    private const array SUBSCHEMA_LIST_KEYWORDS = ['allOf', 'anyOf', 'oneOf'];
+    /** The one position 3.0 spells with a boolean, exactly as draft-4 did ({@see subschema()}). */
+    private const string BOOLEAN_SCHEMA_KEYWORD = 'additionalProperties';
 
     /**
      * Fixed fields whose value is an arbitrary JSON value the document carries rather than more document:
@@ -471,7 +489,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
             $out[$key] = match ($member) {
                 null => $value,
-                self::SCHEMA => is_array($value) ? $this->schema(Arr::stringKeyed($value), $child, $diagnostics) : $value,
+                self::SCHEMA => $this->subschema($value, $child, $diagnostics),
                 self::SCHEMA_MAP => is_array($value) ? $this->schemaMap($value, $child, $diagnostics) : $value,
                 default => $this->walk($value, $child, $member, $removed, $diagnostics),
             };
@@ -768,9 +786,54 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
         foreach ($map as $name => $schema) {
             $name = (string) $name;
-            $out[$name] = is_array($schema)
-                ? $this->schema(Arr::stringKeyed($schema), self::pointer($pointer, $name), $diagnostics)
-                : $schema;
+            $out[$name] = $this->subschema($schema, self::pointer($pointer, $name), $diagnostics);
+        }
+
+        return $out;
+    }
+
+    /**
+     * ONE subschema, wherever it sits. A boolean is a schema in 2020-12 and 3.0's draft-4-shaped Schema
+     * Object is an object at every position but {@see BOOLEAN_SCHEMA_KEYWORD} — so it is rewritten into
+     * the 3.0 spelling of the SAME constraint rather than passed through invalid or dropped: `true` is
+     * the empty schema, and `false` is the schema nothing satisfies, which 3.0 writes as `{not: {}}`.
+     * Both are exact, which is why dropping the keyword — the other answer available — is the worse one:
+     * `items: false` says the array must be empty, and a document that stops saying so is not vaguer,
+     * it is wrong.
+     *
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private function subschema(mixed $value, string $pointer, array &$diagnostics): mixed
+    {
+        if (is_bool($value)) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Info,
+                code: 'downlevel.boolean-subschema',
+                message: sprintf(
+                    'Rewrote the boolean schema `%s` at %s as `%s`, which is how OpenAPI 3.0 says the same thing.',
+                    $value ? 'true' : 'false',
+                    $pointer,
+                    $value ? '{}' : '{"not": {}}',
+                ),
+            );
+
+            return $value ? [] : ['not' => []];
+        }
+
+        return is_array($value) ? $this->schema(Arr::stringKeyed($value), $pointer, $diagnostics) : $value;
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $list
+     * @param  list<Diagnostic>  $diagnostics
+     * @return list<mixed>
+     */
+    private function subschemaList(array $list, string $pointer, array &$diagnostics): array
+    {
+        $out = [];
+
+        foreach (array_values($list) as $index => $branch) {
+            $out[] = $this->subschema($branch, $pointer.'/'.$index, $diagnostics);
         }
 
         return $out;
@@ -1118,32 +1181,22 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
      */
     private function recurse(array $schema, string $pointer, array &$diagnostics): array
     {
-        foreach (self::SUBSCHEMA_KEYWORDS as $keyword) {
-            $subschema = $schema[$keyword] ?? null;
-            if (is_array($subschema)) {
-                $schema[$keyword] = $this->schema(Arr::stringKeyed($subschema), $pointer.'/'.$keyword, $diagnostics);
-            }
-        }
+        foreach ($schema as $key => $value) {
+            $keyword = (string) $key;
 
-        foreach (self::SUBSCHEMA_LIST_KEYWORDS as $keyword) {
-            $list = $schema[$keyword] ?? null;
-            if (! is_array($list)) {
+            // The one boolean 3.0 takes as written, so nothing to convert and nothing to report.
+            if ($keyword === self::BOOLEAN_SCHEMA_KEYWORD && is_bool($value)) {
                 continue;
             }
 
-            $branches = [];
-            foreach (array_values($list) as $index => $branch) {
-                $branches[] = is_array($branch)
-                    ? $this->schema(Arr::stringKeyed($branch), $pointer.'/'.$keyword.'/'.$index, $diagnostics)
-                    : $branch;
-            }
+            $child = $pointer.'/'.$keyword;
 
-            $schema[$keyword] = $branches;
-        }
-
-        $properties = $schema['properties'] ?? null;
-        if (is_array($properties)) {
-            $schema['properties'] = $this->schemaMap($properties, $pointer.'/properties', $diagnostics);
+            $schema[$keyword] = match (SchemaKeywords::positionOf($keyword)) {
+                SchemaKeywords::POSITION_SCHEMA => $this->subschema($value, $child, $diagnostics),
+                SchemaKeywords::POSITION_SCHEMA_MAP => is_array($value) ? $this->schemaMap($value, $child, $diagnostics) : $value,
+                SchemaKeywords::POSITION_SCHEMA_LIST => is_array($value) ? $this->subschemaList($value, $child, $diagnostics) : $value,
+                default => $value,
+            };
         }
 
         return $schema;
