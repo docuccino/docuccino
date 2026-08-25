@@ -310,6 +310,15 @@ document itself, which 3.0 is simply the first version to reject.
 | `downlevel.schema-examples` | info or warning | The first of a schema's `examples` was kept as `example`, or they were dropped where none could be | Nothing |
 | `downlevel.unsupported-keyword` | warning | A JSON Schema keyword OpenAPI 3.0 doesn't define was dropped from a schema | Keep the 3.1 or 3.2 artifact for consumers that validate against the full constraint |
 
+## Servers
+
+Facts about the [`servers`](/laravel/reference/configuration/#servers) a document publishes. Every
+export reads them, so a code here is raised once per artifact rather than once per format.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `server.variable-no-default` | warning | A server variable declares no `default`, which every OpenAPI version requires of one. Where the variable declares an `enum`, its first value stands in — that set is your API's own, so a member of it resolves the URL to something you serve. Where it declares neither, an OpenAPI export leaves the variable out rather than resolve the URL to a value nobody serves, and a Postman collection publishes it blank | Give the variable a `default` — one of its `enum` values, where it declares an enum. See [`servers`](/laravel/reference/configuration/#servers) |
+
 ## Postman collections
 
 A Postman collection describes requests a person sends, so it carries less than an OpenAPI document
@@ -318,7 +327,6 @@ does. See [Postman collections](/laravel/reference/commands/#postman-collections
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `postman.no-server` | warning | The document declares no servers, so the collection's `baseUrl` is empty | Declare a server, or fill the variable in once after importing |
-| `postman.server-variable-no-default` | warning | A server variable declares no default, so the collection can't suggest a value | Give the variable a default in your server definition |
 | `postman.variable-name-collision` | warning | A server variable is named `baseUrl`, which the collection already uses, so it isn't published as a variable of its own | Rename the server variable |
 | `postman.path-template-partial` | warning | A path segment templates only part of itself, and a Postman path variable stands for a whole segment, so the segment was left literal | Edit the URL after importing, or template the whole segment |
 | `postman.auth-unsupported` | warning | A security scheme has no Postman equivalent, so requests are sent unauthenticated | Add the credential by hand in Postman |

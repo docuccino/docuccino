@@ -56,13 +56,8 @@ function metaSchemaFixtures(): array
 }
 
 /**
- * Spec violations the emitters are KNOWN to pass through, pinned exactly so they cannot grow and cannot
- * quietly be fixed without saying so. Two of them, both real:
- *
- * `postman-surface` declares a server variable with an `enum` and no `default` on purpose — it is what
- * raises `postman.server-variable-no-default`. Every OpenAPI version requires `default` on a Server
- * Variable Object, and the OpenAPI emitters have no equivalent of that diagnostic: they pass the variable
- * through and the artifact is invalid at that one pointer, in all three versions and both serialisations.
+ * The one spec violation the emitters are KNOWN to pass through, pinned exactly so it cannot grow and
+ * cannot quietly be fixed without saying so.
  *
  * The `downlevel` document emitted as 3.0 YAML is the empty-map defect, end to end: the 3.0 emitter drops
  * the `if`/`then`/`else` that 3.0 has no grammar for and leaves the honest unconstrained `{}` behind, and
@@ -70,15 +65,14 @@ function metaSchemaFixtures(): array
  * the 3.0 meta-schema sees it — 3.1 and 3.2 leave Schema Objects unconstrained — and the JSON emission of
  * the same document is correct, which is what narrows it to the serialiser. Goes when the cast goes.
  *
+ * (`postman-surface` declares a server variable with an `enum` and no `default` on purpose, to raise
+ * `server.variable-no-default`. That used to be pinned here too: every OpenAPI version requires
+ * `default`, and the emitters passed the variable through. They resolve it from its own `enum` now.)
+ *
  * @return list<string>
  */
 function metaSchemaKnownFindings(string $fixture, string $format, bool $yaml): array
 {
-    if ($fixture === 'postman-surface.uir.json') {
-        return ['/servers/0/variables/version required: The required properties (default) are missing (schema '
-            .($format === 'openapi-3.0' ? '/definitions/ServerVariable' : '/$defs/server-variable').')'];
-    }
-
     if ($fixture === 'downlevel.uir.json' && $format === 'openapi-3.0' && $yaml) {
         return [
             '/components/schemas/Thing/properties/branch type: The data (array) must match the type: object (schema /definitions/Schema)',
