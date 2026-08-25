@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
+use Docuccino\Laravel\Support\IgnoredResponses;
 use Illuminate\Cache\RateLimiter;
 
 /**
@@ -49,6 +50,12 @@ final class RateLimitResponsesExtension implements OperationExtension
     {
         $limits = $this->throttles($context);
         if ($limits === []) {
+            return;
+        }
+
+        // Asked before anything is built: the body below comes from the error-response chain, which
+        // registers a shared response component as it goes ({@see IgnoredResponses}).
+        if (IgnoredResponses::drops($context, '429')) {
             return;
         }
 

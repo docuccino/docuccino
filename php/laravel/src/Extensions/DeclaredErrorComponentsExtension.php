@@ -74,6 +74,14 @@ final class DeclaredErrorComponentsExtension implements OperationExtension
                 continue;
             }
 
+            // `response()` is get-or-create, so asking what the response holds is also a write: on a
+            // status nothing documents — one `#[IgnoreResponse]` dropped — the question publishes the
+            // empty response it was asking about. There is nothing to name either way, and the ignore
+            // retracts what was said about the status along with the status.
+            if (! $operation->hasResponse($status)) {
+                continue;
+            }
+
             if ($operation->response($status)->resolvedField('$ref') !== null) {
                 $this->report(
                     $context,

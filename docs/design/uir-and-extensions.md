@@ -1221,10 +1221,30 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   would stop meaning what its name says. Note the residue: a member whose schema hoisted before it was
   removed leaves the component behind, because nothing prunes `components.schemas` by reachability —
   `ResponseDraft::isBodyless()` is the same hazard, avoided there by asking BEFORE converting a payload.
-  That residue is why `#[IgnoreResponse]` is not the same fix: a response carries a body that hoists, so
-  the producers that outlive its removal (`RateLimitResponsesExtension`, `ErrorResponsesExtension`, the
-  LATE resource-collection ones) have to CONSULT the attribute the way `ImplicitResponsesExtension`
-  already does, rather than be reordered behind it.
+  That residue is why `#[IgnoreResponse]` is not the same fix, and it is the fix it got instead: a
+  response carries a body that hoists, so every producer CONSULTS `Laravel\Support\IgnoredResponses`
+  before it converts anything, rather than being reordered behind a removal. Declining to build the
+  response is therefore also declining to hoist its body, which is the whole difference between
+  consulting and removing afterwards. Eleven producers owe it — inference and the response attributes,
+  the rate-limit 429, the created-resource re-home, the two paginated rewraps (both through
+  `PaginatedResponseBody::wrap()`), the laravel-actions html and authorize pair, Query Builder's
+  strict-mode 400, the throw-driven `ErrorResponsesExtension`, and `ImplicitResponsesExtension`, which
+  was the one that already did. `AttributeResponsesExtension`'s `removeResponse()` sweep stays as the
+  BACKSTOP for a producer this package does not own, where an orphan is the lesser defect.
+  A throw-driven producer asks `IgnoredResponses::mapThrow()` rather than deciding on the throw's own
+  status: a mapper answers at the status its tier proves — a table entry, a code folded out of a
+  `render()` — so deciding beforehand would drop a status the author never named whenever the two
+  differ. Mapping is a read there, and the registry rolls back, so nothing hoists and no diagnostic
+  about an unpublished body is reported.
+  Three rules bound it. A declaration drops EXACTLY the status it names: the created-resource re-home
+  finding its 201 dropped declines the whole re-home, retraction included, rather than taking the 200
+  away as well. It cannot name a range key (`3XX`, `4XX` — the attribute takes an `int`), which answers
+  both directions of the range question: an ignore establishes nothing, so unlike a `#[Response]` it
+  neither retires the range a member sits in nor narrows one. And a status matching nothing is SILENT,
+  for the same measured reason `#[IgnoreParam]`'s unmatched name is: over the adapter's ignore route set
+  a would-be diagnostic fires 13 times against 11 real drops, and all 13 are unactionable — 12 are one
+  correct class-level declaration seen once per sibling action, and the last names a member of a
+  published range the attribute has no way to spell.
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
 - Within the docblock layer, `@summary`/`@description` beat the free-prose split, and declaring
   EITHER hands both fields to the tags — the prose above them was written for whoever maintains

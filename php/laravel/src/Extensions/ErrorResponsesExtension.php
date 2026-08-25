@@ -20,6 +20,7 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Exceptions\DeclaredErrorComponent;
+use Docuccino\Laravel\Support\IgnoredResponses;
 
 /**
  * Turns the action's signalled exceptions into error responses (design §Errors): each runs through the
@@ -66,7 +67,9 @@ final class ErrorResponsesExtension implements OperationExtension
             // a different name from a cold one.
             $context->recordDependencyFiles(DeclarationFiles::of($throw->exceptionFqcn));
 
-            $mapped = $context->mapThrow($throw);
+            // Mapped through the ignore reader, so a status the route drops is neither published nor left
+            // holding the components its body hoisted ({@see IgnoredResponses::mapThrow()}).
+            $mapped = IgnoredResponses::mapThrow($context, $throw);
             if ($mapped === null) {
                 continue;
             }
