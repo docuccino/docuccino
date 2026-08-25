@@ -148,6 +148,51 @@ it('gives every code the severity it is emitted at', function (): void {
 });
 
 /*
+ * The reference is not the only page that tables diagnostics: a guide covering one family repeats that
+ * family's rows so a reader following the guide need not leave it. A second copy nothing reads is the
+ * first one going stale — the narrative-content guide kept the wording of an escape refusal that its
+ * canonical row had been corrected out of, and nothing could have said so. Each row here names the page
+ * and the code prefix it owns; adding a family table to a guide is a line here.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function diagnosticFamilyPages(): array
+{
+    return [
+        'narrative content' => ['laravel/guides/narrative-content.mdx', 'content.'],
+    ];
+}
+
+it('holds a guide that repeats a diagnostic family to the family the packages emit', function (string $page, string $prefix): void {
+    $emitted = diagnostic_codes(diagnosticSourceDirectories());
+    $documented = diagnostic_documented_codes((string) file_get_contents(
+        dirname(__DIR__, 2).'/website/src/content/docs/'.$page,
+    ));
+
+    $family = static fn (array $codes): array => array_filter(
+        $codes,
+        static fn (string $code): bool => str_starts_with($code, $prefix),
+        ARRAY_FILTER_USE_KEY,
+    );
+
+    $emitted = $family($emitted);
+    $documented = $family($documented);
+
+    $wrong = [];
+    foreach ($emitted as $code => $severities) {
+        if (($documented[$code] ?? $severities) !== $severities) {
+            $wrong[] = $code.': emitted '.implode('/', $severities).', page says '.implode('/', $documented[$code]);
+        }
+    }
+
+    expect(array_keys(array_diff_key($emitted, $documented)))->toBe([], 'codes the guide\'s table is short of')
+        ->and(array_keys(array_diff_key($documented, $emitted)))->toBe([], 'rows for codes nothing emits')
+        ->and($wrong)->toBe([])
+        // Anti-vacuity: a prefix that matched nothing would agree with an empty table.
+        ->and(count($emitted))->toBeGreaterThanOrEqual(5);
+})->with(diagnosticFamilyPages());
+
+/*
  * A scan that silently finds nothing passes forever. These are the floors: well under what the
  * packages emit today, so ordinary work never trips them, and far enough above zero that a scanner
  * that stopped seeing one of the shapes below fails loudly instead of going quiet.
