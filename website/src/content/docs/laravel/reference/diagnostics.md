@@ -309,6 +309,7 @@ document itself, which 3.0 is simply the first version to reject.
 | `downlevel.content-encoding` | info or warning | `contentEncoding: base64` became `format: byte`, or was dropped where a `format` was already set | Nothing |
 | `downlevel.exclusive-bound` | warning | A numeric `exclusiveMinimum`/`exclusiveMaximum` was dropped, because 3.0 spells it as a boolean on a bound that's already taken | Nothing, though 3.0 consumers see an unbounded number |
 | `downlevel.schema-examples` | info or warning | The first of a schema's `examples` was kept as `example`, or they were dropped where none could be | Nothing |
+| `downlevel.boolean-subschema` | info | A boolean schema — `true` for "anything goes", `false` for "nothing is valid" — became the OpenAPI 3.0 spelling of the same constraint, `{}` or `{"not": {}}`. 3.0 takes a boolean at `additionalProperties` and nowhere else | Nothing; the constraint is unchanged |
 | `downlevel.unsupported-keyword` | warning | A JSON Schema keyword OpenAPI 3.0 doesn't define was dropped from a schema | Keep the 3.1 or 3.2 artifact for consumers that validate against the full constraint |
 
 ## Servers

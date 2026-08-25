@@ -432,6 +432,25 @@ function loadFixture(string $name): array
 }
 
 /**
+ * The Schema Object member order the canonicalizer publishes, read out of its source. That list is the
+ * one thing about a keyword still stated by hand — order is a normative choice rather than a fact — so
+ * three guards hold it against something else: the classification, the object-valued set, and what
+ * OpenAPI 3.0 defines. They read it from here rather than each scanning for themselves.
+ *
+ * @return list<string>
+ */
+function canonicalizerSchemaOrder(): array
+{
+    $source = (string) file_get_contents(dirname(__DIR__).'/php/core/src/Canonical/Canonicalizer.php');
+    $list = preg_split('/private const array SCHEMA_ORDER = \[/', $source)[1] ?? '';
+    $list = preg_split('/\n    \];/', $list)[0] ?? '';
+
+    preg_match_all("/'([^']+)',/", $list, $matches);
+
+    return $matches[1];
+}
+
+/**
  * Any committed document on disk, read the same way. {@see loadFixture} for why it is not a plain
  * associative decode.
  *

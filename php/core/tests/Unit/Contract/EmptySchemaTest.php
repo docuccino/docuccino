@@ -141,12 +141,7 @@ it('publishes an empty object at every object-valued schema keyword, and reads e
 it('orders every object-valued keyword rather than leaving it to sort with the data', function (): void {
     // The shape is derived, so a keyword missing from the order still publishes an object — this is
     // the half that goes stale silently, and only a scan of the list itself can see it.
-    $source = (string) file_get_contents(__DIR__.'/../../../src/Canonical/Canonicalizer.php');
-    $list = preg_split('/private const array SCHEMA_ORDER = \[/', $source)[1] ?? '';
-    $list = preg_split('/\n    \];/', $list)[0] ?? '';
-
-    preg_match_all("/'([^']+)',/", $list, $matches);
-    $ordered = $matches[1];
+    $ordered = canonicalizerSchemaOrder();
 
     // A scan that stopped matching would turn this into a test of nothing.
     expect($ordered)->toHaveCount(57)

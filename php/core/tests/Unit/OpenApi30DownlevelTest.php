@@ -13,6 +13,7 @@ use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\ReportingEmitter;
 use Docuccino\Core\SpecValidation\Validator;
 use Docuccino\Core\Tests\Support\EmittedDocument;
+use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
 
 /**
  * The 3.0 downlevel. It chains off the 3.1 emitter, so the tests here cover only what 3.0 itself
@@ -504,6 +505,44 @@ describe('schema dialect conversions', function (): void {
         expect($result['schema'])->toBe(['type' => 'object']);
         expect($result['codes'])->toBe([]);
     })->with(OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS);
+
+    /*
+     * The guard that says which keywords those lists must hold, read off the vendored 3.0 meta-schema
+     * rather than off anybody's memory of the spec. 3.0's Schema Object ENUMERATES its members and
+     * closes with `additionalProperties: false`, so a keyword absent both from 3.0 and from the drop
+     * list fails 3.0's own gate whatever value it carries — which is how `additionalItems` shipped
+     * invalid at every value, with the whole suite green.
+     */
+    it('answers for every schema keyword, against what 3.0 actually defines', function (): void {
+        $schema = OpenApiMetaSchema::decode('openapi-3.0')->definitions->Schema;
+
+        expect($schema->additionalProperties)->toBeFalse()
+            ->and(get_object_vars($schema->patternProperties))->toHaveKey('^x-');
+
+        $defined = array_keys(get_object_vars($schema->properties));
+
+        // Anti-vacuity: a decode that stopped finding the member set would make the rest pass on nothing.
+        expect($defined)->toHaveCount(35)
+            ->toContain('additionalProperties', 'items', 'not', 'properties', 'nullable');
+
+        $answered = [
+            ...$defined,
+            ...OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS,
+            ...OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS,
+            ...OpenApi30DownlevelEmitter::HANDLED_SCHEMA_KEYWORDS,
+        ];
+
+        $unanswered = array_values(array_filter(
+            canonicalizerSchemaOrder(),
+            static fn (string $keyword): bool => ! str_starts_with($keyword, 'x-') && ! in_array($keyword, $answered, true),
+        ));
+
+        expect($unanswered)->toBe([], 'schema keywords 3.0 does not define and this emitter does not answer for');
+
+        // And the other direction: nothing is dropped that 3.0 would have carried.
+        expect(array_values(array_intersect(OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS, $defined)))->toBe([])
+            ->and(array_values(array_intersect(OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS, $defined)))->toBe([]);
+    });
 
     it('converts subschemas at every nesting position', function (): void {
         $result = downlevel30([
