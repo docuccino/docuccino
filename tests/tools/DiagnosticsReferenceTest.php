@@ -384,11 +384,14 @@ it('reports each of those with the rule its owner states', function (string $con
     }
 
     // Anti-vacuity: a scan that stopped finding the reporters would pass the assertion beside this
-    // while proving nothing, so the count each row has today is asserted too.
+    // while proving nothing, so the count each row has today is asserted too. Each floor EQUALS the
+    // count on the tree, which is what makes it worth having: a reporter deleted — or a scan that
+    // stopped seeing one — drops below it, while a new one passes on `>=`. A floor set one below the
+    // real count buys nothing and hides exactly the deletion it was put there to catch.
     expect($restating)->toBe([])
         ->and(count($reporters))->toBeGreaterThanOrEqual($floor);
 })->with([
-    ['LEGAL_NAME_HELP', ['components.name-invalid', 'attribute.error-component-invalid'], 3],
+    ['LEGAL_NAME_HELP', ['components.name-invalid', 'attribute.error-component-invalid'], 4],
     ['FILE_ESCAPED_HELP', ['example-file.escapes-base-path', 'description-file.escapes-base-path'], 2],
     ['FILE_MISSING_HELP', ['example-file.missing', 'description-file.missing'], 2],
 ]);
