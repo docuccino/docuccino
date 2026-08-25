@@ -9,20 +9,12 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Support\Arr;
 
 /**
- * How every producer answers a Server Variable Object that declares no usable `default`.
+ * How every producer answers a Server Variable Object that declares no usable `default` — one fact, one
+ * code, since `default` is REQUIRED by 3.0, 3.1 and 3.2 alike and a collection must publish something.
  *
- * One fact, one code. `default` is REQUIRED by OpenAPI 3.0, 3.1 and 3.2 alike, and a Postman
- * collection has to put SOMETHING in the variable it publishes, so both emitter families were reading
- * the same defect — the OpenAPI ones silently, which is how they came to ship an invalid Server
- * Variable Object in all three versions and both serialisations.
- *
- * What the document can honestly say is bounded by what it already says. A declared `enum` is the
- * API's own closed set of legal values, so standing its first entry in for the missing `default`
- * resolves the URL to something the server really serves and claims nothing new; that answer is the
- * same for every target. With no `enum` there is no evidence of any legal value, and a made-up one
- * would change what the URL resolves to — a wrong server URL being worse than a missing variable — so
- * only there do the targets part: an OpenAPI document leaves the variable out, and a collection
- * publishes it blank for a person to fill in.
+ * The invariant: what the document says here is bounded by what it already says, so a declared `enum`
+ * supplies the default and nothing invents one otherwise. The full policy, and where the targets part,
+ * is the `server.variable-no-default` row of the diagnostics reference.
  *
  * @internal
  */

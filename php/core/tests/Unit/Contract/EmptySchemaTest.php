@@ -143,9 +143,10 @@ it('orders every object-valued keyword rather than leaving it to sort with the d
     // the half that goes stale silently, and only a scan of the list itself can see it.
     $ordered = canonicalizerSchemaOrder();
 
-    // A scan that stopped matching would turn this into a test of nothing.
-    expect($ordered)->toHaveCount(57)
-        ->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items');
+    // A source scan that stopped matching would turn this into a test of nothing, so a floor and the
+    // names it must find rather than the exact count, which no legitimate addition should have to edit.
+    expect(count($ordered))->toBeGreaterThan(50)
+        ->and($ordered)->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items');
 
     expect(array_values(array_diff(objectValuedKeywords(), $ordered)))->toBe([]);
 });

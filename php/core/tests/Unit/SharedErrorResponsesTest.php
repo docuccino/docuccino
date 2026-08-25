@@ -1555,7 +1555,8 @@ it('keeps a lone shape name to itself, joining nothing', function (): void {
     expect(array_keys($doc['components']['responses']))->toBe(['ProblemDetailsData']);
 });
 
-it('keeps a whole-response name in the dedupe scope it names', function (): void {    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
+it('keeps a whole-response name in the dedupe scope it names', function (): void {
+    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
     // carry the same representations get a component each; two bodies where only one was named do not
     // collapse onto one name, and the unnamed one publishes what it would have published alone.
     $named = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());

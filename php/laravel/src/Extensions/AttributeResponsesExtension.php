@@ -11,7 +11,6 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\ResponseDraft;
-use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
@@ -107,22 +106,11 @@ final class AttributeResponsesExtension implements OperationExtension
     }
 
     /**
-     * The component name a `#[Response]` declared for the status it declares, through the same
-     * `claimComponentName()` every producer uses — one naming path, and the ordinary ladder settles it.
-     * `#[ErrorComponent]` cannot reach a body an operation states itself (it is read off the exception
-     * classes a route throws and the render methods on their path), so this is the anchor for one.
-     *
-     * Handed to the guard exactly as every other field of the attribute is, so the answers agree: two
-     * declarations at one status settle first-writer-wins over the {@see AttributeSet}'s
-     * most-specific-first order, which is a child action overriding its base controller's default rather
-     * than the two cancelling out, and a shadowed name that differed travels on the provenance trail.
-     *
-     * `namesResponse:` because a response component covers ALL of a status's content: the name is the
-     * status's, written at the operation by someone who can see every representation it answers with,
-     * which is what lets it reach a response stating several ({@see ResponseDraft::claimComponentName()}).
-     * `specificity: 1` puts its documented precedence over the exception class's `#[ErrorComponent]` —
-     * the declaration nearest the operation wins — into the tuple the guard compares, rather than
-     * leaving it to `Responses` happening to run before `Errors`.
+     * The name a `#[Response]` declared, through the `claimComponentName()` every producer uses — the
+     * anchor for an error body an operation states itself, which `#[ErrorComponent]` cannot reach. Both
+     * arguments are stated there: `namesResponse:` because a declaration at the operation can see every
+     * representation the status answers with, and `specificity: 1` to put "the declaration nearest the
+     * operation wins" into the tuple the guard compares rather than leave it to phase order.
      */
     private function claimDeclaredComponent(ResponseDraft $response, Response $attribute, RouteContext $context): void
     {
@@ -134,15 +122,10 @@ final class AttributeResponsesExtension implements OperationExtension
     }
 
     /**
-     * One warning per `errorComponent:` no `$ref` could point at. `claimComponentName()` drops such a
-     * name at the write and answers `NoOp`, which leaves an author who wrote a space — the likeliest
-     * first attempt — with an argument that does nothing and no reason why; the adapter catches it where
-     * it reads it, exactly as {@see ErrorResponsesExtension::reportIllegalName()} does for the anchor
-     * next door. One mistake, one validation and one remedy, so it is that anchor's code rather than a
-     * parallel one: what differs is only which declaration to go and fix, which the message names.
-     *
-     * Keyed by the mistake rather than the declaration, so a bad name spelled on both a controller and
-     * its action is one report, and sorted so what the route says never depends on attribute order.
+     * One warning per `errorComponent:` no `$ref` could point at, under the code
+     * {@see ErrorResponsesExtension::reportIllegalName()} raises for the anchor next door — one mistake,
+     * one remedy, and only the declaration to go and fix differs. Keyed by the mistake rather than the
+     * declaration, and sorted, so what the route says never depends on attribute order.
      */
     private function reportIllegalComponents(RouteContext $context): void
     {

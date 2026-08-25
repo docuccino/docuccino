@@ -13,17 +13,11 @@ use Symfony\Component\Yaml\Yaml;
  * Style: 2-space indent, block collections at every depth (only empty maps/lists go inline, as
  * `{  }` / `[]`), multi-line strings as literal blocks.
  *
- * The value must reach the dumper with its map-versus-sequence carrier intact: `stdClass` is the
- * canonicalizer's empty-map marker and DUMP_OBJECT_AS_MAP writes it `{  }`, while an empty `array`
- * is a genuine sequence and DUMP_EMPTY_ARRAY_AS_SEQUENCE writes it `[]`. Casting objects to arrays
- * here would collapse the two and emit `paths: []`, which is spec-invalid.
- *
- * Map KEYS need the same care for the same reason. Every OpenAPI map is keyed by a string — a status
- * code, a component name, a media type — but PHP coerces a numeric-string array key to an int before
- * the dumper ever sees it, and an unquoted `200:` is a YAML integer where JSON's `"200"` is a string.
- * DUMP_NUMERIC_KEY_AS_STRING writes `'200':` instead, so the two serialisations of one document carry
- * the same node type at every position. It cannot make a sequence look like a map: the key is only
- * emitted where the collection is already a mapping.
+ * The invariant: a value reaches the dumper with its carrier intact, so a `stdClass` writes `{  }` and
+ * an empty `array` writes `[]` — casting objects to arrays here would emit a spec-invalid `paths: []`
+ * (docs/design/uir-and-extensions.md §1 "The empty-object invariant"). DUMP_NUMERIC_KEY_AS_STRING is
+ * the same care for map KEYS, which PHP coerces to ints before the dumper sees them: an unquoted `200:`
+ * is a YAML integer where JSON's `"200"` is a string.
  *
  * @internal
  */

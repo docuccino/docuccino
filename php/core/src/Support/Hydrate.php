@@ -56,10 +56,9 @@ final class Hydrate
      * A STRUCTURAL map however it was spelled — an array, or the {@see stdClass} that `{}` and an
      * index-keyed object arrive as. Null when the value is not a map at all.
      *
-     * {@see JsonValue} keeps those two spellings apart because free-form DATA needs it: an `example: {}`
-     * read back as `[]` publishes a lie. A schema, a `properties` entry, an `items` is a map in either
-     * spelling — so a reader there that tests `is_array()` alone does not degrade, it DROPS the node,
-     * and a comparison that never sees a member reports it added.
+     * A reader at such a position that tests `is_array()` alone does not degrade, it DROPS the node,
+     * after which a comparison that never sees a member reports it added. Why the two spellings exist
+     * to be reconciled: docs/design/uir-and-extensions.md §1 "The empty-object invariant".
      *
      * @return array<string, mixed>|null
      */

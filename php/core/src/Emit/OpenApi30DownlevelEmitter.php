@@ -18,35 +18,22 @@ use Docuccino\Core\Support\Arr;
  * already gone and this emitter only has to answer 3.0's own restrictions — chiefly its schema
  * dialect, a draft-4-shaped subset of JSON Schema 2020-12.
  *
- * Document level: `webhooks`, `info.summary` and `mutualTLS` security schemes have no 3.0 home;
- * `components.pathItems` has none either, so what a `$ref` names is inlined where it stands;
- * `info.license.identifier` becomes an SPDX URL when there is no `url`.
- * Operation level: `responses` is REQUIRED from 3.0's side and optional from 3.1 on, so an operation
- * that documents none gains a placeholder `default` ({@see UNDESCRIBED_RESPONSE}).
- * Schema level: nullable type-arrays become `nullable: true`, `const` becomes a single-value `enum`,
- * schema `examples` become `example`, numeric exclusive bounds become the boolean form, `$ref`
- * siblings hoist into an `allOf` wrapper, a boolean subschema becomes the 3.0 spelling of the same
- * constraint ({@see subschema()}), and {@see UNSUPPORTED_SCHEMA_KEYWORDS} is dropped. Which members
- * carry subschemas at all is read off {@see SchemaKeywords}, so a keyword added there is converted here
- * with no second entry to keep in step.
- * Reference level: a Reference Object's own `summary` or `description` — 3.1's way for a reference to
- * reword what it points at — comes off, since 3.0 defines neither and ignores what stands beside a
- * `$ref`.
+ * What it drops and what it rewrites, member by member, is the reference table on the site's first-export
+ * page; the two internal facts are that an operation documenting no `responses` gains a placeholder
+ * ({@see UNDESCRIBED_RESPONSE}, since 3.0 requires the member 3.1 made optional), and that which members
+ * carry subschemas at all is read off {@see SchemaKeywords} rather than listed again here.
  *
- * The walk that finds all of those is positional throughout ({@see member()}): what a node IS follows from
- * where it sits, never from how its key is spelled. `responses.default` is a Response Object whose key
- * reads like a schema keyword, a component may be named `example`, and a path item is one because a
- * path-item map holds it — not because something three levels up is called `callbacks`. The rule runs the
- * other way too: a key means something only where it is a fixed field, so a Link Object's `parameters` and
- * `requestBody` hold what the application wrote however their members are spelled, and a Security
- * Requirement Object's members are scheme names however they are spelled.
+ * The walk is positional throughout ({@see member()}): what a node IS follows from where it sits, never
+ * from how its key is spelled. `responses.default` is a Response Object whose key reads like a schema
+ * keyword, a component may be named `example`, and a path item is one because a path-item map holds it.
+ * The rule runs the other way too — a key means something only where it is a fixed field, so a Link
+ * Object's `parameters` and a Security Requirement Object's members are read as what the application
+ * wrote however they are spelled.
  *
- * Every step that changes what a consumer reads is reported into an {@see EmitReport} naming the JSON
- * pointer it happened at, so a 3.0 export states what it could not carry instead of quietly shipping a
- * weaker contract: Warning where a contract is lost, Info where it survives in another shape. That is why
- * `downlevel.ref-siblings` covers both answers to one question at a `$ref` — a schema's siblings moving
- * into an `allOf` losslessly, and a reference's prose coming off in favour of the wording the component
- * it points at publishes — and the message says which happened.
+ * Every step that changes what a consumer reads goes into an {@see EmitReport} at the JSON pointer it
+ * happened at, Warning where a contract is lost and Info where it survives in another shape. Hence one
+ * code, `downlevel.ref-siblings`, for both answers at a `$ref` — a schema's siblings moving into an
+ * `allOf`, and a reference's own prose coming off — with the message saying which.
  *
  * @phpstan-type Position self::FIELDS|self::PATH_ITEM|self::NAMES|self::PATH_ITEMS|self::CALLBACKS|self::LINKS|self::LINK|self::SCHEMA|self::SCHEMA_MAP
  * @phpstan-type Removed array{pathItems: array<string, mixed>, securitySchemes: list<string>, inlining: list<string>}
