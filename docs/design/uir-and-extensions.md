@@ -271,10 +271,18 @@ responses, one claim, and the ladder retired the name for both — `ValidationEr
 seventy-five that had held the plain name for a release. Offering a representation the claim says nothing
 about is the same defect as being one: the claim describes the response only where the response is the
 one thing it describes. So a response stating several asks for **what it carries** — the components its
-representations reference, one per distinct shape, in the order the media types sort — and that name is a
-function of its own bytes, so neither body is named after the other's existence and the claim stays with
-the body that is genuinely it. The three above publish as
-`AuthenticationChallengeProblemDetailsData`; the seventy-five keep `ValidationError`.
+representations reference, one per distinct shape, joined with `_` in the order the media types sort — and
+that name is a function of its own bytes, so neither body is named after the other's existence and the
+claim stays with the body that is genuinely it. The three above publish as
+`AuthenticationChallenge_ProblemDetailsData`; the seventy-five keep `ValidationError`.
+
+The separator is what makes the join **injective**, and it is load-bearing rather than decorative: run
+together, `{Foo, BarBaz}` and `{FooBar, Baz}` both spell `FooBarBaz`, so two responses with no shape in
+common contended for one name and each took a content-derived rung neither needed — a pair of hashes
+nobody can catch by name, produced by an ambiguity that had no reason to exist. `.` and `-` are the only
+other characters a component key may hold and neither survives as an identifier in a generated client, so
+`_` is the only candidate. A single distinct shape joins nothing and keeps its own name, so the common
+case is byte-for-byte what it was before there was a separator at all.
 
 **The one claim that does describe a response stating several is one that says so.** A producer names the
 error it rendered and cannot see what another put beside it — that is the whole argument above — but
@@ -292,7 +300,11 @@ shapes that happened to be readable would speak for part of the body and say not
 which is the assertion this whole area refuses; `Error422` is vague and true. Names the hoist itself
 MINTED are not the document's own either — they move when a shape's contest does, and a response named
 after one would move with it — so a body one of whose representations is a shape this pass just named
-falls to its status as well.
+falls to its status as well. And a shape whose OWN name carries a `_` falls there too, however many shapes
+it stands with: `_` splits the join back apart only if no part contains one, so a lone `Auth_Challenge`
+reads as a join of `Auth` and `Challenge` and cannot be told from it. Exempting the one-shape case would
+put both in one codomain and hand the collision straight back, so the refusal is unconditional — a
+vague-but-true `Error422` over a name that misdescribes what it was built from.
 
 The claim is out of a shape's and a multi-representation response's dedupe SCOPE for the same reason: a
 name that cannot describe a body must not tell two of them apart either. Scoping by it hoisted one union
