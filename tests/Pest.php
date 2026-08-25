@@ -810,6 +810,141 @@ function referencesIn(string $directory, string $pattern): array
 }
 
 /**
+ * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php:LINE`
+ * strings — the scan behind the one-reader rule ({@see JsonValue}).
+ *
+ * Associative means any spelling that asks for arrays rather than objects, because a guard must read the
+ * same grammar as the thing it guards: a positional `true`, a named `associative: true`, and the
+ * `JSON_OBJECT_AS_ARRAY` flag that means the same thing without the argument. `null` and a missing second
+ * argument are not it — those honour the flags and default to objects respectively.
+ *
+ * Tokenised rather than grepped, for the reason {@see referencesIn} tokenises: it draws the
+ * string-and-comment line for free, so `'json_decode($x, true)'` inside a message or a doc example is
+ * not a call. The counter-file in `JsonReaderArchTest` is that claim proved rather than asserted.
+ *
+ * @return list<string>
+ */
+function associativeJsonDecodesIn(string $directory): array
+{
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
+
+    $found = [];
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = str_replace(dirname($directory, 3).'/', '', $file->getPathname());
+
+        foreach (associativeJsonDecodeLines((string) file_get_contents($file->getPathname())) as $line) {
+            $found[] = $relative.':'.$line;
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * The line of every associative `json_decode` call in one source. {@see associativeJsonDecodesIn}.
+ *
+ * @return list<int>
+ */
+function associativeJsonDecodeLines(string $source): array
+{
+    /** @var list<PhpToken> $tokens */
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+    ));
+
+    $lines = [];
+
+    foreach ($tokens as $index => $token) {
+        // A method or constant of the same name is somebody else's function, not this one.
+        if (! $token->is(T_STRING) || strcasecmp($token->text, 'json_decode') !== 0) {
+            continue;
+        }
+
+        $previous = $tokens[$index - 1] ?? null;
+        if ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION])) {
+            continue;
+        }
+
+        if (($tokens[$index + 1] ?? null)?->text !== '(') {
+            continue;
+        }
+
+        if (jsonDecodeAsksForArrays(array_slice($tokens, $index + 2))) {
+            $lines[] = $token->line;
+        }
+    }
+
+    return $lines;
+}
+
+/**
+ * Whether the argument list starting at $tokens (just past the opening paren) asks for arrays.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function jsonDecodeAsksForArrays(array $tokens): bool
+{
+    $depth = 0;
+    $argument = 0;
+    $named = null;
+
+    foreach ($tokens as $index => $token) {
+        if (in_array($token->text, ['(', '[', '{'], true)) {
+            $depth++;
+
+            continue;
+        }
+
+        if (in_array($token->text, [')', ']', '}'], true)) {
+            if ($depth === 0) {
+                return false;
+            }
+            $depth--;
+
+            continue;
+        }
+
+        if ($depth > 0) {
+            continue;
+        }
+
+        if ($token->text === ',') {
+            $argument++;
+            $named = null;
+
+            continue;
+        }
+
+        // `associative:` / `flags:` — a named argument fixes the slot whatever its position.
+        if ($token->is(T_STRING) && ($tokens[$index + 1] ?? null)?->text === ':') {
+            $named = strtolower($token->text);
+
+            continue;
+        }
+
+        // The flag spelling of the same request, wherever it sits in a `|` chain.
+        if ($token->is(T_STRING) && strcasecmp($token->text, 'JSON_OBJECT_AS_ARRAY') === 0) {
+            return true;
+        }
+
+        $isSecondSlot = $named === 'associative' || ($named === null && $argument === 1);
+
+        if ($isSecondSlot && $token->is(T_STRING) && strcasecmp($token->text, 'true') === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Every namespaced name one PHP source names in code, once each and without a leading backslash:
  * `use` imports (grouped ones expanded) and inline references alike. The `namespace` declaration is
  * not one of them — a file does not import itself.
