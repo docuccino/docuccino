@@ -17,11 +17,14 @@ use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
  * seven of these documents recovered no responses, which 3.1 and 3.2 accept and 3.0 requires. The 3.0
  * emitter answers that with a placeholder `default` response now, so nothing here is pinned.
  *
- * JSON only, for now. The YAML half of the same battery is blocked on the `YamlSerializer` cast that
- * writes every empty map as `[]`: these documents hold empty maps at eight positions, so a YAML pass here
- * would land eight pinned exceptions that the fix immediately deletes. Core's oracle covers the YAML path
- * (`OpenApiMetaSchemaTest`, on a document that produces one such map through the 3.0 downlevel emitter),
- * and this file gains its YAML half with the fix.
+ * Both serialisations, and both halves matter for the same reason: `Yaml::parse()` answers a PHP array
+ * for a mapping AND for a sequence, so every YAML assertion that predates {@see EmittedDocument} was
+ * blind to the one distinction a YAML writer can get wrong. Nothing here is pinned in either.
+ *
+ * The subjects load through {@see loadDocument}, so the oracle reads its own inputs the way the product
+ * reads a document. An associative decode would hand every `example: {}` in these goldens to the emitter
+ * as `[]`, and the oracle would then validate — and agree with itself about — a document that is not the
+ * one committed beside it.
  */
 
 /** @return array<string, array{string, string}> */
@@ -57,33 +60,89 @@ function adapterMetaSchemaGoldens(): array
     return $goldens;
 }
 
+/** @return array{mixed, mixed} the JSON emission and the YAML emission of one golden, both as graphs */
+function adapterMetaSchemaEmissions(string $golden, string $format): array
+{
+    $document = UirDocument::fromArray(loadDocument(golden($golden)));
+
+    return [
+        json_decode(Formats::emit($format, $document, new EmitOptions)->output, flags: JSON_THROW_ON_ERROR),
+        EmittedDocument::parseYaml(Formats::emit($format, $document, (new EmitOptions)->withYaml())->output),
+    ];
+}
+
 it('emits JSON that answers to its own OpenAPI meta-schema', function (string $golden, string $format): void {
-    $document = UirDocument::fromArray(json_decode(
-        (string) file_get_contents(golden($golden)),
-        true,
-        flags: JSON_THROW_ON_ERROR,
-    ));
+    [$json] = adapterMetaSchemaEmissions($golden, $format);
 
-    $emitted = json_decode(Formats::emit($format, $document, new EmitOptions)->output, flags: JSON_THROW_ON_ERROR);
-
-    expect(OpenApiMetaSchema::findings($format, $emitted))->toBe([]);
+    expect(OpenApiMetaSchema::findings($format, $json))->toBe([]);
 })->with(adapterMetaSchemaSubjects());
+
+it('emits YAML that answers to its own OpenAPI meta-schema', function (string $golden, string $format): void {
+    [, $yaml] = adapterMetaSchemaEmissions($golden, $format);
+
+    expect(OpenApiMetaSchema::findings($format, $yaml))->toBe([]);
+})->with(adapterMetaSchemaSubjects());
+
+/**
+ * The meta-schemas leave Schema Objects unconstrained in 3.1 and 3.2, so a corrupted map INSIDE one is
+ * invisible to them. This is the assertion that sees it: one document serialised twice must agree at
+ * every position on whether it holds a map, a sequence or a scalar.
+ */
+it('emits YAML and JSON that agree on every map, sequence and scalar', function (string $golden, string $format): void {
+    [$json, $yaml] = adapterMetaSchemaEmissions($golden, $format);
+
+    expect(EmittedDocument::differences($json, $yaml))->toBe([]);
+})->with(adapterMetaSchemaSubjects());
+
+/**
+ * The oracle reading its own subjects correctly, stated as bytes. Everything above compares an emission
+ * with a schema or with its other serialisation, so all of it stays green on a document loaded WRONG —
+ * both sides agree, and both are wrong together. This is the assertion that fails instead.
+ */
+it('re-emits the empty objects its subjects hold, rather than the lists a plain decode makes of them', function (): void {
+    $committed = [];
+    $reEmitted = [];
+
+    foreach (adapterMetaSchemaGoldens() as $golden) {
+        $held = substr_count((string) file_get_contents(golden($golden)), '"example": {}');
+
+        if ($held === 0) {
+            continue;
+        }
+
+        $committed[$golden] = $held;
+        $reEmitted[$golden] = substr_count(
+            Formats::emit('openapi-3.2', UirDocument::fromArray(loadDocument(golden($golden))), new EmitOptions)->output,
+            '"example": {}',
+        );
+    }
+
+    // If no committed golden holds one any more, this test is measuring nothing and says so.
+    expect($committed)->not->toBeEmpty()
+        ->and($reEmitted)->toBe($committed);
+});
 
 /**
  * A scan that finds nothing must fail. Well under what the tree holds today, far enough above zero that a
  * glob which stopped matching fails here instead of passing on an empty battery.
+ *
+ * The empty-map count is the one that keeps THIS file honest: these documents hold empty maps, and a
+ * reader that stopped preserving them — or an emitter that stopped writing them — would leave every
+ * assertion above passing on a document with nothing left to get wrong.
  */
-it('validates a plausible minimum of recorded documents and positions', function (): void {
+it('validates a plausible minimum of recorded documents, positions and empty maps', function (): void {
     $positions = 0;
+    $emptyMaps = 0;
 
     foreach (adapterMetaSchemaGoldens() as $golden) {
-        $positions += EmittedDocument::nodes(json_decode(
-            (string) file_get_contents(golden($golden)),
-            flags: JSON_THROW_ON_ERROR,
-        ));
+        [$json, $yaml] = adapterMetaSchemaEmissions($golden, 'openapi-3.2');
+
+        $positions += EmittedDocument::nodes($json) + EmittedDocument::nodes($yaml);
+        $emptyMaps += count(EmittedDocument::emptyMaps($json));
     }
 
     expect(count(adapterMetaSchemaGoldens()))->toBeGreaterThanOrEqual(10)
         ->and(count(adapterMetaSchemaSubjects()))->toBeGreaterThanOrEqual(30)
-        ->and($positions)->toBeGreaterThanOrEqual(10000);
+        ->and($positions)->toBeGreaterThanOrEqual(10000)
+        ->and($emptyMaps)->toBeGreaterThanOrEqual(1);
 });
