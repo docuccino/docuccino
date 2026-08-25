@@ -208,9 +208,42 @@ it('drops the contains bound at exactly the one site that has it', function (): 
 });
 
 /**
+ * The other shape-matched rewrite, and the condition that makes it sound rather than merely convenient.
+ *
+ * `opisWorkarounds()` turns every `$dynamicRef: "#meta"` into the static `$ref: "#/$defs/schema"`. That
+ * is what the dynamic reference is SPECIFIED to resolve to only because each file carries exactly one
+ * `$dynamicAnchor: "meta"` and it sits at that pointer — with two anchors, the dynamic resolution would
+ * depend on the evaluation path and the substitution would silently mis-resolve every Schema Object
+ * position in every document, with the suite green. Its sibling rewrite (the `contains` bound above) is
+ * guarded by a count; this one was not.
+ *
+ * Only the anchor is pinned, not the number of `$dynamicRef`s pointing at it: a revision that adds
+ * another Schema Object position is ordinary spec growth and harmless to the rewrite, whereas a second
+ * anchor is the thing that breaks it.
+ */
+it('rewrites the dynamic reference against exactly one anchor, at the pointer it substitutes', function (): void {
+    $anchors = [];
+
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $anchors[$format] = metaSchemaSites(
+            OpenApiMetaSchema::decode($format),
+            static fn (array $vars): bool => ($vars['$dynamicAnchor'] ?? null) === 'meta',
+        );
+    }
+
+    // 3.0 is draft-04 and has no dynamic references at all, so it needs no rewrite and carries no anchor.
+    expect($anchors)->toBe(['openapi-3.2' => 1, 'openapi-3.1' => 1, 'openapi-3.0' => 0]);
+
+    // The one anchor is at `#/$defs/schema` — the pointer the rewrite substitutes.
+    foreach (['openapi-3.2', 'openapi-3.1'] as $format) {
+        expect(OpenApiMetaSchema::decode($format)->{'$defs'}->schema->{'$dynamicAnchor'})->toBe('meta', $format);
+    }
+});
+
+/**
  * The key gates `allowUnevaluated => false` disables, counted so the scope recorded beside that option
  * cannot drift from the files. 3.0 has none — its gates close with `additionalProperties`, which is why
- * it is the strict column of `OpenApiUnevaluatedScopeTest`'s matrix.
+ * it rejects most of `OpenApiUnevaluatedScopeTest`'s matrix.
  */
 it('counts the unevaluatedProperties sites the disabled keyword takes with it', function (): void {
     $closed = static fn (array $vars): bool => ($vars['unevaluatedProperties'] ?? null) === false;
