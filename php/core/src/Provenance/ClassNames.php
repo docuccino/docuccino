@@ -25,7 +25,12 @@ final readonly class ClassNames
 
     public function of(object $subject): string
     {
-        $class = $subject::class;
+        return $this->ofName($subject::class);
+    }
+
+    /** The same for a name already in hand — a `class-string` a mapper was handed rather than an instance. */
+    public function ofName(string $class): string
+    {
         $declaredAt = strpos($class, "\0");
 
         if ($declaredAt === false) {

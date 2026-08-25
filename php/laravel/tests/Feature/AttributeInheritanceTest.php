@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\Group;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Tests\Fixtures\Attributes\AnonymousThrowController;
 use Docuccino\Laravel\Tests\Fixtures\Attributes\InheritingController;
@@ -87,6 +88,25 @@ it('names an anonymous thrower by where it stands, not by where the build machin
         ->and($help)->not->toContain("\0")
         ->and($help)->not->toContain(dirname(__DIR__, 4))
         ->and($help)->not->toMatch('/\$[0-9a-f]+\./');
+});
+
+it('names a closure route\'s site relatively, since a closure has no name but its file', function (): void {
+    // An action's symbol falls back to the FILE where there is no class, so an ordinary closure route
+    // names one ABSOLUTELY. The site goes in the message the way the cause goes in the help, and a
+    // diagnostic is embedded in the document, so raw it puts the build machine into the output.
+    [, $diagnostics] = ($this->builtDocument)(static function (Router $router): void {
+        $router->get(
+            'api/zz-attr-closure-malformed',
+            /* @phpstan-ignore-next-line argument.type — the wrong argument type IS the fixture */
+            #[Group(123)]
+            static fn (): array => [],
+        );
+    });
+
+    $message = diagnosticsCoded($diagnostics, 'attribute.unreadable')[0]->message ?? '';
+
+    expect($message)->toContain('The #[Group] on tests/Feature/AttributeInheritanceTest.php::{closure} ')
+        ->and($message)->not->toContain(dirname(__DIR__, 4));
 });
 
 it('reports a malformed CLASS-level attribute, naming the class it was written on', function (): void {
