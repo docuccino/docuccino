@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Emit;
 
-use stdClass;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -12,7 +11,12 @@ use Symfony\Component\Yaml\Yaml;
  * dumper keeps the insertion order it's given, so the same canonical input gives byte-identical YAML.
  *
  * Style: 2-space indent, block collections at every depth (only empty maps/lists go inline, as
- * `{  }` / `[]`), multi-line strings as literal blocks, `stdClass` empty-object markers as maps.
+ * `{  }` / `[]`), multi-line strings as literal blocks.
+ *
+ * The value must reach the dumper with its map-versus-sequence carrier intact: `stdClass` is the
+ * canonicalizer's empty-map marker and DUMP_OBJECT_AS_MAP writes it `{  }`, while an empty `array`
+ * is a genuine sequence and DUMP_EMPTY_ARRAY_AS_SEQUENCE writes it `[]`. Casting objects to arrays
+ * here would collapse the two and emit `paths: []`, which is spec-invalid.
  *
  * @internal
  */
@@ -28,23 +32,6 @@ final class YamlSerializer
             | Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
             | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE;
 
-        return Yaml::dump($this->normalize($value), self::BLOCK_DEPTH, self::INDENT, $flags);
-    }
-
-    /**
-     * Symfony's dumper handles nested `stdClass` via DUMP_OBJECT_AS_MAP, but a *bare* empty
-     * `stdClass` at any position is clearer as an explicit empty map, so normalise those.
-     */
-    private function normalize(mixed $value): mixed
-    {
-        if ($value instanceof stdClass) {
-            $value = (array) $value;
-        }
-
-        if (is_array($value)) {
-            return array_map($this->normalize(...), $value);
-        }
-
-        return $value;
+        return Yaml::dump($value, self::BLOCK_DEPTH, self::INDENT, $flags);
     }
 }
