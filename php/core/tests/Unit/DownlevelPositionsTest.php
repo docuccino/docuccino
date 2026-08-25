@@ -169,6 +169,75 @@ describe('a name spelled like a fixed field', function (): void {
             ->and(array_map(static fn ($d): string => $d->code, $result->report->diagnostics))->toBe(['downlevel.ref-siblings']);
     });
 
+    /**
+     * A Link Object's `parameters` is `Map[string, Any | {expression}]` and its `requestBody` is `Any`:
+     * values the application wrote, under keys the application chose. Read as fixed fields they reach the
+     * schema handler, the path-item machinery and the reference handling, each of which rewrites what it
+     * finds — and no meta-schema can see it, because `Any` stays valid whatever is done to it.
+     */
+    it('hands back a Link Object\'s parameters and requestBody, however their members are spelled', function (): void {
+        $link = [
+            'operationId' => 'things.show',
+            'description' => 'The thing this response created',
+            'parameters' => [
+                'path.id' => '$response.body#/id',
+                // Spelled like a schema position, a path-item map, and a callbacks map.
+                'schema' => ['type' => ['string', 'null'], 'const' => 'pinned'],
+                'paths' => ['/audit' => ['get' => ['summary' => 'A body member, owed no responses']]],
+                'callbacks' => ['onAudit' => ['/audit' => ['$ref' => '#/components/pathItems/Nothing']]],
+            ],
+            'requestBody' => ['$ref' => '#/nothing/at/all', 'summary' => 'A body member, not a reference'],
+            'server' => ['url' => 'https://api.example.com'],
+        ];
+
+        $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'paths' => ['/a' => ['get' => ['responses' => ['200' => [
+                'description' => 'OK',
+                'links' => ['self' => $link],
+            ]]]]],
+            'components' => ['links' => ['Self' => $link]],
+        ]));
+
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+
+        // Member for member rather than byte for byte: the canonicalizer sorts a Link's members after this
+        // emitter has had its say, and what matters is that none of them changed.
+        expect($decoded['paths']['/a']['get']['responses']['200']['links']['self'])->toEqual($link)
+            ->and($decoded['components']['links']['Self'])->toEqual($link)
+            ->and(array_map(static fn ($d): string => $d->code, $result->report->diagnostics))->toBe([]);
+    });
+
+    it('still reads a Link map member as a reference, and the Link\'s own fields as fields', function (): void {
+        $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'paths' => ['/a' => ['get' => ['responses' => ['200' => [
+                'description' => 'OK',
+                'links' => ['shared' => ['$ref' => '#/components/links/Audit', 'summary' => 'Reworded here']],
+            ]]]]],
+            'components' => ['links' => ['Audit' => [
+                'operationId' => 'things.audit',
+                // A Link's `server` is a Server Object, so the walk still descends into a Link.
+                'server' => ['url' => 'https://api.example.com', 'variables' => ['region' => ['default' => 'eu']]],
+                'requestBody' => ['$ref' => '#/still/data', 'summary' => 'Kept, being a body member'],
+            ]]],
+        ]));
+
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+
+        // One reference in the links map, whose prose 3.0 ignores; one `$ref`-shaped body member, kept.
+        expect($decoded['paths']['/a']['get']['responses']['200']['links']['shared'])->toBe(['$ref' => '#/components/links/Audit'])
+            ->and($decoded['components']['links']['Audit']['requestBody'])->toEqual(['$ref' => '#/still/data', 'summary' => 'Kept, being a body member'])
+            ->and($decoded['components']['links']['Audit']['server'])->toEqual(['url' => 'https://api.example.com', 'variables' => ['region' => ['default' => 'eu']]])
+            ->and(array_map(static fn ($d): string => $d->code, $result->report->diagnostics))->toBe(['downlevel.ref-siblings']);
+    });
+
     it('keeps a security requirement named like a component out of the scheme drop', function (): void {
         $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
             'uir' => '1.0.0',

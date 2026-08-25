@@ -32,7 +32,9 @@ use Docuccino\Core\Support\Arr;
  * The walk that finds all of those is positional throughout ({@see member()}): what a node IS follows from
  * where it sits, never from how its key is spelled. `responses.default` is a Response Object whose key
  * reads like a schema keyword, a component may be named `example`, and a path item is one because a
- * path-item map holds it — not because something three levels up is called `callbacks`.
+ * path-item map holds it — not because something three levels up is called `callbacks`. The rule runs the
+ * other way too: a key means something only where it is a fixed field, so a Link Object's `parameters` and
+ * `requestBody` hold what the application wrote however their members are spelled.
  *
  * Every step that changes what a consumer reads is reported into an {@see EmitReport} naming the JSON
  * pointer it happened at, so a 3.0 export states what it could not carry instead of quietly shipping a
@@ -41,7 +43,7 @@ use Docuccino\Core\Support\Arr;
  * into an `allOf` losslessly, and a reference's prose coming off in favour of the wording the component
  * it points at publishes — and the message says which happened.
  *
- * @phpstan-type Position self::FIELDS|self::PATH_ITEM|self::NAMES|self::PATH_ITEMS|self::CALLBACKS|self::SCHEMA|self::SCHEMA_MAP
+ * @phpstan-type Position self::FIELDS|self::PATH_ITEM|self::NAMES|self::PATH_ITEMS|self::CALLBACKS|self::LINKS|self::LINK|self::SCHEMA|self::SCHEMA_MAP
  * @phpstan-type Removed array{pathItems: array<string, mixed>, securitySchemes: list<string>}
  *
  * @internal
@@ -93,16 +95,26 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     private const array USER_DATA_FIELDS = ['example', 'value'];
 
     /**
+     * A Link Object's two fixed fields whose value is the application's rather than more document: its
+     * `parameters` is `Map[string, Any | {expression}]` and its `requestBody` is `Any`, so a Link's
+     * `parameters.schema` is no schema and its `parameters.paths` holds no path items. This cannot be said
+     * by name alone, which is why a Link has a position of its own: `parameters` at an Operation IS a list
+     * of Parameter Objects and `requestBody` there IS a Request Body Object, both carrying schemas 3.0 has
+     * to convert.
+     */
+    private const array LINK_USER_DATA_FIELDS = ['parameters', 'requestBody'];
+
+    /**
      * Fixed fields whose value is a map keyed by names the application chose — a status code, a media
-     * type, a component name. `paths` and `callbacks` are maps too and are listed separately, because what
-     * their members ARE is the thing the walk has to know.
+     * type, a component name — and whose members are ordinary objects. `paths`, `callbacks` and `links`
+     * are maps too and are listed separately, because what their members ARE is the thing the walk has to
+     * know.
      */
     private const array NAMED_MAP_FIELDS = [
         'content',
         'encoding',
         'examples',
         'headers',
-        'links',
         'responses',
         'scopes',
         'variables',
@@ -122,6 +134,12 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     /** A map whose members are Callback Objects, each of them a map of Path Items. */
     private const string CALLBACKS = 'callbacks';
+
+    /** A map whose members are Link Objects: a Response Object's `links`, and `components.links`. */
+    private const string LINKS = 'links';
+
+    /** A Link Object — an ordinary object but for {@see LINK_USER_DATA_FIELDS}. */
+    private const string LINK = 'link';
 
     /** A Schema Object. */
     private const string SCHEMA = 'schema';
@@ -458,7 +476,8 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     /**
      * What one member of a node is — the whole positional rule, in one place. Inside a map the application
      * named, every member is an object whatever its key is spelled; only at a fixed-field position does a
-     * key name anything at all.
+     * key name anything at all. A Link Object is an ordinary object at that position bar two fields whose
+     * value is the application's ({@see LINK_USER_DATA_FIELDS}).
      *
      * @param  Position  $kind
      * @return Position|null null where the member is user data the walk must not descend into
@@ -473,6 +492,8 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             self::NAMES => self::FIELDS,
             self::PATH_ITEMS => self::PATH_ITEM,
             self::CALLBACKS => self::PATH_ITEMS,
+            self::LINKS => self::LINK,
+            self::LINK => in_array($key, self::LINK_USER_DATA_FIELDS, true) ? null : self::field($key, $pointer),
             self::FIELDS, self::PATH_ITEM => self::field($key, $pointer),
             default => self::FIELDS,
         };
@@ -490,6 +511,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             return match ($key) {
                 'schemas' => self::SCHEMA_MAP,
                 'callbacks' => self::CALLBACKS,
+                'links' => self::LINKS,
                 'pathItems' => self::PATH_ITEMS,
                 default => self::NAMES,
             };
@@ -500,6 +522,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             $key === 'schema' => self::SCHEMA,
             $key === 'paths' => self::PATH_ITEMS,
             $key === 'callbacks' => self::CALLBACKS,
+            $key === 'links' => self::LINKS,
             in_array($key, self::NAMED_MAP_FIELDS, true) => self::NAMES,
             default => self::FIELDS,
         };
