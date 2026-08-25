@@ -10,10 +10,11 @@ use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
  * it named five of the eighteen keywords 3.0 cannot express, and it said nothing at all about the losses
  * a 3.0 export inherits by being produced through the 3.1 one.
  *
- * Two sources of truth, because the two emitters expose themselves differently. The 3.0 half reads
- * UNSUPPORTED_SCHEMA_KEYWORDS, which is public. The 3.1 half has no equivalent constant — its tag members
- * sit in a private table and `query`/`additionalOperations` are inline literals — so it reads the
- * `downlevel.*` codes out of that emitter's source instead, which is what a reader would be shown anyway.
+ * Both halves read the same source of truth for the same reason: what a reader is SHOWN of a loss is its
+ * `downlevel.*` diagnostic, so the codes an emitter raises are the losses the page owes a row. Reading
+ * one emitter's keyword constant instead covers a single code of its eighteen, which is how a brand-new
+ * 3.0 drop — an endpoint dropped for an unresolvable shared path item — went undocumented with this file
+ * green. The keyword constant is still read, one level finer: it says the big row lists every keyword.
  */
 
 function firstExportSource(): string
@@ -23,12 +24,15 @@ function firstExportSource(): string
     );
 }
 
-/** The `downlevel.*` codes the 3.1 emitter raises — every loss a 3.0 export inherits from it. */
-function inheritedDownlevelCodes(): array
+/**
+ * The `downlevel.*` codes one emitter raises, read out of its source because neither exposes them as a
+ * constant — the tag members sit in a private table and most subjects are inline literals.
+ *
+ * @return list<string>
+ */
+function downlevelCodes(string $emitter): array
 {
-    $source = (string) file_get_contents(
-        dirname(__DIR__, 2).'/php/core/src/Emit/OpenApi31DownlevelEmitter.php',
-    );
+    $source = (string) file_get_contents(dirname(__DIR__, 2).'/php/core/src/Emit/'.$emitter.'.php');
 
     preg_match_all("/'(downlevel\.[\w-]+)'/", $source, $matches);
 
@@ -36,6 +40,20 @@ function inheritedDownlevelCodes(): array
     sort($codes);
 
     return $codes;
+}
+
+/** The rows of the 3.0 section's tables, where a loss the reader will see a diagnostic for belongs. */
+function downlevelTableRows(): string
+{
+    $rows = array_filter(
+        explode("\n", downlevelSection()),
+        static fn (string $line): bool => str_starts_with(trim($line), '|'),
+    );
+
+    // Anti-vacuity: a scan that stopped seeing the tables would otherwise pass forever.
+    expect(count($rows))->toBeGreaterThanOrEqual(20);
+
+    return implode("\n", $rows);
 }
 
 /** The section of the page covering the 3.0 export, so a mention elsewhere cannot cover for a missing row. */
@@ -67,22 +85,66 @@ it('names every keyword 3.0 cannot express', function (): void {
     expect($missing)->toBe([], 'keywords dropped by the 3.0 emitter that the page never mentions');
 });
 
-it('says nothing about a keyword the emitter drops silently', function (): void {
-    // SILENT_SCHEMA_KEYWORDS carries no consumer-visible meaning and raises no diagnostic, so a row for
-    // one would promise a `downlevel.*` note the reader will never see.
-    $section = downlevelSection();
+it('keeps a keyword the emitter drops silently out of the tables', function (): void {
+    // SILENT_SCHEMA_KEYWORDS carries no consumer-visible meaning and raises no diagnostic, so a ROW for
+    // one would promise a `downlevel.*` note the reader will never see. The prose may still name it —
+    // the completeness claim closing the section is about losses, and a silent one is still a loss.
+    $rows = downlevelTableRows();
 
     $overclaimed = array_values(array_filter(
         OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS,
-        static fn (string $keyword): bool => str_contains($section, '`'.$keyword.'`'),
+        static fn (string $keyword): bool => str_contains($rows, '`'.$keyword.'`'),
     ));
 
-    expect($overclaimed)->toBe([], 'keywords the page lists as reported that are dropped without a note');
+    expect($overclaimed)->toBe([], 'keywords the tables list as reported that are dropped without a note')
+        ->and(downlevelSection())->toContain('`$comment` is dropped without a note');
+});
+
+it('accounts for every loss the 3.0 emitter reports', function (): void {
+    // Each code that emitter raises, and the subject a reader would scan the tables for. The map is the
+    // assertion: a new code has no entry here and fails, rather than quietly going undocumented — which
+    // is exactly what a guard reading only UNSUPPORTED_SCHEMA_KEYWORDS let through, since that constant
+    // answers for one of the eighteen.
+    $subjects = [
+        'downlevel.boolean-subschema' => 'A subschema of `true` or `false`',
+        'downlevel.component-path-items' => '`components.pathItems`',
+        'downlevel.const' => '`const: "draft"`',
+        'downlevel.content-encoding' => '`contentEncoding: base64`',
+        'downlevel.empty-responses' => 'An operation with no responses',
+        'downlevel.exclusive-bound' => '`exclusiveMinimum: 0`',
+        'downlevel.info-summary' => '`info.summary`',
+        'downlevel.license-identifier' => 'An SPDX `info.license.identifier`',
+        'downlevel.multi-type' => '`type: [string, integer]`',
+        'downlevel.mutual-tls' => 'A `mutualTLS` security scheme',
+        'downlevel.null-type' => '`type: [string, null]`',
+        'downlevel.nullable-composition' => '`anyOf: [{$ref}, {type: null}]`',
+        'downlevel.path-item-ref' => 'A path `$ref`-ing a shared path item',
+        'downlevel.path-item-unresolved' => 'A path whose `$ref` chain reaches no shared path item',
+        'downlevel.ref-siblings' => 'A `description` beside a `$ref`',
+        'downlevel.schema-examples' => 'Schema `examples: [a, b]`',
+        // The row itself; that it lists every keyword is the finer check above.
+        'downlevel.unsupported-keyword' => 'Dropped — 3.0 cannot express them',
+        'downlevel.webhooks' => '`webhooks`',
+    ];
+
+    $codes = downlevelCodes('OpenApi30DownlevelEmitter');
+
+    expect($codes)->not->toBeEmpty()
+        ->and($codes)->toBe(array_keys($subjects), 'the 3.0 emitter raises a code this guard has no row for');
+
+    $rows = downlevelTableRows();
+
+    $missing = array_values(array_filter(
+        $subjects,
+        static fn (string $subject): bool => ! str_contains($rows, $subject),
+    ));
+
+    expect($missing)->toBe([], 'losses the 3.0 emitter reports that its tables never name');
 });
 
 it('accounts for every loss a 3.0 export inherits from the 3.1 one', function (): void {
-    // Each 3.1 code, and the member a reader would scan the table for. The map is the assertion: a new
-    // code in that emitter has no entry here and fails, rather than quietly going undocumented.
+    // The same reading of the sibling emitter, whose losses a 3.0 export carries by being produced
+    // through it.
     $subjects = [
         'downlevel.additional-operations' => '`additionalOperations`',
         'downlevel.query-method' => '`query` HTTP method',
@@ -91,20 +153,20 @@ it('accounts for every loss a 3.0 export inherits from the 3.1 one', function ()
         'downlevel.tag-summary' => "A tag's `summary`",
     ];
 
-    $codes = inheritedDownlevelCodes();
+    $codes = downlevelCodes('OpenApi31DownlevelEmitter');
 
     expect($codes)->not->toBeEmpty()
         ->and($codes)->toBe(array_keys($subjects), 'the 3.1 emitter raises a code this guard has no row for');
 
-    $section = downlevelSection();
+    $rows = downlevelTableRows();
 
     $missing = array_values(array_filter(
         $subjects,
-        static fn (string $subject): bool => ! str_contains($section, $subject),
+        static fn (string $subject): bool => ! str_contains($rows, $subject),
     ));
 
-    expect($missing)->toBe([], 'losses inherited from the 3.1 emitter that the 3.0 section never states')
-        ->and($section)->toContain('produced **through** the 3.1 one');
+    expect($missing)->toBe([], 'losses inherited from the 3.1 emitter that the 3.0 tables never name')
+        ->and(downlevelSection())->toContain('produced **through** the 3.1 one');
 });
 
 it('does not claim the rest of the export is identical to 3.2 without qualifying it', function (): void {
