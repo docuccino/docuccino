@@ -68,7 +68,7 @@ function unevaluatedScopeMatrix(): array
         'type is a number' => ['passes', 'passes', 'rejects'],
         'properties is a sequence' => ['passes', 'passes', 'rejects'],
         'additionalProperties is a sequence' => ['passes', 'passes', 'rejects'],
-        'format is not a known format' => ['passes', 'passes', 'passes'],
+        'info.contact.email is malformed' => ['passes', 'passes', 'passes'],
     ];
 }
 
@@ -96,7 +96,7 @@ function unevaluatedScopeMutate(string $mutation, stdClass $document): void
         'type is a number' => $schema->type = 42,
         'properties is a sequence' => $schema->properties = [],
         'additionalProperties is a sequence' => $schema->additionalProperties = [],
-        'format is not a known format' => $schema->properties->id->format = 'not-a-format',
+        'info.contact.email is malformed' => $document->info->contact = json_decode('{"email":"not an email"}', flags: JSON_THROW_ON_ERROR),
     };
 }
 

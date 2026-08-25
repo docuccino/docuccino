@@ -96,6 +96,22 @@ it('emits YAML and JSON that agree on every map, sequence and scalar', function 
     expect(EmittedDocument::differences($json, $yaml))->toBe([]);
 })->with(metaSchemaSubjects());
 
+/**
+ * And on the order those members are written in, which neither oracle above can see: the kind comparison
+ * walks maps by NAME and then diffs key SETS, and JSON Schema cannot constrain member order at all. So a
+ * writer that emitted `info` before `paths` where its sibling emitted `paths` before `info` produced zero
+ * findings from both — a second instance of the class mapping-key quoting belongs to, where the difference
+ * exists only in the bytes.
+ *
+ * Determinism is a product feature here, so that is a real defect, and the YAML goldens cover order for
+ * three documents at one version rather than for these subjects at all three.
+ */
+it('emits YAML and JSON that agree on the order they write members in', function (string $fixture, string $format): void {
+    [$json, $yaml] = metaSchemaEmissions($fixture, $format);
+
+    expect(EmittedDocument::orderDifferences($json, $yaml))->toBe([]);
+})->with(metaSchemaSubjects());
+
 it('vendors a meta-schema for every OpenAPI format the emitters offer', function (): void {
     $emitted = array_values(array_filter(
         Formats::ids(),
@@ -107,7 +123,7 @@ it('vendors a meta-schema for every OpenAPI format the emitters offer', function
 });
 
 it('pins each vendored meta-schema to the dated URI it was fetched from', function (): void {
-    foreach (OpenApiMetaSchema::SCHEMAS as $format => [$file, $published]) {
+    foreach (OpenApiMetaSchema::SCHEMAS as $format => $row) {
         $decoded = OpenApiMetaSchema::decode($format);
 
         expect($decoded)->toBeInstanceOf(stdClass::class);
@@ -115,8 +131,37 @@ it('pins each vendored meta-schema to the dated URI it was fetched from', functi
         // 3.2 and 3.1 are draft 2020-12 (`$id`); 3.0 is draft-04 (`id`).
         $declared = $decoded->{'$id'} ?? $decoded->id ?? null;
 
-        expect($declared)->toBe($published, $file);
+        expect($declared)->toBe($row['published'], $row['file']);
     }
+
+    expect(OpenApiMetaSchema::SCHEMAS)->toHaveCount(3);
+});
+
+/**
+ * And the pin the id cannot give. A file's declared `$id` is exactly the field an editor of it would leave
+ * alone, so identity alone lets 1,650 lines of third-party JSON be edited under a name that still checks
+ * out. That matters more here than for an ordinary vendored blob, because the recovered key gates read
+ * their patterns OUT of these same files: widening one gate's `^/` to `^.` leaves the declared id
+ * untouched, weakens the validator and the recovery together, and the site-count tests do not backstop it
+ * — they count sites, not what the patterns at those sites say.
+ *
+ * Same control as `SchemaShippingTest`'s drift guard over the shipped UIR schema, for the same reason:
+ * nobody reads either file line by line, so the bytes answer for themselves.
+ */
+it('pins each vendored meta-schema by content, not only by the id it declares', function (): void {
+    foreach (OpenApiMetaSchema::SCHEMAS as $format => $row) {
+        $path = OpenApiMetaSchema::path($format);
+
+        expect(is_file($path))->toBeTrue($row['file'])
+            ->and(hash_file('sha256', $path))->toBe($row['sha256'], $row['file'])
+            ->and(OpenApiMetaSchema::digest($format))->toBe($row['sha256']);
+
+        // A floor under the pin itself: these are whole published meta-schemas, so a truncated or
+        // placeholder file re-pinned to its own new digest fails here rather than passing quietly.
+        expect(filesize($path))->toBeGreaterThan(20000, $row['file']);
+    }
+
+    expect(OpenApiMetaSchema::SCHEMAS)->toHaveCount(3);
 });
 
 /**
@@ -163,9 +208,42 @@ it('drops the contains bound at exactly the one site that has it', function (): 
 });
 
 /**
+ * The other shape-matched rewrite, and the condition that makes it sound rather than merely convenient.
+ *
+ * `opisWorkarounds()` turns every `$dynamicRef: "#meta"` into the static `$ref: "#/$defs/schema"`. That
+ * is what the dynamic reference is SPECIFIED to resolve to only because each file carries exactly one
+ * `$dynamicAnchor: "meta"` and it sits at that pointer — with two anchors, the dynamic resolution would
+ * depend on the evaluation path and the substitution would silently mis-resolve every Schema Object
+ * position in every document, with the suite green. Its sibling rewrite (the `contains` bound above) is
+ * guarded by a count; this one was not.
+ *
+ * Only the anchor is pinned, not the number of `$dynamicRef`s pointing at it: a revision that adds
+ * another Schema Object position is ordinary spec growth and harmless to the rewrite, whereas a second
+ * anchor is the thing that breaks it.
+ */
+it('rewrites the dynamic reference against exactly one anchor, at the pointer it substitutes', function (): void {
+    $anchors = [];
+
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $anchors[$format] = metaSchemaSites(
+            OpenApiMetaSchema::decode($format),
+            static fn (array $vars): bool => ($vars['$dynamicAnchor'] ?? null) === 'meta',
+        );
+    }
+
+    // 3.0 is draft-04 and has no dynamic references at all, so it needs no rewrite and carries no anchor.
+    expect($anchors)->toBe(['openapi-3.2' => 1, 'openapi-3.1' => 1, 'openapi-3.0' => 0]);
+
+    // The one anchor is at `#/$defs/schema` — the pointer the rewrite substitutes.
+    foreach (['openapi-3.2', 'openapi-3.1'] as $format) {
+        expect(OpenApiMetaSchema::decode($format)->{'$defs'}->schema->{'$dynamicAnchor'})->toBe('meta', $format);
+    }
+});
+
+/**
  * The key gates `allowUnevaluated => false` disables, counted so the scope recorded beside that option
  * cannot drift from the files. 3.0 has none — its gates close with `additionalProperties`, which is why
- * it is the strict column of `OpenApiUnevaluatedScopeTest`'s matrix.
+ * it rejects most of `OpenApiUnevaluatedScopeTest`'s matrix.
  */
 it('counts the unevaluatedProperties sites the disabled keyword takes with it', function (): void {
     $closed = static fn (array $vars): bool => ($vars['unevaluatedProperties'] ?? null) === false;
@@ -243,15 +321,23 @@ it('reports an empty map written as a sequence, and nothing when it is written a
  * `allowDefaults` is off, so a validated 3.2 document silently gained a `jsonSchemaDialect` and a
  * `servers: [{url: "/"}]` it never emitted — and every assertion after it compared against the mutation
  * rather than the emission. The option is set; this is what proves it still is.
+ *
+ * Both graphs, because they are built by different readers: `json_decode` for one and a kind-preserving
+ * `Yaml::parse()` for the other. Proving purity over the JSON graph alone proves it for one of the two
+ * things every assertion in this file goes on to compare.
+ *
+ * The encode is order-sensitive on purpose: it is what makes an injected member visible wherever opis
+ * chose to put it.
  */
-it('leaves the instance it validated exactly as it found it', function (string $fixture, string $format): void {
-    [$json] = metaSchemaEmissions($fixture, $format);
+it('leaves the instances it validated exactly as it found them', function (string $fixture, string $format): void {
+    [$json, $yaml] = metaSchemaEmissions($fixture, $format);
 
-    $before = json_encode($json, JSON_THROW_ON_ERROR);
+    $before = [json_encode($json, JSON_THROW_ON_ERROR), json_encode($yaml, JSON_THROW_ON_ERROR)];
 
     OpenApiMetaSchema::findings($format, $json);
+    OpenApiMetaSchema::findings($format, $yaml);
 
-    expect(json_encode($json, JSON_THROW_ON_ERROR))->toBe($before);
+    expect([json_encode($json, JSON_THROW_ON_ERROR), json_encode($yaml, JSON_THROW_ON_ERROR)])->toBe($before);
 })->with(metaSchemaSubjects());
 
 /**
@@ -278,6 +364,48 @@ it('sees a null-valued member the YAML dropped, where the meta-schema cannot', f
 });
 
 /**
+ * The order detector's own negative path, on the mutation that motivated it: one serialisation writes
+ * `info` then `paths`, the other writes them the other way round, and the same swap one level down.
+ * Members, kinds and scalars are identical, so `differences()` reports nothing and both meta-schemas
+ * accept both documents — and the encoded bytes are not the same bytes.
+ */
+it('reports a member-order divergence both other oracles read past', function (): void {
+    $ordered = json_decode('{"openapi":"3.2.0","info":{"title":"T","version":"1.0.0"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+    $swapped = json_decode('{"openapi":"3.2.0","paths":{},"info":{"version":"1.0.0","title":"T"}}', flags: JSON_THROW_ON_ERROR);
+
+    // What the two existing oracles say about the pair: nothing, from either side.
+    expect(EmittedDocument::differences($ordered, $swapped))->toBe([])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $ordered))->toBe([])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $swapped))->toBe([]);
+
+    // What the bytes say, and what the detector says.
+    expect(json_encode($swapped, JSON_THROW_ON_ERROR))->not->toBe(json_encode($ordered, JSON_THROW_ON_ERROR));
+
+    expect(EmittedDocument::orderDifferences($ordered, $swapped))->toBe([
+        '/: json orders openapi, info, paths, yaml orders openapi, paths, info',
+        '/info: json orders title, version, yaml orders version, title',
+    ]);
+
+    // And silence on a document compared with itself, so the detector is not simply always positive.
+    expect(EmittedDocument::orderDifferences($ordered, $ordered))->toBe([])
+        ->and(EmittedDocument::orderedMaps($ordered))->toBe(2);
+});
+
+/**
+ * Order is only order. A differing key SET belongs to `differences()`, and reporting it in both places
+ * would make one defect read as two — so the detector stays silent on a dropped member and the other
+ * comparison keeps answering for it.
+ */
+it('leaves a differing member set to the comparison that owns it', function (): void {
+    $full = json_decode('{"openapi":"3.2.0","info":{"title":"T","version":"1.0.0"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+    $short = json_decode('{"openapi":"3.2.0","info":{"title":"T"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+
+    expect(EmittedDocument::orderDifferences($full, $short))->toBe([])
+        ->and(EmittedDocument::differences($full, $short))
+        ->toBe(['/info/version: json carries a member yaml does not']);
+});
+
+/**
  * A scan that finds nothing must fail. These are the counts the assertions above are worth: well under
  * what the tree holds today, far enough above zero that a fixture glob which stopped matching, or an
  * emitter that started returning empty output, fails here instead of passing on nothing.
@@ -285,15 +413,21 @@ it('sees a null-valued member the YAML dropped, where the meta-schema cannot', f
 it('validates a plausible minimum of documents and positions', function (): void {
     $documents = 0;
     $positions = 0;
+    $orderedMaps = 0;
 
     foreach (metaSchemaSubjects() as [$fixture, $format]) {
         [$json, $yaml] = metaSchemaEmissions($fixture, $format);
 
         $documents += 2;
         $positions += EmittedDocument::nodes($json) + EmittedDocument::nodes($yaml);
+
+        // The floor the order assertion needs: a map with fewer than two members has no order to get
+        // wrong, so a subject set that had lost its multi-member maps would satisfy it on nothing.
+        $orderedMaps += EmittedDocument::orderedMaps($json);
     }
 
     expect(count(metaSchemaFixtures()))->toBeGreaterThanOrEqual(5)
         ->and($documents)->toBeGreaterThanOrEqual(30)
-        ->and($positions)->toBeGreaterThanOrEqual(5000);
+        ->and($positions)->toBeGreaterThanOrEqual(5000)
+        ->and($orderedMaps)->toBeGreaterThanOrEqual(300);
 });

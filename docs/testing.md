@@ -97,13 +97,24 @@ coverage locally and the ratchet policy for the CI gate.
   cover. Ask presence with `property_exists()`/`array_key_exists()` and report the two cases apart.
 - **A difference that exists only in the BYTES survives every oracle that parses first.** Both guards
   above — the meta-schema validation and the kind comparison — read a parsed graph, so anything the
-  parse normalises away is invisible to them by construction. The known instance is **mapping-key
-  quoting**: every `responses` map is keyed by status code, and `json_decode`, `Yaml::parse` and
-  `get_object_vars` all answer `int(200)` for that key, quoted or not. So YAML emitted `200:` where
-  JSON emitted `"200":` in every document the product had ever written, and the two oracles compared
-  int to int and agreed. The parse boundary is where this class hides; anyone adding an oracle should
-  assume a graph comparison cannot see it, and pin such a fix with an assertion over the raw bytes
-  rather than letting a golden diff stand as the only record.
+  parse normalises away is invisible to them by construction. The parse boundary is where this class
+  hides; anyone adding an oracle should assume a graph comparison cannot see it, and pin such a fix with
+  an assertion over the raw bytes rather than letting a golden diff stand as the only record. **Two
+  instances are known, and the second was found by asking what else the boundary swallows:**
+  - **Mapping-key quoting.** Every `responses` map is keyed by status code, and `json_decode`,
+    `Yaml::parse` and `get_object_vars` all answer `int(200)` for that key, quoted or not. So YAML
+    emitted `200:` where JSON emitted `"200":` in every document the product had ever written, and the
+    two oracles compared int to int and agreed.
+  - **Member order.** The kind comparison walks maps member-by-NAME and then diffs key SETS, so two
+    serialisations carrying identical members in a different order come back identical — and JSON Schema
+    cannot constrain order either, so the meta-schema is silent too. Swapping `info`/`paths` and
+    `title`/`version` in one serialisation yields zero findings from both oracles while the encoded bytes
+    differ. Determinism being a product feature, a writer that ordered members differently from its
+    sibling is a real defect, and the three byte-locked YAML goldens cover order for three documents at
+    one version — not the other subjects, and not the other two versions.
+    `EmittedDocument::orderDifferences()` is the detector, on the same order-sensitive encode the
+    mutation-freedom guard already relied on; `orderedMaps()` is its floor, because a map with fewer than
+    two members has no order to get wrong.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton

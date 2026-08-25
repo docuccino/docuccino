@@ -17,30 +17,54 @@ use stdClass;
  * {@see SCHEMAS} — all three verified SHA-256 identical to what those URIs answer, with zero external
  * `$ref`s in any of them, so nothing here resolves anything off disk or off the network.
  *
- * What the pin in `OpenApiMetaSchemaTest` asserts is narrower than that: a file's declared id against the
- * URI it was fetched from, which is IDENTITY, not CURRENCY. A newer dated revision of any of the three
- * would go unnoticed — the `latest` alias 404s, so there is nothing offline to compare against — and
- * catching that is a deliberate manual step at upgrade time, not something the suite can see.
+ * `SCHEMAS` therefore pins each file twice, and the two pins answer different questions.
+ * The `published` id is IDENTITY: it catches a file swapped for another version's, and it is
+ * checked against what the file DECLARES about itself. The `sha256` is CONTENT: it catches an
+ * edit to a file that keeps declaring the same id, which is the whole of what an editor of 1,650
+ * lines of third-party JSON would leave alone. The content pin is the load-bearing one, because
+ * the oracle reads its own gate patterns out of these files ({@see keyGateFindings()}) — so one
+ * flipped `false`, or one `^/` widened to `^.`, weakens the validator and the recovered gates
+ * together, with nothing else in the suite the wiser.
+ *
+ * Neither pin is CURRENCY. A newer dated revision of any of the three would go unnoticed — the
+ * `latest` alias 404s, so there is nothing offline to compare against — and catching that is a
+ * deliberate manual step at upgrade time, not something the suite can see.
  *
  * Two normalisations stand between a vendored file and opis, and both are named where they are applied:
  * {@see dialect()} lifts 3.0's draft-04 to draft-07, and {@see opisWorkarounds()} rewrites the three
  * 2020-12 constructs opis 2.x gets wrong. Each is a documented, bounded edit — never a widening of what
  * a document may contain.
+ *
+ * @phpstan-type VendoredSchema array{file: string, published: string, sha256: string}
+ * @phpstan-type KeyGates array{paths: list<string>, components: list<string>, responses: list<string>}
  */
 final class OpenApiMetaSchema
 {
     /**
-     * Format id => [vendored file, the published id the file must declare].
+     * Format id => the vendored file, the published id it must declare, and its SHA-256.
      *
      * Keyed by {@see Formats} id so a new OpenAPI version in that table has to bring a meta-schema with
-     * it — `OpenApiMetaSchemaTest` fails when the two sets disagree.
+     * it — `OpenApiMetaSchemaTest` fails when the two sets disagree, and again when either pin on a file
+     * stops matching the bytes on disk.
      *
-     * @var array<string, array{string, string}>
+     * @var array<string, VendoredSchema>
      */
     public const array SCHEMAS = [
-        'openapi-3.2' => ['openapi-v3.2.schema.json', 'https://spec.openapis.org/oas/3.2/schema/2025-09-17'],
-        'openapi-3.1' => ['openapi-v3.1.schema.json', 'https://spec.openapis.org/oas/3.1/schema/2022-10-07'],
-        'openapi-3.0' => ['openapi-v3.0.schema.json', 'https://spec.openapis.org/oas/3.0/schema/2024-10-18'],
+        'openapi-3.2' => [
+            'file' => 'openapi-v3.2.schema.json',
+            'published' => 'https://spec.openapis.org/oas/3.2/schema/2025-09-17',
+            'sha256' => '0c9d74bf25f9b9388b2d81e421ef60fdefa9feffa94898dadfc501b342b3bfcc',
+        ],
+        'openapi-3.1' => [
+            'file' => 'openapi-v3.1.schema.json',
+            'published' => 'https://spec.openapis.org/oas/3.1/schema/2022-10-07',
+            'sha256' => 'da01ba28852cac0de53893797cb8d1942bc3b05084f526dcc216717dec314ed0',
+        ],
+        'openapi-3.0' => [
+            'file' => 'openapi-v3.0.schema.json',
+            'published' => 'https://spec.openapis.org/oas/3.0/schema/2024-10-18',
+            'sha256' => '2385f5bbb8c37878daae73baeabe7f34b2f022a4a8c049329ee61f71796f039c',
+        ],
     ];
 
     /**
@@ -54,20 +78,31 @@ final class OpenApiMetaSchema
     /** @var array<string, Validator> */
     private static array $validators = [];
 
+    /** @var array<string, KeyGates> */
+    private static array $keyGates = [];
+
     /** The vendored file for $format. */
     public static function path(string $format): string
     {
-        $row = self::SCHEMAS[$format] ?? throw new RuntimeException("No vendored meta-schema for format \"$format\".");
-
-        return dirname(__DIR__).'/Fixtures/'.$row[0];
+        return dirname(__DIR__).'/Fixtures/'.self::row($format)['file'];
     }
 
     /** The dated, immutable URI the vendored file was fetched from. */
     public static function publishedId(string $format): string
     {
-        $row = self::SCHEMAS[$format] ?? throw new RuntimeException("No vendored meta-schema for format \"$format\".");
+        return self::row($format)['published'];
+    }
 
-        return $row[1];
+    /** The SHA-256 the vendored file's bytes must hash to. */
+    public static function digest(string $format): string
+    {
+        return self::row($format)['sha256'];
+    }
+
+    /** @return VendoredSchema */
+    private static function row(string $format): array
+    {
+        return self::SCHEMAS[$format] ?? throw new RuntimeException("No vendored meta-schema for format \"$format\".");
     }
 
     /** The vendored file, decoded to the object graph opis validates against. */
@@ -143,8 +178,9 @@ final class OpenApiMetaSchema
      * directly, which needs no validator and no `$ref` resolution.
      *
      * Patterns are READ OUT of the vendored file, never restated here, so a schema whose gate changes
-     * moves this with it. 3.0 needs none: it carries no `unevaluatedProperties` at all, so its 43 gates
-     * were never disabled.
+     * moves this with it — and the digest in {@see SCHEMAS} is what stops that reading from being
+     * redirected by an edit to the file. 3.0 needs none: it carries no `unevaluatedProperties` at all,
+     * so its 43 gates were never disabled.
      *
      * @return list<string>
      */
@@ -211,10 +247,17 @@ final class OpenApiMetaSchema
      * file. A declared `properties` key (`responses`' `default`) is an exact-match alternative, and every
      * one of the three `$ref`s the specification-extensions schema, so `^x-` is always allowed.
      *
-     * @return array{paths: list<string>, components: list<string>, responses: list<string>}
+     * Cached per format for the same reason {@see self::validator()} is: this runs once per document and
+     * the read behind it decodes a 39KB file.
+     *
+     * @return KeyGates
      */
     private static function keyGates(string $format): array
     {
+        if (isset(self::$keyGates[$format])) {
+            return self::$keyGates[$format];
+        }
+
         $defs = self::decode($format)->{'$defs'};
 
         $patterns = static function (string $def) use ($defs): array {
@@ -229,7 +272,7 @@ final class OpenApiMetaSchema
             return [...$found, ...array_keys(get_object_vars($defs->{'specification-extensions'}->patternProperties))];
         };
 
-        return [
+        return self::$keyGates[$format] = [
             'paths' => $patterns('paths'),
             'components' => $patterns('components'),
             'responses' => $patterns('responses'),

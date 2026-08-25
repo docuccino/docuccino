@@ -26,7 +26,7 @@ function annotatedNodeObject(): array
 {
     $properties = [];
     foreach ([
-        'tenant', 'settled', 'documented', 'summarised', 'filed', 'undescribed',
+        'tenant', 'settled', 'documented', 'filed', 'undescribed',
         'overdescribed', 'valueless', 'twoSourced', 'named', 'twice',
     ] as $name) {
         $properties[$name] = ['type' => $name === 'settled' ? 'boolean' : 'string'];
@@ -56,7 +56,6 @@ it('leaves a member whose declaration a property schema cannot hold as it found 
 
     expect($object['properties'][$property])->toBe(['type' => 'string']);
 })->with([
-    'a #[Summary], which a schema property has no field for' => 'summarised',
     'a #[Description(file:)], with no application root to resolve against' => 'filed',
     'a #[Description] carrying neither text nor file' => 'undescribed',
     'a #[Description] carrying both' => 'overdescribed',
@@ -71,7 +70,6 @@ it('reports every property declaration it could not publish', function (): void 
     $node = AnnotatedNode::class;
 
     expect(array_map(static fn (Diagnostic $d): string => $d->code.': '.$d->message, $diagnostics))->toBe([
-        'attribute.property-unsupported: The #[Summary] on '.$node.'::$summarised says something a property schema cannot hold — a schema property carries a `description`, not a `summary`; it was ignored.',
         'attribute.property-unsupported: The #[Description(file: …)] on '.$node.'::$filed says something a property schema cannot hold — a property\'s description is read from the attribute itself; it was ignored.',
         'attribute.description-unusable: The #[Description] on '.$node.'::$undescribed carries neither `text:` nor `file:`; the description was not documented.',
         'attribute.description-unusable: The #[Description] on '.$node.'::$overdescribed carries both `text:` and `file:`; the description was not documented.',
@@ -82,8 +80,9 @@ it('reports every property declaration it could not publish', function (): void 
 });
 
 it('says nothing about a property the schema does not publish', function (): void {
-    // `unpublished` carries a good #[Description] and a bad #[Summary], and the schema hides it. There is
-    // no member to write and nothing the reader could do, so neither the write nor the complaint happens.
+    // `unpublished` carries a good #[Description] and a reportable #[Example], and the schema hides it.
+    // There is no member to write and nothing the reader could do, so neither the write nor the
+    // complaint happens.
     [$object, $diagnostics] = PropertyAnnotations::apply(annotatedNodeObject(), AnnotatedNode::class);
 
     expect($object['properties'])->not->toHaveKey('unpublished')
