@@ -34,7 +34,8 @@ use Docuccino\Core\Support\Arr;
  * reads like a schema keyword, a component may be named `example`, and a path item is one because a
  * path-item map holds it — not because something three levels up is called `callbacks`. The rule runs the
  * other way too: a key means something only where it is a fixed field, so a Link Object's `parameters` and
- * `requestBody` hold what the application wrote however their members are spelled.
+ * `requestBody` hold what the application wrote however their members are spelled, and a Security
+ * Requirement Object's members are scheme names however they are spelled.
  *
  * Every step that changes what a consumer reads is reported into an {@see EmitReport} naming the JSON
  * pointer it happened at, so a 3.0 export states what it could not carry instead of quietly shipping a
@@ -449,11 +450,17 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             $child = self::pointer($pointer, $key);
 
             // `security` is a fixed field of the document and of an Operation Object; a component may be
-            // NAMED `security` without being one, so the parent's kind is what admits it.
-            if ($kind === self::FIELDS && $key === 'security' && $removed['securitySchemes'] !== [] && is_array($value)) {
-                $requirements = self::withoutDroppedSchemes($value, $removed['securitySchemes']);
+            // NAMED `security` without being one, so the parent's kind is what admits it. A Security
+            // Requirement Object is `Map[scheme name, list<scope>]` — application-chosen keys over scope
+            // strings, no document anywhere in it — so the walk stops here whatever a scheme is called.
+            if ($kind === self::FIELDS && $key === 'security' && is_array($value)) {
+                $requirements = $removed['securitySchemes'] === []
+                    ? array_values($value)
+                    : self::withoutDroppedSchemes($value, $removed['securitySchemes']);
 
-                if ($requirements !== []) {
+                // Emptied by the scheme drop, not written empty: `security: []` is the document saying no
+                // security is required, and it stays ({@see withoutDroppedSchemes()}).
+                if ($requirements !== [] || $removed['securitySchemes'] === []) {
                     $out[$key] = $requirements;
                 }
 

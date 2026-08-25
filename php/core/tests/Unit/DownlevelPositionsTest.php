@@ -261,4 +261,38 @@ describe('a name spelled like a fixed field', function (): void {
         expect($decoded['security'])->toBe([['apiKey' => []]])
             ->and($decoded['components']['responses']['security'])->toBe(['description' => 'Not a requirement']);
     });
+
+    /**
+     * A Security Requirement Object's members are scheme names the application chose, and the walk used to
+     * dispatch each of them as a fixed field. Nothing was corrupted, because a requirement's values are
+     * lists of scope strings and every handler is a no-op on those — the guard held by accident of the
+     * value type, which is what this pins now that it holds by position. Both halves of the branch are
+     * here: an operation-level requirement, and `security: []` saying none is required.
+     */
+    it('reads a security requirement\'s members as scheme names, not as fixed fields', function (): void {
+        $requirement = ['schema' => ['read'], 'paths' => [], 'callbacks' => ['write'], 'example' => [], 'links' => []];
+
+        $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray([
+            'uir' => '1.0.0',
+            'openapi' => '3.2.0',
+            'info' => ['title' => 'API', 'version' => '1.0.0'],
+            'security' => [$requirement],
+            'paths' => ['/a' => ['get' => [
+                'security' => [],
+                'responses' => ['200' => ['description' => 'OK']],
+            ]]],
+            'components' => ['securitySchemes' => array_map(
+                static fn (): array => ['type' => 'apiKey', 'name' => 'X-Key', 'in' => 'header'],
+                $requirement,
+            )],
+        ]));
+
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($result->output, true, flags: JSON_THROW_ON_ERROR);
+
+        // Member for member: the canonicalizer sorts a requirement's scheme names.
+        expect($decoded['security'])->toEqual([$requirement])
+            ->and($decoded['paths']['/a']['get']['security'])->toBe([])
+            ->and(array_map(static fn ($d): string => $d->code, $result->report->diagnostics))->toBe([]);
+    });
 });
