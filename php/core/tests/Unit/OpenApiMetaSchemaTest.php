@@ -144,6 +144,22 @@ it('reports an empty map written as a sequence, and nothing when it is written a
 });
 
 /**
+ * An oracle may not touch what it reads. opis applies schema `default`s INTO the instance unless
+ * `allowDefaults` is off, so a validated 3.2 document silently gained a `jsonSchemaDialect` and a
+ * `servers: [{url: "/"}]` it never emitted — and every assertion after it compared against the mutation
+ * rather than the emission. The option is set; this is what proves it still is.
+ */
+it('leaves the instance it validated exactly as it found it', function (string $fixture, string $format): void {
+    [$json] = metaSchemaEmissions($fixture, $format);
+
+    $before = json_encode($json, JSON_THROW_ON_ERROR);
+
+    OpenApiMetaSchema::findings($format, $json);
+
+    expect(json_encode($json, JSON_THROW_ON_ERROR))->toBe($before);
+})->with(metaSchemaSubjects());
+
+/**
  * The other half of the oracle's negative path, on a REAL emission. `postman-surface` emits a genuinely
  * null `closedAt` at three example positions, and a member DROPPED at one of them used to read as a member
  * written null — the comparison answered "no differences" while the YAML had lost a member the JSON
