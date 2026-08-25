@@ -33,6 +33,7 @@ use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
@@ -415,20 +416,42 @@ function componentRefsIn(mixed $node, string $bucket): array
 }
 
 /**
+ * A committed fixture document, read the way the product reads one.
+ *
+ * Through {@see JsonValue}, never `json_decode(…, true)`: the harness is a READER of documents, so an
+ * associative decode here is the same wrong answer it is anywhere else — a fixture holding `example: {}`
+ * loads as `[]` and re-emits as `[]`, and every assertion downstream agrees with itself about the wrong
+ * document. The canonicaliser rescues the structural positions, because a keyword contract knows they
+ * are maps; an example is free-form data and the loss is permanent.
+ *
  * @return array<string, mixed>
  */
 function loadFixture(string $name): array
 {
-    $path = dirname(__DIR__).'/php/core/tests/Fixtures/'.$name;
+    return loadDocument(dirname(__DIR__).'/php/core/tests/Fixtures/'.$name);
+}
+
+/**
+ * Any committed document on disk, read the same way. {@see loadFixture} for why it is not a plain
+ * associative decode.
+ *
+ * @return array<string, mixed>
+ */
+function loadDocument(string $path): array
+{
     $contents = file_get_contents($path);
 
     if ($contents === false) {
-        throw new RuntimeException('Fixture not found: '.$path);
+        throw new RuntimeException('Document not found: '.$path);
+    }
+
+    $decoded = JsonValue::decode($contents);
+
+    if (! is_array($decoded)) {
+        throw new RuntimeException('Not a JSON object: '.$path);
     }
 
     /** @var array<string, mixed> $decoded */
-    $decoded = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
-
     return $decoded;
 }
 
