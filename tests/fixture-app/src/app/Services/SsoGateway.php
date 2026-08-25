@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Contracts\IdentityProvider;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Talks to the identity provider over HTTP. Both members are declared as bare framework types — the
+ * Talks to the identity provider over HTTP. Every member is declared as a bare framework type — the
  * provider's body shape is not ours to state — which is exactly the situation a route inherits when it
  * returns what a collaborator answered. Only ever analysed, never called.
  */
-final class SsoGateway
+final class SsoGateway implements IdentityProvider
 {
     public function authorizeUrl(Request $request): string
     {
@@ -20,6 +21,11 @@ final class SsoGateway
     }
 
     public function exchange(Request $request): JsonResponse
+    {
+        return new JsonResponse(json_decode((string) $request->getContent(), true));
+    }
+
+    public function introspect(Request $request): JsonResponse
     {
         return new JsonResponse(json_decode((string) $request->getContent(), true));
     }

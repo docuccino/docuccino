@@ -234,9 +234,17 @@ own (seeded from the action's parameter type):
 - `app/Data/UploadPolicyData.php` + `app/Support/MediaCollections.php` — a static `rules()` allow-listing a
   natively typed `#[StringType]` property with `Rule::in(MediaCollections::validNames())`: the values are
   not statically knowable, and the override still replaces what the property type inferred.
-- `app/Http/Controllers/SsoRedirectController.php` + `app/Services/SsoGateway.php` — a `RedirectResponse`
-  action and a `JsonResponse` action whose payloads are named nowhere, the two shapes the response side
-  degrades on.
+- `app/Http/Controllers/SsoRedirectController.php` + `app/Services/SsoGateway.php` +
+  `app/Contracts/IdentityProvider.php` — a `RedirectResponse` action and two `JsonResponse` actions whose
+  payloads are named nowhere, the shapes the response side degrades on. The action typed on the CONTRACT is
+  the genuinely bare one: an interface has no body to follow, so nothing is recovered at all. The one typed
+  on the concrete gateway stamps its status fluently, so a status is recovered and the payload still is not
+  — the case that must keep saying its body is unrecovered rather than passing for described.
+- `app/Http/Controllers/WebhookReceiptController.php` — responses whose status (and sometimes media type)
+  is stamped on through Symfony's fluent setters after the body was built: `->setStatusCode()` over
+  `response()->json()` and over `new JsonResponse(…)`, reached across `->header()`/`->withHeaders()` links,
+  plus the three degradations — a status that will not fold, a header name that will not, and a
+  `->setData()` that may have replaced the body and so refuses the whole chain.
 - `app/Http/Controllers/FileDeliveryController.php` — the rest of the framework response family, declared
   the way a real controller declares it: `BinaryFileResponse` from `response()->download()` and
   `response()->file()`, `StreamedResponse` from `response()->stream()`, `streamDownload()`,

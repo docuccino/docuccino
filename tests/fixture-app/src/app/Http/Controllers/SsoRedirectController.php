@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Contracts\IdentityProvider;
 use App\Services\SsoGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -16,7 +17,10 @@ use Illuminate\Http\Request;
  */
 final class SsoRedirectController
 {
-    public function __construct(private readonly SsoGateway $gateway) {}
+    public function __construct(
+        private readonly SsoGateway $gateway,
+        private readonly IdentityProvider $provider,
+    ) {}
 
     /** Kicks the browser out to the identity provider — a 302 with no JSON body. */
     public function connection(Request $request): RedirectResponse
@@ -30,5 +34,14 @@ final class SsoRedirectController
         $response = $this->gateway->exchange($request);
 
         return $response->setStatusCode(200);
+    }
+
+    /**
+     * Relays the provider's own answer. The collaborator is a CONTRACT, so there is no body to follow and
+     * nothing anywhere names the payload — the response stays the bare framework class.
+     */
+    public function introspect(Request $request): JsonResponse
+    {
+        return $this->provider->introspect($request);
     }
 }

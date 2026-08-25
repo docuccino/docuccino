@@ -22,6 +22,7 @@ use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NeverT;
 use Docuccino\Core\Inference\DType\UnionT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Patch\Contribution;
@@ -492,7 +493,13 @@ final class InferredResponsesExtension implements OperationExtension
         }
 
         if ($type->fqcn === FrameworkClasses::JSON_RESPONSE) {
-            return $type->typeArgs !== [] ? null : $type->fqcn;
+            // Parameterised is not the same as recovered: a response the engine could only pin a STATUS on
+            // — a fluent `->setStatusCode(202)` over a body it could not follow — carries an unresolved
+            // payload arg, and its body is exactly as undescribed as a bare response's. A void payload is
+            // the opposite case: `noContent()` proves there is no body to describe.
+            $payload = $type->typeArgs[0] ?? null;
+
+            return $payload === null || $payload instanceof UnknownT ? $type->fqcn : null;
         }
 
         if ($bodies === []) {
