@@ -112,6 +112,24 @@
                   }
                 }
               }
+            },
+            "links": {
+              "audit": {
+                "$ref": "#/components/links/parameters"
+              },
+              "self": {
+                "description": "The thing this request created",
+                "operationId": "things.show",
+                "parameters": {
+                  "path.id": "$response.body#/id",
+                  "schema": "a link parameter keyed like a schema position"
+                },
+                "requestBody": {
+                  "$ref": "#/components/schemas/Thing",
+                  "description": "Kept, because a Link's requestBody is user data",
+                  "summary": "A body member spelled like a reference's own wording"
+                }
+              }
             }
           },
           "404": {
@@ -320,6 +338,15 @@
         "in": "header",
         "name": "X-Api-Key",
         "type": "apiKey"
+      }
+    },
+    "links": {
+      "parameters": {
+        "description": "A link component named like a fixed field of the object it is",
+        "operationId": "things.audit",
+        "parameters": {
+          "paths": "a link parameter keyed like a path-item map"
+        }
       }
     }
   }

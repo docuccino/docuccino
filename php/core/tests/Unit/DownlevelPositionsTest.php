@@ -174,6 +174,11 @@ describe('a name spelled like a fixed field', function (): void {
      * values the application wrote, under keys the application chose. Read as fixed fields they reach the
      * schema handler, the path-item machinery and the reference handling, each of which rewrites what it
      * finds — and no meta-schema can see it, because `Any` stays valid whatever is done to it.
+     *
+     * The document lives here rather than in `downlevel.uir.json` because the published 3.1 and 3.2
+     * meta-schemas type a Link's `parameters` as `Map[string, string]`, against their own prose — so a
+     * fixture carrying an object-valued one would fail the oracle at those two versions while the 3.0
+     * emission it produces is valid. The golden carries the half every version calls `Any`: `requestBody`.
      */
     it('hands back a Link Object\'s parameters and requestBody, however their members are spelled', function (): void {
         $link = [
