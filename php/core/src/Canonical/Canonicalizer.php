@@ -538,20 +538,11 @@ final class Canonicalizer
     }
 
     /**
-     * ONE Schema Object, wherever it sits. A boolean is a schema in every position 2020-12 puts one, and
-     * it is the position's most load-bearing value: `not: false` means the opposite of `not: {}`,
-     * `properties: {a: false}` forbids the property rather than allowing anything, and `allOf: [false]`
-     * is satisfied by nothing rather than by everything. So it is published as written — including
-     * inside a map or a list, where reading each member as an object would invert three schemas into
-     * one and mint them a single `sch:` id.
-     *
-     * "Wherever it sits" is the whole rule, and it covers the slots a schema hangs off something that is
-     * NOT a schema as much as the keywords inside one: a media type's, a parameter's and a header's
-     * `schema`, and every member of `components.schemas`. Reading those as objects inverted the same
-     * `false` in the same way, one level further out.
-     *
-     * Anything else is not a schema at all, and becomes `{}`: a vague-but-valid schema beats a document
-     * no validator accepts.
+     * ONE Schema Object, wherever it sits — inside a schema, and equally at the slots a schema hangs off
+     * something that is not one. A boolean is published as written, since it is a schema at every 2020-12
+     * subschema position and the load-bearing value there; anything that is no schema at all becomes `{}`,
+     * vague and valid beating a document no validator accepts. Design doc §1 "The empty-object invariant"
+     * for why the position rather than the value answers.
      */
     private function subschemaValue(mixed $value): mixed
     {
