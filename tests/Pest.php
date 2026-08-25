@@ -9,6 +9,7 @@ use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Draft\SchemaDraft;
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -448,6 +449,29 @@ function canonicalizerSchemaOrder(): array
     preg_match_all("/'([^']+)',/", $list, $matches);
 
     return $matches[1];
+}
+
+/**
+ * Every schema keyword the product knows: the canonicaliser's member order and
+ * {@see SchemaKeywords::classification()} unioned, sorted.
+ *
+ * Two tables, because neither alone is the vocabulary. Order is a normative choice about how to
+ * PUBLISH a keyword, so a keyword nothing mints can be absent from it and still arrive in a schema
+ * the product was handed; the classification is what the product knows a keyword MEANS. A guard
+ * sweeping only one of them leaves the difference unguarded, which is where four keywords the 3.0
+ * emitter drops managed to sit outside every sweep at once.
+ *
+ * @return list<string>
+ */
+function schemaKeywordVocabulary(): array
+{
+    $keywords = array_values(array_unique([
+        ...canonicalizerSchemaOrder(),
+        ...array_keys(SchemaKeywords::classification()),
+    ]));
+    sort($keywords);
+
+    return $keywords;
 }
 
 /**
