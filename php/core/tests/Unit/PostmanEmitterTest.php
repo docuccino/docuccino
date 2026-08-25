@@ -664,6 +664,52 @@ it('reports webhooks, which describe what the API sends rather than what you sen
     expect(postmanCodes(loadFixture('kitchen-sink.uir.json')))->toContain('postman.webhooks-dropped');
 });
 
+it('names each credential Postman has no auth type for', function (): void {
+    // openIdConnect and mutualTLS have no Postman equivalent at all, so the request ships with no auth
+    // rather than the wrong one — and the reader is told which route lost which scheme.
+    $unsupported = array_values(array_filter(
+        postmanReport(loadFixture('postman-surface.uir.json')),
+        static fn (Diagnostic $d): bool => $d->code === 'postman.auth-unsupported',
+    ));
+
+    expect(array_map(static fn (Diagnostic $d): ?string => $d->routeSignature, $unsupported))
+        ->toBe(['GET /tree', 'GET /vault'])
+        ->and($unsupported[0]->message)->toContain('oidc')
+        ->and($unsupported[1]->message)->toContain('mtls');
+});
+
+it('reports a form body that is not an object, which has no fields to build', function (): void {
+    // Postman's urlencoded and formdata modes are lists of key/value fields, so a body the document says
+    // is an array has nothing to become — a guessed field would be a request that fails on Send.
+    $codes = postmanCodes(postmanDocumentWithPaths([
+        '/tags' => [
+            'post' => [
+                'requestBody' => ['content' => ['application/x-www-form-urlencoded' => [
+                    'schema' => ['type' => 'array', 'items' => ['type' => 'string']],
+                ]]],
+                'responses' => ['204' => ['description' => 'No content']],
+            ],
+        ],
+    ]));
+
+    expect($codes)->toContain('postman.body-not-object');
+});
+
+it('reports the callbacks it drops, which describe a request the API makes', function (): void {
+    $codes = postmanCodes(postmanDocumentWithPaths([
+        '/subscriptions' => [
+            'post' => [
+                'responses' => ['201' => ['description' => 'Created']],
+                'callbacks' => ['onEvent' => ['{$request.body#/url}' => ['post' => [
+                    'responses' => ['200' => ['description' => 'OK']],
+                ]]]],
+            ],
+        ],
+    ]));
+
+    expect($codes)->toContain('postman.callbacks-dropped');
+});
+
 it('writes JSON and says so when asked for YAML', function (): void {
     $document = loadFixture('worked-example.json');
     $result = (new CollectionEmitter)->emitWithReport(UirDocument::fromArray($document), (new EmitOptions)->withYaml());
