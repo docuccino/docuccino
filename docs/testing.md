@@ -39,6 +39,22 @@ coverage locally and the ratchet policy for the CI gate.
   contract. A driver shipped serving a document version its own pinned bundle only half-supported,
   and the markup-only test stayed green throughout. Pin what the pinned version does with the
   document it is given, not only what the driver wrapped around it.
+- **An emitted artifact answers to an external authority, in EVERY serialisation it ships.** A golden
+  pins bytes against a committed copy of themselves and a round trip compares a document to itself:
+  neither knows what the format's own spec says, so both stay green on output no consumer can read.
+  Every format therefore validates against its **vendored publisher meta-schema** — byte-exact as the
+  publisher serves it, at a dated (immutable) URI, offline, with the file's own declared id pinned in
+  a test so a rename cannot quietly swap it — and the guard covers each serialisation separately.
+  `--yaml` shipped `paths: []` for a `paths` that is an empty MAP, through goldens, round trips and a
+  `Validator` run, because the ONE assertion nobody had written was "does the YAML answer to the
+  OpenAPI schema". `OpenApiMetaSchema` is the shape; `Formats` is the source of truth the vendored set
+  is checked against, so a new emitted version cannot land without one.
+- **A round trip through a lossy reader proves nothing about what it cannot see.** `Yaml::parse()`
+  answers a PHP array for a mapping AND for a sequence, so every YAML assertion in the suite was blind
+  to map-vs-sequence — the exact axis the bug was on. When a reader collapses a distinction the format
+  carries, either read with kind preserved (`PARSE_OBJECT_FOR_MAP`) or compare against the
+  serialisation that does; `EmittedDocument` does both, and its kind comparison catches positions the
+  meta-schemas deliberately leave unconstrained (a Schema Object's members, in 3.1 and 3.2).
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
