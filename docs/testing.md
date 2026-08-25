@@ -48,13 +48,43 @@ coverage locally and the ratchet policy for the CI gate.
   `--yaml` shipped `paths: []` for a `paths` that is an empty MAP, through goldens, round trips and a
   `Validator` run, because the ONE assertion nobody had written was "does the YAML answer to the
   OpenAPI schema". `OpenApiMetaSchema` is the shape; `Formats` is the source of truth the vendored set
-  is checked against, so a new emitted version cannot land without one.
+  is checked against, so a new emitted version cannot land without one. This is a standard about the
+  **packages' emitted artifacts** — an OpenAPI document, a Postman collection — and not about every
+  file the repo happens to write: the website's `sitemap.xml` and `robots.txt` fall under its letter
+  with no oracle intended.
+- **Know what a disabled validator option really disabled.** An option turned off to dodge one defect
+  takes everything else it governed with it, and the docblock tends to record only the half that
+  prompted it. `allowUnevaluated => false` reads as "stops asserting no unrecognised member"; it also
+  disables every `patternProperties` **key gate** in 3.1 and 3.2, because those key sets are enforced
+  only through `unevaluatedProperties: false` — 28 sites in each. So a `paths` key not starting with
+  `/`, a response keyed `twohundred` and a misspelled `info.versionn` all validated clean, while 3.0
+  (which has no such keyword) rejected every one. Measure the real scope, record it at the call site,
+  and recover what can be recovered rather than accepting the whole loss: the three key gates are now
+  walked back on directly from patterns READ OUT of the vendored file
+  (`OpenApiMetaSchema::keyGateFindings()`), which needs no validator at all.
+  `OpenApiUnevaluatedScopeTest` is that scope as a **measured matrix** — every row derived by mutating
+  a document all three versions accept, including the rows that still pass, because pinned blindness
+  stops being a surprise and a future weakening shows up as a row flipping.
+- **A rule the schema cannot express still needs asserting.** JSON Schema cannot state uniqueness
+  across positions, so a duplicate `operationId` — which the spec requires unique across the whole API
+  — validates clean at every version while a generated client silently loses a method to the
+  collision. Where the authority structurally cannot carry a rule, the suite carries it
+  (`OpenApiMetaSchema::operationIdFindings()`), with a floor proving the documents it walks actually
+  carry the thing being checked.
 - **A round trip through a lossy reader proves nothing about what it cannot see.** `Yaml::parse()`
   answers a PHP array for a mapping AND for a sequence, so every YAML assertion in the suite was blind
   to map-vs-sequence — the exact axis the bug was on. When a reader collapses a distinction the format
   carries, either read with kind preserved (`PARSE_OBJECT_FOR_MAP`) or compare against the
-  serialisation that does; `EmittedDocument` does both, and its kind comparison catches positions the
-  meta-schemas deliberately leave unconstrained (a Schema Object's members, in 3.1 and 3.2).
+  serialisation that does; `EmittedDocument` does both. Be precise about what that comparison is worth:
+  it catches **YAML/JSON divergence** at positions the meta-schemas leave unconstrained (a Schema
+  Object's members, in 3.1 and 3.2) — and only divergence. A wrong scalar, a misspelled key, a missing
+  required member and an unknown keyword are identical on both sides, so they pass it; the meta-schema
+  is what judges those, and where it declines to (inside a Schema Object) nothing does.
+- **Absence and a null value are not the same reading.** A comparison that reaches for a member with
+  `?? null` cannot tell "this side dropped it" from "this side wrote null", and documents really do
+  emit null — `postman-surface` does, at three `closedAt` positions. Deleting a member there read as
+  agreement and the oracle reported no differences, at exactly the unconstrained positions it exists to
+  cover. Ask presence with `property_exists()`/`array_key_exists()` and report the two cases apart.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
