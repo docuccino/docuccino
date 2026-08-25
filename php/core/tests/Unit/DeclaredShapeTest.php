@@ -162,7 +162,32 @@ it('keeps a refinement the declared type still admits', function (array $inferre
         ['type' => 'number'],
         ['type' => 'number', 'minimum' => 1],
     ],
+    // `maxContains`/`minContains` bound how many items `contains` has to match, so they mean nothing
+    // once the array is gone: retracting `contains` and leaving its bounds behind publishes a count of
+    // matches against a keyword that is no longer there.
+    'a contains bound under a declared string' => [
+        ['type' => 'array', 'contains' => ['type' => 'string'], 'maxContains' => 2, 'minContains' => 1],
+        ['type' => 'string'],
+        ['type' => 'string'],
+    ],
+    'a contains bound under a declared array' => [
+        ['type' => 'array', 'maxContains' => 2],
+        ['type' => 'array'],
+        ['type' => 'array', 'maxContains' => 2],
+    ],
 ]);
+
+it('keeps a schema-level annotation whatever shape is declared', function (): void {
+    // The dialect a schema is written in and a note to its own readers say nothing about the instance,
+    // so neither is retracted — and both are classified rather than merely unreadable, which is what
+    // stops them being treated as a keyword nobody can place.
+    expect(SchemaKeywords::classification()['$schema'])->toBe('annotation')
+        ->and(SchemaKeywords::classification()['$comment'])->toBe('annotation')
+        ->and(frozenShape(
+            ['type' => 'array', '$schema' => 'https://json-schema.org/draft/2020-12/schema', '$comment' => 'internal'],
+            ['type' => 'string'],
+        ))->toBe(['type' => 'string', '$schema' => 'https://json-schema.org/draft/2020-12/schema', '$comment' => 'internal']);
+});
 
 it('takes the nested property drafts with the shape they belonged to', function (): void {
     // `properties` has two halves — the keyword and the nested drafts, which freeze() publishes over it.
