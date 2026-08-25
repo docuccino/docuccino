@@ -71,6 +71,16 @@ coverage locally and the ratchet policy for the CI gate.
   collision. Where the authority structurally cannot carry a rule, the suite carries it
   (`OpenApiMetaSchema::operationIdFindings()`), with a floor proving the documents it walks actually
   carry the thing being checked.
+- **The authority can contradict the prose it publishes, and then a legal document cannot be a
+  fixture.** The published 3.1 and 3.2 meta-schemas type a Link Object's `parameters` as
+  `Map[string, string]`; both specs' prose says `Map[string, Any | {expression}]`, and 3.0's own
+  meta-schema agrees with the prose. So a document carrying an object-valued Link parameter — legal,
+  and exactly the shape a positional walk has to get right — cannot go in a fixture the oracle
+  validates at every version: it would reject the 3.1 and 3.2 emissions of a 3.0 document that is
+  valid. When that happens the coverage moves to a unit test whose only reader is the emitter
+  (`DownlevelPositionsTest`), and the shared fixture carries the half every version spells the same
+  way (a Link's `requestBody`, which is `Any` everywhere). Narrowing the fixture instead would pin
+  the emitter against a document the product is not entitled to assume it gets.
 - **A round trip through a lossy reader proves nothing about what it cannot see.** `Yaml::parse()`
   answers a PHP array for a mapping AND for a sequence, so every YAML assertion in the suite was blind
   to map-vs-sequence — the exact axis the bug was on. When a reader collapses a distinction the format
