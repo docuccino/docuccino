@@ -158,6 +158,11 @@ it('leaves alone every run that a machine did not put there', function (string $
     ['a rule whose regex holds a separator', 'Rule "regex:/^\\d+\\/\\d+$/" could not be read'],
     ['a rule whose regex holds none', 'Rule "regex:/^[a-z]+$/" could not be read'],
     ['a root-relative documentation link', 'See /docs/reference/configuration for the key.'],
+    // The price of reason 4, and the shape that stays open because of it: a directory under no root
+    // names no file, and nothing tells it from the link above. Reducing it would state a path the
+    // application never wrote, which is the direction that must be impossible — so it stands, spaced
+    // `$HOME` and all.
+    ['a directory under no root at all', 'scandir(/Users/ca rol/Library/Caches) failed'],
     ['a home-relative path', 'Reading ~/Projects/app/config.php failed'],
     ['a URL', 'GET https://api.example.com/v1/forms returned 500'],
     ['a URL naming a file', 'Fetching https://cdn.example.com/assets/app.js failed'],
