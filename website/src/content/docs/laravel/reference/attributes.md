@@ -835,7 +835,8 @@ public bool $settled;
 ```
 
 An attribute argument is a real PHP value, so `false` stays a boolean. The `@example` docblock line
-read on a [Data class](/laravel/packages/spatie-data/) property can only carry text, and the
+read on any property a schema publishes — a [Data class](/laravel/packages/spatie-data/) property, a
+plain DTO's, a resource's where a real property backs the key — can only carry text, and the
 attribute beats it where both are written:
 
 ```php
