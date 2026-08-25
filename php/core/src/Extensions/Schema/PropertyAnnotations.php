@@ -9,6 +9,8 @@ use Docuccino\Attributes\Example;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
+use Docuccino\Core\Provenance\ClassNames;
+use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use ReflectionClass;
 use ReflectionProperty;
 use Throwable;
@@ -71,6 +73,12 @@ final class PropertyAnnotations
             return [$object, []];
         }
 
+        // The name every diagnostic below stands a property against. `$fqcn` is whatever the caller was
+        // handed, and `::class` on an ANONYMOUS class is the base name, a NUL byte, the absolute file it
+        // was written in and a counter of the anonymous classes the PROCESS declared before it — none of
+        // which a published diagnostic may carry ({@see ClassNames}).
+        $site = (new ClassNames(new RootRelativeSourcePathResolver('')))->ofName($fqcn);
+
         $diagnostics = [];
         foreach ((new ReflectionClass($fqcn))->getProperties() as $property) {
             $key = $keys[$property->getName()] ?? $property->getName();
@@ -80,7 +88,7 @@ final class PropertyAnnotations
 
             /** @var array<string, mixed> $schema */
             $schema = $published[$key];
-            $published[$key] = self::annotate($schema, $property, $fqcn, $diagnostics);
+            $published[$key] = self::annotate($schema, $property, $site, $diagnostics);
         }
 
         $object['properties'] = $published;
@@ -89,15 +97,16 @@ final class PropertyAnnotations
     }
 
     /**
-     * One property's schema with its declarations applied.
+     * One property's schema with its declarations applied. `$declaring` is the publishable class name
+     * {@see apply()} resolved, so the site is composed around it rather than around a raw `class-string`.
      *
      * @param  array<string, mixed>  $schema
      * @param  list<Diagnostic>  $diagnostics
      * @return array<string, mixed>
      */
-    private static function annotate(array $schema, ReflectionProperty $property, string $fqcn, array &$diagnostics): array
+    private static function annotate(array $schema, ReflectionProperty $property, string $declaring, array &$diagnostics): array
     {
-        $site = $fqcn.'::$'.$property->getName();
+        $site = $declaring.'::$'.$property->getName();
 
         $description = self::first($property, Description::class);
         if ($description !== null) {
