@@ -145,12 +145,13 @@ describe('document members 3.0 does not define', function (): void {
         expect($codes)->toContain('downlevel.info-summary');
     });
 
-    it('drops components.pathItems with a warning', function (): void {
+    it('drops components.pathItems, inlining what a $ref names', function (): void {
         $result = (new OpenApi30DownlevelEmitter)->emitWithReport(UirDocument::fromArray(downlevelFixture()));
 
-        expect($result->output)->not->toContain('shared.get');
+        // The bucket has no 3.0 home; what it held is still in the document, at the path that named it.
+        expect($result->output)->toContain('shared.get');
 
-        $codes = array_map(static fn ($d) => $d->code, $result->report->warnings());
+        $codes = array_map(static fn ($d) => $d->code, $result->report->diagnostics);
         expect($codes)->toContain('downlevel.component-path-items');
     });
 
@@ -228,7 +229,12 @@ describe('prose beside a $ref', function (): void {
                     'callbacks' => ['onData' => ['{$request.body#/cb}' => $pathItem]],
                 ]],
             ],
-            'components' => ['responses' => ['Error404' => ['description' => 'Not Found']]],
+            'components' => [
+                'responses' => ['Error404' => ['description' => 'Not Found']],
+                // Defined, so both path items are inlined rather than dropped: what this block is about is
+                // the prose beside each `$ref`, and a `$ref` naming nothing would take the prose with it.
+                'pathItems' => ['shared' => ['get' => ['responses' => ['200' => ['description' => 'ok']]]]],
+            ],
         ]));
 
         return [
@@ -241,7 +247,7 @@ describe('prose beside a $ref', function (): void {
         [$decoded, $codes] = $emitted();
 
         expect($decoded['paths']['/other']['get']['responses']['404'])->toBe(['$ref' => '#/components/responses/Error404'])
-            ->and($codes)->toBe(['downlevel.ref-siblings']);
+            ->and(array_count_values($codes)['downlevel.ref-siblings'] ?? 0)->toBe(1);
     });
 
     it('keeps the wording a path item states, which 3.0 defines itself', function (string $case, array $pointer) use ($emitted): void {
@@ -257,7 +263,7 @@ describe('prose beside a $ref', function (): void {
 
         expect($node['summary'])->toBe('Things')
             ->and($node['description'])->toBe('Everything about things')
-            ->and($codes)->toHaveCount(1);
+            ->and(array_count_values($codes)['downlevel.ref-siblings'] ?? 0)->toBe(1);
     })->with([
         'a path' => ['a path', ['paths', '/things']],
         'a path item a callback maps' => ['a path item a callback maps', ['paths', '/other', 'get', 'callbacks', 'onData', '{$request.body#/cb}']],
@@ -331,9 +337,11 @@ describe('an operation with no responses', function (): void {
     });
 
     it('leaves a path item that is only a $ref alone', function () use ($emit): void {
-        [$decoded, $diagnostics] = $emit(['/things' => ['$ref' => '#/components/pathItems/shared']]);
+        // A `$ref` 3.0 keeps — it names no `components.pathItems` member, so there is nothing to inline
+        // and nothing here for the placeholder to answer for.
+        [$decoded, $diagnostics] = $emit(['/things' => ['$ref' => 'shared.yaml#/paths/~1things']]);
 
-        expect($decoded['paths']['/things'])->toBe(['$ref' => '#/components/pathItems/shared'])
+        expect($decoded['paths']['/things'])->toBe(['$ref' => 'shared.yaml#/paths/~1things'])
             ->and($diagnostics)->toBe([]);
     });
 

@@ -102,6 +102,10 @@
         "operationId": "things.deferred",
         "summary": "An operation whose responses the build could not recover"
       }
+    },
+    "/shared": {
+      "$ref": "#/components/pathItems/Shared",
+      "summary": "A path item OpenAPI 3.0 has no components.pathItems to reference"
     }
   },
   "webhooks": {
