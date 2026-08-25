@@ -36,6 +36,7 @@ use stdClass;
  * a document may contain.
  *
  * @phpstan-type VendoredSchema array{file: string, published: string, sha256: string}
+ * @phpstan-type KeyGates array{paths: list<string>, components: list<string>, responses: list<string>}
  */
 final class OpenApiMetaSchema
 {
@@ -76,6 +77,9 @@ final class OpenApiMetaSchema
 
     /** @var array<string, Validator> */
     private static array $validators = [];
+
+    /** @var array<string, KeyGates> */
+    private static array $keyGates = [];
 
     /** The vendored file for $format. */
     public static function path(string $format): string
@@ -174,8 +178,9 @@ final class OpenApiMetaSchema
      * directly, which needs no validator and no `$ref` resolution.
      *
      * Patterns are READ OUT of the vendored file, never restated here, so a schema whose gate changes
-     * moves this with it. 3.0 needs none: it carries no `unevaluatedProperties` at all, so its 43 gates
-     * were never disabled.
+     * moves this with it — and the digest in {@see SCHEMAS} is what stops that reading from being
+     * redirected by an edit to the file. 3.0 needs none: it carries no `unevaluatedProperties` at all,
+     * so its 43 gates were never disabled.
      *
      * @return list<string>
      */
@@ -242,10 +247,17 @@ final class OpenApiMetaSchema
      * file. A declared `properties` key (`responses`' `default`) is an exact-match alternative, and every
      * one of the three `$ref`s the specification-extensions schema, so `^x-` is always allowed.
      *
-     * @return array{paths: list<string>, components: list<string>, responses: list<string>}
+     * Cached per format for the same reason {@see self::validator()} is: this runs once per document and
+     * the read behind it decodes a 39KB file.
+     *
+     * @return KeyGates
      */
     private static function keyGates(string $format): array
     {
+        if (isset(self::$keyGates[$format])) {
+            return self::$keyGates[$format];
+        }
+
         $defs = self::decode($format)->{'$defs'};
 
         $patterns = static function (string $def) use ($defs): array {
@@ -260,7 +272,7 @@ final class OpenApiMetaSchema
             return [...$found, ...array_keys(get_object_vars($defs->{'specification-extensions'}->patternProperties))];
         };
 
-        return [
+        return self::$keyGates[$format] = [
             'paths' => $patterns('paths'),
             'components' => $patterns('components'),
             'responses' => $patterns('responses'),
