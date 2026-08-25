@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
+use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
 
 /*
  * The guard behind "what a 3.0 export changes". The page's table is a completeness claim closing on
@@ -67,11 +68,32 @@ function downlevelSection(): string
     return substr($page, (int) $start);
 }
 
-it('reads a plausible number of unsupported keywords', function (): void {
-    // A constant that stopped being readable would make the row check below vacuous.
-    expect(count(OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS))->toBeGreaterThanOrEqual(15)
-        ->and(OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS)
-        ->toContain('if', 'then', 'else', 'prefixItems', 'unevaluatedProperties');
+it('reads every unsupported keyword there is, not a plausible number of them', function (): void {
+    // A constant that stopped being readable would make the row check below vacuous, and a hand list of
+    // five names is only worth those five: dropping `prefixItems` failed here and dropping `maxContains`
+    // did not. So the floor is the SET, derived from the two things that decide it — every schema keyword
+    // the product knows, less the ones 3.0's own Schema Object enumerates, less the ones this emitter
+    // rewrites instead of dropping.
+    $defined = array_keys(get_object_vars(OpenApiMetaSchema::decode('openapi-3.0')->definitions->Schema->properties));
+
+    $owed = array_values(array_filter(
+        schemaKeywordVocabulary(),
+        static fn (string $keyword): bool => ! str_starts_with($keyword, 'x-')
+            && ! in_array($keyword, $defined, true)
+            && ! in_array($keyword, OpenApi30DownlevelEmitter::HANDLED_SCHEMA_KEYWORDS, true),
+    ));
+
+    $dropped = [
+        ...OpenApi30DownlevelEmitter::UNSUPPORTED_SCHEMA_KEYWORDS,
+        ...OpenApi30DownlevelEmitter::SILENT_SCHEMA_KEYWORDS,
+    ];
+    sort($dropped);
+
+    // Anti-vacuity on the derivation itself: a decode or a scan that stopped finding its members would
+    // otherwise make the comparison a test of nothing.
+    expect(count($defined))->toBe(35)
+        ->and(count($owed))->toBeGreaterThan(15)
+        ->and($owed)->toBe($dropped, 'a keyword 3.0 cannot express that this emitter no longer drops');
 });
 
 it('names every keyword 3.0 cannot express', function (): void {

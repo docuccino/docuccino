@@ -106,7 +106,7 @@ it('is scanning something', function (): void {
 });
 
 /**
- * The scanner's own proof. Every spelling that asks `json_decode` for arrays, and the two that do not,
+ * The scanner's own proof. Every spelling that asks `json_decode` for arrays, and the ones that do not,
  * plus the shapes a `^json_decode.*true` grep would get wrong in both directions: a `true` that belongs
  * to a nested call rather than to this one, and a call written inside a string.
  */
@@ -130,6 +130,13 @@ it('sees every spelling that asks for arrays, and only those', function (): void
                     true,
                 );
 
+                // A leading `\` is inert to PHP, so it is inert here too — on the function, on the
+                // literal in the slot, and on the flag alike.
+                \json_decode($raw, true);
+                \json_decode($raw, associative: \true);
+                \json_decode($raw, flags: \JSON_OBJECT_AS_ARRAY);
+                json_decode($raw, \true);
+
                 // json_decode($raw, true) in a comment is not a call.
                 json_decode($raw);
                 json_decode($raw, false);
@@ -137,6 +144,8 @@ it('sees every spelling that asks for arrays, and only those', function (): void
                 json_decode(json_encode(['a' => true]), false);
                 $this->json_decode($raw, true);
                 Other::json_decode($raw, true);
+                \json_decode($raw, \false);
+                \Sneaky\json_decode($raw, true);
             }
 
             private function json_decode(string $raw, bool $associative): void {}
@@ -145,6 +154,7 @@ it('sees every spelling that asks for arrays, and only those', function (): void
 
     // Every line above that really does ask for arrays, reported where the CALL opens — and `512 > 1`
     // (line 13) is not one of them: an expression in the slot is not the literal, and a guard that
-    // guessed would flag a call it cannot read.
-    expect(associativeJsonDecodeLines($source))->toBe([9, 10, 11, 12, 14]);
+    // guessed would flag a call it cannot read. `\Sneaky\json_decode` (line 34) is not one either: a
+    // namespaced function sharing the short name is not this one.
+    expect(associativeJsonDecodeLines($source))->toBe([9, 10, 11, 12, 14, 21, 22, 23, 24]);
 });

@@ -9,6 +9,7 @@ use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Draft\SchemaDraft;
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
@@ -451,6 +452,131 @@ function canonicalizerSchemaOrder(): array
 }
 
 /**
+ * Every DECLARATION in one PHP source that names $members as string literals three or more times over,
+ * as `declaration name => hit count`.
+ *
+ * The scan behind "one copy of a keyword set, in one place". It reads PHP's own grammar for the two
+ * halves rather than one spelling of each, because both spellings drifted: a set can be enumerated by
+ * a `const`, a static property or a `match`, and a member can be written in either quote style.
+ * Tokenising settles all of it at once — `T_CONSTANT_ENCAPSED_STRING` is both quote styles and neither
+ * a comment nor a docblock, and a declaration is whatever `const`, `function` or a property names,
+ * whether or not it carries a type.
+ *
+ * A `match` is not a declaration of its own, so a copy spelled as one is reported against the method
+ * holding it — which is the name a reader needs anyway.
+ *
+ * @param  list<string>  $members
+ * @return array<string, int>
+ */
+function literalSetDeclarations(string $source, array $members, int $threshold = 3): array
+{
+    /** @var list<PhpToken> $tokens */
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+    ));
+
+    $found = [];
+    $name = null;
+    $expect = null;
+
+    foreach ($tokens as $index => $token) {
+        if ($token->is([T_CONST, T_FUNCTION])) {
+            $expect = 'name';
+
+            continue;
+        }
+
+        // A property: `$members` after a modifier, with or without a type in between.
+        if ($token->is(T_VARIABLE) && ($tokens[$index + 1] ?? null)?->text === '=') {
+            foreach (array_slice($tokens, max(0, $index - 4), 4) as $before) {
+                if ($before->is([T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_READONLY])) {
+                    $name = ltrim($token->text, '$');
+
+                    break;
+                }
+            }
+
+            continue;
+        }
+
+        if ($expect === 'name' && $token->is(T_STRING)) {
+            $name = $token->text;
+            $expect = null;
+
+            continue;
+        }
+
+        if ($token->is(T_CONSTANT_ENCAPSED_STRING) && $name !== null) {
+            $literal = stripcslashes(substr($token->text, 1, -1));
+
+            if (in_array($literal, $members, true) && literalEnumerates($tokens, $index)) {
+                $found[$name][$literal] = true;
+            }
+        }
+    }
+
+    $out = [];
+    foreach ($found as $declaration => $hits) {
+        if (count($hits) >= $threshold) {
+            $out[$declaration] = count($hits);
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Whether the string literal at $index is LISTING a keyword rather than using one. A copy of a set
+ * enumerates its members; two other things name a member and are not copies at all:
+ *
+ *   - a subscript. `$schema['items']` dereferences one keyword. Code that reads three keywords in
+ *     three places is code doing its job, not a table going stale.
+ *   - a schema literal. `'properties' => [...]` keyed to more structure is a schema being BUILT, and a
+ *     schema is data. The real tables map a keyword to a scalar (`'items' => self::POSITION_SCHEMA`),
+ *     so the nested value is what tells the two apart.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function literalEnumerates(array $tokens, int $index): bool
+{
+    $before = $tokens[$index - 2] ?? null;
+    $opens = ($tokens[$index - 1] ?? null)?->text === '[';
+
+    // `$x['items']`, `foo()['items']`, `self::MAP['items']` — anything subscriptable before the bracket.
+    if ($opens && ($before?->is([T_VARIABLE, T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED]) === true
+        || in_array($before?->text, [']', ')'], true))) {
+        return false;
+    }
+
+    return ! (($tokens[$index + 1] ?? null)?->text === '=>'
+        && in_array(($tokens[$index + 2] ?? null)?->text, ['[', 'new'], true));
+}
+
+/**
+ * Every schema keyword the product knows: the canonicaliser's member order and
+ * {@see SchemaKeywords::classification()} unioned, sorted.
+ *
+ * Two tables, because neither alone is the vocabulary. Order is a normative choice about how to
+ * PUBLISH a keyword, so a keyword nothing mints can be absent from it and still arrive in a schema
+ * the product was handed; the classification is what the product knows a keyword MEANS. A guard
+ * sweeping only one of them leaves the difference unguarded, which is where four keywords the 3.0
+ * emitter drops managed to sit outside every sweep at once.
+ *
+ * @return list<string>
+ */
+function schemaKeywordVocabulary(): array
+{
+    $keywords = array_values(array_unique([
+        ...canonicalizerSchemaOrder(),
+        ...array_keys(SchemaKeywords::classification()),
+    ]));
+    sort($keywords);
+
+    return $keywords;
+}
+
+/**
  * Any committed document on disk, read the same way. {@see loadFixture} for why it is not a plain
  * associative decode.
  *
@@ -882,7 +1008,7 @@ function associativeJsonDecodeLines(string $source): array
 
     foreach ($tokens as $index => $token) {
         // A method or constant of the same name is somebody else's function, not this one.
-        if (! $token->is(T_STRING) || strcasecmp($token->text, 'json_decode') !== 0) {
+        if (! namesGlobalSymbol($token, 'json_decode')) {
             continue;
         }
 
@@ -901,6 +1027,26 @@ function associativeJsonDecodeLines(string $source): array
     }
 
     return $lines;
+}
+
+/**
+ * Whether one token names the GLOBAL symbol `$symbol` — a function, a constant or a keyword-like
+ * literal alike.
+ *
+ * A leading `\` is inert to PHP: `\json_decode` and `json_decode` are the same function, `\true` and
+ * `true` the same literal. PHP 8 tokenises the qualified spelling as one `T_NAME_FULLY_QUALIFIED`
+ * rather than the `T_STRING` of the bare one, so a scan keying on `T_STRING` reads a narrower
+ * grammar than the language and misses the spelling that means exactly the same thing. Comparing the
+ * qualified text against `\$symbol` whole is what keeps `\Foo\json_decode` out: that one names a
+ * namespaced function which merely shares a short name.
+ */
+function namesGlobalSymbol(PhpToken $token, string $symbol): bool
+{
+    if ($token->is(T_STRING)) {
+        return strcasecmp($token->text, $symbol) === 0;
+    }
+
+    return $token->is(T_NAME_FULLY_QUALIFIED) && strcasecmp($token->text, '\\'.$symbol) === 0;
 }
 
 /**
@@ -949,13 +1095,13 @@ function jsonDecodeAsksForArrays(array $tokens): bool
         }
 
         // The flag spelling of the same request, wherever it sits in a `|` chain.
-        if ($token->is(T_STRING) && strcasecmp($token->text, 'JSON_OBJECT_AS_ARRAY') === 0) {
+        if (namesGlobalSymbol($token, 'JSON_OBJECT_AS_ARRAY')) {
             return true;
         }
 
         $isSecondSlot = $named === 'associative' || ($named === null && $argument === 1);
 
-        if ($isSecondSlot && $token->is(T_STRING) && strcasecmp($token->text, 'true') === 0) {
+        if ($isSecondSlot && namesGlobalSymbol($token, 'true')) {
             return true;
         }
     }
