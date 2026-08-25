@@ -53,20 +53,25 @@ final class RateLimitResponsesExtension implements OperationExtension
             return;
         }
 
+        $limit = $limits[0];
+
+        // Above the ignore consult, because what it reports is an application bug rather than anything
+        // about the documented response — see {@see checkRegistered()}. An author saying "do not document
+        // the 429" has not said the limiter is registered.
+        if ($limit->name !== null) {
+            $this->checkRegistered($limit->name, $context);
+        }
+
         // Asked before anything is built: the body below comes from the error-response chain, which
         // registers a shared response component as it goes ({@see IgnoredResponses}).
         if (IgnoredResponses::drops($context, '429')) {
             return;
         }
 
-        $limit = $limits[0];
-
+        // Below it, because this one reports what the DOCUMENT does with several throttles, and a route
+        // that documents no 429 at all represents none of them to under-report.
         if (count($limits) > 1) {
             $this->reportMultiple($limits, $context);
-        }
-
-        if ($limit->name !== null) {
-            $this->checkRegistered($limit->name, $context);
         }
 
         $contribution = Contribution::integration('rate-limit', $context->actionSource());
