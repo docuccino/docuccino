@@ -286,6 +286,32 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    can declare a name twice (a renderer beside the inline one it falls back to), and a bare method name
    there answers one class's return with the other's body. Where a caller has no class to name, the by-name
    lookup answers only while the file declares that name once.
+   A return site may also STAMP the response after building it — `response()->json($body)->setStatusCode(202)`
+   — and that tail is peeled before anything else runs (`FluentResponseChain`). It has to be, twice over: the
+   setter is vendor code, so the descent in the paragraph above declines it and the whole shape with it; and
+   `setStatusCode()` returns `static`, so the `JsonResponse<…, 200>` our own extension resolved for
+   `response()->json()` survives the call unchanged and would publish a 200 the endpoint never sends. So the
+   erased-generic gate is not "does the type carry arguments" but "does the refiner read this expression
+   better than its type does" (`ResponseShapeRefiner::outranksResolvedType()`) — true for a `new` and for a
+   peelable chain, since the stub's `@template` bounds parameterise a plain `new JsonResponse(…)` with
+   nothing at all.
+
+   The grammar is one rule, and the guard is the same function as the fold: a call whose RECEIVER is one of
+   the four response classes is a MUTATOR, peeled only when it is `setStatusCode`, `header` or `withHeaders`
+   AND the installed framework declares it returning the object it was called on (native `static`, or the
+   `@return $this` the header setters carry) — read off the resolved vendor code, so a release that moves
+   either fact degrades rather than publishing this major's dialect. Any other mutator refuses the WHOLE
+   chain: `->setData($other)` returns `static` exactly as the status setter does, and passing the receiver's
+   payload through it would publish a body that was replaced. A call whose receiver is not a response is a
+   producer — that is the base, and mechanism 1 takes it from there. Peeling is not a call hop, so it costs
+   no depth and adds no dependency file: the only thing newly read is vendor reflection, which
+   `BuildFingerprint` already covers through the app's `composer.lock`.
+   `withStatus()` is deliberately absent (PSR-7's setter; no response class here declares it), and so are
+   SUBCLASSES of the four — a strict receiver check is what keeps `(new StreamedResponse(…))->setStatusCode(202)`
+   out, since everything recovered here is emitted as a `JsonResponse` and a streamed body is not one.
+   A status that will not fold refuses the chain rather than guessing; a header link that will not read
+   reports its media type UNKNOWN instead, which drops whatever the receiver carried but keeps the status,
+   because a header is the one thing that cannot have touched it.
 2. **Value-flow / status provenance.** A callee's recovered shape is CALL-INDEPENDENT: a status that is
    not a literal is recorded as the `ParamAccessor` it reads from (the parameter itself, `->value`,
    `->name`, or a no-arg `->method()`), and each body member's provenance is recorded the same way. The
