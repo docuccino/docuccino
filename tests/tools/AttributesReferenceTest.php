@@ -260,3 +260,121 @@ it('gives every attribute a reference section of its own', function (): void {
 
     expect($missing)->toBe([]);
 });
+
+require_once dirname(__DIR__, 2).'/tools/attribute-target-readers.php';
+require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
+
+/**
+ * The packages a declaration can be read by.
+ *
+ * @return list<string>
+ */
+function attributeReaderSourceDirectories(): array
+{
+    $root = dirname(__DIR__, 2);
+
+    return [$root.'/php/core/src', $root.'/php/laravel/src', $root.'/php/inference-phpstan/src'];
+}
+
+/**
+ * Every declared target that is NOT an ordinary `effect` — read, and changing the document. Two other
+ * verdicts exist, and each costs something a bare allow-list entry does not:
+ *
+ *   - `diagnostic`: read, and what it does is tell the author it cannot be honoured. It cites the code
+ *     it raises, which has to be one the packages really emit.
+ *   - `documented-inert`: NOT read, and the reference page says so in as many words. It cites the
+ *     sentence, which has to be in that attribute's own section and to name the target.
+ *
+ * The third verdict is the point. Without it a dead surface is closed by adding a line here, which is
+ * how four of them shipped; with it, closing one costs a public admission or a real diagnostic.
+ *
+ * @return array<string, array<string, array{0: string, 1: string}>>
+ */
+function attributeInertTargets(): array
+{
+    return [
+        'Example' => [
+            'PARAMETER' => ['documented-inert', 'The `PARAMETER` target is accepted and has no effect of its own.'],
+        ],
+        'Internal' => [
+            'PROPERTY' => ['documented-inert', 'is accepted but has no effect on a schema today'],
+        ],
+        'Summary' => [
+            'PROPERTY' => ['diagnostic', 'attribute.property-unsupported'],
+        ],
+    ];
+}
+
+it('reads every target every attribute declares, or says in public that it does not', function (): void {
+    // An attribute that declares a target nothing reads is a promise the document never keeps, and the
+    // suite stays green either way — the reflection sweep behind this found four such surfaces at once.
+    // The reader side is derived by scanning the packages; the exceptions above are the only cells
+    // allowed to have no reader, and each has to pay for the exemption.
+    $readers = attribute_target_readers(attributeReaderSourceDirectories());
+    $page = attributesReferencePage();
+    $emitted = diagnostic_codes(attributeReaderSourceDirectories());
+    $exceptions = attributeInertTargets();
+
+    $wrong = [];
+    $pairs = 0;
+    $surfaces = [];
+    foreach (shippedAttributeNames() as $name) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $read = $readers[$name] ?? [];
+        $section = attributeReferenceSection($page, $name);
+
+        foreach (explode(' | ', attributeFlagNames(attributeFlagsOf($class) & ~Attribute::IS_REPEATABLE)) as $target) {
+            [$verdict, $citation] = $exceptions[$name][$target] ?? ['effect', ''];
+            $cell = '#['.$name.'] on '.$target;
+            $hasReader = in_array($target, $read, true);
+
+            if ($hasReader) {
+                $pairs++;
+                $surfaces[$target] = true;
+            }
+
+            if ($verdict !== 'documented-inert' && ! $hasReader) {
+                $wrong[] = $cell.': declared '.$verdict.', and nothing reads it';
+            }
+
+            if ($verdict === 'documented-inert' && $hasReader) {
+                $wrong[] = $cell.': declared inert, and something reads it — give it the `effect` verdict';
+            }
+
+            // Whatever excuses a cell has to be public: the sentence for an inert one, the code for a
+            // diagnostic one, and an inert cell has to name the target it is disowning.
+            if ($verdict !== 'effect' && ! str_contains($section, $citation)) {
+                $wrong[] = $cell.': the reference section does not carry "'.$citation.'"';
+            }
+
+            if ($verdict === 'documented-inert' && ! str_contains($section, '`'.$target.'`')) {
+                $wrong[] = $cell.': its disclosure does not name the target';
+            }
+
+            if ($verdict === 'diagnostic' && ! isset($emitted[$citation])) {
+                $wrong[] = $cell.': cites '.$citation.', which the packages do not emit';
+            }
+        }
+    }
+
+    // An exception has to be a target something really declares, so one cannot outlive the surface it
+    // excuses.
+    foreach ($exceptions as $name => $targets) {
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.$name;
+        $declared = explode(' | ', attributeFlagNames(attributeFlagsOf($class)));
+        foreach (array_keys($targets) as $target) {
+            if (! in_array($target, $declared, true)) {
+                $wrong[] = '#['.$name.'] on '.$target.': excused, and no longer declared';
+            }
+        }
+    }
+
+    ksort($surfaces);
+
+    // A scan matching nothing must fail rather than pass, so the shape of what it found is pinned too.
+    expect($wrong)->toBe([])
+        ->and($pairs)->toBeGreaterThan(60)
+        ->and(array_keys($surfaces))->toBe(['CLASS', 'CLASS_CONSTANT', 'FUNCTION', 'METHOD', 'PROPERTY']);
+});
