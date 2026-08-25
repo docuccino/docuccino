@@ -114,8 +114,10 @@ final class DataClassReflector
      * `#[MapName(SnakeCaseMapper::class)]` renames every property; knowing the transform here is what
      * stops the mapper FQCN leaking as the documented JSON key.
      *
-     * It lists every zero-argument mapper the package ships. `ProvidedNameMapper` is not a transform at
-     * all: it returns a fixed name, which is how spatie models a literal `#[MapName('key')]`.
+     * It lists every zero-argument mapper the package ships, and may list one the resolved version does
+     * not have yet — spatie only treats a string as a mapper when the class exists, so a row for a
+     * mapper that isn't installed is never reached (see resolveMapped). `ProvidedNameMapper` is not a
+     * transform at all: it returns a fixed name, which is how spatie models a literal `#[MapName('key')]`.
      *
      * @var array<string, string>
      */
@@ -709,13 +711,17 @@ final class DataClassReflector
             return null;
         }
 
-        $mapped = self::mapWithMapper($value, $property);
-        if ($mapped !== null) {
-            return $mapped;
+        // What counts as a mapper is a function of the version the app resolved: spatie only treats a
+        // string as one when the class exists, and otherwise uses it verbatim as the key. So a name that
+        // isn't installed — a mapper from a later release, say — is a literal here too, exactly as the
+        // running application would key it.
+        if (! class_exists($value)) {
+            return $value;
         }
 
-        // Never leak an unrecognised mapper's FQCN as the key — unrecognisedMappers() reports it.
-        return class_exists($value) ? null : $value;
+        // A recognised mapper transforms; an unrecognised one yields null so the caller falls back to the
+        // property name, since its FQCN must never leak as the key. unrecognisedMappers() reports it.
+        return self::mapWithMapper($value, $property);
     }
 
     /**

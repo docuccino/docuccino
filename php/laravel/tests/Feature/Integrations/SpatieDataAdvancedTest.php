@@ -2,9 +2,17 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\AttributeSet;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -16,18 +24,23 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\SpatieData\DataClassReflector;
+use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\DataValidationRules;
+use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountStatus;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\ScreamingMappedController;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\ScreamingMappedData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ExampleTypesData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\KebabCasedData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\PinnedRuleData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ProfileResource;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RequestExclusionData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\SaveAnswersData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\ScreamingNameMapper;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\TagData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\TimestampData;
 
@@ -85,6 +98,54 @@ it('keys a kebab-mapped Data class the way spatie keys it', function (): void {
     ! class_exists('Spatie\\LaravelData\\Mappers\\KebabCaseMapper'),
     'KebabCaseMapper arrived in spatie/laravel-data 4.18; on an older install the attribute names no mapper.',
 );
+
+it('documents an application-defined mapper unmapped rather than guessing its transform', function (): void {
+    // A mapper of the application's own is legitimate and unreadable — nothing static says what
+    // `map()` returns. The property name is the honest answer, and the diagnostic below is where the
+    // author hears about it.
+    $reflector = new DataClassReflector;
+
+    expect($reflector->outputName(ScreamingMappedData::class, 'displayName'))->toBe('displayName')
+        ->and($reflector->inputName(ScreamingMappedData::class, 'displayName'))->toBe('displayName')
+        ->and($reflector->unrecognisedMappers(ScreamingMappedData::class))->toBe([ScreamingNameMapper::class]);
+});
+
+it('keys a mapper name the installed package does not ship as the literal it is', function (): void {
+    // spatie only treats a string as a mapper when the class exists; otherwise it keys the property
+    // with the string verbatim. A mapper from a release the application has not upgraded to is
+    // therefore a literal, and publishing its transform would be this version's dialect, not the
+    // running one's.
+    expect((new DataClassReflector)->outputName(ScreamingMappedData::class, 'userName'))
+        ->toBe('Spatie\\LaravelData\\Mappers\\NotShippedYetMapper');
+});
+
+it('raises one diagnostic naming the Data class and the mapper it could not read', function (): void {
+    $context = new RouteContext(
+        route: new RouteDescriptor(['POST'], 'api/custom-mapped'),
+        actionRef: new ActionRef('', ScreamingMappedController::class, 'store'),
+        attributes: new AttributeSet,
+        engine: new StubTypeEngine(classes: [
+            ScreamingMappedData::class => new ClassMetadata(ScreamingMappedData::class, [
+                new PropertyMetadata('displayName', ScalarT::string()),
+                new PropertyMetadata('userName', ScalarT::string()),
+            ]),
+        ]),
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions(
+            typeToSchema: DefaultTypeMappers::all(),
+            ruleTransformers: ValidationIntegration::transformers(),
+        ),
+    );
+
+    (new DataRequestExtension)->handle(new OperationDraft, $context);
+
+    $diagnostics = diagnosticsCoded($context->components->diagnostics(), 'spatie-data.unknown-mapper');
+
+    expect($diagnostics)->toHaveCount(1)
+        ->and($diagnostics[0]->severity)->toBe(Severity::Info)
+        ->and($diagnostics[0]->message)->toContain(ScreamingMappedData::class)
+        ->and($diagnostics[0]->message)->toContain(ScreamingNameMapper::class);
+});
 
 it('renames every key through a class-level mapper (input and output)', function (): void {
     $reflector = new DataClassReflector;
