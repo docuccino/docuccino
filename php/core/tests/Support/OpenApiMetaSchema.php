@@ -457,9 +457,12 @@ final class OpenApiMetaSchema
      *   so the static `$ref` is what the dynamic one is specified to resolve to.
      * - `contains` alongside `minContains: 0` still demands one match (`ContainsKeyword` errors on
      *   `$valid === 0` after the `minContains` check has already passed), which fails every document
-     *   whose parameter list holds no `querystring` parameter. Dropped with its bounds — the mutual
-     *   exclusion of `query` and `querystring` is asserted separately, by a `not`/`allOf` opis reads
-     *   correctly, so what goes is the "at most one querystring parameter" cap alone.
+     *   whose parameter list holds no `querystring` parameter. Only `minContains` has to go; `maxContains`
+     *   is collateral, and its cost is that TWO `querystring` parameters validate clean at 3.2 where the
+     *   spec caps them at one. Nothing in the product can mint such a parameter today, so the loss is
+     *   unreachable rather than harmless — measured either way, in `OpenApiUnevaluatedScopeTest`, beside
+     *   the row proving the mutual exclusion of `query` and `querystring` is NOT lost with it (that rides
+     *   a `not`/`allOf` opis reads correctly), which is what bounds the loss to the cap alone.
      */
     private static function opisWorkarounds(mixed $node, bool $inMap = false): mixed
     {

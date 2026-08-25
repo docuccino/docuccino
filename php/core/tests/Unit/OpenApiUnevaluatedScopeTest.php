@@ -16,6 +16,11 @@ use Docuccino\Core\Tests\Support\OpenApiMetaSchema;
  * `OpenApiMetaSchema::keyGateFindings()` walks the three key gates back on directly, so the first two rows
  * reject everywhere. The rest is the honest remainder, and the rows that PASS are the point: pinned
  * blindness stops being a surprise, and a future weakening — or a recovery — shows up as a row flipping.
+ *
+ * Three losses reach this matrix, one row set each: the key gates and the unrecognised-member check
+ * (`allowUnevaluated`), the format assertion (`allowFormats`, the `info.contact.email` row), and the
+ * `contains` bound `opisWorkarounds()` drops (the two `querystring` rows). All three are named at their
+ * call site in `OpenApiMetaSchema`; this file is where each is measured.
  */
 function unevaluatedScopeVersions(): array
 {
@@ -54,6 +59,15 @@ function unevaluatedScopeBase(string $version): stdClass
 /**
  * The matrix: mutation => outcome per format, in the order {@see unevaluatedScopeVersions()} lists them.
  *
+ * The last two rows are the third loss, which is collateral rather than chosen: `opisWorkarounds()` drops
+ * `contains` with BOTH its bounds wherever `minContains: 0` sits beside it, and only `minContains` is what
+ * opis mis-evaluates. `maxContains: 1` goes with it, so 3.2's "at most one querystring parameter" cap is
+ * unenforced. The pair measures the loss and its edge together — a row recording a loss with nothing
+ * bounding it reads as a measurement and measures nothing.
+ *
+ * 3.1 and 3.0 reject both rows for a reason that is not the cap: `querystring` is a 3.2-only `in` value,
+ * so their columns say only that the parameter does not belong there.
+ *
  * @return array<string, list<string>>
  */
 function unevaluatedScopeMatrix(): array
@@ -69,7 +83,19 @@ function unevaluatedScopeMatrix(): array
         'properties is a sequence' => ['passes', 'passes', 'rejects'],
         'additionalProperties is a sequence' => ['passes', 'passes', 'rejects'],
         'info.contact.email is malformed' => ['passes', 'passes', 'passes'],
+        'two querystring parameters' => ['passes', 'rejects', 'rejects'],
+        'query parameter beside a querystring one' => ['rejects', 'rejects', 'rejects'],
     ];
+}
+
+/**
+ * A 3.2 `querystring` parameter, which takes `content` rather than `schema`.
+ *
+ * @return array{name: string, in: string, content: array{'application/json': array{schema: array{type: string}}}}
+ */
+function unevaluatedScopeQuerystring(string $name): array
+{
+    return ['name' => $name, 'in' => 'querystring', 'content' => ['application/json' => ['schema' => ['type' => 'string']]]];
 }
 
 function unevaluatedScopeMutate(string $mutation, stdClass $document): void
@@ -97,6 +123,15 @@ function unevaluatedScopeMutate(string $mutation, stdClass $document): void
         'properties is a sequence' => $schema->properties = [],
         'additionalProperties is a sequence' => $schema->additionalProperties = [],
         'info.contact.email is malformed' => $document->info->contact = json_decode('{"email":"not an email"}', flags: JSON_THROW_ON_ERROR),
+        // The dropped `maxContains: 1`. Two of them is one more than 3.2 allows, and 3.2 says nothing.
+        'two querystring parameters' => $operation->parameters = json_decode((string) json_encode(
+            [unevaluatedScopeQuerystring('one'), unevaluatedScopeQuerystring('two')],
+        ), flags: JSON_THROW_ON_ERROR),
+        // The edge of that loss: the mutual exclusion of `query` and `querystring` rides a `not`/`allOf`
+        // opis reads correctly, so it is NOT collateral and 3.2 still rejects this.
+        'query parameter beside a querystring one' => $operation->parameters = json_decode((string) json_encode(
+            [['name' => 'page', 'in' => 'query', 'schema' => ['type' => 'integer']], unevaluatedScopeQuerystring('one')],
+        ), flags: JSON_THROW_ON_ERROR),
     };
 }
 
@@ -144,9 +179,9 @@ it('records a matrix with something in both columns', function (): void {
 
     $strict = array_filter(unevaluatedScopeMatrix(), static fn (array $row): bool => $row[2] === 'rejects');
 
-    expect(unevaluatedScopeMatrix())->toHaveCount(10)
-        ->and(count(unevaluatedScopeSubjects()))->toBe(30)
+    expect(unevaluatedScopeMatrix())->toHaveCount(12)
+        ->and(count(unevaluatedScopeSubjects()))->toBe(36)
         ->and(array_count_values($outcomes)['passes'] ?? 0)->toBeGreaterThanOrEqual(10)
         ->and(array_count_values($outcomes)['rejects'] ?? 0)->toBeGreaterThanOrEqual(10)
-        ->and($strict)->toHaveCount(9);
+        ->and($strict)->toHaveCount(11);
 });

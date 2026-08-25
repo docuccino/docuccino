@@ -65,6 +65,17 @@ coverage locally and the ratchet policy for the CI gate.
   `OpenApiUnevaluatedScopeTest` is that scope as a **measured matrix** — every row derived by mutating
   a document all three versions accept, including the rows that still pass, because pinned blindness
   stops being a surprise and a future weakening shows up as a row flipping.
+- **The same rule covers a schema REWRITE, and its collateral goes in the same matrix.** Dodging a
+  validator defect by deleting a keyword takes that keyword's neighbours with it, and the neighbours are
+  the half nobody records. `opisWorkarounds()` drops `contains` with its bounds wherever `minContains: 0`
+  sits beside it, because opis demands a match anyway; only `minContains` had to go, so 3.2's
+  `maxContains: 1` — "at most one `querystring` parameter" — is unenforced collateral, and two of them
+  validate clean. **Unreachable is not the same as absent**: nothing in the product can mint a
+  `querystring` parameter today, and the row is still owed, because a loss recorded only in a comment at
+  the call site is a loss nobody re-checks when that changes. Record the **edge** beside it too — the
+  mutual exclusion of `query` and `querystring` rides a `not`/`allOf` opis reads correctly and survives,
+  which is what proves the loss is the cap alone rather than the whole construct. A row measuring a loss
+  with nothing bounding it has already shipped here reading like a measurement and measuring nothing.
 - **A rule the schema cannot express still needs asserting.** JSON Schema cannot state uniqueness
   across positions, so a duplicate `operationId` — which the spec requires unique across the whole API
   — validates clean at every version while a generated client silently loses a method to the
