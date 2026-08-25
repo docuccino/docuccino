@@ -120,6 +120,65 @@ it('pins each vendored meta-schema to the dated URI it was fetched from', functi
 });
 
 /**
+ * Counts the schema positions where $matches says yes, walking keyword nodes only — a key inside a
+ * `properties`/`$defs`/`patternProperties` map is a NAME, so `{"properties": {"contains": …}}` is a
+ * property called `contains` and never the keyword.
+ */
+function metaSchemaSites(mixed $node, callable $matches, bool $inMap = false): int
+{
+    if (is_array($node)) {
+        return array_sum(array_map(static fn (mixed $v): int => metaSchemaSites($v, $matches), $node));
+    }
+
+    if (! $node instanceof stdClass) {
+        return 0;
+    }
+
+    $vars = get_object_vars($node);
+    $found = ! $inMap && $matches($vars) ? 1 : 0;
+
+    foreach ($vars as $key => $value) {
+        $names = ! $inMap && in_array($key, ['properties', 'definitions', 'patternProperties', '$defs'], true);
+        $found += metaSchemaSites($value, $matches, $names);
+    }
+
+    return $found;
+}
+
+/**
+ * `opisWorkarounds()` drops `contains` with its bounds wherever `minContains: 0` sits beside it, because
+ * opis still demands one match. It matches by SHAPE, so a vendored schema that grew a second such site
+ * would lose that bound silently and nothing would say so. Exactly one exists — 3.2's "at most one
+ * querystring parameter" cap — and none in the other two.
+ */
+it('drops the contains bound at exactly the one site that has it', function (): void {
+    $unbounded = static fn (array $vars): bool => ($vars['minContains'] ?? null) === 0 && isset($vars['contains']);
+
+    $sites = [];
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $sites[$format] = metaSchemaSites(OpenApiMetaSchema::decode($format), $unbounded);
+    }
+
+    expect($sites)->toBe(['openapi-3.2' => 1, 'openapi-3.1' => 0, 'openapi-3.0' => 0]);
+});
+
+/**
+ * The key gates `allowUnevaluated => false` disables, counted so the scope recorded beside that option
+ * cannot drift from the files. 3.0 has none — its gates close with `additionalProperties`, which is why
+ * it is the strict column of `OpenApiUnevaluatedScopeTest`'s matrix.
+ */
+it('counts the unevaluatedProperties sites the disabled keyword takes with it', function (): void {
+    $closed = static fn (array $vars): bool => ($vars['unevaluatedProperties'] ?? null) === false;
+
+    $sites = [];
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $sites[$format] = metaSchemaSites(OpenApiMetaSchema::decode($format), $closed);
+    }
+
+    expect($sites)->toBe(['openapi-3.2' => 28, 'openapi-3.1' => 28, 'openapi-3.0' => 0]);
+});
+
+/**
  * The oracle's own negative path. If these two pass, an empty map written as a sequence is a failure the
  * suite can see — which is the whole reason this file exists.
  */

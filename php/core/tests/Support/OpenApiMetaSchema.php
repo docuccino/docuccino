@@ -41,6 +41,14 @@ final class OpenApiMetaSchema
         'openapi-3.0' => ['openapi-v3.0.schema.json', 'https://spec.openapis.org/oas/3.0/schema/2024-10-18'],
     ];
 
+    /**
+     * The path-item members that hold an Operation Object. `query` is 3.2's addition; naming one version's
+     * method under another is caught by the meta-schema itself, so the union is safe to walk.
+     *
+     * @var list<string>
+     */
+    private const array METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace', 'query'];
+
     /** @var array<string, Validator> */
     private static array $validators = [];
 
@@ -74,19 +82,23 @@ final class OpenApiMetaSchema
      * ({@see EmittedDocument::parseYaml()}). Hand it an associative array and every map in the document
      * reads as a JSON array, which is the blindness this oracle exists to remove.
      *
+     * The key gates {@see keyGateFindings()} recovers are folded in here, so every caller gets them.
+     *
      * @return list<string>
      */
     public static function findings(string $format, mixed $instance): array
     {
+        $gates = self::keyGateFindings($format, $instance);
+
         $result = self::validator($format)->validate($instance, 'https://docuccino.test/'.$format.'.json');
 
         $error = $result->error();
         if ($error === null) {
-            return [];
+            return $gates;
         }
 
         $formatter = new ErrorFormatter;
-        $findings = [];
+        $findings = $gates;
 
         foreach ($formatter->formatKeyed(
             $error,
@@ -104,6 +116,187 @@ final class OpenApiMetaSchema
         }
 
         return $findings;
+    }
+
+    /**
+     * The `patternProperties` KEY GATES the 3.1/3.2 meta-schemas enforce only through
+     * `unevaluatedProperties: false` — which is off, for the opis defects named in {@see self::validator()}.
+     * Turning that keyword off silently took all 28 of those sites with it, so a `paths` key not starting
+     * with `/` and a response keyed `twohundred` both validated clean. This walks the three gates back on
+     * directly, which needs no validator and no `$ref` resolution.
+     *
+     * Patterns are READ OUT of the vendored file, never restated here, so a schema whose gate changes
+     * moves this with it. 3.0 needs none: it carries no `unevaluatedProperties` at all, so its 43 gates
+     * were never disabled.
+     *
+     * @return list<string>
+     */
+    public static function keyGateFindings(string $format, mixed $instance): array
+    {
+        if (! $instance instanceof stdClass || self::isDraft04($format)) {
+            return [];
+        }
+
+        $gates = self::keyGates($format);
+        $findings = [];
+
+        foreach (['paths', 'components'] as $member) {
+            $findings = [...$findings, ...self::gateKeys($instance->{$member} ?? null, $gates[$member], '/'.$member, $member)];
+        }
+
+        foreach (self::operations($instance) as $pointer => $operation) {
+            $findings = [
+                ...$findings,
+                ...self::gateKeys($operation->responses ?? null, $gates['responses'], $pointer.'/responses', 'responses'),
+            ];
+        }
+
+        sort($findings);
+
+        return $findings;
+    }
+
+    /**
+     * Every key of $map that matches none of $patterns, as findings.
+     *
+     * @param  list<string>  $patterns
+     * @return list<string>
+     */
+    private static function gateKeys(mixed $map, array $patterns, string $pointer, string $gate): array
+    {
+        if (! $map instanceof stdClass) {
+            return [];
+        }
+
+        $findings = [];
+
+        foreach (array_keys(get_object_vars($map)) as $key) {
+            foreach ($patterns as $pattern) {
+                if (preg_match('~'.str_replace('~', '\~', $pattern).'~', (string) $key) === 1) {
+                    continue 2;
+                }
+            }
+
+            $findings[] = sprintf(
+                '%s patternProperties: The key "%s" matches none of %s (schema /$defs/%s)',
+                $pointer.'/'.self::escape((string) $key),
+                $key,
+                implode(', ', $patterns),
+                $gate,
+            );
+        }
+
+        return $findings;
+    }
+
+    /**
+     * The gate patterns for `paths`, `components` and an operation's `responses`, read from the vendored
+     * file. A declared `properties` key (`responses`' `default`) is an exact-match alternative, and every
+     * one of the three `$ref`s the specification-extensions schema, so `^x-` is always allowed.
+     *
+     * @return array{paths: list<string>, components: list<string>, responses: list<string>}
+     */
+    private static function keyGates(string $format): array
+    {
+        $defs = self::decode($format)->{'$defs'};
+
+        $patterns = static function (string $def) use ($defs): array {
+            $node = $defs->{$def};
+
+            $found = array_keys(get_object_vars($node->patternProperties));
+
+            foreach (array_keys(get_object_vars($node->properties ?? new stdClass)) as $literal) {
+                $found[] = '^'.preg_quote((string) $literal, '~').'$';
+            }
+
+            return [...$found, ...array_keys(get_object_vars($defs->{'specification-extensions'}->patternProperties))];
+        };
+
+        return [
+            'paths' => $patterns('paths'),
+            'components' => $patterns('components'),
+            'responses' => $patterns('responses'),
+        ];
+    }
+
+    /**
+     * Every Operation Object in the document, by JSON pointer. Found structurally — path items live under
+     * `paths`, `webhooks` and `components.pathItems`, and each operation's `callbacks` carry more — so
+     * nothing here resolves a `$ref`, and a map merely NAMED `responses` inside a Schema Object is never
+     * mistaken for a Responses Object.
+     *
+     * @return array<string, stdClass>
+     */
+    private static function operations(stdClass $instance): array
+    {
+        $components = $instance->components ?? null;
+
+        $containers = [
+            '/paths' => $instance->paths ?? null,
+            '/webhooks' => $instance->webhooks ?? null,
+            '/components/pathItems' => $components instanceof stdClass ? ($components->pathItems ?? null) : null,
+        ];
+
+        $operations = [];
+
+        while ($containers !== []) {
+            $pathItems = [];
+
+            foreach ($containers as $pointer => $container) {
+                if (! $container instanceof stdClass) {
+                    continue;
+                }
+
+                foreach (get_object_vars($container) as $name => $item) {
+                    if ($item instanceof stdClass) {
+                        $pathItems[$pointer.'/'.self::escape((string) $name)] = $item;
+                    }
+                }
+            }
+
+            $containers = [];
+
+            foreach ($pathItems as $pointer => $item) {
+                foreach (self::METHODS as $method) {
+                    $operation = $item->{$method} ?? null;
+
+                    if (! $operation instanceof stdClass) {
+                        continue;
+                    }
+
+                    $operations[$pointer.'/'.$method] = $operation;
+
+                    // A callback maps a runtime EXPRESSION to a path item, which is the same shape as the
+                    // containers above — so each one goes back through the loop and its operations count.
+                    foreach (get_object_vars($operation->callbacks ?? new stdClass) as $name => $callback) {
+                        if ($callback instanceof stdClass) {
+                            $containers[$pointer.'/'.$method.'/callbacks/'.self::escape((string) $name)] = $callback;
+                        }
+                    }
+                }
+
+                // 3.2 lets a path item carry operations under names of its own choosing.
+                foreach (get_object_vars($item->additionalOperations ?? new stdClass) as $method => $operation) {
+                    if ($operation instanceof stdClass) {
+                        $operations[$pointer.'/additionalOperations/'.self::escape((string) $method)] = $operation;
+                    }
+                }
+            }
+        }
+
+        return $operations;
+    }
+
+    /** Whether $format's vendored file is draft-04 (3.0), which needs no key-gate recovery. */
+    private static function isDraft04(string $format): bool
+    {
+        return str_starts_with(self::publishedId($format), 'https://spec.openapis.org/oas/3.0/');
+    }
+
+    /** A JSON pointer token, escaped. */
+    private static function escape(string $token): string
+    {
+        return str_replace(['~', '/'], ['~0', '~1'], $token);
     }
 
     /**
@@ -151,8 +344,17 @@ final class OpenApiMetaSchema
         // opis's `unevaluatedProperties` does not collect annotations produced inside
         // `dependentSchemas` or `if`/`then`, and reports properties the instance does not even carry as
         // unevaluated — a bare `{name, in, schema}` parameter comes back "unevaluated: explode,
-        // allowReserved, allowEmptyValue". Off, the oracle stops asserting "no unrecognised member" and
-        // keeps every type, required, enum, pattern and oneOf assertion.
+        // allowReserved, allowEmptyValue".
+        //
+        // Off costs MORE than "no unrecognised member". 3.1 and 3.2 spell `unevaluatedProperties: false`
+        // at 28 sites each, and those are the only thing enforcing their `patternProperties` KEY gates —
+        // so a `paths` key not starting with `/`, a response keyed `twohundred` and a misspelled
+        // `info.versionn` all validate clean with it off. 3.0 is unaffected (no such keyword; its gates
+        // close with `additionalProperties`), which is why it rejects every one of those.
+        // {@see keyGateFindings()} walks the three gates back on directly; what stays lost is the
+        // unrecognised-member check everywhere else, and everything inside a Schema Object, which the
+        // 3.1/3.2 meta-schemas leave unconstrained regardless. `OpenApiUnevaluatedScopeTest` is the
+        // measured matrix of exactly that, row by row.
         $validator->parser()->setOption('allowUnevaluated', false);
 
         $validator->resolver()?->registerRaw($schema, 'https://docuccino.test/'.$format.'.json');
