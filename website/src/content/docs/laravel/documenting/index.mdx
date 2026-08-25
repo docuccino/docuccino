@@ -133,7 +133,7 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
-| [Data-leakage lint](/laravel/reference/configuration/#lint) | Warns when a schema property name looks sensitive (`password`, `token`, `secret`, `api_key`, …) before it ships — a diagnostic, never a mutation | Built in — always on | [`lint.leakage`](/laravel/reference/configuration/#lint) |
+| [Document lints](/laravel/reference/configuration/#lint) | Warns before you publish — a property, example or default that looks like a credential, an `operationId` no generated client can name a method after, an example the schema beside it rejects, and the rest of the [lint catalogue](/laravel/reference/configuration/#lint). Diagnostics only; a lint never changes a byte | Built in — each rule switchable | [`lint`](/laravel/reference/configuration/#lint) |
 
 ## How contributions combine
 
