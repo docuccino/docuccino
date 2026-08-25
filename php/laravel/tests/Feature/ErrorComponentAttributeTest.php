@@ -30,6 +30,7 @@ use Docuccino\Laravel\Tests\Fixtures\DeclaredErrors\ValidationFailedException;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Workbench\App\Http\Controllers\FormController;
 
 /**
@@ -65,6 +66,9 @@ const DECLARED_ERROR_ACTIONS = [
     'sixteenth' => DeclaredErrorsController::class.'::sixteenth',
     'seventeenth' => DeclaredErrorsController::class.'::seventeenth',
     'eighteenth' => DeclaredErrorsController::class.'::eighteenth',
+    'nineteenth' => DeclaredErrorsController::class.'::nineteenth',
+    'twentieth' => DeclaredErrorsController::class.'::twentieth',
+    'twentyFirst' => DeclaredErrorsController::class.'::twentyFirst',
 ];
 
 /**
@@ -346,6 +350,54 @@ it('lets an empty errorComponent: neither publish nor block the name beside it',
     expect($document['paths']['/api/zz-declared-eighteenth']['get']['responses']['410']['x-docuccino']['facts']['component'])
         ->toBe('RealName')
         ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid'))->toHaveCount(1);
+});
+
+it('reports an errorComponent: on a status that shares no error body', function (string $action, string $status): void {
+    // The argument names an ERROR component, and only an error body is ever published as one: the hoist
+    // groups 4xx and 5xx and nothing else. So a name below 400 is claimed, frozen into the facts, and
+    // then walked past — the same inert argument the whole branch exists to remove, one status over.
+    // Making it work instead would mean componentizing success responses, which is a different feature
+    // with document-wide byte impact and one the argument's own name could not describe.
+    $result = declaringBuild([$action => [UndeclaredException::class, 409]]);
+
+    $inert = diagnosticsCoded($result->diagnostics, 'attribute.error-component-unreachable');
+
+    expect($inert)->toHaveCount(1)
+        ->and($inert[0]->severity)->toBe(Severity::Warning)
+        ->and($inert[0]->message)->toContain('NotAnError')
+        ->and($inert[0]->message)->toContain($status.' is not an error status')
+        ->and($inert[0]->help)->toContain('4xx or 5xx');
+})->with([
+    ['nineteenth', '200'],
+    ['twentieth', '302'],
+]);
+
+it('reports an errorComponent: on a status a mapper turned into a $ref', function (): void {
+    // The Problem Details preset answers the whole status with a reference to a component it named where
+    // that component is defined, so there is no body here to carry another name. `ErrorResponsesExtension`
+    // has guarded the same path for the class anchor since it was written; it just did so in silence, and
+    // for an argument written AT the operation silence is the defect. Asked at Finalize because a status
+    // does not become a `$ref` until a mapper resolves, one phase after the claim is written.
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/zz-declared-twentyFirst', [DeclaredErrorsController::class, 'twentyFirst']);
+
+    app()->instance(TypeEngine::class, declaringEngine(['twentyFirst' => [NotFoundHttpException::class, 404]])());
+
+    $result = generateDocument(static function (array $raw): array {
+        $raw['error_responses'] = 'problem-details';
+
+        return $raw;
+    });
+
+    $unreachable = diagnosticsCoded($result->diagnostics, 'attribute.error-component-unreachable');
+
+    expect($result->document->toArray()['paths']['/api/zz-declared-twentyFirst']['get']['responses']['404']['$ref'])
+        ->toBe('#/components/responses/ProblemNotFound')
+        ->and($unreachable)->toHaveCount(1)
+        ->and($unreachable[0]->message)->toContain('NamesTheReference')
+        ->and($unreachable[0]->message)->toContain('is a reference to a shared component')
+        ->and($unreachable[0]->help)->toContain('Name the component at its own definition');
 });
 
 it('names an undeclared exception\'s error after its status, as it always did', function (): void {

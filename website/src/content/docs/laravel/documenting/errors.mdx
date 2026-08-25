@@ -775,6 +775,10 @@ representation of a status, the name is the status's — where two declarations 
 different components the nearer one wins, a method's over its controller's, the same way every other
 argument of the attribute settles.
 
+Where the name can reach nothing at all, the build says so with
+`attribute.error-component-unreachable`: on a status below `400`, which shares no error body, and on one
+a mapper answered with a `$ref` to a component that was named where that component is defined.
+
 #### When neither attribute is enough
 
 | | |

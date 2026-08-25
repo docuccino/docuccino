@@ -102,8 +102,10 @@ public function completeMfa(Request $request): SuccessData { /* … */ }
 ```
 
 Three things it does not do. It **renames a shared component; it does not create one** — a body only one
-operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares a body,
-so a name there names nothing. And a response component covers *every* representation of a status, so the
+operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares an
+error body, so a name there names nothing — and says so, with
+`attribute.error-component-unreachable`, as it does on a status a mapper answered with a `$ref` to a
+component named elsewhere. And a response component covers *every* representation of a status, so the
 name is the status's: where two declarations at one status name different components, the nearer one wins
 — the method's over the controller's, and the first written where both are on the same target — exactly
 as every other argument of the attribute settles. It outranks an `#[ErrorComponent]` on the exception

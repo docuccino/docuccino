@@ -123,6 +123,27 @@ final class DeclaredErrorsController
         return [];
     }
 
+    /** A name on a status that shares no error body — the argument is inert and has to say so. */
+    #[Response(status: 200, type: 'array{ok: bool}', description: 'OK', errorComponent: 'NotAnError')]
+    public function nineteenth(): array
+    {
+        return [];
+    }
+
+    /** The same, on the `3xx` half of the same rule. */
+    #[Response(status: 302, description: 'Found', errorComponent: 'NotAnError')]
+    public function twentieth(): array
+    {
+        return [];
+    }
+
+    /** A status a mapper turns into a `$ref`: the component it points at is named where it is defined. */
+    #[Response(status: 404, errorComponent: 'NamesTheReference')]
+    public function twentyFirst(): array
+    {
+        return [];
+    }
+
     /** An empty name is no name: it neither publishes nor stands in the way of the one beside it. */
     #[Response(status: 410, mediaType: 'application/problem+json', errorComponent: '')]
     #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'RealName')]
