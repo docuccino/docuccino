@@ -235,11 +235,11 @@ final class SchemaComparator
      */
     private function compareItems(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
-        $oldItems = $old['items'] ?? null;
-        $newItems = $new['items'] ?? null;
+        $oldItems = Hydrate::mapOrNull($old['items'] ?? null);
+        $newItems = Hydrate::mapOrNull($new['items'] ?? null);
 
-        if (is_array($oldItems) && is_array($newItems)) {
-            foreach ($this->compare(Arr::stringKeyed($oldItems), Arr::stringKeyed($newItems), $path.'.items', $id, $request) as $child) {
+        if ($oldItems !== null && $newItems !== null) {
+            foreach ($this->compare($oldItems, $newItems, $path.'.items', $id, $request) as $child) {
                 $changes[] = $child;
             }
         }
@@ -280,16 +280,21 @@ final class SchemaComparator
      */
     private static function properties(array $schema): array
     {
-        $properties = $schema['properties'] ?? null;
+        // Through `mapOrNull`, not `is_array`: a property whose schema is `{}` — unconstrained, the shape
+        // an un-inferrable property gets — arrives as a stdClass from any faithful read of an artifact,
+        // and dropping it here reported the property ADDED when both sides had it.
+        $properties = Hydrate::mapOrNull($schema['properties'] ?? null);
 
-        if (! is_array($properties)) {
+        if ($properties === null) {
             return [];
         }
 
         $out = [];
         foreach ($properties as $name => $value) {
-            if (is_array($value)) {
-                $out[(string) $name] = Arr::stringKeyed($value);
+            $property = Hydrate::mapOrNull($value);
+
+            if ($property !== null) {
+                $out[$name] = $property;
             }
         }
 
