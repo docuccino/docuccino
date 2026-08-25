@@ -285,10 +285,16 @@ it('classifies every keyword it gives a subschema position', function (): void {
 /*
  * The guard on the one shape of this defect a guard can catch: a stale SECOND copy of the set. Nine have
  * shipped — three in the example audit, two in the 3.0 downlevel, three in the canonicalizer, one in the
- * structural hash. So a constant anywhere in the packages naming three or more of these keywords is
+ * structural hash. So a declaration anywhere in the packages naming three or more of these keywords is
  * either one of the copies below — each stated for a reason that is not "which keywords carry
  * subschemas" — or a copy nobody has retired yet. The wider class is not copies at all and is described
  * in docs/design/uir-and-extensions.md §1 "The empty-object invariant".
+ *
+ * What it reads is a DECLARATION, tokenised ({@see literalSetDeclarations()}), rather than the one
+ * spelling `const array NAME = [` with single-quoted members: a set can be listed by an untyped const, a
+ * static property or a `match`, and a member can be written in either quote style. Every existing reader
+ * of the table is match-shaped, so that was the likeliest spelling of the next copy and the one the scan
+ * could not see.
  */
 it('keeps the subschema keyword set in one place, so no reader can carry a stale copy', function (): void {
     $sanctioned = [
@@ -320,22 +326,10 @@ it('keeps the subschema keyword set in one place, so no reader can carry a stale
             }
 
             $source = (string) file_get_contents($file->getPathname());
+            $relative = $package.'/src/'.str_replace($root.$package.'/src/', '', $file->getPathname());
 
-            // Split on the declaration and read each chunk up to its own closing bracket, so a
-            // one-line constant cannot swallow the multi-line one after it.
-            foreach (array_slice(preg_split('/const array /', $source) ?: [], 1) as $chunk) {
-                if (preg_match('/^([A-Za-z_]+) = \[/', $chunk, $declared) !== 1) {
-                    continue;
-                }
-
-                $body = preg_split('/\];/', $chunk)[0] ?? '';
-                preg_match_all("/'([^']+)'/", $body, $strings);
-
-                if (count(array_unique(array_intersect($strings[1], $positioned))) < 3) {
-                    continue;
-                }
-
-                $found[] = $package.'/src/'.str_replace($root.$package.'/src/', '', $file->getPathname()).'::'.$declared[1];
+            foreach (array_keys(literalSetDeclarations($source, $positioned)) as $declaration) {
+                $found[] = $relative.'::'.$declaration;
             }
         }
     }
@@ -345,6 +339,64 @@ it('keeps the subschema keyword set in one place, so no reader can carry a stale
 
     // Both directions: a new copy fails, and so does a scan that stopped seeing the sanctioned ones.
     expect($found)->toBe($sanctioned);
+});
+
+it('sees a keyword set listed any way PHP can list one, and nothing that merely uses one', function (): void {
+    // The scanner's own proof. Every spelling a copy could take — and the three shapes that name these
+    // keywords without listing them, each of which the guard flagged as a copy before it read grammar.
+    $source = <<<'PHP'
+        <?php
+
+        final class Copies
+        {
+            /** A docblock naming items, properties and allOf is prose. */
+            public const array TYPED = ['items', 'properties', 'allOf'];
+
+            public const UNTYPED_2 = ["items", "properties", "allOf"];
+
+            private static array $property = ['items', 'properties', 'allOf'];
+
+            public const array TABLE = ['items' => self::A, 'properties' => self::B, 'allOf' => self::C];
+
+            public const array SHORT = ['items', 'properties'];
+
+            // 'items', 'properties', 'allOf' in a comment is not a list.
+            public function matched(string $keyword): int
+            {
+                return match ($keyword) {
+                    'items', 'properties', 'allOf' => 1,
+                    default => 0,
+                };
+            }
+
+            public function reads(array $schema): bool
+            {
+                return isset($schema['items']) || isset($schema['properties']) || isset($schema['allOf']);
+            }
+
+            public function builds(): array
+            {
+                return [
+                    'items' => ['type' => 'string'],
+                    'properties' => ['a' => ['type' => 'string']],
+                    'allOf' => [['type' => 'string']],
+                ];
+            }
+        }
+        PHP;
+
+    $found = literalSetDeclarations($source, ['items', 'properties', 'allOf']);
+
+    // A typed const, an untyped one whose name carries a digit, a static property, a keyword-to-scalar
+    // table and a `match` are all five a list. `SHORT` names two, so it is under the threshold; `reads`
+    // dereferences one keyword three times; `builds` is a schema, and a schema is data.
+    expect($found)->toBe([
+        'TYPED' => 3,
+        'UNTYPED_2' => 3,
+        'property' => 3,
+        'TABLE' => 3,
+        'matched' => 3,
+    ]);
 });
 
 it('gives draft-07 dependencies no position, because one position cannot describe it', function (): void {

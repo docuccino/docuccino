@@ -452,6 +452,108 @@ function canonicalizerSchemaOrder(): array
 }
 
 /**
+ * Every DECLARATION in one PHP source that names $members as string literals three or more times over,
+ * as `declaration name => hit count`.
+ *
+ * The scan behind "one copy of a keyword set, in one place". It reads PHP's own grammar for the two
+ * halves rather than one spelling of each, because both spellings drifted: a set can be enumerated by
+ * a `const`, a static property or a `match`, and a member can be written in either quote style.
+ * Tokenising settles all of it at once — `T_CONSTANT_ENCAPSED_STRING` is both quote styles and neither
+ * a comment nor a docblock, and a declaration is whatever `const`, `function` or a property names,
+ * whether or not it carries a type.
+ *
+ * A `match` is not a declaration of its own, so a copy spelled as one is reported against the method
+ * holding it — which is the name a reader needs anyway.
+ *
+ * @param  list<string>  $members
+ * @return array<string, int>
+ */
+function literalSetDeclarations(string $source, array $members, int $threshold = 3): array
+{
+    /** @var list<PhpToken> $tokens */
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+    ));
+
+    $found = [];
+    $name = null;
+    $expect = null;
+
+    foreach ($tokens as $index => $token) {
+        if ($token->is([T_CONST, T_FUNCTION])) {
+            $expect = 'name';
+
+            continue;
+        }
+
+        // A property: `$members` after a modifier, with or without a type in between.
+        if ($token->is(T_VARIABLE) && ($tokens[$index + 1] ?? null)?->text === '=') {
+            foreach (array_slice($tokens, max(0, $index - 4), 4) as $before) {
+                if ($before->is([T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_READONLY])) {
+                    $name = ltrim($token->text, '$');
+
+                    break;
+                }
+            }
+
+            continue;
+        }
+
+        if ($expect === 'name' && $token->is(T_STRING)) {
+            $name = $token->text;
+            $expect = null;
+
+            continue;
+        }
+
+        if ($token->is(T_CONSTANT_ENCAPSED_STRING) && $name !== null) {
+            $literal = stripcslashes(substr($token->text, 1, -1));
+
+            if (in_array($literal, $members, true) && literalEnumerates($tokens, $index)) {
+                $found[$name][$literal] = true;
+            }
+        }
+    }
+
+    $out = [];
+    foreach ($found as $declaration => $hits) {
+        if (count($hits) >= $threshold) {
+            $out[$declaration] = count($hits);
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Whether the string literal at $index is LISTING a keyword rather than using one. A copy of a set
+ * enumerates its members; two other things name a member and are not copies at all:
+ *
+ *   - a subscript. `$schema['items']` dereferences one keyword. Code that reads three keywords in
+ *     three places is code doing its job, not a table going stale.
+ *   - a schema literal. `'properties' => [...]` keyed to more structure is a schema being BUILT, and a
+ *     schema is data. The real tables map a keyword to a scalar (`'items' => self::POSITION_SCHEMA`),
+ *     so the nested value is what tells the two apart.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function literalEnumerates(array $tokens, int $index): bool
+{
+    $before = $tokens[$index - 2] ?? null;
+    $opens = ($tokens[$index - 1] ?? null)?->text === '[';
+
+    // `$x['items']`, `foo()['items']`, `self::MAP['items']` — anything subscriptable before the bracket.
+    if ($opens && ($before?->is([T_VARIABLE, T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED]) === true
+        || in_array($before?->text, [']', ')'], true))) {
+        return false;
+    }
+
+    return ! (($tokens[$index + 1] ?? null)?->text === '=>'
+        && in_array(($tokens[$index + 2] ?? null)?->text, ['[', 'new'], true));
+}
+
+/**
  * Every schema keyword the product knows: the canonicaliser's member order and
  * {@see SchemaKeywords::classification()} unioned, sorted.
  *
