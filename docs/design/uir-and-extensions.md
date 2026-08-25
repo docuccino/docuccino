@@ -379,7 +379,7 @@ there is the wrong fix, for a reason the attribute's own shape gives: it carries
 and its two anchors are per-BODY by construction — an exception class raises one error, a render method
 answers with one body. An action is neither. It answers at every error status its validation, its
 authorisation and its throws produce, ordinarily four or five, and one name over all of them sends every one
-of them up the ladder to a content hash. That is the trade #186 refused for `#[IgnoreResponse]`: a visible
+of them up the ladder to a content hash. That is the same trade `#[IgnoreResponse]` refuses: a visible
 no-op swapped for an invisible wrong answer, here a wrong PUBLISHED NAME, which is the one thing this
 section exists to prevent. Reaching it would also mean a third producer consulting the attribute —
 `AttributeResponsesExtension` beside `ErrorResponsesExtension` and `HandlerResponseBuilder` — with a rule
