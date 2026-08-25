@@ -519,17 +519,36 @@ final class Canonicalizer
         return $position === null ? $this->canonicalizeGeneric($value) : $this->subschema($position, $value);
     }
 
+    /**
+     * A keyword's value read as the subschemas its position says are there. All three schema-carrying
+     * positions read each subschema the SAME way ({@see subschemaValue()}): a position tells us where
+     * a subschema sits, never what may stand in one.
+     */
     private function subschema(string $position, mixed $value): mixed
     {
         return match ($position) {
-            // A boolean is a schema in this position, and `not: false` means the opposite of
-            // `not: {}` — so only an array is read as a subschema.
-            SchemaKeywords::POSITION_SCHEMA => is_array($value) ? $this->canonicalizeSchema($value) : $value,
-            SchemaKeywords::POSITION_SCHEMA_MAP => $this->sortedMap($value, $this->canonicalizeSchema(...)),
-            SchemaKeywords::POSITION_SCHEMA_LIST => $this->mapList($value, $this->canonicalizeSchema(...)),
+            SchemaKeywords::POSITION_SCHEMA => $this->subschemaValue($value),
+            SchemaKeywords::POSITION_SCHEMA_MAP => $this->sortedMap($value, $this->subschemaValue(...)),
+            SchemaKeywords::POSITION_SCHEMA_LIST => $this->mapList($value, $this->subschemaValue(...)),
             SchemaKeywords::POSITION_STRING_LIST_MAP => $this->sortedMap($value, $this->canonicalizeStringList(...)),
             default => $this->canonicalizeGeneric($value),
         };
+    }
+
+    /**
+     * ONE subschema, wherever it sits. A boolean is a schema in every subschema position 2020-12 has,
+     * and it is the position's most load-bearing value: `not: false` means the opposite of `not: {}`,
+     * `properties: {a: false}` forbids the property rather than allowing anything, and `allOf: [false]`
+     * is satisfied by nothing rather than by everything. So it is published as written — including
+     * inside a map or a list, where reading each member as an object would invert three schemas into
+     * one and mint them a single `sch:` id.
+     *
+     * Anything else is not a schema at all, and becomes `{}`: a vague-but-valid schema beats a document
+     * no validator accepts.
+     */
+    private function subschemaValue(mixed $value): mixed
+    {
+        return is_bool($value) ? $value : $this->canonicalizeSchema($value);
     }
 
     /**

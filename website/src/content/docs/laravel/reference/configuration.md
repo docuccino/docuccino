@@ -549,7 +549,7 @@ with it.
 | `descriptions` | **off** | An operation publishing neither a summary nor a description. |
 | `operation_ids` | on | An `operationId` a generated client can't name a method after. |
 | `tags` | **off** | A tag your operations carry that [`tags.definitions`](#tags) never declares. |
-| `vacuous_union` | on | An `anyOf` whose empty `{}` branch accepts anything, so its typed branches add no constraint. |
+| `vacuous_union` | on | An `anyOf` whose unconstrained branch — `{}`, or the `true` that means the same — accepts anything, so its typed branches add no constraint. |
 | `examples` | on | A published example the schema beside it rejects. Its `allow` entries are JSON pointers, or the label the message names. |
 | `unpinned_redirect` | on | A redirect the document doesn't say exactly one thing about: the `3XX` range alone, or the range still standing beside a concrete 3xx. |
 
@@ -659,9 +659,9 @@ there would be noise. Turn it on when your `definitions` are meant to be the com
 
 ### Vacuous union
 
-`lint.vacuous-union` warns on an `anyOf` carrying an unconstrained `{}` branch: that branch accepts
-anything, so the typed branches beside it add no constraint and the schema validates like `mixed` while
-reading like a contract. It's the trace of an honest widening — one arm of the union recovered as
+`lint.vacuous-union` warns on an `anyOf` carrying an unconstrained branch — `{}`, or the `true` that says
+the same thing: that branch accepts anything, so the typed branches beside it add no constraint and the
+schema validates like `mixed` while reading like a contract. It's the trace of an honest widening — one arm of the union recovered as
 "anything" — and what it cost is the shape your consumer would otherwise have validated against. The
 finding names the operation and the JSON pointer, so you can go to the arm and pin it with a return
 docblock or a [`#[Response]`](/laravel/reference/attributes/#response) on the action.
