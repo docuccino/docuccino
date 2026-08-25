@@ -300,7 +300,7 @@ as its own losses. The first group below is what 3.1 already gives up; the rest 
 | `exclusiveMinimum: 0` | `minimum: 0` with `exclusiveMinimum: true` |
 | `contentEncoding: base64` | `format: byte` |
 | A `description` beside a `$ref` | Hoisted, with the `$ref` moved into an `allOf` |
-| `$anchor`, `$defs`, `$id`, `$schema`, `contains`, `contentMediaType`, `dependentRequired`, `dependentSchemas`, `else`, `if`, `maxContains`, `minContains`, `patternProperties`, `prefixItems`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` | Dropped — 3.0 cannot express them |
+| `$anchor`, `$defs`, `$id`, `$schema`, `additionalItems`, `contains`, `contentMediaType`, `contentSchema`, `definitions`, `dependentRequired`, `dependentSchemas`, `else`, `if`, `maxContains`, `minContains`, `patternProperties`, `prefixItems`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` | Dropped — 3.0 cannot express them |
 | `webhooks`, `components.pathItems`, `info.summary` | Dropped — 3.0 has no such member |
 | An SPDX `info.license.identifier` | `info.license.url`, pointing at the SPDX page |
 | A `mutualTLS` security scheme | Dropped, along with every requirement that named it |
