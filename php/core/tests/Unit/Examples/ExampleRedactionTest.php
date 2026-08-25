@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Docuccino\Core\Examples\ExampleRedaction;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
-use Docuccino\Core\Support\EmptyObject;
 
 /**
  * A recorded body is captured from a live request and published in a document, so this is the part of
@@ -191,9 +190,9 @@ it('finds nothing in a body the recorder already cleaned', function (): void {
 it('leaves an empty object an empty object', function (): void {
     [$body, $pointers] = (new ExampleRedaction)->apply(['meta' => (object) []]);
 
-    // The shared instance, not merely an equal one: a walk that rebuilds every map hands back a `{}`
-    // no longer `===` the one it was given, and two builds of one body stop comparing equal.
-    expect($body['meta'])->toBe(EmptyObject::get())
+    // A walk that rebuilds every map must hand back a `{}` and not the `[]` a PHP array shares with it.
+    expect($body['meta'])->toBeInstanceOf(stdClass::class)
+        ->and(json_encode($body))->toBe('{"meta":{}}')
         ->and($pointers)->toBe([]);
 });
 

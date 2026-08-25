@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\OperationFragment;
-use Docuccino\Core\Support\EmptyObject;
 
 /**
  * A restored fragment has to hold the values the build put into it, and JSON is the storage. PHP's
@@ -79,10 +78,9 @@ it('restores an empty object as an object, not as the empty list it shares a PHP
     // `{}` is what a free-form map's example most often is, and an associative decode read it back as
     // `[]`: the warm build published `"example": []` beside `type: object`, hashed the document off
     // those bytes, and had the example lint report a mismatch the cold build never saw.
-    $restored = fidelityRoundTrip(['type' => 'object', 'example' => EmptyObject::get()]);
+    $restored = fidelityRoundTrip(['type' => 'object', 'example' => new stdClass]);
 
-    // The shared instance, so the restored fragment is still `===`-comparable with a freshly built one.
-    expect($restored['example'])->toBe(EmptyObject::get())
+    expect($restored['example'])->toBeInstanceOf(stdClass::class)
         ->and(json_encode($restored))->toBe('{"type":"object","example":{}}');
 });
 
@@ -95,7 +93,7 @@ it('restores an object whose member names look like indexes as an object', funct
 });
 
 it('restores a nested empty object, since an example is a whole value and not just its top level', function (): void {
-    $restored = fidelityRoundTrip(['example' => ['meta' => EmptyObject::get(), 'tags' => []]]);
+    $restored = fidelityRoundTrip(['example' => ['meta' => new stdClass, 'tags' => []]]);
 
     expect(json_encode($restored))->toBe('{"example":{"meta":{},"tags":[]}}');
 });

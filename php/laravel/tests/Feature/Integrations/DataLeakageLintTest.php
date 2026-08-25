@@ -43,7 +43,7 @@ it('does not mutate the emitted document (diagnostics only)', function (): void 
         return $raw;
     })->document->toArray();
 
-    expect($withLint)->toBe($withoutLint);
+    expect(graphDifferences($withLint, $withoutLint))->toBe([]);
 });
 
 it('silences a property via the config safelist', function (): void {

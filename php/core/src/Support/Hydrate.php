@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Support;
 
+use stdClass;
+
 /**
  * Hydration helpers for the JSON boundary. Decoded UIR/OAS data is `array<mixed, mixed>`; these
  * coerce members to the narrow shapes the document model expects, dropping anything malformed.
@@ -48,6 +50,26 @@ final class Hydrate
     public static function map(mixed $value): array
     {
         return is_array($value) ? Arr::stringKeyed($value) : [];
+    }
+
+    /**
+     * A STRUCTURAL map however it was spelled — an array, or the {@see stdClass} that `{}` and an
+     * index-keyed object arrive as. Null when the value is not a map at all.
+     *
+     * {@see JsonValue} keeps those two spellings apart because free-form DATA needs it: an `example: {}`
+     * read back as `[]` publishes a lie. A schema, a `properties` entry, an `items` is a map in either
+     * spelling — so a reader there that tests `is_array()` alone does not degrade, it DROPS the node,
+     * and a comparison that never sees a member reports it added.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function mapOrNull(mixed $value): ?array
+    {
+        if ($value instanceof stdClass) {
+            return Arr::stringKeyed(get_object_vars($value));
+        }
+
+        return is_array($value) ? Arr::stringKeyed($value) : null;
     }
 
     /**

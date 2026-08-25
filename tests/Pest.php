@@ -33,6 +33,7 @@ use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
@@ -415,20 +416,42 @@ function componentRefsIn(mixed $node, string $bucket): array
 }
 
 /**
+ * A committed fixture document, read the way the product reads one.
+ *
+ * Through {@see JsonValue}, never `json_decode(…, true)`: the harness is a READER of documents, so an
+ * associative decode here is the same wrong answer it is anywhere else — a fixture holding `example: {}`
+ * loads as `[]` and re-emits as `[]`, and every assertion downstream agrees with itself about the wrong
+ * document. The canonicaliser rescues the structural positions, because a keyword contract knows they
+ * are maps; an example is free-form data and the loss is permanent.
+ *
  * @return array<string, mixed>
  */
 function loadFixture(string $name): array
 {
-    $path = dirname(__DIR__).'/php/core/tests/Fixtures/'.$name;
+    return loadDocument(dirname(__DIR__).'/php/core/tests/Fixtures/'.$name);
+}
+
+/**
+ * Any committed document on disk, read the same way. {@see loadFixture} for why it is not a plain
+ * associative decode.
+ *
+ * @return array<string, mixed>
+ */
+function loadDocument(string $path): array
+{
     $contents = file_get_contents($path);
 
     if ($contents === false) {
-        throw new RuntimeException('Fixture not found: '.$path);
+        throw new RuntimeException('Document not found: '.$path);
+    }
+
+    $decoded = JsonValue::decode($contents);
+
+    if (! is_array($decoded)) {
+        throw new RuntimeException('Not a JSON object: '.$path);
     }
 
     /** @var array<string, mixed> $decoded */
-    $decoded = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
-
     return $decoded;
 }
 
@@ -787,6 +810,141 @@ function referencesIn(string $directory, string $pattern): array
 }
 
 /**
+ * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php:LINE`
+ * strings — the scan behind the one-reader rule ({@see JsonValue}).
+ *
+ * Associative means any spelling that asks for arrays rather than objects, because a guard must read the
+ * same grammar as the thing it guards: a positional `true`, a named `associative: true`, and the
+ * `JSON_OBJECT_AS_ARRAY` flag that means the same thing without the argument. `null` and a missing second
+ * argument are not it — those honour the flags and default to objects respectively.
+ *
+ * Tokenised rather than grepped, for the reason {@see referencesIn} tokenises: it draws the
+ * string-and-comment line for free, so `'json_decode($x, true)'` inside a message or a doc example is
+ * not a call. The counter-file in `JsonReaderArchTest` is that claim proved rather than asserted.
+ *
+ * @return list<string>
+ */
+function associativeJsonDecodesIn(string $directory): array
+{
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
+
+    $found = [];
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = str_replace(dirname($directory, 3).'/', '', $file->getPathname());
+
+        foreach (associativeJsonDecodeLines((string) file_get_contents($file->getPathname())) as $line) {
+            $found[] = $relative.':'.$line;
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
+ * The line of every associative `json_decode` call in one source. {@see associativeJsonDecodesIn}.
+ *
+ * @return list<int>
+ */
+function associativeJsonDecodeLines(string $source): array
+{
+    /** @var list<PhpToken> $tokens */
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+    ));
+
+    $lines = [];
+
+    foreach ($tokens as $index => $token) {
+        // A method or constant of the same name is somebody else's function, not this one.
+        if (! $token->is(T_STRING) || strcasecmp($token->text, 'json_decode') !== 0) {
+            continue;
+        }
+
+        $previous = $tokens[$index - 1] ?? null;
+        if ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION])) {
+            continue;
+        }
+
+        if (($tokens[$index + 1] ?? null)?->text !== '(') {
+            continue;
+        }
+
+        if (jsonDecodeAsksForArrays(array_slice($tokens, $index + 2))) {
+            $lines[] = $token->line;
+        }
+    }
+
+    return $lines;
+}
+
+/**
+ * Whether the argument list starting at $tokens (just past the opening paren) asks for arrays.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function jsonDecodeAsksForArrays(array $tokens): bool
+{
+    $depth = 0;
+    $argument = 0;
+    $named = null;
+
+    foreach ($tokens as $index => $token) {
+        if (in_array($token->text, ['(', '[', '{'], true)) {
+            $depth++;
+
+            continue;
+        }
+
+        if (in_array($token->text, [')', ']', '}'], true)) {
+            if ($depth === 0) {
+                return false;
+            }
+            $depth--;
+
+            continue;
+        }
+
+        if ($depth > 0) {
+            continue;
+        }
+
+        if ($token->text === ',') {
+            $argument++;
+            $named = null;
+
+            continue;
+        }
+
+        // `associative:` / `flags:` — a named argument fixes the slot whatever its position.
+        if ($token->is(T_STRING) && ($tokens[$index + 1] ?? null)?->text === ':') {
+            $named = strtolower($token->text);
+
+            continue;
+        }
+
+        // The flag spelling of the same request, wherever it sits in a `|` chain.
+        if ($token->is(T_STRING) && strcasecmp($token->text, 'JSON_OBJECT_AS_ARRAY') === 0) {
+            return true;
+        }
+
+        $isSecondSlot = $named === 'associative' || ($named === null && $argument === 1);
+
+        if ($isSecondSlot && $token->is(T_STRING) && strcasecmp($token->text, 'true') === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Every namespaced name one PHP source names in code, once each and without a leading backslash:
  * `use` imports (grouped ones expanded) and inline references alike. The `namespace` declaration is
  * not one of them — a file does not import itself.
@@ -1097,6 +1255,57 @@ function removeFragmentCacheDirs(string $slug): void
 }
 
 /**
+ * Every position where two document graphs disagree, one line each — `===` in every respect except
+ * that two `stdClass` standing for the same JSON object are the same value however they were minted.
+ *
+ * That exception is the whole reason this exists rather than a `toBe`. A JSON object a PHP array cannot
+ * hold (`{}`, `{"0":"a","1":"b"}`) is minted fresh wherever it is produced, so `===` reads two builds of
+ * ONE application as different documents. Everything else stays strict, deliberately: key order, key
+ * type, and an integer-valued float against the int — which is exactly what a `==` walk would lose and
+ * what the caller below is looking for.
+ *
+ * @return list<string>
+ */
+function graphDifferences(mixed $a, mixed $b, string $pointer = ''): array
+{
+    $at = $pointer === '' ? '/' : $pointer;
+    $describe = static fn (mixed $v): string => get_debug_type($v).' '.(is_scalar($v) ? var_export($v, true) : '');
+
+    if ($a instanceof stdClass || $b instanceof stdClass) {
+        return $a instanceof stdClass && $b instanceof stdClass
+            ? graphDifferences(get_object_vars($a), get_object_vars($b), $pointer)
+            : [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+    }
+
+    if (is_array($a) || is_array($b)) {
+        if (! is_array($a) || ! is_array($b)) {
+            return [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+        }
+
+        if (array_keys($a) !== array_keys($b)) {
+            return [sprintf(
+                '%s: a is keyed [%s], b is keyed [%s]',
+                $at,
+                implode(', ', array_map(strval(...), array_keys($a))),
+                implode(', ', array_map(strval(...), array_keys($b))),
+            )];
+        }
+
+        $differences = [];
+        foreach ($a as $key => $value) {
+            $differences = [
+                ...$differences,
+                ...graphDifferences($value, $b[$key], $pointer.'/'.str_replace(['~', '/'], ['~0', '~1'], (string) $key)),
+            ];
+        }
+
+        return $differences;
+    }
+
+    return $a === $b ? [] : [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+}
+
+/**
  * WARM == COLD. Warm the fragment cache on `$before`, document `$after` against that warm cache, then
  * document `$after` again in a fresh cache directory, and hold the two to the same bytes AND the same
  * diagnostics.
@@ -1135,8 +1344,9 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
             // integer-valued float indistinguishable from the int — so equal bytes are not equal builds.
             // Overlays, transformers, lints and the differ all read the document in the shape below,
             // which is where a value restored in another type, or a bucket restored in another order,
-            // actually shows.
-            ->and($warm->document->toArray())->toBe($cold->document->toArray())
+            // actually shows. Not `toBe`: `===` reads two independently minted `{}` as different values
+            // ({@see graphDifferences}, which keeps every distinction `===` makes but that one).
+            ->and(graphDifferences($warm->document->toArray(), $cold->document->toArray()))->toBe([])
             ->and(diagnosticRecords($warm->diagnostics))->toBe(diagnosticRecords($cold->diagnostics));
 
         // …and the warm build really was warm. Every row shares at least one route with `$before`, so

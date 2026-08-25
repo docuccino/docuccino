@@ -6,11 +6,13 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
+use Docuccino\Core\Emit\Formats;
 use Docuccino\Core\Emit\OpenApi30DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi31DownlevelEmitter;
 use Docuccino\Core\Emit\OpenApi32Emitter;
 use Docuccino\Core\Emit\ReportingEmitter;
 use Docuccino\Core\SpecValidation\Validator;
+use Docuccino\Core\Tests\Support\EmittedDocument;
 
 /**
  * The 3.0 downlevel. It chains off the 3.1 emitter, so the tests here cover only what 3.0 itself
@@ -55,6 +57,25 @@ it('emits OpenAPI 3.0 JSON byte-identical to the committed golden', function ():
     $document = UirDocument::fromArray(downlevelFixture());
 
     expect((new OpenApi30DownlevelEmitter)->emit($document))->toBe(loadGolden('downlevel.openapi30.json'));
+});
+
+/**
+ * The one assertion in this file that can see a MAP. Everything else here reads the emission with an
+ * associative `json_decode`, which answers a PHP array for `{}` and for `[]` alike — so a downlevel that
+ * turned a map into a sequence, or dropped an empty one, passed every test on this page. This emitter is
+ * where an empty map is most likely to appear, because 3.0 is what strips a keyword down to nothing.
+ */
+it('downlevels to a 3.0 JSON and YAML that agree on every map, sequence and scalar', function (): void {
+    $document = UirDocument::fromArray(downlevelFixture());
+
+    $json = json_decode(Formats::emit('openapi-3.0', $document, new EmitOptions)->output, flags: JSON_THROW_ON_ERROR);
+    $yaml = EmittedDocument::parseYaml(Formats::emit('openapi-3.0', $document, (new EmitOptions)->withYaml())->output);
+
+    expect(EmittedDocument::differences($json, $yaml))->toBe([])
+        // Anti-vacuity, and the reason this document is the right subject: the downlevel produces empty
+        // maps, so the comparison above has the shape it exists to check.
+        ->and(EmittedDocument::emptyMaps($json))->not->toBeEmpty()
+        ->and(EmittedDocument::nodes($json))->toBeGreaterThan(100);
 });
 
 it('keeps the downlevel fixture valid against the bundled UIR schema', function (): void {
