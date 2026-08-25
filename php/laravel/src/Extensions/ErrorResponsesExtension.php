@@ -165,7 +165,7 @@ final class ErrorResponsesExtension implements OperationExtension
                 ),
                 source: $context->actionSource(),
                 routeSignature: $context->route->signature(),
-                help: 'Put it on the exception class the error is raised from, or on the render method that builds the body. For a body the operation declares itself, name it with the `component:` argument of the #[Response] that declares it.',
+                help: 'Put it on the exception class the error is raised from, or on the render method that builds the body. For a body the operation declares itself, name it with the `errorComponent:` argument of the #[Response] that declares it.',
             ));
         }
     }

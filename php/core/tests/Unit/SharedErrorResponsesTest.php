@@ -1483,7 +1483,7 @@ it('reports a whole-response name two different bodies contest, rather than pick
         ->and($collision)->toHaveCount(1)
         // …and the help names both anchors that can settle it, and no action that cannot.
         ->and($collision[0]->help)->toContain('#[ErrorComponent]')
-        ->and($collision[0]->help)->toContain('component: argument of the #[Response]')
+        ->and($collision[0]->help)->toContain('errorComponent: argument of the #[Response]')
         ->and($collision[0]->help)->not->toContain('state one body');
 });
 

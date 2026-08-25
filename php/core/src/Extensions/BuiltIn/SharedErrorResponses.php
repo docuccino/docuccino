@@ -925,7 +925,7 @@ final class SharedErrorResponses implements DocumentTransformer
                 help: ($incumbent
                     ? 'The component already holding the name was published before this pass ran and cannot move. Give the error body a name of its own, or rename the component holding this one, and it publishes under a plain name again.'
                     : 'A shared error body is named after its status unless something names it, and a name belongs to one body only while it holds it alone. Nothing to do if these really are different errors and the derived names read well enough; otherwise give each body a name of its own — one name per body, since a name spread over an exception family, or over a method answering at several statuses, is contested the same way.'
-                ).' Name a body that arises from a throw with #[ErrorComponent] on the exception class or its render method; name one the operation declares itself with the component: argument of the #[Response] that declares it.'
+                ).' Name a body that arises from a throw with #[ErrorComponent] on the exception class or its render method; name one the operation declares itself with the errorComponent: argument of the #[Response] that declares it.'
                     .($bucket === 'schemas' ? ' A name reaches the shape under a response only where the response states one representation; a response offering several says nothing about which of them is the one it named.' : ''),
             );
         }

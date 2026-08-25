@@ -73,7 +73,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $mediaType = null,
-    public ?string $component = null,
+    public ?string $errorComponent = null,
 )
 ```
 
@@ -87,14 +87,17 @@ producer had documented the same body under, which the default deliberately does
 public function show(int $id): UserResource { /* … */ }
 ```
 
-`component:` names the [shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
-the status's error response publishes under — the anchor for a body the operation declares itself, which
-[`#[ErrorComponent]`](#errorcomponent) never sees because it names errors where they are *defined*. It
-names the response in `components.responses`, and the shape under it where the status states one
-representation; `type:` already names the schema after the class it points at.
+`errorComponent:` names the [shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+the status's error response publishes under. It and [`#[ErrorComponent]`](#errorcomponent) differ by what
+they are *about*, not by which bodies they can reach: that one names an error where the error is defined,
+so every operation answering with it publishes the same name, and this one names **one status of one
+operation**, whatever produced the body — a body the operation declares itself, and equally one an
+exception the action throws produced, where it wins as the declaration nearest the operation. It names the
+response in `components.responses`, and the shape under it where the status states one representation;
+`type:` already names the schema after the class it points at.
 
 ```php
-#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', component: 'AuthenticationChallenge')]
+#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
 public function completeMfa(Request $request): SuccessData { /* … */ }
 ```
 
@@ -700,14 +703,14 @@ controller method, and nothing reads it there: it names an error where the error
 an operation happens to answer with it. An action is where several errors meet and the attribute carries
 no status, so there is nothing for it to name — a placement that does nothing is reported as
 `attribute.error-component-unread`. To name a body **the operation declares itself**, with `#[Response]`,
-use that attribute's [`component:`](#response) argument, which has the status and the media type written
+use that attribute's [`errorComponent:`](#response) argument, which has the status and the media type written
 beside it.
 
 What it does not name is one body a response offers *beside* another. Where a response states two
 representations — an RFC 9457 problem body under `application/problem+json` and a plain-JSON alternative,
 say — each shape publishes under its status, and so does the response: a name standing for the whole
 response cannot say which representation it means, so the response is named after the components its
-representations reference instead. A name written on the operation with `#[Response(component:)]` *is*
+representations reference instead. A name written on the operation with `#[Response(errorComponent:)]` *is*
 about the whole response, and does name it.
 
 Where several methods on one render path carry it, the one **nearest the answer** wins: the arm that

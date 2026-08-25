@@ -362,7 +362,7 @@ status default stands, and `attribute.error-component-contested` names both clas
 had already named the body, in which case neither declaration was ever in the running and there is
 nothing for the reader to reconcile, so nothing is reported.
 
-**The action is not a third anchor, and `#[Response(component:)]` is what stands in its place.** `TARGET_METHOD`
+**The action is not a third anchor, and `#[Response(errorComponent:)]` is what stands in its place.** `TARGET_METHOD`
 lets PHP accept `#[ErrorComponent]` on a controller method and `AttributeCollector` materialises it, so an
 author naming the error they want renamed on the action answering it got their old names back and nothing
 said why — the reported case, and the placement is now `attribute.error-component-unread`. Making it READ
@@ -376,7 +376,7 @@ section exists to prevent. Reaching it would also mean a third producer consulti
 `AttributeResponsesExtension` beside `ErrorResponsesExtension` and `HandlerResponseBuilder` — with a rule
 for choosing among an operation's statuses that the attribute gives it no way to write.
 
-`#[Response]` gives it one. That attribute already states a status and a media type, so `component:` on it
+`#[Response]` gives it one. That attribute already states a status and a media type, so `errorComponent:` on it
 is unambiguous, and it is the only anchor that reaches a body **nothing threw**: `#[ErrorComponent]` is read
 off the exception classes a route signals and the render methods on their path, and a `4xx` an operation
 declares for itself is on neither. It claims through the same `claimComponentName()` at `attribute`, so

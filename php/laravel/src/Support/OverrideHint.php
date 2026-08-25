@@ -130,7 +130,7 @@ final class OverrideHint
             // Not a member of the response at all — it is the name the shared error body is published
             // under. Two anchors write it, and the one nearest the operation is the one to name here.
             $field === 'component' => sprintf(
-                "#[Response(status: %s, component: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method",
+                "#[Response(status: %s, errorComponent: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method",
                 $status,
             ),
             $field === 'headers' => sprintf("#[ResponseHeader(name: 'X-Total', status: %s)]", $status),

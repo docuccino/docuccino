@@ -228,7 +228,7 @@ it('publishes a declared error response under the name its #[Response] gives it'
 it('takes the nearest name when two #[Response] declarations name one status differently', function (): void {
     // A response component covers every representation of a status, so a status has one name — and which
     // one is the question the guard answers for every other field of the attribute: the first writer over
-    // a most-specific-first set, so the nearest declaration wins. `component:` settles no differently, and
+    // a most-specific-first set, so the nearest declaration wins. `errorComponent:` settles no differently, and
     // the name that lost is on the provenance trail where every other shadowed value is.
     $result = declaringBuild([
         'eleventh' => [UndeclaredException::class, 409],
@@ -295,7 +295,7 @@ it('keeps an exception class\'s name off a response answering with more than its
 it('lets an action\'s component: beat the one its base controller declares', function (): void {
     // `AttributeCollector` walks the controller's parents, and the set it builds is most-specific-first
     // precisely so a child's declaration beats the base's. Every other `#[Response]` field settles that
-    // way — the guard takes the first writer at equal contribution — and `component:` settles that way
+    // way — the guard takes the first writer at equal contribution — and `errorComponent:` settles that way
     // too, so a base-controller default overridden on one action is an override rather than a standoff.
     /** @var Router $router */
     $router = app('router');

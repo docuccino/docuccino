@@ -628,7 +628,7 @@ you chose. A response that offers two representations — a problem body and a p
 is a different thing: calling either shape `ResourceMissing` would say it is the error when it may be the
 alternative beside it, and so would calling the response that offers both. Such a response is named after
 the components its representations reference, and each shape publishes under its status. See
-[Name a response you declared yourself](#name-a-response-you-declared-yourself) for the way to override
+[Name one operation's error](#name-one-operations-error-wherever-the-body-came-from) for the way to override
 that.
 
 **It names errors where they are defined, so it does not go on the action.** PHP will let you write
@@ -745,19 +745,22 @@ returns each body inline has nowhere to put one, so give the arms that need name
 is what the example above does.
 :::
 
-**Precedence, in order:** `#[Response(component:)]` on the operation, then the name a mapper gave the body
+**Precedence, in order:** `#[Response(errorComponent:)]` on the operation, then the name a mapper gave the body
 it built, then `#[ErrorComponent]` on the render method, then `#[ErrorComponent]` on the exception class,
 then the status default in the table above. The chain resolves to the first mapper that answers, so a
 mapper that must beat the renderer Docuccino read orders itself ahead of it.
 
-#### Name a response you declared yourself
+#### Name one operation's error, wherever the body came from
 
-`#[ErrorComponent]` names errors where they are defined — an exception class, or the method that renders
-one. A `4xx` your operation **declares**, with `#[Response]`, has no such place: nothing was thrown and
-no renderer built it, so neither anchor ever sees it. Name it on the declaration:
+`#[ErrorComponent]` names an error where the error is *defined* — an exception class, or the method that
+renders one — so every operation answering with it publishes that name. `#[Response(errorComponent:)]`
+names **one status of one operation**, and it does not care what produced the body. That covers the case
+neither `#[ErrorComponent]` anchor can reach at all — a `4xx` your operation declares, where nothing was
+thrown and no renderer built it — and equally a body an exception the action throws produced, where it
+simply wins as the declaration nearest the operation:
 
 ```php
-#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', component: 'AuthenticationChallenge')]
+#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
 public function completeMfa(Request $request): SuccessData { /* … */ }
 ```
 

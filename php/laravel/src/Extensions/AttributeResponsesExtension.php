@@ -109,7 +109,7 @@ final class AttributeResponsesExtension implements OperationExtension
     private function claimDeclaredComponent(ResponseDraft $response, Response $attribute, RouteContext $context): void
     {
         $response->claimComponentName(
-            $attribute->component,
+            $attribute->errorComponent,
             Contribution::attribute($context->actionSource(), specificity: 1),
             namesResponse: true,
         );

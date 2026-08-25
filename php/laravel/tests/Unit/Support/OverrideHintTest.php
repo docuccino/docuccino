@@ -43,7 +43,7 @@ it('names the attribute that writes a response', function (string $label, string
     // `component` is not a member of the response at all — it is the shared error body's published
     // name, written by two anchors and by no other argument of #[Response]. The one nearest the
     // operation leads, since it is the one that reaches a body nothing threw.
-    'a shared error name' => ['responses.404', 'component', "#[Response(status: 404, component: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method"],
+    'a shared error name' => ['responses.404', 'component', "#[Response(status: 404, errorComponent: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method"],
 ]);
 
 it('falls back to the generic truth wherever no attribute writes the field', function (string $label, string $field): void {

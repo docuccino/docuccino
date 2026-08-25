@@ -62,27 +62,27 @@ final class DeclaredErrorsController
         return [];
     }
 
-    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', component: 'DeclaredGone')]
+    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'DeclaredGone')]
     public function ninth(): array
     {
         return [];
     }
 
-    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', component: 'DeclaredGone')]
+    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'DeclaredGone')]
     public function tenth(): array
     {
         return [];
     }
 
-    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', component: 'DeclaredGone')]
-    #[Response(status: 410, mediaType: 'application/problem+json', component: 'SecondName')]
+    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'DeclaredGone')]
+    #[Response(status: 410, mediaType: 'application/problem+json', errorComponent: 'SecondName')]
     public function eleventh(): array
     {
         return [];
     }
 
     /** Names the 409 the error tiers build, over the `#[ErrorComponent]` its thrown exception declares. */
-    #[Response(status: 409, description: 'Conflict', component: 'DeclaredConflict')]
+    #[Response(status: 409, description: 'Conflict', errorComponent: 'DeclaredConflict')]
     public function twelfth(): array
     {
         return [];
