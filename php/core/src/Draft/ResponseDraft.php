@@ -134,18 +134,13 @@ final class ResponseDraft
      * above it, so a name a `$ref` cannot point at never reaches the document — whether or not the
      * shared-error hoist, which is the only thing that would have refused it, is switched on.
      *
-     * `$isStatusDefault` is how a producer says the name is the one it derives from the status rather
-     * than one anything named — the difference between "nobody has named this body" and "this body is
-     * called that". Only the writer knows it: a later reader comparing the value against the default
-     * table cannot tell a deliberate `#[ErrorComponent("NotFound")]` on a 404 from the default it
-     * happens to spell.
-     *
-     * `$namesResponse` is the same kind of statement one level up: that the name describes every
-     * representation the status answers with, and not merely the body this claimer built. A producer
-     * names the error it rendered and cannot see what another put beside it, so it says nothing here;
-     * something naming the response AT the operation — an annotation, an overlay, a config entry — can,
-     * and only it knows so. The hoist reads it back to decide whether the name may reach a response
-     * stating several representations ({@see COMPONENT_NAMES_RESPONSE}).
+     * Both flags are statements only the WRITER can make, which is why they travel with the write rather
+     * than being computed back off the finished response. `$isStatusDefault`: the name is the one derived
+     * from the status, not one anything chose — a reader cannot tell a deliberate
+     * `#[ErrorComponent("NotFound")]` on a 404 from the default it happens to spell. `$namesResponse`:
+     * the name describes every representation the status answers with, which is what lets the hoist take
+     * it to a response stating several ({@see COMPONENT_NAMES_RESPONSE}, and the design doc's
+     * "Shared error components" for why a producer can never say it).
      */
     public function claimComponentName(?string $name, Contribution $by, bool $isStatusDefault = false, bool $namesResponse = false): PatchResult
     {
