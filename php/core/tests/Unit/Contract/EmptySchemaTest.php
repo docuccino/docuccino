@@ -120,7 +120,9 @@ it('publishes an empty object at every object-valued schema keyword, and reads e
     // Anti-vacuity, and the reason this reads the table instead of listing: a hand dataset here was
     // short by three keywords for as long as it existed, and every assertion below still passed.
     expect(count($keywords))->toBeGreaterThan(10)
-        ->and($keywords)->toContain('additionalProperties', 'unevaluatedProperties', 'unevaluatedItems', 'additionalItems');
+        ->and($keywords)->toContain('additionalProperties', 'unevaluatedProperties', 'unevaluatedItems', 'additionalItems')
+        // 2020-12's `contentSchema`, and the draft-07 spellings an overlay may legitimately carry.
+        ->and($keywords)->toContain('contentSchema', 'definitions');
 
     $serializer = new CanonicalJsonSerializer;
 
@@ -147,7 +149,7 @@ it('orders every object-valued keyword rather than leaving it to sort with the d
     $ordered = $matches[1];
 
     // A scan that stopped matching would turn this into a test of nothing.
-    expect($ordered)->toHaveCount(55)
+    expect($ordered)->toHaveCount(57)
         ->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items');
 
     expect(array_values(array_diff(objectValuedKeywords(), $ordered)))->toBe([]);

@@ -37,10 +37,18 @@ final class SchemaKeywords
      * there is not a schema at all, and the position is the only thing that knows the difference.
      *
      * Consequently a keyword named here needs no further entry anywhere: the canonicalizer derives
-     * how to canonicalise it, the structural hash derives where to recurse, and the contract checker
-     * derives what to repair. The one thing still stated by hand is the ORDER the canonicalizer
+     * how to canonicalise it, the structural hash derives where to recurse, the contract checker
+     * derives what to repair, the example audit derives where to descend, and the 3.0 downlevel
+     * derives where to convert. The one thing still stated by hand is the ORDER the canonicalizer
      * publishes members in, which is a normative choice rather than a fact about the keyword — and
      * a guard holds that list against this one.
+     *
+     * Draft-07's `dependencies` is the one subschema-carrying keyword with no row here, and cannot
+     * have one: each of its members is EITHER a subschema or a list of property names, so what a
+     * member is follows from the member's own value rather than from the keyword. One position
+     * cannot say that, and a reader picking either answer would be wrong half the time — so it is
+     * left unpositioned, which every reader treats as data and none rewrites. `dependentSchemas`
+     * and `dependentRequired`, the 2020-12 split of exactly that keyword, are both here.
      *
      * @var array<string, string>
      */
@@ -50,7 +58,9 @@ final class SchemaKeywords
         'allOf' => self::POSITION_SCHEMA_LIST,
         'anyOf' => self::POSITION_SCHEMA_LIST,
         'contains' => self::POSITION_SCHEMA,
+        'contentSchema' => self::POSITION_SCHEMA,
         '$defs' => self::POSITION_SCHEMA_MAP,
+        'definitions' => self::POSITION_SCHEMA_MAP,
         'dependentRequired' => self::POSITION_STRING_LIST_MAP,
         'dependentSchemas' => self::POSITION_SCHEMA_MAP,
         'else' => self::POSITION_SCHEMA,
@@ -119,6 +129,9 @@ final class SchemaKeywords
         'pattern' => ['string'],
         'contentEncoding' => ['string'],
         'contentMediaType' => ['string'],
+        // A subschema, but one describing the string's DECODED content rather than the string — so it
+        // is type-bound like its two siblings above, not a shape claim about the value carrying it.
+        'contentSchema' => ['string'],
         'multipleOf' => ['integer', 'number'],
         'maximum' => ['integer', 'number'],
         'exclusiveMaximum' => ['integer', 'number'],
@@ -143,6 +156,9 @@ final class SchemaKeywords
         '$id',
         '$anchor',
         '$defs',
+        // Draft-07's spelling of `$defs`. A store of subschemas says nothing about the value that
+        // carries it, so neither is retracted by a declared shape.
+        'definitions',
         'title',
         'description',
         'default',

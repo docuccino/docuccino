@@ -225,7 +225,7 @@ it('classifies every schema keyword the canonicalizer orders', function (): void
     $keywords = $matches[1];
 
     // A scan that stopped matching would turn this into a test of nothing.
-    expect($keywords)->toHaveCount(55)
+    expect($keywords)->toHaveCount(57)
         ->toContain('$ref', 'type', 'properties', 'additionalProperties', 'items', 'description');
 
     expect(array_values(array_diff($keywords, array_keys(SchemaKeywords::classification()))))->toBe([]);
@@ -248,12 +248,32 @@ it('classifies every keyword it gives a subschema position', function (): void {
         ...SchemaKeywords::at(SchemaKeywords::POSITION_SCHEMA_LIST),
     ];
 
-    expect($positioned)->toHaveCount(20);
+    expect($positioned)->toHaveCount(22);
+
+    // The three positioned keywords that describe something OTHER than the value carrying them, and so
+    // are not shape claims about it: two subschema stores, and the decoded content of a string.
+    $exceptions = ['$defs' => 'annotation', 'definitions' => 'annotation', 'contentSchema' => 'refinement'];
 
     foreach ($positioned as $keyword) {
-        // `$defs` carries subschemas but says nothing about the value carrying it, so it is the one
-        // positioned keyword classified as an annotation rather than as shape.
         expect(SchemaKeywords::classification())->toHaveKey($keyword)
-            ->and(SchemaKeywords::classification()[$keyword])->toBe($keyword === '$defs' ? 'annotation' : 'shape');
+            ->and(SchemaKeywords::classification()[$keyword])->toBe($exceptions[$keyword] ?? 'shape');
     }
+});
+
+it('gives draft-07 dependencies no position, because one position cannot describe it', function (): void {
+    // Its members are EITHER a subschema or a list of property names, decided by the member's own
+    // value — so no single position is right, and it is left as data rather than rewritten on a guess.
+    expect(SchemaKeywords::positionOf('dependencies'))->toBeNull()
+        ->and(SchemaKeywords::positionOf('dependentSchemas'))->toBe(SchemaKeywords::POSITION_SCHEMA_MAP)
+        ->and(SchemaKeywords::positionOf('dependentRequired'))->toBe(SchemaKeywords::POSITION_STRING_LIST_MAP)
+        // And so it is never retracted either: we do not retract what we cannot read.
+        ->and(SchemaKeywords::isSuperseded('dependencies', ['type' => 'object']))->toBeFalse();
+});
+
+it('supersedes a contentSchema only where the declared type is no longer a string', function (): void {
+    // It carries a subschema and is still type-bound, exactly like the two `content*` keywords beside
+    // it: a declared `string` keeps it, anything else leaves it describing nothing.
+    expect(SchemaKeywords::isSuperseded('contentSchema', ['type' => 'string']))->toBeFalse()
+        ->and(SchemaKeywords::isSuperseded('contentSchema', ['type' => 'object']))->toBeTrue()
+        ->and(SchemaKeywords::isSuperseded('definitions', ['type' => 'object']))->toBeFalse();
 });
