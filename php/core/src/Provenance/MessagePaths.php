@@ -28,10 +28,13 @@ namespace Docuccino\Core\Provenance;
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
  *    anything but a filesystem path, so those are always reduced.
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
- *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text.
+ *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
+ *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
+ *    leaves the same bare name a root it never found leaves.
  * 4. **File shape.** A run the ladder could not attribute is reduced only when its last segment
  *    names a file (`Reader.php`). `/api/forms` and `/docs/reference/configuration` keep every
- *    character they had, because nothing here established they were ever paths.
+ *    character they had, because nothing here established they were ever paths. How far such a run
+ *    reaches through a space is {@see pathRun()}.
  *
  * Machine words that no path grammar reaches — the `include_path='…'` tail PHP appends to a failed
  * include, a temp directory — are redacted literally afterwards, by the prefixes this process can
@@ -40,11 +43,19 @@ namespace Docuccino\Core\Provenance;
 final readonly class MessagePaths
 {
     /**
-     * A path body: anything but the punctuation that delimits a path in prose. One interior space is
-     * allowed because `$HOME` ordinarily contains one on macOS and Windows; a space-crossing run is
-     * only ever kept when the ladder attributes it, so the tolerance cannot widen a reduction.
+     * A path body: anything but the punctuation that delimits a path in prose. An interior space is
+     * allowed because `$HOME` ordinarily contains one on macOS and Windows; which spaces a reduction may
+     * then cross is decided by {@see pathRun()}, not by the matcher.
      */
     private const BODY = '(?:[^\\s\'"(),;:<>]| (?=\\S))';
+
+    /**
+     * Two segments appended to a path to ask the ladder something its answer alone cannot say: did it
+     * recognise a root? It strips a root it recognised and otherwise answers a bare name, so both
+     * segments survive a recognised root and only the last survives no root at all. One segment cannot
+     * tell those apart — a root that IS the path leaves exactly the one segment a bare name leaves.
+     */
+    private const PROBE = 'docuccino/probe';
 
     /** One literal backslash, as the pattern spells it. */
     private const BS = '\\\\';
@@ -102,9 +113,7 @@ final readonly class MessagePaths
             return $match;
         }
 
-        $candidates = self::candidates($run);
-
-        foreach ($candidates as $candidate) {
+        foreach (self::candidates($run) as $candidate) {
             $attributed = $this->attributed($candidate);
 
             if ($attributed !== null) {
@@ -112,12 +121,12 @@ final readonly class MessagePaths
             }
         }
 
-        $shortest = $candidates[0];
-        $reduced = self::proven($shortest) || self::namesAFile($shortest)
-            ? $this->resolve($shortest)
-            : $shortest;
+        $unattributed = self::pathRun($run);
+        $reduced = self::proven($unattributed) || self::namesAFile($unattributed)
+            ? $this->resolve($unattributed)
+            : $unattributed;
 
-        return $reduced.$this->scrub(substr($run, strlen($shortest)).$trailing);
+        return $reduced.$this->scrub(substr($run, strlen($unattributed)).$trailing);
     }
 
     /**
@@ -168,8 +177,8 @@ final readonly class MessagePaths
 
     /**
      * The run cut at each of its interior spaces, shortest first. The first candidate the ladder
-     * attributes wins, so a path is only allowed to swallow a space when a root actually accounts for
-     * it — `/Users/tm artin/checkout/app/X.php on line 3` gives up `on line 3` and keeps the path.
+     * attributes wins, so attribution swallows a space only where a root actually accounts for it —
+     * `/Users/tm artin/checkout/app/X.php on line 3` gives up `on line 3` and keeps the path.
      *
      * @return non-empty-list<string>
      */
@@ -189,19 +198,32 @@ final readonly class MessagePaths
     }
 
     /**
-     * The relative form, but only where the ladder recognised a root. It answers with a bare name
-     * when it did not, so an answer that is more than the name is proof a prefix was stripped —
-     * {@see RootRelativeSourcePathResolver} is where that contract is written down.
+     * How much of a run a reduction may cover once NO root accounted for it: the run cut at the first
+     * space that is not inside a directory segment. A spaced directory (`/Users/ca rol/Library/…`) puts
+     * its space between two separators with text against both; a sentence carrying on after a path puts
+     * its first space where no separator follows at all (`/docs/reference/configuration for the key`),
+     * and a second path in the same sentence puts one right against the next separator. Only the first
+     * shape may be crossed, so proof and file shape see a whole spaced path and never a sentence.
      */
-    private function attributed(string $run): ?string
+    private static function pathRun(string $run): string
     {
-        $path = self::pathPart($run);
+        $offset = 1;
 
-        if ($this->paths->relative($path) === basename(str_replace('\\', '/', $path))) {
-            return null;
+        while (($space = strpos($run, ' ', $offset)) !== false) {
+            if (strpos($run, '/', $space) === false || $run[$space - 1] === '/' || $run[$space + 1] === '/') {
+                return substr($run, 0, $space);
+            }
+
+            $offset = $space + 1;
         }
 
-        return $this->resolve($run);
+        return $run;
+    }
+
+    /** The relative form, but only where the ladder recognised a root. */
+    private function attributed(string $run): ?string
+    {
+        return $this->stripped(self::pathPart($run)) === null ? null : $this->resolve($run);
     }
 
     /**
@@ -215,16 +237,41 @@ final readonly class MessagePaths
         $scheme = self::wrapper($run);
 
         if ($scheme === null) {
-            return $this->paths->relative($run);
+            return $this->relativise($run);
         }
 
         $path = substr($run, strlen($scheme) + 3);
 
         if ($scheme === 'phar' && ($boundary = self::pharBoundary($path)) !== null) {
-            return $scheme.'://'.$this->paths->relative(substr($path, 0, $boundary)).substr($path, $boundary);
+            return $scheme.'://'.$this->relativise(substr($path, 0, $boundary)).substr($path, $boundary);
         }
 
-        return $scheme.'://'.$this->paths->relative($path);
+        return $scheme.'://'.$this->relativise($path);
+    }
+
+    /**
+     * The ladder's answer, taken from the probe wherever it recognised a root: what it leaves in front of
+     * the probe segments IS the prefix strip. That is also the only way to relativise a run that IS the
+     * root, where {@see SourcePathResolver::relative()} has nothing left to answer with but the name of
+     * the directory the checkout happens to sit in — a different string on every machine.
+     */
+    private function relativise(string $path): string
+    {
+        return $this->stripped($path) ?? $this->paths->relative($path);
+    }
+
+    /** The path under the root the ladder recognised, or null where it recognised none. */
+    private function stripped(string $path): ?string
+    {
+        $answer = $this->paths->relative(rtrim(str_replace('\\', '/', $path), '/').'/'.self::PROBE);
+
+        if ($answer === self::PROBE) {
+            return '';
+        }
+
+        return str_ends_with($answer, '/'.self::PROBE)
+            ? substr($answer, 0, -strlen('/'.self::PROBE))
+            : null;
     }
 
     /** Where the archive ends and the path inside it begins, or null when the run names no archive. */

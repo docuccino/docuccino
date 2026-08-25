@@ -15,6 +15,10 @@ use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
  * exclusion that protects an author's text is a chance to publish a machine. So a change to the
  * matcher has to answer both lists at once — the first says nothing survives that names this machine,
  * the second says nothing is rewritten that the application actually wrote.
+ *
+ * Every shape a release note says is closed owes the first list a row, and the shapes left open owe the
+ * second one, because a leak has already been counted closed on a reading of the code while the suite
+ * had nothing that would have failed.
  */
 it('reports one failure identically from two checkouts of the same code', function (): void {
     // The determinism promise, stated where it is easiest to break: two developers hit the same bug,
@@ -84,6 +88,53 @@ it('leaves nothing in a published message that names the machine it was built on
         'file_get_contents(/elsewhere/cache/acme/Reader.php): Failed to open stream',
         'file_get_contents(Reader.php): Failed to open stream',
     ],
+    // A directory one segment under the root relativises to exactly its own basename, which is also what
+    // the ladder answers when it recognised nothing — so a predicate reading the ANSWER cannot tell the
+    // two apart, and published these whole. They are the framework's own directories, so the failure
+    // reaching a route diagnostic is an ordinary one: a storage permission, an unreadable vendor tree.
+    ['a directory one segment under the root', 'mkdir(/app/root/storage): Permission denied', 'mkdir(storage): Permission denied'],
+    ['a package tree the build could not read', 'scandir(/app/root/vendor): Permission denied', 'scandir(vendor): Permission denied'],
+    ['a file with no extension under the root', 'require(/app/root/artisan) failed', 'require(artisan) failed'],
+    // The root itself has nothing left after the strip, and the one thing `relative()` can answer with
+    // there — the name of the directory the checkout sits in — is a different string on every machine.
+    ['the project root itself', 'mkdir(/app/root): Permission denied', 'mkdir(): Permission denied'],
+]);
+
+it('tells a root it recognised from a root it never found', function (): void {
+    // The predicate reason 3 turns on, stated as the one pair that isolates it: the two paths differ only
+    // in whether a root accounts for them, and the ladder answers BOTH with a bare `storage`. So an
+    // answer longer than the basename is not proof a prefix was stripped — asking with segments the
+    // ladder cannot have invented is (MessagePaths::PROBE).
+    $paths = new MessagePaths(new RootRelativeSourcePathResolver('/app/root'));
+
+    expect($paths->relative('mkdir(/app/root/storage) failed'))->toBe('mkdir(storage) failed')
+        ->and($paths->relative('mkdir(/elsewhere/storage) failed'))->toBe('mkdir(/elsewhere/storage) failed');
+});
+
+it('crosses a space inside a directory name, and stops at one that starts a sentence', function (string $case, string $message, string $expected): void {
+    // Both ends of the space tolerance. A `$HOME` with a space in it is the ordinary macOS and Windows
+    // case and its segments have text against both separators; a sentence carrying on after a path has no
+    // separator left, and a second path in the same sentence puts a space right against the next one.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($expected);
+})->with([
+    ['a space inside a directory name', 'read /Users/ca rol/Library/pkg/Reader.php failed', 'read Reader.php failed'],
+    ['a sentence carrying on after a path', 'See /docs/reference/configuration and open app.php', 'See /docs/reference/configuration and open app.php'],
+    ['a second path in the same sentence', 'See /docs/reference/configuration and /docs/other/x.php', 'See /docs/reference/configuration and x.php'],
+]);
+
+it('reduces a path under a $HOME that has a space in it, wherever under it the path sits', function (string $case, string $message, string $expected): void {
+    // The shape was closed for exactly one position — a path under the base path itself — and left
+    // standing everywhere else under the same home, which is where a global cache and an installed phar
+    // sit. So the message LOOKED scrubbed while naming the machine's own user.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/Users/ca rol/checkout')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('ca rol');
+})->with([
+    ['under the base path', 'read /Users/ca rol/checkout/app/X.php failed', 'read app/X.php failed'],
+    ['under the home, outside every root', 'read /Users/ca rol/Library/Caches/pkg/Reader.php failed', 'read Reader.php failed'],
+    ['a phar installed under the home', 'Internal error in phar:///Users/ca rol/bin/phpstan.phar/src/X.php', 'Internal error in phar://phpstan.phar/src/X.php'],
 ]);
 
 it('leaves alone every run that a machine did not put there', function (string $case, string $message): void {
