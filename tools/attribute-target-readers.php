@@ -17,8 +17,17 @@ declare(strict_types=1);
  *     coarse answer is exact on every reader the packages have. It can only over-claim inside a file
  *     that already reads that attribute, never claim a file that reads nothing.
  *   - THE BAG. `AttributeCollector` materialises every `Docuccino\Attributes\*` declared on a route's
- *     action and its controller chain, so anything read back out of an `AttributeSet` is reached on a
- *     class, a method or a function.
+ *     action and its controller chain, so anything read back out of an `AttributeSet` is reached on
+ *     whatever surfaces that collector reflects over — read off ITS source
+ *     ({@see attribute_collector_surfaces()}) rather than restated here. The trio it comes to today was
+ *     hard-coded, which made the credit true by assertion: narrowing the collector to classes alone left
+ *     every attribute documented as usable on a closure route claiming a reader it no longer had.
+ *
+ * What stays coarse is which CALL SITE's bag an attribute came out of. `collectOne()` is handed one
+ * reflection and `collect()` walks an action plus its controller chain, and crediting a read with the
+ * collector's whole surface over-claims for the former. Telling them apart means dataflow; the coarse
+ * answer is exact on every reader the packages have, and it can only over-claim inside a file that
+ * already reads that attribute.
  */
 
 /**
@@ -30,6 +39,8 @@ declare(strict_types=1);
  */
 function attribute_target_readers(array $directories): array
 {
+    $bagSurfaces = attribute_collector_surfaces($directories);
+
     $found = [];
     foreach (attribute_reader_files($directories) as $file) {
         $source = (string) file_get_contents($file);
@@ -42,7 +53,7 @@ function attribute_target_readers(array $directories): array
         }
 
         foreach (attribute_reader_bag_reads($source, $names) as $name) {
-            foreach (['CLASS', 'METHOD', 'FUNCTION'] as $surface) {
+            foreach (attribute_bag_surfaces($source, $bagSurfaces) as $surface) {
                 $found[$name][$surface] = true;
             }
         }
@@ -57,6 +68,66 @@ function attribute_target_readers(array $directories): array
     ksort($out);
 
     return $out;
+}
+
+/**
+ * The surfaces a bag read in THIS file earns.
+ *
+ * The collector has two entry points and they do not reach the same places. `collect()` is handed a
+ * route action and walks its controller chain, so a bag from the pipeline carries every surface the
+ * collector reflects over. `collectOne()` is handed ONE reflection and walks nowhere, so a file that
+ * builds its own bag that way reaches only what it reflects over — `#[Webhook]` is read out of a bag
+ * built from a `ReflectionClass`, and crediting it with the whole trio sanctioned two dead surfaces:
+ * declaring it on a method or a function passed, and nothing would ever read it.
+ *
+ * Still per file rather than per call, for the reason the reflection half is. A file that calls
+ * `collectOne()` and names a wide vocabulary over-claims exactly as before.
+ *
+ * @param  list<string>  $collectorSurfaces
+ * @return list<string>
+ */
+function attribute_bag_surfaces(string $source, array $collectorSurfaces): array
+{
+    if (! str_contains($source, 'collectOne(')) {
+        return $collectorSurfaces;
+    }
+
+    $own = attribute_reader_surfaces($source);
+
+    // A file with no reflection vocabulary of its own tells us nothing, so it keeps the wider credit
+    // rather than losing every cell to a scan that found nothing.
+    return $own === [] ? $collectorSurfaces : $own;
+}
+
+/**
+ * The reflection surfaces the `AttributeSet` collector materialises from, read off its own source with
+ * the same vocabulary the reflection half uses — so the credit a bag read earns is a fact about the
+ * collector rather than a trio written down beside it.
+ *
+ * A missing or unreadable collector throws rather than falling back: a credit derived from nothing would
+ * hand every bag-read attribute an empty surface list and fail every cell at once, which reads as a
+ * broken guard instead of a missing one.
+ *
+ * @param  list<string>  $directories
+ * @return list<string>
+ */
+function attribute_collector_surfaces(array $directories): array
+{
+    foreach (attribute_reader_files($directories) as $file) {
+        if (basename($file) !== 'AttributeCollector.php') {
+            continue;
+        }
+
+        $surfaces = attribute_reader_surfaces((string) file_get_contents($file));
+
+        if ($surfaces === []) {
+            throw new RuntimeException($file.' names no reflection surface; the bag credit would be empty.');
+        }
+
+        return $surfaces;
+    }
+
+    throw new RuntimeException('AttributeCollector.php was not found under any reader directory.');
 }
 
 /**
