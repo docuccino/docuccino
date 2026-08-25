@@ -32,6 +32,14 @@ it('warns about the ArticleData secret property leaking into the request body by
     }
 });
 
+it('names the hide that would actually remove this finding', function (): void {
+    // ArticleData's `secret` already carries #[Hidden] and is still in the request body, so a help
+    // naming only #[Hidden] points at the attribute that is already there and did not help.
+    $help = implode("\n", array_map(static fn ($d): string => (string) $d->help, leakageDiagnostics()));
+
+    expect($help)->toContain('#[HiddenFromRequest]');
+});
+
 it('does not mutate the emitted document (diagnostics only)', function (): void {
     bindStubEngine();
     $withLint = generateDocument()->document->toArray();
