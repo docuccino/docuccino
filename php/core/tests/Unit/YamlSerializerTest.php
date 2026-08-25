@@ -132,6 +132,40 @@ it('agrees with the canonical JSON writer on every empty collection it emits', f
         ->and($yamlSequences)->toBe($jsonSequences);
 });
 
+// Map KEYS have the same blind spot as empty collections, one layer deeper. PHP coerces a
+// numeric-string array key to an int on the way IN, so `['404' => …]` is already `[404 => …]` before
+// either writer runs; and it coerces on the way back OUT, so `Yaml::parse()` and `json_decode()` both
+// answer `int(404)` and no round trip can tell the two apart. Only the emitted bytes carry the
+// difference — JSON's `"404"` is a string by RFC 8259, YAML's bare `404` is an integer by the 1.2 core
+// schema — so these assert bytes.
+
+it('quotes a numeric map key so it stays the string every OpenAPI map is keyed by', function (): void {
+    $yaml = (new YamlSerializer)->serialize(['responses' => ['200' => ['description' => 'ok']]]);
+
+    expect($yaml)->toBe("responses:\n  '200':\n    description: ok\n");
+});
+
+it('leaves sequences alone while quoting the keys of a mapping', function (): void {
+    // The flag only reaches keys the dumper actually writes, and a sequence writes none — so `tags`
+    // must not sprout indices and an empty list must not become a map.
+    $yaml = (new YamlSerializer)->serialize([
+        'tags' => ['a', 'b'],
+        'enum' => [],
+        'schemas' => ['404' => new stdClass],
+    ]);
+
+    expect($yaml)->toBe("tags:\n  - a\n  - b\nenum: []\nschemas:\n  '404': {  }\n");
+});
+
+it('writes every status code in an emitted document as a string key', function (): void {
+    // Not a hypothetical: every operation in every document is keyed by status code, so an unquoted
+    // key here meant the YAML emission disagreed with the JSON one at every response position.
+    $yaml = (new YamlSerializer)->serialize((new Canonicalizer)->canonicalize(workedExample()));
+
+    expect($yaml)->toMatch("/^\\s+'\\d{3}':$/m")
+        ->and($yaml)->not->toMatch('/^\\s+\\d{3}:$/m');
+});
+
 it('renders multi-line strings as literal blocks deterministically', function (): void {
     $value = ['description' => "line one\nline two\nline three"];
 

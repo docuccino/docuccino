@@ -1320,10 +1320,10 @@ it('leaves the plain claimed name to the body the claim describes', function ():
     ]);
 
     expect(array_keys($doc['components']['responses']))
-        ->toBe(['AuthenticationChallengeProblemDetailsData', 'ValidationError'])
+        ->toBe(['AuthenticationChallenge_ProblemDetailsData', 'ValidationError'])
         ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/ValidationError')
         ->and(responseRefAt($doc, '/mfa', '422'))
-        ->toBe('#/components/responses/AuthenticationChallengeProblemDetailsData')
+        ->toBe('#/components/responses/AuthenticationChallenge_ProblemDetailsData')
         // No name in either bucket is a content hash, which is the whole complaint.
         ->and([...array_keys($doc['components']['responses']), ...array_keys($doc['components']['schemas'])])
         ->each->not->toMatch('/_[a-z2-7]{8}$/');
@@ -1369,8 +1369,8 @@ it('keeps a multi-representation response\'s name off the arrival and departure 
         ->and(responseRefAt($both, '/mfa', '422'))->toBe(responseRefAt($onlyChallenge, '/mfa', '422'))
         ->and($both['components']['responses']['ValidationError'])
         ->toBe($onlyProblem['components']['responses']['ValidationError'])
-        ->and($both['components']['responses']['AuthenticationChallengeProblemDetailsData'])
-        ->toBe($onlyChallenge['components']['responses']['AuthenticationChallengeProblemDetailsData']);
+        ->and($both['components']['responses']['AuthenticationChallenge_ProblemDetailsData'])
+        ->toBe($onlyChallenge['components']['responses']['AuthenticationChallenge_ProblemDetailsData']);
 });
 
 it('names a multi-representation body the same however the document spells it', function (): void {
@@ -1392,9 +1392,68 @@ it('names a multi-representation body the same however the document spells it', 
         ['uir' => '1.0', 'openapi' => '3.2.0', 'info' => ['title' => 'T', 'version' => '1'], 'x-docuccino' => ['id' => 'doc:default']] + $doc,
     ));
 
-    expect(array_keys($one['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
-        ->and(array_keys($two['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
+    expect(array_keys($one['components']['responses']))->toBe(['AuthenticationChallenge_ProblemDetailsData'])
+        ->and(array_keys($two['components']['responses']))->toBe(['AuthenticationChallenge_ProblemDetailsData'])
         ->and($emit($one))->toBe($emit($two));
+});
+
+it('refuses a shape whose own name carries the separator the join is built from', function (): void {
+    // Injectivity, which is the only reason the join uses a separator at all. A response whose
+    // representations all resolve to ONE shape called `Auth_Challenge` spells exactly what a two-shape
+    // join of `Auth` and `Challenge` spells, so exempting the one-shape case put both in one codomain:
+    // alone, each published `Auth_Challenge`; together, they contested it and took
+    // `Auth_Challenge_3blbosdq` and `Auth_Challenge_l2gsglvo`. A pair of hashes nobody catches by name,
+    // and each moved because the other arrived — which is the outcome the separator exists to remove.
+    //
+    // Two representations resolving to one shape is what reaches this past a count of DISTINCT shapes.
+    $schemas = [
+        'Auth_Challenge' => ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]],
+        'Auth' => ['type' => 'object', 'properties' => ['b' => ['type' => 'string']]],
+        'Challenge' => ['type' => 'object', 'properties' => ['c' => ['type' => 'string']]],
+    ];
+
+    $underscored = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Auth_Challenge']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Auth_Challenge']],
+    ]];
+    $join = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Auth']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Challenge']],
+    ]];
+
+    $alone = errorDocWithSchemas(['/a' => ['422' => $underscored], '/b' => ['422' => $underscored]], $schemas);
+    $both = errorDocWithSchemas([
+        '/a' => ['422' => $underscored], '/b' => ['422' => $underscored],
+        '/m' => ['422' => $join], '/n' => ['422' => $join],
+    ], $schemas);
+
+    expect(array_keys($both['components']['responses']))->toBe(['Auth_Challenge', 'Error422'])
+        // The `_`-bearing shape takes its status; the join keeps the name it spells unambiguously.
+        ->and(responseRefAt($both, '/a', '422'))->toBe('#/components/responses/Error422')
+        ->and(responseRefAt($both, '/m', '422'))->toBe('#/components/responses/Auth_Challenge')
+        // Locality: neither name is a function of the other body being in the document.
+        ->and(responseRefAt($alone, '/a', '422'))->toBe(responseRefAt($both, '/a', '422'))
+        ->and(array_keys($both['components']['responses']))->each->not->toMatch('/_[a-z2-7]{8}$/');
+});
+
+it('orders a join by media type and not by the shapes\' own names', function (): void {
+    // The order is the media types', which is a fact about the body rather than about the alphabet. Every
+    // other case in this file uses shapes where the two orderings agree, so none of them would notice the
+    // sort changing. Here they disagree — `application/json` sorts first and carries `Zebra` — and the
+    // body spells its representations in a third order again, so neither the walk nor the shape names can
+    // account for the answer.
+    $schemas = [
+        'Zebra' => ['type' => 'object', 'properties' => ['z' => ['type' => 'string']]],
+        'Alpha' => ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]],
+    ];
+    $body = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Alpha']],
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Zebra']],
+    ]];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['Zebra_Alpha']);
 });
 
 it('lets a claim that names the whole response reach a multi-representation one', function (array $body, string $published): void {
@@ -1420,11 +1479,11 @@ it('lets a claim that names the whole response reach a multi-representation one'
     // means it. All three read as a producer, which is the conservative half of the question.
     'says nothing' => [
         fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody()),
-        'AuthenticationChallengeProblemDetailsData',
+        'AuthenticationChallenge_ProblemDetailsData',
     ],
     'says nothing, at the config layer' => [
         fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'config'),
-        'AuthenticationChallengeProblemDetailsData',
+        'AuthenticationChallenge_ProblemDetailsData',
     ],
     'says something else' => [
         function (): array {
@@ -1433,12 +1492,70 @@ it('lets a claim that names the whole response reach a multi-representation one'
 
             return $body;
         },
-        'AuthenticationChallengeProblemDetailsData',
+        'AuthenticationChallenge_ProblemDetailsData',
     ],
 ]);
 
-it('keeps a whole-response name in the dedupe scope it names', function (): void {
-    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
+it('gives two responses carrying different shapes different names', function (): void {
+    // Injectivity. Run together, `{Foo, BarBaz}` and `{FooBar, Baz}` both spell `FooBarBaz`, so two
+    // responses with no shape in common contended for one name and each took a content-derived rung
+    // neither needed — deterministic, and ambiguous for no reason.
+    $representations = static fn (string $first, string $second): array => ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/'.$first]],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/'.$second]],
+    ]];
+
+    $left = $representations('BarBaz', 'Foo');
+    $right = $representations('Baz', 'FooBar');
+    $schemas = [
+        'Foo' => ['type' => 'object'], 'BarBaz' => ['type' => 'string'],
+        'FooBar' => ['type' => 'integer'], 'Baz' => ['type' => 'boolean'],
+    ];
+
+    $doc = errorDocWithSchemas([
+        '/a' => ['422' => $left], '/b' => ['422' => $left],
+        '/c' => ['422' => $right], '/d' => ['422' => $right],
+    ], $schemas);
+
+    $names = array_keys($doc['components']['responses']);
+
+    expect($names)->toBe(['BarBaz_Foo', 'Baz_FooBar'])
+        // Neither had to climb: a content-derived rung here would be the old ambiguity showing up as a
+        // pair of hashes nobody can catch by name.
+        ->and($names)->each->not->toMatch('/_[a-z2-7]{8}$/');
+});
+
+it('takes its status where a shape name would make the join ambiguous', function (): void {
+    // `_` only splits back apart if no shape carries one, so a shape whose own name does is the case
+    // this cannot name unambiguously — and a vague-but-true `Error422` beats a name that lies about
+    // which shapes it was built from.
+    $body = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Auth_Challenge']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+    ]];
+    $schemas = ['Auth_Challenge' => ['type' => 'object'], 'ProblemDetailsData' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['Error422']);
+});
+
+it('keeps a lone shape name to itself, joining nothing', function (): void {
+    // The name must not get uglier where there is nothing to disambiguate. Two media types answering
+    // with ONE shape are one distinct shape, so the join has a single part and the separator never
+    // appears — the shape keeps its own name exactly as it did before there was a separator at all.
+    $body = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+    ]];
+    $schemas = ['ProblemDetailsData' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['ProblemDetailsData']);
+});
+
+it('keeps a whole-response name in the dedupe scope it names', function (): void {    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
     // carry the same representations get a component each; two bodies where only one was named do not
     // collapse onto one name, and the unnamed one publishes what it would have published alone.
     $named = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());

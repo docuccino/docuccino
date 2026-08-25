@@ -384,6 +384,18 @@ final class SharedErrorResponses implements DocumentTransformer
      * Names this run MINTED are not the document's own either: they move when a shape's contest does, and
      * a response named after one would move with it.
      *
+     * The shapes are joined with `_` rather than run together, because concatenation is not injective:
+     * `{Foo, BarBaz}` and `{FooBar, Baz}` both spell `FooBarBaz`, so two responses with nothing in common
+     * contended for one name and each took a content-derived rung it never needed.
+     *
+     * `_` only splits back apart if no shape carries one, so a shape whose own name does is refused
+     * however many shapes it is standing with — a lone `Auth_Challenge` reads as a join of `Auth` and
+     * `Challenge`, so exempting the one-shape case would put the two in one codomain and hand the
+     * collision back. Refused means it takes its status, the same degradation as a representation naming
+     * no shape at all, for the same reason. What survives is joins of `_`-free parts, where `n` parts
+     * carry exactly `n - 1` separators and parse back apart uniquely. `.` and `-` are the only other
+     * characters a component name may hold, and neither survives as an identifier in a generated client.
+     *
      * @param  array<array-key, mixed>  $content
      * @param  array<string, string>  $minted
      */
@@ -410,7 +422,13 @@ final class SharedErrorResponses implements DocumentTransformer
             $shapes[$shape] = true;
         }
 
-        $name = implode('', array_keys($shapes));
+        $names = array_map(strval(...), array_keys($shapes));
+
+        if (array_filter($names, static fn (string $n): bool => str_contains($n, '_')) !== []) {
+            return null;
+        }
+
+        $name = implode('_', $names);
 
         return $name !== '' && ComponentNames::isLegal($name) ? $name : null;
     }
@@ -584,7 +602,9 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * @param  array<string, mixed>  $values  canonical bytes → the example they encode
      * @param  array<string, array<string, mixed>>  $contested  contested name → canonical bytes → the Example Object under it
-     * @param  list<string>  $taken  names an author already gave an example on this media type
+     * @param  list<array-key>  $taken  names an author already gave an example on this media type; these
+     *                                  are bucket KEYS, so a numeric one arrives as an int
+     *                                  ({@see ComponentNames::mint()}, which normalises them)
      * @return array<string, mixed>
      */
     private static function named(array $values, array $contested, array $taken): array
