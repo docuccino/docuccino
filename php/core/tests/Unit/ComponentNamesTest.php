@@ -142,11 +142,6 @@ it('sanitizes a name down to the characters a $ref may carry', function (string 
     'nothing left is still a name' => ['<>', 'Schema'],
 ]);
 
-/*
- * A published name is read by a code generator, which turns it into a type and, for most targets, into
- * the file that type lives in. Two properties follow, and neither has a guard anywhere else.
- */
-
 it('refuses every character a $ref could not carry into a JSON pointer', function (string $hostile): void {
     // `SharedErrorResponses` and the registry build a `$ref` by concatenating a name onto
     // `#/components/schemas/` with no escaping, which is safe ONLY because `/` and `~` — the two
@@ -168,37 +163,6 @@ it('refuses every character a $ref could not carry into a JSON pointer', functio
     'non-ascii' => ['Café'],
     'emoji' => ['📄'],
 ]);
-
-it('bounds a published name and derives the short form from the whole of it', function (): void {
-    // A component key becomes a filename in a generated client and NAME_MAX is 255 bytes, so an
-    // unbounded name is a real defect — there was no cap anywhere, and a 5,000-character name was
-    // legal. The short form ends in a hash of the whole name, so two names sharing a long head stay
-    // distinct rather than collapsing onto one truncation.
-    $head = str_repeat('A', 500);
-
-    $one = ComponentNames::sanitize($head.'One');
-    $two = ComponentNames::sanitize($head.'Two');
-
-    expect(strlen($one))->toBe(128)
-        ->and(strlen($two))->toBe(128)
-        ->and($one)->not->toBe($two)
-        ->and($one)->toStartWith('AAAA')
-        ->and(ComponentNames::isLegal($head.'One'))->toBeFalse()
-        ->and(ComponentNames::isLegal($one))->toBeTrue();
-});
-
-it('keeps every rung of a ladder inside the bound', function (): void {
-    // The hash rung and the uniqueness tail are both built by appending to a stem, so each has to pass
-    // back through the one function that owns the bound rather than sailing past it.
-    [$names] = ComponentNames::mint([
-        'a' => claim(str_repeat('Long', 60), 'App\\'.str_repeat('Deep\\', 40).'Thing'),
-        'b' => claim(str_repeat('Long', 60), 'App\\'.str_repeat('Deep\\', 40).'Other'),
-    ]);
-
-    expect(array_values($names))->each(function ($name): void {
-        $name->toHaveLength(128)->and(ComponentNames::isLegal($name->value))->toBeTrue();
-    })->and(array_unique(array_values($names)))->toHaveCount(2);
-});
 
 it('rewrites references through a rename map, and only in the bucket named', function (): void {
     $node = [

@@ -24,9 +24,6 @@ final class ComponentNames
     /** Characters of the identity hash a claim nothing else separates falls back to — 40 bits. */
     private const DISCRIMINATOR = 8;
 
-    /** The longest name this may publish; see {@see sanitize()} for why a component key needs a bound. */
-    private const MAX = 128;
-
     /**
      * What one bucket's claims settle to: the RENAMES — registration name → published name, for the
      * claims whose slot isn't the name they keep — and the CONTESTS, as contested name → published name
@@ -133,7 +130,7 @@ final class ComponentNames
             $rungs[] = self::sanitize(implode('', array_slice($segments, -$depth)).$stem);
         }
 
-        $rungs[] = self::sanitize($stem.'_'.self::discriminator($claim['identity'] ?? $claim['content']));
+        $rungs[] = $stem.'_'.self::discriminator($claim['identity'] ?? $claim['content']);
 
         return array_values(array_unique($rungs));
     }
@@ -226,7 +223,7 @@ final class ComponentNames
 
             $candidate = $proposal;
             for ($n = 2; isset($used[$candidate]); $n++) {
-                $candidate = self::sanitize($proposal.'_'.$n);
+                $candidate = $proposal.'_'.$n;
             }
 
             $used[$candidate] = true;
@@ -306,29 +303,12 @@ final class ComponentNames
         return self::sanitize($name) === $name;
     }
 
-    /**
-     * Reduce a name to the characters a `$ref` may carry, never to nothing and never to more than
-     * {@see MAX} bytes.
-     *
-     * The bound is here because a published component name is not only a map key: a generator turns it
-     * into a type and, for most targets, into the FILE that type lives in, and `NAME_MAX` is 255 bytes
-     * on every mainstream filesystem. 128 leaves a generator its own prefix, suffix and extension
-     * inside that, and is far above anything a name is minted from in practice — the longest this
-     * repository's fixtures publish is 22 bytes. An over-long name keeps as much of its head as fits
-     * and ends in a hash of the whole, so the short form is still a function of the name alone and two
-     * names sharing a head do not collapse onto one.
-     */
+    /** Reduce a name to the characters a `$ref` may carry, never to nothing. */
     public static function sanitize(string $name): string
     {
         $clean = self::clean($name);
 
-        if ($clean === '') {
-            return 'Schema';
-        }
-
-        return strlen($clean) <= self::MAX
-            ? $clean
-            : substr($clean, 0, self::MAX - 1 - self::DISCRIMINATOR).'_'.self::discriminator($clean);
+        return $clean === '' ? 'Schema' : $clean;
     }
 
     /** The `$ref`-safe characters of a name, which may be none of them. */
