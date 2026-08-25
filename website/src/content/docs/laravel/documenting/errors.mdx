@@ -809,6 +809,19 @@ representation of a status, the name is the status's — where two declarations 
 different components the nearer one wins, a method's over its controller's, the same way every other
 argument of the attribute settles.
 
+**The shapes under it are a separate question, and the answer there is deliberate rather than a gap.** A
+response component covers every representation of a status; a schema component is **one shape**. So where
+the status states a single representation the shape is the whole of the named error and takes the name
+with it. Where it states two, naming either shape after the response would assert that shape *is* the
+error you named, when it may be the alternative sitting beside it. Neither takes it, and your name stays
+on the response.
+
+**Name the shapes themselves instead.** A shape `type:` points at is already named after that class — as
+`SignInChallenge` is above — and [`#[SchemaName]`](/laravel/reference/attributes/#schemaname) renames it
+where the class name isn't what you want a client to see. What falls back to `Error<status>` is a shape
+nothing named at all, so finding `Error422` under a nicely-named response means one representation has no
+declaration of its own, not that the attribute was ignored.
+
 Where the name can reach nothing at all, the build says so with
 `attribute.error-component-unreachable`: on a status below `400`, which shares no error body, and on one
 a mapper answered with a `$ref` to a component that was named where that component is defined.
