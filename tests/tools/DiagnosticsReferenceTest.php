@@ -160,6 +160,10 @@ function diagnosticFamilyPages(): array
 {
     return [
         'narrative content' => ['laravel/guides/narrative-content.mdx', 'content.'],
+        // The recorded-examples page tables the same family, and had no row here: a code added to the
+        // family reached the reference and left the guide one short, which is the drift this list exists
+        // to catch and not a second kind of problem.
+        'recorded examples' => ['laravel/documenting/examples.mdx', 'examples.'],
     ];
 }
 
@@ -467,8 +471,10 @@ it('reports each of those with the rule its owner states', function (array $cons
     // configured-path wording, and both are drawn from the one owner.
     [
         ['ConfinedPath::FILE_ESCAPED_HELP', 'ConfinedPath::CONFIG_FILE_ESCAPED_HELP'],
-        ['example-file.escapes-base-path', 'description-file.escapes-base-path'],
-        3,
+        // A configured DIRECTORY refused for leaving the application is the same refusal with the same
+        // remedy, so the recordings audit draws on the same configured-path sentence rather than its own.
+        ['example-file.escapes-base-path', 'description-file.escapes-base-path', 'examples.recordings-escapes-base'],
+        4,
     ],
     [
         ['ConfinedPath::FILE_MISSING_HELP', 'ConfinedPath::CONFIG_FILE_MISSING_HELP'],

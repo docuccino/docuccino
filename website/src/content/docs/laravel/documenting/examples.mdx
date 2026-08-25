@@ -360,15 +360,18 @@ rather have the names.
 
 ### When recordings go stale
 
-Every build reports what is wrong with the committed directory:
+Every build reports what is wrong with the committed directory. Every code below is in the
+[diagnostics reference](/laravel/reference/diagnostics/#recorded-examples) too, alongside what to do
+about each one.
 
-| Diagnostic | Meaning |
-| --- | --- |
-| `examples.recordings-empty` | The directory you configured holds no recordings yet |
-| `examples.recording-unreadable` | A file in it isn't a recording Docuccino can read |
-| `examples.recording-orphaned` | A recording for an operation this document no longer has — the route was renamed, moved or removed |
-| `examples.recording-unsafe` | A committed body still holds what looks like a credential; it wasn't published |
-| `examples.recording-name-unpublished` | A recorded name on an error response the document shares as a component; the body publishes without it |
+| Code | Severity | Means |
+| --- | --- | --- |
+| `examples.recordings-empty` | info | The directory you configured holds no recordings yet |
+| `examples.recordings-escapes-base` | warning | The directory you configured isn't inside your application, so it was never read |
+| `examples.recording-unreadable` | warning | A file in it isn't a recording Docuccino can read |
+| `examples.recording-orphaned` | warning | A recording for an operation this document no longer has — the route was renamed, moved or removed |
+| `examples.recording-unsafe` | warning | A committed body still holds what looks like a credential; it wasn't published |
+| `examples.recording-name-unpublished` | warning | A recorded name on an error response the document shares as a component; the body publishes without it |
 
 <Aside type="caution" title="An example that doesn't match its schema is a lie">
 Inference can't be wrong about a shape it derived; a hand-written example can say anything at all, and
