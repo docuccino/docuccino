@@ -889,8 +889,12 @@ It's omitted in two cases: the document sets
 [`error_responses` to `none`](/laravel/reference/configuration/#error_responses), or you've turned
 strict mode fully off. "Fully" is the operative word — Docuccino treats strict mode as off only when
 **all three** of `disable_invalid_filter_query_exception`,
-`disable_invalid_sort_query_exception`, and `disable_invalid_includes_query_exception` are `true` in
+`disable_invalid_sort_query_exception`, and `disable_invalid_include_query_exception` are `true` in
 `config/query-builder.php`, because any one of them left on can still produce the `400`.
+
+Spatie renamed that last key in v7 — it was `disable_invalid_includes_query_exception`, plural, up to
+v6. Docuccino reads whichever spelling the installed version reads, so a published config file left
+un-renamed by an upgrade documents the `400` the server will still throw.
 
 ## Query objects (allow-lists in a separate class)
 
