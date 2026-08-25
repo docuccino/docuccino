@@ -10,9 +10,11 @@ use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentHoist;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
+use Docuccino\Core\Extensions\Schema\DocumentedExamples;
 use Docuccino\Core\Extensions\Schema\MockHints;
 use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaResult;
+use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Laravel\Integrations\Support\ResourceWrapping;
@@ -74,6 +76,14 @@ final class JsonResourceSchema implements TypeToSchema
                 return null;
             }
 
+            // A resource's own declared properties are the only place a per-field declaration can be
+            // written, so their metadata is read for the docblock example the same reflection pass
+            // supplies the attributes from — and the files it was assembled from are recorded, since a
+            // fact this fragment now depends on may be written in a parent or a trait.
+            $metadata = $context->engine()->classMetadata(new ClassRef($type->fqcn));
+            $context->dependsOn(...$metadata->dependencyFiles);
+
+            $object = DocumentedExamples::applyTo($context, $object, $type->fqcn, $metadata->properties);
             $object = PropertyAnnotations::applyTo($context, $object, $type->fqcn);
 
             return MockHints::applyTo($context, $object, $type->fqcn);
