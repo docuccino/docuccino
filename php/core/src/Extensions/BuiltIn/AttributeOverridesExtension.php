@@ -156,7 +156,7 @@ final class AttributeOverridesExtension implements OperationExtension
             $this->report($context, Severity::Error, 'description-file.escapes-base-path', sprintf(
                 '#[Description] file "%s" escapes the application base path and was rejected.',
                 $path,
-            ), 'Point `file:` at a path inside the application, written relative to its root.');
+            ), ConfinedPath::FILE_ESCAPED_HELP);
 
             return null;
         }
@@ -168,7 +168,7 @@ final class AttributeOverridesExtension implements OperationExtension
             $this->report($context, Severity::Warning, 'description-file.missing', sprintf(
                 '#[Description] file "%s" could not be read; the description was not documented.',
                 $path,
-            ), 'Create the file, or correct the path — it is read relative to the application root.');
+            ), ConfinedPath::FILE_MISSING_HELP);
 
             return null;
         }

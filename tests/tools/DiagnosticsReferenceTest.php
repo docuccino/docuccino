@@ -3,6 +3,7 @@
 declare(strict_types=1);
 use Docuccino\Core\Diagnostics\DiagnosticDocs;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
+use Docuccino\Core\Support\ConfinedPath;
 
 require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
 
@@ -320,53 +321,77 @@ function diagnosticSourceContents(): array
     return $out;
 }
 
-/*
- * One owner for the component-key rule. The sentence a refused name is reported with restates the
- * character class ComponentNames enforces, and it reached three producers as three separate literals:
- * core's shared-error-response naming, the adapter's `#[ErrorComponent]` reader, and the
- * inferred-handler integration's. They draw from ComponentNames::LEGAL_NAME_HELP now, and these two
- * are what keep them there — the first refuses a fourth site that types the words out again (a copy is
- * free to drift from the pattern it describes), the second refuses a producer of either code that
- * states the rule some other way instead. Both are derived, not listed: the words come from the
- * constant, and the files come from the codes, so neither goes stale on a reword or a rename.
+/**
+ * The longest leading run of a sentence that no PHP quoting style would spell differently — cut at the
+ * first character a single- or double-quoted literal could escape. That is what makes a search for a
+ * hand-typed copy independent of how the copy was quoted.
  */
-it('states the component-key rule in one file only', function (): void {
-    // Up to the first double quote of the sentence, which is the longest run of it no PHP quoting
-    // style would escape — so a copy is caught however it was written.
-    $fragment = strstr(ComponentNames::LEGAL_NAME_HELP, '"', true);
+function diagnosticHelpFragment(string $sentence): string
+{
+    $cut = strcspn($sentence, '\'"\\$');
 
-    expect($fragment)->toBeString()->and(strlen((string) $fragment))->toBeGreaterThan(20);
+    return substr($sentence, 0, $cut);
+}
+
+/*
+ * One owner per help sentence. Each of these restates a rule some other code enforces, and each has
+ * already reached its reporters as separate literals — the component-key rule as three copies (core's
+ * shared-error-response naming, the adapter's `#[ErrorComponent]` reader, the inferred-handler
+ * integration's), the two `file:` refusals as four, in the example reader and the description reader,
+ * while the constants that own them had no readers at all. These two rows are what keep them drawn
+ * from one place: the first refuses a site that types the words out again (a copy is free to drift
+ * from the rule it describes), the second refuses a reporter of a code that states the rule some other
+ * way instead. Both are derived, not listed: the words come from the constant and the files come from
+ * the codes, so neither goes stale on a reword or a rename.
+ */
+it('states a rule a diagnostic restates in one file only', function (string $sentence, string $owner): void {
+    $fragment = diagnosticHelpFragment($sentence);
+
+    expect(strlen($fragment))->toBeGreaterThan(20);
 
     $holders = [];
     foreach (diagnosticSourceContents() as $path => $contents) {
-        if (str_contains($contents, (string) $fragment)) {
+        if (str_contains($contents, $fragment)) {
             $holders[] = basename($path);
         }
     }
 
-    expect($holders)->toBe(['ComponentNames.php']);
-});
+    expect($holders)->toBe([$owner]);
+})->with([
+    [ComponentNames::LEGAL_NAME_HELP, 'ComponentNames.php'],
+    [ConfinedPath::FILE_ESCAPED_HELP, 'ConfinedPath.php'],
+    [ConfinedPath::FILE_MISSING_HELP, 'ConfinedPath.php'],
+]);
 
-it('reports a refused component name with the rule its owner states', function (): void {
+it('reports each of those with the rule its owner states', function (string $constant, array $codes, int $floor): void {
     $reporters = [];
     $restating = [];
     foreach (diagnosticSourceContents() as $path => $contents) {
-        if (! str_contains($contents, "'components.name-invalid'") && ! str_contains($contents, "'attribute.error-component-invalid'")) {
+        $raises = false;
+        foreach ($codes as $code) {
+            $raises = $raises || str_contains($contents, "'".$code."'");
+        }
+
+        if (! $raises) {
             continue;
         }
 
         $reporters[] = basename($path);
 
-        if (! str_contains($contents, 'LEGAL_NAME_HELP')) {
+        if (! str_contains($contents, $constant)) {
             $restating[] = basename($path);
         }
     }
 
-    // Anti-vacuity: three producers report one of those codes today, so a scan that stopped finding
-    // them would pass the assertion below while proving nothing.
+    // Anti-vacuity: a scan that stopped finding the reporters would pass the assertion beside this
+    // while proving nothing, so the count each row has today is asserted too.
     expect($restating)->toBe([])
-        ->and(count($reporters))->toBeGreaterThanOrEqual(3);
-});
+        ->and(count($reporters))->toBeGreaterThanOrEqual($floor);
+})->with([
+    ['LEGAL_NAME_HELP', ['components.name-invalid', 'attribute.error-component-invalid'], 3],
+    ['FILE_ESCAPED_HELP', ['example-file.escapes-base-path', 'description-file.escapes-base-path'], 2],
+    ['FILE_MISSING_HELP', ['example-file.missing', 'description-file.missing'], 2],
+]);
 
 /*
  * The links a build prints. A link to an anchor that is not there is worse than no link: it tells the

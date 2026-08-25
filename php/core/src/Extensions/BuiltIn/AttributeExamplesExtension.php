@@ -13,6 +13,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\ExampleFile;
 
 /**
@@ -342,7 +343,7 @@ final class AttributeExamplesExtension implements OperationExtension
             $this->report($context, Severity::Error, 'example-file.escapes-base-path', sprintf(
                 '#[Example] file "%s" escapes the application base path and was rejected.',
                 $path,
-            ), 'Point `file:` at a path inside the application, written relative to its root.');
+            ), ConfinedPath::FILE_ESCAPED_HELP);
 
             return null;
         }
@@ -351,7 +352,7 @@ final class AttributeExamplesExtension implements OperationExtension
             $this->report($context, Severity::Warning, 'example-file.missing', sprintf(
                 '#[Example] file "%s" could not be read; the example was not documented.',
                 $path,
-            ), 'Create the file, or correct the path — it is read relative to the application root.');
+            ), ConfinedPath::FILE_MISSING_HELP);
 
             return null;
         }
