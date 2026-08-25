@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Canonical;
 
 use Docuccino\Core\Document\PathItem;
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Json;
 use Docuccino\Core\Support\JsonValue;
 use stdClass;
@@ -70,11 +71,15 @@ final class Canonicalizer
     }
 
     /**
+     * `$residual` reads the members no handler names, where the node type still knows something
+     * about them — a Schema Object does, from the keyword's position. Without one they are data.
+     *
      * @param  array<mixed, mixed>  $node
      * @param  array<string, callable(mixed): mixed>  $handlers
+     * @param  (callable(string, mixed): mixed)|null  $residual
      * @return array<string, mixed>
      */
-    private function build(array $node, array $handlers): array
+    private function build(array $node, array $handlers, ?callable $residual = null): array
     {
         $out = [];
 
@@ -90,7 +95,11 @@ final class Canonicalizer
         foreach ($unknown as $key => $value) {
             $key = (string) $key;
             // An `x-*` member is somebody else's vocabulary: verbatim, whatever shape it is in.
-            $out[$key] = str_starts_with($key, 'x-') ? $value : $this->canonicalizeGeneric($value);
+            $out[$key] = match (true) {
+                str_starts_with($key, 'x-') => $value,
+                $residual !== null => $residual($key, $value),
+                default => $this->canonicalizeGeneric($value),
+            };
         }
 
         return $out;
@@ -397,64 +406,130 @@ final class Canonicalizer
     }
 
     /**
+     * The normative member order of a Schema Object. Order is the one thing about a keyword that is
+     * a choice rather than a fact, so it is stated here; how each member canonicalises is derived
+     * from the keyword's own contract in {@see SchemaKeywords}. A keyword missing from this list
+     * still canonicalises correctly — it sorts into the trailing run with the other unlisted
+     * members — so going stale costs a member its place and never its shape.
+     *
+     * @var list<string>
+     */
+    private const array SCHEMA_ORDER = [
+        'x-docuccino',
+        '$ref',
+        '$id',
+        '$anchor',
+        '$defs',
+        'title',
+        'description',
+        'type',
+        'format',
+        'enum',
+        'const',
+        'default',
+        'multipleOf',
+        'maximum',
+        'exclusiveMaximum',
+        'minimum',
+        'exclusiveMinimum',
+        'maxLength',
+        'minLength',
+        'pattern',
+        'contentEncoding',
+        'contentMediaType',
+        'items',
+        'prefixItems',
+        'additionalItems',
+        'contains',
+        'unevaluatedItems',
+        'maxItems',
+        'minItems',
+        'uniqueItems',
+        'properties',
+        'required',
+        'additionalProperties',
+        'patternProperties',
+        'propertyNames',
+        'unevaluatedProperties',
+        'maxProperties',
+        'minProperties',
+        'dependentRequired',
+        'dependentSchemas',
+        'allOf',
+        'anyOf',
+        'oneOf',
+        'not',
+        'if',
+        'then',
+        'else',
+        'discriminator',
+        'externalDocs',
+        'example',
+        'examples',
+        'readOnly',
+        'writeOnly',
+        'deprecated',
+        'nullable',
+    ];
+
+    /**
      * @return array<string, mixed>|stdClass
      */
     private function canonicalizeSchema(mixed $node): array|stdClass
     {
-        return $this->object($node, fn (array $schema) => $this->build($schema, [
-            'x-docuccino' => $this->canonicalizeDocuccino(...),
-            '$ref' => $this->keep(...),
-            '$id' => $this->keep(...),
-            '$anchor' => $this->keep(...),
-            '$defs' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeSchema(...)),
-            'title' => $this->keep(...),
-            'description' => $this->keep(...),
-            'type' => $this->keep(...),
-            'format' => $this->keep(...),
-            'enum' => $this->canonicalizeValueList(...),
-            'const' => $this->canonicalizeGeneric(...),
-            'default' => $this->canonicalizeGeneric(...),
-            'multipleOf' => $this->keep(...),
-            'maximum' => $this->keep(...),
-            'exclusiveMaximum' => $this->keep(...),
-            'minimum' => $this->keep(...),
-            'exclusiveMinimum' => $this->keep(...),
-            'maxLength' => $this->keep(...),
-            'minLength' => $this->keep(...),
-            'pattern' => $this->keep(...),
-            'contentEncoding' => $this->keep(...),
-            'contentMediaType' => $this->keep(...),
-            'items' => $this->canonicalizeSchema(...),
-            'prefixItems' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeSchema(...)),
-            'contains' => $this->canonicalizeSchema(...),
-            'maxItems' => $this->keep(...),
-            'minItems' => $this->keep(...),
-            'uniqueItems' => $this->keep(...),
-            'properties' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeSchema(...)),
-            'required' => $this->canonicalizeStringList(...),
-            'additionalProperties' => fn (mixed $v): mixed => is_array($v) ? $this->canonicalizeSchema($v) : $v,
-            'patternProperties' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeSchema(...)),
-            'propertyNames' => $this->canonicalizeSchema(...),
-            'maxProperties' => $this->keep(...),
-            'minProperties' => $this->keep(...),
-            'dependentRequired' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeStringList(...)),
-            'dependentSchemas' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeSchema(...)),
-            'allOf' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeSchema(...)),
-            'anyOf' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeSchema(...)),
-            'oneOf' => fn (mixed $v): mixed => $this->mapList($v, $this->canonicalizeSchema(...)),
-            'not' => $this->canonicalizeSchema(...),
-            'if' => $this->canonicalizeSchema(...),
-            'then' => $this->canonicalizeSchema(...),
-            'else' => $this->canonicalizeSchema(...),
-            'discriminator' => $this->canonicalizeGeneric(...),
-            'externalDocs' => $this->canonicalizeExternalDocs(...),
-            'example' => $this->canonicalizeGeneric(...),
-            'examples' => $this->canonicalizeGeneric(...),
-            'readOnly' => $this->keep(...),
-            'writeOnly' => $this->keep(...),
-            'deprecated' => $this->keep(...),
-            'nullable' => $this->keep(...),
-        ]));
+        $handlers = [];
+        foreach (self::SCHEMA_ORDER as $keyword) {
+            $handlers[$keyword] = fn (mixed $v): mixed => $this->schemaMember($keyword, $v);
+        }
+
+        return $this->object($node, fn (array $schema) => $this->build($schema, $handlers, $this->schemaResidual(...)));
+    }
+
+    /**
+     * One member {@see SCHEMA_ORDER} names, canonicalised for the position its keyword sits at.
+     * Everything else is data the schema states about instances, or prose about it.
+     */
+    private function schemaMember(string $keyword, mixed $value): mixed
+    {
+        $position = SchemaKeywords::positionOf($keyword);
+
+        if ($position !== null) {
+            return $this->subschema($position, $value);
+        }
+
+        return match ($keyword) {
+            'x-docuccino' => $this->canonicalizeDocuccino($value),
+            'externalDocs' => $this->canonicalizeExternalDocs($value),
+            'enum' => $this->canonicalizeValueList($value),
+            'required' => $this->canonicalizeStringList($value),
+            'const', 'default', 'discriminator', 'example', 'examples' => $this->canonicalizeGeneric($value),
+            default => $this->keep($value),
+        };
+    }
+
+    /**
+     * A member no ordering names. Its position still decides its shape — which is what keeps a
+     * keyword the order list has not caught up with valid rather than merely deterministic — and
+     * anything with no position is data, sorted like any other unknown member.
+     */
+    private function schemaResidual(string $keyword, mixed $value): mixed
+    {
+        $position = SchemaKeywords::positionOf($keyword);
+
+        return $position === null ? $this->canonicalizeGeneric($value) : $this->subschema($position, $value);
+    }
+
+    private function subschema(string $position, mixed $value): mixed
+    {
+        return match ($position) {
+            // A boolean is a schema in this position, and `not: false` means the opposite of
+            // `not: {}` — so only an array is read as a subschema.
+            SchemaKeywords::POSITION_SCHEMA => is_array($value) ? $this->canonicalizeSchema($value) : $value,
+            SchemaKeywords::POSITION_SCHEMA_MAP => $this->sortedMap($value, $this->canonicalizeSchema(...)),
+            SchemaKeywords::POSITION_SCHEMA_LIST => $this->mapList($value, $this->canonicalizeSchema(...)),
+            SchemaKeywords::POSITION_STRING_LIST_MAP => $this->sortedMap($value, $this->canonicalizeStringList(...)),
+            default => $this->canonicalizeGeneric($value),
+        };
     }
 
     /**
@@ -721,21 +796,12 @@ final class Canonicalizer
     /** Prose that must not change a schema's structural `sch:` id. Stripped only in annotation position. */
     private const array SCHEMA_ANNOTATION_KEYS = ['description', 'title', 'example', 'examples', 'x-docuccino'];
 
-    /** Keywords whose value is a single subschema. */
-    private const array SCHEMA_SUBSCHEMA_KEYS = ['items', 'contains', 'not', 'if', 'then', 'else', 'propertyNames', 'additionalProperties'];
-
-    /** Keywords whose value is a map of subschemas — the map keys are structural, only values recurse. */
-    private const array SCHEMA_SUBSCHEMA_MAP_KEYS = ['properties', '$defs', 'patternProperties', 'dependentSchemas'];
-
-    /** Keywords whose value is a list of subschemas. */
-    private const array SCHEMA_SUBSCHEMA_LIST_KEYS = ['allOf', 'anyOf', 'oneOf', 'prefixItems'];
-
     /**
      * Keyword-aware structural view of a schema for inline-schema identity. Recursion follows the
-     * JSON Schema applicator keywords, so a property literally named `description`/`title`/`example`
-     * still counts towards identity. `required` is order-normalised here — identity only, never in
-     * canonical output — so reordering members can't fork the id. Everything else (`type`, `enum`,
-     * `const`, bounds, …) is data and passes through untouched.
+     * subschema positions {@see SchemaKeywords} names, so a property literally named
+     * `description`/`title`/`example` still counts towards identity. `required` is order-normalised
+     * here — identity only, never in canonical output — so reordering members can't fork the id.
+     * Everything else (`type`, `enum`, `const`, bounds, …) is data and passes through untouched.
      *
      * @param  array<mixed, mixed>  $schema
      * @return array<string, mixed>
@@ -755,28 +821,18 @@ final class Canonicalizer
                 continue;
             }
 
-            if (in_array($key, self::SCHEMA_SUBSCHEMA_MAP_KEYS, true) && is_array($value)) {
-                $out[(string) $key] = $this->stripSubschemaMap($value);
+            $position = SchemaKeywords::positionOf((string) $key);
 
-                continue;
-            }
-
-            if (in_array($key, self::SCHEMA_SUBSCHEMA_LIST_KEYS, true) && is_array($value)) {
-                $out[(string) $key] = array_map(
+            $out[(string) $key] = match (true) {
+                ! is_array($value) => $value,
+                $position === SchemaKeywords::POSITION_SCHEMA_MAP => $this->stripSubschemaMap($value),
+                $position === SchemaKeywords::POSITION_SCHEMA_LIST => array_map(
                     fn (mixed $item): mixed => is_array($item) ? $this->stripForStructuralHash($item) : $item,
                     array_values($value),
-                );
-
-                continue;
-            }
-
-            if (in_array($key, self::SCHEMA_SUBSCHEMA_KEYS, true) && is_array($value)) {
-                $out[(string) $key] = $this->stripForStructuralHash($value);
-
-                continue;
-            }
-
-            $out[(string) $key] = $value;
+                ),
+                $position === SchemaKeywords::POSITION_SCHEMA => $this->stripForStructuralHash($value),
+                default => $value,
+            };
         }
 
         return $out;
