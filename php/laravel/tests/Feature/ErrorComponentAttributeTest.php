@@ -63,6 +63,8 @@ const DECLARED_ERROR_ACTIONS = [
     'fourteenth' => DeclaredErrorsController::class.'::fourteenth',
     'fifteenth' => DeclaredErrorsController::class.'::fifteenth',
     'sixteenth' => DeclaredErrorsController::class.'::sixteenth',
+    'seventeenth' => DeclaredErrorsController::class.'::seventeenth',
+    'eighteenth' => DeclaredErrorsController::class.'::eighteenth',
 ];
 
 /**
@@ -312,6 +314,38 @@ it('lets an action\'s component: beat the one its base controller declares', fun
     expect($facts('/api/zz-inheriting-overrides'))->toBe('ActionGone')
         ->and($facts('/api/zz-inheriting-inherits'))->toBe('BaseGone')
         ->and(diagnosticsCoded($result->diagnostics, 'attribute.response-component-contested'))->toBeEmpty();
+});
+
+it('reports an errorComponent: no component key could carry', function (): void {
+    // `claimComponentName()` drops an illegal name at the write and says nothing, which is the same
+    // silence #187 removed from `#[ErrorComponent]` — an author who wrote `'Auth Challenge'`, a space
+    // and the most likely first attempt, gets their old names back and no reason why. One mistake, one
+    // remedy, so one code: the anchor that read it names itself in the message.
+    $result = declaringBuild(['seventeenth' => [UndeclaredException::class, 409]]);
+    $document = $result->document->toArray();
+
+    $rejected = diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid');
+
+    expect($rejected)->toHaveCount(1)
+        ->and($rejected[0]->severity)->toBe(Severity::Warning)
+        ->and($rejected[0]->message)->toContain('#[Response(status: 410')
+        ->and($rejected[0]->message)->toContain('Auth Challenge')
+        ->and($rejected[0]->help)->toContain('letters, digits')
+        // …and the name reached nothing, exactly as it did before it was reported.
+        ->and($document['paths']['/api/zz-declared-seventeenth']['get']['responses']['410']['x-docuccino']['facts'] ?? [])
+        ->not->toHaveKey('component');
+});
+
+it('lets an empty errorComponent: neither publish nor block the name beside it', function (): void {
+    // An empty string is no name. It is reported like any other name a key cannot carry, and — the half
+    // that would have been invisible — it does not take the status's one claim on the way past, so the
+    // legal declaration under it still wins.
+    $result = declaringBuild(['eighteenth' => [UndeclaredException::class, 409]]);
+    $document = $result->document->toArray();
+
+    expect($document['paths']['/api/zz-declared-eighteenth']['get']['responses']['410']['x-docuccino']['facts']['component'])
+        ->toBe('RealName')
+        ->and(diagnosticsCoded($result->diagnostics, 'attribute.error-component-invalid'))->toHaveCount(1);
 });
 
 it('names an undeclared exception\'s error after its status, as it always did', function (): void {

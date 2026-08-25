@@ -796,9 +796,10 @@ that builds it, which outranks both. Nothing is reported where the render method
 :::
 
 A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
-the class or the render method that declared it, and the response keeps the name it would have had — the
-status default from the table above, or `Error<status>` where the status has none. A refused name never
-contests a good one.
+the declaration that carried it — the exception class, the render method, or the `#[Response]` — and the
+response keeps the name it would have had: the status default from the table above, or `Error<status>`
+where the status has none. A refused name never contests a good one, so a legal name at the same status
+still wins.
 
 Two render methods naming *the same* component for bodies that differ is settled like every other
 contest: both bodies keep a name derived from their own content and the build reports

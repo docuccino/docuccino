@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\TypeGrammar\ImportContext;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
@@ -44,6 +45,8 @@ final class AttributeResponsesExtension implements OperationExtension
         foreach ($context->attributes->all(IgnoreResponse::class) as $ignore) {
             $operation->removeResponse((string) $ignore->status);
         }
+
+        $this->reportIllegalComponents($context);
 
         foreach ($context->attributes->all(Response::class) as $attribute) {
             $status = (string) $attribute->status;
@@ -113,6 +116,49 @@ final class AttributeResponsesExtension implements OperationExtension
             Contribution::attribute($context->actionSource(), specificity: 1),
             namesResponse: true,
         );
+    }
+
+    /**
+     * One warning per `errorComponent:` no `$ref` could point at. `claimComponentName()` drops such a
+     * name at the write and answers `NoOp`, which leaves an author who wrote a space — the likeliest
+     * first attempt — with an argument that does nothing and no reason why; the adapter catches it where
+     * it reads it, exactly as {@see ErrorResponsesExtension::reportIllegalName()} does for the anchor
+     * next door. One mistake, one validation and one remedy, so it is that anchor's code rather than a
+     * parallel one: what differs is only which declaration to go and fix, which the message names.
+     *
+     * Keyed by the mistake rather than the declaration, so a bad name spelled on both a controller and
+     * its action is one report, and sorted so what the route says never depends on attribute order.
+     */
+    private function reportIllegalComponents(RouteContext $context): void
+    {
+        /** @var array<string, array{string, string}> $illegal */
+        $illegal = [];
+        foreach ($context->attributes->all(Response::class) as $attribute) {
+            $name = $attribute->errorComponent;
+            if ($name === null || ComponentNames::isLegal($name)) {
+                continue;
+            }
+
+            $status = (string) $attribute->status;
+            $illegal[$status."\0".$name] = [$status, $name];
+        }
+
+        ksort($illegal);
+
+        foreach ($illegal as [$status, $name]) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Warning,
+                code: 'attribute.error-component-invalid',
+                message: sprintf(
+                    '#[Response(status: %s, errorComponent: "%s")] is not a name an OpenAPI component key can carry, so the argument names nothing and the response keeps the name it would have had.',
+                    $status,
+                    $name,
+                ),
+                source: $context->actionSource(),
+                routeSignature: $context->route->signature(),
+                help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
+            ));
+        }
     }
 
     private function reportBodylessBody(RouteContext $context, string $status, string $type): void

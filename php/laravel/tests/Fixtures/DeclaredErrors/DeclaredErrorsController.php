@@ -115,4 +115,19 @@ final class DeclaredErrorsController
     {
         return [];
     }
+
+    /** A space is the first thing anyone tries, and no `$ref` can point at what it makes. */
+    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'Auth Challenge')]
+    public function seventeenth(): array
+    {
+        return [];
+    }
+
+    /** An empty name is no name: it neither publishes nor stands in the way of the one beside it. */
+    #[Response(status: 410, mediaType: 'application/problem+json', errorComponent: '')]
+    #[Response(status: 410, type: 'array{reason: string}', description: 'Gone', errorComponent: 'RealName')]
+    public function eighteenth(): array
+    {
+        return [];
+    }
 }

@@ -109,6 +109,10 @@ name is the status's: where two declarations at one status name different compon
 as every other argument of the attribute settles. It outranks an `#[ErrorComponent]` on the exception
 class the action throws, which is the specificity rule: the declaration nearest the operation wins.
 
+A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
+the declaration that carried it, and the response keeps the name it would have had. A refused name never
+takes the status's one claim on the way past, so a legal name beside it still wins.
+
 ### `#[ResponseHeader]`
 
 Targets `CLASS | METHOD | FUNCTION`, repeatable.
