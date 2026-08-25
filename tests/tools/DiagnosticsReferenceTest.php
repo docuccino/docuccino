@@ -361,9 +361,32 @@ it('states a rule a diagnostic restates in one file only', function (string $sen
     [ComponentNames::LEGAL_NAME_HELP, 'ComponentNames.php'],
     [ConfinedPath::FILE_ESCAPED_HELP, 'ConfinedPath.php'],
     [ConfinedPath::FILE_MISSING_HELP, 'ConfinedPath.php'],
+    // The config-facing half of the same two refusals. Same rule, same owner, a different place for the
+    // author to go and edit — so it is the same drift risk and owes the same row.
+    [ConfinedPath::CONFIG_FILE_ESCAPED_HELP, 'ConfinedPath.php'],
+    [ConfinedPath::CONFIG_FILE_MISSING_HELP, 'ConfinedPath.php'],
 ]);
 
-it('reports each of those with the rule its owner states', function (string $constant, array $codes, int $floor): void {
+/**
+ * References written the way the source writes them — `Owner::CONSTANT` — rather than bare constant
+ * names. A bare name is a SUBSTRING of the config-facing one (`FILE_ESCAPED_HELP` sits inside
+ * `CONFIG_FILE_ESCAPED_HELP`), so a reporter drawing on either would satisfy a row naming the other and
+ * a reporter drawing on NEITHER would have to be caught by something else.
+ *
+ * @param  list<string>  $constants
+ */
+function diagnosticDrawsOnAny(string $contents, array $constants): bool
+{
+    foreach ($constants as $constant) {
+        if (str_contains($contents, $constant)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+it('reports each of those with the rule its owner states', function (array $constants, array $codes, int $floor): void {
     $reporters = [];
     $restating = [];
     foreach (diagnosticSourceContents() as $path => $contents) {
@@ -378,7 +401,7 @@ it('reports each of those with the rule its owner states', function (string $con
 
         $reporters[] = basename($path);
 
-        if (! str_contains($contents, $constant)) {
+        if (! diagnosticDrawsOnAny($contents, $constants)) {
             $restating[] = basename($path);
         }
     }
@@ -391,9 +414,22 @@ it('reports each of those with the rule its owner states', function (string $con
     expect($restating)->toBe([])
         ->and(count($reporters))->toBeGreaterThanOrEqual($floor);
 })->with([
-    ['LEGAL_NAME_HELP', ['components.name-invalid', 'attribute.error-component-invalid'], 4],
-    ['FILE_ESCAPED_HELP', ['example-file.escapes-base-path', 'description-file.escapes-base-path'], 2],
-    ['FILE_MISSING_HELP', ['example-file.missing', 'description-file.missing'], 2],
+    // `ComponentRegistry::LEGAL_NAME_HELP` is an alias of the owner's constant, not a copy — it is how
+    // an integration, which may only import the public surface, draws on the same sentence.
+    [['ComponentNames::LEGAL_NAME_HELP', 'ComponentRegistry::LEGAL_NAME_HELP'], ['components.name-invalid', 'attribute.error-component-invalid'], 4],
+    // Two codes with reporters on both sides of the attribute/config line, so either constant of the
+    // pair satisfies a row: an attribute reader owes the `file:` wording and a config reader the
+    // configured-path wording, and both are drawn from the one owner.
+    [
+        ['ConfinedPath::FILE_ESCAPED_HELP', 'ConfinedPath::CONFIG_FILE_ESCAPED_HELP'],
+        ['example-file.escapes-base-path', 'description-file.escapes-base-path'],
+        3,
+    ],
+    [
+        ['ConfinedPath::FILE_MISSING_HELP', 'ConfinedPath::CONFIG_FILE_MISSING_HELP'],
+        ['example-file.missing', 'description-file.missing'],
+        3,
+    ],
 ]);
 
 /*
