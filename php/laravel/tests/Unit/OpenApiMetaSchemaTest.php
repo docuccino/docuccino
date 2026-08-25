@@ -95,6 +95,17 @@ it('emits YAML and JSON that agree on every map, sequence and scalar', function 
 })->with(adapterMetaSchemaSubjects());
 
 /**
+ * And on member ORDER, which neither the comparison above nor a meta-schema can see — one walks by name
+ * and diffs key sets, the other cannot constrain order at all. These are whole recorded applications at
+ * all three versions, where the YAML goldens pin order for three documents at one.
+ */
+it('emits YAML and JSON that agree on the order they write members in', function (string $golden, string $format): void {
+    [$json, $yaml] = adapterMetaSchemaEmissions($golden, $format);
+
+    expect(EmittedDocument::orderDifferences($json, $yaml))->toBe([]);
+})->with(adapterMetaSchemaSubjects());
+
+/**
  * The oracle reading its own subjects correctly, stated as bytes. Everything above compares an emission
  * with a schema or with its other serialisation, so all of it stays green on a document loaded WRONG —
  * both sides agree, and both are wrong together. This is the assertion that fails instead.
@@ -137,16 +148,22 @@ it('re-emits the empty objects its subjects hold, rather than the lists a plain 
 it('validates a plausible minimum of recorded documents, positions and empty maps', function (): void {
     $positions = 0;
     $emptyMaps = 0;
+    $orderedMaps = 0;
 
     foreach (adapterMetaSchemaGoldens() as $golden) {
         [$json, $yaml] = adapterMetaSchemaEmissions($golden, 'openapi-3.2');
 
         $positions += EmittedDocument::nodes($json) + EmittedDocument::nodes($yaml);
         $emptyMaps += count(EmittedDocument::emptyMaps($json));
+
+        // The floor the order assertion needs: a map with fewer than two members has no order to get
+        // wrong, so a subject set that had lost its multi-member maps would satisfy it on nothing.
+        $orderedMaps += EmittedDocument::orderedMaps($json);
     }
 
     expect(count(adapterMetaSchemaGoldens()))->toBeGreaterThanOrEqual(10)
         ->and(count(adapterMetaSchemaSubjects()))->toBeGreaterThanOrEqual(30)
         ->and($positions)->toBeGreaterThanOrEqual(10000)
-        ->and($emptyMaps)->toBeGreaterThanOrEqual(1);
+        ->and($emptyMaps)->toBeGreaterThanOrEqual(1)
+        ->and($orderedMaps)->toBeGreaterThanOrEqual(500);
 });

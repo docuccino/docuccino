@@ -17,6 +17,10 @@ use Symfony\Component\Yaml\Yaml;
  * `--yaml` shipped `paths: []` for a `paths` that is an empty MAP. {@see parseYaml()} uses
  * `PARSE_OBJECT_FOR_MAP`, which answers `stdClass` for a mapping, so the two serialisations of one
  * document become comparable position by position.
+ *
+ * Two comparisons read that graph and they split the work deliberately: {@see differences()} answers
+ * kinds, presence and scalar values, and {@see orderDifferences()} answers member ORDER, which
+ * `differences()` cannot see because it walks by name and diffs key sets.
  */
 final class EmittedDocument
 {
@@ -92,6 +96,86 @@ final class EmittedDocument
         }
 
         return $json === $yaml ? [] : [sprintf('%s: json %s, yaml %s', $at, var_export($json, true), var_export($yaml, true))];
+    }
+
+    /**
+     * Every position where the two serialisations write the same members in a DIFFERENT ORDER, one line
+     * each.
+     *
+     * {@see differences()} cannot see this by construction: it walks maps member-by-NAME and then diffs
+     * key SETS, so two serialisations that carry identical members in swapped order come back identical,
+     * and so does the meta-schema — JSON Schema has no way to constrain member order. That makes member
+     * order a second instance of the class mapping-key quoting belongs to: a difference that exists only
+     * in the BYTES, invisible to any oracle that parses first.
+     *
+     * It matters here because determinism is a product feature. A writer that emitted members in a
+     * different order from its sibling is a real defect — the two serialisations of one document stop
+     * being the same document — and the three byte-locked YAML goldens cover order for three documents at
+     * one version, not for the other subjects or the other two versions.
+     *
+     * Only order: a differing key SET is {@see differences()}'s to report, and reporting it twice would
+     * make one defect read as two.
+     *
+     * @return list<string>
+     */
+    public static function orderDifferences(mixed $json, mixed $yaml, string $pointer = ''): array
+    {
+        if ($json instanceof stdClass && $yaml instanceof stdClass) {
+            $jsonKeys = array_keys(get_object_vars($json));
+            $yamlKeys = array_keys(get_object_vars($yaml));
+
+            $found = [];
+
+            if ($jsonKeys !== $yamlKeys && array_diff($jsonKeys, $yamlKeys) === [] && array_diff($yamlKeys, $jsonKeys) === []) {
+                $found[] = sprintf(
+                    '%s: json orders %s, yaml orders %s',
+                    $pointer === '' ? '/' : $pointer,
+                    implode(', ', $jsonKeys),
+                    implode(', ', $yamlKeys),
+                );
+            }
+
+            foreach (get_object_vars($json) as $key => $value) {
+                if (property_exists($yaml, (string) $key)) {
+                    $found = [...$found, ...self::orderDifferences($value, $yaml->{$key}, $pointer.'/'.self::escape((string) $key))];
+                }
+            }
+
+            return $found;
+        }
+
+        if (is_array($json) && is_array($yaml)) {
+            $found = [];
+
+            foreach ($json as $index => $value) {
+                if (array_key_exists($index, $yaml)) {
+                    $found = [...$found, ...self::orderDifferences($value, $yaml[$index], $pointer.'/'.$index)];
+                }
+            }
+
+            return $found;
+        }
+
+        return [];
+    }
+
+    /**
+     * How many maps in $node carry two or more members — the anti-vacuity count for
+     * {@see orderDifferences()}, since a map with fewer has no order to get wrong.
+     */
+    public static function orderedMaps(mixed $node): int
+    {
+        if ($node instanceof stdClass) {
+            $members = get_object_vars($node);
+
+            return (count($members) >= 2 ? 1 : 0) + array_sum(array_map(self::orderedMaps(...), array_values($members)));
+        }
+
+        if (is_array($node)) {
+            return array_sum(array_map(self::orderedMaps(...), $node));
+        }
+
+        return 0;
     }
 
     /** How many positions a walk of $node visits — the anti-vacuity count for any of the above. */

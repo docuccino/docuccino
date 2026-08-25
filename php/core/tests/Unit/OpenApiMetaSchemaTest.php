@@ -96,6 +96,22 @@ it('emits YAML and JSON that agree on every map, sequence and scalar', function 
     expect(EmittedDocument::differences($json, $yaml))->toBe([]);
 })->with(metaSchemaSubjects());
 
+/**
+ * And on the order those members are written in, which neither oracle above can see: the kind comparison
+ * walks maps by NAME and then diffs key SETS, and JSON Schema cannot constrain member order at all. So a
+ * writer that emitted `info` before `paths` where its sibling emitted `paths` before `info` produced zero
+ * findings from both — a second instance of the class mapping-key quoting belongs to, where the difference
+ * exists only in the bytes.
+ *
+ * Determinism is a product feature here, so that is a real defect, and the YAML goldens cover order for
+ * three documents at one version rather than for these subjects at all three.
+ */
+it('emits YAML and JSON that agree on the order they write members in', function (string $fixture, string $format): void {
+    [$json, $yaml] = metaSchemaEmissions($fixture, $format);
+
+    expect(EmittedDocument::orderDifferences($json, $yaml))->toBe([]);
+})->with(metaSchemaSubjects());
+
 it('vendors a meta-schema for every OpenAPI format the emitters offer', function (): void {
     $emitted = array_values(array_filter(
         Formats::ids(),
@@ -315,6 +331,48 @@ it('sees a null-valued member the YAML dropped, where the meta-schema cannot', f
 });
 
 /**
+ * The order detector's own negative path, on the mutation that motivated it: one serialisation writes
+ * `info` then `paths`, the other writes them the other way round, and the same swap one level down.
+ * Members, kinds and scalars are identical, so `differences()` reports nothing and both meta-schemas
+ * accept both documents — and the encoded bytes are not the same bytes.
+ */
+it('reports a member-order divergence both other oracles read past', function (): void {
+    $ordered = json_decode('{"openapi":"3.2.0","info":{"title":"T","version":"1.0.0"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+    $swapped = json_decode('{"openapi":"3.2.0","paths":{},"info":{"version":"1.0.0","title":"T"}}', flags: JSON_THROW_ON_ERROR);
+
+    // What the two existing oracles say about the pair: nothing, from either side.
+    expect(EmittedDocument::differences($ordered, $swapped))->toBe([])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $ordered))->toBe([])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $swapped))->toBe([]);
+
+    // What the bytes say, and what the detector says.
+    expect(json_encode($swapped, JSON_THROW_ON_ERROR))->not->toBe(json_encode($ordered, JSON_THROW_ON_ERROR));
+
+    expect(EmittedDocument::orderDifferences($ordered, $swapped))->toBe([
+        '/: json orders openapi, info, paths, yaml orders openapi, paths, info',
+        '/info: json orders title, version, yaml orders version, title',
+    ]);
+
+    // And silence on a document compared with itself, so the detector is not simply always positive.
+    expect(EmittedDocument::orderDifferences($ordered, $ordered))->toBe([])
+        ->and(EmittedDocument::orderedMaps($ordered))->toBe(2);
+});
+
+/**
+ * Order is only order. A differing key SET belongs to `differences()`, and reporting it in both places
+ * would make one defect read as two — so the detector stays silent on a dropped member and the other
+ * comparison keeps answering for it.
+ */
+it('leaves a differing member set to the comparison that owns it', function (): void {
+    $full = json_decode('{"openapi":"3.2.0","info":{"title":"T","version":"1.0.0"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+    $short = json_decode('{"openapi":"3.2.0","info":{"title":"T"},"paths":{}}', flags: JSON_THROW_ON_ERROR);
+
+    expect(EmittedDocument::orderDifferences($full, $short))->toBe([])
+        ->and(EmittedDocument::differences($full, $short))
+        ->toBe(['/info/version: json carries a member yaml does not']);
+});
+
+/**
  * A scan that finds nothing must fail. These are the counts the assertions above are worth: well under
  * what the tree holds today, far enough above zero that a fixture glob which stopped matching, or an
  * emitter that started returning empty output, fails here instead of passing on nothing.
@@ -322,15 +380,21 @@ it('sees a null-valued member the YAML dropped, where the meta-schema cannot', f
 it('validates a plausible minimum of documents and positions', function (): void {
     $documents = 0;
     $positions = 0;
+    $orderedMaps = 0;
 
     foreach (metaSchemaSubjects() as [$fixture, $format]) {
         [$json, $yaml] = metaSchemaEmissions($fixture, $format);
 
         $documents += 2;
         $positions += EmittedDocument::nodes($json) + EmittedDocument::nodes($yaml);
+
+        // The floor the order assertion needs: a map with fewer than two members has no order to get
+        // wrong, so a subject set that had lost its multi-member maps would satisfy it on nothing.
+        $orderedMaps += EmittedDocument::orderedMaps($json);
     }
 
     expect(count(metaSchemaFixtures()))->toBeGreaterThanOrEqual(5)
         ->and($documents)->toBeGreaterThanOrEqual(30)
-        ->and($positions)->toBeGreaterThanOrEqual(5000);
+        ->and($positions)->toBeGreaterThanOrEqual(5000)
+        ->and($orderedMaps)->toBeGreaterThanOrEqual(300);
 });
