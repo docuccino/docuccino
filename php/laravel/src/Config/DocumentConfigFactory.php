@@ -69,7 +69,12 @@ final readonly class DocumentConfigFactory
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
             errorResponses: is_string($preset) ? $preset : 'none',
             errorsShape: $errorsShape === 'pointer-list' ? 'pointer-list' : 'map',
-            overlays: Hydrate::stringList($config['overlays'] ?? []),
+            // A glob holding a NUL byte raises out of `glob()` and takes the build with it, so it never
+            // reaches one — the same refusal every other path key gets, reported by ConfigDiagnostics.
+            overlays: array_values(array_filter(
+                Hydrate::stringList($config['overlays'] ?? []),
+                static fn (string $pattern): bool => ConfinedPath::holdable($pattern) !== null,
+            )),
             onRouteError: $onRouteError,
             security: $security,
             tags: $tags,

@@ -15,7 +15,9 @@ use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\EngineNeon;
 use Docuccino\Laravel\Engine\EnginePackage;
@@ -72,7 +74,12 @@ final class DocumentBuilder
         $config = $this->config($key);
         [$overlays, $overlayDiagnostics] = $this->overlays($config);
         [$extensions, $extensionDiagnostics] = ConfigExtensions::read();
-        $preDiagnostics = [...$this->engineDiagnostics(), ...$extensionDiagnostics, ...$overlayDiagnostics];
+        $preDiagnostics = [
+            ...$this->engineDiagnostics(),
+            ...$this->cachePathDiagnostics(),
+            ...$extensionDiagnostics,
+            ...$overlayDiagnostics,
+        ];
 
         $result = $this->generator->generate($config, $engine, $extensions, $overlays);
 
@@ -137,6 +144,35 @@ final class DocumentBuilder
         return $analysing
             ? [...$diagnostics, ...$this->engineNeonDiagnostics()]
             : $diagnostics;
+    }
+
+    /**
+     * `cache.path` names a directory no filesystem call can accept, so the fragment cache is off.
+     *
+     * The one path key outside the per-document bag that a BUILD reads, so ConfigDiagnostics — which
+     * only sees a document's own config — cannot report it, and this is the neighbouring channel that
+     * can. Same code and same severity as the document keys: what the author did is identical, and so
+     * is what it cost them.
+     *
+     * @return list<Diagnostic>
+     */
+    private function cachePathDiagnostics(): array
+    {
+        $configured = config('docuccino.cache.path');
+
+        if (! is_string($configured) || ConfinedPath::holdable($configured) !== null) {
+            return [];
+        }
+
+        return [new Diagnostic(
+            severity: Severity::Warning,
+            code: 'config.path-rejected',
+            message: sprintf(
+                'cache.path contains a NUL byte, which no filesystem path can hold, so the fragment cache is off and every route was rebuilt — %s.',
+                PlainText::of($configured),
+            ),
+            help: 'Write the path in single quotes, or escape the backslash — "\0" in a double-quoted PHP string is a NUL byte, not the two characters it looks like.',
+        )];
     }
 
     /**

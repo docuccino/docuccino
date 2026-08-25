@@ -39,13 +39,12 @@ final class ConfinedPath
      */
     public static function resolve(string $base, string $relative): ?string
     {
-        // A NUL byte is neither a traversal nor an absent file: it is a path no filesystem can hold,
-        // and every function that would answer for one — realpath(), file_get_contents(), is_dir() —
-        // raises a ValueError instead. PHP lets an author write one by accident, a stray escape in a
+        // A NUL byte is neither a traversal nor an absent file: it is a path no filesystem can hold
+        // ({@see holdable()}). PHP lets an author write one by accident, a stray escape in a
         // double-quoted attribute argument, so it is refused HERE. Refusing it at a reporter would
         // leave every other caller of a security control crashing, and the nearest catch is
         // per-route: one stray escape would cost the author the whole route rather than one example.
-        if (str_contains($base, "\0") || str_contains($relative, "\0")) {
+        if (self::holdable($base) === null || self::holdable($relative) === null) {
             return null;
         }
 
@@ -73,11 +72,25 @@ final class ConfinedPath
      */
     public static function configuredDir(string $base, string $configured): ?string
     {
-        if (str_contains($configured, "\0")) {
-            return null;
-        }
+        return self::holdable($configured) === null
+            ? null
+            : (str_starts_with($configured, '/') ? $configured : self::resolve($base, $configured));
+    }
 
-        return str_starts_with($configured, '/') ? $configured : self::resolve($base, $configured);
+    /**
+     * $path, or null when no filesystem call could accept it — the NUL refusal above, for the paths
+     * this class does NOT confine.
+     *
+     * Confinement and holdability are different questions and only one of them has exceptions: an
+     * overlay glob, an export destination and a fragment-cache directory may legitimately point outside
+     * the application, so they never come through {@see resolve()} — and a NUL byte raises a `ValueError`
+     * out of `glob()`, `realpath()`, `file_get_contents()`, `scandir()` and `mkdir()` all the same, with
+     * `@` no help because it is a throw and not a warning. So the refusal belongs to every configured
+     * path and not only to the confined ones, and it is stated once, here, rather than at each reader.
+     */
+    public static function holdable(string $path): ?string
+    {
+        return str_contains($path, "\0") ? null : $path;
     }
 
     private static function within(string $base, string $candidate): bool
