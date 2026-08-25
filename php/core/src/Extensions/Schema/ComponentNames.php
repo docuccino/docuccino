@@ -24,6 +24,9 @@ final class ComponentNames
     /** Characters of the identity hash a claim nothing else separates falls back to — 40 bits. */
     private const DISCRIMINATOR = 8;
 
+    /** The longest name this may publish; see {@see sanitize()} for why a component key needs a bound. */
+    private const MAX = 128;
+
     /**
      * What one bucket's claims settle to: the RENAMES — registration name → published name, for the
      * claims whose slot isn't the name they keep — and the CONTESTS, as contested name → published name
@@ -130,7 +133,7 @@ final class ComponentNames
             $rungs[] = self::sanitize(implode('', array_slice($segments, -$depth)).$stem);
         }
 
-        $rungs[] = $stem.'_'.self::discriminator($claim['identity'] ?? $claim['content']);
+        $rungs[] = self::sanitize($stem.'_'.self::discriminator($claim['identity'] ?? $claim['content']));
 
         return array_values(array_unique($rungs));
     }
@@ -223,7 +226,7 @@ final class ComponentNames
 
             $candidate = $proposal;
             for ($n = 2; isset($used[$candidate]); $n++) {
-                $candidate = $proposal.'_'.$n;
+                $candidate = self::sanitize($proposal.'_'.$n);
             }
 
             $used[$candidate] = true;
@@ -292,18 +295,40 @@ final class ComponentNames
      * Whether a name is already one a `$ref` can carry — the question {@see sanitize()} answers by
      * force. The character class lives here and nowhere else: a second copy of it is how a name this
      * class would rewrite comes to be accepted somewhere upstream.
+     *
+     * What it guarantees, beyond the OAS component-key grammar it implements: `/` and `~` cannot
+     * survive it, so a name is safe to concatenate into a `#/components/…` pointer without escaping.
+     * Callers that build a `$ref` by concatenation depend on that and have no guard of their own, so
+     * `ComponentNamesTest` asserts the two together rather than leaving the coupling implicit.
      */
     public static function isLegal(string $name): bool
     {
         return self::sanitize($name) === $name;
     }
 
-    /** Reduce a name to the characters a `$ref` may carry, never to nothing. */
+    /**
+     * Reduce a name to the characters a `$ref` may carry, never to nothing and never to more than
+     * {@see MAX} bytes.
+     *
+     * The bound is here because a published component name is not only a map key: a generator turns it
+     * into a type and, for most targets, into the FILE that type lives in, and `NAME_MAX` is 255 bytes
+     * on every mainstream filesystem. 128 leaves a generator its own prefix, suffix and extension
+     * inside that, and is far above anything a name is minted from in practice — the longest this
+     * repository's fixtures publish is 22 bytes. An over-long name keeps as much of its head as fits
+     * and ends in a hash of the whole, so the short form is still a function of the name alone and two
+     * names sharing a head do not collapse onto one.
+     */
     public static function sanitize(string $name): string
     {
         $clean = self::clean($name);
 
-        return $clean === '' ? 'Schema' : $clean;
+        if ($clean === '') {
+            return 'Schema';
+        }
+
+        return strlen($clean) <= self::MAX
+            ? $clean
+            : substr($clean, 0, self::MAX - 1 - self::DISCRIMINATOR).'_'.self::discriminator($clean);
     }
 
     /** The `$ref`-safe characters of a name, which may be none of them. */

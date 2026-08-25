@@ -163,7 +163,7 @@ it('writes every status code in an emitted document as a string key', function (
     $yaml = (new YamlSerializer)->serialize((new Canonicalizer)->canonicalize(workedExample()));
 
     expect($yaml)->toMatch("/^\\s+'\\d{3}':$/m")
-        ->and($yaml)->not->toMatch("/^\\s+\\d{3}:$/m");
+        ->and($yaml)->not->toMatch('/^\\s+\\d{3}:$/m');
 });
 
 it('renders multi-line strings as literal blocks deterministically', function (): void {

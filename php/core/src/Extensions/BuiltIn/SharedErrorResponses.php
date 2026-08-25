@@ -601,8 +601,8 @@ final class SharedErrorResponses implements DocumentTransformer
      * @param  array<string, mixed>  $values  canonical bytes → the example they encode
      * @param  array<string, array<string, mixed>>  $contested  contested name → canonical bytes → the Example Object under it
      * @param  list<array-key>  $taken  names an author already gave an example on this media type; these
-     *                                are bucket KEYS, so a numeric one arrives as an int
-     *                                ({@see ComponentNames::mint()}, which normalises them)
+     *                                  are bucket KEYS, so a numeric one arrives as an int
+     *                                  ({@see ComponentNames::mint()}, which normalises them)
      * @return array<string, mixed>
      */
     private static function named(array $values, array $contested, array $taken): array
