@@ -296,17 +296,22 @@ as its own losses. The first group below is what 3.1 already gives up; the rest 
 | `anyOf: [{$ref}, {type: null}]` | `allOf: [{$ref}]` with `nullable: true` |
 | `type: [string, integer]` | An `anyOf` of single-type branches |
 | `const: "draft"` | `enum: ["draft"]` |
+| A subschema of `true` or `false` | `{}` or `{"not": {}}` — the same constraint, in the only spelling 3.0 has for it |
 | Schema `examples: [a, b]` | `example: a` |
 | `exclusiveMinimum: 0` | `minimum: 0` with `exclusiveMinimum: true` |
 | `contentEncoding: base64` | `format: byte` |
 | A `description` beside a `$ref` | Hoisted, with the `$ref` moved into an `allOf` |
 | `$anchor`, `$defs`, `$id`, `$schema`, `additionalItems`, `contains`, `contentMediaType`, `contentSchema`, `definitions`, `dependentRequired`, `dependentSchemas`, `else`, `if`, `maxContains`, `minContains`, `patternProperties`, `prefixItems`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` | Dropped — 3.0 cannot express them |
 | `webhooks`, `components.pathItems`, `info.summary` | Dropped — 3.0 has no such member |
+| A path `$ref`-ing a shared path item | Inlined where it stands, since the shared one is gone |
+| A path whose `$ref` chain reaches no shared path item | Dropped — an undefined name or a cycle leaves nothing to inline, so a 3.0 consumer loses the endpoint |
 | An SPDX `info.license.identifier` | `info.license.url`, pointing at the SPDX page |
 | A `mutualTLS` security scheme | Dropped, along with every requirement that named it |
 | An operation with no responses | A placeholder `default` response — 3.0 requires every operation to declare at least one |
 
-Everything the two tables don't name is identical to the 3.2 output. Keep the 3.2 artifact around as
+Everything the two tables don't name is identical to the 3.2 output, bar one thing no diagnostic can
+tell you about: a schema's `$comment` is dropped without a note, because it addresses whoever wrote the
+schema and says nothing a consumer could act on. Keep the 3.2 artifact around as
 the full-fidelity copy — it is the only one that loses nothing — and treat the 3.0 one as what you hand
 to the pinned toolchain. The [diagnostics reference](/laravel/reference/diagnostics/#emitting-openapi-31-and-30)
 has a row per `downlevel.*` code, including the ones that only fire on documents using the construct.
