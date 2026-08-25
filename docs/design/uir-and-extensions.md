@@ -37,6 +37,126 @@ Top level:
   Consumers MUST ignore unknown `x-docuccino` members (additive = minor; shape/identity change =
   major + new `$schema` URL).
 
+### The empty-object invariant: the JSON values a PHP array cannot spell
+
+A document is assembled, canonicalised, cached, compared and emitted as PHP arrays, and a PHP array
+cannot spell every JSON object. Exactly two shapes are out of reach: `{}`, and an object whose member
+names re-key to a `0..n-1` run (`{"0":"a","1":"b"}`) — PHP re-reads `"0"` as the integer 0, and an
+array keyed `0,1,2…` writes back as a list. Nothing else is out of reach, and it matters that the set
+stops there: `{"1":"a","2":"b"}` and `{"201":{}}` are plain arrays that write back as the objects they
+were, so carrying THOSE as objects too would buy nothing and cost every caller legitimately holding a
+numerically-keyed MAP — a `responses` keyed by status code, most of all.
+
+Those two stay `stdClass`, the codebase's standing spelling for a JSON object no array can hold, and
+nothing downstream can put the distinction back: a JSON Schema validator takes `{}` for `type: object`
+and refuses `[]`, and one PHP array is both. `additionalProperties: []` is not a schema at that
+pointer, `paths: []` is not a Map, and an `example: []` beside a `type: object` is a body that lies
+about its shape.
+
+**One reader, because two readers disagree.** `Core\Support\JsonValue` is the only thing that pulls
+JSON INTO a document — an authored `@example` literal, an `#[Example(file:)]`, a recorded response
+body, a shared recording session, a cached operation fragment, a committed artifact re-read for a diff
+or for the viewer. `array_is_list()` over the cast members is the entire rule, which is why it is
+position-independent and needs no list of which keywords hold data. `JsonReaderArchTest` enforces it
+rather than asking: an associative `json_decode` under any package's `src/` is either in the
+allow-list with the reason its value never reaches a document, or the suite fails. Entries are
+justified by where the value GOES, never by the call looking harmless, and a stale entry fails too,
+because a line whose call has moved guards nothing.
+
+Five readers had to be converted to get there, and two of them are why "remember to" was never the
+mechanism. The harness's own `loadFixture()` decides what every downstream assertion is looking at, so
+its loss was invisible from inside — load a fixture holding `example: {}`, re-emit it, and every
+round-trip, golden and self-comparison agrees on `[]` because both sides went through the same loss.
+And `SharedRecordingLedger`'s session file is how a recorded body reaches the worker that did not
+record it; it decoded associatively while the committed sidecar holding the same values did not, so
+**which worker won a slot decided whether a published example kept its shape.**
+
+**A shared instance is impossible, so equality is asked by value.** Every such object is minted fresh,
+and `===` on an object is instance identity — so two producers writing the same `{}` read as a
+disagreement, and the patch guard records a phantom `overrode` against a value nobody displaced.
+Interning one instance per process was tried and retired, for two reasons. It is not sufficient: only
+the EMPTY object can be interned, and the index-keyed shape is minted per site regardless. And it is
+not safe, because a `stdClass` subclass cannot be made immutable in PHP. `__set` catches a direct
+assignment and nothing else — PHP resolves a by-reference property ACQUISITION through
+`get_property_ptr_ptr`, which creates the property on the instance without consulting `__set` at all,
+and `&$o->x`, `$o->p[] = 1`, `$o->n++`, `preg_match(…, $o->m)` and `parse_str(…, $o->p)` are every one
+of them that. A shared instance is handed to `DocumentTransformer`, which is code we do not own, so a
+single such write would reach every `{}` in the document — structural positions included — and persist
+to the fragment cache on disk.
+
+So `JsonValue::same()` is the comparison: `===` in every respect EXCEPT that two `stdClass` standing
+for the same JSON object are one value. Nothing else relaxes, deliberately, and `Support\Json::stable`
+cannot serve as the helper here — JSON has no spelling for an integer-valued float, so it answers `1`
+for both `1.0` and `1`, which is precisely the distinction a warm-versus-cold assertion exists to see.
+`graphDifferences()` is the same rule over whole documents, reporting the position rather than a
+boolean.
+
+**Free-form data needs the distinction; a structural position does not.** `JsonValue` keeps the two
+spellings apart because an `example: {}` read back as `[]` publishes a lie. A schema, a `properties`
+entry, an `items` is a map whichever way it was written, so `Support\Hydrate::mapOrNull()` accepts
+both — and a reader at such a position that tests `is_array()` alone does not degrade, it DROPS the
+node, after which a comparison that never sees a member reports it added.
+
+**Where a value cannot report what it was, the POSITION answers.** Once a document is PHP arrays the
+value is no longer able to say which JSON it came from, so the answer has to come from the keyword's
+own contract: `Draft\SchemaKeywords::SUBSCHEMA_POSITIONS` states, per keyword, what its value is. A
+keyword named there needs no further entry anywhere — the canonicalizer derives how to canonicalise
+it, the structural hash where to recurse, `Contract\SchemaCheck` what to repair, the example audit
+where to descend, and the 3.0 downlevel where to convert. The one thing still stated by hand is the
+ORDER members publish in, which is a normative choice rather than a fact about the keyword, so it is
+stated where it is a decision and held against the table by a guard; going stale therefore costs a
+member its place and never its shape. Draft-07's `dependencies` has no row and cannot have one — each
+of its members is EITHER a subschema or a list of property names, decided by the member's own value, so
+one position cannot describe it and a reader picking either answer would be wrong half the time. It is
+left unpositioned, which every reader treats as data and none rewrites.
+
+The same reasoning covers the other value only a position can vouch for. A boolean IS a schema at
+every subschema position, and there it is the most load-bearing value in the language:
+`properties: {a: false}` says the property must never appear, and rewritten to `{}` it says the
+property may be anything; `allOf: [false]` is satisfied by nothing and becomes satisfied by
+everything. The identity half is worse than the bytes — three semantically distinct schemas minted ONE
+`sch:` id, so content-dedupe merged them, deduping by a key that had already thrown away the
+difference the name was supposed to carry. So one subschema reader answers for every arm, and for the
+four slots where a Schema Object hangs off something that is NOT one: a media type's `schema`, a
+parameter's, a header's, and every member of `components.schemas`. A value that is no schema at all
+still widens to `{}` at every slot, which is the vague-but-true answer rather than a document no
+validator accepts.
+
+**Nineteen sites, which is why the rule is stated here once.** The class is the same defect throughout —
+something asked the VALUE what it was, where only the position or the reader knows — and every
+instance shipped green, because a suite whose two sides go through one loss agrees with itself.
+
+| Object mistaken for array | What it published |
+|---|---|
+| an untyped parameter's draft | coerced its empty schema to `null`, so the parameter published no schema at all |
+| the docblock `@example` reader | refused `{}`, the one literal it would not publish, with `docblock.example-untypable` — 34 unactionable warnings on a 221-operation application, and the natural example on a free-form map lost |
+| the inline and `#[Example(file:)]` readers | each read the same bytes their own way, so one example published differently depending on where the author put it |
+| the YAML writer | cast every `stdClass` away, so `paths: []` and `additionalProperties: []` shipped spec-invalid while the JSON of the same build was correct |
+| the fragment cache | wrote with `json_encode` and read back associatively, so the warm build published `"example": []` where the cold one published `{}`, with `publishedSchemaId` and `contentHash` moving with it |
+| the `source=artifact` viewer | re-emitted a committed document associatively — one document, two answers, on the copy a reader actually looks at |
+| `SharedRecordingLedger` | read its session file associatively while the committed sidecar beside it did not |
+| `Diff\SchemaComparator` | gated its property walk and `items` descent on `is_array()`, so a property whose schema is `{}` read as ADDED against a document that had it all along |
+| the harness's `loadFixture()` | lost `{}` in the one place that decides what every downstream assertion is looking at |
+| the patch guard, and three document comparisons | asked instance identity where they meant value |
+| `Lint\ExampleSchemaLint` | audited a pre-canonicalisation draft and handed `additionalProperties: []` to a validator that correctly refuses it: an uncaught exception, no document at all, and a release reverted |
+| the canonicalizer's per-keyword handlers | never learned `unevaluatedProperties`, `unevaluatedItems` or `additionalItems`, so an overlay writing any of the three published `[]` |
+| the same table | was short `contentSchema`, `definitions` and `dependencies` |
+
+| Boolean mistaken for the empty schema | What it published |
+|---|---|
+| the single-subschema arm | flattened a boolean, so `not: false` published as `not: {}` — the exact opposite — and `items: null` became a confident `items: {}` |
+| the map and list arms | did the same at 12 of the 20 positioned keywords, so `properties: {a: false}` and a boolean branch of `allOf`/`anyOf`/`oneOf` all inverted |
+| the four outer slots | did the same where a Schema Object hangs off something that is not one, so `content: {application/json: {schema: false}}` published `{}` |
+| the 3.0 downlevel | passed a raw boolean through at six positions 3.0's own closed member set rejects, so the artifact failed the repo's vendored meta-schema with zero diagnostics |
+| `Diff\SchemaComparator` | read no boolean subschema, so `items: {type: string}` → `items: false` — the tightest narrowing an element contract has — reported NO change while `contentHash` moved |
+| `Contract\Examples\ExampleAudit` | kept three hand copies of the position table, short by five keywords, so an `#[Example]` under `if`/`then`/`else`/`unevaluatedItems`/`unevaluatedProperties` was never checked against the schema beside it |
+
+Nine of those are one narrower shape worth naming, because it is the one a guard can catch: a stale
+SECOND copy of the subschema table — three in the example audit, two in the 3.0 downlevel, three in
+the canonicalizer, one in the structural hash. `DeclaredShapeTest` therefore fails on any `const array`
+anywhere in the packages naming three or more positioned keywords unless it is one of the four
+sanctioned lists, each stated for a reason that is not "which keywords carry subschemas".
+
 ## 2. Identity model
 
 Every operation, parameter, named schema, response, security scheme carries
