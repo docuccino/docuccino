@@ -271,11 +271,14 @@ it('makes a property carrying both a default and an example agree with itself', 
     // example: "false"`, and a consumer copying the example would have sent a string.
     [$props] = exampleTypesComponent();
 
+    // The order here is the mapper's insertion order, not the document's: the canonicalizer emits a
+    // schema's keywords in one fixed template order whatever order they were written in, which is why
+    // moving the example read to the shared docblock layer left every golden byte-identical.
     expect($props['sso_required'])->toBe([
         'type' => 'boolean',
         'description' => 'Whether the team must sign in through SSO.',
-        'example' => false,
         'default' => false,
+        'example' => false,
     ]);
 });
 

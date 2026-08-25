@@ -36,6 +36,8 @@ arch('built-in integrations consume only the public extension surface')
         // The one reader of #[Mock], for the same reason SchemaIdentity is here: every class-hoisting
         // mapper owes the same answer, and an integration rolling its own would fork the attribute's
         // meaning per package.
+        // The one reader of a property's docblock `@example`, here for the same reason MockHints is.
+        'Docuccino\Core\Extensions\Schema\DocumentedExamples',
         'Docuccino\Core\Extensions\Schema\MockHints',
         // The one reader of the property-target prose attributes, here for the same reason MockHints is.
         'Docuccino\Core\Extensions\Schema\PropertyAnnotations',

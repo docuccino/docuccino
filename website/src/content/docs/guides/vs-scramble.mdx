@@ -226,7 +226,7 @@ Most annotations map across cleanly.
 | `#[HeaderParameter]` | [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) | — |
 | `#[CookieParameter]` | [`#[CookieParameter]`](/laravel/reference/attributes/#cookieparameter) | Direct swap. |
 | `#[Group]` | [`#[Group]`](/laravel/reference/attributes/#group) | Tag assignment; repeatable. |
-| `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | On an action, pins example payloads — one, or several named ones with their own summaries — on a response, the request body or a parameter, written inline or loaded from a JSON/YAML file. An `@example` docblock line on a Data-class property carries a field-level example. |
+| `#[Example]` / `@example` | [`#[Example]`](/laravel/reference/attributes/#example) | On an action, pins example payloads — one, or several named ones with their own summaries — on a response, the request body or a parameter, written inline or loaded from a JSON/YAML file. An `@example` docblock line on any property a schema publishes carries a field-level example. |
 | Exclude a route / controller | [`#[ExcludeFromDocs]`](/laravel/reference/attributes/#excludefromdocs) | Method or class target. |
 | `@unauthenticated` | [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) | Clears the inferred security requirement. |
 | `@response {status}` | [`#[Response]`](/laravel/reference/attributes/#response) | Patches field-level, keeping inferred siblings. |
