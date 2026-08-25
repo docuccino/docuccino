@@ -141,6 +141,10 @@ final class DataClassReflector
      * validation chain, so `#[Max(100)]` documents identically to `'max:100'` on a FormRequest. Curated
      * to the common floor — an unmapped attribute degrades (see validationTokens) rather than guessing.
      *
+     * Reflection reports an attribute under the case it was WRITTEN in, so the key is the class name
+     * spatie declares — `IP`, not `Ip` — which is the only spelling whose source autoloads on a
+     * case-sensitive filesystem. A key that miscases one matches nothing.
+     *
      * @var array<string, string>
      */
     private const RULE_MAP = [
@@ -149,7 +153,7 @@ final class DataClassReflector
         'Email' => 'email', 'Url' => 'url', 'ActiveUrl' => 'active_url', 'Uuid' => 'uuid',
         'Ulid' => 'ulid', 'Numeric' => 'numeric', 'IntegerType' => 'integer', 'StringType' => 'string',
         'BooleanType' => 'boolean', 'ArrayType' => 'array', 'Alpha' => 'alpha', 'AlphaNumeric' => 'alpha_num',
-        'AlphaDash' => 'alpha_dash', 'Date' => 'date', 'Json' => 'json', 'Ip' => 'ip',
+        'AlphaDash' => 'alpha_dash', 'Date' => 'date', 'Json' => 'json', 'IP' => 'ip',
         'Max' => 'max', 'Min' => 'min', 'Size' => 'size', 'Between' => 'between',
         'In' => 'in', 'NotIn' => 'not_in', 'Regex' => 'regex', 'DateFormat' => 'date_format',
         'MaxDigits' => 'max_digits', 'MinDigits' => 'min_digits', 'DigitsBetween' => 'digits_between',

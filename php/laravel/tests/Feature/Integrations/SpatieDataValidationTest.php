@@ -74,7 +74,7 @@ it('recovers the right Laravel rule token from every supported spatie validation
     'AlphaDash' => ['alphaDash', 'alpha_dash'],
     'Date' => ['date', 'date'],
     'Json' => ['json', 'json'],
-    'Ip' => ['ip', 'ip'],
+    'IP' => ['ip', 'ip'],
     'Max' => ['max', 'max:500'],
     'Min' => ['min', 'min:1'],
     'Size' => ['size', 'size:10'],
