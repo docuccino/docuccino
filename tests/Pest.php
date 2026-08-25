@@ -882,7 +882,7 @@ function associativeJsonDecodeLines(string $source): array
 
     foreach ($tokens as $index => $token) {
         // A method or constant of the same name is somebody else's function, not this one.
-        if (! $token->is(T_STRING) || strcasecmp($token->text, 'json_decode') !== 0) {
+        if (! namesGlobalSymbol($token, 'json_decode')) {
             continue;
         }
 
@@ -901,6 +901,26 @@ function associativeJsonDecodeLines(string $source): array
     }
 
     return $lines;
+}
+
+/**
+ * Whether one token names the GLOBAL symbol `$symbol` — a function, a constant or a keyword-like
+ * literal alike.
+ *
+ * A leading `\` is inert to PHP: `\json_decode` and `json_decode` are the same function, `\true` and
+ * `true` the same literal. PHP 8 tokenises the qualified spelling as one `T_NAME_FULLY_QUALIFIED`
+ * rather than the `T_STRING` of the bare one, so a scan keying on `T_STRING` reads a narrower
+ * grammar than the language and misses the spelling that means exactly the same thing. Comparing the
+ * qualified text against `\$symbol` whole is what keeps `\Foo\json_decode` out: that one names a
+ * namespaced function which merely shares a short name.
+ */
+function namesGlobalSymbol(PhpToken $token, string $symbol): bool
+{
+    if ($token->is(T_STRING)) {
+        return strcasecmp($token->text, $symbol) === 0;
+    }
+
+    return $token->is(T_NAME_FULLY_QUALIFIED) && strcasecmp($token->text, '\\'.$symbol) === 0;
 }
 
 /**
@@ -949,13 +969,13 @@ function jsonDecodeAsksForArrays(array $tokens): bool
         }
 
         // The flag spelling of the same request, wherever it sits in a `|` chain.
-        if ($token->is(T_STRING) && strcasecmp($token->text, 'JSON_OBJECT_AS_ARRAY') === 0) {
+        if (namesGlobalSymbol($token, 'JSON_OBJECT_AS_ARRAY')) {
             return true;
         }
 
         $isSecondSlot = $named === 'associative' || ($named === null && $argument === 1);
 
-        if ($isSecondSlot && $token->is(T_STRING) && strcasecmp($token->text, 'true') === 0) {
+        if ($isSecondSlot && namesGlobalSymbol($token, 'true')) {
             return true;
         }
     }
