@@ -122,7 +122,18 @@ parameter's, a header's, and every member of `components.schemas`. A value that 
 still widens to `{}` at every slot, which is the vague-but-true answer rather than a document no
 validator accepts.
 
-**Nineteen sites, which is why the rule is stated here once.** The class is the same defect throughout —
+**Two readers stand at those outer slots.** The canonicaliser answers on the way OUT; the document model
+answers on the way IN, and a slot it drops never reaches the canonicaliser to be published correctly at
+all. The model's loss is the worse of the two, because it does not merely restate the value — it removes
+the member. An omitted `schema` inverts the parameter exactly as `{}` would AND fails the spec's own
+`parameter.anyOf`, and a vanished `components.schemas` member leaves every `$ref` naming it dangling: a
+document every validator accepts and every client generator breaks on at load time. So a schema slot is
+hydrated through `Hydrate::schemaOrNull()` and `Hydrate::schemaMap()` rather than the plain object
+helpers, which answer `null` for a boolean and for the `stdClass` a `{}` arrives as. The two differ on one
+point, and it is the pointer that decides it: a slot on an OBJECT may be absent, since nothing can name
+it, while a member of a MAP is only ever widened, because a `$ref` can.
+
+**Twenty sites, which is why the rule is stated here once.** The class is the same defect throughout —
 something asked the VALUE what it was, where only the position or the reader knows — and every
 instance shipped green, because a suite whose two sides go through one loss agrees with itself.
 
@@ -147,6 +158,7 @@ instance shipped green, because a suite whose two sides go through one loss agre
 | the single-subschema arm | flattened a boolean, so `not: false` published as `not: {}` — the exact opposite — and `items: null` became a confident `items: {}` |
 | the map and list arms | did the same at 12 of the 20 positioned keywords, so `properties: {a: false}` and a boolean branch of `allOf`/`anyOf`/`oneOf` all inverted |
 | the four outer slots | did the same where a Schema Object hangs off something that is not one, so `content: {application/json: {schema: false}}` published `{}` |
+| the document model, at two of the four | DROPPED rather than flattened, one layer before the canonicaliser could answer: a parameter's `schema: false` republished with no `schema` at all, and a `components.schemas` member written as `false` vanished from the bucket while every `$ref` kept pointing at it. The differ then read the loss rather than the edit, reporting the tightest narrowing in the language as a non-breaking `schema.type-removed` |
 | the 3.0 downlevel | passed a raw boolean through at six positions 3.0's own closed member set rejects, so the artifact failed the repo's vendored meta-schema with zero diagnostics |
 | `Diff\SchemaComparator` | read no boolean subschema, so `items: {type: string}` → `items: false` — the tightest narrowing an element contract has — reported NO change while `contentHash` moved |
 | `Contract\Examples\ExampleAudit` | kept three hand copies of the position table, short by five keywords, so an `#[Example]` under `if`/`then`/`else`/`unevaluatedItems`/`unevaluatedProperties` was never checked against the schema beside it |
