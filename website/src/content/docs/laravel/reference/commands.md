@@ -638,7 +638,8 @@ gets one line saying how to take it:
 | `config` | `config is the top rung — edit config/docuccino.php` |
 
 An attribute is named **only where it genuinely writes that field on that node**: `#[Group]` really is
-what sets `tags`, and `#[ErrorComponent]` — not `#[Response]` — is what names a shared error body. A
+what sets `tags`, and the name a shared error body publishes under is written by `#[ErrorComponent]` or
+by `#[Response(errorComponent:)]` — never by `#[Response]`'s other arguments. A
 lever that would do nothing is worse than no lever, so everywhere else the answer is the generic one,
 which is still actionable: an [overlay](/laravel/guides/customizing-output/) can write any field at
 all, and it outranks everything except `config`.

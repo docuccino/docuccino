@@ -29,7 +29,9 @@ use Docuccino\Laravel\Exceptions\DeclaredErrorComponent;
  * Also the one place `#[ErrorComponent]` on an EXCEPTION CLASS is read, so the name an application
  * declares reaches the response through the same `claimComponentName()` every producer uses
  * ({@see applyDeclarations()}). The same attribute on a RENDER METHOD is read where the call path is
- * visible, which is the engine, and claimed by the tier that built the body from it.
+ * visible, which is the engine, and claimed by the tier that built the body from it. On anything else it
+ * is read by nothing, which {@see DeclaredErrorComponentsExtension} reports — from `Finalize`, so it is
+ * not lost to this class's early return.
  */
 final class ErrorResponsesExtension implements OperationExtension
 {

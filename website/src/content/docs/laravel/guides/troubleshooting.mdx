@@ -316,6 +316,14 @@ several endpoints to share it and none did, they are stating different bodies â€
 become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components) for
 what counts as the same one.
 
+If you marked the **controller action** rather than the exception class, that is a different answer: the
+attribute names an error where the error is *defined*, and an action is where several of your errors meet.
+The build reports `attribute.error-component-unread` for that placement (for the action's own attribute;
+one inherited from a base controller is silent, since it would repeat on every route under it). Move it to
+the exception class or its render method â€” or, to name one status of one operation, use `#[Response]`'s
+[`errorComponent:`](/laravel/reference/attributes/#response) argument, which is the only anchor that reaches
+a body nothing threw.
+
 ---
 
 ## Why is this endpoint documented this way?

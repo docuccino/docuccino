@@ -10,9 +10,12 @@ use Docuccino\Attributes\ResponseHeader;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Draft\ResponseDraft;
+use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\TypeGrammar\ImportContext;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
@@ -43,6 +46,8 @@ final class AttributeResponsesExtension implements OperationExtension
             $operation->removeResponse((string) $ignore->status);
         }
 
+        $this->reportIllegalComponents($context);
+
         foreach ($context->attributes->all(Response::class) as $attribute) {
             $status = (string) $attribute->status;
             $response = $operation->response($status);
@@ -53,6 +58,7 @@ final class AttributeResponsesExtension implements OperationExtension
 
             $response->setDescription('OK', Contribution::fallback());
             $response->setDescription($attribute->description, Contribution::attribute($context->actionSource()));
+            $this->claimDeclaredComponent($response, $attribute, $context);
 
             if ($attribute->type === null) {
                 continue;
@@ -83,6 +89,76 @@ final class AttributeResponsesExtension implements OperationExtension
         }
 
         $this->applyResponseHeaders($operation, $context, $imports);
+    }
+
+    /**
+     * The component name a `#[Response]` declared for the status it declares, through the same
+     * `claimComponentName()` every producer uses — one naming path, and the ordinary ladder settles it.
+     * `#[ErrorComponent]` cannot reach a body an operation states itself (it is read off the exception
+     * classes a route throws and the render methods on their path), so this is the anchor for one.
+     *
+     * Handed to the guard exactly as every other field of the attribute is, so the answers agree: two
+     * declarations at one status settle first-writer-wins over the {@see AttributeSet}'s
+     * most-specific-first order, which is a child action overriding its base controller's default rather
+     * than the two cancelling out, and a shadowed name that differed travels on the provenance trail.
+     *
+     * `namesResponse:` because a response component covers ALL of a status's content: the name is the
+     * status's, written at the operation by someone who can see every representation it answers with,
+     * which is what lets it reach a response stating several ({@see ResponseDraft::claimComponentName()}).
+     * `specificity: 1` puts its documented precedence over the exception class's `#[ErrorComponent]` —
+     * the declaration nearest the operation wins — into the tuple the guard compares, rather than
+     * leaving it to `Responses` happening to run before `Errors`.
+     */
+    private function claimDeclaredComponent(ResponseDraft $response, Response $attribute, RouteContext $context): void
+    {
+        $response->claimComponentName(
+            $attribute->errorComponent,
+            Contribution::attribute($context->actionSource(), specificity: 1),
+            namesResponse: true,
+        );
+    }
+
+    /**
+     * One warning per `errorComponent:` no `$ref` could point at. `claimComponentName()` drops such a
+     * name at the write and answers `NoOp`, which leaves an author who wrote a space — the likeliest
+     * first attempt — with an argument that does nothing and no reason why; the adapter catches it where
+     * it reads it, exactly as {@see ErrorResponsesExtension::reportIllegalName()} does for the anchor
+     * next door. One mistake, one validation and one remedy, so it is that anchor's code rather than a
+     * parallel one: what differs is only which declaration to go and fix, which the message names.
+     *
+     * Keyed by the mistake rather than the declaration, so a bad name spelled on both a controller and
+     * its action is one report, and sorted so what the route says never depends on attribute order.
+     */
+    private function reportIllegalComponents(RouteContext $context): void
+    {
+        /** @var array<string, array{string, string}> $illegal */
+        $illegal = [];
+        foreach ($context->attributes->all(Response::class) as $attribute) {
+            $name = $attribute->errorComponent;
+            if ($name === null || ComponentNames::isLegal($name)) {
+                continue;
+            }
+
+            $status = (string) $attribute->status;
+            $illegal[$status."\0".$name] = [$status, $name];
+        }
+
+        ksort($illegal);
+
+        foreach ($illegal as [$status, $name]) {
+            $context->components->addDiagnostic(new Diagnostic(
+                severity: Severity::Warning,
+                code: 'attribute.error-component-invalid',
+                message: sprintf(
+                    '#[Response(status: %s, errorComponent: "%s")] is not a name an OpenAPI component key can carry, so the argument names nothing and the response keeps the name it would have had.',
+                    $status,
+                    $name,
+                ),
+                source: $context->actionSource(),
+                routeSignature: $context->route->signature(),
+                help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
+            ));
+        }
     }
 
     private function reportBodylessBody(RouteContext $context, string $status, string $type): void

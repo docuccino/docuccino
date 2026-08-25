@@ -35,6 +35,13 @@ final class ResponseDraft
      */
     public const COMPONENT = 'component';
 
+    /**
+     * Frozen beside {@see COMPONENT} when the standing claim names the WHOLE response — every
+     * representation the status answers with — rather than the one body its claimer built. Public for the
+     * same reason: the shared-error hoist reads it back off the finished document.
+     */
+    public const COMPONENT_NAMES_RESPONSE = 'componentNamesResponse';
+
     private readonly PatchGuard $guard;
 
     /**
@@ -91,6 +98,9 @@ final class ResponseDraft
     /** Tracks the winning {@see claimComponentName()} write, so it turns over with the name it belongs to. */
     private bool $componentIsStatusDefault = false;
 
+    /** The other half of that write ({@see COMPONENT_NAMES_RESPONSE}), turning over with it. */
+    private bool $componentNamesResponse = false;
+
     public function __construct(
         public readonly string $status,
     ) {
@@ -129,8 +139,15 @@ final class ResponseDraft
      * called that". Only the writer knows it: a later reader comparing the value against the default
      * table cannot tell a deliberate `#[ErrorComponent("NotFound")]` on a 404 from the default it
      * happens to spell.
+     *
+     * `$namesResponse` is the same kind of statement one level up: that the name describes every
+     * representation the status answers with, and not merely the body this claimer built. A producer
+     * names the error it rendered and cannot see what another put beside it, so it says nothing here;
+     * something naming the response AT the operation — an annotation, an overlay, a config entry — can,
+     * and only it knows so. The hoist reads it back to decide whether the name may reach a response
+     * stating several representations ({@see COMPONENT_NAMES_RESPONSE}).
      */
-    public function claimComponentName(?string $name, Contribution $by, bool $isStatusDefault = false): PatchResult
+    public function claimComponentName(?string $name, Contribution $by, bool $isStatusDefault = false, bool $namesResponse = false): PatchResult
     {
         $result = $this->guard->apply(
             self::COMPONENT,
@@ -140,6 +157,7 @@ final class ResponseDraft
 
         if ($result === PatchResult::Accepted) {
             $this->componentIsStatusDefault = $isStatusDefault;
+            $this->componentNamesResponse = $namesResponse;
         }
 
         return $result;
@@ -155,6 +173,12 @@ final class ResponseDraft
     public function componentClaimIsStatusDefault(): bool
     {
         return $this->componentIsStatusDefault;
+    }
+
+    /** Whether the standing claim names the whole response ({@see COMPONENT_NAMES_RESPONSE}). */
+    public function componentClaimNamesResponse(): bool
+    {
+        return $this->componentNamesResponse;
     }
 
     public function content(string $mediaType): SchemaDraft
@@ -183,7 +207,7 @@ final class ResponseDraft
     {
         foreach ($other->guard->contributions() as $field => $write) {
             if ($field === self::COMPONENT) {
-                $this->claimComponentName(Hydrate::stringOrNull($write['value']), $write['by'], $other->componentIsStatusDefault);
+                $this->claimComponentName(Hydrate::stringOrNull($write['value']), $write['by'], $other->componentIsStatusDefault, $other->componentNamesResponse);
 
                 continue;
             }
@@ -447,7 +471,8 @@ final class ResponseDraft
         $docuccino = new NodeExtension(
             id: $this->id,
             provenance: $this->guard->provenance(),
-            rest: $component === null ? [] : ['facts' => [self::COMPONENT => $component]],
+            rest: $component === null ? [] : ['facts' => [self::COMPONENT => $component]
+                + ($this->componentNamesResponse ? [self::COMPONENT_NAMES_RESPONSE => true] : [])],
         );
 
         return new ResponseObject(

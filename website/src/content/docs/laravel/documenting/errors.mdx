@@ -625,9 +625,19 @@ Same status, same body, same description — only the name a generated client gi
 **It names the response, and the shape under it where that shape is the whole response.** A `404`
 answered with one body publishes both as `ResourceMissing`, which is what lets a client catch the name
 you chose. A response that offers two representations — a problem body and a plain-JSON alternative, say —
-keeps the name on the response, and each shape publishes under its status: `components.schemas` and
-`components.responses` hold different kinds of thing, and calling one of two bodies `ResourceMissing`
-would say it is the error when it may be the alternative beside it.
+is a different thing: calling either shape `ResourceMissing` would say it is the error when it may be the
+alternative beside it, and so would calling the response that offers both. Such a response is named after
+the components its representations reference, and each shape publishes under its status. See
+[Name one operation's error](#name-one-operations-error-wherever-the-body-came-from) for the way to override
+that.
+
+**It names errors where they are defined, so it does not go on the action.** PHP will let you write
+`#[ErrorComponent]` on a controller method and nothing reads it there — an action is where several of
+your errors meet, and the attribute carries no status, so there is nothing for it to name. The build
+reports `attribute.error-component-unread` rather than leaving you to wonder — for the action's own
+declaration. One on a base **controller** is silent, because it would say the same thing on every route
+of every child, and nothing it changes was ever going to be different. For one status of one operation,
+name it with `#[Response(errorComponent:)]` instead.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
@@ -737,10 +747,39 @@ returns each body inline has nowhere to put one, so give the arms that need name
 is what the example above does.
 :::
 
-**Precedence, in order:** the name a mapper gave the body it built, then `#[ErrorComponent]` on the
-render method, then `#[ErrorComponent]` on the exception class, then the status default in the table
-above. The chain resolves to the first mapper that answers, so a mapper that must beat the renderer
-Docuccino read orders itself ahead of it.
+**Precedence, in order:** `#[Response(errorComponent:)]` on the operation, then the name a mapper gave the body
+it built, then `#[ErrorComponent]` on the render method, then `#[ErrorComponent]` on the exception class,
+then the status default in the table above. The chain resolves to the first mapper that answers, so a
+mapper that must beat the renderer Docuccino read orders itself ahead of it.
+
+#### Name one operation's error, wherever the body came from
+
+`#[ErrorComponent]` names an error where the error is *defined* — an exception class, or the method that
+renders one — so every operation answering with it publishes that name. `#[Response(errorComponent:)]`
+names **one status of one operation**, and it does not care what produced the body. That covers the case
+neither `#[ErrorComponent]` anchor can reach at all — a `4xx` your operation declares, where nothing was
+thrown and no renderer built it — and equally a body an exception the action throws produced, where it
+simply wins as the declaration nearest the operation:
+
+```php
+#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
+public function completeMfa(Request $request): SuccessData { /* … */ }
+```
+
+This is the escape hatch for a name the defaults get wrong, and the one that reaches a response offering
+two representations — a name written on the operation is about the whole response, unlike one a renderer
+gave the body it built. It outranks `#[ErrorComponent]` on the exception the action throws, because the
+declaration nearest the operation wins.
+
+It renames a shared component and does not create one, exactly as `#[ErrorComponent]` does: a body only
+one operation states stays inline and has nothing to name. And because a response component covers every
+representation of a status, the name is the status's — where two declarations at one status name
+different components the nearer one wins, a method's over its controller's, the same way every other
+argument of the attribute settles.
+
+Where the name can reach nothing at all, the build says so with
+`attribute.error-component-unreachable`: on a status below `400`, which shares no error body, and on one
+a mapper answered with a `$ref` to a component that was named where that component is defined.
 
 #### When neither attribute is enough
 
@@ -763,9 +802,10 @@ that builds it, which outranks both. Nothing is reported where the render method
 :::
 
 A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
-the class or the render method that declared it, and the response keeps the name it would have had — the
-status default from the table above, or `Error<status>` where the status has none. A refused name never
-contests a good one.
+the declaration that carried it — the exception class, the render method, or the `#[Response]` — and the
+response keeps the name it would have had: the status default from the table above, or `Error<status>`
+where the status has none. A refused name never contests a good one, so a legal name at the same status
+still wins.
 
 Two render methods naming *the same* component for bodies that differ is settled like every other
 contest: both bodies keep a name derived from their own content and the build reports

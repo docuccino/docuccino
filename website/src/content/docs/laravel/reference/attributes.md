@@ -73,6 +73,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $mediaType = null,
+    public ?string $errorComponent = null,
 )
 ```
 
@@ -85,6 +86,34 @@ producer had documented the same body under, which the default deliberately does
 #[Response(status: 404, description: 'User not found')]
 public function show(int $id): UserResource { /* … */ }
 ```
+
+`errorComponent:` names the [shared component](/laravel/documenting/errors/#repeated-bodies-become-shared-components)
+the status's error response publishes under. It and [`#[ErrorComponent]`](#errorcomponent) differ by what
+they are *about*, not by which bodies they can reach: that one names an error where the error is defined,
+so every operation answering with it publishes the same name, and this one names **one status of one
+operation**, whatever produced the body — a body the operation declares itself, and equally one an
+exception the action throws produced, where it wins as the declaration nearest the operation. It names the
+response in `components.responses`, and the shape under it where the status states one representation;
+`type:` already names the schema after the class it points at.
+
+```php
+#[Response(status: 422, type: SignInChallenge::class, mediaType: 'application/json', errorComponent: 'AuthenticationChallenge')]
+public function completeMfa(Request $request): SuccessData { /* … */ }
+```
+
+Three things it does not do. It **renames a shared component; it does not create one** — a body only one
+operation states stays inline, exactly as `#[ErrorComponent]` behaves. Below `400` nothing shares an
+error body, so a name there names nothing — and says so, with
+`attribute.error-component-unreachable`, as it does on a status a mapper answered with a `$ref` to a
+component named elsewhere. And a response component covers *every* representation of a status, so the
+name is the status's: where two declarations at one status name different components, the nearer one wins
+— the method's over the controller's, and the first written where both are on the same target — exactly
+as every other argument of the attribute settles. It outranks an `#[ErrorComponent]` on the exception
+class the action throws, which is the specificity rule: the declaration nearest the operation wins.
+
+A name outside `^[a-zA-Z0-9._-]+$` is refused with an `attribute.error-component-invalid` warning naming
+the declaration that carried it, and the response keeps the name it would have had. A refused name never
+takes the status's one claim on the way past, so a legal name beside it still wins.
 
 ### `#[ResponseHeader]`
 
@@ -675,10 +704,22 @@ name in any generated client — and changes nothing else about the response, in
 shared at all: an error only one operation states stays inline and has no component to name until a
 second operation states it too.
 
+**Two anchors, and neither of them is the action.** `TARGET_METHOD` lets PHP accept the attribute on a
+controller method, and nothing reads it there: it names an error where the error is *defined*, not where
+an operation happens to answer with it. An action is where several errors meet and the attribute carries
+no status, so there is nothing for it to name — a placement that does nothing is reported as
+`attribute.error-component-unread`, for the action's own declaration. One inherited from a base
+controller is silent: it would say the same thing on every route under it, and the names it fails to
+change are the names they would have been anyway. To name **one status of one operation**, use
+`#[Response]`'s [`errorComponent:`](#response) argument, which has the status and the media type written
+beside it.
+
 What it does not name is one body a response offers *beside* another. Where a response states two
 representations — an RFC 9457 problem body under `application/problem+json` and a plain-JSON alternative,
-say — the name stays on the response and each shape publishes under its status, because a name standing
-for the whole response cannot say which of them it means.
+say — each shape publishes under its status, and so does the response: a name standing for the whole
+response cannot say which representation it means, so the response is named after the components its
+representations reference instead. A name written on the operation with `#[Response(errorComponent:)]` *is*
+about the whole response, and does name it.
 
 Where several methods on one render path carry it, the one **nearest the answer** wins: the arm that
 returned the body beats the helper that built it, so marking a shared `problem()` helper names only the

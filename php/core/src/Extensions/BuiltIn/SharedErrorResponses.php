@@ -330,6 +330,11 @@ final class SharedErrorResponses implements DocumentTransformer
      * with its name: a name that cannot describe a body must not tell two of them apart either, and
      * keeping it in the scope would only send two identically-carried bodies back up the ladder together.
      *
+     * What that argument does NOT cover is a claim that says of itself that it names the whole response
+     * ({@see namesResponse()}). A producer names the error it rendered and cannot see the representation
+     * another producer put beside it; something written AT the operation can, so its name stands however
+     * many the response states — a name they can override is the point of having one at all.
+     *
      * @param  array<array-key, mixed>  $response
      * @param  array<string, string>  $minted  the schema names this run published, which are not the
      *                                         document's own and so name nothing for it
@@ -340,7 +345,32 @@ final class SharedErrorResponses implements DocumentTransformer
         /** @var array<array-key, mixed> $content */
         $content = $response['content'];
 
-        return [[[], $response, count($content) === 1 ? self::claimed($response) : self::carries($content, $minted)]];
+        if (count($content) === 1) {
+            return [[[], $response, self::claimed($response)]];
+        }
+
+        $whole = self::namesResponse($response) ? self::claimed($response) : null;
+
+        return [[[], $response, $whole ?? self::carries($content, $minted)]];
+    }
+
+    /**
+     * Whether the standing claim says of itself that it names the whole response rather than the one body
+     * its claimer built ({@see ResponseDraft::COMPONENT_NAMES_RESPONSE}) — the claimer's own statement,
+     * frozen beside the name and travelling with it.
+     *
+     * Only the claimer knows: the layer it wrote at cannot say, since `#[ErrorComponent]` on an exception
+     * class writes at `attribute` and speaks for the error that class IS, seeing nothing of the
+     * representation another producer put beside it at the same status.
+     *
+     * @param  array<array-key, mixed>  $response
+     */
+    private static function namesResponse(array $response): bool
+    {
+        $extension = $response[self::PROVENANCE] ?? null;
+        $facts = is_array($extension) ? ($extension['facts'] ?? null) : null;
+
+        return is_array($facts) && ($facts[ResponseDraft::COMPONENT_NAMES_RESPONSE] ?? null) === true;
     }
 
     /**
@@ -893,9 +923,10 @@ final class SharedErrorResponses implements DocumentTransformer
                         $bucket,
                     ),
                 help: ($incumbent
-                    ? 'The component already holding the name was published before this pass ran and cannot move. Give the error body a name of its own with #[ErrorComponent], or rename the component holding this one, and it publishes under a plain name again.'
-                    : 'A shared error body is named after its status unless something names it, and a name belongs to one body only while it holds it alone. Nothing to do if these really are different errors and the derived names read well enough; otherwise have the operations state one body, or name each body with #[ErrorComponent] — one name per body, since a name spread over an exception family, or over a method answering at several statuses, is contested the same way.'
-                ).($bucket === 'schemas' ? ' A declared name names the response, so it names the shape under it only where the response states one representation; a response offering several says nothing about which of them is the one it named.' : ''),
+                    ? 'The component already holding the name was published before this pass ran and cannot move. Give the error body a name of its own, or rename the component holding this one, and it publishes under a plain name again.'
+                    : 'A shared error body is named after its status unless something names it, and a name belongs to one body only while it holds it alone. Nothing to do if these really are different errors and the derived names read well enough; otherwise give each body a name of its own — one name per body, since a name spread over an exception family, or over a method answering at several statuses, is contested the same way.'
+                ).' Name a body that arises from a throw with #[ErrorComponent] on the exception class or its render method; name one the operation declares itself with the errorComponent: argument of the #[Response] that declares it.'
+                    .($bucket === 'schemas' ? ' A name reaches the shape under a response only where the response states one representation; a response offering several says nothing about which of them is the one it named.' : ''),
             );
         }
 

@@ -141,6 +141,19 @@ function twoNamedRepresentationBody(string $description = 'Unprocessable Entity'
     ];
 }
 
+/**
+ * The same claim, saying of itself that it names the WHOLE response — every representation the status
+ * answers with — rather than the one body its claimer built. The claimer's own statement, since nothing
+ * a reader can compute off the finished response tells the two apart.
+ */
+function wholeResponseBody(string $name, array $body): array
+{
+    $claimed = claimedBody($name, $body);
+    $claimed['x-docuccino']['facts']['componentNamesResponse'] = true;
+
+    return $claimed;
+}
+
 /** The one representation the rest of the document answers that status with. */
 function oneNamedRepresentationBody(string $description = 'Unprocessable Entity'): array
 {
@@ -1382,6 +1395,96 @@ it('names a multi-representation body the same however the document spells it', 
     expect(array_keys($one['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
         ->and(array_keys($two['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
         ->and($emit($one))->toBe($emit($two));
+});
+
+it('lets a claim that names the whole response reach a multi-representation one', function (array $body, string $published): void {
+    // The half the multi-representation rule must not swallow. A producer names the error it rendered and
+    // cannot see what another producer put beside it, so its name does not describe the whole response —
+    // something naming the response AT the operation can, and only it knows so. The claimer says which it
+    // is; nothing a reader can compute off the finished response tells the two apart, and the layer least
+    // of all, since `#[ErrorComponent]` on an exception class writes at `attribute` and speaks for one
+    // body.
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe([$published])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/'.$published);
+})->with([
+    'names the whole response' => [
+        fn (): array => wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody()),
+        'AuthenticationChallenge',
+    ],
+    // Everything else is a producer speaking for the body it built, however high it wrote: a claim
+    // saying nothing, one at the top of the ladder, and one whose statement is not the `true` that
+    // means it. All three read as a producer, which is the conservative half of the question.
+    'says nothing' => [
+        fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody()),
+        'AuthenticationChallengeProblemDetailsData',
+    ],
+    'says nothing, at the config layer' => [
+        fn (): array => claimedBody('AuthenticationChallenge', twoNamedRepresentationBody(), 'config'),
+        'AuthenticationChallengeProblemDetailsData',
+    ],
+    'says something else' => [
+        function (): array {
+            $body = claimedBody('AuthenticationChallenge', twoNamedRepresentationBody());
+            $body['x-docuccino']['facts']['componentNamesResponse'] = 'yes';
+
+            return $body;
+        },
+        'AuthenticationChallengeProblemDetailsData',
+    ],
+]);
+
+it('keeps a whole-response name in the dedupe scope it names', function (): void {
+    // The claim scopes exactly what it names. Two authors naming two different errors that happen to
+    // carry the same representations get a component each; two bodies where only one was named do not
+    // collapse onto one name, and the unnamed one publishes what it would have published alone.
+    $named = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());
+    $other = wholeResponseBody('SignInIncomplete', twoNamedRepresentationBody());
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $doc = errorDocWithSchemas([
+        '/a' => ['422' => $named], '/b' => ['422' => $named],
+        '/c' => ['422' => $other], '/d' => ['422' => $other],
+    ], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['AuthenticationChallenge', 'SignInIncomplete'])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/AuthenticationChallenge')
+        ->and(responseRefAt($doc, '/c', '422'))->toBe('#/components/responses/SignInIncomplete');
+});
+
+it('reports a whole-response name two different bodies contest, rather than picking one', function (): void {
+    // An author's name is authoritative and still not magic: two different bodies asking for it is a
+    // question only they can settle, and the ladder answers it the way it answers every other contest.
+    $one = wholeResponseBody('AuthenticationChallenge', twoNamedRepresentationBody());
+    $two = wholeResponseBody('AuthenticationChallenge', ['description' => 'Unprocessable Entity', 'content' => [
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+        'application/vnd.api+json' => ['schema' => ['$ref' => '#/components/schemas/AuthenticationChallenge']],
+    ]]);
+
+    $paths = ['paths' => array_map(static fn (array $r): array => ['get' => ['responses' => $r]], [
+        '/a' => ['422' => $one], '/b' => ['422' => $one],
+        '/c' => ['422' => $two], '/d' => ['422' => $two],
+    ]), 'components' => ['schemas' => [
+        'ProblemDetailsData' => ['type' => 'object'],
+        'AuthenticationChallenge' => ['type' => 'object'],
+    ]]];
+
+    $names = array_keys(transformedErrorDoc($paths)['components']['responses']);
+    $collision = array_values(array_filter(
+        errorDocReport($paths),
+        static fn ($d): bool => $d->code === 'components.name-collision',
+    ));
+
+    expect($names)->toHaveCount(2)
+        ->and($names)->each->toMatch('/^AuthenticationChallenge_[a-z2-7]{8}$/')
+        ->and($collision)->toHaveCount(1)
+        // …and the help names both anchors that can settle it, and no action that cannot.
+        ->and($collision[0]->help)->toContain('#[ErrorComponent]')
+        ->and($collision[0]->help)->toContain('errorComponent: argument of the #[Response]')
+        ->and($collision[0]->help)->not->toContain('state one body');
 });
 
 it('falls back to the status where a representation names no shape of its own', function (): void {

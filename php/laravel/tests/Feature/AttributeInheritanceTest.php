@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Tests\Fixtures\Attributes\AnonymousThrowController;
 use Docuccino\Laravel\Tests\Fixtures\Attributes\InheritingController;
 use Docuccino\Laravel\Tests\Fixtures\Attributes\MalformedAttributeController;
 use Docuccino\Laravel\Tests\Fixtures\Attributes\MalformedClassAttributeController;
@@ -64,6 +65,28 @@ it('reports an attribute whose arguments do not fit, and keeps collecting the re
         ->and($reports[0]->help)->toContain('TypeError')
         ->and($reports[0]->routeSignature)->toBe('GET /api/zz-attr-malformed')
         ->and($operation['summary'])->toBe('Still documented');
+});
+
+it('names an anonymous thrower by where it stands, not by where the build machine keeps it', function (): void {
+    // PHP allows `new` in an attribute's arguments, so what instantiating one throws is not limited to
+    // the named errors PHP raises itself — and `::class` on an anonymous exception is the base name, a
+    // NUL byte, then the ABSOLUTE file it was written in and a counter of the anonymous classes this
+    // process declared first. Diagnostics are embedded in the document, so printing it raw puts the
+    // build machine into the output and makes two runs over one tree disagree.
+    [, $diagnostics] = ($this->builtDocument)(static function (Router $router): void {
+        $router->get('api/zz-attr-anon-throw', [AnonymousThrowController::class, 'index']);
+    });
+
+    $help = diagnosticsCoded($diagnostics, 'attribute.unreadable')[0]->help ?? '';
+
+    expect($help)->toContain('RuntimeException@anonymous declared in ')
+        // Relative to the nearest composer root, which is the resolver's documented degradation where
+        // nothing handed it a base path — portable, and the same on every machine.
+        ->toContain('tests/Fixtures/Attributes/ThrowsAnonymously.php:')
+        // No NUL byte, no absolute prefix, and no process-order counter.
+        ->and($help)->not->toContain("\0")
+        ->and($help)->not->toContain(dirname(__DIR__, 4))
+        ->and($help)->not->toMatch('/\$[0-9a-f]+\./');
 });
 
 it('reports a malformed CLASS-level attribute, naming the class it was written on', function (): void {

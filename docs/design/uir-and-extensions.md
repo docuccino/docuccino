@@ -156,6 +156,17 @@ function of its own bytes, so neither body is named after the other's existence 
 the body that is genuinely it. The three above publish as
 `AuthenticationChallengeProblemDetailsData`; the seventy-five keep `ValidationError`.
 
+**The one claim that does describe a response stating several is one that says so.** A producer names the
+error it rendered and cannot see what another put beside it — that is the whole argument above — but
+something naming the response AT the operation can, and a name an author may override is the point of
+having one at all. So the claim carries the statement: `claimComponentName()` takes a `$namesResponse`
+flag, frozen beside the name as `x-docuccino.facts.componentNamesResponse`, and only a claim carrying it
+reaches a multi-representation response. Nothing a reader can compute off the finished response tells the
+two apart, and the precedence LAYER least of all: `#[ErrorComponent]` on an exception class writes at
+`attribute` and still speaks for the one error that class is, so ranking on the layer would hand the
+reported topology straight back. Only the claimer knows, which is the same reason `$isStatusDefault`
+travels with the write.
+
 Every representation has to name a shape, or the response takes its status. A name assembled from the
 shapes that happened to be readable would speak for part of the body and say nothing about the rest,
 which is the assertion this whole area refuses; `Error422` is vague and true. Names the hoist itself
@@ -350,6 +361,47 @@ reported first would make a published type name a function of encounter order. N
 status default stands, and `attribute.error-component-contested` names both classes — unless a producer
 had already named the body, in which case neither declaration was ever in the running and there is
 nothing for the reader to reconcile, so nothing is reported.
+
+**The action is not a third anchor, and `#[Response(errorComponent:)]` is what stands in its place.** `TARGET_METHOD`
+lets PHP accept `#[ErrorComponent]` on a controller method and `AttributeCollector` materialises it, so an
+author naming the error they want renamed on the action answering it got their old names back and nothing
+said why — the reported case, and the placement is now `attribute.error-component-unread`, raised for the
+ACTION's own declaration only. `AttributeCollector` walks the controller's parents, so reporting off the
+route's whole set says one mistake once per route of every child — six routes for one attribute on one
+base, measured, and linear in the API from there. A route-scoped pass has nowhere to collapse that: a
+per-build "already said" set makes what the document reports a function of which routes came from the
+fragment cache, and a warm build reporting less than a cold one is a silent degradation. So the placement
+that is one report per declaration stays, and the one that would be N does not; nothing about the emitted
+names differs either way. It is raised from `Finalize` rather than from the error chain, so
+`error_responses => 'none'` — the value an application with no config key resolves to — does not take it
+with it. Making it READ
+there is the wrong fix, for a reason the attribute's own shape gives: it carries a name and nothing else,
+and its two anchors are per-BODY by construction — an exception class raises one error, a render method
+answers with one body. An action is neither. It answers at every error status its validation, its
+authorisation and its throws produce, ordinarily four or five, and one name over all of them sends every one
+of them up the ladder to a content hash. That is the trade #186 refused for `#[IgnoreResponse]`: a visible
+no-op swapped for an invisible wrong answer, here a wrong PUBLISHED NAME, which is the one thing this
+section exists to prevent. Reaching it would also mean a third producer consulting the attribute —
+`AttributeResponsesExtension` beside `ErrorResponsesExtension` and `HandlerResponseBuilder` — with a rule
+for choosing among an operation's statuses that the attribute gives it no way to write.
+
+`#[Response]` gives it one. That attribute already states a status and a media type, so `errorComponent:` on it
+is unambiguous, and it is the only anchor that reaches a body **nothing threw**: `#[ErrorComponent]` is read
+off the exception classes a route signals and the render methods on their path, and a `4xx` an operation
+declares for itself is on neither. It claims through the same `claimComponentName()` at `attribute`, so
+there is still one naming path. It goes to the guard exactly as every other argument of the attribute does,
+so two of them at one status naming different components settle the way `description:` does: first writer
+over a most-specific-first `AttributeSet`, which is a child action overriding its base controller's default
+rather than the two cancelling out, and the name that lost travels on the provenance trail like every other
+shadowed value. A bespoke "use neither and warn" here bought nothing the guard does not, and cost the
+inherited case its documented answer. Against the class anchor the `#[Response]` claim carries
+`specificity: 1`, so the documented precedence — the declaration nearest the operation wins — is in the
+tuple `outranks()` compares rather than in `Responses` happening to run before `Errors`; `mayReplace()`
+still holds `ErrorResponsesExtension` off a status something already named, which is what keeps it from
+reporting a contest nobody can act on. It
+does NOT force componentization: what repeats decides that, here as everywhere, so a name on a body one
+operation states waits inline for a second stater exactly as `#[ErrorComponent]` does. Hoisting on a name
+would put one entry per one-off error in the bucket, which this section already rejected on its own terms.
 
 **The same attribute on a RENDER METHOD is the other anchor, and it is the same naming path again.**
 The class anchor says one thing per class, which is not enough for the shape the base above invites: a
