@@ -509,6 +509,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     /**
      * One fixed field of an OpenAPI object. `components` is worth spelling out: its members are the
      * buckets, so those keys ARE fixed, and three of them hold something other than plain objects.
+     * `pathItems` is not a fourth: the bucket is gone before the walk starts ({@see downlevelComponents()}).
      *
      * @return Position|null
      */
@@ -519,7 +520,6 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
                 'schemas' => self::SCHEMA_MAP,
                 'callbacks' => self::CALLBACKS,
                 'links' => self::LINKS,
-                'pathItems' => self::PATH_ITEMS,
                 default => self::NAMES,
             };
         }
