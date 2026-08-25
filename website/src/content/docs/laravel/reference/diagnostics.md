@@ -286,7 +286,16 @@ Where a code is `info or warning`, the quieter one means Docuccino rewrote the c
 something equivalent and the louder one means it had to drop it.
 
 `downlevel.empty-responses` is the one that isn't only about the older target: it reports a gap in the
-document itself, which 3.0 is simply the first version to reject.
+document itself. Every OpenAPI version rejects a present-but-empty `responses: {}` — 3.1 and 3.2
+included — and what they allow instead is leaving `responses` out altogether, which 3.0 does not. So the
+placeholder is the 3.0 emitter's alone, while the missing responses it stands in for are worth naming
+whichever version you ship.
+
+A `downlevel.*` code is raised **once per emitted format that raises it**, by the emitter doing the
+rewriting — nothing dedupes across formats. `downlevel.empty-responses` comes from the 3.0 emitter only,
+so it appears once in a build exporting 3.0 and not at all in one exporting 3.2, 3.1 or Postman. A 3.0
+export chains through the 3.1 emitter, so it also carries every code the 3.1 target raises. `--format=uir`
+emits no report of this kind at all.
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
@@ -316,7 +325,10 @@ document itself, which 3.0 is simply the first version to reject.
 ## Servers
 
 Facts about the [`servers`](/laravel/reference/configuration/#servers) a document publishes. Every
-export reads them, so a code here is raised once per artifact rather than once per format.
+emitter that writes a URL resolves them for itself, so a code here is raised **once per emitted
+format** — a build exporting OpenAPI 3.2, 3.1, 3.0 and a Postman collection reports the same variable
+four times, once against each. `--format=uir` publishes the variables as configured and reports
+nothing, since nothing has resolved a URL yet.
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|

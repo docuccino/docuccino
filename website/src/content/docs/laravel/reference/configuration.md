@@ -78,14 +78,32 @@ Maps to OAS `info`, and any other OAS `info` field you add (`contact`, `license`
     // ['url' => 'https://{tenant}.example.com', 'variables' => [
     //     'tenant' => ['default' => 'acme', 'description' => 'Tenant slug'],
     // ]],
+    // A variable whose legal values are a closed set:
+    // ['url' => 'https://api.example.com/{version}', 'variables' => [
+    //     'version' => ['default' => 'v2', 'enum' => ['v1', 'v2']],
+    // ]],
 ],
 ```
 
-Emitted as OAS `servers`, including server variables. Every OpenAPI version requires a `default` on a
-variable, so give each one a value you serve: without it, a variable that declares an `enum` publishes
-the first of those values and one that declares neither is left out of the document altogether, both
-with a [`server.variable-no-default`](/laravel/reference/diagnostics/#servers) warning. For a worked
-multitenant subdomain example (`{tenant}.example.com`), see
+Emitted as OAS `servers`, including server variables.
+
+**Every OpenAPI version requires a `default` on a variable**, so give each one a value you serve. A
+variable without one raises [`server.variable-no-default`](/laravel/reference/diagnostics/#servers)
+against every format the build emits, and what happens next depends on whether the variable declares an
+`enum`. With one — as `version` does above — its first value stands in, which resolves the URL to
+something you demonstrably serve. With neither, an OpenAPI document leaves the variable out rather than
+invent a value, and a Postman collection publishes it blank for a person to fill in.
+
+**An empty string is not a default.** `'default' => ''` reads as *no* default and takes the path above,
+because substituting it resolves `https://{tenant}.example.com` to `https://.example.com` — a URL nobody
+serves, which leaves a reader exactly where declaring nothing does.
+
+**A dropped variable leaves its placeholder behind.** Only the `variables` entry is removed; the `url` is
+published as written, so a `{tenant}` with no default and no enum stays literally `{tenant}` in the
+emitted URL. That is deliberate — a template a consumer must fill in is honest, and a guessed hostname is
+not — but it means the warning is worth acting on rather than accepting.
+
+For a worked multitenant subdomain example (`{tenant}.example.com`), see
 [Deploying to production](/laravel/guides/production/#multitenant-base-urls).
 
 ### `routes`

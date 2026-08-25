@@ -639,6 +639,12 @@ declaration. One on a base **controller** is silent, because it would say the sa
 of every child, and nothing it changes was ever going to be different. For one status of one operation,
 name it with `#[Response(errorComponent:)]` instead.
 
+The check reads the controller class **and its parents**, so one such attribute on a base controller
+your API classes extend is reported against every route of every child — a screenful of warnings from a
+single line. It is skipped entirely under
+[`error_responses => 'none'`](/laravel/reference/configuration/#error_responses), along with the rest of
+this tier.
+
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a
 class doesn't change it: an error only one operation states stays inline, so a one-off error publishes no
