@@ -14,8 +14,13 @@ use stdClass;
  * and a decoded document and it names every place the document does not answer to its own spec.
  *
  * The vendored files are byte-exact as `spec.openapis.org` serves them at the dated (immutable) URIs in
- * {@see SCHEMAS}; `OpenApiMetaSchemaTest` pins each file's declared id against that URI. None of the
- * three references another document, so nothing here resolves anything off disk or off the network.
+ * {@see SCHEMAS} — all three verified SHA-256 identical to what those URIs answer, with zero external
+ * `$ref`s in any of them, so nothing here resolves anything off disk or off the network.
+ *
+ * What the pin in `OpenApiMetaSchemaTest` asserts is narrower than that: a file's declared id against the
+ * URI it was fetched from, which is IDENTITY, not CURRENCY. A newer dated revision of any of the three
+ * would go unnoticed — the `latest` alias 404s, so there is nothing offline to compare against — and
+ * catching that is a deliberate manual step at upgrade time, not something the suite can see.
  *
  * Two normalisations stand between a vendored file and opis, and both are named where they are applied:
  * {@see dialect()} lifts 3.0's draft-04 to draft-07, and {@see opisWorkarounds()} rewrites the three
@@ -87,8 +92,47 @@ final class OpenApiMetaSchema
     {
         return [
             ...self::keyGateFindings($format, $instance),
+            ...self::operationIdFindings($instance),
             ...SchemaFindings::of(self::validator($format), $instance, 'https://docuccino.test/'.$format.'.json'),
         ];
+    }
+
+    /**
+     * Every `operationId` the document uses more than once. The spec requires them unique across the whole
+     * API, and no meta-schema can say so — JSON Schema has no way to express uniqueness across positions —
+     * so a duplicate validates clean at every version while a generated client loses a method to a name
+     * collision. This is the assertion that sees it.
+     *
+     * @return list<string>
+     */
+    public static function operationIdFindings(mixed $instance): array
+    {
+        if (! $instance instanceof stdClass) {
+            return [];
+        }
+
+        $seen = [];
+
+        foreach (self::operations($instance) as $pointer => $operation) {
+            $id = $operation->operationId ?? null;
+
+            if (is_string($id)) {
+                $seen[$id][] = $pointer;
+            }
+        }
+
+        $findings = [];
+
+        foreach ($seen as $id => $pointers) {
+            if (count($pointers) > 1) {
+                sort($pointers);
+                $findings[] = sprintf('%s operationId: "%s" is used by %s', $pointers[0], $id, implode(', ', $pointers));
+            }
+        }
+
+        sort($findings);
+
+        return $findings;
     }
 
     /**

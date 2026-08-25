@@ -179,6 +179,42 @@ it('counts the unevaluatedProperties sites the disabled keyword takes with it', 
 });
 
 /**
+ * `operationId` uniqueness is a spec rule no meta-schema can carry — JSON Schema cannot express
+ * uniqueness across positions — so a duplicate validates clean at every version while a generated client
+ * quietly loses a method to the collision. This is the negative path for the check that sees it.
+ */
+it('reports an operationId two operations share, and nothing when they differ', function (): void {
+    $document = static fn (string $second): mixed => json_decode((string) json_encode([
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'T', 'version' => '1.0.0'],
+        'paths' => [
+            '/things' => ['get' => ['operationId' => 'listThings', 'responses' => ['200' => ['description' => 'ok']]]],
+            '/others' => ['get' => ['operationId' => $second, 'responses' => ['200' => ['description' => 'ok']]]],
+        ],
+    ]), flags: JSON_THROW_ON_ERROR);
+
+    expect(OpenApiMetaSchema::findings('openapi-3.2', $document('listThings')))
+        ->toBe(['/paths/~1others/get operationId: "listThings" is used by /paths/~1others/get, /paths/~1things/get'])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $document('listOthers')))->toBe([]);
+});
+
+/**
+ * And the floor under it: the check is worth nothing if the documents it runs over carry no `operationId`
+ * at all, which would make "no duplicates" true and vacuous.
+ */
+it('runs the operationId check over documents that actually carry operationIds', function (): void {
+    $ids = 0;
+
+    foreach (metaSchemaSubjects() as [$fixture, $format]) {
+        [$json] = metaSchemaEmissions($fixture, $format);
+
+        $ids += metaSchemaSites($json, static fn (array $vars): bool => isset($vars['operationId']));
+    }
+
+    expect($ids)->toBeGreaterThanOrEqual(50);
+});
+
+/**
  * The oracle's own negative path. If these two pass, an empty map written as a sequence is a failure the
  * suite can see — which is the whole reason this file exists.
  */
