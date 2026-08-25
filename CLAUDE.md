@@ -27,6 +27,27 @@ The consumer cannot see the codebase: they want a type they can name in a `catch
 that does not lie. Most of the rules below are one of those two audiences made specific; when a
 change serves one at the other's expense, say so out loud rather than letting it pass as a tidy-up.
 
+**One application's report, every application's fix.** A report is evidence, not a specification —
+it is one application noticing a defect the product has for everyone. So the fix is written in the
+product's own vocabulary and sized to the defect, never to the reporter: state it without naming the
+application that asked, and a second application should recognise its own problem in that sentence.
+If the description needs "because their app does X", the shape is wrong, and the honest move is to
+find the general fact behind X and fix that.
+
+The other half is the same rule looking outward: **one instance means a class, so sweep for the
+rest.** Fixing what was reported and stopping there leaves siblings that will each arrive as their
+own report. Every large finding in this codebase has been a class rather than an instance — an empty
+object mistaken for an empty array in six separate readers, a key name used as a position in four
+members plus the test that guarded them, a diagnostic hardened in one field with its sibling left
+raw in four places. When a fix lands, say what the class is and what else you checked; a fix with no
+sweep beside it is a report closed, not a defect removed.
+
+And size a mechanism to what has been measured, not to what could be true. An argument from a
+standard or a limit is a reason to *look*, and the count is the reason to build: a guard with zero
+observed firings, sized from a bound nothing in the corpus approaches, is speculation with a
+maintenance cost — and worse, its own failure mode is usually newer and less understood than the one
+it prevents.
+
 ## ⚠️ Absolute rules
 
 - **Green on all checks, always**: `composer test` (incl. `composer test:inference-fixture`
