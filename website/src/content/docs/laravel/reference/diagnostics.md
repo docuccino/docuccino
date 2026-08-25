@@ -134,12 +134,12 @@ what it would have had.
 | `attribute.ignore-param-location` | warning | An `#[IgnoreParam]` whose `in:` names no parameter location, so it dropped nothing | Use `cookie`, `header`, `path` or `query` — in any case — or leave `in:` off to drop the name from every location. See [`#[IgnoreParam]`](/laravel/reference/attributes/#ignoreparam) |
 | `example-file.missing` | warning | An `#[Example(file: …)]` names a file that isn't there | Create it or fix the path, which is read relative to your application root. Docuccino watches it either way, so the example appears the moment the file does |
 | `example-file.invalid` | warning | An `#[Example(file: …)]` file didn't decode — not `.json`/`.yaml`/`.yml`, unparseable, or empty | Fix the file; the message quotes the parser |
-| `example-file.escapes-base-path` | error | An `#[Example(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root; a path that leaves it is refused by design |
+| `example-file.escapes-base-path` | error | An `#[Example(file: …)]` path doesn't name a path inside your application — it leaves the root, or holds a character no filesystem can — so nothing was read | Write the path relative to the application root; a path that leaves it is refused by design |
 | `attribute.description-unusable` | warning | A `#[Description]` carries both `text:` and `file:`, or neither, so it says nothing certain and nothing was documented | Give it exactly one of the two; the message says which half is wrong. See [`#[Description]`](/laravel/reference/attributes/#description) |
 | `attribute.property-unsupported` | warning | A property declaration says something a property's schema has no field for — a `#[Description(file: …)]` (no application root reaches a schema), or an `#[Example]` naming what only an Example Object holds (`name:`, `status:`, `request:`, `parameter:`, `file:`, `externalValue:`) | Say it in the field that exists: `#[Description(text: '…')]` for the prose, a bare `#[Example(…)]` value for the example. Everything else belongs on the action — see [`#[Example]`](/laravel/reference/attributes/#example) |
 | `attribute.unreadable` | warning | A Docuccino attribute at the named declaration could not be instantiated — usually a typo'd argument — so it was ignored | Check the arguments at that declaration against the attribute's constructor; the message names what it threw |
 | `description-file.missing` | warning | A `#[Description(file: …)]` names a file that isn't there | Create it or fix the path, which is read relative to your application root. Docuccino watches it either way, so the description appears the moment the file does |
-| `description-file.escapes-base-path` | error | A `#[Description(file: …)]` path resolves outside your application root, so nothing was read | Write the path relative to the application root — see [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) |
+| `description-file.escapes-base-path` | error | A `#[Description(file: …)]` path doesn't name a path inside your application — it leaves the root, or holds a character no filesystem can — so nothing was read | Write the path relative to the application root — see [symbol-anchored prose](/laravel/guides/narrative-content/#symbol-anchored-prose) |
 
 ## Docblock tags
 
@@ -212,7 +212,7 @@ Webhooks are collected from `#[Webhook]` classes under the directory you configu
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `webhook.dir-missing` | warning | The configured webhook directory doesn't exist, so no webhooks were collected | Create it, or unset `webhooks.dir` — see [pointing the document at your webhook classes](/laravel/documenting/webhooks/#point-the-document-at-your-webhook-classes) |
-| `webhook.dir-escapes-base` | warning | The webhook directory resolves outside your application root and was ignored | Write it relative to the application root |
+| `webhook.dir-escapes-base` | warning | The webhook directory doesn't name a path inside your application and was ignored | Write it relative to the application root |
 | `webhook.name-invalid` | warning | A class carries a `#[Webhook]` with no name, so it isn't in the document — a webhook is published under its name | Give the attribute the name the receiving endpoint subscribes to, e.g. `#[Webhook('invoice.paid')]` |
 | `webhook.name-collision` | error | Two classes claim one webhook name and method, so one of them isn't in the document | Give one a name of its own — a webhook name is the contract a consumer subscribes to |
 | `webhook.operation-collision` | error | A webhook already documents that method from another class, so this one isn't in the document | Give one of them its own name, or a method the other doesn't use |
@@ -228,7 +228,7 @@ Codes from the Markdown pages you fold into the document. See
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `content.dir-missing` | warning | The configured content directory doesn't exist, so no pages were compiled | Create it, or unset `content.dir` |
-| `content.dir-escapes-base` | warning | The content directory resolves outside your application root and was ignored | Write it relative to the application root |
+| `content.dir-escapes-base` | warning | The content directory doesn't name a path inside your application and was ignored | Write it relative to the application root |
 | `content.duplicate-slug` | error | Two content pages share a slug, so the later one is ignored | Rename one of them; a slug is a page's address |
 | `content.duplicate-operation-id` | warning | Two operations share an `operationId`, so an `::operation` directive naming it resolves to the last one in path order | Give one its own id with [`#[OperationId]`](/laravel/reference/attributes/#operationid) |
 | `content.unresolved-directive` | error | An `::operation` or `::schema` directive is missing its attribute, or points at something the document doesn't have | Point it at a documented operation id, `METHOD /path`, or component schema name — see [Linking to your API](/laravel/guides/narrative-content/#linking-to-your-api) |
