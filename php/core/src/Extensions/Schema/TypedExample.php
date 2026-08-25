@@ -28,11 +28,9 @@ use stdClass;
  * it, nothing here can tell, and the example audit that runs over the finished document is what holds
  * that case to its schema.
  *
- * `{}` and `[]` decode to the same PHP array, so an object literal is classified off an OBJECT-decode
- * and then read by {@see JsonValue}, which is where the `{}`-versus-`[]` convention lives and which the
- * `#[Example(file:)]` reader and the recorded-body reader share — one literal, one reading, however it
- * reached the build. On a free-form map `{}` is the natural example to write, and it used to be the one
- * literal refused despite being valid.
+ * An object literal is classified off an OBJECT-decode and then read by {@see JsonValue}, the reader the
+ * `#[Example(file:)]` and recorded-body paths also go through — one literal, one reading, however it
+ * reached the build.
  */
 final class TypedExample
 {
@@ -141,10 +139,8 @@ final class TypedExample
     }
 
     /**
-     * A JSON literal, classified and published off ONE object-decode: `{}` and `[]` are the same PHP
-     * array once decoded associatively, so the object form is the only one that tells a list from a map,
-     * and re-decoding associatively to publish would throw that reading away again — an empty object
-     * would reach the document as `[]` and contradict the `type: object` beside it.
+     * A JSON literal, classified and published off ONE object-decode — the only decode that tells a list
+     * from a map, so re-decoding associatively to publish would throw that reading away again.
      *
      * @return array{mixed}|null
      */

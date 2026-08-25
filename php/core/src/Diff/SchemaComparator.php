@@ -27,10 +27,10 @@ use Docuccino\Core\Support\Hydrate;
  * `request` flag can under-state its audience (a shared component serves both directions), and a
  * downgrade there green-lights a change that rejects a writer's previously valid value.
  *
- * A subschema may be a BOOLEAN, which is where the classification above stops being enough: `true`
- * is the empty schema and reads as one, but `false` is satisfied by nothing at all and no set of
- * keywords spells it, so it is compared as itself ({@see compareSubschema()}) and arriving is breaking
- * on both sides — the tightest narrowing the language has.
+ * A subschema may be a BOOLEAN, which is where the classification above stops being enough: `true` is
+ * the empty schema and reads as one, but `false` is spelled by no set of keywords, so it is compared as
+ * itself ({@see compareSubschema()}) and arriving is breaking on both sides — the tightest narrowing the
+ * language has (docs/design/uir-and-extensions.md §1 "The empty-object invariant").
  *
  * Three positions are descended into: `properties`, `items` and `additionalProperties`, which are the
  * object and array contract a generated client types against, and which share a polarity — narrowing
@@ -46,8 +46,7 @@ final class SchemaComparator
 {
     /**
      * Two Schema Objects at one position. `mixed`, because a Schema Object may be a BOOLEAN at every
-     * position OpenAPI puts one — a media type's `schema` as much as an `items` inside it — and a
-     * comparison that could only be handed keyword maps was blind to the one value it most needed to see.
+     * position OpenAPI puts one — a media type's `schema` as much as an `items` inside it.
      *
      * @return list<Change>
      */

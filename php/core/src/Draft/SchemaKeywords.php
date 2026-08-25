@@ -30,25 +30,11 @@ final class SchemaKeywords
     public const string POSITION_STRING_LIST_MAP = 'stringListMap';
 
     /**
-     * Where a keyword's value sits relative to the schema carrying it. This is the keyword's own
-     * contract, and it settles the empty-array-versus-empty-object question for everyone: a document
-     * assembled as PHP arrays cannot tell `{}` from `[]`, so every reader has to be told which the
-     * keyword meant. `{}` at `unevaluatedProperties` says "any unevaluated member is allowed"; `[]`
-     * there is not a schema at all, and the position is the only thing that knows the difference.
-     *
-     * Consequently a keyword named here needs no further entry anywhere: the canonicalizer derives
-     * how to canonicalise it, the structural hash derives where to recurse, the contract checker
-     * derives what to repair, the example audit derives where to descend, and the 3.0 downlevel
-     * derives where to convert. The one thing still stated by hand is the ORDER the canonicalizer
-     * publishes members in, which is a normative choice rather than a fact about the keyword — and
-     * a guard holds that list against this one.
-     *
-     * Draft-07's `dependencies` is the one subschema-carrying keyword with no row here, and cannot
-     * have one: each of its members is EITHER a subschema or a list of property names, so what a
-     * member is follows from the member's own value rather than from the keyword. One position
-     * cannot say that, and a reader picking either answer would be wrong half the time — so it is
-     * left unpositioned, which every reader treats as data and none rewrites. `dependentSchemas`
-     * and `dependentRequired`, the 2020-12 split of exactly that keyword, are both here.
+     * Where a keyword's value sits relative to the schema carrying it — the keyword's own contract, and
+     * the only thing that can tell a reader whether an array there is a JSON object or a list. A keyword
+     * named here needs no further entry anywhere; what derives from it, and why draft-07's `dependencies`
+     * has no row and cannot have one, are in docs/design/uir-and-extensions.md §1 "The empty-object
+     * invariant". `dependentSchemas` and `dependentRequired`, 2020-12's split of that keyword, are both here.
      *
      * @var array<string, string>
      */
