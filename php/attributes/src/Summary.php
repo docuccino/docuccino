@@ -13,7 +13,7 @@ use Attribute;
  * There is deliberately no `file:` form — a summary is one line, and a file for one line is ceremony.
  * Long prose is what `#[Description]` is for, and that one does read a file.
  */
-#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::TARGET_PROPERTY)]
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION)]
 final readonly class Summary
 {
     public function __construct(

@@ -436,7 +436,7 @@ ordinary way a class-level declaration is written.
 
 ### `#[Summary]`
 
-Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
+Targets `CLASS | METHOD | FUNCTION`.
 
 ```php
 public function __construct(public string $text)
@@ -455,10 +455,9 @@ public function store(StoreInvoiceRequest $request): InvoiceResource { /* … */
 There is no `file:` form on purpose. A summary is one line; long prose is what `#[Description]` is
 for, and that one does read a file.
 
-The `PROPERTY` target is accepted, and a schema property has a `description` and no `summary` — so a
-`#[Summary]` on one is reported as
-[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
-Use [`#[Description]`](#description) for a property's one line.
+There is no `PROPERTY` target either: a schema property has a `description` and no `summary`, so
+there was never a field for one to write. Use [`#[Description]`](#description) for a property's one
+line.
 
 ### `#[Description]`
 
@@ -770,7 +769,7 @@ class or method that declared it, and the response keeps the name it would have 
 
 ### `#[Example]`
 
-Targets `METHOD | PROPERTY | FUNCTION | PARAMETER`, repeatable.
+Targets `METHOD | PROPERTY | FUNCTION`, repeatable.
 
 ```php
 public function __construct(
@@ -869,9 +868,9 @@ there and are reported as
 [`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes). Two declarations on
 one property leave the first standing. Everything else is what the action-level form is for.
 
-The `PARAMETER` target is accepted and has no effect of its own. A promoted constructor property is
-already reached through `PROPERTY`, and for an action's parameter there are two spellings that do
-work: `#[Example(parameter: 'page', …)]` on the action, or the `example:` argument of
+There is no `PARAMETER` target. A promoted constructor property is reached through `PROPERTY`, so a
+Data class's examples work as they read; and for an action's parameter there are two spellings that
+do work: `#[Example(parameter: 'page', …)]` on the action, or the `example:` argument of
 [`#[QueryParameter]`](#queryparameter) and its siblings.
 
 ### `#[CaseDescription]`

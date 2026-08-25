@@ -6,7 +6,6 @@ namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Attributes\Description;
 use Docuccino\Attributes\Example;
-use Docuccino\Attributes\Summary;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
@@ -25,8 +24,8 @@ use Throwable;
  * there is nothing to guess about its type.
  *
  * A schema property is a bare slot: one `description`, one `example` value. Anything a declaration
- * says that has no slot there — a `#[Summary]`, a `file:`, a named or targeted example — is reported
- * rather than dropped quietly, since the author is standing at the property that would carry it.
+ * says that has no slot there — a `file:`, a named or targeted example — is reported rather than
+ * dropped quietly, since the author is standing at the property that would carry it.
  */
 final class PropertyAnnotations
 {
@@ -99,10 +98,6 @@ final class PropertyAnnotations
     private static function annotate(array $schema, ReflectionProperty $property, string $fqcn, array &$diagnostics): array
     {
         $site = $fqcn.'::$'.$property->getName();
-
-        if (self::first($property, Summary::class) !== null) {
-            $diagnostics[] = self::unsupported('#[Summary]', $site, 'a schema property carries a `description`, not a `summary`', 'Write the one line as #[Description(text: \'…\')] — that is the field a property publishes.');
-        }
 
         $description = self::first($property, Description::class);
         if ($description !== null) {
