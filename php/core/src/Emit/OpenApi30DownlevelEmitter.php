@@ -26,7 +26,12 @@ use Docuccino\Core\Support\Arr;
  * siblings hoist into an `allOf` wrapper, and {@see UNSUPPORTED_SCHEMA_KEYWORDS} is dropped.
  * Reference level: a Reference Object's own `summary` or `description` — 3.1's way for a reference to
  * reword what it points at — comes off, since 3.0 defines neither and ignores what stands beside a
- * `$ref` ({@see isReference()} for the positions where that is what a `$ref` means).
+ * `$ref`.
+ *
+ * The walk that finds all of those is positional throughout ({@see member()}): what a node IS follows from
+ * where it sits, never from how its key is spelled. `responses.default` is a Response Object whose key
+ * reads like a schema keyword, a component may be named `example`, and a path item is one because a
+ * path-item map holds it — not because something three levels up is called `callbacks`.
  *
  * Every step that changes what a consumer reads is reported into an {@see EmitReport} naming the JSON
  * pointer it happened at, so a 3.0 export states what it could not carry instead of quietly shipping a
@@ -34,6 +39,9 @@ use Docuccino\Core\Support\Arr;
  * `downlevel.ref-siblings` covers both answers to one question at a `$ref` — a schema's siblings moving
  * into an `allOf` losslessly, and a reference's prose coming off in favour of the wording the component
  * it points at publishes — and the message says which happened.
+ *
+ * @phpstan-type Position self::FIELDS|self::PATH_ITEM|self::NAMES|self::PATH_ITEMS|self::CALLBACKS|self::SCHEMA|self::SCHEMA_MAP
+ * @phpstan-type Removed array{securitySchemes: list<string>}
  *
  * @internal
  */
@@ -75,8 +83,50 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     /** Keywords whose value is a list of schemas. */
     private const array SUBSCHEMA_LIST_KEYWORDS = ['allOf', 'anyOf', 'oneOf'];
 
-    /** Members whose value is user data the schema walk must not descend into. */
-    private const array OPAQUE_MEMBERS = ['const', 'default', 'enum', 'example', 'examples'];
+    /**
+     * Fixed fields whose value is an arbitrary JSON value the document carries rather than more document:
+     * a Media Type, Parameter or Header Object's `example`, and an Example Object's `value`. Read only at
+     * a fixed-field position — a response, a header or a component may be NAMED `example`, and that name
+     * describes nothing about what it holds.
+     */
+    private const array USER_DATA_FIELDS = ['example', 'value'];
+
+    /**
+     * Fixed fields whose value is a map keyed by names the application chose — a status code, a media
+     * type, a component name. `paths` and `callbacks` are maps too and are listed separately, because what
+     * their members ARE is the thing the walk has to know.
+     */
+    private const array NAMED_MAP_FIELDS = [
+        'content',
+        'encoding',
+        'examples',
+        'headers',
+        'links',
+        'responses',
+        'scopes',
+        'variables',
+    ];
+
+    /** An OpenAPI object, read by its fixed field names. */
+    private const string FIELDS = 'fields';
+
+    /** A Path Item Object — fixed fields too, but `summary` and `description` are 3.0's own here. */
+    private const string PATH_ITEM = 'path-item';
+
+    /** A map keyed by application-chosen names, whose members are ordinary objects. */
+    private const string NAMES = 'names';
+
+    /** A map whose members are Path Items: `paths`, and a Callback Object's expression map. */
+    private const string PATH_ITEMS = 'path-items';
+
+    /** A map whose members are Callback Objects, each of them a map of Path Items. */
+    private const string CALLBACKS = 'callbacks';
+
+    /** A Schema Object. */
+    private const string SCHEMA = 'schema';
+
+    /** A map whose members are Schema Objects. */
+    private const string SCHEMA_MAP = 'schema-map';
 
     /**
      * The 3.0 Path Item Object's operation members. `query` and `additionalOperations` are 3.2-only and
@@ -137,10 +187,10 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
         $array = $this->downlevelInfo($array, $diagnostics);
         $array = $this->dropWebhooks($array, $diagnostics);
-        $array = $this->downlevelComponents($array, $diagnostics);
+        [$array, $removed] = $this->downlevelComponents($array, $diagnostics);
 
         /** @var array<string, mixed> $walked */
-        $walked = $this->walk($array, '#', $diagnostics);
+        $walked = $this->walk($array, '#', self::FIELDS, $removed, $diagnostics);
 
         return $walked;
     }
@@ -246,14 +296,19 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     }
 
     /**
+     * The two buckets 3.0 cannot keep. A requirement naming a dropped scheme has to go with it, which is
+     * what the walk is handed.
+     *
      * @param  array<string, mixed>  $array
      * @param  list<Diagnostic>  $diagnostics
-     * @return array<string, mixed>
+     * @return array{array<string, mixed>, Removed}
      */
     private function downlevelComponents(array $array, array &$diagnostics): array
     {
+        $removed = ['securitySchemes' => []];
+
         if (! is_array($array['components'] ?? null)) {
-            return $array;
+            return [$array, $removed];
         }
 
         $components = Arr::stringKeyed($array['components']);
@@ -268,19 +323,15 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             );
         }
 
-        $dropped = [];
         if (is_array($components['securitySchemes'] ?? null)) {
             [$schemes, $dropped] = $this->downlevelSecuritySchemes(Arr::stringKeyed($components['securitySchemes']), $diagnostics);
             $components['securitySchemes'] = $schemes;
+            $removed['securitySchemes'] = $dropped;
         }
 
         $array['components'] = $components;
 
-        if ($dropped === []) {
-            return $array;
-        }
-
-        return Arr::stringKeyed($this->dropSecurityRequirements($array, $dropped));
+        return [$array, $removed];
     }
 
     /**
@@ -312,68 +363,51 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     }
 
     /**
-     * Requirements naming a dropped scheme would dangle, so they go with it. An emptied requirement
+     * Requirements naming a dropped scheme would dangle, so the name goes with it. An emptied requirement
      * is removed rather than left as `{}` — that would read as "no security required".
      *
-     * @param  array<mixed, mixed>  $node
+     * @param  array<mixed, mixed>  $security
      * @param  list<string>  $dropped
-     * @return array<mixed, mixed>
+     * @return list<mixed>
      */
-    private function dropSecurityRequirements(array $node, array $dropped): array
+    private static function withoutDroppedSchemes(array $security, array $dropped): array
     {
-        foreach ($node as $key => $value) {
-            $key = (string) $key;
+        $requirements = [];
 
-            if (! is_array($value) || str_starts_with($key, 'x-') || in_array($key, self::OPAQUE_MEMBERS, true)) {
-                continue;
+        foreach ($security as $requirement) {
+            $requirement = is_array($requirement) ? array_diff_key($requirement, array_flip($dropped)) : $requirement;
+
+            if ($requirement !== []) {
+                $requirements[] = $requirement;
             }
-
-            if ($key === 'security') {
-                $requirements = [];
-                foreach ($value as $requirement) {
-                    $requirement = is_array($requirement) ? array_diff_key($requirement, array_flip($dropped)) : $requirement;
-
-                    if ($requirement !== []) {
-                        $requirements[] = $requirement;
-                    }
-                }
-
-                if ($requirements === []) {
-                    unset($node[$key]);
-
-                    continue;
-                }
-
-                $node[$key] = $requirements;
-
-                continue;
-            }
-
-            $node[$key] = $this->dropSecurityRequirements($value, $dropped);
         }
 
-        return $node;
+        return $requirements;
     }
 
     /**
-     * Generic descent looking for schema positions: a `schema` member anywhere, and every entry of
-     * `components.schemas`. User data (`example`, `default`, …) and `x-*` members pass untouched.
+     * Descent over the whole document. `$kind` says what THIS node is and {@see member()} says what each
+     * of its members is, so every decision below — a schema position, a path item, user data to hand back
+     * untouched — follows from position alone.
      *
+     * @param  Position  $kind
+     * @param  Removed  $removed
      * @param  list<Diagnostic>  $diagnostics
      */
-    private function walk(mixed $node, string $pointer, array &$diagnostics): mixed
+    private function walk(mixed $node, string $pointer, string $kind, array $removed, array &$diagnostics): mixed
     {
         if (! is_array($node)) {
             return $node;
         }
 
         $list = array_is_list($node);
-        if (! $list && is_string($node['$ref'] ?? null) && self::isReference($pointer)) {
-            $node = $this->dropRefProse(Arr::stringKeyed($node), $pointer, $diagnostics);
-        }
 
-        if (! $list && ! self::isReference($pointer)) {
+        // A Path Item's `summary` and `description` are 3.0 fixed fields of its own, so a `$ref` stands
+        // legally beside them there and nowhere else; everywhere else a `$ref` is a Reference Object.
+        if (! $list && $kind === self::PATH_ITEM) {
             $node = $this->completeResponses(Arr::stringKeyed($node), $pointer, $diagnostics);
+        } elseif (! $list && is_string($node['$ref'] ?? null)) {
+            $node = $this->dropRefProse(Arr::stringKeyed($node), $pointer, $diagnostics);
         }
 
         $out = [];
@@ -382,11 +416,25 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             $key = (string) $key;
             $child = self::pointer($pointer, $key);
 
-            $out[$key] = match (true) {
-                str_starts_with($key, 'x-'), in_array($key, self::OPAQUE_MEMBERS, true) => $value,
-                $key === 'schema' && is_array($value) => $this->schema(Arr::stringKeyed($value), $child, $diagnostics),
-                $key === 'schemas' && $pointer === '#/components' && is_array($value) => $this->schemaMap($value, $child, $diagnostics),
-                default => $this->walk($value, $child, $diagnostics),
+            // `security` is a fixed field of the document and of an Operation Object; a component may be
+            // NAMED `security` without being one, so the parent's kind is what admits it.
+            if ($kind === self::FIELDS && $key === 'security' && $removed['securitySchemes'] !== [] && is_array($value)) {
+                $requirements = self::withoutDroppedSchemes($value, $removed['securitySchemes']);
+
+                if ($requirements !== []) {
+                    $out[$key] = $requirements;
+                }
+
+                continue;
+            }
+
+            $member = $list ? self::FIELDS : self::member($kind, $key, $pointer);
+
+            $out[$key] = match ($member) {
+                null => $value,
+                self::SCHEMA => is_array($value) ? $this->schema(Arr::stringKeyed($value), $child, $diagnostics) : $value,
+                self::SCHEMA_MAP => is_array($value) ? $this->schemaMap($value, $child, $diagnostics) : $value,
+                default => $this->walk($value, $child, $member, $removed, $diagnostics),
             };
         }
 
@@ -394,18 +442,53 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
     }
 
     /**
-     * Whether a `$ref` at this position is a Reference Object — where 3.0 defines nothing beside the
-     * `$ref` — rather than a Path Item, whose `summary` and `description` are 3.0 fixed fields of its own
-     * that a `$ref` stands legally beside. Path items are what `paths` maps, and what the expression map
-     * of a Callbacks Object maps; `components.pathItems` and `webhooks` are gone by the time this runs.
+     * What one member of a node is — the whole positional rule, in one place. Inside a map the application
+     * named, every member is an object whatever its key is spelled; only at a fixed-field position does a
+     * key name anything at all.
+     *
+     * @param  Position  $kind
+     * @return Position|null null where the member is user data the walk must not descend into
      */
-    private static function isReference(string $pointer): bool
+    private static function member(string $kind, string $key, string $pointer): ?string
     {
-        $tokens = explode('/', $pointer);
-        $depth = count($tokens);
+        if (str_starts_with($key, 'x-')) {
+            return null;
+        }
 
-        return ! ($depth === 3 && $tokens[1] === 'paths')
-            && ! ($depth >= 4 && $tokens[$depth - 3] === 'callbacks');
+        return match ($kind) {
+            self::NAMES => self::FIELDS,
+            self::PATH_ITEMS => self::PATH_ITEM,
+            self::CALLBACKS => self::PATH_ITEMS,
+            self::FIELDS, self::PATH_ITEM => self::field($key, $pointer),
+            default => self::FIELDS,
+        };
+    }
+
+    /**
+     * One fixed field of an OpenAPI object. `components` is worth spelling out: its members are the
+     * buckets, so those keys ARE fixed, and three of them hold something other than plain objects.
+     *
+     * @return Position|null
+     */
+    private static function field(string $key, string $pointer): ?string
+    {
+        if ($pointer === '#/components') {
+            return match ($key) {
+                'schemas' => self::SCHEMA_MAP,
+                'callbacks' => self::CALLBACKS,
+                'pathItems' => self::PATH_ITEMS,
+                default => self::NAMES,
+            };
+        }
+
+        return match (true) {
+            in_array($key, self::USER_DATA_FIELDS, true) => null,
+            $key === 'schema' => self::SCHEMA,
+            $key === 'paths' => self::PATH_ITEMS,
+            $key === 'callbacks' => self::CALLBACKS,
+            in_array($key, self::NAMED_MAP_FIELDS, true) => self::NAMES,
+            default => self::FIELDS,
+        };
     }
 
     /**

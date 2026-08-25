@@ -63,7 +63,26 @@
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Thing" },
                 "examples": {
-                  "one": { "value": { "kind": "widget", "schema": "a user value keyed like a schema position" } }
+                  "one": { "value": { "kind": "widget", "schema": "a user value keyed like a schema position" } },
+                  "two": { "$ref": "#/components/examples/examples", "summary": "A reference's own wording, inside the bucket that really is examples" }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/example" },
+          "default": {
+            "description": "An unexpected error",
+            "headers": {
+              "default": { "description": "A header named like a fixed field", "schema": { "type": ["string", "null"] } }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "kind": { "const": "error" },
+                    "code": { "type": "integer", "exclusiveMinimum": 3 }
+                  }
                 }
               }
             }
@@ -119,6 +138,26 @@
         "type": "string",
         "enum": ["draft", "published"]
       }
+    },
+    "responses": {
+      "default": {
+        "description": "A component named like a fixed field",
+        "content": {
+          "application/json": { "schema": { "type": ["string", "null"], "const": "unavailable" } }
+        }
+      },
+      "example": {
+        "description": "A component named like a member whose value is user data",
+        "content": {
+          "application/json": { "schema": { "type": "integer", "exclusiveMinimum": 0 } }
+        }
+      }
+    },
+    "examples": {
+      "examples": { "summary": "An example in the bucket that really is one", "value": { "kind": "widget" } }
+    },
+    "headers": {
+      "enum": { "description": "A component named like a schema keyword", "schema": { "type": ["boolean", "null"] } }
     },
     "securitySchemes": {
       "apiKey": { "type": "apiKey", "name": "X-Api-Key", "in": "header" },
