@@ -120,6 +120,101 @@ it('pins each vendored meta-schema to the dated URI it was fetched from', functi
 });
 
 /**
+ * Counts the schema positions where $matches says yes, walking keyword nodes only — a key inside a
+ * `properties`/`$defs`/`patternProperties` map is a NAME, so `{"properties": {"contains": …}}` is a
+ * property called `contains` and never the keyword.
+ */
+function metaSchemaSites(mixed $node, callable $matches, bool $inMap = false): int
+{
+    if (is_array($node)) {
+        return array_sum(array_map(static fn (mixed $v): int => metaSchemaSites($v, $matches), $node));
+    }
+
+    if (! $node instanceof stdClass) {
+        return 0;
+    }
+
+    $vars = get_object_vars($node);
+    $found = ! $inMap && $matches($vars) ? 1 : 0;
+
+    foreach ($vars as $key => $value) {
+        $names = ! $inMap && in_array($key, ['properties', 'definitions', 'patternProperties', '$defs'], true);
+        $found += metaSchemaSites($value, $matches, $names);
+    }
+
+    return $found;
+}
+
+/**
+ * `opisWorkarounds()` drops `contains` with its bounds wherever `minContains: 0` sits beside it, because
+ * opis still demands one match. It matches by SHAPE, so a vendored schema that grew a second such site
+ * would lose that bound silently and nothing would say so. Exactly one exists — 3.2's "at most one
+ * querystring parameter" cap — and none in the other two.
+ */
+it('drops the contains bound at exactly the one site that has it', function (): void {
+    $unbounded = static fn (array $vars): bool => ($vars['minContains'] ?? null) === 0 && isset($vars['contains']);
+
+    $sites = [];
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $sites[$format] = metaSchemaSites(OpenApiMetaSchema::decode($format), $unbounded);
+    }
+
+    expect($sites)->toBe(['openapi-3.2' => 1, 'openapi-3.1' => 0, 'openapi-3.0' => 0]);
+});
+
+/**
+ * The key gates `allowUnevaluated => false` disables, counted so the scope recorded beside that option
+ * cannot drift from the files. 3.0 has none — its gates close with `additionalProperties`, which is why
+ * it is the strict column of `OpenApiUnevaluatedScopeTest`'s matrix.
+ */
+it('counts the unevaluatedProperties sites the disabled keyword takes with it', function (): void {
+    $closed = static fn (array $vars): bool => ($vars['unevaluatedProperties'] ?? null) === false;
+
+    $sites = [];
+    foreach (array_keys(OpenApiMetaSchema::SCHEMAS) as $format) {
+        $sites[$format] = metaSchemaSites(OpenApiMetaSchema::decode($format), $closed);
+    }
+
+    expect($sites)->toBe(['openapi-3.2' => 28, 'openapi-3.1' => 28, 'openapi-3.0' => 0]);
+});
+
+/**
+ * `operationId` uniqueness is a spec rule no meta-schema can carry — JSON Schema cannot express
+ * uniqueness across positions — so a duplicate validates clean at every version while a generated client
+ * quietly loses a method to the collision. This is the negative path for the check that sees it.
+ */
+it('reports an operationId two operations share, and nothing when they differ', function (): void {
+    $document = static fn (string $second): mixed => json_decode((string) json_encode([
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'T', 'version' => '1.0.0'],
+        'paths' => [
+            '/things' => ['get' => ['operationId' => 'listThings', 'responses' => ['200' => ['description' => 'ok']]]],
+            '/others' => ['get' => ['operationId' => $second, 'responses' => ['200' => ['description' => 'ok']]]],
+        ],
+    ]), flags: JSON_THROW_ON_ERROR);
+
+    expect(OpenApiMetaSchema::findings('openapi-3.2', $document('listThings')))
+        ->toBe(['/paths/~1others/get operationId: "listThings" is used by /paths/~1others/get, /paths/~1things/get'])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $document('listOthers')))->toBe([]);
+});
+
+/**
+ * And the floor under it: the check is worth nothing if the documents it runs over carry no `operationId`
+ * at all, which would make "no duplicates" true and vacuous.
+ */
+it('runs the operationId check over documents that actually carry operationIds', function (): void {
+    $ids = 0;
+
+    foreach (metaSchemaSubjects() as [$fixture, $format]) {
+        [$json] = metaSchemaEmissions($fixture, $format);
+
+        $ids += metaSchemaSites($json, static fn (array $vars): bool => isset($vars['operationId']));
+    }
+
+    expect($ids)->toBeGreaterThanOrEqual(50);
+});
+
+/**
  * The oracle's own negative path. If these two pass, an empty map written as a sequence is a failure the
  * suite can see — which is the whole reason this file exists.
  */
@@ -141,6 +236,45 @@ it('reports an empty map written as a sequence, and nothing when it is written a
         ->and(EmittedDocument::differences($sound, $broken))->toBe(['/paths: json is map, yaml is sequence'])
         ->and(EmittedDocument::emptyMaps($sound))->toBe(['/paths'])
         ->and(EmittedDocument::emptyMaps($broken))->toBe([]);
+});
+
+/**
+ * An oracle may not touch what it reads. opis applies schema `default`s INTO the instance unless
+ * `allowDefaults` is off, so a validated 3.2 document silently gained a `jsonSchemaDialect` and a
+ * `servers: [{url: "/"}]` it never emitted — and every assertion after it compared against the mutation
+ * rather than the emission. The option is set; this is what proves it still is.
+ */
+it('leaves the instance it validated exactly as it found it', function (string $fixture, string $format): void {
+    [$json] = metaSchemaEmissions($fixture, $format);
+
+    $before = json_encode($json, JSON_THROW_ON_ERROR);
+
+    OpenApiMetaSchema::findings($format, $json);
+
+    expect(json_encode($json, JSON_THROW_ON_ERROR))->toBe($before);
+})->with(metaSchemaSubjects());
+
+/**
+ * The other half of the oracle's negative path, on a REAL emission. `postman-surface` emits a genuinely
+ * null `closedAt` at three example positions, and a member DROPPED at one of them used to read as a member
+ * written null — the comparison answered "no differences" while the YAML had lost a member the JSON
+ * carries. Nothing else sees it: the meta-schema is asserted here to stay silent on the same mutation,
+ * because an example's members are exactly what it leaves unconstrained.
+ */
+it('sees a null-valued member the YAML dropped, where the meta-schema cannot', function (): void {
+    [$json, $yaml] = metaSchemaEmissions('postman-surface.uir.json', 'openapi-3.2');
+
+    $example = $yaml->paths->{'/accounts'}->post->responses->{'201'}->content->{'application/json'}->example;
+
+    expect(property_exists($example, 'closedAt'))->toBeTrue()
+        ->and($example->closedAt)->toBeNull()
+        ->and(EmittedDocument::differences($json, $yaml))->toBe([]);
+
+    unset($example->closedAt);
+
+    expect(EmittedDocument::differences($json, $yaml))
+        ->toBe(['/paths/~1accounts/post/responses/201/content/application~1json/example/closedAt: json carries a member yaml does not'])
+        ->and(OpenApiMetaSchema::findings('openapi-3.2', $yaml))->toBe([]);
 });
 
 /**

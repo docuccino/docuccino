@@ -7,6 +7,8 @@ use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Emit\EmitOptions;
 use Docuccino\Core\Emit\Postman\CollectionEmitter;
 use Docuccino\Core\Emit\Postman\Description;
+use Docuccino\Core\Tests\Support\EmittedDocument;
+use Docuccino\Core\Tests\Support\SchemaFindings;
 use Opis\JsonSchema\Validator;
 
 /**
@@ -136,7 +138,38 @@ function postmanDocumentWithPaths(array $paths, array $tags = []): array
     return $document;
 }
 
-it('emits a schema-valid v2.1.0 collection for every fixture', function (string $fixture): void {
+/**
+ * Every UIR fixture in the tree, discovered rather than listed — the hand-written list this replaced had
+ * gone stale, leaving `contract` and `downlevel` emitting collections nothing ever validated.
+ *
+ * @return list<string>
+ */
+function postmanSchemaFixtures(): array
+{
+    $fixtures = [];
+
+    foreach (glob(dirname(__DIR__).'/Fixtures/*.json') ?: [] as $path) {
+        $decoded = json_decode((string) file_get_contents($path), true);
+
+        if (is_array($decoded) && isset($decoded['uir'], $decoded['info'])) {
+            $fixtures[] = basename($path);
+        }
+    }
+
+    sort($fixtures);
+
+    return $fixtures;
+}
+
+/** The vendored Postman schema, cached — parsing it per assertion is the cost worth avoiding. */
+function postmanSchemaValidator(): Validator
+{
+    static $validator = null;
+
+    if ($validator instanceof Validator) {
+        return $validator;
+    }
+
     // Postman publishes its collection schema as draft-04, which opis does not parse. The vendored file
     // stays byte-exact as Postman ships it and the dialect is lifted here: the draft-04 `id` anchors go
     // (every `$ref` in the file is a `#/definitions/…` pointer that resolves without them) and the
@@ -146,21 +179,48 @@ it('emits a schema-valid v2.1.0 collection for every fixture', function (string 
         flags: JSON_THROW_ON_ERROR,
     ));
 
-    $collection = json_decode(
+    $validator = new Validator;
+    $validator->setMaxErrors(50);
+
+    // An oracle may not touch what it reads: opis writes schema `default`s INTO the instance otherwise.
+    $validator->parser()->setOption('allowDefaults', false);
+
+    $validator->resolver()?->registerRaw($schema, 'https://docuccino.test/postman-collection.json');
+
+    return $validator;
+}
+
+/** The emitted collection for $fixture, decoded to the object graph the oracle reads. */
+function postmanCollection(string $fixture): mixed
+{
+    return json_decode(
         (new CollectionEmitter)->emit(UirDocument::fromArray(loadFixture($fixture))),
         flags: JSON_THROW_ON_ERROR,
     );
+}
 
-    $validator = new Validator;
-    $validator->resolver()->registerRaw($schema, 'https://docuccino.test/postman-collection.json');
+it('emits a schema-valid v2.1.0 collection for every fixture', function (string $fixture): void {
+    expect(SchemaFindings::of(
+        postmanSchemaValidator(),
+        postmanCollection($fixture),
+        'https://docuccino.test/postman-collection.json',
+    ))->toBe([]);
+})->with(postmanSchemaFixtures());
 
-    expect($validator->validate($collection, 'https://docuccino.test/postman-collection.json')->isValid())->toBeTrue();
-})->with([
-    'worked-example' => ['worked-example.json'],
-    'kitchen-sink' => ['kitchen-sink.uir.json'],
-    'tag-hierarchy' => ['tag-hierarchy.uir.json'],
-    'postman-surface' => ['postman-surface.uir.json'],
-]);
+/**
+ * A scan that finds nothing must fail, and it counts what was VALIDATED rather than what sits on disk —
+ * an emitter answering `{}` for every fixture would otherwise clear this unchanged.
+ */
+it('validates a plausible minimum of collections and positions', function (): void {
+    $positions = 0;
+
+    foreach (postmanSchemaFixtures() as $fixture) {
+        $positions += EmittedDocument::nodes(postmanCollection($fixture));
+    }
+
+    expect(count(postmanSchemaFixtures()))->toBeGreaterThanOrEqual(5)
+        ->and($positions)->toBeGreaterThanOrEqual(1000);
+});
 
 it('emits a Postman collection byte-identical to the committed golden', function (): void {
     expect((new CollectionEmitter)->emit(UirDocument::fromArray(loadFixture('postman-surface.uir.json'))))
