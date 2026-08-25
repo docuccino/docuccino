@@ -468,21 +468,21 @@ change one, in the order to reach for them.
 <Steps>
 
 1. **Name the response on the operation that declares it.** Where the action declares the status itself
-   with `#[Response]`, its `component:` argument names the response — no extension, and the highest of
+   with `#[Response]`, its `errorComponent:` argument names the response — no extension, and the highest of
    the four, so it stands over anything the paths below claim:
 
    ```php
    use Docuccino\Attributes\Response;
 
-   #[Response(status: 422, type: SignInChallenge::class, component: 'AuthenticationChallenge')]
+   #[Response(status: 422, type: SignInChallenge::class, errorComponent: 'AuthenticationChallenge')]
    public function completeMfa(Request $request): SuccessData { /* … */ }
    ```
 
    It is also the only anchor that reaches a body **nothing threw**, which is why it is not simply a
    spelling of the attribute below: `#[ErrorComponent]` is read off the exception classes a route signals
    and the render methods on their path, and a status an operation declares for itself is on neither.
-   Full behavior: [Name a response you declared
-   yourself](/laravel/documenting/errors/#name-a-response-you-declared-yourself).
+   Full behavior: [Name one operation's
+   error](/laravel/documenting/errors/#name-one-operations-error-wherever-the-body-came-from).
 
 2. **Mark the exception.** For your own exception classes this is the whole job — no extension, no
    registration:

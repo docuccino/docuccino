@@ -602,7 +602,7 @@ responses.422  → #/components/responses/UnprocessableEntity
   from integration:implicit-response · app/Http/Controllers/InvoiceController.php:38 · implicit:validated-request
   component
     ✓ integration "UnprocessableEntity"
-    → set it with #[Response(status: 422, component: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method
+    → set it with #[Response(status: 422, errorComponent: 'InvoiceNotFound')], or #[ErrorComponent] on the exception or its render method
   description
     ✓ integration "Unprocessable Entity"
     → set it with #[Response(status: 422, description: '…')]
