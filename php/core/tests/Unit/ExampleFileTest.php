@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Support\EmptyObject;
 use Docuccino\Core\Support\ExampleFile;
 
 /**
@@ -166,9 +165,3 @@ it('reads a JSON file the way an inline literal is read, object-ness and all', f
     'an id-keyed object an array cannot carry' => ['{"0": "Widget", "1": "Cog"}', '{"0":"Widget","1":"Cog"}'],
     'a named object, which an array carries' => ['{"id": 1}', '{"id":1}'],
 ]);
-
-it('hands back the shared empty object, so two files holding {} publish one value', function (): void {
-    file_put_contents($this->base.'/example.json', '{}');
-
-    expect(ExampleFile::read($this->base, 'example.json')->value)->toBe(EmptyObject::get());
-});

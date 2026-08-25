@@ -7,7 +7,6 @@ namespace Docuccino\Core\Examples;
 use Docuccino\Core\Lint\CredentialShapes;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
-use Docuccino\Core\Support\EmptyObject;
 use stdClass;
 
 /**
@@ -112,7 +111,7 @@ final readonly class ExampleRedaction
             }
 
             if ($map) {
-                return $out === [] ? EmptyObject::get() : (object) $out;
+                return (object) $out;
             }
 
             return $list ? array_values($out) : $out;

@@ -1097,6 +1097,57 @@ function removeFragmentCacheDirs(string $slug): void
 }
 
 /**
+ * Every position where two document graphs disagree, one line each — `===` in every respect except
+ * that two `stdClass` standing for the same JSON object are the same value however they were minted.
+ *
+ * That exception is the whole reason this exists rather than a `toBe`. A JSON object a PHP array cannot
+ * hold (`{}`, `{"0":"a","1":"b"}`) is minted fresh wherever it is produced, so `===` reads two builds of
+ * ONE application as different documents. Everything else stays strict, deliberately: key order, key
+ * type, and an integer-valued float against the int — which is exactly what a `==` walk would lose and
+ * what the caller below is looking for.
+ *
+ * @return list<string>
+ */
+function graphDifferences(mixed $a, mixed $b, string $pointer = ''): array
+{
+    $at = $pointer === '' ? '/' : $pointer;
+    $describe = static fn (mixed $v): string => get_debug_type($v).' '.(is_scalar($v) ? var_export($v, true) : '');
+
+    if ($a instanceof stdClass || $b instanceof stdClass) {
+        return $a instanceof stdClass && $b instanceof stdClass
+            ? graphDifferences(get_object_vars($a), get_object_vars($b), $pointer)
+            : [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+    }
+
+    if (is_array($a) || is_array($b)) {
+        if (! is_array($a) || ! is_array($b)) {
+            return [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+        }
+
+        if (array_keys($a) !== array_keys($b)) {
+            return [sprintf(
+                '%s: a is keyed [%s], b is keyed [%s]',
+                $at,
+                implode(', ', array_map(strval(...), array_keys($a))),
+                implode(', ', array_map(strval(...), array_keys($b))),
+            )];
+        }
+
+        $differences = [];
+        foreach ($a as $key => $value) {
+            $differences = [
+                ...$differences,
+                ...graphDifferences($value, $b[$key], $pointer.'/'.str_replace(['~', '/'], ['~0', '~1'], (string) $key)),
+            ];
+        }
+
+        return $differences;
+    }
+
+    return $a === $b ? [] : [sprintf('%s: a is %s, b is %s', $at, $describe($a), $describe($b))];
+}
+
+/**
  * WARM == COLD. Warm the fragment cache on `$before`, document `$after` against that warm cache, then
  * document `$after` again in a fresh cache directory, and hold the two to the same bytes AND the same
  * diagnostics.
@@ -1135,8 +1186,9 @@ function assertWarmEqualsCold(callable $before, callable $after, ?callable $engi
             // integer-valued float indistinguishable from the int — so equal bytes are not equal builds.
             // Overlays, transformers, lints and the differ all read the document in the shape below,
             // which is where a value restored in another type, or a bucket restored in another order,
-            // actually shows.
-            ->and($warm->document->toArray())->toBe($cold->document->toArray())
+            // actually shows. Not `toBe`: `===` reads two independently minted `{}` as different values
+            // ({@see graphDifferences}, which keeps every distinction `===` makes but that one).
+            ->and(graphDifferences($warm->document->toArray(), $cold->document->toArray()))->toBe([])
             ->and(diagnosticRecords($warm->diagnostics))->toBe(diagnosticRecords($cold->diagnostics));
 
         // …and the warm build really was warm. Every row shares at least one route with `$before`, so
