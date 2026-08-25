@@ -49,7 +49,8 @@ use Docuccino\Core\Support\Arr;
  * it points at publishes — and the message says which happened.
  *
  * @phpstan-type Position self::FIELDS|self::PATH_ITEM|self::NAMES|self::PATH_ITEMS|self::CALLBACKS|self::LINKS|self::LINK|self::SCHEMA|self::SCHEMA_MAP
- * @phpstan-type Removed array{pathItems: array<string, mixed>, securitySchemes: list<string>}
+ * @phpstan-type Removed array{pathItems: array<string, mixed>, securitySchemes: list<string>, inlining: list<string>}
+ * @phpstan-type PathItemChain array{item: array<string, mixed>|null, chain: list<string>, cycle: bool}
  *
  * @internal
  */
@@ -347,7 +348,7 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
      */
     private function downlevelComponents(array $array, array &$diagnostics): array
     {
-        $removed = ['pathItems' => [], 'securitySchemes' => []];
+        $removed = ['pathItems' => [], 'securitySchemes' => [], 'inlining' => []];
 
         if (! is_array($array['components'] ?? null)) {
             return [$array, $removed];
@@ -588,42 +589,59 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
                 continue;
             }
 
-            $inlined = self::inlinePathItem($item, $removed['pathItems']);
+            $resolved = self::inlinePathItem($item, $removed['pathItems'], $removed['inlining']);
+            // The first hop is the `$ref` that got us here, so a chain is never really empty.
+            $hops = $resolved['chain'] === [] ? [$ref] : $resolved['chain'];
+            $chain = self::chain($hops);
 
-            if ($inlined === null) {
-                $diagnostics[] = new Diagnostic(
-                    severity: Severity::Warning,
-                    code: 'downlevel.path-item-ref',
-                    message: sprintf(
-                        'Dropped the path item at %s, whose `$ref` names the shared path item `%s`: OpenAPI 3.0 has no `components.pathItems`, and this document defines nothing by that name to inline in its place.',
-                        $child,
-                        $ref,
-                    ),
-                    help: 'Define the shared path item, or write the path out where it is used, so 3.0 consumers keep the endpoint.',
-                );
+            if ($resolved['item'] === null) {
+                // Two causes, and one of them used to be reported as the other: a chain that closes on
+                // itself never reaches a path item either, but the document DOES define what it names,
+                // so telling the author to define it sends them to fix something that is already there.
+                $diagnostics[] = $resolved['cycle']
+                    ? new Diagnostic(
+                        severity: Severity::Warning,
+                        code: 'downlevel.path-item-unresolved',
+                        message: sprintf(
+                            'Dropped the path item at %s, whose `$ref` chain %s returns to `%s` and so reaches no path item: OpenAPI 3.0 has no `components.pathItems`, and there was nothing to inline in its place.',
+                            $child,
+                            $chain,
+                            $hops[count($hops) - 1],
+                        ),
+                        help: 'Break the cycle: one of those shared path items has to describe the path rather than point at another, so 3.0 consumers keep the endpoint.',
+                    )
+                    : new Diagnostic(
+                        severity: Severity::Warning,
+                        code: 'downlevel.path-item-unresolved',
+                        message: sprintf(
+                            'Dropped the path item at %s, whose `$ref` chain %s ends at a shared path item this document does not define: OpenAPI 3.0 has no `components.pathItems`, and there was nothing to inline in its place.',
+                            $child,
+                            $chain,
+                        ),
+                        help: 'Define the shared path item, or write the path out where it is used, so 3.0 consumers keep the endpoint.',
+                    );
 
                 continue;
             }
 
-            [$item, $names] = $inlined;
+            $item = $resolved['item'];
 
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Info,
                 code: 'downlevel.path-item-ref',
                 message: sprintf(
-                    'Inlined the shared path item `%s` at %s; OpenAPI 3.0 has no `components.pathItems` for a path item to reference.',
-                    implode('` → `', $names),
+                    'Inlined the shared path item %s at %s; OpenAPI 3.0 has no `components.pathItems` for a path item to reference.',
+                    $chain,
                     $child,
                 ),
             );
 
-            // A path item cannot be inlined into itself, so what it stood for is out of reach inside it:
-            // a `$ref` back to it from a callback within degrades to the drop above rather than looping.
-            // Out of reach INSIDE it only — a sibling path referencing the same name still resolves.
+            // A path item cannot be inlined into itself, so every name on the chain stays OPEN while its
+            // body is walked: a `$ref` back to one from a callback within is the cycle above rather than
+            // a loop. Open, not removed — a sibling path referencing the same name still resolves, and a
+            // name that is merely out of reach would otherwise read as a name nothing defines.
             $inner = $removed;
-            foreach ($names as $name) {
-                unset($inner['pathItems'][$name]);
-            }
+            $inner['inlining'] = [...$inner['inlining'], ...$hops];
 
             $out[$key] = $this->walk($item, $child, self::PATH_ITEM, $inner, $diagnostics);
         }
@@ -652,22 +670,31 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
 
     /**
      * The path item a `$ref` chain resolves to, with the referencing item's own members kept over the
-     * shared ones — which is how 3.1 reads a `summary` or `description` beside such a `$ref`. Null where a
-     * hop names nothing, or names its way back into the chain.
+     * shared ones — which is how 3.1 reads a `summary` or `description` beside such a `$ref`.
+     *
+     * `chain` is every hop it took, ending at the one that failed, so a caller can name where a chain
+     * stopped rather than where it started. Two ways it stops: a hop names nothing this document
+     * defines, or it names one already open — a name on $inlining, which the caller keeps while it
+     * walks that name's body, or one this chain has followed itself.
      *
      * @param  array<string, mixed>  $item
      * @param  array<string, mixed>  $shared
-     * @return array{array<string, mixed>, non-empty-list<string>}|null
+     * @param  list<string>  $inlining
+     * @return PathItemChain
      */
-    private static function inlinePathItem(array $item, array $shared): ?array
+    private static function inlinePathItem(array $item, array $shared, array $inlining): array
     {
         $names = [];
 
         for ($name = self::sharedPathItem($item); $name !== null; $name = self::sharedPathItem($item)) {
+            if (in_array($name, $names, true) || in_array($name, $inlining, true)) {
+                return ['item' => null, 'chain' => [...$names, $name], 'cycle' => true];
+            }
+
             $target = $shared[$name] ?? null;
 
-            if (in_array($name, $names, true) || ! is_array($target)) {
-                return null;
+            if (! is_array($target)) {
+                return ['item' => null, 'chain' => [...$names, $name], 'cycle' => false];
             }
 
             $names[] = $name;
@@ -675,7 +702,17 @@ final readonly class OpenApi30DownlevelEmitter implements ReportingEmitter
             $item += Arr::stringKeyed($target);
         }
 
-        return $names === [] ? null : [$item, $names];
+        return ['item' => $item, 'chain' => $names, 'cycle' => false];
+    }
+
+    /**
+     * A `$ref` chain as a reader sees it: one name, or every hop it took, in the order taken.
+     *
+     * @param  non-empty-list<string>  $names
+     */
+    private static function chain(array $names): string
+    {
+        return '`'.implode('` → `', $names).'`';
     }
 
     /**

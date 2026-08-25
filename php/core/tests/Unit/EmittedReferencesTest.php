@@ -217,6 +217,28 @@ describe('a $ref to a shared path item', function (): void {
             ->and(implode(' ', $messages))->toContain('`First` → `Second`');
     });
 
+    /*
+     * A dropped path is a 3.0 consumer losing an endpoint, and an inlined one is nothing anybody has to
+     * act on. Both were `downlevel.path-item-ref`, and `diagnostics.accept` suppresses by code — so a
+     * reader silencing the quiet half silenced the half that says an endpoint disappeared. They are two
+     * codes, and the loud one is the new name: an accept entry aimed at the quiet half still names it.
+     */
+    it('reports a drop under a code of its own, so silencing the quiet half cannot silence it', function () use ($emit, $shared): void {
+        [, $dropped] = $emit([
+            'paths' => ['/a' => ['$ref' => '#/components/pathItems/Missing']],
+            'components' => ['pathItems' => $shared],
+        ]);
+        [, $inlined] = $emit([
+            'paths' => ['/a' => ['$ref' => '#/components/pathItems/Shared']],
+            'components' => ['pathItems' => $shared],
+        ]);
+
+        expect($dropped)->toContain('downlevel.path-item-unresolved')
+            ->and($dropped)->not->toContain('downlevel.path-item-ref')
+            ->and($inlined)->toContain('downlevel.path-item-ref')
+            ->and($inlined)->not->toContain('downlevel.path-item-unresolved');
+    });
+
     it('drops the path when the bucket defines nothing by that name, naming both halves', function () use ($emit): void {
         // The one answer that is not available: publishing a `$ref` to a member this emitter removed.
         [$decoded, $codes, $messages] = $emit([
@@ -226,23 +248,57 @@ describe('a $ref to a shared path item', function (): void {
 
         expect($decoded['paths'])->not->toHaveKey('/a')
             ->and($decoded['paths'])->toHaveKey('/b')
-            ->and($codes)->toContain('downlevel.path-item-ref')
+            ->and($codes)->toContain('downlevel.path-item-unresolved')
             ->and(implode(' ', $messages))->toContain('#/paths/~1a')
-            ->and(implode(' ', $messages))->toContain('`Missing`');
+            ->and(implode(' ', $messages))->toContain('`Missing`')
+            ->and(implode(' ', $messages))->toContain('this document does not define');
+    });
+
+    it('names the hop a chain gave up at, not the one it started from', function () use ($emit): void {
+        // The interpolated name used to be the first hop, so a two-hop chain sent the author to a
+        // component that was perfectly well defined.
+        [, , $messages] = $emit([
+            'paths' => ['/a' => ['$ref' => '#/components/pathItems/First']],
+            'components' => ['pathItems' => ['First' => ['$ref' => '#/components/pathItems/Absent']]],
+        ]);
+
+        expect(implode(' ', $messages))->toContain('`First` → `Absent`')
+            ->and(implode(' ', $messages))->toContain('this document does not define');
+    });
+
+    it('says a chain closed on itself rather than that nothing defines it', function () use ($emit): void {
+        // The document DOES define `Loop`, so "define the shared path item" sent the author to create
+        // something that was already there. Both halves of the cycle are named, in the order taken.
+        [$decoded, $codes, $messages] = $emit([
+            'paths' => ['/a' => ['$ref' => '#/components/pathItems/A']],
+            'components' => ['pathItems' => [
+                'A' => ['$ref' => '#/components/pathItems/B'],
+                'B' => ['$ref' => '#/components/pathItems/A'],
+            ]],
+        ]);
+
+        expect($decoded['paths'])->toBe([])
+            ->and($codes)->toContain('downlevel.path-item-unresolved')
+            ->and(implode(' ', $messages))->toContain('`A` → `B` → `A`')
+            ->and(implode(' ', $messages))->toContain('returns to `A`')
+            ->and(implode(' ', $messages))->not->toContain('this document does not define');
     });
 
     it('drops a path item that references its way back into its own chain', function () use ($emit): void {
-        [$decoded, $codes] = $emit([
+        [$decoded, $codes, $messages] = $emit([
             'paths' => ['/a' => ['$ref' => '#/components/pathItems/Loop']],
             'components' => ['pathItems' => ['Loop' => ['$ref' => '#/components/pathItems/Loop']]],
         ]);
 
         expect($decoded['paths'])->toBe([])
-            ->and(array_filter($codes, static fn (string $c): bool => $c === 'downlevel.path-item-ref'))->toHaveCount(1);
+            ->and(array_filter($codes, static fn (string $c): bool => $c === 'downlevel.path-item-unresolved'))->toHaveCount(1)
+            ->and(implode(' ', $messages))->toContain('returns to `Loop`');
     });
 
     it('drops a $ref back to the item being inlined rather than inlining forever', function () use ($emit): void {
-        [$decoded, $codes] = $emit([
+        // Reached by a different mechanism — the name is OPEN while its own body is walked, not absent
+        // from the bucket — and it is still a cycle, so it must not read as a name nothing defines.
+        [$decoded, $codes, $messages] = $emit([
             'paths' => ['/a' => ['$ref' => '#/components/pathItems/Self']],
             'components' => ['pathItems' => ['Self' => ['post' => [
                 'responses' => ['202' => ['description' => 'Accepted']],
@@ -251,6 +307,22 @@ describe('a $ref to a shared path item', function (): void {
         ]);
 
         expect($decoded['paths']['/a']['post']['callbacks']['again'])->toBe([])
-            ->and($codes)->toContain('downlevel.path-item-ref');
+            ->and($codes)->toContain('downlevel.path-item-unresolved')
+            ->and(implode(' ', $messages))->toContain('returns to `Self`')
+            ->and(implode(' ', $messages))->not->toContain('this document does not define');
+    });
+
+    it('still resolves a sibling reference to a name an ancestor is inlining', function () use ($emit, $shared): void {
+        // Open, not removed: a name being inlined is out of reach INSIDE its own body only.
+        [$decoded, $codes] = $emit([
+            'paths' => [
+                '/a' => ['$ref' => '#/components/pathItems/Shared'],
+                '/b' => ['$ref' => '#/components/pathItems/Shared'],
+            ],
+            'components' => ['pathItems' => $shared],
+        ]);
+
+        expect($decoded['paths']['/a'])->toBe($decoded['paths']['/b'])
+            ->and($codes)->not->toContain('downlevel.path-item-unresolved');
     });
 });
