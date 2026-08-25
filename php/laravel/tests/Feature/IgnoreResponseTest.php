@@ -72,6 +72,7 @@ function ignoreResponseEngine(): TypeEngine
             $controller.'queried' => new ActionAnalysis(returns: [new ReturnSite($collection, $location)]),
             $controller.'implicit' => new ActionAnalysis(returns: [new ReturnSite($inline, $location)]),
             $controller.'contradicted' => new ActionAnalysis(returns: [new ReturnSite($inline, $location)]),
+            $controller.'declaredError' => new ActionAnalysis(returns: [new ReturnSite($inline, $location)]),
             $controller.'redirect' => new ActionAnalysis(
                 returns: [new ReturnSite(new ClassT('Illuminate\\Http\\RedirectResponse'), $location)],
             ),
@@ -115,6 +116,7 @@ function ignoreResponseDocument(array $only = []): GenerationResult
         'queried' => ['get', 'api/ignored-responses/queried', [$controller, 'queried']],
         'implicit' => ['get', 'api/ignored-responses/implicit/{form}', [$controller, 'implicit']],
         'contradicted' => ['get', 'api/ignored-responses/contradicted', [$controller, 'contradicted']],
+        'declaredError' => ['get', 'api/ignored-responses/declared-error', [$controller, 'declaredError']],
         'redirect' => ['get', 'api/ignored-responses/redirect', [$controller, 'redirect']],
         'html' => ['get', 'api/ignored-responses/html', IgnoredHtmlAction::class],
         'authorize' => ['post', 'api/ignored-responses/authorize', IgnoredAuthorizeAction::class],
@@ -222,6 +224,11 @@ it('keeps an ignored response out of the document, whichever producer writes it'
     'a route-model binding' => ['get', '/api/ignored-responses/implicit/{form}', '404', ['200']],
     // Same action, same layer: the ignore is the retraction, so it wins over the declaration.
     'a #[Response] the same action contradicts' => ['get', '/api/ignored-responses/contradicted', '202', ['200']],
+    // The same at an error status, where the declaration also names a component. Nothing CONVERTS here —
+    // the declaring producer declined at its own phase — so the orphan half of this pair cannot see it:
+    // what publishes the status is the Finalize pass that asks whether the name was read, over a draft
+    // whose response accessor is get-or-create.
+    'a #[Response] naming an error component' => ['get', '/api/ignored-responses/declared-error', '404', ['200']],
     // laravel-actions: the html representation is additive to the 200, and the 403 comes from authorize().
     'a laravel-actions html representation' => ['get', '/api/ignored-responses/html', '200', []],
     'a laravel-actions authorize() gate' => ['post', '/api/ignored-responses/authorize', '403', ['200', '422']],
@@ -255,6 +262,7 @@ it('leaves nothing an ignored response would have hoisted behind as an orphan co
     'a route-model binding' => ['implicit', []],
     // A declared body under a status the same action drops.
     'a #[Response] the same action contradicts' => ['contradicted', []],
+    'a #[Response] naming an error component' => ['declaredError', []],
     // laravel-actions.
     'a laravel-actions html representation' => ['html', []],
     // The action's rules() still hoist a request body; only the dropped 403 must leave nothing.

@@ -105,6 +105,18 @@ final class IgnoredResponsesController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /**
+     * The same contradiction at an ERROR status, where the declaration also names a component. The name
+     * is the part that reaches past the `Responses` phase: it is re-read at `Finalize` to decide whether
+     * anything read it, and the status it names is one a 4xx body can share.
+     */
+    #[Response(status: 404, description: 'Whatever this said, the ignore below retracts.', errorComponent: 'NotFound')]
+    #[IgnoreResponse(status: 404)]
+    public function declaredError(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A redirect inference documents under the `3XX` range, with a member of that range dropped. */
     #[IgnoreResponse(status: 302)]
     public function redirect(): RedirectResponse
