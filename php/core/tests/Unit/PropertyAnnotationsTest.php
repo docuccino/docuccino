@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\Description;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -77,6 +78,32 @@ it('reports every property declaration it could not publish', function (): void 
         'attribute.example-unusable: An #[Example] on '.$node.'::$twoSourced carries more than one value — `value:`, `file:` and `externalValue:` are alternatives; it was not documented.',
         'attribute.property-unsupported: The #[Example] on '.$node.'::$named says something a property schema cannot hold — a property publishes one bare example value, which carries no `name:`, no `summary:`, no `status:`; it was ignored.',
     ]);
+});
+
+it('names an anonymous class by where it stands, not by where the build machine keeps it', function (): void {
+    // `::class` on an anonymous class is the base name, a NUL byte, the ABSOLUTE file it was written in
+    // and a counter of the anonymous classes this process declared first. A mapper takes whatever name
+    // its caller was handed, and these diagnostics are embedded in the document — so raw, the site puts
+    // the build machine into the output and makes two runs over one tree disagree.
+    $subject = new class
+    {
+        #[Description(file: 'docs/tenant.md')]
+        public string $filed = '';
+    };
+
+    [, $diagnostics] = PropertyAnnotations::apply(
+        ['type' => 'object', 'properties' => ['filed' => ['type' => 'string']]],
+        $subject::class,
+    );
+
+    $message = $diagnostics[0]->message ?? '';
+
+    expect($message)->toContain('class@anonymous declared in tests/Unit/PropertyAnnotationsTest.php:')
+        ->and($message)->toContain('::$filed')
+        // No NUL byte, no absolute prefix, and no process-order counter.
+        ->and($message)->not->toContain("\0")
+        ->and($message)->not->toContain(dirname(__DIR__, 3))
+        ->and($message)->not->toMatch('/\$[0-9a-f]+::/');
 });
 
 it('says nothing about a property the schema does not publish', function (): void {
