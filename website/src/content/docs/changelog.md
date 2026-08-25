@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.10.1
+
+### Bug fixes
+
+- **core**: read a quoted JSON string example as the string it quotes ([#239](https://github.com/docuccino/docuccino/pull/239))
+- **laravel**: a union keeps every member a producer contributes one shape to ([#238](https://github.com/docuccino/docuccino/pull/238))
+
+### Performance
+
+- **ci**: make the coverage gate fast and separately re-runnable ([#241](https://github.com/docuccino/docuccino/pull/241))
+
 ## v0.10.0
 
 ### Breaking changes
