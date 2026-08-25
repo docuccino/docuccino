@@ -256,6 +256,29 @@ Laravel adapter feature tests run on orchestra/testbench with the workbench app 
 `tests/fixture-app/app`. The workbench app and `tests/Fixtures/**` are test INPUT the product
 parses — their docblocks and attributes are data, so edit them only to change what a test proves.
 
+**One working tree, one branch, one writer.** A working tree is single-threaded: `git checkout`
+rewrites every file in it, so two agents editing one tree switch branches out from under each
+other. Parallel work gets a worktree each (`git worktree add`), and the writer of a branch is the
+only process allowed to check it out. This is not a tidiness rule — every one of these has already
+happened here: a commit landing on another branch **under another agent's message**, so the change
+was correct and the history was a lie; a suite reporting green for a tree it had stopped being;
+and a warm-build assertion failing because the fragment cache honestly re-hashed files a concurrent
+checkout had rewritten, which reads exactly like a flake and is not one. **A gate result is only
+worth what the tree was during the run** — if anything else could have written to it, the number
+means nothing and the run has to be repeated in a quiet tree. Never `git checkout <file>` to undo an
+experiment either; it silently discards a neighbour's uncommitted work, so copy the file aside
+instead.
+
+The one honest pull toward sharing the main checkout is `tests/fixture-app/app`, which is gitignored
+and so absent from a fresh worktree. That does not license sharing: a task needing the fixture group
+takes the main checkout **alone**, and everything else waits or runs in a worktree with the group
+skipping. Say which happened — "233 skipped" is not a full pass, and reporting it as one is the
+failure the fixture-honesty rule exists to prevent.
+
+**zsh does not word-split an unquoted variable.** `for b in $BRANCHES` and `-- $FILES` pass one
+giant string, so a loop runs once on nonsense and a pathspec matches nothing — silently, with exit 0.
+Write the list literally, or `read` it line by line.
+
 ## Project status
 
 Feature-complete and green: core, attributes, the inference engine, the Laravel adapter, the
