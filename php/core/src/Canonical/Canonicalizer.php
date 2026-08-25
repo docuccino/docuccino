@@ -589,8 +589,9 @@ final class Canonicalizer
      * ONE Schema Object, wherever it sits — inside a schema, and equally at the slots a schema hangs off
      * something that is not one. A boolean is published as written, since it is a schema at every 2020-12
      * subschema position and the load-bearing value there; anything that is no schema at all becomes `{}`,
-     * vague and valid beating a document no validator accepts. Design doc §1 "The empty-object invariant"
-     * for why the position rather than the value answers.
+     * vague and valid beating a document no validator accepts. That second arm is deliberately silent,
+     * unlike every other widening — design doc §1 "The empty-object invariant" for that and for why the
+     * position rather than the value answers.
      */
     private function subschemaValue(mixed $value): mixed
     {

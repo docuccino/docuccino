@@ -122,6 +122,27 @@ parameter's, a header's, and every member of `components.schemas`. A value that 
 still widens to `{}` at every slot, which is the vague-but-true answer rather than a document no
 validator accepts.
 
+**That widening is deliberately SILENT, which is the one place the "say so with a diagnostic" rule does
+not apply.** Widening normally owes a diagnostic, and the boolean arm at this very site raises
+`downlevel.boolean-subschema` when 3.0 cannot carry one — so the channel exists and only one arm uses
+it. Three things settle it. The population is zero and cannot be otherwise from inside: every producer
+mints a typed schema array, so nothing the product writes can put a non-schema at a subschema slot, and
+the one authoring surface that could — an overlay's `mixed` update — has no instance anywhere in the
+corpus. The site has nothing useful to say: it is a pure function with no pointer state, reached from
+identity hashing, content hashing, spec validation and every emitter, two of which run per fragment
+many times a build with nowhere to put a report, so a diagnostic here would fire on a 3.0 export and
+not on a UIR emit — one policy per producer, which is the anti-pattern. And the boolean arm is not the
+precedent it resembles: it reports a LOSS an author can act on, because the `false` they wrote is being
+weakened, whereas a value that was never a schema is nobody's claim.
+
+`document.schema-invalid` cannot stand in either, and moving it earlier is not the fix it looks like.
+`SpecValidation\Validator` canonicalises BEFORE validating, so the coercion runs first and launders the
+problem — but that hop is what turns a PHP array into JSON at all, and by the invariant above an array
+cannot spell `{}`. Validate the bytes as handed over and a legitimate `properties: {}` is rejected: the
+validator is a post-condition on what the emitter writes, never a pre-condition on the array it was
+given. `CanonicalizerTest` pins all three facts, laundering included, so the silence is a decision on
+the record rather than an omission.
+
 **Two readers stand at those outer slots.** The canonicaliser answers on the way OUT; the document model
 answers on the way IN, and a slot it drops never reaches the canonicaliser to be published correctly at
 all. The model's loss is the worse of the two, because it does not merely restate the value — it removes

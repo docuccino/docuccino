@@ -217,6 +217,12 @@ final readonly class Url
         $required = ($parameter['required'] ?? false) === true;
         $schema = $this->schemaOf($parameter, $components);
 
+        // A parameter whose schema admits no value is not one the consumer may send, so it gets no
+        // entry at all rather than an empty one they would try to fill in.
+        if ($this->examples->member($parameter['schema'] ?? null, $components) === null) {
+            return [];
+        }
+
         if (($parameter['style'] ?? null) === 'deepObject') {
             $properties = is_array($schema['properties'] ?? null) ? $schema['properties'] : [];
             $keys = array_map(strval(...), array_keys($properties));
@@ -233,10 +239,17 @@ final readonly class Url
 
             $out = [];
             foreach ($keys as $key) {
+                $member = $this->examples->member($properties[$key] ?? null, $components);
+
+                // A member the schema forbids is not a key the consumer may type.
+                if ($member === null) {
+                    continue;
+                }
+
                 $property = Arr::stringKeyed(is_array($properties[$key] ?? null) ? $properties[$key] : []);
                 $out[] = $this->entry(
                     $name.'['.$key.']',
-                    $this->scalar($this->examples->value($property, $components)),
+                    $this->scalar($member[0]),
                     false,
                     $this->describe(['schema' => $property] + ['description' => $property['description'] ?? null]),
                 );
