@@ -77,6 +77,7 @@ final class DocumentBuilder
         $preDiagnostics = [
             ...$this->engineDiagnostics(),
             ...$this->cachePathDiagnostics(),
+            ...$this->descriptionFileDiagnostics($config),
             ...$extensionDiagnostics,
             ...$overlayDiagnostics,
         ];
@@ -144,6 +145,58 @@ final class DocumentBuilder
         return $analysing
             ? [...$diagnostics, ...$this->engineNeonDiagnostics()]
             : $diagnostics;
+    }
+
+    /**
+     * What became of `info.description.file` — a configured path the pipeline never touches, because
+     * {@see DocumentConfigFactory} reads it into the bag as contents at config time. That read has
+     * three outcomes and had one voice: nothing. A refused path and an absent file are the same silence
+     * as a description nobody configured, and the author is left with a document whose `info` has no
+     * description and no reason why.
+     *
+     * The same two codes and severities the `#[Description(file: …)]` reader raises, because it is the
+     * same fact with the same remedy — only the place to go and edit it differs, which is what the
+     * config-facing half of {@see ConfinedPath}'s help sentences is for. Reported here rather than in
+     * ConfigDiagnostics for the reason {@see engineNeonDiagnostics()} is: telling a refusal from an
+     * absence needs the base path, and a document's own config bag does not carry one.
+     *
+     * @return list<Diagnostic>
+     */
+    private function descriptionFileDiagnostics(DocumentConfig $config): array
+    {
+        $path = Hydrate::map(Hydrate::map($config->raw['info'] ?? null)['description'] ?? null)['file'] ?? null;
+
+        if (! is_string($path) || $path === '') {
+            return [];
+        }
+
+        $resolved = ConfinedPath::resolve($this->basePath, $path);
+
+        if ($resolved === null) {
+            return [new Diagnostic(
+                severity: Severity::Error,
+                code: 'description-file.escapes-base-path',
+                message: sprintf(
+                    'info.description.file "%s" does not name a path inside the application and was rejected, so the document has no description.',
+                    PlainText::of($path),
+                ),
+                help: ConfinedPath::CONFIG_FILE_ESCAPED_HELP,
+            )];
+        }
+
+        if (@file_get_contents($resolved) !== false) {
+            return [];
+        }
+
+        return [new Diagnostic(
+            severity: Severity::Warning,
+            code: 'description-file.missing',
+            message: sprintf(
+                'info.description.file "%s" could not be read, so the document has no description.',
+                PlainText::of($path),
+            ),
+            help: ConfinedPath::CONFIG_FILE_MISSING_HELP,
+        )];
     }
 
     /**

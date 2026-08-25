@@ -24,13 +24,22 @@ final class ConfinedPath
      * no readable file — the two outcomes {@see resolve()} distinguishes, and so the two sentences
      * this class owns. They are stated here rather than at each reporter because a remedy that no
      * longer matches the rule sends the author to fix something that was never wrong, and a copy is
-     * free to drift from the rule exactly as a copy of the guard would be. The wording addresses a
-     * `file:` attribute argument, which is what every site reporting these outcomes today is reading;
-     * a configured path refused the same way wants a sentence of its own.
+     * free to drift from the rule exactly as a copy of the guard would be. The `FILE_*` pair addresses
+     * a `file:` attribute argument and the `CONFIG_FILE_*` pair a configured path, which is the one
+     * thing that differs between them: where the author goes to change it.
      */
     public const string FILE_ESCAPED_HELP = 'Point `file:` at a path inside the application, written relative to its root.';
 
     public const string FILE_MISSING_HELP = 'Create the file, or correct the path — it is read relative to the application root.';
+
+    /**
+     * The same two outcomes for a CONFIGURED path rather than an attribute argument. Same rule, same
+     * remedy, different thing to go and edit — and an author sent to look for a `file:` argument that
+     * is really a config key spends their time in the wrong file.
+     */
+    public const string CONFIG_FILE_ESCAPED_HELP = 'Point the configured path inside the application, written relative to its root.';
+
+    public const string CONFIG_FILE_MISSING_HELP = 'Create the file, or correct the configured path — it is read relative to the application root.';
 
     /**
      * The absolute path $relative resolves to under $base, or null when it is refused. A returned path
