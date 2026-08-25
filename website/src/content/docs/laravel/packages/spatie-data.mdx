@@ -468,7 +468,7 @@ JSON your app actually produces and accepts:
 | `Optional` / `Lazy` | Makes the property non-required. |
 | A constructor default | Makes the property non-required, and documents the value as `default`. |
 | `#[MapName]` / `#[MapInputName]` / `#[MapOutputName]` | Renames the property key to the mapped name, per direction. |
-| A mapper class (`SnakeCaseMapper`, `CamelCaseMapper`, `StudlyCaseMapper`, `LowerCaseMapper`, `UpperCaseMapper`) | Applies that transform to the key. |
+| A mapper class (`SnakeCaseMapper`, `CamelCaseMapper`, `StudlyCaseMapper`, `KebabCaseMapper`, `LowerCaseMapper`, `UpperCaseMapper`) | Applies that transform to the key. |
 | Global name-mapping strategy | `data.name_mapping_strategy` renames every un-mapped key, independently for input and output. |
 | Nested `Data` | Recurses into a nested (referenced) schema, and into dotted request rules. |
 | `DataCollection` / `#[DataCollectionOf]` | Becomes an array of the item schema. |

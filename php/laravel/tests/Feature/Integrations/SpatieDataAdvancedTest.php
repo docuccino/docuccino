@@ -23,6 +23,7 @@ use Docuccino\Laravel\Tests\Fixtures\SpatieData\AccountStatus;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\AddressData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ContainerShapeData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ExampleTypesData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\KebabCasedData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\PinnedRuleData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\ProfileResource;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\RequestExclusionData;
@@ -65,6 +66,7 @@ it('applies every built-in name mapper, degrading an unknown mapper', function (
     'snake' => ['Spatie\\LaravelData\\Mappers\\SnakeCaseMapper', 'display_name'],
     'camel' => ['Spatie\\LaravelData\\Mappers\\CamelCaseMapper', 'displayName'],
     'studly' => ['Spatie\\LaravelData\\Mappers\\StudlyCaseMapper', 'DisplayName'],
+    'kebab' => ['Spatie\\LaravelData\\Mappers\\KebabCaseMapper', 'display-name'],
     'lower' => ['Spatie\\LaravelData\\Mappers\\LowerCaseMapper', 'displayname'],
     'upper' => ['Spatie\\LaravelData\\Mappers\\UpperCaseMapper', 'DISPLAYNAME'],
 ]);
@@ -73,6 +75,16 @@ it('returns null for an unrecognised mapper class or a non-class value', functio
     expect(DataClassReflector::mapWithMapper('App\\Mappers\\CustomMapper', 'displayName'))->toBeNull()
         ->and(DataClassReflector::mapWithMapper('not_a_class', 'displayName'))->toBeNull();
 });
+
+it('keys a kebab-mapped Data class the way spatie keys it', function (): void {
+    $reflector = new DataClassReflector;
+
+    expect($reflector->outputName(KebabCasedData::class, 'displayName'))->toBe('display-name')
+        ->and($reflector->inputName(KebabCasedData::class, 'userName'))->toBe('user-name');
+})->skip(
+    ! class_exists('Spatie\\LaravelData\\Mappers\\KebabCaseMapper'),
+    'KebabCaseMapper arrived in spatie/laravel-data 4.18; on an older install the attribute names no mapper.',
+);
 
 it('renames every key through a class-level mapper (input and output)', function (): void {
     $reflector = new DataClassReflector;

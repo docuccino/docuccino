@@ -114,12 +114,16 @@ final class DataClassReflector
      * `#[MapName(SnakeCaseMapper::class)]` renames every property; knowing the transform here is what
      * stops the mapper FQCN leaking as the documented JSON key.
      *
+     * It lists every zero-argument mapper the package ships. `ProvidedNameMapper` is not a transform at
+     * all: it returns a fixed name, which is how spatie models a literal `#[MapName('key')]`.
+     *
      * @var array<string, string>
      */
     private const MAPPERS = [
         'Spatie\\LaravelData\\Mappers\\SnakeCaseMapper' => 'snake',
         'Spatie\\LaravelData\\Mappers\\CamelCaseMapper' => 'camel',
         'Spatie\\LaravelData\\Mappers\\StudlyCaseMapper' => 'studly',
+        'Spatie\\LaravelData\\Mappers\\KebabCaseMapper' => 'kebab',
         'Spatie\\LaravelData\\Mappers\\LowerCaseMapper' => 'lower',
         'Spatie\\LaravelData\\Mappers\\UpperCaseMapper' => 'upper',
     ];
@@ -724,6 +728,7 @@ final class DataClassReflector
             'snake' => Str::snake($property),
             'camel' => Str::camel($property),
             'studly' => Str::studly($property),
+            'kebab' => Str::kebab($property),
             'lower' => Str::lower($property),
             'upper' => Str::upper($property),
             default => null,
