@@ -7,6 +7,17 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.10.0
+
+### Breaking changes
+
+- stop declaring a target nothing can honour ([#216](https://github.com/docuccino/docuccino/pull/216))
+  - `#[Summary]` no longer declares `TARGET_PROPERTY` and `#[Example]` no longer declares `TARGET_PARAMETER`. Code reflecting either at those targets now throws where it did not, and a `#[Summary]` written on a property is a PHP error rather than a build diagnostic.
+
+### Features
+
+- let a #[Response] name the error component it declares ([#193](https://github.com/docuccino/docuccino/pull/193))
+
 ## v0.8.0
 
 ### Breaking changes
