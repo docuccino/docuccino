@@ -129,6 +129,10 @@ it('re-emits the empty objects its subjects hold, rather than the lists a plain 
  * The empty-map count is the one that keeps THIS file honest: these documents hold empty maps, and a
  * reader that stopped preserving them — or an emitter that stopped writing them — would leave every
  * assertion above passing on a document with nothing left to get wrong.
+ *
+ * It counts what was VALIDATED, not what sits on disk: summing the recorded UIR files measured
+ * the INPUT, so an emitter answering `{}` for every one of them cleared that floor unchanged —
+ * precisely the vacuity a floor exists to catch.
  */
 it('validates a plausible minimum of recorded documents, positions and empty maps', function (): void {
     $positions = 0;
