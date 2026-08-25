@@ -107,7 +107,7 @@ it('vendors a meta-schema for every OpenAPI format the emitters offer', function
 });
 
 it('pins each vendored meta-schema to the dated URI it was fetched from', function (): void {
-    foreach (OpenApiMetaSchema::SCHEMAS as $format => [$file, $published]) {
+    foreach (OpenApiMetaSchema::SCHEMAS as $format => $row) {
         $decoded = OpenApiMetaSchema::decode($format);
 
         expect($decoded)->toBeInstanceOf(stdClass::class);
@@ -115,8 +115,37 @@ it('pins each vendored meta-schema to the dated URI it was fetched from', functi
         // 3.2 and 3.1 are draft 2020-12 (`$id`); 3.0 is draft-04 (`id`).
         $declared = $decoded->{'$id'} ?? $decoded->id ?? null;
 
-        expect($declared)->toBe($published, $file);
+        expect($declared)->toBe($row['published'], $row['file']);
     }
+
+    expect(OpenApiMetaSchema::SCHEMAS)->toHaveCount(3);
+});
+
+/**
+ * And the pin the id cannot give. A file's declared `$id` is exactly the field an editor of it would leave
+ * alone, so identity alone lets 1,650 lines of third-party JSON be edited under a name that still checks
+ * out. That matters more here than for an ordinary vendored blob, because the recovered key gates read
+ * their patterns OUT of these same files: widening one gate's `^/` to `^.` leaves the declared id
+ * untouched, weakens the validator and the recovery together, and the site-count tests do not backstop it
+ * — they count sites, not what the patterns at those sites say.
+ *
+ * Same control as `SchemaShippingTest`'s drift guard over the shipped UIR schema, for the same reason:
+ * nobody reads either file line by line, so the bytes answer for themselves.
+ */
+it('pins each vendored meta-schema by content, not only by the id it declares', function (): void {
+    foreach (OpenApiMetaSchema::SCHEMAS as $format => $row) {
+        $path = OpenApiMetaSchema::path($format);
+
+        expect(is_file($path))->toBeTrue($row['file'])
+            ->and(hash_file('sha256', $path))->toBe($row['sha256'], $row['file'])
+            ->and(OpenApiMetaSchema::digest($format))->toBe($row['sha256']);
+
+        // A floor under the pin itself: these are whole published meta-schemas, so a truncated or
+        // placeholder file re-pinned to its own new digest fails here rather than passing quietly.
+        expect(filesize($path))->toBeGreaterThan(20000, $row['file']);
+    }
+
+    expect(OpenApiMetaSchema::SCHEMAS)->toHaveCount(3);
 });
 
 /**
