@@ -639,11 +639,9 @@ declaration. One on a base **controller** is silent, because it would say the sa
 of every child, and nothing it changes was ever going to be different. For one status of one operation,
 name it with `#[Response(errorComponent:)]` instead.
 
-The check reads the controller class **and its parents**, so one such attribute on a base controller
-your API classes extend is reported against every route of every child — a screenful of warnings from a
-single line. It is skipped entirely under
-[`error_responses => 'none'`](/laravel/reference/configuration/#error_responses), along with the rest of
-this tier.
+You get that warning whether or not the document publishes error responses at all: a misplaced attribute
+is misplaced under [`error_responses => 'none'`](/laravel/reference/configuration/#error_responses) too,
+which is what an application that never published a config file resolves to.
 
 **It renames a shared component; it does not create one.** [Which bodies are
 shared](#repeated-bodies-become-shared-components) is settled before anything is named, and marking a

@@ -301,14 +301,27 @@ constraint widening is a small, fast release. Prefer that over a permanent `conf
 
 ## `#[ErrorComponent]` changed nothing
 
-**Symptom.** You marked an exception class, regenerated, and `components.responses` has no entry under
-the name you chose. No warning either — the build is silent about it.
+**Symptom.** You marked something with `#[ErrorComponent]`, regenerated, and `components.responses` has
+no entry under the name you chose. Read your diagnostics first — the two causes are told apart by
+whether the build said anything.
 
-**Cause.** The attribute names a *shared* error component, and only an error two or more operations
-state is shared. Throw that exception from a single endpoint and its body stays inline on that
-operation, so there is no component for the name to apply to. That rule is what keeps a `components`
-bucket from filling with one entry per one-off error, and it is the same rule with or without the
-attribute — nothing about the marked class is being ignored.
+**Cause, if it warned `attribute.error-component-unread`.** You marked the **controller action**. The
+attribute names an error where the error is *defined*, and an action is where several of your errors
+meet — it answers at every status its validation, its authorization and its throws produce, and one name
+over all of them says nothing about which. So nothing reads it there, and the build says so rather than
+leaving you to wonder.
+
+**Fix.** Move it to the exception class, or to the render method that builds the body. To name one
+status of one operation, use `#[Response]`'s
+[`errorComponent:`](/laravel/reference/attributes/#response) argument instead — the only anchor that
+reaches a body nothing threw.
+
+**Cause, if it said nothing.** The attribute names a *shared* error component, and only an error two or
+more operations state is shared. Throw that exception from a single endpoint and its body stays inline
+on that operation, so there is no component for the name to apply to. That rule is what keeps a
+`components` bucket from filling with one entry per one-off error, and it is the same rule with or
+without the attribute — nothing about the marked class is being ignored, which is why there is nothing
+to report.
 
 **Fix.** Nothing, if one endpoint really is the whole story: the response is complete and correct where
 it is, and the name is published the moment a second operation states the same error. If you expected
@@ -316,13 +329,10 @@ several endpoints to share it and none did, they are stating different bodies �
 become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components) for
 what counts as the same one.
 
-If you marked the **controller action** rather than the exception class, that is a different answer: the
-attribute names an error where the error is *defined*, and an action is where several of your errors meet.
-The build reports `attribute.error-component-unread` for that placement (for the action's own attribute;
-one inherited from a base controller is silent, since it would repeat on every route under it). Move it to
-the exception class or its render method — or, to name one status of one operation, use `#[Response]`'s
-[`errorComponent:`](/laravel/reference/attributes/#response) argument, which is the only anchor that reaches
-a body nothing threw.
+One more way to see nothing: an `#[ErrorComponent]` on a **base controller** your API classes extend
+names nothing either, and is reported nowhere — a warning per route of every child would say the same
+thing dozens of times over. Only the action's own declaration is reported, so move a base-class one to
+the exceptions themselves and the names appear.
 
 ---
 
