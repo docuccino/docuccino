@@ -386,12 +386,14 @@ final class SharedErrorResponses implements DocumentTransformer
      *
      * The shapes are joined with `_` rather than run together, because concatenation is not injective:
      * `{Foo, BarBaz}` and `{FooBar, Baz}` both spell `FooBarBaz`, so two responses with nothing in common
-     * contended for one name and each took a content-derived rung it never needed. A single shape is
-     * joined with nothing and keeps its own name, which is the case almost every document is.
+     * contended for one name and each took a content-derived rung it never needed.
      *
-     * `_` only splits back apart if no shape carries one, so a shape whose own name does is the one case
-     * this cannot name unambiguously, and it takes its status instead — the same degradation as a
-     * representation naming no shape at all, for the same reason. `.` and `-` are the only other
+     * `_` only splits back apart if no shape carries one, so a shape whose own name does is refused
+     * however many shapes it is standing with — a lone `Auth_Challenge` reads as a join of `Auth` and
+     * `Challenge`, so exempting the one-shape case would put the two in one codomain and hand the
+     * collision back. Refused means it takes its status, the same degradation as a representation naming
+     * no shape at all, for the same reason. What survives is joins of `_`-free parts, where `n` parts
+     * carry exactly `n - 1` separators and parse back apart uniquely. `.` and `-` are the only other
      * characters a component name may hold, and neither survives as an identifier in a generated client.
      *
      * @param  array<array-key, mixed>  $content
@@ -422,7 +424,7 @@ final class SharedErrorResponses implements DocumentTransformer
 
         $names = array_map(strval(...), array_keys($shapes));
 
-        if (count($names) > 1 && array_filter($names, static fn (string $n): bool => str_contains($n, '_')) !== []) {
+        if (array_filter($names, static fn (string $n): bool => str_contains($n, '_')) !== []) {
             return null;
         }
 

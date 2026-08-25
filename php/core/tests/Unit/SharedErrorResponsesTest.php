@@ -1397,6 +1397,65 @@ it('names a multi-representation body the same however the document spells it', 
         ->and($emit($one))->toBe($emit($two));
 });
 
+it('refuses a shape whose own name carries the separator the join is built from', function (): void {
+    // Injectivity, which is the only reason the join uses a separator at all. A response whose
+    // representations all resolve to ONE shape called `Auth_Challenge` spells exactly what a two-shape
+    // join of `Auth` and `Challenge` spells, so exempting the one-shape case put both in one codomain:
+    // alone, each published `Auth_Challenge`; together, they contested it and took
+    // `Auth_Challenge_3blbosdq` and `Auth_Challenge_l2gsglvo`. A pair of hashes nobody catches by name,
+    // and each moved because the other arrived — which is the outcome the separator exists to remove.
+    //
+    // Two representations resolving to one shape is what reaches this past a count of DISTINCT shapes.
+    $schemas = [
+        'Auth_Challenge' => ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]],
+        'Auth' => ['type' => 'object', 'properties' => ['b' => ['type' => 'string']]],
+        'Challenge' => ['type' => 'object', 'properties' => ['c' => ['type' => 'string']]],
+    ];
+
+    $underscored = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Auth_Challenge']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Auth_Challenge']],
+    ]];
+    $join = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Auth']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Challenge']],
+    ]];
+
+    $alone = errorDocWithSchemas(['/a' => ['422' => $underscored], '/b' => ['422' => $underscored]], $schemas);
+    $both = errorDocWithSchemas([
+        '/a' => ['422' => $underscored], '/b' => ['422' => $underscored],
+        '/m' => ['422' => $join], '/n' => ['422' => $join],
+    ], $schemas);
+
+    expect(array_keys($both['components']['responses']))->toBe(['Auth_Challenge', 'Error422'])
+        // The `_`-bearing shape takes its status; the join keeps the name it spells unambiguously.
+        ->and(responseRefAt($both, '/a', '422'))->toBe('#/components/responses/Error422')
+        ->and(responseRefAt($both, '/m', '422'))->toBe('#/components/responses/Auth_Challenge')
+        // Locality: neither name is a function of the other body being in the document.
+        ->and(responseRefAt($alone, '/a', '422'))->toBe(responseRefAt($both, '/a', '422'))
+        ->and(array_keys($both['components']['responses']))->each->not->toMatch('/_[a-z2-7]{8}$/');
+});
+
+it('orders a join by media type and not by the shapes\' own names', function (): void {
+    // The order is the media types', which is a fact about the body rather than about the alphabet. Every
+    // other case in this file uses shapes where the two orderings agree, so none of them would notice the
+    // sort changing. Here they disagree — `application/json` sorts first and carries `Zebra` — and the
+    // body spells its representations in a third order again, so neither the walk nor the shape names can
+    // account for the answer.
+    $schemas = [
+        'Zebra' => ['type' => 'object', 'properties' => ['z' => ['type' => 'string']]],
+        'Alpha' => ['type' => 'object', 'properties' => ['a' => ['type' => 'string']]],
+    ];
+    $body = ['description' => 'Unprocessable Entity', 'content' => [
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/Alpha']],
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/Zebra']],
+    ]];
+
+    $doc = errorDocWithSchemas(['/a' => ['422' => $body], '/b' => ['422' => $body]], $schemas);
+
+    expect(array_keys($doc['components']['responses']))->toBe(['Zebra_Alpha']);
+});
+
 it('lets a claim that names the whole response reach a multi-representation one', function (array $body, string $published): void {
     // The half the multi-representation rule must not swallow. A producer names the error it rendered and
     // cannot see what another producer put beside it, so its name does not describe the whole response —
