@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use Docuccino\Core\Diagnostics\DiagnosticDocs;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 
 require_once dirname(__DIR__, 2).'/tools/diagnostic-codes.php';
 
@@ -291,6 +292,80 @@ it('names the construction sites whose code is not written beside it', function 
         'Pipeline/DocumentGenerator.php',
         'Support/MachineDependentValue.php',
     ]);
+});
+
+/**
+ * Every `.php` file the packages ship, as path => contents.
+ *
+ * @return array<string, string>
+ */
+function diagnosticSourceContents(): array
+{
+    $out = [];
+
+    foreach (diagnosticSourceDirectories() as $directory) {
+        $files = new RegexIterator(
+            new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)),
+            '/\.php$/',
+        );
+
+        foreach ($files as $file) {
+            $path = (string) $file;
+            $out[$path] = (string) file_get_contents($path);
+        }
+    }
+
+    ksort($out);
+
+    return $out;
+}
+
+/*
+ * One owner for the component-key rule. The sentence a refused name is reported with restates the
+ * character class ComponentNames enforces, and it reached three producers as three separate literals:
+ * core's shared-error-response naming, the adapter's `#[ErrorComponent]` reader, and the
+ * inferred-handler integration's. They draw from ComponentNames::LEGAL_NAME_HELP now, and these two
+ * are what keep them there — the first refuses a fourth site that types the words out again (a copy is
+ * free to drift from the pattern it describes), the second refuses a producer of either code that
+ * states the rule some other way instead. Both are derived, not listed: the words come from the
+ * constant, and the files come from the codes, so neither goes stale on a reword or a rename.
+ */
+it('states the component-key rule in one file only', function (): void {
+    // Up to the first double quote of the sentence, which is the longest run of it no PHP quoting
+    // style would escape — so a copy is caught however it was written.
+    $fragment = strstr(ComponentNames::LEGAL_NAME_HELP, '"', true);
+
+    expect($fragment)->toBeString()->and(strlen((string) $fragment))->toBeGreaterThan(20);
+
+    $holders = [];
+    foreach (diagnosticSourceContents() as $path => $contents) {
+        if (str_contains($contents, (string) $fragment)) {
+            $holders[] = basename($path);
+        }
+    }
+
+    expect($holders)->toBe(['ComponentNames.php']);
+});
+
+it('reports a refused component name with the rule its owner states', function (): void {
+    $reporters = [];
+    $restating = [];
+    foreach (diagnosticSourceContents() as $path => $contents) {
+        if (! str_contains($contents, "'components.name-invalid'") && ! str_contains($contents, "'attribute.error-component-invalid'")) {
+            continue;
+        }
+
+        $reporters[] = basename($path);
+
+        if (! str_contains($contents, 'LEGAL_NAME_HELP')) {
+            $restating[] = basename($path);
+        }
+    }
+
+    // Anti-vacuity: three producers report one of those codes today, so a scan that stopped finding
+    // them would pass the assertion below while proving nothing.
+    expect($restating)->toBe([])
+        ->and(count($reporters))->toBeGreaterThanOrEqual(3);
 });
 
 /*
