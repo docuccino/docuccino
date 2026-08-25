@@ -6,6 +6,7 @@ namespace Docuccino\Core\Extensions\Schema;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Support\JsonValue;
 use JsonException;
 use stdClass;
 
@@ -25,9 +26,13 @@ use stdClass;
  * most specific first, so `integer|null` reads `7` as a number and `null` as null. Where the schema
  * states no type of its own the text stands exactly as written: a `$ref` or an `anyOf` may well accept
  * it, nothing here can tell, and the example audit that runs over the finished document is what holds
- * that case to its schema. The one literal that gets no reading despite a declared type is an empty
- * JSON object, because `{}` and `[]` decode to the same PHP array and publishing it would contradict
- * the `type: object` beside it at the next step.
+ * that case to its schema.
+ *
+ * `{}` and `[]` decode to the same PHP array, so an object literal is classified off an OBJECT-decode
+ * and then read by {@see JsonValue}, which is where the `{}`-versus-`[]` convention lives and which the
+ * `#[Example(file:)]` reader and the recorded-body reader share — one literal, one reading, however it
+ * reached the build. On a free-form map `{}` is the natural example to write, and it used to be the one
+ * literal refused despite being valid.
  */
 final class TypedExample
 {
@@ -136,9 +141,10 @@ final class TypedExample
     }
 
     /**
-     * A JSON literal, classified on an object-decode — `{}` and `[]` are the same PHP array once
-     * decoded associatively, so only the object form tells a list from a map — and published on an
-     * associative one, which is the shape every emitter downstream expects.
+     * A JSON literal, classified and published off ONE object-decode: `{}` and `[]` are the same PHP
+     * array once decoded associatively, so the object form is the only one that tells a list from a map,
+     * and re-decoding associatively to publish would throw that reading away again — an empty object
+     * would reach the document as `[]` and contradict the `type: object` beside it.
      *
      * @return array{mixed}|null
      */
@@ -151,14 +157,11 @@ final class TypedExample
             return null;
         }
 
-        if ($wantList ? ! is_array($shape) : ! ($shape instanceof stdClass && (array) $shape !== [])) {
+        if ($wantList ? ! is_array($shape) : ! $shape instanceof stdClass) {
             return null;
         }
 
-        /** @var mixed $value */
-        $value = json_decode($text, true);
-
-        return [$value];
+        return [JsonValue::normalize($shape)];
     }
 
     /**

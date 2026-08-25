@@ -7,7 +7,7 @@ namespace Docuccino\Core\Emit\Postman;
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Emit\SchemaExampleFactory;
 use Docuccino\Core\Support\Arr;
-use stdClass;
+use Docuccino\Core\Support\EmptyObject;
 
 /**
  * One documented response as a Postman saved example.
@@ -166,7 +166,7 @@ final class SavedExample
 
         $value = $stated === null ? $examples->value($schema, $components) : $stated[0];
 
-        return [rtrim((new CanonicalJsonSerializer)->serialize($value ?? new stdClass), "\n"), 'json'];
+        return [rtrim((new CanonicalJsonSerializer)->serialize($value ?? EmptyObject::get()), "\n"), 'json'];
     }
 
     /**

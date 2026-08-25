@@ -7,6 +7,7 @@ namespace Docuccino\Core\Examples;
 use Docuccino\Core\Lint\CredentialShapes;
 use Docuccino\Core\Lint\SensitiveFieldLint;
 use Docuccino\Core\Lint\SensitiveFieldLintOptions;
+use Docuccino\Core\Support\EmptyObject;
 use stdClass;
 
 /**
@@ -110,7 +111,11 @@ final readonly class ExampleRedaction
                 $out[$name] = $this->walk($child, $childPointer, $childTainted, $childNamed, $pointers, $replace, $depth + 1);
             }
 
-            return $map ? (object) $out : ($list ? array_values($out) : $out);
+            if ($map) {
+                return $out === [] ? EmptyObject::get() : (object) $out;
+            }
+
+            return $list ? array_values($out) : $out;
         }
 
         if (! is_string($value)) {

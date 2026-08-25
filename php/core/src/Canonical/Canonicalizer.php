@@ -6,6 +6,7 @@ namespace Docuccino\Core\Canonical;
 
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Support\Json;
+use Docuccino\Core\Support\JsonValue;
 use stdClass;
 
 /**
@@ -35,6 +36,11 @@ final class Canonicalizer
      * answer the question — `x-enum-descriptions` beside it is genuinely a list and must stay one — so
      * only the keyword's own contract knows which it is. A new map-valued extension therefore owes a
      * line here; one whose keys can never be a `0..n` run loses nothing by having it.
+     *
+     * The fragment cache no longer needs this: it reads its entries through {@see JsonValue}, which
+     * keeps an index-keyed object an object. What still does is any caller handing us a document some
+     * OTHER associative decode produced — a committed artifact read for a diff, most of all — where the
+     * shape is genuinely gone by the time it arrives.
      */
     private const array OBJECT_EXTENSIONS = ['x-enumDescriptions'];
 

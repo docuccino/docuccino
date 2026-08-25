@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit;
 
 use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\EmptyObject;
 use Docuccino\Core\Support\FormatSamples;
 use stdClass;
 
@@ -17,8 +18,9 @@ use stdClass;
  * because JSON object order is not an authored fact, while `enum` and `oneOf` pick their first entry,
  * because a list's order IS authored and every other reader of the document shows the same branch.
  *
- * An empty object comes back as {@see stdClass}, not `[]`. The value is serialised into a JSON string
- * for the collection, and an empty PHP array would render as `[]` — a body that lies about its shape.
+ * An empty object comes back as the shared {@see EmptyObject}, not `[]`. The value is serialised into a
+ * JSON string for the collection, and an empty PHP array would render as `[]` — a body that lies about
+ * its shape.
  *
  * @internal
  */
@@ -169,7 +171,7 @@ final readonly class SchemaExampleFactory
                 }
             }
 
-            return [$merged === [] ? new stdClass : $merged];
+            return [$merged === [] ? EmptyObject::get() : $merged];
         }
 
         foreach (['oneOf', 'anyOf'] as $keyword) {
@@ -190,13 +192,13 @@ final readonly class SchemaExampleFactory
     {
         // A pointer already on the stack is a cycle: return the empty shape rather than recursing.
         if (in_array($ref, $stack, true)) {
-            return new stdClass;
+            return EmptyObject::get();
         }
 
         $resolved = $this->resolve($ref, $components);
 
         return $resolved === null
-            ? new stdClass
+            ? EmptyObject::get()
             : $this->value($resolved, $components, $depth + 1, [...$stack, $ref]);
     }
 
@@ -297,7 +299,7 @@ final readonly class SchemaExampleFactory
             $out[$key] = is_array($property) ? $this->value(Arr::stringKeyed($property), $components, $depth + 1, $stack) : null;
         }
 
-        return $out === [] ? new stdClass : $out;
+        return $out === [] ? EmptyObject::get() : $out;
     }
 
     /**
@@ -346,7 +348,7 @@ final readonly class SchemaExampleFactory
             'string' => '',
             'integer', 'number' => 0,
             'boolean' => false,
-            default => new stdClass,
+            default => EmptyObject::get(),
         };
     }
 }
