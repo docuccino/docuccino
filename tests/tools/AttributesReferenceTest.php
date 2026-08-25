@@ -222,7 +222,7 @@ it('states the targets and repeatability every attribute really declares', funct
     // Every target name the vocabulary knows is claimed somewhere, so a regex that stopped matching
     // one of them fails here rather than passing on a thinner page.
     expect($wrong)->toBe([])
-        ->and(attributeFlagNames($seen))->toBe('CLASS | METHOD | FUNCTION | PROPERTY | PARAMETER | CLASS_CONSTANT | repeatable');
+        ->and(attributeFlagNames($seen))->toBe('CLASS | METHOD | FUNCTION | PROPERTY | CLASS_CONSTANT | repeatable');
 });
 
 /** @param  class-string  $class */
@@ -293,14 +293,8 @@ function attributeReaderSourceDirectories(): array
 function attributeInertTargets(): array
 {
     return [
-        'Example' => [
-            'PARAMETER' => ['documented-inert', 'The `PARAMETER` target is accepted and has no effect of its own.'],
-        ],
         'Internal' => [
             'PROPERTY' => ['documented-inert', 'is accepted but has no effect on a schema today'],
-        ],
-        'Summary' => [
-            'PROPERTY' => ['diagnostic', 'attribute.property-unsupported'],
         ],
     ];
 }
