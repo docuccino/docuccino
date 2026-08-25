@@ -272,15 +272,23 @@ it('reports an empty map written as a sequence, and nothing when it is written a
  * `allowDefaults` is off, so a validated 3.2 document silently gained a `jsonSchemaDialect` and a
  * `servers: [{url: "/"}]` it never emitted — and every assertion after it compared against the mutation
  * rather than the emission. The option is set; this is what proves it still is.
+ *
+ * Both graphs, because they are built by different readers: `json_decode` for one and a kind-preserving
+ * `Yaml::parse()` for the other. Proving purity over the JSON graph alone proves it for one of the two
+ * things every assertion in this file goes on to compare.
+ *
+ * The encode is order-sensitive on purpose: it is what makes an injected member visible wherever opis
+ * chose to put it.
  */
-it('leaves the instance it validated exactly as it found it', function (string $fixture, string $format): void {
-    [$json] = metaSchemaEmissions($fixture, $format);
+it('leaves the instances it validated exactly as it found them', function (string $fixture, string $format): void {
+    [$json, $yaml] = metaSchemaEmissions($fixture, $format);
 
-    $before = json_encode($json, JSON_THROW_ON_ERROR);
+    $before = [json_encode($json, JSON_THROW_ON_ERROR), json_encode($yaml, JSON_THROW_ON_ERROR)];
 
     OpenApiMetaSchema::findings($format, $json);
+    OpenApiMetaSchema::findings($format, $yaml);
 
-    expect(json_encode($json, JSON_THROW_ON_ERROR))->toBe($before);
+    expect([json_encode($json, JSON_THROW_ON_ERROR), json_encode($yaml, JSON_THROW_ON_ERROR)])->toBe($before);
 })->with(metaSchemaSubjects());
 
 /**
