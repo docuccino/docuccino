@@ -399,7 +399,8 @@ it reads only what the kind actually exposes:
 | `callback('active', fn)` | The column of a single `$query->where('active', $value)` in the closure, then that column's cast. | Comment above the entry, or `#[QueryParameter]`. |
 | `custom('flag', new F)` | A `#[QueryParameter]` on the filter class `F`, else the column of a single `where` in `F::__invoke`. | See [custom filter classes](#custom-filter-classes). |
 | `operator('score', FilterOperator::EQUAL)` | The internal column's cast — equality operators (`EQUAL`, `DYNAMIC`) only. | `#[QueryParameter]`. |
-| `beginsWithStrict('name')` / `endsWithStrict('name')` | A begins-with / ends-with substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
+| `beginsWith('name')` / `endsWith('name')` | A begins-with / ends-with substring match — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
+| `groupOr('search', [...])` / `groupAnd('search', [...])` | One key whose value every grouped member applies — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `belongsTo('team')` | A relationship filter — documented as a string. | Comment, docblock, or `#[QueryParameter]`. |
 | `trashed()` | A fixed `with` / `only` string enum, with the omitted-value default explained. | — |
 
@@ -408,6 +409,11 @@ uses the comma `whereIn` array. Wherever a kind reads a column's cast, the
 [key and foreign-key typing](#keys-and-foreign-keys-without-a-cast) applies too — an uncast id column
 types the same through `exact`, `operator`, a callback, or a custom filter. `AllowedFilter::trashed()`
 called with no name is documented under Spatie's own default name, `filter[trashed]`.
+
+A filter group publishes the one key it is declared under and nothing else — its members are
+conditions on that key, not parameters of their own. The kind is read from the factory you call, so
+`beginsWithStrict` and `endsWithStrict` — the names these two carried before v7 — are recognised the
+same way on an older install.
 
 Anything Docuccino can't reduce to one column or a known type is documented at exactly the certainty
 that remains. It never guesses. A kind whose value is a string by construction — a non-equality
@@ -541,9 +547,11 @@ it from. The reader can't see your allow-list, so a label like "custom filter" t
 | --- | --- |
 | `exact('status')` | Exact match on `status`. |
 | `partial('name')` / a bare `'name'` | Substring match on `name`. |
-| `beginsWithStrict('name')` | Prefix match on `name`. |
-| `endsWithStrict('name')` | Suffix match on `name`. |
+| `beginsWith('name')` | Prefix match on `name`. |
+| `endsWith('name')` | Suffix match on `name`. |
 | `operator('score', …)` | Compares `score` against the value. |
+| `groupOr('search', […])` | Matches records where at least one of the conditions grouped under `search` holds. |
+| `groupAnd('search', […])` | Matches records where every condition grouped under `search` holds. |
 | `belongsTo('customer')` | Matches records belonging to the given `customer`. |
 | `trashed()` | Soft-delete filter: `with` includes soft-deleted records, `only` returns only soft-deleted; omit to exclude them. |
 | `scope('popular')`, `callback('active', fn)`, `custom('flag', F::class)` | Filters the result set by `popular`. |

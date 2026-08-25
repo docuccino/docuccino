@@ -252,3 +252,28 @@ it('detects the installed package as the supported major', function (): void {
     // parser reading anything else here means detection stopped seeing real versions.
     expect(QueryBuilderConfig::majorOf(InstalledVersions::getVersion('spatie/laravel-query-builder')))->toBe(7);
 });
+
+/**
+ * The v7 spellings, end to end: a kind is the factory method the app wrote, so these reach the table
+ * under their own names and get the match they perform rather than the opaque fallback.
+ */
+it('describes the filter kinds the installed major spells', function (): void {
+    [$byName] = runFilterKinds(
+        'QueryBuilder::for(\\Workbench\\App\\Models\\Gadget::class)->allowedFilters(['
+        ."AllowedFilter::beginsWith('name'), "
+        ."AllowedFilter::endsWith('slug'), "
+        ."AllowedFilter::groupOr('search', [AllowedFilter::partial('name'), AllowedFilter::partial('slug')]), "
+        ."AllowedFilter::groupAnd('both', [AllowedFilter::partial('name'), AllowedFilter::partial('slug')]), "
+        .'])->paginate()'
+    );
+
+    expect($byName['filter[name]']['description'])->toBe('Prefix match on `name`.')
+        ->and($byName['filter[slug]']['description'])->toBe('Suffix match on `slug`.')
+        ->and($byName['filter[search]']['description'])->toBe('Matches records where at least one of the conditions grouped under `search` holds.')
+        ->and($byName['filter[both]']['description'])->toBe('Matches records where every condition grouped under `both` holds.')
+        // A group's members are not filters of their own — the group publishes one key, and the value
+        // it takes is a string whatever its members type off.
+        ->and($byName['filter[search]']['schema']['type'])->toBe('string')
+        ->and($byName['filter[search]']['schema'])->not->toHaveKey('enum')
+        ->and($byName)->toHaveCount(5); // the four filters + the page parameter
+});
