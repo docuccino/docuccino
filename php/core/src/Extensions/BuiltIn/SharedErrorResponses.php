@@ -28,9 +28,9 @@ use Docuccino\Core\Support\Json;
  *
  * What REPEATS decides whether a body is hoisted; what its producer DECLARED
  * ({@see ResponseDraft::claimComponentName()}) decides only what the component is called — so a
- * declaration can add a component and never take one away. It names the RESPONSE, and reaches the shape
- * inside it only where that shape is the whole of it ({@see schemaSites()}). Design §"Shared error
- * components".
+ * declaration can add a component and never take one away. It describes a response stating ONE
+ * representation, and the shape under it ({@see schemaSites()}); a response stating several is named for
+ * the representations it carries instead ({@see carries()}). Design §"Shared error components".
  *
  * A media type's `example` and its `examples` map are how an operation ILLUSTRATES the body, not what the
  * body IS, so the second pass keeps both out of the key and republishes every arm's illustration on the
@@ -104,8 +104,10 @@ final class SharedErrorResponses implements DocumentTransformer
         $shapes = self::shareable(self::collect($paths, self::schemaSites(...), self::stated(...)));
         [$paths, $schemas, $schemaContests, $aliases] = self::shareShapes($paths, $shapes, self::bucket($components, 'schemas'));
 
-        $bodies = self::shareable(self::collect($paths, self::responseSites(...), self::illustrated(...), $aliases));
-        [$paths, $responses, $responseContests] = self::shareResponses($paths, $bodies, self::bucket($components, 'responses'));
+        $sites = static fn (array $response): array => self::responseSites($response, $aliases);
+
+        $bodies = self::shareable(self::collect($paths, $sites, self::illustrated(...), $aliases));
+        [$paths, $responses, $responseContests] = self::shareResponses($paths, $bodies, self::bucket($components, 'responses'), $sites);
 
         foreach ([...self::rejectedClaims($shapes, $bodies), ...$schemaContests, ...$responseContests] as $diagnostic) {
             $context->report($diagnostic);
@@ -180,9 +182,10 @@ final class SharedErrorResponses implements DocumentTransformer
      * @param  array<array-key, mixed>  $paths
      * @param  array<string, Occurrence>  $bodies
      * @param  array<string, mixed>  $existing
+     * @param  callable(array<array-key, mixed>): list<array{list<array-key>, array<array-key, mixed>, string|null}>  $sites
      * @return array{array<array-key, mixed>, array<string, mixed>|null, list<Diagnostic>}
      */
-    private static function shareResponses(array $paths, array $bodies, array $existing): array
+    private static function shareResponses(array $paths, array $bodies, array $existing, callable $sites): array
     {
         if ($bodies === []) {
             return [$paths, null, []];
@@ -207,7 +210,7 @@ final class SharedErrorResponses implements DocumentTransformer
         );
 
         return [
-            self::rewrite($paths, $names, self::responseSites(...), self::illustrated(...), self::RESPONSES, $spoken),
+            self::rewrite($paths, $names, $sites, self::illustrated(...), self::RESPONSES, $spoken),
             $bucket,
             [...self::collisions($contests, $names, 'responses'), ...$disagreements],
         ];
@@ -286,12 +289,12 @@ final class SharedErrorResponses implements DocumentTransformer
      * Every hoistable node of one response, as `[pointer into the response, body, the name claimed for
      * it]`. A schema pass reads one per media type; a response pass reads the response itself.
      *
-     * A producer's claim names the RESPONSE, and it reaches the shape underneath only where the response
-     * states exactly ONE representation — there the shape IS the named error's body, and the two buckets
-     * publish one concept under one name. A response offering several says nothing about which of them
-     * the name belongs to, so each shape asks for its status instead: `components.schemas` and
-     * `components.responses` hold different kinds of thing, and a shape named after the response
-     * enclosing it asserts it is that error when it may be the alternative representation beside it.
+     * A producer's claim reaches the shape underneath only where the response states exactly ONE
+     * representation — there the shape IS the named error's body, and the two buckets publish one concept
+     * under one name. A response offering several says nothing about which of them the name belongs to,
+     * so each shape asks for its status instead: `components.schemas` and `components.responses` hold
+     * different kinds of thing, and a shape named after the response enclosing it asserts it is that
+     * error when it may be the alternative representation beside it.
      *
      * @param  array<array-key, mixed>  $response
      * @return list<array{list<array-key>, array<array-key, mixed>, string|null}>
@@ -315,12 +318,71 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
+     * The response itself, under the name it asks for — which is the producer's claim only where the
+     * response states ONE representation, exactly as the claim reaches the shape under it only there
+     * ({@see schemaSites()}). A response offering a representation the claim says nothing about is not
+     * the error the claim names, so asking for that name would retire it for the body that IS: a
+     * renderer's `ValidationError` spread over a problem body and a problem-body-plus-challenge published
+     * both of them as content hashes, and the seventy-five operations answering with the first had their
+     * type renamed by three answering with the second.
+     *
+     * So it asks for what it carries instead ({@see carries()}), and the claim leaves its dedupe scope
+     * with its name: a name that cannot describe a body must not tell two of them apart either, and
+     * keeping it in the scope would only send two identically-carried bodies back up the ladder together.
+     *
      * @param  array<array-key, mixed>  $response
+     * @param  array<string, string>  $minted  the schema names this run published, which are not the
+     *                                         document's own and so name nothing for it
      * @return list<array{list<array-key>, array<array-key, mixed>, string|null}>
      */
-    private static function responseSites(array $response): array
+    private static function responseSites(array $response, array $minted = []): array
     {
-        return [[[], $response, self::claimed($response)]];
+        /** @var array<array-key, mixed> $content */
+        $content = $response['content'];
+
+        return [[[], $response, count($content) === 1 ? self::claimed($response) : self::carries($content, $minted)]];
+    }
+
+    /**
+     * What a response stating several representations is called: the components they reference, one per
+     * distinct shape, in the order the media types sort — a function of the body's own bytes, so two
+     * builds agree and an operation elsewhere in the application arriving or leaving moves nothing.
+     *
+     * Every representation has to name a shape, or the answer is null and the body takes its status. A
+     * name assembled from the shapes it could read would speak for part of the response and say nothing
+     * about the rest, which is the assertion this area exists to refuse — `Error422` is vague and true.
+     * Names this run MINTED are not the document's own either: they move when a shape's contest does, and
+     * a response named after one would move with it.
+     *
+     * @param  array<array-key, mixed>  $content
+     * @param  array<string, string>  $minted
+     */
+    private static function carries(array $content, array $minted): ?string
+    {
+        $mediaTypes = array_map(strval(...), array_keys($content));
+        sort($mediaTypes, SORT_STRING);
+
+        $shapes = [];
+        foreach ($mediaTypes as $mediaType) {
+            $media = $content[$mediaType] ?? null;
+            $schema = is_array($media) ? ($media['schema'] ?? null) : null;
+            $ref = is_array($schema) ? ($schema['$ref'] ?? null) : null;
+
+            if (! is_string($ref) || ! str_starts_with($ref, self::SCHEMAS)) {
+                return null;
+            }
+
+            $shape = substr($ref, strlen(self::SCHEMAS));
+            if ($shape === '' || isset($minted[$shape])) {
+                return null;
+            }
+
+            $shapes[$shape] = true;
+        }
+
+        $name = implode('', array_keys($shapes));
+
+        return $name !== '' && ComponentNames::isLegal($name) ? $name : null;
     }
 
     /**

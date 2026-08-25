@@ -125,6 +125,42 @@ function twoRepresentationBody(string $description = 'Unprocessable Entity'): ar
     ];
 }
 
+/**
+ * The reported shape: one status answered with the problem body every other operation answers it with,
+ * and a second representation beside it — both of them components the document already publishes, which
+ * is what a `#[Response(type: SomeUnion::class)]` beside a Data-class problem body actually looks like.
+ */
+function twoNamedRepresentationBody(string $description = 'Unprocessable Entity'): array
+{
+    return [
+        'description' => $description,
+        'content' => [
+            'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+            'application/json' => ['schema' => ['$ref' => '#/components/schemas/AuthenticationChallenge']],
+        ],
+    ];
+}
+
+/** The one representation the rest of the document answers that status with. */
+function oneNamedRepresentationBody(string $description = 'Unprocessable Entity'): array
+{
+    return [
+        'description' => $description,
+        'content' => ['application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']]],
+    ];
+}
+
+/** A document of `[path => [status => response]]`, with the components a real one would already publish. */
+function errorDocWithSchemas(array $responsesByPath, array $schemas): array
+{
+    $paths = [];
+    foreach ($responsesByPath as $path => $responses) {
+        $paths[$path] = ['get' => ['responses' => $responses]];
+    }
+
+    return transformedErrorDoc(['paths' => $paths, 'components' => ['schemas' => $schemas]]);
+}
+
 /** A path's error response as documented, read through `components.responses` when it was hoisted. */
 function responseAt(array $doc, string $path, string $status): array
 {
@@ -1191,17 +1227,18 @@ it('publishes a declared name in both buckets, in place of the status', function
         ->toBe(['$ref' => '#/components/schemas/NotFound']);
 });
 
-it('names a hoisted shape after the response only where the response is that shape', function (string $case, array $body, array $schemas, array $responses): void {
-    // The two buckets hold different kinds of thing, so a claim that names a response only names the
-    // shape underneath it where that shape is the whole of the response. Where the response offers
-    // several representations it says nothing about which one it named, and each takes its status.
+it('names a hoisted body after the claim only where the claim describes it', function (string $case, array $body, array $schemas, array $responses): void {
+    // A claim describes a response that states ONE representation, and the shape under it — the two
+    // buckets then publish one concept under one name. Where the response offers several it says nothing
+    // about which of them it named, so neither the response nor any shape in it may take that name; the
+    // response asks for what it carries and falls to its status where a representation names no shape.
     $doc = errorDoc(['/a' => ['422' => $body], '/b' => ['422' => $body]]);
 
     expect(array_keys($doc['components']['schemas']))->toBe($schemas)
         ->and(array_keys($doc['components']['responses']))->toBe($responses);
 })->with([
     ['a claim, one representation', claimedBody('ValidationError', messageBody('Unprocessable Entity')), ['ValidationError'], ['ValidationError']],
-    ['a claim, two representations', claimedBody('ValidationError', twoRepresentationBody()), ['Error422'], ['ValidationError']],
+    ['a claim, two representations', claimedBody('ValidationError', twoRepresentationBody()), ['Error422'], ['Error422']],
     ['no claim, one representation', messageBody('Unprocessable Entity'), ['Error422'], ['Error422']],
     ['no claim, two representations', twoRepresentationBody(), ['Error422'], ['Error422']],
 ]);
@@ -1215,7 +1252,10 @@ it('keeps a response\'s claimed name off the representation beside the one it na
 
     $doc = errorDoc(['/a' => ['422' => $body], '/b' => ['422' => $body]]);
 
-    expect(array_keys($doc['components']['responses']))->toBe(['ValidationError'])
+    // Nor does the name reach the response: the challenge union beside the problem body is a
+    // representation `ValidationError` says nothing about, so the response is no more that error than
+    // the union is. One of its two shapes is a name this run minted, so its status is what is left.
+    expect(array_keys($doc['components']['responses']))->toBe(['Error422'])
         ->and(array_keys($doc['components']['schemas']))->toBe(['Error422'])
         ->and(schemaRefAt($doc, '/a', '422'))->toBe('#/components/schemas/Error422')
         // The named error's own body was already a reference, so this pass had nothing to hoist for it.
@@ -1235,12 +1275,131 @@ it('hoists one shape once when a claimed response and an unclaimed one state it'
         '/d' => ['422' => $bare],
     ]);
 
+    // The same rule one level up, and the same reason: the claim describes neither of these responses,
+    // so it does not tell them apart either. Two arms stating one body get one component, not two names
+    // for one type — which is what asking a name that only one of them could keep would have cost.
     expect(array_keys($doc['components']['schemas']))->toBe(['Error422'])
         ->and(schemaRefAt($doc, '/a', '422'))->toBe('#/components/schemas/Error422')
         ->and(schemaRefAt($doc, '/d', '422'))->toBe('#/components/schemas/Error422')
-        // The claim still names the response it was made about, which is the half of it that is true.
-        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/ValidationError')
+        ->and(array_keys($doc['components']['responses']))->toBe(['Error422'])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/Error422')
         ->and(responseRefAt($doc, '/d', '422'))->toBe('#/components/responses/Error422');
+});
+
+it('leaves the plain claimed name to the body the claim describes', function (): void {
+    // The reported regression, as a consumer met it: 75 operations answering 422 with an RFC 9457 problem
+    // body and three answering it with that body PLUS an authentication challenge all inherited one
+    // `ValidationError` from the renderer that named it, contested it, and were published as
+    // `ValidationError_5lwwjnmg` and `ValidationError_m2hyrf57`. Nobody catches either of those.
+    //
+    // A response offering a representation the claim says nothing about is not the error the claim names,
+    // so it does not ask for that name — which leaves the name to the body that IS it, and takes the
+    // second body's name from the representations it actually carries.
+    $problem = claimedBody('ValidationError', oneNamedRepresentationBody());
+    $challenge = claimedBody('ValidationError', twoNamedRepresentationBody());
+
+    $doc = errorDocWithSchemas([
+        '/a' => ['422' => $problem], '/b' => ['422' => $problem], '/c' => ['422' => $problem],
+        '/mfa' => ['422' => $challenge], '/magic' => ['422' => $challenge], '/verify' => ['422' => $challenge],
+    ], [
+        'ProblemDetailsData' => ['type' => 'object', 'properties' => ['detail' => ['type' => 'string']]],
+        'AuthenticationChallenge' => ['oneOf' => [['type' => 'object'], ['type' => 'object', 'properties' => ['sso' => ['type' => 'string']]]]],
+    ]);
+
+    expect(array_keys($doc['components']['responses']))
+        ->toBe(['AuthenticationChallengeProblemDetailsData', 'ValidationError'])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/ValidationError')
+        ->and(responseRefAt($doc, '/mfa', '422'))
+        ->toBe('#/components/responses/AuthenticationChallengeProblemDetailsData')
+        // No name in either bucket is a content hash, which is the whole complaint.
+        ->and([...array_keys($doc['components']['responses']), ...array_keys($doc['components']['schemas'])])
+        ->each->not->toMatch('/_[a-z2-7]{8}$/');
+});
+
+it('says nothing about a claim two bodies no longer contest', function (): void {
+    // The collision warning told the reader to have the operations state one body, which they cannot: the
+    // three genuinely answer with a representation the other seventy-five do not. With neither body asking
+    // for a name the other holds there is no contest left to report, so the channel stays quiet.
+    $problem = claimedBody('ValidationError', oneNamedRepresentationBody());
+    $challenge = claimedBody('ValidationError', twoNamedRepresentationBody());
+
+    $report = errorDocReport([
+        'paths' => array_map(static fn (array $r): array => ['get' => ['responses' => $r]], [
+            '/a' => ['422' => $problem], '/b' => ['422' => $problem],
+            '/mfa' => ['422' => $challenge], '/magic' => ['422' => $challenge],
+        ]),
+        'components' => ['schemas' => [
+            'ProblemDetailsData' => ['type' => 'object'],
+            'AuthenticationChallenge' => ['type' => 'object'],
+        ]],
+    ]);
+
+    expect($report)->toBe([]);
+});
+
+it('keeps a multi-representation response\'s name off the arrival and departure of the body beside it', function (): void {
+    // Locality, both ways. The claimed single-representation pair names itself from its claim and the
+    // multi-representation trio from the representations it carries, so neither is a function of the
+    // other's existence — a document holding only one of them publishes the same name for it.
+    $problem = claimedBody('ValidationError', oneNamedRepresentationBody());
+    $challenge = claimedBody('ValidationError', twoNamedRepresentationBody());
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $both = errorDocWithSchemas([
+        '/a' => ['422' => $problem], '/b' => ['422' => $problem],
+        '/mfa' => ['422' => $challenge], '/magic' => ['422' => $challenge],
+    ], $schemas);
+    $onlyProblem = errorDocWithSchemas(['/a' => ['422' => $problem], '/b' => ['422' => $problem]], $schemas);
+    $onlyChallenge = errorDocWithSchemas(['/mfa' => ['422' => $challenge], '/magic' => ['422' => $challenge]], $schemas);
+
+    expect(responseRefAt($both, '/a', '422'))->toBe(responseRefAt($onlyProblem, '/a', '422'))
+        ->and(responseRefAt($both, '/mfa', '422'))->toBe(responseRefAt($onlyChallenge, '/mfa', '422'))
+        ->and($both['components']['responses']['ValidationError'])
+        ->toBe($onlyProblem['components']['responses']['ValidationError'])
+        ->and($both['components']['responses']['AuthenticationChallengeProblemDetailsData'])
+        ->toBe($onlyChallenge['components']['responses']['AuthenticationChallengeProblemDetailsData']);
+});
+
+it('names a multi-representation body the same however the document spells it', function (): void {
+    // A function of the set of representations and never of the walk: the media types state themselves in
+    // either order, on either route, and one name comes out.
+    $forward = claimedBody('ValidationError', twoNamedRepresentationBody());
+    $backward = claimedBody('ValidationError', ['description' => 'Unprocessable Entity', 'content' => [
+        'application/json' => ['schema' => ['$ref' => '#/components/schemas/AuthenticationChallenge']],
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+    ]]);
+    $schemas = ['ProblemDetailsData' => ['type' => 'object'], 'AuthenticationChallenge' => ['type' => 'object']];
+
+    $one = errorDocWithSchemas(['/a' => ['422' => $forward], '/b' => ['422' => $backward]], $schemas);
+    $two = errorDocWithSchemas(['/a' => ['422' => $backward], '/b' => ['422' => $forward]], $schemas);
+
+    // Insertion order inside the merged `content` is whichever arm the walk met first and is sorted away
+    // on emit, so it is the EMITTED bytes the two documents owe each other.
+    $emit = static fn (array $doc): string => (new OpenApi32Emitter)->emit(UirDocument::fromArray(
+        ['uir' => '1.0', 'openapi' => '3.2.0', 'info' => ['title' => 'T', 'version' => '1'], 'x-docuccino' => ['id' => 'doc:default']] + $doc,
+    ));
+
+    expect(array_keys($one['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
+        ->and(array_keys($two['components']['responses']))->toBe(['AuthenticationChallengeProblemDetailsData'])
+        ->and($emit($one))->toBe($emit($two));
+});
+
+it('falls back to the status where a representation names no shape of its own', function (): void {
+    // Degraded but true. A response is only named after the shapes it carries where every one of them is
+    // a shape the document names — otherwise the name would speak for part of the body and say nothing
+    // about the rest, which is the assertion this whole area exists to refuse.
+    $body = claimedBody('ValidationError', ['description' => 'Unprocessable Entity', 'content' => [
+        'application/problem+json' => ['schema' => ['$ref' => '#/components/schemas/ProblemDetailsData']],
+        'application/json' => ['schema' => ['type' => 'object', 'properties' => ['otp' => ['type' => 'string']]]],
+    ]]);
+
+    $doc = errorDocWithSchemas(
+        ['/a' => ['422' => $body], '/b' => ['422' => $body]],
+        ['ProblemDetailsData' => ['type' => 'object']],
+    );
+
+    expect(array_keys($doc['components']['responses']))->toBe(['Error422'])
+        ->and(responseRefAt($doc, '/a', '422'))->toBe('#/components/responses/Error422');
 });
 
 it('gives two anonymous representations of one status a name each, derived from their own content', function (): void {
@@ -1269,10 +1428,10 @@ it('gives two anonymous representations of one status a name each, derived from 
         ->and($help[0])->toContain('states one representation');
 });
 
-it('leaves a claimed shape alone when a response stating several representations arrives', function (): void {
-    // Locality across the narrowing: a route whose response offers two representations publishes shapes
-    // named after its status, and every byte the claimed single-representation pair already published —
-    // its `$ref`s and both its components — survives that arrival untouched.
+it('leaves a claimed body alone when a response stating several representations arrives', function (): void {
+    // Locality across the narrowing: a route whose response offers two representations publishes a shape
+    // and a response named after its status, and every byte the claimed single-representation pair
+    // already published — its `$ref`s and both its components — survives that arrival untouched.
     $single = ['404' => claimedBody('NotFound', messageBody())];
     $arriving = ['404' => claimedBody('Missing', twoRepresentationBody('Not Found'))];
 
@@ -1285,7 +1444,7 @@ it('leaves a claimed shape alone when a response stating several representations
         ->and($after['components']['responses']['NotFound'])->toBe($before['components']['responses']['NotFound'])
         // …and the arrival really did arrive, under its status rather than under the name it declared.
         ->and(array_keys($after['components']['schemas']))->toBe(['NotFound', 'Error404'])
-        ->and(array_keys($after['components']['responses']))->toBe(['Missing', 'NotFound']);
+        ->and(array_keys($after['components']['responses']))->toBe(['NotFound', 'Error404']);
 });
 
 it('leaves the declaration on the operation and out of the component it names', function (): void {

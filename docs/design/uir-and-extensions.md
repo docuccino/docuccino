@@ -133,24 +133,43 @@ operation DESCRIBES or ILLUSTRATES the error, so `description`, `headers` and th
 examples all stay outside it. Which of those the RESPONSE pass then keys on is a separate question,
 answered below: `headers` yes, the words and the illustrations no.
 
-**A declared name names the RESPONSE, and reaches the shape under it only where that shape is the whole
-of it.** The two buckets hold different kinds of thing, so publishing an anonymous body as
+**A declared name describes a response that states ONE representation, and there it names the shape under
+it too.** The two buckets hold different kinds of thing, so publishing an anonymous body as
 `components.schemas.ValidationError` because the response around it claimed that name asserts the body IS
-that error. Where the response states one representation the assertion is true, and the two buckets
-publishing one concept under one name is the point of the claim — a client catches `NotFound`, and the
-shape underneath is `NotFound` too. Where it states SEVERAL it is a guess, and it was wrong in the case
-that found this: a 422 answered with an RFC 9457 problem body under `application/problem+json` and a
-union of challenge shapes under `application/json` had the union published as the named validation error,
-beside the response component that correctly held the problem body. So the claim reaches a shape only at
-a single-representation response; each shape of a multi-representation one asks for its status instead,
-and two anonymous ones there contest that name and climb like any other pair.
+that error. At a single-representation response the assertion is true, and the two buckets publishing one
+concept under one name is the point of the claim — a client catches `NotFound`, and the shape underneath
+is `NotFound` too. Where the response states SEVERAL it is a guess, and it was wrong in the case that
+found this: a 422 answered with an RFC 9457 problem body under `application/problem+json` and a union of
+challenge shapes under `application/json` had the union published as the named validation error, beside
+the response component that correctly held the problem body.
 
-The claim is out of such a shape's dedupe SCOPE for the same reason: a name that cannot describe a shape
-must not tell two of them apart either. Scoping by it hoisted one union twice — once under the claim,
-once under the status, identical members and two ids — which hands a client two names for one type. The
-claim still scopes what it does name: two producers naming two different errors that happen to spell one
-body get a component each, and an undeclared body's own representation never moves because someone
-elsewhere learned to name theirs.
+**A multi-representation response is not the error its claim names either**, which the same document
+proved one level up. A renderer's `#[ErrorComponent('ValidationError')]` reached seventy-eight 422s:
+seventy-five stating the problem body alone, and three stating it beside an authentication challenge. Two
+responses, one claim, and the ladder retired the name for both — `ValidationError_5lwwjnmg` and
+`ValidationError_m2hyrf57`, neither of them a type anyone catches, and the rename fell on the
+seventy-five that had held the plain name for a release. Offering a representation the claim says nothing
+about is the same defect as being one: the claim describes the response only where the response is the
+one thing it describes. So a response stating several asks for **what it carries** — the components its
+representations reference, one per distinct shape, in the order the media types sort — and that name is a
+function of its own bytes, so neither body is named after the other's existence and the claim stays with
+the body that is genuinely it. The three above publish as
+`AuthenticationChallengeProblemDetailsData`; the seventy-five keep `ValidationError`.
+
+Every representation has to name a shape, or the response takes its status. A name assembled from the
+shapes that happened to be readable would speak for part of the body and say nothing about the rest,
+which is the assertion this whole area refuses; `Error422` is vague and true. Names the hoist itself
+MINTED are not the document's own either — they move when a shape's contest does, and a response named
+after one would move with it — so a body one of whose representations is a shape this pass just named
+falls to its status as well.
+
+The claim is out of a shape's and a multi-representation response's dedupe SCOPE for the same reason: a
+name that cannot describe a body must not tell two of them apart either. Scoping by it hoisted one union
+twice — once under the claim, once under the status, identical members and two ids — which hands a client
+two names for one type, and keeping it in the response's scope would only send two identically-carried
+bodies up the ladder together. The claim still scopes what it does name: two producers naming two
+different errors that happen to spell one single-representation body get a component each, and an
+undeclared body's own representation never moves because someone elsewhere learned to name theirs.
 
 **Responses second**, over the rewritten document: a whole response — description, headers, and by now
 a schema `$ref` — that two or more operations state identically is hoisted too. Second so the response
@@ -270,7 +289,8 @@ which name that is would depend on which routes the application happens to have 
 to mean something else, which is the one failure this whole area is built to prevent. Keyed on the
 declaration as well they are two components, each named for its own declarer and neither able to move
 the other. An undeclared body keys on the status alone, exactly as it always did, so its key, its hash
-rung and its component id are unchanged.
+rung and its component id are unchanged — and so does one whose claim does not describe it, since the
+name it asks for is a function of the representations it carries and those are already in the key.
 
 **What repeats decides WHETHER a body is hoisted; what its producer declared decides only what the
 component is CALLED.** The two questions are counted separately and this is load-bearing: occurrences
