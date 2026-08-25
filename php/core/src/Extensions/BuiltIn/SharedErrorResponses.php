@@ -1192,7 +1192,7 @@ final class SharedErrorResponses implements DocumentTransformer
                     $producer === null ? 'A producer' : sprintf('"%s"', $producer),
                     $name,
                 ),
-                help: 'A component key is letters, digits, ".", "_" and "-" only. A reason phrase as one word — "NotFound", "TooManyRequests" — is what reads best as a generated client\'s type.',
+                help: ComponentNames::LEGAL_NAME_HELP,
             );
         }
 
