@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Canonical\Canonicalizer;
+use Docuccino\Core\Canonical\CanonicalJsonSerializer;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\EmitOptions;
@@ -168,6 +170,32 @@ it('publishes an empty subschema slot as the empty schema, not as a list', funct
 
     expect(booleanSubschemaPublished('openapi-3.0', $document))->toBe($dropped ? '{}' : $expected, $keyword.' 3.0');
 })->with(booleanSubschemaKeywords());
+
+/*
+ * The slots a Schema Object hangs off something that is NOT one. The keywords inside a schema were the
+ * first half of this; these four are one level further out and inverted the same `false` the same way,
+ * so a media type declaring "no body is valid" published `{}` — "any body is". The 3.0 downlevel
+ * converting the boolean correctly is what surfaced it: 3.0 said `{"not": {}}` where 3.2 said `{}`, and
+ * one document cannot mean two things.
+ */
+it('publishes a boolean at every slot a Schema Object hangs off something that is not one', function (): void {
+    $serialized = (new CanonicalJsonSerializer)->serialize((new Canonicalizer)->canonicalize([
+        'components' => [
+            'schemas' => ['Forbidden' => false, 'Anything' => true, 'Nonsense' => 7],
+            'parameters' => ['q' => ['name' => 'q', 'in' => 'query', 'schema' => false]],
+            'headers' => ['X-Trace' => ['schema' => false]],
+            'requestBodies' => ['Body' => ['content' => ['application/json' => ['schema' => false]]]],
+        ],
+    ]));
+
+    expect($serialized)
+        ->toContain('"Forbidden": false')
+        ->toContain('"Anything": true')
+        // …and a value that is no schema at all still widens to the vague-but-valid one.
+        ->toContain('"Nonsense": {}')
+        // Once each for the parameter, the header and the media type.
+        ->and(substr_count($serialized, '"schema": false'))->toBe(3);
+});
 
 it('widens a value that is no schema at all to a vague-but-valid one', function (string $keyword): void {
     // Neither an object nor a boolean is a schema anywhere, so it cannot be published as written: the

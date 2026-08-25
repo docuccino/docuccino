@@ -300,7 +300,7 @@ final class Canonicalizer
             'style' => $this->keep(...),
             'explode' => $this->keep(...),
             'allowReserved' => $this->keep(...),
-            'schema' => $this->canonicalizeSchema(...),
+            'schema' => $this->subschemaValue(...),
             'example' => $this->keep(...),
             'examples' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeExample(...)),
             'content' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeMediaType(...)),
@@ -350,7 +350,7 @@ final class Canonicalizer
             'deprecated' => $this->keep(...),
             'style' => $this->keep(...),
             'explode' => $this->keep(...),
-            'schema' => $this->canonicalizeSchema(...),
+            'schema' => $this->subschemaValue(...),
             'example' => $this->keep(...),
             'examples' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeExample(...)),
             'content' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeMediaType(...)),
@@ -364,7 +364,7 @@ final class Canonicalizer
     {
         return $this->object($node, fn (array $media) => $this->build($media, [
             'x-docuccino' => $this->canonicalizeDocuccino(...),
-            'schema' => $this->canonicalizeSchema(...),
+            'schema' => $this->subschemaValue(...),
             'example' => $this->keep(...),
             'examples' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeExample(...)),
             'encoding' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeGeneric(...)),
@@ -391,7 +391,7 @@ final class Canonicalizer
     private function canonicalizeComponents(mixed $node): array|stdClass
     {
         return $this->object($node, fn (array $components) => $this->build($components, [
-            'schemas' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeSchema(...)),
+            'schemas' => fn (mixed $v): mixed => $this->sortedMap($v, $this->subschemaValue(...)),
             'responses' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeResponse(...)),
             'parameters' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeParameter(...)),
             'examples' => fn (mixed $v): mixed => $this->sortedMap($v, $this->canonicalizeExample(...)),
@@ -538,12 +538,17 @@ final class Canonicalizer
     }
 
     /**
-     * ONE subschema, wherever it sits. A boolean is a schema in every subschema position 2020-12 has,
-     * and it is the position's most load-bearing value: `not: false` means the opposite of `not: {}`,
+     * ONE Schema Object, wherever it sits. A boolean is a schema in every position 2020-12 puts one, and
+     * it is the position's most load-bearing value: `not: false` means the opposite of `not: {}`,
      * `properties: {a: false}` forbids the property rather than allowing anything, and `allOf: [false]`
      * is satisfied by nothing rather than by everything. So it is published as written — including
      * inside a map or a list, where reading each member as an object would invert three schemas into
      * one and mint them a single `sch:` id.
+     *
+     * "Wherever it sits" is the whole rule, and it covers the slots a schema hangs off something that is
+     * NOT a schema as much as the keywords inside one: a media type's, a parameter's and a header's
+     * `schema`, and every member of `components.schemas`. Reading those as objects inverted the same
+     * `false` in the same way, one level further out.
      *
      * Anything else is not a schema at all, and becomes `{}`: a vague-but-valid schema beats a document
      * no validator accepts.
