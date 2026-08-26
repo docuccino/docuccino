@@ -266,6 +266,28 @@ class names resolve through that file's `use` statements, and an accessor's `@re
 types its property the same way. The `@phpstan-`/`@psalm-` prefixed forms of each tag are read too,
 and win over the plain one where both are present.
 
+## Describing a schema
+
+A component says what its fields are; `#[Description]` on the class says what the thing *is*, once, for
+every operation that references it:
+
+```php
+#[Description(text: 'A single retention policy, as the billing system holds it.')]
+final class RetentionPolicyData extends Data { /* … */ }
+```
+
+That sentence becomes the schema's `description` on both sides of the document — the response component
+and, for a DTO you accept, the request body component too.
+
+Docuccino does **not** read the class docblock for this, and that is deliberate. A class docblock is
+where you explain a class to whoever maintains it next, so it tends to name properties, casts,
+attributes and internals that the consumer of your document cannot see. A description that misinforms
+costs a reader more than an absent one, so the attribute — which says *publish this sentence* — is the
+one that publishes. Your docblock stays yours.
+
+Per-field prose works the same way, from either form: see
+[`#[Description]`](/laravel/reference/attributes/#description).
+
 ## Mock data hints
 
 A schema says what a value *is*; it rarely says what a plausible one looks like. `#[Mock]` records
