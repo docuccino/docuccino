@@ -526,7 +526,7 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
 'lint' => [
     'leakage' => [
         'enabled' => true,
-        'allow' => [],   // e.g. ['reset_token', '#/components/schemas/Invoice/properties/status']
+        'allow' => [],   // e.g. ['reset_token', '/components/schemas/Invoice/properties/status']
         // 'patterns' => ['sortcode' => 'a bank sort code', 'iban' => 'an IBAN'],
     ],
     'descriptions' => [

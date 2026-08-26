@@ -255,7 +255,7 @@ return [
         'leakage' => [
             'enabled' => true,
             // Property names or JSON pointers to accept, e.g.
-            // ['reset_token', '#/components/schemas/Invoice/properties/status']. A name silences this
+            // ['reset_token', '/components/schemas/Invoice/properties/status']. A name silences this
             // lint only; the response recorder redacts by name regardless and honours a pointer alone.
             'allow' => [],
             // Extra heuristics, merged over the built-in table (built-in tokens keep their label).
