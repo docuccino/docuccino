@@ -26,8 +26,8 @@ function ruleContext(RepresentationPolicy $policy = new RepresentationPolicy): S
 
 /**
  * A minimal transformer set: `required` marks required, `nullable` marks nullable, `str`/`int` set
- * a scalar type, `map` declares open object values. Enough to drive the builder without any Laravel
- * semantics.
+ * a scalar type, `map` declares open object values and `closed` refuses them. Enough to drive the
+ * builder without any Laravel semantics.
  *
  * @return list<RuleTransformer>
  */
@@ -43,7 +43,7 @@ function fakeTransformers(): array
 
             public function handledRuleNames(): array
             {
-                return ['required', 'nullable', 'str', 'int', 'map'];
+                return ['required', 'nullable', 'str', 'int', 'map', 'closed'];
             }
 
             public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
@@ -53,6 +53,7 @@ function fakeTransformers(): array
                     'nullable' => $field->markNullable(),
                     'str' => $field->setType('string'),
                     'map' => $this->map($field),
+                    'closed' => $this->closed($field),
                     default => $field->setType('integer'),
                 };
             }
@@ -61,6 +62,12 @@ function fakeTransformers(): array
             {
                 $field->setType('object');
                 $field->set('additionalProperties', []);
+            }
+
+            private function closed(ValidationField $field): void
+            {
+                $field->setType('object');
+                $field->set('additionalProperties', false);
             }
         },
     ];
@@ -138,6 +145,18 @@ it('publishes a `*` child as the value schema of a node that declares additional
         'type' => ['array', 'null'],
         'items' => ['type' => 'string'],
     ]);
+});
+
+it('leaves a closed object closed when a `*` child names its values', function (): void {
+    // `additionalProperties: false` is a constraint of its own, not an empty slot: filling it with the
+    // child's schema would publish a document more permissive than the one the writer declared.
+    $driver = new DefaultValidationRulesToSchema(fakeTransformers());
+    $schema = $driver->convert(fakeRuleSet([
+        'settings' => ['closed'],
+        'settings.*' => ['str'],
+    ]), ruleContext())->schema;
+
+    expect($schema['properties']['settings'])->toBe(['type' => 'object', 'additionalProperties' => false]);
 });
 
 it('expresses nullable per the representation policy', function (): void {

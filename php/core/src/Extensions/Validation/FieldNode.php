@@ -13,8 +13,9 @@ use Docuccino\Core\Extensions\Context\RepresentationPolicy;
  * constraints). `required` and `nullable` are node flags a parent lifts into its `required` list and its
  * type expression.
  *
- * A `*` segment does NOT decide the container: it names an array's items on an array and an object's
- * values on an object, and {@see build()} owns that choice.
+ * A `*` segment does NOT decide the container: `items` and `additionalProperties` are one slot for two
+ * containers, mutually exclusive on one schema, so the segment names an array's items on an array and an
+ * object's values on an object — {@see build()} owns that choice.
  *
  * @internal builder state; the public surface is {@see ValidationField}.
  */
@@ -103,14 +104,14 @@ final class FieldNode
                 $schema['required'] = $required;
             }
         } elseif ($this->items !== null) {
-            // `items` and `additionalProperties` are the same slot for two different containers — an
-            // array's items and an object's values — and mutually exclusive on one schema. A `*` segment
-            // names whichever this node is, so the node's own declaration picks the slot: a node already
-            // carrying `additionalProperties` is an object, and publishing `items` beside it would leave
-            // one of the two inert.
+            // The node's own declaration picks the slot, per the class docblock.
             if (array_key_exists('additionalProperties', $schema)) {
                 $schema['type'] = 'object';
-                $schema['additionalProperties'] = $this->items->build($policy);
+                // Only a value SCHEMA is a slot the `*` child fills. A `false` closing the object is a
+                // constraint of its own, and overwriting it would widen a closed object to an open one.
+                if (is_array($schema['additionalProperties'])) {
+                    $schema['additionalProperties'] = $this->items->build($policy);
+                }
             } else {
                 $schema['type'] ??= 'array';
                 $schema['items'] = $this->items->build($policy);
