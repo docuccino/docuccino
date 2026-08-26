@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\Validation\Transformers\AdditionalPropertiesRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\Transformers\AnnotationRuleTransformer;
+use Docuccino\Laravel\Integrations\Validation\Transformers\DateWireRuleTransformer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 
 /*
@@ -15,9 +16,22 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
  */
 
 /**
- * The rules a reader can actually write in a Laravel rules array. The chain also handles the
- * `#[RuleSchema]` annotation trio and Docuccino's own `additional_properties`, which Laravel would
- * reject — they are part of the machinery, not of the vocabulary the pages are counting.
+ * The transformers whose rule names are Docuccino's OWN rather than Laravel's: a recovered fact the rule
+ * vocabulary has no word for, stated outright by the integration that recovered it — an `array<string, V>`
+ * property's value schema, a date-typed property's wire format. Laravel would reject the name and nobody
+ * ever types one, so there is nothing here for a count or a reference to tell a reader; the exclusion is
+ * structural, not a name on a preference list.
+ *
+ * @return list<class-string>
+ */
+function synthesisedRuleTransformers(): array
+{
+    return [AdditionalPropertiesRuleTransformer::class, DateWireRuleTransformer::class];
+}
+
+/**
+ * The rules a reader can actually write in a Laravel rules array — the synthesised names above plus the
+ * `#[RuleSchema]` annotation trio are machinery, not the vocabulary the pages are counting.
  */
 function namedLaravelRuleCount(): int
 {
@@ -26,7 +40,7 @@ function namedLaravelRuleCount(): int
 
     foreach (ValidationIntegration::transformers() as $transformer) {
         $isInternal = $transformer instanceof AnnotationRuleTransformer
-            || $transformer instanceof AdditionalPropertiesRuleTransformer;
+            || in_array($transformer::class, synthesisedRuleTransformers(), true);
 
         foreach ($transformer->handledRuleNames() as $name) {
             if ($isInternal) {
@@ -58,10 +72,8 @@ it('quotes the vocabulary the package actually maps, on every page that quotes o
 })->with(['vs-scramble.mdx', 'vs-scribe.mdx']);
 
 /**
- * Every rule name a reader could write, mapped to the transformer that handles it. `additional_properties`
- * is left out and the exclusion is structural rather than a name on a list: it is the one rule Laravel's
- * own vocabulary has no word for, synthesised by a recovering integration and never typed by anybody, so
- * there is nothing for a reference to tell a reader about it.
+ * Every rule name a reader could write, mapped to the transformer that handles it — the synthesised
+ * names left out for the reason {@see synthesisedRuleTransformers()} gives.
  *
  * @return array<string, string>
  */
@@ -70,7 +82,7 @@ function authorWritableRules(): array
     $rules = [];
 
     foreach (ValidationIntegration::transformers() as $transformer) {
-        if ($transformer instanceof AdditionalPropertiesRuleTransformer) {
+        if (in_array($transformer::class, synthesisedRuleTransformers(), true)) {
             continue;
         }
 

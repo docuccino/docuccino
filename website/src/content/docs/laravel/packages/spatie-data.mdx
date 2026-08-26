@@ -279,13 +279,42 @@ status separately. A computed status falls back to `200` with a
 ### Dates and timestamps
 
 A `DateTimeInterface` property is documented as a string, with the `format` following your app's
-`data.date_format`: a time-bearing format gives `date-time`, a date-only one gives `date`. The one
-property that isn't a string is a Unix timestamp:
+`data.date_format`: an ISO format gives `date-time` or `date`, and anything else — `d/m/Y H:i` — gives a
+plain string naming the format, because `date-time` means RFC 3339 and a claim your values fail is worse
+than none. The one property that isn't a string is a Unix timestamp:
 
 ```php
 #[WithCast(DateTimeInterfaceCast::class, format: 'U')]
 public CarbonImmutable $issuedAt; // → { "type": "integer", "description": "Unix timestamp (seconds)." }
 ```
+
+That holds in **both directions**. A date property in a request body is documented from the most
+specific source the class gives, not from a validation rule that says less:
+
+| On the property | The request documents |
+| --- | --- |
+| `#[DateFormat('d/m/Y')]` | "Expected format: d/m/Y" and `example: 01/01/2024` — you stated the wire format outright, and no `format` word describes it. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | `type: integer` — the cast parses a timestamp, so that is what the endpoint takes. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'Y-m-d')]` | `format: date` — the cast's format is the one it accepts. |
+| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives, exactly as the response side reads it. |
+
+The example is always rendered with the format itself, so it is a value your endpoint accepts rather than
+an ISO one it would reject.
+
+So a `#[Date]` (or a `'date'` in a `rules()` override) beside a `CarbonImmutable` property does not narrow
+the field to `format: date`. Laravel's `date` rule accepts anything non-relative `strtotime` parses —
+`2024-01-01`, `2024-01-01T10:00:00Z`, `January 1 2024` — so `date` would mark a working request invalid,
+and a client generated from it would truncate the time on the way back:
+
+```php
+#[Nullable, Date]
+public ?CarbonImmutable $expectedUpdatedAt;
+// request  → { "type": ["string", "null"], "format": "date-time" }
+// response → { "type": ["string", "null"], "format": "date-time" }
+```
+
+Where your app really is asymmetric the two sides say so: a `d/m/Y` cast with an ISO `data.date_format`
+documents a `d/m/Y` string in and `date-time` out, because that is what the endpoint does.
 
 ### Wrapping
 

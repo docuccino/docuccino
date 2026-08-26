@@ -45,6 +45,14 @@ final class FieldNode
     public bool $exampleSuppressed = false;
 
     /**
+     * Keywords a rule dropped ({@see ValidationField::remove()}). The drop is a decision about the value,
+     * so a later rule that would only be guessing is told no ({@see ValidationField::mayClaim()}).
+     *
+     * @var array<string, true>
+     */
+    public array $withheld = [];
+
+    /**
      * @var array<string, FieldNode>
      */
     public array $properties = [];
