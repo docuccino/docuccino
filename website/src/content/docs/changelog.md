@@ -13,6 +13,17 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.10.3
+
+### Features
+
+- **core**: let a class describe the schema it publishes ([#247](https://github.com/docuccino/docuccino/pull/247))
+
+### Bug fixes
+
+- **laravel**: follow a remapped property to the key the request accepts ([#246](https://github.com/docuccino/docuccino/pull/246))
+- **core**: publish an input DTO's own prose on the request side ([#245](https://github.com/docuccino/docuccino/pull/245))
+
 ## v0.10.2
 
 ### Bug fixes
