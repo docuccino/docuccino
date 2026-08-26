@@ -158,6 +158,39 @@ return new SchemaResult(
 );
 ```
 
+#### Working at the response root
+
+Some output belongs only at the top of a body — a wrapping key, an envelope, a `meta` sibling. Ask
+`atRoot()` for that, and build any composite you emit with `convertMember()`, which converts a member
+that stands in the same place as the composite itself. A union branch is at the root when its union is,
+so the envelope lands on every arm instead of vanishing under the first `anyOf`:
+
+```php
+public function toSchema(DType $type, SchemaContext $context): ?SchemaResult
+{
+    $schema = $context->reference('Receipt', [/* … */], $type->fqcn);
+
+    // Only the top-level receipt is enveloped; nested ones stay bare.
+    return new SchemaResult($context->atRoot() ? [
+        'type' => 'object',
+        'properties' => ['data' => $schema],
+        'required' => ['data'],
+    ] : $schema);
+}
+```
+
+```php
+// A composite of your own: each member is converted where the composite stands, so a member
+// that wraps at the root still gets to.
+return new SchemaResult(['anyOf' => array_map(
+    static fn (DType $member): array => $context->convertMember($member),
+    $type->members,
+)]);
+```
+
+Reach for `convert()` whenever the type really is somewhere else — an array's items, an object's
+property — and `depth()` only when you want the literal recursion count.
+
 ## Controlling order
 
 Mappers form a chain and the first match wins, so order matters when your mapper covers a type a

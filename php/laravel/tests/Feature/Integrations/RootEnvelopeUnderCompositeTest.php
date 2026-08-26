@@ -20,6 +20,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\ApiResources\JsonApiResourceSchema;
 use Docuccino\Laravel\Integrations\ApiResources\JsonResourceSchema;
@@ -148,4 +149,34 @@ it('keeps the envelope under either spelling of a nullable root', function (): v
 
     expect(rootSchema($type, 'anyof'))
         ->toBe(['anyOf' => [wrapped('data', 'AuthorData'), ['type' => 'null']]]);
+});
+
+it('publishes the per-arm envelope through the whole pipeline', function (): void {
+    // The converter is only half the path: this pins what the emitter actually writes into the
+    // operation, since the response body arrives at the draft as loose keywords rather than one schema.
+    $loc = new SourceLocation('');
+    $shape = static fn (array $fields): ActionAnalysis => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT($fields), $loc)]);
+
+    app()->instance(TypeEngine::class, new StubTypeEngine(analyses: [
+        'Workbench\\App\\Http\\Controllers\\FormController::index' => new ActionAnalysis(returns: [new ReturnSite(
+            UnionT::of([new ClassT(ArticleResource::class), new ClassT(AuthorResource::class)]),
+            $loc,
+        )]),
+        ArticleResource::class.'::toArray' => $shape([
+            new ArrayShapeField('id', ScalarT::int()),
+            new ArrayShapeField('title', ScalarT::string()),
+        ]),
+        AuthorResource::class.'::toArray' => $shape([
+            new ArrayShapeField('id', ScalarT::int()),
+            new ArrayShapeField('name', ScalarT::string()),
+        ]),
+    ]));
+
+    $document = generateDocument()->document->toArray();
+    $body = stripDocuccino($document['paths']['/api/forms']['get']['responses']['200']['content']['application/json']['schema']);
+
+    expect($body)->toBe(['anyOf' => [
+        wrapped('data', 'ArticleResource'),
+        wrapped('data', 'AuthorResource'),
+    ]]);
 });
