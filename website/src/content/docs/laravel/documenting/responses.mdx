@@ -67,6 +67,55 @@ Each response's `description` is the standard reason phrase for its status — `
 `201 Created`, `202 Accepted`, `204 No Content`, and so on — so you don't hand-write them. Responses
 are emitted in ascending status order, whatever order your return paths appear in.
 
+### Union return types
+
+An action whose return type has more than one arm documents as `anyOf`, one branch per arm — and each
+branch keeps the envelope that arm would carry on its own. That's what the server sends: the resource
+actually returned is the one whose wrapping applies, so the `data` key belongs inside each branch
+rather than around the union.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	public function show(Invoice $invoice): InvoiceResource|ArchivedInvoiceResource
+	{
+	    return $invoice->trashed()
+	        ? new ArchivedInvoiceResource($invoice)
+	        : new InvoiceResource($invoice);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"schema": {
+	  "anyOf": [
+	    {
+	      "type": "object",
+	      "properties": { "data": { "$ref": "#/components/schemas/InvoiceResource" } },
+	      "required": ["data"]
+	    },
+	    {
+	      "type": "object",
+	      "properties": { "data": { "$ref": "#/components/schemas/ArchivedInvoiceResource" } },
+	      "required": ["data"]
+	    }
+	  ]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Per-branch is what keeps the document true when the arms disagree. A [Spatie Data](/laravel/packages/spatie-data/)
+class with its own `defaultWrap()` keeps its own key while the other arm keeps `data`, and an arm that
+strips its envelope — the `withoutWrapping()` a problem document needs to sit at the root — stays bare
+beside a wrapped sibling. A single outer wrapper would have to pick one of them and be wrong about the
+rest.
+
+A nullable return is the same rule with a `null` arm: `?InvoiceResource` documents
+`{ "type": ["object", "null"], "properties": { "data": … }, "required": ["data"] }`, the envelope intact
+and `null` folded into its type.
+
 ### Pagination
 
 A paginated collection's `{ data, links, meta }` envelope is defined once, as a component named after
@@ -525,7 +574,7 @@ responses without discarding the rest:
 #[Response(status: 200, type: InvoiceResource::class, description: 'The invoice')]
 #[Response(status: 404, description: 'Invoice not found')]
 #[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left', status: 200)]
-public function show(int $id): InvoiceResource { /* … */ }
+public function update(int $id): InvoiceResource { /* … */ }
 ```
 
 <Aside title="Error responses have their own page">
