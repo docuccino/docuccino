@@ -42,14 +42,21 @@ final class RecoveredRequest
      * Drain the schema's diagnostics and write it as a request body (write verbs) or query parameters
      * (read verbs), attributed to `integration:<producer>`. Pass the single class the body was
      * recovered from as `$sourceClass` so it can hoist; null (an inline `validate()`) stays inline.
+     *
+     * `$keys` maps a PHP property name to the key the REQUEST accepts it under, for a source class
+     * whose wire names are remapped. Only the caller knows that mapping — it is the vendor package's
+     * own, and an input name is not an output name — so a caller that has one owes it here, or a
+     * declaration written on the property will be looked for under a key the body doesn't publish.
+     *
+     * @param  array<string, string>  $keys
      */
-    public function apply(OperationDraft $operation, RouteContext $context, ValidationSchema $result, string $producer, ?string $sourceClass = null): void
+    public function apply(OperationDraft $operation, RouteContext $context, ValidationSchema $result, string $producer, ?string $sourceClass = null, array $keys = []): void
     {
         foreach ($result->diagnostics as $diagnostic) {
             $context->components->addDiagnostic($diagnostic);
         }
 
-        $result = $this->withDeclarations($result, $context, $sourceClass);
+        $result = $this->withDeclarations($result, $context, $sourceClass, $keys);
 
         $contribution = Contribution::integration($producer, $context->actionSource());
 
@@ -75,8 +82,14 @@ final class RecoveredRequest
      *
      * The class file is recorded as a dependency because adding any of these has to invalidate, and the
      * metadata's own files with it — inheritance answers a docblock as readily as an attribute.
+     *
+     * Every one of these reads a PROPERTY and writes to a published key, so `$keys` travels through all
+     * four: a remapped field is the case where the two names differ, and looking under the wrong one
+     * loses the declaration silently.
+     *
+     * @param  array<string, string>  $keys
      */
-    private function withDeclarations(ValidationSchema $result, RouteContext $context, ?string $sourceClass): ValidationSchema
+    private function withDeclarations(ValidationSchema $result, RouteContext $context, ?string $sourceClass, array $keys): ValidationSchema
     {
         if ($sourceClass === null) {
             return $result;
@@ -87,11 +100,11 @@ final class RecoveredRequest
         $metadata = $context->engine->classMetadata(new ClassRef($sourceClass));
         $context->recordDependencyFiles($metadata->dependencyFiles);
 
-        $schema = DocumentedDescriptions::applyTo($result->schema, $metadata->properties);
-        $schema = DocumentedExamples::applyTo($context->converter(), $schema, $sourceClass, $metadata->properties);
+        $schema = DocumentedDescriptions::applyTo($result->schema, $metadata->properties, $keys);
+        $schema = DocumentedExamples::applyTo($context->converter(), $schema, $sourceClass, $metadata->properties, $keys);
 
-        [$schema, $diagnostics] = PropertyAnnotations::apply($schema, $sourceClass);
-        [$schema, $hintDiagnostics] = MockHints::apply($schema, $sourceClass);
+        [$schema, $diagnostics] = PropertyAnnotations::apply($schema, $sourceClass, $keys);
+        [$schema, $hintDiagnostics] = MockHints::apply($schema, $sourceClass, $keys);
 
         foreach ([...$diagnostics, ...$hintDiagnostics] as $diagnostic) {
             $context->components->addDiagnostic($diagnostic);
