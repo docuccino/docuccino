@@ -7,28 +7,38 @@ namespace Docuccino\Laravel\Integrations\Validation;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Laravel\Integrations\Support\FieldPaths;
 
 /**
  * Makes a recovered field map coherent before the rule chain runs — the two facts only visible ACROSS
  * fields, which a per-field {@see RuleTransformer} cannot see. A bare `prohibited` field and everything
  * under it is dropped, since the API refuses it outright (the conditional forms and `prohibits` stay —
- * those fields are sendable); and a field with a named, non-`*` child key loses its `array`/`list` rule,
- * because Laravel's `array` covers objects too and `{"type": "array", "properties": …}` validates nothing.
- * Every recovery integration runs it alongside {@see RuleOrdering}.
+ * those fields are sendable); and a field with a named, non-`*` child key trades its `array`/`list` rule
+ * for `object`, because Laravel's `array` covers objects too and `{"type": "array", "properties": …}`
+ * validates nothing. Every recovery integration runs it alongside {@see RuleOrdering}.
+ *
+ * The trade is a rewrite rather than a deletion because the type-aware rules downstream READ the type:
+ * a field left with no type word at all takes `min`/`max`/`size` as string-length bounds, which on an
+ * object is a bound nothing applies.
  */
 final class RuleSetNormalizer
 {
     /** Type rules meaning "PHP array", which a named child key resolves to an object. */
     private const ARRAY_RULES = ['array', 'list'];
 
+    /** The word the rule vocabulary lacks for what a named child key proves. */
+    private const OBJECT_RULE = 'object';
+
     public function normalize(RuleSet $rules): RuleSet
     {
         $fields = $this->withoutProhibited($rules->fields);
 
+        $keys = array_keys($fields);
+
         $out = [];
         foreach ($fields as $field => $fieldRules) {
-            $out[$field] = $this->hasNamedChild($field, $fields)
-                ? array_values(array_filter($fieldRules, static fn (ValidationRule $rule): bool => ! in_array($rule->name, self::ARRAY_RULES, true)))
+            $out[$field] = FieldPaths::hasNamedChild((string) $field, $keys)
+                ? self::asObject($fieldRules)
                 : $fieldRules;
         }
 
@@ -69,19 +79,30 @@ final class RuleSetNormalizer
     }
 
     /**
-     * Whether any other field path is a named (non-`*`) child of this one.
+     * The same rules with each array word replaced by `object`, in place so the type still lands ahead of
+     * every rule that reads it. A field stating the word twice keeps one.
      *
-     * @param  array<string, list<ValidationRule>>  $fields
+     * @param  list<ValidationRule>  $rules
+     * @return list<ValidationRule>
      */
-    private function hasNamedChild(string $field, array $fields): bool
+    private static function asObject(array $rules): array
     {
-        $prefix = $field.'.';
-        foreach (array_keys($fields) as $other) {
-            if ($other !== $field && str_starts_with($other, $prefix) && ! str_starts_with(substr($other, strlen($prefix)), '*')) {
-                return true;
+        $out = [];
+        $stated = false;
+
+        foreach ($rules as $rule) {
+            if (! in_array($rule->name, self::ARRAY_RULES, true)) {
+                $out[] = $rule;
+
+                continue;
+            }
+
+            if (! $stated) {
+                $out[] = ValidationRule::of(self::OBJECT_RULE);
+                $stated = true;
             }
         }
 
-        return false;
+        return $out;
     }
 }

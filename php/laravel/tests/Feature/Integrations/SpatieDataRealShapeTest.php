@@ -288,8 +288,10 @@ it('keeps a recovered container through a rules() override that only restates `a
     // The real-source half of the same story: `array` is the ONE word the rule vocabulary has for every
     // array shape, so an override stating it restates what the constructor `@param` already recovered
     // rather than replacing it — and `{"type": "array"}` for a JSON object is wrong, not merely vague.
-    // `metadata` proves it survives a size-only custom rule sitting alongside; `touched_fields` is the
-    // half that already worked, its item field riding on a key of its own.
+    // `metadata` proves it survives a size-only custom rule sitting alongside — and that the bound the
+    // rule states counts the object's KEYS, since Laravel sizes an array-or-object by its entries and a
+    // length keyword on one is a bound no validator applies. `touched_fields` is the half that already
+    // worked, its item field riding on a key of its own.
     $metadata = realMetadataAs('App\\Data\\ActionPreviewData', ActionPreviewData::class);
     $override = tracedOverride('app/Data/ActionPreviewData.php', 'App\\Data\\ActionPreviewData');
     $schema = realRequestSchema(ActionPreviewData::class, $metadata, $override);
@@ -302,7 +304,7 @@ it('keeps a recovered container through a rules() override that only restates `a
     'array<string, mixed>|null' => ['metadata', [
         'type' => 'object',
         'additionalProperties' => [],
-        'maxLength' => 65536,
+        'maxProperties' => 65536,
         'description' => 'At most 64 KiB once encoded.',
     ]],
     'list<string>' => ['touched_fields', ['type' => 'array', 'items' => ['type' => 'string']]],

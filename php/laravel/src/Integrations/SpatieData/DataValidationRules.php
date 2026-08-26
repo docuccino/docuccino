@@ -25,6 +25,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Integrations\FormRequest\RulesFromClass;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 use Docuccino\Laravel\Integrations\Support\DependencyFileSet;
+use Docuccino\Laravel\Integrations\Support\FieldPaths;
 use Docuccino\Laravel\Integrations\Support\RuleParsing;
 use Docuccino\Laravel\Integrations\Validation\CustomRuleReader;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
@@ -152,15 +153,18 @@ final class DataValidationRules
                 : self::withDateCarrier(self::withMapCarrier($rules, $previous, $field, $siblings), $previous);
         }
 
-        return new RuleSet($fields);
+        return new RuleSet(self::withObjectValues($fields));
     }
 
     /**
      * A replaced field's rules, with the recovered map's `additional_properties` carrier put back when the
      * override only restated `array` — one word for every array shape, per the class docblock, so it says
      * strictly less than the recovered `array<string, V>` did. Left alone when the override states the
-     * shape itself: another type word, a named child (whose keys say more than open values do), or a `.*`
-     * child (which says JSON array outright).
+     * shape itself: another type word, or a named child, whose keys say more than open values do.
+     *
+     * A `.*` child is NOT such a statement. Laravel applies a `field.*` rule to every value whatever the
+     * keys are, so it carries no information about key type and cannot decide list-vs-map; it constrains
+     * the value, and {@see withObjectValues()} is where the value's own container is settled.
      *
      * @param  list<ValidationRule>  $rules  the override's rules, now at the key
      * @param  list<ValidationRule>  $inferred  what property inference had put there
@@ -174,18 +178,91 @@ final class DataValidationRules
         // `array` has to be the ONLY type the override states: `list` narrows it to a JSON array, and
         // anything else has replaced the shape outright. An `additional_properties` of its own needs no
         // second.
-        if ($carrier === null || self::statedTypes($rules) !== ['array']) {
+        if ($carrier === null || self::statedTypes($rules) !== ['array'] || FieldPaths::hasNamedChild($field, $siblings)) {
             return $rules;
         }
 
-        $prefix = $field.'.';
-        foreach ($siblings as $other) {
-            if ($other !== $field && str_starts_with($other, $prefix)) {
-                return $rules;
+        return [...$rules, $carrier];
+    }
+
+    /**
+     * The same rule, one level down: a map's `.*` field, with the `array` word it can only have said
+     * traded for the `object` the recovered VALUE schema states. Without it a value the type says is an
+     * object publishes as a JSON array, and its size bound as a length.
+     *
+     * @param  array<string, list<ValidationRule>>  $fields
+     * @return array<string, list<ValidationRule>>
+     */
+    private static function withObjectValues(array $fields): array
+    {
+        foreach (array_keys($fields) as $key) {
+            $field = (string) $key;
+            $wildcard = $field.'.*';
+            if (! isset($fields[$wildcard]) || ! self::hasObjectValues($fields[$field])) {
+                continue;
+            }
+
+            $fields[$wildcard] = self::asObject($fields[$wildcard]);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Whether these rules carry a map whose value schema is itself an object.
+     *
+     * @param  list<ValidationRule>  $rules
+     */
+    private static function hasObjectValues(array $rules): bool
+    {
+        $carrier = self::mapCarrier($rules);
+        $json = $carrier?->parameter();
+        if ($json === null) {
+            return false;
+        }
+
+        $decoded = json_decode($json, true);
+        $type = is_array($decoded) ? $decoded['type'] ?? null : null;
+
+        return $type === 'object' || (is_array($type) && in_array('object', $type, true));
+    }
+
+    /**
+     * The rules with `array` traded for `object`, when `array` is the ONLY container word they state —
+     * the same test {@see withMapCarrier()} applies to a field's own rules.
+     *
+     * @param  list<ValidationRule>  $rules
+     * @return list<ValidationRule>
+     */
+    private static function asObject(array $rules): array
+    {
+        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
+        $stated = array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
+        if ($stated !== ['array']) {
+            return $rules;
+        }
+
+        return array_map(
+            static fn (ValidationRule $rule): ValidationRule => $rule->name === 'array' ? ValidationRule::of('object') : $rule,
+            $rules,
+        );
+    }
+
+    /**
+     * The last `additional_properties` carrier in a rule list, or null where there is none.
+     *
+     * @param  list<ValidationRule>  $rules
+     */
+    private static function mapCarrier(array $rules): ?ValidationRule
+    {
+        $carrier = null;
+        foreach ($rules as $rule) {
+            if ($rule->name === 'additional_properties') {
+                $carrier = $rule;
             }
         }
 
-        return [...$rules, $carrier];
+        return $carrier;
     }
 
     /**

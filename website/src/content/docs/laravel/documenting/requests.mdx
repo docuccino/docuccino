@@ -404,9 +404,8 @@ value your API accepts.
 
 ### Nested and array fields
 
-Dot and wildcard paths build a real schema tree. A `*` segment turns the current node into an array
-and descends into its items, so an `items.*.sku` rule documents `items` as an array of objects with a
-`sku` property:
+Dot and wildcard paths build a real schema tree. A `*` segment descends into the current node's
+elements, so an `items.*.sku` rule documents `items` as an array of objects with a `sku` property:
 
 <Tabs>
 	<TabItem label="Your code">
@@ -454,14 +453,21 @@ and descends into its items, so an `items.*.sku` rule documents `items` as an ar
 </Tabs>
 
 Notice `min:1` on `items`: size rules are applied **type-aware**, so the same rule bounds `minItems`
-on an array, `minimum` on a number, and `minLength` on anything else. Rule order in your array
-doesn't matter — Docuccino sorts each field's rules into Laravel's own effect order first, so
+on an array, `minProperties` on an object, `minimum` on a number, and `minLength` on anything else.
+Rule order in your array doesn't matter — Docuccino sorts each field's rules into Laravel's own effect order first, so
 `['max:100', 'integer']` and `['integer', 'max:100']` produce identical output.
 
 Laravel's `array` rule covers both JSON arrays and JSON objects, so a **named** child key settles which
 one you meant: writing `'billing' => ['array']` beside `billing.email` still documents `billing` as an
-object, never `{ "type": "array", "properties": … }` — a shape no document validates against. A `*`
-child is the array case and keeps the rule.
+object, never `{ "type": "array", "properties": … }` — a shape no document validates against. That also
+picks the size keywords: `'billing' => ['array', 'max:3']` bounds `maxProperties`, since Laravel counts
+an object's keys.
+
+A `*` child settles nothing, because Laravel applies a `field.*` rule to every value whatever the keys
+are. It constrains the value, and the container is whatever else established it — the named children
+above, or, for a Spatie Data property, the [type its docblock
+states](/laravel/packages/spatie-data/#requests-from-a-data-class). With nothing else to go on, `array`
+plus a `*` child is a JSON array, which is all the information there is.
 
 ### Documenting a custom rule
 
@@ -516,7 +522,8 @@ in form requests, inline `validate()` calls, and Spatie Data's `#[Rule(new …)]
 </Tabs>
 
 Every field is optional, and each one maps onto the same rule the vocabulary below already documents —
-so a `min` bounds `minLength`, `minimum` or `minItems` by the resolved type, exactly like `min:8` would:
+so a `min` bounds `minLength`, `minimum`, `minItems` or `minProperties` by the resolved type, exactly
+like `min:8` would:
 
 | Field | Documented as |
 | --- | --- |
@@ -702,7 +709,7 @@ byte. See [Dates and timestamps](/laravel/packages/spatie-data/#dates-and-timest
 
 | Rule | Documented as |
 | --- | --- |
-| `min:n`, `max:n` | `minimum`/`maximum` on a number, `minItems`/`maxItems` on an array, `minLength`/`maxLength` otherwise. |
+| `min:n`, `max:n` | `minimum`/`maximum` on a number, `minItems`/`maxItems` on an array, `minProperties`/`maxProperties` on an object, `minLength`/`maxLength` otherwise. |
 | `between:a,b` | Both bounds, same type-aware keywords. |
 | `size:n` | Both bounds pinned to `n`. |
 | `gt:n`, `lt:n` | `exclusiveMinimum` / `exclusiveMaximum` (defaults the field to `number`). |

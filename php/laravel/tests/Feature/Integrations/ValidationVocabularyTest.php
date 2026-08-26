@@ -108,6 +108,13 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'max (string length)' => [[['string'], ['max', ['9']]], ['maxLength' => 9, 'type' => 'string', 'example' => 'example']],
     'between (numeric bounds)' => [[['integer'], ['between', ['1', '5']]], ['maximum' => 5, 'minimum' => 1, 'type' => 'integer', 'example' => 1]],
     'size (array items)' => [[['array'], ['size', ['3']]], ['maxItems' => 3, 'minItems' => 3, 'type' => 'array']],
+    // The object branch: Laravel's size rules count an OBJECT's keys, so a length keyword here would be
+    // a bound every validator reading the document silently ignores.
+    'min (object keys)' => [[['object'], ['min', ['1']]], ['minProperties' => 1, 'type' => 'object']],
+    'max (object keys)' => [[['object'], ['max', ['4']]], ['maxProperties' => 4, 'type' => 'object']],
+    'between (object keys)' => [[['object'], ['between', ['1', '4']]], ['maxProperties' => 4, 'minProperties' => 1, 'type' => 'object']],
+    'size (object keys)' => [[['object'], ['size', ['2']]], ['maxProperties' => 2, 'minProperties' => 2, 'type' => 'object']],
+    'max (map keys)' => [[['additional_properties', ['{"type":"string"}']], ['max', ['4']]], ['additionalProperties' => ['type' => 'string'], 'maxProperties' => 4, 'type' => 'object']],
     // Float bounds on a numeric field keep their decimal value (not truncated to int).
     'min (float bound)' => [[['numeric'], ['min', ['2.5']]], ['minimum' => 2.5, 'type' => 'number', 'example' => 2.5]],
     'max (float bound)' => [[['numeric'], ['max', ['9.75']]], ['maximum' => 9.75, 'type' => 'number', 'example' => 1]],
@@ -192,14 +199,17 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'list' => [[['list']], ['type' => 'array']],
     'distinct' => [[['distinct']], ['type' => 'array', 'uniqueItems' => true]],
 
-    // AdditionalPropertiesRuleTransformer — a recovered `array<string, V>`: the value schema arrives as
-    // JSON, and `object` replaces the `array` a Laravel type rule can only have said.
+    // AdditionalPropertiesRuleTransformer — the two words the Laravel vocabulary has none of. `object`
+    // says a JSON object; `additional_properties` says the same and states the value schema, which
+    // arrives as JSON. Both replace the `array` a Laravel type rule can only have said.
     'additional_properties' => [[['additional_properties', ['{"type":"string"}']]], ['additionalProperties' => ['type' => 'string'], 'type' => 'object']],
     'additional_properties (open values)' => [[['additional_properties', ['{}']]], ['additionalProperties' => [], 'type' => 'object']],
     'additional_properties (overrides the array rule beside it)' => [[['array'], ['additional_properties', ['{"type":"integer"}']]], ['additionalProperties' => ['type' => 'integer'], 'type' => 'object']],
     // Degradation: nothing to decode, or a parameter that isn't a schema, leaves the field untouched.
     'additional_properties (no parameter)' => [[['string'], ['additional_properties']], ['type' => 'string']],
     'additional_properties (unparseable parameter)' => [[['string'], ['additional_properties', ['not json']]], ['type' => 'string']],
+    'object' => [[['object']], ['type' => 'object']],
+    'object (replaces the array rule beside it)' => [[['array'], ['object']], ['type' => 'object']],
 
     // DateWireRuleTransformer — a date-typed property's own wire format, stated by the recovering
     // integration because the rule vocabulary has no word for it. The parameter is the PHP `date()` format

@@ -74,7 +74,11 @@ though Laravel's rule vocabulary has one word — `array` — for all of them:
 | `array{width: int, label?: string}` | An object with `properties`, the optional key left out of `required` |
 
 A static `rules()` still wins per field, so a dotted key inside one of these (`metadata.retention.mode`)
-documents that key and settles the container as an object.
+documents that key and settles the container as an object. An override that only restates `array`
+doesn't undo the table above — `array` is the vaguer way of saying what the docblock already said, not a
+contradiction of it — and neither does a `field.*` rule, which Laravel applies to every value whatever
+the keys are. So `['nullable', 'array', 'max:100']` over an `array<string, …>` property still publishes
+an object, bounds `maxProperties`, and lets the `field.*` rules constrain the values.
 
 Because a Data class is a single named source class, the body is **hoisted to a `#/components/schemas`
 component and the operation `$ref`s it** — so the same Data class accepted by several endpoints becomes

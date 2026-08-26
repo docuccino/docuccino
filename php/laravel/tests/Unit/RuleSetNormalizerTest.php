@@ -47,12 +47,14 @@ it('keeps a conditionally prohibited field, which is legitimately sendable', fun
     expect(normalizedNames(['legacy' => ['string', $rule]]))->toBe(['legacy' => ['string', $rule]]);
 })->with(['prohibited_if', 'prohibited_unless', 'prohibits']);
 
-it('drops the array rule from a field a named child proves is an object', function (string $arrayRule): void {
+it('replaces the array rule with `object` on a field a named child proves is an object', function (string $arrayRule): void {
+    // Dropping the word left the field with no type word at all, so every type-aware rule after it —
+    // `min`/`max`/`size` — read an untyped field and published string-length bounds on an object.
     expect(normalizedNames([
-        'metadata' => ['nullable', $arrayRule],
+        'metadata' => ['nullable', $arrayRule, 'max'],
         'metadata.retention' => ['string'],
     ]))->toBe([
-        'metadata' => ['nullable'],
+        'metadata' => ['nullable', 'object', 'max'],
         'metadata.retention' => ['string'],
     ]);
 })->with(['array', 'list']);
@@ -93,4 +95,19 @@ it('turns the clashing array-plus-child pair into a coherent object schema', fun
             'type' => 'object',
             'properties' => ['mode' => ['type' => 'string']],
         ]);
+});
+
+it('bounds an object a named child proves by its keys, not by its length', function (): void {
+    // `max:2` on an array-or-object value counts elements in Laravel, so `maxLength` here is a bound
+    // no validator applies. The object word the normalizer leaves behind is what the size rule reads.
+    $set = new RuleSet([
+        'metadata' => [ValidationRule::of('array'), ValidationRule::of('max', ['2'])],
+        'metadata.mode' => [ValidationRule::of('string')],
+    ]);
+
+    expect(validationSchema($set, schemaConverter())['properties']['metadata'])->toBe([
+        'type' => 'object',
+        'maxProperties' => 2,
+        'properties' => ['mode' => ['type' => 'string']],
+    ]);
 });
