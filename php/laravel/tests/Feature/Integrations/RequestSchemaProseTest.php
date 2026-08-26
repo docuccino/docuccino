@@ -153,3 +153,27 @@ it('follows a remapped property to the key the request really accepts', function
         ->and($properties['blueprint_id']['description'])->toBe('The blueprint whose field set this is built from.')
         ->and($properties['source_channel']['description'])->toBe('Where the submission came from.');
 });
+
+it('describes the request body component from the class that states it', function (): void {
+    // A request body is assembled from rules rather than lifted by the component hoist, so the class's own
+    // sentence has to be written where the body is built — otherwise every `*Request` schema in a document
+    // is nameless prose-wise while its response twin is described.
+    $components = new ComponentRegistry;
+    $context = new RouteContext(
+        route: new RouteDescriptor(['POST'], 'api/described-input'),
+        actionRef: new ActionRef('', DescribedInputController::class, 'store'),
+        attributes: new AttributeSet,
+        engine: new StubTypeEngine(classes: [DescribedInputData::class => inputMetadata()]),
+        document: new DocumentConfig('default', []),
+        components: $components,
+        extensions: new ResolvedExtensions(
+            typeToSchema: DefaultTypeMappers::all(),
+            ruleTransformers: ValidationIntegration::transformers(),
+        ),
+    );
+
+    (new DataRequestExtension)->handle(new OperationDraft, $context);
+
+    expect($components->schemas()['DescribedInputData']['description'])
+        ->toBe('Everything the submission form captured, as one payload.');
+});
