@@ -55,6 +55,16 @@ final readonly class ValidationField
     }
 
     /**
+     * Drop a keyword an earlier, coarser rule left behind — for a rule that REPLACES that rule's claim
+     * rather than adding to it, and would otherwise publish a keyword against a type it no longer
+     * belongs to.
+     */
+    public function remove(string $keyword): void
+    {
+        unset($this->node->keywords[$keyword]);
+    }
+
+    /**
      * A value this rule alone knows is legal, for the synthesized `example` — or null to say no value
      * would be, which is final and outranks any other rule's proposal.
      *

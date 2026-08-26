@@ -155,6 +155,58 @@ it('lets an earlier transformer intercept a rule ahead of later ones', function 
         ->and($result->diagnostics)->toBe([]);
 });
 
+it('lets a later transformer drop a keyword an earlier one left', function (): void {
+    // The replacement case: a rule that supersedes an earlier one's claim rather than adding to it, and
+    // would otherwise leave a keyword standing against a type it no longer belongs to.
+    $replacing = new class implements RuleTransformer
+    {
+        public function supports(ValidationRule $rule): bool
+        {
+            return in_array($rule->name, $this->handledRuleNames(), true);
+        }
+
+        public function handledRuleNames(): array
+        {
+            return ['really_an_int'];
+        }
+
+        public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
+        {
+            expect($field->has('pattern'))->toBeTrue();
+
+            $field->setType('integer');
+            $field->remove('pattern');
+            // Removing what was never there is a no-op, not an error.
+            $field->remove('pattern');
+            $field->remove('never-set');
+        }
+    };
+
+    $stating = new class implements RuleTransformer
+    {
+        public function supports(ValidationRule $rule): bool
+        {
+            return in_array($rule->name, $this->handledRuleNames(), true);
+        }
+
+        public function handledRuleNames(): array
+        {
+            return ['patterned'];
+        }
+
+        public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
+        {
+            $field->set('pattern', '^x');
+        }
+    };
+
+    $driver = new DefaultValidationRulesToSchema([$stating, $replacing, ...fakeTransformers()]);
+    $result = $driver->convert(fakeRuleSet(['token' => ['str', 'patterned', 'really_an_int']]), ruleContext());
+
+    expect($result->schema['properties']['token'])->toBe(['type' => 'integer'])
+        ->and($result->diagnostics)->toBe([]);
+});
+
 it('returns an empty schema for an empty rule set', function (): void {
     $result = (new DefaultValidationRulesToSchema(fakeTransformers()))->convert(new RuleSet, ruleContext());
 
