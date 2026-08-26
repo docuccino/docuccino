@@ -10,11 +10,13 @@ use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Contracts\SchemaContext;
 use Docuccino\Core\Extensions\Validation\ValidationField;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 
 /**
  * `date_format:Y-m-d` → a string schema whose `format` is `date` (date-only patterns) or
- * `date-time` (patterns carrying a time token), with the raw PHP format preserved in the
- * description so a reader keeps the exact contract.
+ * `date-time` (patterns carrying a time token, per {@see DateWireFormat}), with the raw PHP format
+ * preserved in the description so a reader keeps the exact contract. The app states the accepted wire
+ * format outright here, so this is the most specific source there is and nothing displaces it.
  *
  * The wire format is the one thing the schema cannot carry, so the example is proposed here rather
  * than derived from `format` — which would document an ISO value a `d/m/Y` endpoint rejects. A fixed
@@ -39,8 +41,7 @@ final class DateFormatRuleTransformer implements RuleTransformer
         $field->setType('string');
 
         $pattern = $rule->parameter() ?? '';
-        $hasTime = (bool) preg_match('/[HGhisvuAaeTPO]/', $pattern);
-        $field->set('format', $hasTime ? 'date-time' : 'date');
+        $field->set('format', DateWireFormat::oas($pattern));
 
         if ($pattern === '') {
             return;

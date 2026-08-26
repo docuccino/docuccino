@@ -287,6 +287,31 @@ property that isn't a string is a Unix timestamp:
 public CarbonImmutable $issuedAt; // → { "type": "integer", "description": "Unix timestamp (seconds)." }
 ```
 
+That holds in **both directions**. A date property in a request body is documented from the most
+specific source the class gives, not from a validation rule that says less:
+
+| On the property | The request documents |
+| --- | --- |
+| `#[DateFormat('d/m/Y')]` | `format: date` and "Expected format: d/m/Y" — you stated the wire format outright. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | `type: integer` — the cast parses a timestamp, so that is what the endpoint takes. |
+| `#[WithCast(DateTimeInterfaceCast::class, format: 'Y-m-d')]` | `format: date` — the cast's format is the one it accepts. |
+| A `DateTimeInterface` type, nothing else | The `format` your `data.date_format` gives, exactly as the response side reads it. |
+
+So a `#[Date]` (or a `'date'` in a `rules()` override) beside a `CarbonImmutable` property no longer
+narrows the field to `format: date`. Laravel's `date` rule accepts anything non-relative `strtotime`
+parses — `2024-01-01`, `2024-01-01T10:00:00Z`, `January 1 2024` — so `date` would mark a working
+request invalid, and a client generated from it would truncate the time on the way back:
+
+```php
+#[Nullable, Date]
+public ?CarbonImmutable $expectedUpdatedAt;
+// request  → { "type": ["string", "null"], "format": "date-time" }
+// response → { "type": ["string", "null"], "format": "date-time" }
+```
+
+Where your app really is asymmetric the two sides say so: a `d/m/Y` cast with an ISO `data.date_format`
+documents `date` in and `date-time` out, because that is what the endpoint does.
+
 ### Wrapping
 
 If your app wraps responses — a class-level `defaultWrap()` or the global `data.wrap` config —

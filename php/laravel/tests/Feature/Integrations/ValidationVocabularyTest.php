@@ -192,6 +192,18 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'additional_properties (no parameter)' => [[['string'], ['additional_properties']], ['type' => 'string']],
     'additional_properties (unparseable parameter)' => [[['string'], ['additional_properties', ['not json']]], ['type' => 'string']],
 
+    // DateWireRuleTransformer — a date-typed property's own wire shape, stated by the recovering
+    // integration because the rule vocabulary has no word for it.
+    'date_wire (date)' => [[['date_wire', ['date']]], ['format' => 'date', 'type' => 'string', 'example' => '2024-01-01']],
+    'date_wire (date-time)' => [[['date_wire', ['date-time']]], ['format' => 'date-time', 'type' => 'string', 'example' => '2024-01-01T00:00:00Z']],
+    // It IS the more specific source, so unlike every already-typed guard above it REPLACES the format
+    // the coarse `date` rule guessed.
+    'date_wire (overrides the date rule beside it)' => [[['date'], ['date_wire', ['date-time']]], ['format' => 'date-time', 'type' => 'string', 'example' => '2024-01-01T00:00:00Z']],
+    // The one shape that isn't a string: the coarse rule's `format` goes with the type it belonged to.
+    'date_wire (timestamp)' => [[['date'], ['date_wire', ['timestamp']]], ['description' => 'Unix timestamp (seconds).', 'type' => 'integer']],
+    'date_wire (no parameter)' => [[['date'], ['date_wire']], ['format' => 'date', 'type' => 'string', 'example' => '2024-01-01']],
+    'date_wire (unknown shape)' => [[['date'], ['date_wire', ['epoch-millis']]], ['format' => 'date', 'type' => 'string', 'example' => '2024-01-01']],
+
     // ProhibitedRuleTransformer — the conditional forms stay documented, with the condition as a note.
     // (A bare `prohibited` never reaches a field at all; RuleSetNormalizerTest covers that.)
     'prohibited (no schema effect)' => [[['string'], ['prohibited']], ['type' => 'string']],

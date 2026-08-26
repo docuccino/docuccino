@@ -688,10 +688,15 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `ulid` | `string`, `format: ulid` |
 | `url` | `string`, `format: uri` |
 | `ip` | `string`, `format: ip` |
-| `date` | `string`, `format: date` |
+| `date` | `string`, `format: date` — the reading of intent where nothing more specific is known. |
 | `date_format:Y-m-d H:i` | `string`, `format: date-time` when the pattern carries a time token, else `date` — plus "Expected format: …" so the exact contract survives. |
 | `json` | `string` with `contentMediaType: application/json` — the value is a string *carrying* JSON. |
 | `timezone` | `string`, described as "Must be a valid timezone identifier." |
+
+Laravel's `date` accepts anything non-relative `strtotime` parses, so `date` on its own is a reading of
+intent rather than a wire format. Where the property's own type says more — a Spatie Data property typed
+`CarbonImmutable` — that type names the format instead, and the request matches the response byte for
+byte. See [Dates and timestamps](/laravel/packages/spatie-data/#dates-and-timestamps).
 
 ### Sizes and ranges
 
