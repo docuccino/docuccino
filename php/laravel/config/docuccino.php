@@ -295,8 +295,8 @@ return [
         // and sends it back, so one the schema rejects is worse than none.
         // 'examples' => [
         //     'enabled' => true,
-        //     // JSON pointers, or the label the message names, e.g.
-        //     // ['#/components/schemas/Invoice/properties/status/example'].
+        //     // JSON pointers as the message prints them, or the label it names, e.g.
+        //     // ['/components/schemas/Invoice/properties/status/example'].
         //     'allow' => [],
         // ],
         // Flags a redirect the document doesn't say exactly one thing about: the 3XX range alone, or

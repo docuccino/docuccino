@@ -547,7 +547,7 @@ registrations **at build time, never at boot**. See [extension authoring](/exten
     // ],
     // 'examples' => [
     //     'enabled' => true,
-    //     'allow' => [],   // e.g. ['#/components/schemas/Invoice/properties/status/example']
+    //     'allow' => [],   // e.g. ['/components/schemas/Invoice/properties/status/example']
     // ],
     // 'unpinned_redirect' => [
     //     'enabled' => true,
