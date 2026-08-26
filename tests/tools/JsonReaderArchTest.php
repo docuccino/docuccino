@@ -55,7 +55,7 @@ function allowedAssociativeJsonDecodes(): array
         // Asks the same carrier for its value schema's `type` WORD and nothing else, to tell whether a
         // map's values are objects. The decoded value is discarded on the next line; the schema that
         // reaches the document is the carrier's own JSON, decoded by the transformer above.
-        'php/laravel/src/Integrations/SpatieData/DataValidationRules.php:215' => 'rule parameter → value container word',
+        'php/laravel/src/Integrations/SpatieData/DataValidationRules.php:226' => 'rule parameter → value container word',
     ];
 }
 
