@@ -15,13 +15,15 @@ use Spatie\LaravelData\Optional;
  * immutable after creation, so the override rejects it outright with `prohibited` and a matching
  * message. It also constrains one key INSIDE the metadata blob with a dotted rule, the way Laravel
  * validates nested payloads, and carries its canvas coordinates as a POSITIONAL tuple — the shape a real
- * DTO writes for a fixed-length pair. Only ever reflected.
+ * DTO writes for a fixed-length pair. `theme` is the keyed-map case: the override restates `array` and
+ * bounds each value through `theme.*`, neither of which can say the keys are strings. Only ever reflected.
  */
 final class UpdateNodeData extends Data
 {
     /**
      * @param  array<string, mixed>|Optional|null  $metadata
      * @param  array{float, float}|Optional  $position
+     * @param  array<string, array<string, mixed>>|Optional  $theme
      */
     public function __construct(
         /**
@@ -38,6 +40,9 @@ final class UpdateNodeData extends Data
 
         /** Canvas coordinates, as an `[x, y]` pair. */
         public readonly Optional|array $position = new Optional,
+
+        /** Per-section rendering overrides, keyed by section id then by setting name. */
+        public readonly Optional|array $theme = new Optional,
     ) {}
 
     /**
@@ -49,6 +54,10 @@ final class UpdateNodeData extends Data
             'metadata' => ['array'],
             'metadata.retention.mode' => ['required_with:metadata', 'string'],
             'label' => ['prohibited'],
+            // Restates the container in the one word Laravel has for it, and bounds each VALUE — which
+            // says nothing about whether the keys are numeric.
+            'theme' => ['sometimes', 'array', 'max:20'],
+            'theme.*' => ['array', 'max:50'],
         ];
     }
 

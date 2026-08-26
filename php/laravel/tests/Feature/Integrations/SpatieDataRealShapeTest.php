@@ -245,8 +245,28 @@ it('omits a request property for a field the API prohibits outright', function (
     $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\\Data\\UpdateNodeData');
     $schema = realRequestSchema(UpdateNodeData::class, $metadata, $override);
 
-    expect(array_keys($schema['properties']))->toBe(['name', 'metadata', 'position'])
+    expect(array_keys($schema['properties']))->toBe(['name', 'metadata', 'position', 'theme'])
         ->and($schema)->not->toHaveKey('required');
+})->group('fixture');
+
+it('keeps a recovered map an object through an override that restates it and bounds its values', function (): void {
+    // The headline of the container work, against real recovery rather than a hand-built MapT. The engine
+    // reads `array<string, array<string, mixed>>` off the constructor @param; the override then says
+    // `array` — Laravel's one word for every array shape — and bounds each value through `theme.*`.
+    // Neither statement can say the keys are strings, so neither may take the container away from the
+    // type that does. `.*` applies to each value whatever the keys are, which is why it decides nothing
+    // about key type.
+    $metadata = realMetadataAs('App\Data\UpdateNodeData', UpdateNodeData::class);
+    $override = tracedOverride('app/Data/UpdateNodeData.php', 'App\Data\UpdateNodeData');
+
+    expect(realRequestSchema(UpdateNodeData::class, $metadata, $override)['properties']['theme'])->toBe([
+        'type' => 'object',
+        // The `theme.*` constraints land on the value slot an object has, never on a dead `items`.
+        'additionalProperties' => ['type' => 'object', 'maxProperties' => 50],
+        // `max:20` on an object counts its keys, so the bound is a property count, not a string length —
+        // and the same reading applies one level down, to the values `theme.*` bounds.
+        'maxProperties' => 20,
+    ]);
 })->group('fixture');
 
 it('documents a positional tuple as an array, never as an object with numeric property names', function (): void {
@@ -288,8 +308,10 @@ it('keeps a recovered container through a rules() override that only restates `a
     // The real-source half of the same story: `array` is the ONE word the rule vocabulary has for every
     // array shape, so an override stating it restates what the constructor `@param` already recovered
     // rather than replacing it — and `{"type": "array"}` for a JSON object is wrong, not merely vague.
-    // `metadata` proves it survives a size-only custom rule sitting alongside; `touched_fields` is the
-    // half that already worked, its item field riding on a key of its own.
+    // `metadata` proves it survives a size-only custom rule sitting alongside — and that the bound the
+    // rule states counts the object's KEYS, since Laravel sizes an array-or-object by its entries and a
+    // length keyword on one is a bound no validator applies. `touched_fields` is the half that already
+    // worked, its item field riding on a key of its own.
     $metadata = realMetadataAs('App\\Data\\ActionPreviewData', ActionPreviewData::class);
     $override = tracedOverride('app/Data/ActionPreviewData.php', 'App\\Data\\ActionPreviewData');
     $schema = realRequestSchema(ActionPreviewData::class, $metadata, $override);
@@ -302,7 +324,7 @@ it('keeps a recovered container through a rules() override that only restates `a
     'array<string, mixed>|null' => ['metadata', [
         'type' => 'object',
         'additionalProperties' => [],
-        'maxLength' => 65536,
+        'maxProperties' => 65536,
         'description' => 'At most 64 KiB once encoded.',
     ]],
     'list<string>' => ['touched_fields', ['type' => 'array', 'items' => ['type' => 'string']]],
