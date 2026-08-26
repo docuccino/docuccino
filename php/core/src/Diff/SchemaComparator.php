@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Diff;
 
+use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Hydrate;
 
@@ -26,6 +27,16 @@ use Docuccino\Core\Support\Hydrate;
  * introduced, stay breaking on BOTH sides: each is safe for a pure reader, but a schema's
  * `request` flag can under-state its audience (a shared component serves both directions), and a
  * downgrade there green-lights a change that rejects a writer's previously valid value.
+ *
+ * An ANNOTATION keyword is the one class of edit that is never any of the above: `title`,
+ * `description`, `example`, `examples`, `externalDocs` and `$comment` say what a value means and
+ * nothing about what it may be, so a change to one is reported — a reviewer asking what moved is
+ * owed the answer — and is never breaking under any versioning policy. Which keywords those are is
+ * {@see SchemaKeywords::isAnnotationOnly()}'s answer and not a list kept here; `default`,
+ * `deprecated`, `readOnly` and `writeOnly` are deliberately outside it. Nothing here asks whether an
+ * example is VALID: `ExampleSchemaLint` and `RecordedExampleAudit` hold every published example to
+ * the schema beside it, on every build, with the same validator. Two readers of one fact and only one
+ * can be right — the differ classifies the keyword, the audit owns validity.
  *
  * A subschema may be a BOOLEAN, which is where the classification above stops being enough: `true` is
  * the empty schema and reads as one, but `false` is spelled by no set of keywords, so it is compared as
@@ -65,6 +76,7 @@ final class SchemaComparator
         $changes = [];
 
         $this->compareRef($old, $new, $path, $id, $changes);
+        $this->compareAnnotations($old, $new, $path, $id, $changes);
         $this->compareType($old, $new, $path, $id, $changes);
         $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $request, $changes);
@@ -118,6 +130,37 @@ final class SchemaComparator
 
         if ($oldRef !== null && $newRef !== null && $oldRef !== $newRef) {
             $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.$ref', false, 'schema.ref-changed', '$ref', $oldRef, $newRef);
+        }
+    }
+
+    /**
+     * Every annotation-only keyword either side carries, compared by VALUE. `===` is not that
+     * comparison: an artifact read faithfully hands back `{}` as a stdClass, and two equal objects are
+     * not the identical one — so an example that never moved read as an example that had. The
+     * fingerprint the enum comparison already uses answers it, and keeps `{}` apart from `[]`.
+     *
+     * Hard-coded non-breaking, and the only place in this class where that is not a judgment about the
+     * two values: a keyword that says nothing about what the value may be cannot narrow it.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareAnnotations(array $old, array $new, string $path, string $id, array &$changes): void
+    {
+        foreach (Arr::sortedUnion(array_keys($old), array_keys($new)) as $keyword) {
+            if (! SchemaKeywords::isAnnotationOnly($keyword)) {
+                continue;
+            }
+
+            $before = $old[$keyword] ?? null;
+            $after = $new[$keyword] ?? null;
+
+            if (self::valueKey($before) === self::valueKey($after)) {
+                continue;
+            }
+
+            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.'.$keyword, false, 'schema.annotation-changed', $keyword, $before, $after);
         }
     }
 

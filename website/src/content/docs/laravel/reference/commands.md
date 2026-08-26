@@ -281,6 +281,27 @@ minus any the operation restates for the same `name` and `in` — the override O
 writes parameters on the operation, so this only comes up when `old` is a hand-written or third-party
 artifact, which is exactly where a parameter would otherwise go uncompared.
 
+An **annotation-only edit is not a contract change.** A schema's `title`, `description`, `example`,
+`examples`, `externalDocs` and `$comment` say what a value means and nothing about what it may be, so a
+change to one is reported as `schema.annotation-changed` and is never breaking — under any
+[`versioning`](/laravel/reference/configuration/#versioning) policy, `none` included. It is still in the
+changeset, under `NON-BREAKING`, because a rewritten description or a re-recorded example is worth
+seeing; it is just not worth failing a pipeline over. That matters most for a recorded example, which is
+whatever your last test run sent: a payload keyed by generated ids re-records on every run, and a gate
+that flagged it would teach the reviewer to skim.
+
+Four keywords that read like documentation are deliberately outside that set, because each changes what
+a client may do with the value: `default` (what the server fills in when the value is omitted),
+`readOnly` (whether it may be sent), `writeOnly` (whether it will come back) and `deprecated` (whether
+it is being withdrawn). A change beside an annotation is unaffected either way — a narrowed `type` and a
+rewritten `description` on one schema are two changes, one breaking and one not, and neither hides the
+other.
+
+Whether an example is *valid* is a different question, and the diff never asks it. Every example the
+document publishes is held to the schema beside it on every build, so an example that stopped matching
+its own type is caught there — see [Examples](/laravel/documenting/examples/) — rather than by a gate
+that only ever compares two artifacts.
+
 | Flag | Values / default | Effect |
 | --- | --- | --- |
 | `old` (required) | path | The "old" side. Missing/unreadable/invalid-JSON → exit 1. |

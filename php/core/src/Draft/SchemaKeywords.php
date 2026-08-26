@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Docuccino\Core\Draft;
 
 /**
- * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Two
+ * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Three
  * questions live here: the classification {@see SchemaDraft::declareShape()} reasons over — shape,
- * refinement or annotation — and the subschema position {@see SUBSCHEMA_POSITIONS} a keyword's
- * value occupies, which is what tells a reader an array there is a JSON object rather than a list.
- * Every keyword the document can carry is answered once here, so no producer keeps its own copy.
+ * refinement or annotation — the subschema position {@see SUBSCHEMA_POSITIONS} a keyword's
+ * value occupies, which is what tells a reader an array there is a JSON object rather than a list,
+ * and which keywords a semantic DIFF may treat as a non-event ({@see ANNOTATION_ONLY}, a narrower
+ * question than the first). Every keyword the document can carry is answered once here, so no
+ * producer keeps its own copy.
  *
  * A keyword this does not know is never superseded: we do not retract what we cannot read.
  *
@@ -164,6 +166,51 @@ final class SchemaKeywords
         'writeOnly',
         'deprecated',
     ];
+
+    /**
+     * The annotation keywords a DIFF may treat as a non-event: each says what a value means and none
+     * says what it may be, so editing one moves no contract and gates nothing under any versioning
+     * policy. `SchemaComparator` is the reader.
+     *
+     * A different question from {@see ANNOTATIONS}, which is about supersession — which standing
+     * keywords a declared shape retracts — and is deliberately wider. Four of its members survive a
+     * declaration exactly as a description does and still move a contract when they change:
+     * `default` (what the server fills in when the value is omitted), `readOnly` (whether it may be
+     * sent), `writeOnly` (whether it will come back) and `deprecated` (whether it is being withdrawn).
+     * A generator emits different code for each, so each stays breaking-eligible rather than silenced
+     * here. `$defs`, `definitions`, `$id` and `$anchor` are annotations for supersession and are
+     * absent for a second reason: a `$ref` can point at any of them, so they are the contract under
+     * another name.
+     *
+     * Widening this set silences a real change, so every row — present and deliberately absent — is
+     * pinned by dataset.
+     *
+     * @var list<string>
+     */
+    private const array ANNOTATION_ONLY = [
+        '$comment',
+        'description',
+        'example',
+        'examples',
+        'externalDocs',
+        'title',
+    ];
+
+    /** Whether changing `$keyword` alone can change nothing a client may do. {@see ANNOTATION_ONLY} */
+    public static function isAnnotationOnly(string $keyword): bool
+    {
+        return in_array($keyword, self::ANNOTATION_ONLY, true);
+    }
+
+    /**
+     * Every annotation-only keyword, so a guard reads the set rather than a second copy of it.
+     *
+     * @return list<string>
+     */
+    public static function annotationOnly(): array
+    {
+        return self::ANNOTATION_ONLY;
+    }
 
     /**
      * Whether a schema states what kind of value it is — a `type`, or a `$ref` whose component states

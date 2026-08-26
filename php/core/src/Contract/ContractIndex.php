@@ -9,6 +9,7 @@ use Docuccino\Core\Document\NodeIdentity;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\JsonValue;
 use JsonException;
 use stdClass;
 
@@ -80,6 +81,31 @@ final class ContractIndex
     public function document(): array
     {
         return $this->document;
+    }
+
+    /**
+     * The document as the typed model, for the SEMANTIC DIFF. Read from the kept JSON text through the
+     * one reader, exactly as {@see graph()} is for validation and for the same reason: the associative
+     * copy this class indexes cannot tell `{}` from `[]`, so a document diffed against itself reported
+     * every empty-object example inside it changing shape.
+     *
+     * The fallback is unreachable from either constructor — the text came from a decode that succeeded
+     * or from encoding this very array — and is the lossy reading rather than no document at all.
+     *
+     * @internal
+     */
+    public function comparable(): UirDocument
+    {
+        try {
+            $decoded = JsonValue::decode($this->json);
+        } catch (JsonException) {
+            $decoded = null;
+        }
+
+        /** @var array<string, mixed> $document */
+        $document = is_array($decoded) ? $decoded : $this->document;
+
+        return UirDocument::fromArray($document);
     }
 
     /**

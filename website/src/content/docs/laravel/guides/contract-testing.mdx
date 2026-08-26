@@ -322,6 +322,13 @@ command's `--against` does:
 $this->assertNoBreakingChanges('origin/main');
 ```
 
+Prose and examples never fail this. A schema's `title`, `description`, `example`, `examples`,
+`externalDocs` and `$comment` are reported as `schema.annotation-changed` and are never breaking, so a
+suite that records its own example payloads does not start failing because the last run sent different
+ids. `default`, `readOnly`, `writeOnly` and `deprecated` are not in that group — each changes what a
+client may do with the value — and neither is anything else. Full rule under
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
+
 The failure renders the changeset, then says where each broken node came from:
 
 ```text
