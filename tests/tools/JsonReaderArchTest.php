@@ -39,11 +39,11 @@ function allowedAssociativeJsonDecodes(): array
         // to the response untouched. The bytes are never decoded here, so there is nothing to flatten.
         'php/laravel/src/Runtime/DocumentCache.php:48' => 'cache envelope → format + string payload',
 
-        // The contract index keeps the original JSON text and re-decodes it from there wherever `{}`
-        // versus `[]` decides an answer: as an OBJECT graph for schema validation
-        // (`ContractIndex::graph()`), and as the typed model for the semantic diff
-        // (`ContractIndex::comparable()`). The associative copy is only ever walked to LOCATE a node —
-        // operation ids, paths, methods, pointer segments — and is never re-emitted or compared.
+        // The contract index keeps the original JSON text and re-decodes it as an OBJECT graph
+        // (`ContractIndex::graph()`) wherever `{}` versus `[]` decides an answer — schema validation,
+        // and the typed model the semantic diff reads (`ContractIndex::comparable()`). The associative
+        // copy is only ever walked to LOCATE a node — operation ids, paths, methods, pointer segments —
+        // and is never re-emitted or compared.
         'php/core/src/Contract/ContractIndex.php:61' => 'contract lookup index; validation reads graph()',
 
         // The decoded value lands on `additionalProperties` — a SCHEMA, and every position inside a

@@ -285,17 +285,22 @@ An **annotation-only edit is not a contract change.** A schema's `title`, `descr
 `examples`, `externalDocs` and `$comment` say what a value means and nothing about what it may be, so a
 change to one is reported as `schema.annotation-changed` and is never breaking — under any
 [`versioning`](/laravel/reference/configuration/#versioning) policy, `none` included. It is still in the
-changeset, under `NON-BREAKING`, because a rewritten description or a re-recorded example is worth
-seeing; it is just not worth failing a pipeline over. That matters most for a recorded example, which is
-whatever your last test run sent: a payload keyed by generated ids re-records on every run, and a gate
-that flagged it would teach the reviewer to skim.
+changeset, under `NON-BREAKING`, because a rewritten description or a corrected `#[Example]` is worth
+seeing; it is just not worth failing a pipeline over. A change beside an annotation is unaffected either
+way — a narrowed `type` and a rewritten `description` on one schema are two changes, one breaking and one
+not, and neither hides the other.
 
-Four keywords that read like documentation are deliberately outside that set, because each changes what
-a client may do with the value: `default` (what the server fills in when the value is omitted),
-`readOnly` (whether it may be sent), `writeOnly` (whether it will come back) and `deprecated` (whether
-it is being withdrawn). A change beside an annotation is unaffected either way — a narrowed `type` and a
-rewritten `description` on one schema are two changes, one breaking and one not, and neither hides the
-other.
+Four keywords that read like documentation are deliberately outside that set, because each says
+something about the value rather than about what it means: `default` (what the server fills in when the
+value is omitted), `readOnly` (whether it may be sent), `writeOnly` (whether it will come back) and
+`deprecated` (whether it is being withdrawn). Being outside the set is not the same as being reported:
+the diff does not compare these four at all today, so changing one produces no entry in the changeset.
+
+**What the diff does not see.** It compares a schema's own keywords, so prose that lives beside a schema
+rather than inside one is not read: an `example` or `examples` on a media type — which is where a
+[recorded example](/laravel/documenting/examples/) is published — the same pair on a parameter, and
+`info.title`/`info.description` on the document. A re-recorded example therefore produces no changeset
+entry at all, and never has.
 
 Whether an example is *valid* is a different question, and the diff never asks it. Every example the
 document publishes is held to the schema beside it on every build, so an example that stopped matching

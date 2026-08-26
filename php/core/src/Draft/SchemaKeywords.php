@@ -173,17 +173,16 @@ final class SchemaKeywords
      * policy. `SchemaComparator` is the reader.
      *
      * A different question from {@see ANNOTATIONS}, which is about supersession — which standing
-     * keywords a declared shape retracts — and is deliberately wider. Four of its members survive a
-     * declaration exactly as a description does and still move a contract when they change:
-     * `default` (what the server fills in when the value is omitted), `readOnly` (whether it may be
-     * sent), `writeOnly` (whether it will come back) and `deprecated` (whether it is being withdrawn).
-     * A generator emits different code for each, so each stays breaking-eligible rather than silenced
-     * here. `$defs`, `definitions`, `$id` and `$anchor` are annotations for supersession and are
-     * absent for a second reason: a `$ref` can point at any of them, so they are the contract under
-     * another name.
+     * keywords a declared shape retracts — and is deliberately wider. Everything it holds and this does
+     * not is here for one of three reasons. `default`, `readOnly`, `writeOnly` and `deprecated` say
+     * what the server fills in, whether a value may be sent, whether it will come back and whether it
+     * is being withdrawn — a generator emits different code for each. `$defs`, `definitions`, `$id` and
+     * `$anchor` are the contract under another name, because a `$ref` can point at any of them. And
+     * `$schema` names the dialect every keyword beside it is read in, while `x-docuccino` carries the
+     * identity the diff pairs nodes BY.
      *
-     * Widening this set silences a real change, so every row — present and deliberately absent — is
-     * pinned by dataset.
+     * Widening this set silences a real change, so both halves of the split are pinned by dataset —
+     * every member, and every one of the ten exclusions.
      *
      * @var list<string>
      */
@@ -210,6 +209,18 @@ final class SchemaKeywords
     public static function annotationOnly(): array
     {
         return self::ANNOTATION_ONLY;
+    }
+
+    /**
+     * Every supersession annotation. The exclusions {@see ANNOTATION_ONLY} reasons about are this set
+     * minus that one, which is the only way a guard can see them at all — a new annotation landing in
+     * neither list is a decision nobody made.
+     *
+     * @return list<string>
+     */
+    public static function annotations(): array
+    {
+        return self::ANNOTATIONS;
     }
 
     /**

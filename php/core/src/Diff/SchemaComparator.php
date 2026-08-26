@@ -28,15 +28,13 @@ use Docuccino\Core\Support\Hydrate;
  * `request` flag can under-state its audience (a shared component serves both directions), and a
  * downgrade there green-lights a change that rejects a writer's previously valid value.
  *
- * An ANNOTATION keyword is the one class of edit that is never any of the above: `title`,
- * `description`, `example`, `examples`, `externalDocs` and `$comment` say what a value means and
- * nothing about what it may be, so a change to one is reported — a reviewer asking what moved is
- * owed the answer — and is never breaking under any versioning policy. Which keywords those are is
- * {@see SchemaKeywords::isAnnotationOnly()}'s answer and not a list kept here; `default`,
- * `deprecated`, `readOnly` and `writeOnly` are deliberately outside it. Nothing here asks whether an
- * example is VALID: `ExampleSchemaLint` and `RecordedExampleAudit` hold every published example to
- * the schema beside it, on every build, with the same validator. Two readers of one fact and only one
- * can be right — the differ classifies the keyword, the audit owns validity.
+ * An ANNOTATION keyword is the one class of edit that is never any of the above: it says what a value
+ * means and nothing about what it may be, so a change to one is reported — a reviewer asking what moved
+ * is owed the answer — and is never breaking under any versioning policy. Which keywords those are is
+ * {@see SchemaKeywords::isAnnotationOnly()}'s answer and not a list kept here. Nothing here asks whether
+ * an example is VALID: `ExampleSchemaLint` and `RecordedExampleAudit` hold every published example to
+ * the schema beside it, on every build, with the same validator — the differ classifies the keyword,
+ * the audit owns validity.
  *
  * A subschema may be a BOOLEAN, which is where the classification above stops being enough: `true` is
  * the empty schema and reads as one, but `false` is spelled by no set of keywords, so it is compared as
@@ -134,13 +132,10 @@ final class SchemaComparator
     }
 
     /**
-     * Every annotation-only keyword either side carries, compared by VALUE. `===` is not that
-     * comparison: an artifact read faithfully hands back `{}` as a stdClass, and two equal objects are
-     * not the identical one — so an example that never moved read as an example that had. The
-     * fingerprint the enum comparison already uses answers it, and keeps `{}` apart from `[]`.
-     *
-     * Hard-coded non-breaking, and the only place in this class where that is not a judgment about the
-     * two values: a keyword that says nothing about what the value may be cannot narrow it.
+     * Every annotation-only keyword either side carries, compared by the fingerprint {@see valueKey()}
+     * rather than by `===`: two `stdClass` standing for one JSON object are never the identical one.
+     * Non-breaking by construction, and the only place in this class where that is not a judgment about
+     * the two values.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -471,10 +466,17 @@ final class SchemaComparator
         return $out;
     }
 
+    /**
+     * A value's identity, as its JSON text — which is what makes `{}` and `[]` two values and two
+     * `stdClass` standing for one JSON object one. Where JSON cannot spell it at all (a string that is
+     * not valid UTF-8, an `INF`, a `NAN`) `serialize()` answers instead, faithfully: the fallback was
+     * `gettype()`, under which every un-encodable value shared one key, so a removed enum value read as
+     * still present and the breaking change went unreported. The prefixes keep the two spaces apart.
+     */
     private static function valueKey(mixed $value): string
     {
         $encoded = json_encode($value);
 
-        return $encoded === false ? gettype($value) : $encoded;
+        return $encoded === false ? 'php:'.serialize($value) : 'json:'.$encoded;
     }
 }

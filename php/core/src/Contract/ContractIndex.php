@@ -84,33 +84,11 @@ final class ContractIndex
     }
 
     /**
-     * The document as the typed model, for the SEMANTIC DIFF. Read from the kept JSON text through the
-     * one reader, exactly as {@see graph()} is for validation and for the same reason: the associative
-     * copy this class indexes cannot tell `{}` from `[]`, so a document diffed against itself reported
-     * every empty-object example inside it changing shape.
-     *
-     * The fallback is unreachable from either constructor — the text came from a decode that succeeded
-     * or from encoding this very array — and is the lossy reading rather than no document at all.
-     *
-     * @internal
-     */
-    public function comparable(): UirDocument
-    {
-        try {
-            $decoded = JsonValue::decode($this->json);
-        } catch (JsonException) {
-            $decoded = null;
-        }
-
-        /** @var array<string, mixed> $document */
-        $document = is_array($decoded) ? $decoded : $this->document;
-
-        return UirDocument::fromArray($document);
-    }
-
-    /**
      * The document as an object graph, which is what JSON Schema validation needs: `properties: {}`
      * and `properties: []` mean different things and only the object form keeps them apart.
+     *
+     * An empty graph where the kept text is not JSON, which {@see fromArray()} reaches whenever
+     * `json_encode` refuses the array it was handed — invalid UTF-8, an `INF` — and hands over `''`.
      *
      * @internal
      */
@@ -123,6 +101,18 @@ final class ContractIndex
         $decoded = json_decode($this->json, false);
 
         return $this->graph = is_object($decoded) ? $decoded : new stdClass;
+    }
+
+    /**
+     * The document as the typed model, for the SEMANTIC DIFF. Read off {@see graph()} rather than off
+     * the associative copy this class indexes, and for the same reason validation is: only the object
+     * form tells `{}` from `[]`, and at a compared keyword those are two different values.
+     *
+     * @internal
+     */
+    public function comparable(): UirDocument
+    {
+        return UirDocument::fromArray(Arr::stringKeyed((array) JsonValue::normalize($this->graph())));
     }
 
     /**

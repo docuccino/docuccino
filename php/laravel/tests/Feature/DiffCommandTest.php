@@ -384,3 +384,35 @@ it('passes enforcement for an annotation-only change, and still fails once a rea
 
     @unlink($both);
 });
+
+it('reports a payload it could not encode rather than printing an empty line', function (): void {
+    // JSON has no bound on a number literal, so `1e999` parses without complaint and lands as a PHP
+    // `INF` — which `json_encode` then refuses. The value reaches `--format=json` because a change
+    // carries what moved, and an empty line is the one answer a CI gate cannot read: it parses as
+    // neither a changeset nor a failure.
+    bindStubEngine();
+
+    $old = writeArtifact(function (array $uir): array {
+        $components = is_array($uir['components'] ?? null) ? $uir['components'] : [];
+        $schemas = is_array($components['schemas'] ?? null) ? $components['schemas'] : [];
+        $article = is_array($schemas['Article'] ?? null) ? $schemas['Article'] : [];
+
+        $article['enum'] = ['__overflow__'];
+        $schemas['Article'] = $article;
+        $components['schemas'] = $schemas;
+        $uir['components'] = $components;
+
+        return $uir;
+    });
+
+    // Written as text: the literal cannot survive `json_encode` on the way in either.
+    $text = (string) file_get_contents($old);
+    expect($text)->toContain('"__overflow__"');
+    file_put_contents($old, str_replace('"__overflow__"', '1e999', $text));
+
+    $this->artisan('docuccino:diff', ['old' => $old, '--format' => 'json'])
+        ->expectsOutputToContain('could not be encoded as JSON')
+        ->assertFailed();
+
+    @unlink($old);
+});
