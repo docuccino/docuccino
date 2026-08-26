@@ -5,14 +5,10 @@ declare(strict_types=1);
 namespace Docuccino\Core\Lint;
 
 /**
- * The one reading of a `lint.*.allow` entry, shared by every lint that has one.
- *
- * A pointer is spelled two ways in front of an author: a finding's message prints the bare RFC 6901
- * pointer (`/components/schemas/Invoice/properties/status/example`), while every `$ref` the emitted
- * document publishes spells the same path as a URI fragment (`#/components/…`). Reaching for the
- * fragment form is the instinct rather than the slip, and a safelist that quietly matched only one of
- * them left a config value doing nothing — which is worse than no config value at all. So the leading
- * `#` comes off both the entry and the subject, and all four combinations land.
+ * The one reading of an `allow` entry, shared by everything that consults one — every lint, and the
+ * recorder's redaction. A pointer reaches a safelist spelled either bare (`/components/…`, the form a
+ * message prints) or as the URI fragment a `$ref` uses (`#/components/…`), so the leading `#` comes
+ * off both the entry and the subject and all four combinations land.
  *
  * @internal
  */
