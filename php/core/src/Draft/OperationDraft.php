@@ -52,9 +52,7 @@ final class OperationDraft
 
     /**
      * The request body's own `description` ({@see declareRequestBodyDescription()}), merged into the
-     * winning body at {@see freeze()} for the reason stated on {@see $requestExamples}: prose about how
-     * to fill a body in adds to it, it never disagrees with it, so contesting the whole guarded field
-     * would lose the body to keep a sentence.
+     * winning body at {@see freeze()} for the reason stated on {@see $requestExamples}.
      */
     private ?string $requestDescription = null;
 
@@ -212,10 +210,8 @@ final class OperationDraft
     }
 
     /**
-     * Set the request body's `description`: prose for whoever fills this operation's body in, as
-     * opposed to the schema's own description, which says what the type IS. The FIRST call stands, so a
-     * caller reading declarations most-specific-first gets the most specific one — the same rule a
-     * declared example's name gets.
+     * Set the request body's own `description` ({@see $requestDescription}). The FIRST call stands, so a
+     * caller reading declarations most-specific-first gets the most specific one.
      */
     public function declareRequestBodyDescription(string $description): void
     {
@@ -284,10 +280,8 @@ final class OperationDraft
     }
 
     /**
-     * The request body with a declared `description` on it. A body shaped like nothing this recognises
-     * comes back untouched, and the declaration wins where one is already there: nothing in the build
-     * derives request-body prose, so anything sitting in that member came from a producer the author
-     * has now spoken over.
+     * The request body with a declared `description` on it, untouched where the body is shaped like
+     * nothing this recognises. Nothing in the build derives request-body prose, so the declaration wins.
      */
     private function withRequestDescription(mixed $body): mixed
     {

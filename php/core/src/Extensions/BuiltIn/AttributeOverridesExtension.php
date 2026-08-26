@@ -98,11 +98,9 @@ final class AttributeOverridesExtension implements OperationExtension
             $operation->setSummary($summary->text, $attribute);
         }
 
-        // Two slots, so `first()` is not enough: the declarations are partitioned by `request:` and each
-        // slot takes the most specific of its own kind, rather than one kind hiding the other.
         [$describedOperation, $describedRequest] = $this->partitionDescriptions($context);
 
-        $description = $describedOperation === null ? null : $this->describedText($context, $describedOperation, '#[Description]');
+        $description = $describedOperation === null ? null : $this->describedText($context, $describedOperation);
 
         $this->applyDescriptionAndReason($operation, $description, $attributeReason ?? $docblockReason, $attributeReason, $attribute);
 
@@ -141,29 +139,37 @@ final class AttributeOverridesExtension implements OperationExtension
      * different fact from the schema's own description, which a class-level declaration writes — that
      * one says what the type IS, and every operation sharing the component reads it.
      *
-     * A declaration with no body to describe is reported rather than dropped: it is the same mistake as
-     * a `#[Description]` that says nothing certain, and it lands in the same channel.
+     * A declaration written on the ACTION with no body to describe is reported rather than dropped: it
+     * is the same mistake as a `#[Description]` that says nothing certain, and lands in the same channel.
      */
     private function applyRequestDescription(OperationDraft $operation, RouteContext $context, Description $described): void
     {
-        $text = $this->describedText($context, $described, '#[Description(request: true)]');
+        $text = $this->describedText($context, $described);
         if ($text === null) {
             return;
         }
 
-        if (! is_array($operation->resolvedField('requestBody'))) {
-            $this->report(
-                $context,
-                Severity::Warning,
-                'attribute.description-unusable',
-                'A #[Description(request: true)] here describes a request body, and this operation documents none; the description was not documented.',
-                'Document the body first — validation rules, a request DTO or #[BodyParameter] — or drop `request:` to describe the operation itself.',
-            );
+        // Every requestBody producer runs in OperationPhase::Request, ahead of this extension's
+        // Overrides phase, so by now the field is settled whatever DefaultExtensions::all() lists first.
+        if (is_array($operation->resolvedField('requestBody'))) {
+            $operation->declareRequestBodyDescription($text);
 
             return;
         }
 
-        $operation->declareRequestBodyDescription($text);
+        // Reported only where the author is standing: one declaration on a CONTROLLER covers every
+        // action under it, so a report per bodyless action fires where there is nothing to do.
+        if (! in_array($described, $context->attributes->direct(Description::class), true)) {
+            return;
+        }
+
+        $this->report(
+            $context,
+            Severity::Warning,
+            'attribute.description-unusable',
+            'A #[Description(request: true)] here describes a request body, and this operation documents none; the description was not documented.',
+            'Document the body first — validation rules, a request DTO or #[BodyParameter] — or drop `request:` to describe the operation itself.',
+        );
     }
 
     /**
@@ -190,15 +196,15 @@ final class AttributeOverridesExtension implements OperationExtension
     /**
      * The prose one `#[Description]` states: inline `text:`, or the markdown file `file:` names. Exactly
      * one of them says something, so a declaration carrying both or neither is diagnosed and states
-     * nothing — picking one would document prose the author never chose. `$declaration` is how the
-     * message spells the declaration, since an action may carry one of these per slot.
+     * nothing — picking one would document prose the author never chose. The report names which slot
+     * the declaration was aimed at, since an action may carry one of each.
      */
-    private function describedText(RouteContext $context, Description $description, string $declaration): ?string
+    private function describedText(RouteContext $context, Description $description): ?string
     {
         if (($description->text === null) === ($description->file === null)) {
             $this->report($context, Severity::Warning, 'attribute.description-unusable', sprintf(
                 'A %s here carries %s; the description was not documented.',
-                $declaration,
+                $description->request ? '#[Description(request: true)]' : '#[Description]',
                 $description->text === null ? 'neither `text:` nor `file:`' : 'both `text:` and `file:`',
             ), 'One of `text:` (inline prose) or `file:` (a markdown file under the application root) per declaration.');
 

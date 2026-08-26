@@ -13,6 +13,7 @@ use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\ConsumerProseController;
 use Workbench\App\Http\Controllers\DescribedController;
 use Workbench\App\Http\Controllers\DescriptionEscapeController;
+use Workbench\App\Http\Controllers\SharedBodyProseController;
 
 /**
  * The prose an API consumer reads, and how an author says it without rewriting the docblock the next
@@ -324,11 +325,13 @@ it('loads an in-tree #[Description(file:, request: true)] into the body descript
     $absolute = base_path('docuccino-body-prose.md');
     file_put_contents($absolute, "Fill in every field.\n\nThe widget is replaced wholesale.\n");
 
-    $result = describeRoutes(function (Router $router): void {
-        $router->post('api/described-body-file', [ConsumerProseController::class, 'describedBodyFromFile']);
-    });
-
-    @unlink($absolute);
+    try {
+        $result = describeRoutes(function (Router $router): void {
+            $router->post('api/described-body-file', [ConsumerProseController::class, 'describedBodyFromFile']);
+        });
+    } finally {
+        @unlink($absolute);
+    }
 
     expect($result['paths']['/api/described-body-file']['post']['requestBody']['description'])
         ->toBe("Fill in every field.\n\nThe widget is replaced wholesale.");
@@ -377,4 +380,18 @@ it('documents nothing and says which declaration when the request form names bot
     expect($result['paths']['/api/contradictory-body']['post']['requestBody']['description'] ?? null)->toBeNull()
         ->and($unusable)->not->toBeEmpty()
         ->and($unusable[0]->message)->toContain('A #[Description(request: true)] here carries both `text:` and `file:`');
+});
+
+// A declaration on the CONTROLLER covers every action under it, so it lands on the bodies that exist —
+// and the actions with no body are not each told about a mistake they are not the place to fix.
+it('spreads a controller-level body description over the actions that have a body', function (): void {
+    $result = describeRoutes(function (Router $router): void {
+        $router->post('api/shared-body', [SharedBodyProseController::class, 'stored']);
+        $router->post('api/shared-bodyless', [SharedBodyProseController::class, 'bodyless']);
+    });
+
+    expect($result['paths']['/api/shared-body']['post']['requestBody']['description'])
+        ->toBe('Send the whole widget; every action here replaces rather than merges.')
+        ->and($result['paths']['/api/shared-bodyless']['post'])->not->toHaveKey('requestBody')
+        ->and(diagnosticsCoded($result['diagnostics'], 'attribute.description-unusable'))->toBe([]);
 });

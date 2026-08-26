@@ -682,7 +682,9 @@ Data class, or a body you assembled yourself out of
 nothing for it to describe — a `GET` is the common case, where validation rules become
 [query parameters](#query-parameters) instead — and that is reported as
 [`attribute.description-unusable`](/laravel/reference/diagnostics/#attributes) rather than quietly
-re-pointed at the operation.
+re-pointed at the operation. That report is for a declaration on the *action*: put one on the
+controller to cover every action in it and the ones with a body take it, while the ones without stay
+silent — none of them is where you would go to change it.
 
 ### Prose from the DTO itself
 
