@@ -37,28 +37,92 @@ it('moves when the structure moves', function (mixed $first, mixed $second): voi
 ]);
 
 /**
+ * The key texts each generated kind claims: a spread of uuid versions including the nil one, and both
+ * cases of each, since the patterns are case-insensitive. At least two apiece, or "these read as one
+ * kind" has nothing to say.
+ *
+ * @return array<string, list<string>>
+ */
+function generatedKeyTexts(): array
+{
+    return [
+        '<uuid>' => [
+            'f47ac10b-58cc-1372-a567-0e02b2c3d479',
+            '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+            '0193a1f0-0000-7000-8000-000000000000',
+            '0193a1f0-ffff-7fff-bfff-ffffffffffff',
+            '00000000-0000-0000-0000-000000000000',
+            '3FA85F64-5717-4562-B3FC-2C963F66AFA6',
+        ],
+        '<ulid>' => [
+            '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+            '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+            '01arz3ndektsv4rrffq69g5fav',
+        ],
+    ];
+}
+
+/**
+ * Keys someone chose, including the near misses: a uuid a digit short, a 26-character phrase, and two
+ * hex strings of the lengths a real key comes in — an md5 digest and a mongo object id — since hex is
+ * what the ulid pattern reads case-insensitively and length is the whole of what turns them away.
+ *
+ * @return list<string>
+ */
+function chosenKeyTexts(): array
+{
+    return [
+        'core-details',
+        'contact-details',
+        'en-GB',
+        '1',
+        '3fa85f64-5717-4562-b3fc-2c963f66afa',
+        'lorem-ipsum-dolor-sit-amet',
+        '5d41402abc4b2a76b9719d911017c592',
+        '507f1f77bcf86cd799439011',
+    ];
+}
+
+/**
  * A map keyed by generated ids can never settle, because the keys move on every run while the structure
  * does not — and an API's open-map properties run into the dozens. So the KIND of a generated key is
  * what reaches the fingerprint; a key someone chose still reaches it as itself.
  */
-it('reads a generated key as its kind and a chosen key as its text', function (mixed $first, mixed $second, bool $sameShape): void {
-    expect(ResponseShape::of($first) === ResponseShape::of($second))->toBe($sameShape);
-})->with([
-    'uuid v1' => [['f47ac10b-58cc-1372-a567-0e02b2c3d479' => 1], ['6ba7b810-9dad-11d1-80b4-00c04fd430c8' => 1], true],
-    'uuid v4' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['c0ffee00-dead-4bee-8000-000000000001' => 1], true],
-    'uuid v7' => [['0193a1f0-0000-7000-8000-000000000000' => 1], ['0193a1f0-ffff-7fff-bfff-ffffffffffff' => 1], true],
-    'the nil uuid' => [['00000000-0000-0000-0000-000000000000' => 1], ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], true],
-    'an upper-case uuid' => [['3FA85F64-5717-4562-B3FC-2C963F66AFA6' => 1], ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], true],
-    'a ulid' => [['01ARZ3NDEKTSV4RRFFQ69G5FAV' => 1], ['01BX5ZZKBKACTAV9WEVGEMMVRZ' => 1], true],
-    'a lower-case ulid' => [['01arz3ndektsv4rrffq69g5fav' => 1], ['01BX5ZZKBKACTAV9WEVGEMMVRZ' => 1], true],
-    'a slug' => [['core-details' => 1], ['contact-details' => 1], false],
-    'a locale code' => [['en-GB' => 1], ['fr-FR' => 1], false],
-    'a numeric key' => [['1' => 1], ['2' => 1], false],
-    'a uuid missing a digit' => [['3fa85f64-5717-4562-b3fc-2c963f66afa' => 1], ['c0ffee00-dead-4bee-8000-00000000000' => 1], false],
-    'a 26-character phrase is not a ulid' => [['lorem-ipsum-dolor-sit-amet' => 1], ['primary-billing-address-uk' => 1], false],
-    'a kind change is a contract change' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['core-details' => 1], false],
-    'one generated kind is not another' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['01ARZ3NDEKTSV4RRFFQ69G5FAV' => 1], false],
-]);
+it('reads every key of one generated kind alike, and nothing else as that kind', function (array $texts): void {
+    $shapeOf = static fn (string $key): string => ResponseShape::of([$key => 1]);
+
+    $foreign = array_values(array_diff(
+        array_merge(chosenKeyTexts(), ...array_values(generatedKeyTexts())),
+        $texts,
+    ));
+
+    expect(count($texts))->toBeGreaterThanOrEqual(2)
+        ->and(array_unique(array_map($shapeOf, $texts)))->toHaveCount(1)
+        ->and(array_intersect(array_map($shapeOf, $texts), array_map($shapeOf, $foreign)))->toBeEmpty();
+})->with(array_map(static fn (array $texts): array => [$texts], generatedKeyTexts()));
+
+it('reads a key someone chose as the key itself', function (): void {
+    $chosen = chosenKeyTexts();
+    $shapes = array_map(static fn (string $key): string => ResponseShape::of([$key => 1]), $chosen);
+
+    expect(count($chosen))->toBeGreaterThanOrEqual(5)
+        ->and(array_unique($shapes))->toHaveCount(count($chosen));
+});
+
+/**
+ * The dataset above only proves the rows it lists, and the kind table is the thing that must not gain an
+ * entry quietly: a `<ksuid>` added with no row would collapse a whole class of keys with the suite green.
+ * So the rows are held to the source of truth in both directions.
+ */
+it('covers every generated key kind there is', function (): void {
+    $listed = array_keys(generatedKeyTexts());
+    $actual = ResponseShape::generatedKeyKinds();
+    sort($listed);
+    sort($actual);
+
+    expect(count($actual))->toBeGreaterThanOrEqual(2)
+        ->and($listed)->toBe($actual);
+});
 
 it('keeps how many ids a map holds while letting go of which', function (): void {
     $keyedBy = static fn (array $ids): array => ['values' => ['core-details' => array_fill_keys($ids, 's')]];

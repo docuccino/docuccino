@@ -18,10 +18,7 @@ use stdClass;
  * That promise covers a generated id wherever it sits, and an id-keyed map puts one in the KEY: a map
  * under `0193a1f0-…` holds one kind of thing, it does not have a member of that name. Such a key
  * therefore contributes its KIND, while how many of them there are stays in the fingerprint — so a key
- * that changes kind and a map that grows a member both still move it. There is no option to turn that
- * off: a generated id is its own discriminator (the keys people choose are slugs and locale codes,
- * neither of which is id-shaped), and this class sees a recorded body and nothing else, so there is no
- * `additionalProperties` beside it to gate on even if one wanted one.
+ * that changes kind and a map that grows a member both still move it.
  *
  * @internal
  */
@@ -61,6 +58,17 @@ final class ResponseShape
         return count($paths);
     }
 
+    /**
+     * Every kind marker a generated key can contribute, so a guard reads the set rather than a second
+     * copy of it. {@see GENERATED_KEY_KINDS}
+     *
+     * @return list<string>
+     */
+    public static function generatedKeyKinds(): array
+    {
+        return array_keys(self::GENERATED_KEY_KINDS);
+    }
+
     private static function describe(mixed $value, int $depth): string
     {
         // An object stays an object even when its members happen to be `0`, `1`, `2` — the map branch
@@ -88,9 +96,7 @@ final class ResponseShape
                 return '['.implode('|', $shapes).']';
             }
 
-            // The only place key text is read, and a deliberate exception to the rule above that the
-            // branch never looks at keys: a generated id is an identity rather than a name, so it
-            // stands in for its kind. Members are LISTED, not deduplicated, so nine ids stay nine.
+            // Members are LISTED, not deduplicated, so nine ids stay nine.
             $members = [];
             foreach ($value as $key => $item) {
                 $members[] = self::keyKind((string) $key).':'.self::describe($item, $depth + 1);
@@ -137,6 +143,8 @@ final class ResponseShape
                 return;
             }
 
+            // Key text reaches a path as it is; only describe() reads a generated key as its kind, so
+            // an id-keyed map still counts each id as a place of its own.
             $list = ! $map && array_is_list($value);
             foreach ($value as $key => $item) {
                 self::collect($item, $path.'/'.($list ? '*' : (string) $key), $paths, $depth + 1);
