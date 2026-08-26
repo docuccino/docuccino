@@ -207,6 +207,45 @@ it('lets a later transformer drop a keyword an earlier one left', function (): v
         ->and($result->diagnostics)->toBe([]);
 });
 
+it('refuses a guessing rule the keyword a later one withdrew', function (): void {
+    // A rule that drops a keyword has decided no keyword describes the value — for the field, not just for
+    // its own moment in the chain. So a coarser rule filling the gap back in is told no, while a rule
+    // STATING one on the author's behalf still gets to.
+    $transformer = new class implements RuleTransformer
+    {
+        public function supports(ValidationRule $rule): bool
+        {
+            return in_array($rule->name, $this->handledRuleNames(), true);
+        }
+
+        public function handledRuleNames(): array
+        {
+            return ['formatted', 'withdraws', 'guesses', 'states'];
+        }
+
+        public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
+        {
+            match ($rule->name) {
+                'formatted' => $field->set('format', 'date'),
+                'withdraws' => $field->remove('format'),
+                'guesses' => $field->mayClaim('format') ? $field->set('format', 'date') : null,
+                default => $field->set('format', 'iban'),
+            };
+        }
+    };
+
+    $driver = new DefaultValidationRulesToSchema([$transformer, ...fakeTransformers()]);
+    $result = $driver->convert(fakeRuleSet([
+        'withdrawn' => ['str', 'formatted', 'withdraws', 'guesses'],
+        'untouched' => ['str', 'guesses'],
+        'stated' => ['str', 'formatted', 'withdraws', 'states'],
+    ]), ruleContext());
+
+    expect($result->schema['properties']['withdrawn'])->toBe(['type' => 'string'])
+        ->and($result->schema['properties']['untouched'])->toBe(['type' => 'string', 'format' => 'date', 'example' => '2024-01-01'])
+        ->and($result->schema['properties']['stated'])->toBe(['type' => 'string', 'format' => 'iban']);
+});
+
 it('returns an empty schema for an empty rule set', function (): void {
     $result = (new DefaultValidationRulesToSchema(fakeTransformers()))->convert(new RuleSet, ruleContext());
 
