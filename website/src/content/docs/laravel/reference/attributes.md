@@ -500,8 +500,24 @@ on addressing whoever maintains the class.
 public string $tenant;
 ```
 
-Inline `text:` only. A schema mapper has no application root to resolve a path against, so a `file:`
-declaration on a property is reported as
+**On a DTO, model or resource class** it describes the schema that class publishes — the component a
+request body or a response `$ref`s, on both sides of the document:
+
+```php
+#[Description(text: 'A single retention policy, as the billing system holds it.')]
+final class RetentionPolicyData extends Data { /* … */ }
+```
+
+The class *docblock* is deliberately not read for this. A docblock is where you explain a class to
+whoever maintains it next, so it tends to name properties, attributes and internals that the consumer
+of your document cannot see — and a description that misinforms costs a reader more than an absent one.
+The attribute says, unambiguously, "publish this sentence". Your docblock stays yours.
+
+A parent's declaration describes the parent, so a class inherits none of it: a shared base DTO doesn't
+put one description on every shape beneath it.
+
+Inline `text:` only, on a property or a class. A schema mapper has no application root to resolve a
+path against, so a `file:` declaration on either is reported as
 [`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
 
 ### `#[Group]`

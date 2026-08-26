@@ -22,6 +22,7 @@ use Spatie\LaravelData\Data;
  * The docblock text here is the source of truth the stubbed {@see ClassMetadata}
  * mirrors; only ever reflected.
  */
+#[Description(text: 'Everything the submission form captured, as one payload.')]
 final class DescribedInputData extends Data
 {
     public function __construct(

@@ -7,6 +7,7 @@ namespace Docuccino\Core\Extensions\Validation;
 use Docuccino\Attributes\BodyParameter;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Schema\ClassAnnotations;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Schema\DocumentedDescriptions;
 use Docuccino\Core\Extensions\Schema\DocumentedExamples;
@@ -74,6 +75,9 @@ final class RecoveredRequest
      * docblock layer (a property's summary and `@example`), then the attribute layer over it, then
      * whatever `#[Mock]` the class states.
      *
+     * A class that describes itself with `#[Description]` describes this body too, the way it describes
+     * any component the hoist lifts — this one is assembled here rather than there, so it is written here.
+     *
      * A validated field is named by its RULES, not by the property behind it, so none of this arrives
      * with the schema — it has to be matched back on afterwards, which is the whole reason a docblock
      * written on an input DTO used to reach the response side and not the request side. The order is
@@ -100,7 +104,8 @@ final class RecoveredRequest
         $metadata = $context->engine->classMetadata(new ClassRef($sourceClass));
         $context->recordDependencyFiles($metadata->dependencyFiles);
 
-        $schema = DocumentedDescriptions::applyTo($result->schema, $metadata->properties, $keys);
+        $schema = ClassAnnotations::applyTo($context->converter(), $result->schema, $sourceClass);
+        $schema = DocumentedDescriptions::applyTo($schema, $metadata->properties, $keys);
         $schema = DocumentedExamples::applyTo($context->converter(), $schema, $sourceClass, $metadata->properties, $keys);
 
         [$schema, $diagnostics] = PropertyAnnotations::apply($schema, $sourceClass, $keys);
