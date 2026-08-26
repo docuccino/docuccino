@@ -350,6 +350,40 @@ it('attaches a #[Mock] hint to the real recovered shape, following a #[MapName] 
         ->and($component['properties']['forms'])->not->toHaveKey('x-docuccino');
 })->group('fixture');
 
+it('reads a date property\'s wire shape off the type the real engine recovered', function (): void {
+    // The request-side twin of the response assertion below. Everything the date ladder decides turns on
+    // recognising a DateTimeInterface inside whatever union the ENGINE hands back — `?CarbonImmutable`, and
+    // `Optional|CarbonImmutable|null` with the marker stripped — and that recognition is the half a
+    // hand-built type cannot prove. The rules say `nullable|date`, whose one word covers everything
+    // non-relative `strtotime` parses; the property says which of those the app actually serialises.
+    $metadata = realMetadataAs('App\Data\TimelineData', TimelineData::class);
+    $context = schemaConverter();
+    $schema = validationSchema(
+        (new DataValidationRules(dateFormat: 'Y-m-d\TH:i:sP'))
+            ->build(TimelineData::class, $metadata, new NullTypeEngine, null, $context),
+        $context,
+    );
+
+    $properties = $schema['properties'];
+
+    // The reported shape: a `#[Date]` rule over a partial-update union publishes the type's format, not
+    // the rule's coarser reading of it — and the same format the response side publishes.
+    // Prose is matched on later, by RecoveredRequest — this harness stops at the rule set, so the shape
+    // asserted here is exactly what the ladder decided and nothing else.
+    expect($properties['expectedUpdatedAt'])->toBe([
+        'type' => ['string', 'null'],
+        'format' => 'date-time',
+        'example' => '2024-01-01T00:00:00+00:00',
+    ])
+        // A nullable date-time with no date rule at all: the request used to say nothing here.
+        ->and($properties['publishedAt']['type'])->toBe(['string', 'null'])
+        ->and($properties['publishedAt']['format'])->toBe('date-time')
+        // The `format: 'U'` cast is an integer on both sides, and the note says so once.
+        ->and($properties['expiresAt']['type'])->toBe(['integer', 'null'])
+        ->and($properties['expiresAt'])->not->toHaveKey('format')
+        ->and($properties['createdAt']['format'])->toBe('date-time');
+})->group('fixture');
+
 it('keeps the null on a nullable timestamp the real engine reports as a union', function (): void {
     // The absence this fills: no fixture Data class had a NULLABLE date-time, so the date-time special
     // case answering for the whole union — and dropping the null arm — shipped with the suite green.
