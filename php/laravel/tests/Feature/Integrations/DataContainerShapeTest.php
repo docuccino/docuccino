@@ -241,9 +241,15 @@ it('lets an override that states a shape of its own replace the recovered map ou
     'array + list' => [['settings' => ['array', 'list']], ['type' => 'array']],
     'array + file' => [['settings' => ['array', 'file']], ['type' => 'string', 'format' => 'binary']],
     'array + image' => [['settings' => ['array', 'image']], ['type' => 'string', 'format' => 'binary', 'description' => 'An image file.']],
-    // No type word at all: the override dropped the type the way it drops one for a scalar property too.
-    'no type rule' => [['settings' => ['sometimes']], []],
 ]);
+
+it('keeps a recovered map an object when a rules() override names no type at all', function (): void {
+    // An override stating nothing but a presence word contradicts nothing, so the recovered
+    // `array<string, V>` is still all the information there is — the reading the class docblock gives
+    // both carriers, and the opposite of the cells above, where the override named a shape of its own.
+    expect(containerProperty('settings', new MapT(ScalarT::string(), ScalarT::int()), override: containerOverride(['settings' => ['sometimes']])))
+        ->toBe(['type' => 'object', 'additionalProperties' => ['type' => 'integer']]);
+});
 
 it('leaves a recovered list and shape alone under the same override', function (string $property, DType $type, array $expected): void {
     // The other half of the asymmetry: these state their structure on child KEYS, which an override
@@ -350,6 +356,27 @@ it('lets a `.*` override restate a map\'s values without restating its keys', fu
         'settings.*' => ['string'],
     ])))->toBe(['type' => 'object', 'additionalProperties' => ['type' => 'string']]);
 });
+
+it('reads what the value schema says before trading a `.*` override\'s array word', function (DType $type, array $names, array $expected): void {
+    // The plain case is the matrix cell above. These are the two edges of the same test: a value schema
+    // saying `object` in a type LIST still says it, and a `.*` override stating more than `array` has
+    // replaced the value shape, so there is nothing of the type's left to trade.
+    expect(containerProperty('theme', $type, override: containerOverride([
+        'theme' => ['array'],
+        'theme.*' => $names,
+    ])))->toBe($expected);
+})->with([
+    'nullable object values' => [
+        new MapT(ScalarT::string(), UnionT::of([new MapT(ScalarT::string(), new UnknownT('mixed')), new NullT])),
+        ['array'],
+        ['type' => 'object', 'additionalProperties' => ['type' => 'object']],
+    ],
+    'array + list' => [
+        mapOfMaps(),
+        ['array', 'list'],
+        ['type' => 'object', 'additionalProperties' => ['type' => 'array']],
+    ],
+]);
 
 it('keeps a map and a list side by side under one rules() override', function (): void {
     // Both halves in one override, which is how one arrives: the map's container survives a restated

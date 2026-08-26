@@ -19,12 +19,15 @@ final class FieldPaths
      * Whether any of these keys is a named (non-`*`) child of the field — `address.city`, or the
      * `coords.0` an int-keyed shape writes, but never `tags.*` or `items.*.id`.
      *
-     * @param  list<string>  $keys
+     * @param  list<array-key>  $keys  as `array_keys()` hands them over
      */
     public static function hasNamedChild(string $field, array $keys): bool
     {
         $prefix = $field.'.';
-        foreach ($keys as $other) {
+        foreach ($keys as $key) {
+            // A purely numeric field key reaches PHP as an INT array key, so cast before reading it as
+            // a path — the same reason FieldNode casts its property names.
+            $other = (string) $key;
             if ($other !== $field && str_starts_with($other, $prefix) && ! str_starts_with(substr($other, strlen($prefix)), '*')) {
                 return true;
             }

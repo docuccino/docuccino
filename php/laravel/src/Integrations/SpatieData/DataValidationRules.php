@@ -56,6 +56,11 @@ use Docuccino\Laravel\Integrations\Validation\Transformers\DateWireRuleTransform
  * field key, REPLACING the inferred set rather than merging — unless the class carries
  * `#[MergeValidationRules]`, which makes the same resolver append instead. {@see DataRequestExtension}
  * recovers the override via {@see RulesFromClass} and passes it to {@see build()}.
+ *
+ * Both carriers state a fact about the DECLARED TYPE rather than about the rules, so an override that
+ * restates only the vocabulary's coarse word — `array`, `date` — or names no type at all has not replaced
+ * one, and it is re-attached ({@see withMapCarrier()}, {@see withDateCarrier()}). An override stating a
+ * shape of its own has.
  */
 final class DataValidationRules
 {
@@ -134,7 +139,7 @@ final class DataValidationRules
         $this->begin($engine, $schema, $validation);
         $inferred = $this->fieldsFor($fqcn, $metadata, '', [$fqcn]);
         if ($overrides === null) {
-            return new RuleSet($inferred);
+            return new RuleSet(self::withObjectValues($inferred));
         }
 
         // Overwrite, not merge: the override replaces the inferred set at its key, and may name fields
@@ -158,9 +163,9 @@ final class DataValidationRules
 
     /**
      * A replaced field's rules, with the recovered map's `additional_properties` carrier put back when the
-     * override only restated `array` — one word for every array shape, per the class docblock, so it says
-     * strictly less than the recovered `array<string, V>` did. Left alone when the override states the
-     * shape itself: another type word, or a named child, whose keys say more than open values do.
+     * override said no more about the container than the class docblock's rule allows. Left alone when the
+     * override states the shape itself: another type word, or a named child, whose keys say more than open
+     * values do.
      *
      * A `.*` child is NOT such a statement. Laravel applies a `field.*` rule to every value whatever the
      * keys are, so it carries no information about key type and cannot decide list-vs-map; it constrains
@@ -175,10 +180,12 @@ final class DataValidationRules
     {
         $carrier = self::carrier($inferred, 'additional_properties');
 
-        // `array` has to be the ONLY type the override states: `list` narrows it to a JSON array, and
-        // anything else has replaced the shape outright. An `additional_properties` of its own needs no
-        // second.
-        if ($carrier === null || self::statedTypes($rules) !== ['array'] || FieldPaths::hasNamedChild($field, $siblings)) {
+        // `array` has to be the only type word the override states, or none at all — an override stating
+        // nothing contradicts nothing, so the recovered map is still all the information there is. `list`
+        // narrows `array` to a JSON array and anything else has replaced the shape outright; an
+        // `additional_properties` of its own needs no second.
+        $stated = self::statedTypes($rules);
+        if ($carrier === null || ($stated !== [] && $stated !== ['array']) || FieldPaths::hasNamedChild($field, $siblings)) {
             return $rules;
         }
 
@@ -202,7 +209,7 @@ final class DataValidationRules
                 continue;
             }
 
-            $fields[$wildcard] = self::asObject($fields[$wildcard]);
+            $fields[$wildcard] = self::withObjectWord($fields[$wildcard]);
         }
 
         return $fields;
@@ -228,17 +235,15 @@ final class DataValidationRules
     }
 
     /**
-     * The rules with `array` traded for `object`, when `array` is the ONLY container word they state —
-     * the same test {@see withMapCarrier()} applies to a field's own rules.
+     * The rules with `array` traded for `object`, when `array` is the ONLY container word they state — a
+     * rewrite rather than an addition, so the word the size rules read stays where the coarse one was.
      *
      * @param  list<ValidationRule>  $rules
      * @return list<ValidationRule>
      */
-    private static function asObject(array $rules): array
+    private static function withObjectWord(array $rules): array
     {
-        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
-        $stated = array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
-        if ($stated !== ['array']) {
+        if (self::statedTypes($rules) !== ['array']) {
             return $rules;
         }
 
@@ -267,10 +272,9 @@ final class DataValidationRules
 
     /**
      * A replaced field's rules with the recovered `date_wire` carrier put back when the override left the
-     * wire format to be worked out. That carrier states a fact about the property's TYPE rather than about
-     * its rules, so an override restating `date` — one word for everything non-relative `strtotime`
-     * parses, and so strictly less than the declared type said — or naming no type at all has not
-     * restated it. An override carrying a `date_format`, or a type that is not a date string, has.
+     * wire format to be worked out — the class docblock's rule again: restating `date`, one word for
+     * everything non-relative `strtotime` parses, or naming no type at all, has not replaced it. An
+     * override carrying a `date_format`, or a type that is not a date string, has.
      *
      * @param  list<ValidationRule>  $rules  the override's rules, now at the key
      * @param  list<ValidationRule>  $inferred  what property inference had put there
@@ -279,8 +283,7 @@ final class DataValidationRules
     private static function withDateCarrier(array $rules, array $inferred): array
     {
         $carrier = self::carrier($inferred, 'date_wire');
-        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
-        if ($carrier === null || array_intersect(['date_format', 'date_wire'], $named) !== []) {
+        if ($carrier === null || array_intersect(['date_format', 'date_wire'], self::ruleNames($rules)) !== []) {
             return $rules;
         }
 
@@ -316,9 +319,16 @@ final class DataValidationRules
      */
     private static function statedTypes(array $rules): array
     {
-        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
+        return array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], self::ruleNames($rules)));
+    }
 
-        return array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
+    /**
+     * @param  list<ValidationRule>  $rules
+     * @return list<string>
+     */
+    private static function ruleNames(array $rules): array
+    {
+        return array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
     }
 
     /** Resets the per-build state every entry point above starts from. */

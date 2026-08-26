@@ -59,6 +59,27 @@ it('replaces the array rule with `object` on a field a named child proves is an 
     ]);
 })->with(['array', 'list']);
 
+it('leaves one object word on a field that stated the array word twice', function (): void {
+    // A real pair: recovery synthesises `array` and an override restates `list`. Two `object` words
+    // would be the same rule applied twice.
+    expect(normalizedNames([
+        'metadata' => ['array', 'list'],
+        'metadata.retention' => ['string'],
+    ]))->toBe([
+        'metadata' => ['object'],
+        'metadata.retention' => ['string'],
+    ]);
+});
+
+it('reads a purely numeric field key as the path it is', function (): void {
+    // Such a key is an INT in a PHP array, and every path read here wants a string — uncast, the
+    // normalizer raises a TypeError under strict_types rather than answering at all.
+    expect(normalizedNames(['0' => ['array'], '0.mode' => ['string']]))
+        ->toBe(['0' => ['object'], '0.mode' => ['string']])
+        ->and(normalizedNames(['0' => ['prohibited'], '0.mode' => ['string'], 'name' => ['string']]))
+        ->toBe(['name' => ['string']]);
+});
+
 it('keeps the array rule when the only child is a wildcard, which IS an array', function (): void {
     expect(normalizedNames([
         'tags' => ['array'],

@@ -8,6 +8,7 @@ use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Laravel\Integrations\Support\FieldPaths;
+use Docuccino\Laravel\Integrations\Validation\Transformers\SizeRuleTransformer;
 
 /**
  * Makes a recovered field map coherent before the rule chain runs — the two facts only visible ACROSS
@@ -17,9 +18,9 @@ use Docuccino\Laravel\Integrations\Support\FieldPaths;
  * for `object`, because Laravel's `array` covers objects too and `{"type": "array", "properties": …}`
  * validates nothing. Every recovery integration runs it alongside {@see RuleOrdering}.
  *
- * The trade is a rewrite rather than a deletion because the type-aware rules downstream READ the type:
- * a field left with no type word at all takes `min`/`max`/`size` as string-length bounds, which on an
- * object is a bound nothing applies.
+ * The trade is a rewrite rather than a deletion because the type-aware rules downstream READ the type: a
+ * field left with no type word at all takes its size bounds as string lengths, and which of the two
+ * containers it is decides that keyword ({@see SizeRuleTransformer}).
  */
 final class RuleSetNormalizer
 {
@@ -55,7 +56,9 @@ final class RuleSetNormalizer
         foreach ($fields as $field => $fieldRules) {
             foreach ($fieldRules as $rule) {
                 if ($rule->name === 'prohibited') {
-                    $prohibited[] = $field;
+                    // Cast for the same reason {@see FieldPaths::hasNamedChild()} does: a purely numeric
+                    // field key reaches PHP as an INT array key, and a path is read as a string.
+                    $prohibited[] = (string) $field;
                     break;
                 }
             }
@@ -66,13 +69,14 @@ final class RuleSetNormalizer
         }
 
         $out = [];
-        foreach ($fields as $field => $fieldRules) {
+        foreach ($fields as $key => $fieldRules) {
+            $field = (string) $key;
             foreach ($prohibited as $dropped) {
                 if ($field === $dropped || str_starts_with($field, $dropped.'.')) {
                     continue 2;
                 }
             }
-            $out[$field] = $fieldRules;
+            $out[$key] = $fieldRules;
         }
 
         return $out;
