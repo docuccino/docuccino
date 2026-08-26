@@ -36,6 +36,9 @@ final readonly class AnnotatedNode
         public string $undescribed,
         #[Description(text: 'inline', file: 'docs/tenant.md')]
         public string $overdescribed,
+        // `request:` describes one operation's use of a body; a property schema is part of the type.
+        #[Description(text: 'Send every field.', request: true)]
+        public string $requestScoped,
         #[Example]
         public string $valueless,
         #[Example(value: 'a', externalValue: 'https://example.test/a.json')]

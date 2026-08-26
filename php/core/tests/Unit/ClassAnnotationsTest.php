@@ -15,6 +15,7 @@ use Docuccino\Core\Tests\Fixtures\DescribedNode;
 use Docuccino\Core\Tests\Fixtures\FiledNode;
 use Docuccino\Core\Tests\Fixtures\InheritingNode;
 use Docuccino\Core\Tests\Fixtures\OverdescribedNode;
+use Docuccino\Core\Tests\Fixtures\RequestScopedNode;
 use Docuccino\Core\Tests\Fixtures\UndescribedNode;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 
@@ -44,6 +45,7 @@ it('leaves the class untouched where the declaration says nothing publishable', 
     'a #[Description(file:)], with no application root to resolve against' => FiledNode::class,
     'a #[Description] carrying both text and file' => OverdescribedNode::class,
     'a #[Description] carrying neither' => UndescribedNode::class,
+    'a #[Description(request:)], which describes an operation rather than a type' => RequestScopedNode::class,
     'a class carrying no declaration at all' => ClassMetadata::class,
     'a class that cannot be loaded' => 'App\\Nope\\Missing',
 ]);
@@ -64,6 +66,10 @@ it('reports a class declaration it could not publish', function (string $fqcn, s
     'neither half' => [
         UndescribedNode::class,
         'attribute.description-unusable: The #[Description] on '.UndescribedNode::class.' carries neither `text:` nor `file:`; the description was not documented.',
+    ],
+    'request, which is an operation\'s use of the type rather than the type' => [
+        RequestScopedNode::class,
+        'attribute.property-unsupported: The #[Description(request: true)] on '.RequestScopedNode::class.' says something a schema cannot hold — a request body is one operation\'s use of a type, and a schema\'s description describes the type itself; it was ignored.',
     ],
 ]);
 
