@@ -13,6 +13,18 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.10.4
+
+### Features
+
+- **core**: describe a request body per operation ([#253](https://github.com/docuccino/docuccino/pull/253))
+
+### Bug fixes
+
+- **laravel**: keep the declared container through the rule vocabulary ([#252](https://github.com/docuccino/docuccino/pull/252))
+- **laravel**: a date field's format comes from its most specific source ([#251](https://github.com/docuccino/docuccino/pull/251))
+- **core**: read a lint safelist pointer in the spelling every message prints ([#250](https://github.com/docuccino/docuccino/pull/250))
+
 ## v0.10.3
 
 ### Features
