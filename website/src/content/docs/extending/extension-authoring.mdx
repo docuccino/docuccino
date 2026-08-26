@@ -133,13 +133,15 @@ schema:
 | Method | Use it to… |
 | --- | --- |
 | `convert(DType $type): array` | Convert a nested type through the full mapper chain (e.g. a property whose type is itself complex). |
+| `convertMember(DType $member): array` | Convert one member of a composite you're building at the CURRENT position — a union branch, an intersection member. Root-ness carries through, so a root envelope still lands on every arm; `convert()` would descend a position and hide it. |
 | `reference(string $name, array $schema, ?string $schemaId = null): array` | Hoist a named schema into `components.schemas` and get back a `{ "$ref": … }` — the correct way to make a reusable, shareable schema. |
 | `reserveComponentName(string $name, string $schemaId): string` | Reserve the final component name (with collision suffixing) **before** building the body, so a self-referential schema can point its cycle-breaking `$ref` at the exact name. Never fabricate a component name or `#/components/schemas/…` ref yourself. |
 | `dependsOn(string ...$files): void` | Declare the source files your schema was built from, so cached output is invalidated when they change. Pass the file of any class you reflect (an enum or model file too). Empty strings are ignored. |
 | `lowerConfidence(float $confidence): void` | Note that this conversion was a best guess. The lowest value seen wins, and it's recorded in provenance. |
 | `diagnostic(Diagnostic $d): void` | Surface a problem (shown in CLI output, and able to fail CI). |
 | `engine(): TypeEngine` | The inference engine, for `classMetadata()` class expansion. |
-| `depth(): int` | Recursion depth of the running conversion — `1` at a response or parameter root, deeper for each nested type. Read it when your output depends on being at the root. |
+| `atRoot(): bool` | Whether what you're building occupies the response or parameter root. Read it when your output depends on being at the root — a top-level wrapping key, say. A union branch is at the root when its union is, so never spell this as `depth() === 1`. |
+| `depth(): int` | Recursion depth of the running conversion — `1` at a response or parameter root, deeper for each conversion nested inside it, composite members included. For root-ness use `atRoot()`. |
 | `representation(): RepresentationPolicy` | The document's representation policy (enum naming, how nullability is expressed, and so on). |
 
 `convert()` never returns `null` — an unresolvable type comes back as `{}`, so you can always nest it
