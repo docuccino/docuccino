@@ -487,6 +487,11 @@ Name mapping resolves in Spatie's own order: a property-level attribute beats a 
 directional `#[MapInputName]`/`#[MapOutputName]` beats a symmetric `#[MapName]`, and the global
 strategy applies only where no map attribute governs the property.
 
+Whatever a property declares travels with it to the mapped key, per direction. A class mapped
+`snake_case` in and `camelCase` out has two different maps, so a `#[Description]`, an `#[Example]` or a
+`#[Mock]` on `$blueprintId` lands on `blueprint_id` in the request body and on `blueprintId` in the
+response — the property is the same one, and each side publishes it under the name that side uses.
+
 Add examples with [`#[Example]`](/laravel/reference/attributes/#example) on a property, and pin
 anything inference can't determine with the usual [attributes](/laravel/reference/attributes/) — they
 always take precedence.

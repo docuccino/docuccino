@@ -22,6 +22,8 @@ use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DescribedInputController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DescribedInputData;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\MappedInputController;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\MappedInputData;
 
 /**
  * What an input DTO's own declarations publish on the REQUEST side. A request body is recovered from
@@ -116,4 +118,38 @@ it('keeps the rules as the source of what the body accepts', function (): void {
     expect(array_keys($properties))->toBe(['reference', 'blueprint_id', 'token'])
         ->and($properties['reference']['maxLength'])->toBe(64)
         ->and($properties['blueprint_id']['format'])->toBe('uuid');
+});
+
+it('follows a remapped property to the key the request really accepts', function (): void {
+    // `#[MapInputName]` renames a field on the way IN, so the property a declaration sits on and the key
+    // the body publishes are different names. Looked for under the property name, both the docblock and
+    // the attribute land on nothing — silently, since a body that simply lacks a description looks like a
+    // body nobody described.
+    $components = new ComponentRegistry;
+    $metadata = new ClassMetadata(MappedInputData::class, [
+        new PropertyMetadata('blueprintId', ScalarT::string(), 'The blueprint whose field set this is built from.'),
+        new PropertyMetadata('sourceChannel', ScalarT::string()),
+    ]);
+    $context = new RouteContext(
+        route: new RouteDescriptor(['POST'], 'api/mapped-input'),
+        actionRef: new ActionRef('', MappedInputController::class, 'store'),
+        attributes: new AttributeSet,
+        engine: new StubTypeEngine(classes: [MappedInputData::class => $metadata]),
+        document: new DocumentConfig('default', []),
+        components: $components,
+        extensions: new ResolvedExtensions(
+            typeToSchema: DefaultTypeMappers::all(),
+            ruleTransformers: ValidationIntegration::transformers(),
+        ),
+    );
+
+    (new DataRequestExtension)->handle(new OperationDraft, $context);
+
+    /** @var array<string, mixed> $properties */
+    $properties = $components->schemas()['MappedInputData']['properties'];
+
+    // The keys are the mapper's, and each declaration is on the key its own property publishes under.
+    expect(array_keys($properties))->toBe(['blueprint_id', 'source_channel'])
+        ->and($properties['blueprint_id']['description'])->toBe('The blueprint whose field set this is built from.')
+        ->and($properties['source_channel']['description'])->toBe('Where the submission came from.');
 });
