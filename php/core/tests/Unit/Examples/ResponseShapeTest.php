@@ -36,6 +36,69 @@ it('moves when the structure moves', function (mixed $first, mixed $second): voi
     'a bool is not a string' => [['ok' => true], ['ok' => 'true']],
 ]);
 
+/**
+ * A map keyed by generated ids can never settle, because the keys move on every run while the structure
+ * does not — and an API's open-map properties run into the dozens. So the KIND of a generated key is
+ * what reaches the fingerprint; a key someone chose still reaches it as itself.
+ */
+it('reads a generated key as its kind and a chosen key as its text', function (mixed $first, mixed $second, bool $sameShape): void {
+    expect(ResponseShape::of($first) === ResponseShape::of($second))->toBe($sameShape);
+})->with([
+    'uuid v1' => [['f47ac10b-58cc-1372-a567-0e02b2c3d479' => 1], ['6ba7b810-9dad-11d1-80b4-00c04fd430c8' => 1], true],
+    'uuid v4' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['c0ffee00-dead-4bee-8000-000000000001' => 1], true],
+    'uuid v7' => [['0193a1f0-0000-7000-8000-000000000000' => 1], ['0193a1f0-ffff-7fff-bfff-ffffffffffff' => 1], true],
+    'the nil uuid' => [['00000000-0000-0000-0000-000000000000' => 1], ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], true],
+    'an upper-case uuid' => [['3FA85F64-5717-4562-B3FC-2C963F66AFA6' => 1], ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], true],
+    'a ulid' => [['01ARZ3NDEKTSV4RRFFQ69G5FAV' => 1], ['01BX5ZZKBKACTAV9WEVGEMMVRZ' => 1], true],
+    'a lower-case ulid' => [['01arz3ndektsv4rrffq69g5fav' => 1], ['01BX5ZZKBKACTAV9WEVGEMMVRZ' => 1], true],
+    'a slug' => [['core-details' => 1], ['contact-details' => 1], false],
+    'a locale code' => [['en-GB' => 1], ['fr-FR' => 1], false],
+    'a numeric key' => [['1' => 1], ['2' => 1], false],
+    'a uuid missing a digit' => [['3fa85f64-5717-4562-b3fc-2c963f66afa' => 1], ['c0ffee00-dead-4bee-8000-00000000000' => 1], false],
+    'a 26-character phrase is not a ulid' => [['lorem-ipsum-dolor-sit-amet' => 1], ['primary-billing-address-uk' => 1], false],
+    'a kind change is a contract change' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['core-details' => 1], false],
+    'one generated kind is not another' => [['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 1], ['01ARZ3NDEKTSV4RRFFQ69G5FAV' => 1], false],
+]);
+
+it('keeps how many ids a map holds while letting go of which', function (): void {
+    $keyedBy = static fn (array $ids): array => ['values' => ['core-details' => array_fill_keys($ids, 's')]];
+
+    $first = $keyedBy([
+        '0193a1f0-0000-7000-8000-000000000001', '0193a1f0-0000-7000-8000-000000000002',
+        '0193a1f0-0000-7000-8000-000000000003',
+    ]);
+    $second = $keyedBy([
+        '3fa85f64-5717-4562-b3fc-2c963f66afa6', 'c0ffee00-dead-4bee-8000-000000000001',
+        'f47ac10b-58cc-1372-a567-0e02b2c3d479',
+    ]);
+    $grown = $keyedBy([
+        '3fa85f64-5717-4562-b3fc-2c963f66afa6', 'c0ffee00-dead-4bee-8000-000000000001',
+        'f47ac10b-58cc-1372-a567-0e02b2c3d479', '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    ]);
+
+    expect(ResponseShape::of($first))->toBe(ResponseShape::of($second))
+        ->and(ResponseShape::of($first))->not->toBe(ResponseShape::of($grown))
+        ->and(ResponseShape::of($first))->not->toBe(ResponseShape::of(['values' => ['core-details' => (object) []]]));
+});
+
+it('collapses generated keys at any depth, and only the keys that are generated', function (): void {
+    $deep = static fn (string $id): array => ['data' => [['attributes' => ['translations' => [$id => ['title' => 's']]]]]];
+
+    expect(ResponseShape::of($deep('0193a1f0-0000-7000-8000-000000000001')))
+        ->toBe(ResponseShape::of($deep('c0ffee00-dead-4bee-8000-000000000001')))
+        ->and(ResponseShape::of($deep('0193a1f0-0000-7000-8000-000000000001')))
+        ->not->toBe(ResponseShape::of($deep('en-GB')));
+});
+
+it('reads the keys of an object the same way it reads the keys of a map', function (): void {
+    $first = (object) ['values' => (object) ['core-details' => (object) ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 's']]];
+    $second = (object) ['values' => (object) ['core-details' => (object) ['c0ffee00-dead-4bee-8000-000000000001' => 's']]];
+    $renamed = (object) ['values' => (object) ['other-details' => (object) ['3fa85f64-5717-4562-b3fc-2c963f66afa6' => 's']]];
+
+    expect(ResponseShape::of($first))->toBe(ResponseShape::of($second))
+        ->and(ResponseShape::of($first))->not->toBe(ResponseShape::of($renamed));
+});
+
 it('counts the places a body actually fills in', function (mixed $body, int $expected): void {
     expect(ResponseShape::populatedPaths($body))->toBe($expected);
 })->with([
@@ -46,6 +109,13 @@ it('counts the places a body actually fills in', function (mixed $body, int $exp
     'nested members each count' => [['a' => ['b' => 1, 'c' => 2]], 2],
     'a hundred rows count as one row' => [array_fill(0, 100, ['id' => 1, 'name' => 'a']), 2],
     'an empty object fills nothing' => [(object) [], 0],
+    'each generated key is still a place of its own' => [
+        ['values' => ['core-details' => [
+            '3fa85f64-5717-4562-b3fc-2c963f66afa6' => 's',
+            'c0ffee00-dead-4bee-8000-000000000001' => 's',
+        ]]],
+        2,
+    ],
 ]);
 
 it('stops rather than recursing forever into a very deep body', function (): void {

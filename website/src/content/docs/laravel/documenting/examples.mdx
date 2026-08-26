@@ -246,8 +246,11 @@ rather than of the run that produced them:
 
 That last one is what keeps your artifact stable. Re-record as often as you like: the file changes when
 the *shape* of a response changes, which is a change worth reading, and never because a fixture had a
-different id this morning. And because every one of the three reads the responses alone, several test
-workers can record one operation at once without any of them having to know about the others.
+different id this morning. A response keyed *by* ids is stable on the same terms — a map under
+`"0193a1f0-…"` holds one kind of thing rather than a member of that name, so which ids it holds never
+moves the shape, while how many of them it holds still does. And because every one of the three reads
+the responses alone, several test workers can record one operation at once without any of them having
+to know about the others.
 
 <Aside type="tip" title="`--parallel` is fine here">
 A recording is one operation's, so workers only have to take turns: each one compares its candidate
