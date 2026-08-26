@@ -26,7 +26,8 @@ function ruleContext(RepresentationPolicy $policy = new RepresentationPolicy): S
 
 /**
  * A minimal transformer set: `required` marks required, `nullable` marks nullable, `str`/`int` set
- * a scalar type. Enough to drive the builder without any Laravel semantics.
+ * a scalar type, `map` declares open object values. Enough to drive the builder without any Laravel
+ * semantics.
  *
  * @return list<RuleTransformer>
  */
@@ -42,7 +43,7 @@ function fakeTransformers(): array
 
             public function handledRuleNames(): array
             {
-                return ['required', 'nullable', 'str', 'int'];
+                return ['required', 'nullable', 'str', 'int', 'map'];
             }
 
             public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
@@ -51,8 +52,15 @@ function fakeTransformers(): array
                     'required' => $field->markRequired(),
                     'nullable' => $field->markNullable(),
                     'str' => $field->setType('string'),
+                    'map' => $this->map($field),
                     default => $field->setType('integer'),
                 };
+            }
+
+            private function map(ValidationField $field): void
+            {
+                $field->setType('object');
+                $field->set('additionalProperties', []);
             }
         },
     ];
@@ -107,6 +115,28 @@ it('nests dot notation and wildcard arrays', function (): void {
             'properties' => ['id' => ['type' => 'integer']],
             'required' => ['id'],
         ],
+    ]);
+});
+
+it('publishes a `*` child as the value schema of a node that declares additionalProperties', function (): void {
+    // `additionalProperties` and `items` are the SAME slot for two different containers — an object's
+    // values and an array's items — and mutually exclusive on one schema. A `*` segment names whichever
+    // the node is, so the node's own declaration decides which slot gets filled; emitting both would
+    // leave one of them inert.
+    $driver = new DefaultValidationRulesToSchema(fakeTransformers());
+    $schema = $driver->convert(fakeRuleSet([
+        'settings' => ['map'],
+        'settings.*' => ['str'],
+        'tags' => ['nullable'],
+        'tags.*' => ['str'],
+    ]), ruleContext())->schema;
+
+    expect($schema['properties']['settings'])->toBe([
+        'type' => 'object',
+        'additionalProperties' => ['type' => 'string'],
+    ])->and($schema['properties']['tags'])->toBe([
+        'type' => ['array', 'null'],
+        'items' => ['type' => 'string'],
     ]);
 });
 
