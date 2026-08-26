@@ -368,7 +368,9 @@ example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparamete
 one keeps its body inline for that operation, because the patch adjusts a property the shared
 component must not carry. To illustrate the body as a whole — the payload a reader would send —
 [`#[Example]`](/laravel/reference/attributes/#example) takes `request: true`, and has a page of its
-own: [Example payloads](/laravel/documenting/examples/).
+own: [Example payloads](/laravel/documenting/examples/). To say something about the body in prose —
+"send only the fields you're changing" — see [Prose for the body
+itself](#prose-for-the-body-itself).
 
 <Aside title="Data objects get their own page">
 Type-hint a [Spatie Data](/laravel/packages/spatie-data/) class as your action parameter and Docuccino
@@ -608,6 +610,79 @@ Anything you write outranks all of it — the prose on the DTO's own properties 
 `#[BodyParameter(example: …)]`, a `#[RuleSchema(example: …)]` on your own rule class, or an
 [`#[Example]`](/laravel/documenting/examples/) for the body as a whole. See
 [Example payloads](/laravel/documenting/examples/) for the full ladder.
+
+### Prose for the body itself
+
+The schema says what the body *is*. What it can't say is how one endpoint wants it filled in — "send
+only the fields you're changing" is true of your `PATCH` and false of the `POST` that accepts the same
+shape, so it belongs on the operation's body rather than on the type.
+[`#[Description]`](/laravel/reference/attributes/#description) takes `request: true` for that, and an
+action can carry one of those alongside its ordinary description:
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Http/Controllers/InvoiceController.php
+	#[Description(text: 'Updates an invoice that has not been issued yet.')]
+	#[Description(text: 'Send only the fields you are changing; anything you leave out keeps its current value.', request: true)]
+	public function update(UpdateInvoiceRequest $request): InvoiceResource { /* … */ }
+	```
+
+	```php
+	// app/Http/Requests/UpdateInvoiceRequest.php
+	#[Description(text: 'The fields of an invoice the billing system will accept.')]
+	final class UpdateInvoiceRequest extends FormRequest
+	{
+	    public function rules(): array
+	    {
+	        return [
+	            'customer_id' => 'required|integer',
+	            'currency'    => 'required|in:GBP,USD,EUR',
+	            'due_at'      => 'nullable|date',
+	        ];
+	    }
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"description": "Updates an invoice that has not been issued yet.",
+	"requestBody": {
+	  "description": "Send only the fields you are changing; anything you leave out keeps its current value.",
+	  "required": true,
+	  "content": {
+	    "application/json": {
+	      "schema": { "$ref": "#/components/schemas/UpdateInvoiceRequest" }
+	    }
+	  }
+	},
+	// components.schemas
+	"UpdateInvoiceRequest": {
+	  "description": "The fields of an invoice the billing system will accept.",
+	  "type": "object",
+	  "properties": {
+	    "currency":    { "type": "string", "enum": ["GBP", "USD", "EUR"], "example": "GBP" },
+	    "customer_id": { "type": "integer" },
+	    "due_at":      { "type": ["string", "null"], "format": "date", "example": "2024-01-01" }
+	  },
+	  "required": ["customer_id", "currency"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Three sentences, three slots, and none of them repeats another: the operation says what the endpoint
+does, the body says how to fill it in, and the component says what the shape is — which every other
+endpoint accepting an `UpdateInvoiceRequest` reads too. `file:` works here as it does anywhere else, so
+a longer note can live in a Markdown file under your application root.
+
+The prose rides on whatever built the body, so it lands the same way on a recovered form request, a
+Data class, or a body you assembled yourself out of
+[`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter). An operation with no body has
+nothing for it to describe — a `GET` is the common case, where validation rules become
+[query parameters](#query-parameters) instead — and that is reported as
+[`attribute.description-unusable`](/laravel/reference/diagnostics/#attributes) rather than quietly
+re-pointed at the operation.
 
 ### Prose from the DTO itself
 
