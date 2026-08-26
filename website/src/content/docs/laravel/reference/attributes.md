@@ -548,7 +548,9 @@ put one description on every shape beneath it.
 Inline `text:` only, on a property or a class. A schema mapper has no application root to resolve a
 path against, and a request body is one operation's use of a type rather than part of it — so a `file:`
 or a `request:` declaration on either is reported as
-[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
+[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing. A
+second declaration beside it still publishes: the reader reports each one it cannot use and keeps the
+first that says something a schema can hold.
 
 ### `#[Group]`
 

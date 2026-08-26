@@ -15,6 +15,7 @@ use Docuccino\Core\Tests\Fixtures\DescribedNode;
 use Docuccino\Core\Tests\Fixtures\FiledNode;
 use Docuccino\Core\Tests\Fixtures\InheritingNode;
 use Docuccino\Core\Tests\Fixtures\OverdescribedNode;
+use Docuccino\Core\Tests\Fixtures\RequestScopedFirstNode;
 use Docuccino\Core\Tests\Fixtures\RequestScopedNode;
 use Docuccino\Core\Tests\Fixtures\UndescribedNode;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
@@ -32,6 +33,15 @@ it('publishes the sentence a class states about itself', function () use ($objec
 
     expect($schema['description'])->toBe('A single retention policy, as the billing system holds it.')
         ->and($diagnostics)->toBe([]);
+});
+
+it('publishes the sentence standing behind a declaration a schema cannot hold', function () use ($object): void {
+    // Repeatability made this legal PHP, and taking the first declaration and stopping would drop the
+    // author's real sentence to report the misplaced one.
+    [$schema, $diagnostics] = ClassAnnotations::describe($object(), RequestScopedFirstNode::class);
+
+    expect($schema['description'])->toBe('A retention policy the billing system accepts.')
+        ->and(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe(['attribute.property-unsupported']);
 });
 
 it('leaves the class untouched where the declaration says nothing publishable', function (string $fqcn) use ($object): void {

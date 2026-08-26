@@ -17,6 +17,10 @@ use Docuccino\Core\Diagnostics\Severity;
  * `file:`, or neither, says nothing certain, while `file:` and `request:` are operation-level forms —
  * no application root reaches a schema mapper to resolve a path against, and a request body belongs to
  * an operation rather than to a type.
+ *
+ * `#[Description]` is repeatable and a schema slot holds one string, so both readers call this for
+ * EVERY declaration and keep the first that yields text: a misplaced declaration is then reported
+ * without costing the author the good one beside it.
  */
 final class DescribedText
 {
