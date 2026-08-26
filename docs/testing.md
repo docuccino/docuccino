@@ -229,9 +229,9 @@ floors are set from — measure, then set the floor to the measured integer.
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **96.37%** | 95    | fully in-process-measurable                      |
-| `laravel`           | **94.70%** | 94    | fully in-process-measurable                      |
-| `inference-phpstan` | **43.77%** | 40    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **97.09%** | 96    | fully in-process-measurable                      |
+| `laravel`           | **95.76%** | 95    | fully in-process-measurable                      |
+| `inference-phpstan` | **44.98%** | 44    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 90.48%     | —     | informational only; no longer a gate             |
 

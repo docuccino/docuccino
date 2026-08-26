@@ -28,16 +28,17 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 96.37% (8550/8872) — held at 95 rather than
-    // ratcheted, deliberately: rounding down leaves 0.08pp, which one uncovered branch in the next
-    // change would trip, and the failure would land on that change rather than on the margin this one
-    // set. Ratchet once the figure settles.
-    'core' => 95,
+    // phpdoc type grammar, the contract checker. Measured 97.09% (10013/10313) — ratcheted 95 → 96, one
+    // short of the measured integer on purpose. 97 would leave 0.09pp, the same hair-trigger that held
+    // this floor at 95 while the figure sat at 96.37%; 96 locks in the gain with a margin the next
+    // change will not trip. The figure has settled upward across two releases, which is what the earlier
+    // note was waiting for.
+    'core' => 96,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 94.70% (8373/8842) — ratcheted 93 → 94: the coverage log,
-    // its merge command and the recorder all answer from files and config, which the in-process suites
-    // reach whole.
-    'laravel' => 94,
+    // contract-testing assertions. Measured 95.76% (9387/9803) — ratcheted 94 → 95: the recovered
+    // container, the date ladder and the request-body prose all answer from rules, reflection and
+    // config, which the in-process suites reach whole.
+    'laravel' => 95,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
@@ -46,10 +47,11 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/88). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Measured 40.32% (714/1771): the narrowed-arm guard and the `#[ErrorComponent]` reader are the
-    // latest move into the first half — both answer from a DType or a ReflectionMethod, so neither needs
-    // a Scope to be proved.
-    'inference-phpstan' => 40,
+    // Measured 44.98% (923/2052) — ratcheted 40 → 44. Nothing in this package moved in-process to earn
+    // it; the ratio rose because the denominator grew around the Scope-driven half. Recorded as measured
+    // so the number cannot drift silently, and read the same way as before: mostly proven
+    // out-of-process, never untested.
+    'inference-phpstan' => 44,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

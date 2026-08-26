@@ -461,12 +461,13 @@ line.
 
 ### `#[Description]`
 
-Targets `CLASS | METHOD | FUNCTION | PROPERTY`.
+Targets `CLASS | METHOD | FUNCTION | PROPERTY`, repeatable.
 
 ```php
 public function __construct(
     public ?string $text = null,
     public ?string $file = null,
+    public bool $request = false,
 )
 ```
 
@@ -474,6 +475,18 @@ Sets the `description`, either inline or from a Markdown file. Give it exactly o
 declaration carrying both, or neither, is reported as
 [`attribute.description-unusable`](/laravel/reference/diagnostics/#attributes) and writes
 nothing.
+
+Which `description` it sets is decided by where you write it, plus `request:`:
+
+| Where you write it | What it describes | Lands on |
+|---|---|---|
+| On the action | What the endpoint does | `paths.…{method}.description` |
+| On the action, with `request: true` | How to fill this endpoint's body in | `paths.…{method}.requestBody.description` |
+| On a DTO, model or resource class | What the type is | `components.schemas.….description` |
+| On a property | What that field is | the field's `description` in the schema |
+
+An action may carry a plain declaration and a `request: true` one at the same time, which is why the
+attribute is repeatable. Each of these is a different fact, and none of them is copied into another.
 
 ```php
 #[Description(text: 'Creates a draft invoice for the authenticated tenant.')]
@@ -500,6 +513,22 @@ on addressing whoever maintains the class.
 public string $tenant;
 ```
 
+**With `request: true` on an action** it describes the request body — this operation's use of the
+body, rather than the type behind it. That is where "send only the fields you're changing" belongs: it
+is true of this endpoint and not of every endpoint that accepts the same shape.
+
+```php
+#[Description(text: 'Updates an invoice that has not been issued yet.')]
+#[Description(text: 'Send only the fields you are changing.', request: true)]
+public function update(UpdateInvoiceRequest $request): InvoiceResource { /* … */ }
+```
+
+`file:` works here too, since an action-level declaration has an application root to resolve against.
+A declaration on an operation with no request body — including a `GET`, whose validation rules become
+query parameters rather than a body — has nothing to describe, and is reported as
+[`attribute.description-unusable`](/laravel/reference/diagnostics/#attributes) rather than falling
+back to the operation. See [Prose for the body itself](/laravel/documenting/requests/#prose-for-the-body-itself).
+
 **On a DTO, model or resource class** it describes the schema that class publishes — the component a
 request body or a response `$ref`s, on both sides of the document:
 
@@ -517,8 +546,11 @@ A parent's declaration describes the parent, so a class inherits none of it: a s
 put one description on every shape beneath it.
 
 Inline `text:` only, on a property or a class. A schema mapper has no application root to resolve a
-path against, so a `file:` declaration on either is reported as
-[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing.
+path against, and a request body is one operation's use of a type rather than part of it — so a `file:`
+or a `request:` declaration on either is reported as
+[`attribute.property-unsupported`](/laravel/reference/diagnostics/#attributes) and writes nothing. A
+second declaration beside it still publishes: the reader reports each one it cannot use and keeps the
+first that says something a schema can hold.
 
 ### `#[Group]`
 

@@ -87,7 +87,7 @@ function attributeCatalogue(): array
         'IgnoreResponse' => [IgnoreResponse::class, $classFn | Attribute::IS_REPEATABLE],
         'ResponseHeader' => [ResponseHeader::class, $classFn | Attribute::IS_REPEATABLE],
         'Summary' => [Summary::class, $classFn],
-        'Description' => [Description::class, $classFn | Attribute::TARGET_PROPERTY],
+        'Description' => [Description::class, $classFn | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
         'RuleSchema' => [RuleSchema::class, Attribute::TARGET_CLASS],
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
