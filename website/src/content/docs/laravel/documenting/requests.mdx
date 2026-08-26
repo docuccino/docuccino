@@ -597,10 +597,65 @@ Your samples reach every value Docuccino invents, not only the ones in the schem
 response examples and URL variables from the same table, so the email in the body a teammate presses
 Send on is the email the document publishes.
 
-Anything you write outranks all of it — a `#[BodyParameter(example: …)]`, a
-`#[RuleSchema(example: …)]` on your own rule class, or an
+Anything you write outranks all of it — the prose on the DTO's own properties (below), a
+`#[BodyParameter(example: …)]`, a `#[RuleSchema(example: …)]` on your own rule class, or an
 [`#[Example]`](/laravel/documenting/examples/) for the body as a whole. See
 [Example payloads](/laravel/documenting/examples/) for the full ladder.
+
+### Prose from the DTO itself
+
+A request body is recovered from *rules*, so its fields are named by rules rather than by the
+properties behind them. Whatever those properties say about themselves is matched back on: a docblock
+summary becomes the field's `description`, an `@example` becomes its `example`, and the attribute forms
+outrank the docblock, exactly as they do on a response schema.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Data/CreateInvoiceData.php
+	final class CreateInvoiceData extends Data
+	{
+	    public function __construct(
+	        /**
+	         * The customer's own reference for this invoice.
+	         *
+	         * @example INV-2291
+	         */
+	        #[Required, StringType, Max(64)]
+	        public readonly string $reference,
+	        #[Description(text: 'Currency the totals are stated in.')]
+	        #[Required, In(['GBP', 'USD', 'EUR'])]
+	        public readonly string $currency,
+	    ) {}
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"properties": {
+	  "reference": {
+	    "type": "string",
+	    "maxLength": 64,
+	    "description": "The customer's own reference for this invoice.",
+	    "example": "INV-2291"
+	  },
+	  "currency": {
+	    "type": "string",
+	    "enum": ["GBP", "USD", "EUR"],
+	    "description": "Currency the totals are stated in.",
+	    "example": "GBP"
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Your own example replaces the one the rules would have derived — `reference` publishes `INV-2291`
+rather than a sample of a length `max:64` allows. Where a property says nothing, the derived example
+still stands: `currency` gets `GBP` from its own `in:` list.
+
+None of this changes what the endpoint accepts. Prose rides on the fields the rules named; it never
+adds one, never drops one and never touches a constraint. A docblock is documentation, not validation.
 
 ## Validation rule reference
 

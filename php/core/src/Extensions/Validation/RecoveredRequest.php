@@ -8,9 +8,12 @@ use Docuccino\Attributes\BodyParameter;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
+use Docuccino\Core\Extensions\Schema\DocumentedDescriptions;
+use Docuccino\Core\Extensions\Schema\DocumentedExamples;
 use Docuccino\Core\Extensions\Schema\MockHints;
 use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
+use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\Fqcn;
 
@@ -46,7 +49,7 @@ final class RecoveredRequest
             $context->components->addDiagnostic($diagnostic);
         }
 
-        $result = $this->withMockHints($result, $context, $sourceClass);
+        $result = $this->withDeclarations($result, $context, $sourceClass);
 
         $contribution = Contribution::integration($producer, $context->actionSource());
 
@@ -60,11 +63,20 @@ final class RecoveredRequest
     }
 
     /**
-     * The schema with whatever `#[Mock]` the source class declares written onto it. A validated field
-     * is named by rules rather than by a property, so it is the class-level form that reaches one —
-     * and the class file is recorded as a dependency, since adding the attribute has to invalidate.
+     * The schema with everything the source class declares about its fields written onto it: the
+     * docblock layer (a property's summary and `@example`), then the attribute layer over it, then
+     * whatever `#[Mock]` the class states.
+     *
+     * A validated field is named by its RULES, not by the property behind it, so none of this arrives
+     * with the schema — it has to be matched back on afterwards, which is the whole reason a docblock
+     * written on an input DTO used to reach the response side and not the request side. The order is
+     * the precedence: docblock 30, then attribute 40 over it. `#[Mock]` is read class-level, since a
+     * rule-named field has no property to hang it on.
+     *
+     * The class file is recorded as a dependency because adding any of these has to invalidate, and the
+     * metadata's own files with it — inheritance answers a docblock as readily as an attribute.
      */
-    private function withMockHints(ValidationSchema $result, RouteContext $context, ?string $sourceClass): ValidationSchema
+    private function withDeclarations(ValidationSchema $result, RouteContext $context, ?string $sourceClass): ValidationSchema
     {
         if ($sourceClass === null) {
             return $result;
@@ -72,7 +84,13 @@ final class RecoveredRequest
 
         $context->recordDependencyFiles(DeclarationFiles::of($sourceClass));
 
-        [$schema, $diagnostics] = PropertyAnnotations::apply($result->schema, $sourceClass);
+        $metadata = $context->engine->classMetadata(new ClassRef($sourceClass));
+        $context->recordDependencyFiles($metadata->dependencyFiles);
+
+        $schema = DocumentedDescriptions::applyTo($result->schema, $metadata->properties);
+        $schema = DocumentedExamples::applyTo($context->converter(), $schema, $sourceClass, $metadata->properties);
+
+        [$schema, $diagnostics] = PropertyAnnotations::apply($schema, $sourceClass);
         [$schema, $hintDiagnostics] = MockHints::apply($schema, $sourceClass);
 
         foreach ([...$diagnostics, ...$hintDiagnostics] as $diagnostic) {
