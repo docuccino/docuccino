@@ -69,6 +69,9 @@ it('silences a property by name and by JSON pointer via the safelist', function 
 })->with([
     'by name' => ['password'],
     'by pointer' => ['#/components/schemas/Model/properties/password'],
+    // This lint mints the fragment form, so the bare pointer is the one an author writes by hand — or
+    // copies out of another lint's message, which prints pointers without the `#`.
+    'by pointer written bare' => ['/components/schemas/Model/properties/password'],
 ]);
 
 it('reports nothing when disabled', function (): void {

@@ -134,8 +134,9 @@ final class SensitiveFieldLint implements DocumentTransformer
         }
     }
 
+    /** The pointers this lint mints carry the `#`; {@see LintSafelist} is why an entry without one lands too. */
     private function silenced(string $name, string $pointer): bool
     {
-        return in_array($name, $this->options->allow, true) || in_array($pointer, $this->options->allow, true);
+        return LintSafelist::matches($this->options->allow, $name, $pointer);
     }
 }
