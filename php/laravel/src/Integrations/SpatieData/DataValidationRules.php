@@ -169,19 +169,12 @@ final class DataValidationRules
      */
     private static function withMapCarrier(array $rules, array $inferred, string $field, array $siblings): array
     {
-        $carrier = null;
-        foreach ($inferred as $rule) {
-            if ($rule->name === 'additional_properties') {
-                $carrier = $rule;
-            }
-        }
+        $carrier = self::carrier($inferred, 'additional_properties');
 
         // `array` has to be the ONLY type the override states: `list` narrows it to a JSON array, and
         // anything else has replaced the shape outright. An `additional_properties` of its own needs no
         // second.
-        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
-        $stated = array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
-        if ($carrier === null || $stated !== ['array']) {
+        if ($carrier === null || self::statedTypes($rules) !== ['array']) {
             return $rules;
         }
 
@@ -208,21 +201,47 @@ final class DataValidationRules
      */
     private static function withDateCarrier(array $rules, array $inferred): array
     {
-        $carrier = null;
-        foreach ($inferred as $rule) {
-            if ($rule->name === 'date_wire') {
-                $carrier = $rule;
-            }
-        }
-
+        $carrier = self::carrier($inferred, 'date_wire');
         $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
         if ($carrier === null || array_intersect(['date_format', 'date_wire'], $named) !== []) {
             return $rules;
         }
 
-        $stated = array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
+        $stated = self::statedTypes($rules);
 
         return $stated === [] || $stated === ['string'] ? [...$rules, $carrier] : $rules;
+    }
+
+    /**
+     * The LAST rule of a name in a set, or null. Last because that is the one the chain would apply, and
+     * one loop because both carriers above ask the same question of the same shape of list.
+     *
+     * @param  list<ValidationRule>  $rules
+     */
+    private static function carrier(array $rules, string $name): ?ValidationRule
+    {
+        $carrier = null;
+        foreach ($rules as $rule) {
+            if ($rule->name === $name) {
+                $carrier = $rule;
+            }
+        }
+
+        return $carrier;
+    }
+
+    /**
+     * The type words a rule set states, in table order — what an override has to have said for a recovered
+     * carrier to be redundant.
+     *
+     * @param  list<ValidationRule>  $rules
+     * @return list<string>
+     */
+    private static function statedTypes(array $rules): array
+    {
+        $named = array_map(static fn (ValidationRule $rule): string => $rule->name, $rules);
+
+        return array_values(array_intersect([...self::TYPE_RULES, ...self::FILE_RULES, 'list'], $named));
     }
 
     /** Resets the per-build state every entry point above starts from. */
@@ -383,6 +402,10 @@ final class DataValidationRules
      * than by a second guess. A field whose own rules already carry a `date_format` says it more
      * specifically still and gets none.
      *
+     * The PHP format travels on the rule as it was written, never a word summarising it: what the document
+     * may CLAIM about a pattern — a `format` keyword, a note, the example bytes — is one policy, and
+     * {@see DateWireRuleTransformer} applies it.
+     *
      * @param  list<ValidationRule>  $stated  the rules the property itself declared
      * @return list<ValidationRule>
      */
@@ -400,7 +423,7 @@ final class DataValidationRules
 
         $format = $this->reflector->dateTimeCastFormat($fqcn, $property) ?? $this->dateFormat;
 
-        return [ValidationRule::of('date_wire', [DateWireFormat::shape($format)])];
+        return [ValidationRule::of('date_wire', [$format])];
     }
 
     /**

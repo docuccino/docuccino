@@ -11,15 +11,18 @@ use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Laravel\Integrations\Support\DateWireFormat;
 
 /**
- * `date_wire` — the wire shape a date-typed property really accepts, stated outright by the recovering
- * integration from the most specific source it has, because Laravel's rule vocabulary has no word for
- * it. Runs straight after the type rules and sets `format` UNCONDITIONALLY: a bare `date` rule accepts
- * anything non-relative `strtotime` parses, so the `format: date` {@see TypeRuleTransformer} pairs with
- * it is only its reading of intent where nothing better is known — which is why that transformer sets a
- * format only on a field that hasn't got one, and why this rule outranks what it left.
+ * `date_wire:<PHP date() format>` — the wire format a date-typed property really accepts, stated outright
+ * by the recovering integration from the most specific source it has, because Laravel's rule vocabulary
+ * has no word for it. Runs straight after the type rules and REPLACES what they left: a bare `date` rule
+ * accepts anything non-relative `strtotime` parses, so the `format: date` {@see TypeRuleTransformer} pairs
+ * with it is only its reading of intent where nothing better is known — which is why that transformer sets
+ * a format only on a field that hasn't got one, and why this rule outranks what it left.
  *
- * `timestamp` is the one shape that isn't a string at all, so the coarse rule's `format` goes with the
- * type it belonged to.
+ * The format is answered exactly as {@see DateFormatRuleTransformer} answers the rule where the app states
+ * it outright, from the one policy in {@see DateWireFormat}: a `format` keyword only where the pattern's
+ * own values satisfy it, else a string with the pattern named, and either way an example rendered WITH the
+ * pattern rather than derived from the keyword. `U` is the one format that is not a string at all, so the
+ * coarse rule's `format` goes with the type it belonged to.
  */
 final class DateWireRuleTransformer implements RuleTransformer
 {
@@ -35,23 +38,31 @@ final class DateWireRuleTransformer implements RuleTransformer
 
     public function apply(ValidationRule $rule, ValidationField $field, SchemaContext $context): void
     {
-        $shape = $rule->parameter();
-
-        if ($shape === DateWireFormat::TIMESTAMP) {
-            $field->setType('integer');
-            $field->remove('format');
-            if (! $field->has('description')) {
-                $field->set('description', 'Unix timestamp (seconds).');
-            }
-
+        $format = $rule->parameter();
+        if ($format === null || $format === '') {
             return;
         }
 
-        if ($shape !== 'date' && $shape !== 'date-time') {
+        if ($format === DateWireFormat::UNIX) {
+            $field->setType('integer');
+            $field->remove('format');
+            $field->set('description', DateWireFormat::TIMESTAMP_NOTE);
+
             return;
         }
 
         $field->setType('string');
-        $field->set('format', $shape);
+
+        $oas = DateWireFormat::oas($format);
+        if ($oas !== null) {
+            $field->set('format', $oas);
+        } else {
+            // Nothing names this pattern's values, so the coarse rule's guess goes with it rather than
+            // outliving the rule that displaced it.
+            $field->remove('format');
+            $field->set('description', DateWireFormat::expected($format));
+        }
+
+        $field->proposeExample(DateWireFormat::example($format));
     }
 }

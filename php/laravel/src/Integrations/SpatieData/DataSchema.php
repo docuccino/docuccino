@@ -182,10 +182,10 @@ final class DataSchema implements TypeToSchema
         }
 
         // Only the `U` cast format changes the wire TYPE (integer timestamp); every other explicit
-        // format still renders as a date/date-time string.
+        // format still renders as a string, shaped by the one date policy.
         $serialized = $this->reflector->dateTimeCastFormat($fqcn, $property) === DateWireFormat::UNIX
-            ? ['type' => 'integer', 'description' => 'Unix timestamp (seconds).']
-            : ['type' => 'string', 'format' => DateWireFormat::oas($this->dateFormat)];
+            ? ['type' => 'integer', 'description' => DateWireFormat::TIMESTAMP_NOTE]
+            : DateWireFormat::serializedSchema($this->dateFormat);
 
         return $this->withDateTime($clean, $serialized, $context);
     }

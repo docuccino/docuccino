@@ -29,6 +29,9 @@ final class DateLadderData extends Data
         public readonly CarbonImmutable $castTimestamp,
         #[WithCast(DateTimeInterfaceCast::class, format: 'Y-m-d')]
         public readonly CarbonImmutable $castDateOnly,
+        // A cast format no OAS `format` word describes.
+        #[WithCast(DateTimeInterfaceCast::class, format: 'd/m/Y')]
+        public readonly CarbonImmutable $castBespoke,
         // Nothing but the declared type.
         public readonly CarbonImmutable $declaredOnly,
         public readonly ?CarbonImmutable $nullableDeclared,

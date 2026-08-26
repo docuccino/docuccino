@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -22,6 +23,8 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
@@ -33,16 +36,17 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderController;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateLadderData;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\DateOverrideData;
+use Illuminate\Routing\Router;
 use Spatie\LaravelData\Attributes\Validation\DateFormat;
 use Spatie\LaravelData\Attributes\WithCast;
 use Spatie\LaravelData\Optional;
 
 /**
- * What a date-typed property publishes, in BOTH directions, from one class. The same value used to be
- * documented two contradictory ways: the request body took `format: date` from the `date` rule — one
- * word for everything non-relative `strtotime` parses, so narrower than the server accepts — while the
- * response took `date-time` from the app's `data.date_format`. A client round-tripping the value
- * truncated the time.
+ * What a date-typed property publishes, in BOTH directions, from one class. The invariant: one value is
+ * documented one way. A `date` rule is one word for everything non-relative `strtotime` parses, so it is
+ * narrower than the server accepts and never the source a date-typed property's format comes from — and a
+ * client round-tripping a value documented `date` on the way in and `date-time` on the way out truncates
+ * the time.
  *
  * Both sides are asserted from one class here, and the shape that reaches each is the *whole* leaf
  * schema, so neither direction can move without the other being seen to.
@@ -56,6 +60,7 @@ function ladderMetadata(): ClassMetadata
         new PropertyMetadata('statedFormat', $carbon),
         new PropertyMetadata('castTimestamp', $carbon),
         new PropertyMetadata('castDateOnly', $carbon),
+        new PropertyMetadata('castBespoke', $carbon),
         new PropertyMetadata('declaredOnly', $carbon),
         new PropertyMetadata('nullableDeclared', $nullableCarbon),
         new PropertyMetadata('afterLiteral', $carbon),
@@ -149,10 +154,11 @@ it('resolves a date property\'s format from its most specific source, both ways'
         ->and($shapes['response'])->toBe($response);
 })->with([
     // 1. `date_format:d/m/Y` — the app states the accepted wire format outright, and nothing displaces
-    //    it. The response emits its own configured format, so the two honestly differ: this app parses
-    //    `d/m/Y` in and writes ATOM out.
+    //    it. No `format` word describes a `d/m/Y` value, so the request claims none and names the pattern
+    //    instead (asserted whole below). The response emits its own configured format, so the two honestly
+    //    differ: this app parses `d/m/Y` in and writes ATOM out.
     'a date_format rule wins' => ['statedFormat',
-        ['type' => 'string', 'format' => 'date'],
+        ['type' => 'string', 'format' => null],
         ['type' => 'string', 'format' => 'date-time'],
     ],
 
@@ -166,9 +172,15 @@ it('resolves a date property\'s format from its most specific source, both ways'
         ['type' => 'string', 'format' => 'date'],
         ['type' => 'string', 'format' => 'date-time'],
     ],
+    // A cast format no keyword names: the request says string and names the pattern rather than claiming
+    // the `date` a `d/m/Y` value fails.
+    'a bespoke cast format claims no format' => ['castBespoke',
+        ['type' => 'string', 'format' => null],
+        ['type' => 'string', 'format' => 'date-time'],
+    ],
 
     // 3. The declared type with no rule stating otherwise — one config value, so one answer both ways.
-    //    Before the fix the request published nothing at all here.
+    //    The request is owed the format here too: the declared type is the only source there is.
     'the declared type alone' => ['declaredOnly',
         ['type' => 'string', 'format' => 'date-time'],
         ['type' => 'string', 'format' => 'date-time'],
@@ -214,14 +226,67 @@ it('derives both directions from the one configured format', function (): void {
     // symmetric date properties are the population, and a property added to it lands here.
     expect($properties)->toHaveCount(4);
 
-    foreach ($properties as $property) {
-        foreach (['Y-m-d\TH:i:sP' => 'date-time', 'Y-m-d' => 'date'] as $configured => $expected) {
-            $shapes = dateWireShapes($property, $configured);
+    // The last two rows are the formats no keyword names: `d/m/Y H:i` is a perfectly ordinary
+    // `data.date_format`, and `Y-m-d\T` is the escaped-literal trap a character-class reading of the
+    // pattern gets wrong. Both sides owe a string that claims nothing rather than a format the value fails.
+    $configurations = [
+        'Y-m-d\TH:i:sP' => 'date-time',
+        'Y-m-d' => 'date',
+        'd/m/Y H:i' => null,
+        'Y-m-d\T' => null,
+    ];
 
-            expect($shapes['request'])->toBe($shapes['response'])
-                ->and($shapes['request']['format'])->toBe($expected);
+    foreach ($properties as $property) {
+        foreach ($configurations as $configured => $expected) {
+            $shapes = dateWireShapes($property, (string) $configured);
+
+            $where = $property.' @ '.$configured;
+            expect($shapes['request'])->toBe($shapes['response'], $where)
+                ->and($shapes['request']['format'])->toBe($expected, $where);
         }
     }
+});
+
+it('names the pattern where no format word describes it, in both directions', function (): void {
+    // The whole leaf, both ways, for a `data.date_format` nothing names: what the endpoint accepts is the
+    // pattern's own bytes, so the request carries them as the example rather than an ISO value the server
+    // would 422 — and neither side publishes a `format` its own values fail.
+    $classes = [DateLadderData::class => ladderMetadata()];
+    $configured = 'd/m/Y H:i';
+
+    expect(dateWireRequest(DateLadderData::class, DateLadderController::class, $classes, $configured)['declaredOnly'])
+        ->toBe([
+            'type' => 'string',
+            'description' => 'Expected format: d/m/Y H:i',
+            'example' => '01/01/2024 00:00',
+        ])
+        ->and(dateWireResponse(DateLadderData::class, $classes, $configured)['declaredOnly'])
+        ->toBe([
+            'type' => 'string',
+            'description' => 'Serialized using the date format "d/m/Y H:i".',
+        ]);
+});
+
+it('documents a bespoke cast format as the value the cast really parses', function (): void {
+    // The reported shape: a `#[WithCast(DateTimeInterfaceCast::class, format: 'd/m/Y')]` property. A
+    // `format: date` here would be false twice over — the claim, and the ISO example synthesised from it.
+    $request = dateWireRequest(
+        DateLadderData::class,
+        DateLadderController::class,
+        [DateLadderData::class => ladderMetadata()],
+    );
+
+    expect($request['castBespoke'])->toBe([
+        'type' => 'string',
+        'description' => 'Expected format: d/m/Y',
+        'example' => '01/01/2024',
+    ])
+        // The rule the app states outright is answered the same way, by the same policy.
+        ->and($request['statedFormat'])->toBe([
+            'type' => 'string',
+            'description' => 'Expected format: d/m/Y',
+            'example' => '01/01/2024',
+        ]);
 });
 
 /** Whether a promoted parameter's declared type is, or unions in, a `DateTimeInterface`. */
@@ -260,8 +325,9 @@ it('keeps the recovered wire format under a rules() override that says less', fu
         ->convert((new RuleOrdering)->order((new RuleSetNormalizer)->normalize($rules)), $converter)->schema;
 
     expect($schema['properties']['restatedDate']['format'])->toBe('date-time')
-        ->and($schema['properties']['statedFormat']['format'])->toBe('date')
+        ->and($schema['properties']['statedFormat'])->not->toHaveKey('format')
         ->and($schema['properties']['statedFormat']['description'])->toBe('Expected format: d/m/Y')
+        ->and($schema['properties']['statedFormat']['example'])->toBe('01/01/2024')
         ->and($schema['properties']['noTypeStated']['format'])->toBe('date-time');
 });
 
@@ -275,3 +341,83 @@ it('describes a Unix-timestamp property identically in both directions', functio
         ->and(dateWireResponse(DateLadderData::class, $classes)['castTimestamp'])
         ->toBe(['type' => 'integer', 'description' => 'Unix timestamp (seconds).']);
 });
+
+it('claims a format only where the pattern\'s own bytes satisfy it', function (): void {
+    // The allow-list per entry. A claim is honest exactly when the value the pattern writes validates
+    // against the keyword claimed for it, and {@see FieldExample} runs that check before publishing an
+    // example — so an entry whose own bytes its format rejects publishes no example and fails here.
+    $formats = DateWireFormat::isoFormats();
+
+    // Read off the table rather than listed: an entry added there is covered without a line here, and a
+    // table that emptied fails instead of passing vacuously.
+    expect($formats)->toHaveCount(5);
+
+    foreach ($formats as $format) {
+        $schema = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))
+            ->convert(new RuleSet(['f' => [ValidationRule::of('date_wire', [$format])]]), schemaConverter())->schema;
+
+        expect($schema['properties']['f'])->toBe([
+            'type' => 'string',
+            'format' => DateWireFormat::oas($format),
+            'example' => DateWireFormat::example($format),
+        ], $format);
+    }
+
+    // Everything else: no keyword names it, whatever tokens it happens to contain.
+    expect(DateWireFormat::oas('Y-m-d H:i:s'))->toBeNull()
+        ->and(DateWireFormat::oas('d/m/Y'))->toBeNull()
+        ->and(DateWireFormat::oas('Y-m-d\T'))->toBeNull()
+        ->and(DateWireFormat::oas(DateWireFormat::UNIX))->toBeNull();
+});
+
+it('breaks the rank-12 tie on insertion order alone', function (): void {
+    // `additional_properties` and `date_wire` share a rank, so the sort tie-breaks on position — a
+    // function of the synthesising code, never of route order. Pinned in both directions: a sort that
+    // stopped being stable would reorder one of them.
+    $map = ValidationRule::of('additional_properties', ['{"type":"string"}']);
+    $date = ValidationRule::of('date_wire', ['Y-m-d']);
+    $names = static fn (array $rules): array => array_map(
+        static fn (ValidationRule $rule): string => $rule->name,
+        (new RuleOrdering)->order(new RuleSet(['f' => $rules]))->fields['f'],
+    );
+
+    expect($names([$map, $date]))->toBe(['additional_properties', 'date_wire'])
+        ->and($names([$date, $map]))->toBe(['date_wire', 'additional_properties']);
+});
+
+it('documents the format the app configured, through the container', function (): void {
+    // The bind that hands the app's `data.date_format` to both sides. Every other test here constructs the
+    // recovery objects itself, so without this one the whole suite stays green while an app's request
+    // bodies and responses both document the package default.
+    config(['data.date_format' => 'Y-m-d']);
+
+    $document = generateDocumentOverDateRoute();
+
+    $request = resolveSchema($document, $document['paths']['/api/dates']['post']['requestBody']['content']['application/json']['schema'] ?? []);
+    // A POST returning the Data class it took: spatie's own 201.
+    $response = resolveSchema($document, $document['paths']['/api/dates']['post']['responses']['201']['content']['application/json']['schema'] ?? []);
+
+    expect($request['properties']['declaredOnly'] ?? null)->toBe(['type' => 'string', 'format' => 'date', 'example' => '2024-01-01'])
+        ->and($response['properties']['declaredOnly'] ?? null)->toBe(['type' => 'string', 'format' => 'date']);
+});
+
+/**
+ * The emitted `default` document with one route over the date ladder, built through the container so the
+ * real bindings — not a hand-constructed recovery object — decide what a date property publishes.
+ *
+ * @return array<string, mixed>
+ */
+function generateDocumentOverDateRoute(): array
+{
+    $result = localityBuild(
+        static fn (Router $router): mixed => $router->post('api/dates', [DateLadderController::class, 'store']),
+        static fn (): StubTypeEngine => new StubTypeEngine(
+            analyses: [DateLadderController::class.'::store' => new ActionAnalysis(
+                returns: [new ReturnSite(new ClassT(DateLadderData::class), new SourceLocation(''))],
+            )],
+            classes: [DateLadderData::class => ladderMetadata()],
+        ),
+    );
+
+    return emittedArray($result);
+}

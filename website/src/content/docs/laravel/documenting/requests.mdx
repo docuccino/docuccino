@@ -689,7 +689,7 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `url` | `string`, `format: uri` |
 | `ip` | `string`, `format: ip` |
 | `date` | `string`, `format: date` — the reading of intent where nothing more specific is known. |
-| `date_format:Y-m-d H:i` | `string`, `format: date-time` when the pattern carries a time token, else `date` — plus "Expected format: …" so the exact contract survives. |
+| `date_format:Y-m-d H:i` | `string` with "Expected format: …" and an example rendered in that pattern, plus `format: date`/`date-time` where the pattern is an ISO one those words describe. |
 | `json` | `string` with `contentMediaType: application/json` — the value is a string *carrying* JSON. |
 | `timezone` | `string`, described as "Must be a valid timezone identifier." |
 
