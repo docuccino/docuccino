@@ -13,6 +13,12 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.10.2
+
+### Bug fixes
+
+- **laravel**: wrap every arm of a composite at the response root ([#243](https://github.com/docuccino/docuccino/pull/243))
+
 ## v0.10.1
 
 ### Bug fixes
