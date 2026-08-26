@@ -574,7 +574,7 @@ responses without discarding the rest:
 #[Response(status: 200, type: InvoiceResource::class, description: 'The invoice')]
 #[Response(status: 404, description: 'Invoice not found')]
 #[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left', status: 200)]
-public function show(int $id): InvoiceResource { /* … */ }
+public function update(int $id): InvoiceResource { /* … */ }
 ```
 
 <Aside title="Error responses have their own page">
