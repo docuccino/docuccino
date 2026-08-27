@@ -472,6 +472,12 @@ above, or, for a Spatie Data property, the [type its docblock
 states](/laravel/packages/spatie-data/#requests-from-a-data-class). With nothing else to go on, `array`
 plus a `*` child is a JSON array, which is all the information there is.
 
+An `array` rule with **no** child rules at all — no `*`, no named keys — settles nothing either way, and
+a free-form map passes it exactly as a list does. Docuccino documents both, `"type": ["array", "object"]`,
+and bounds both (`max:3` writes `maxItems` and `maxProperties`, whichever the request turns out to send).
+The build says so with a `validation.container-undecided` notice naming the field: add `field.*` rules or
+dotted `field.<key>` rules and the document narrows to the one you meant.
+
 ### Documenting a custom rule
 
 A custom `ValidationRule` class does its work at runtime, so there's nothing to read from its body. Say
@@ -767,7 +773,7 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `integer`, `int` | `integer` |
 | `numeric` | `number` |
 | `boolean`, `bool` | `boolean` |
-| `array` | `array` |
+| `array` | `array` where a `*` or named child key says which container the field is; `[array, object]` on its own, since Laravel's `array` covers both. |
 | `email` | `string`, `format: email` |
 | `uuid` | `string`, `format: uuid` |
 | `ulid` | `string`, `format: ulid` |

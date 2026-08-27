@@ -25,6 +25,18 @@ final readonly class ValidationField
         $this->node->keywords['type'] = $type;
     }
 
+    /**
+     * The field's type where more than one is true of the value — the union a rule states because the
+     * fact it recovered leaves the choice open, not one it is guessing between. A single member says
+     * exactly what {@see setType()} says and is written the same way.
+     *
+     * @param  non-empty-list<string>  $types
+     */
+    public function setTypes(array $types): void
+    {
+        $this->node->keywords['type'] = count($types) === 1 ? $types[0] : $types;
+    }
+
     /** The dotted path naming this field, as a diagnostic about it would spell it (`address.city`). */
     public function path(): string
     {
@@ -37,6 +49,24 @@ final readonly class ValidationField
         $type = $this->node->keywords['type'] ?? null;
 
         return is_string($type) ? $type : null;
+    }
+
+    /**
+     * Every type word set on the field — one for a scalar type, several for a union, none where nothing
+     * has typed it yet. What a type-aware rule reads when its keyword differs per type: a bound that is
+     * `maxItems` on an array and `maxProperties` on an object owes both to a value that may be either.
+     *
+     * @return list<string>
+     */
+    public function types(): array
+    {
+        $type = $this->node->keywords['type'] ?? null;
+
+        return match (true) {
+            is_string($type) => [$type],
+            is_array($type) => array_values(array_filter($type, is_string(...))),
+            default => [],
+        };
     }
 
     public function set(string $keyword, mixed $value): void

@@ -199,9 +199,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'list' => [[['list']], ['type' => 'array']],
     'distinct' => [[['distinct']], ['type' => 'array', 'uniqueItems' => true]],
 
-    // AdditionalPropertiesRuleTransformer — the two words the Laravel vocabulary has none of. `object`
+    // AdditionalPropertiesRuleTransformer — the words the Laravel vocabulary has none of. `object`
     // says a JSON object; `additional_properties` says the same and states the value schema, which
-    // arrives as JSON. Both replace the `array` a Laravel type rule can only have said.
+    // arrives as JSON; `array_or_object` says nothing decided between the two. All three replace the
+    // `array` a Laravel type rule can only have said.
     'additional_properties' => [[['additional_properties', ['{"type":"string"}']]], ['additionalProperties' => ['type' => 'string'], 'type' => 'object']],
     'additional_properties (open values)' => [[['additional_properties', ['{}']]], ['additionalProperties' => [], 'type' => 'object']],
     'additional_properties (overrides the array rule beside it)' => [[['array'], ['additional_properties', ['{"type":"integer"}']]], ['additionalProperties' => ['type' => 'integer'], 'type' => 'object']],
@@ -210,6 +211,12 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'additional_properties (unparseable parameter)' => [[['string'], ['additional_properties', ['not json']]], ['type' => 'string']],
     'object' => [[['object']], ['type' => 'object']],
     'object (replaces the array rule beside it)' => [[['array'], ['object']], ['type' => 'object']],
+    'array_or_object' => [[['array_or_object']], ['type' => ['array', 'object']]],
+    // The bound is owed to both containers: Laravel counts the entries of either, and each keyword is
+    // inert against the type it does not belong to.
+    'array_or_object (bounded)' => [[['array_or_object'], ['size', ['3']]], ['maxItems' => 3, 'maxProperties' => 3, 'minItems' => 3, 'minProperties' => 3, 'type' => ['array', 'object']]],
+    // The `_confirmation` partner is asserted on separately; this row is the field's own schema.
+    'array_or_object (confirmed)' => [[['array_or_object'], ['confirmed']], ['type' => ['array', 'object']]],
 
     // DateWireRuleTransformer — a date-typed property's own wire format, stated by the recovering
     // integration because the rule vocabulary has no word for it. The parameter is the PHP `date()` format
@@ -433,7 +440,11 @@ it('switches to multipart and documents the confirmed partner', function (): voi
     expect($file->mediaType)->toBe('multipart/form-data')
         ->and($file->schema['properties']['avatar'])->toBe(['type' => 'string', 'format' => 'binary', 'description' => 'An image file.'])
         ->and($confirmed['properties'])->toHaveKeys(['password', 'password_confirmation'])
-        ->and($confirmed['required'])->toBe(['password', 'password_confirmation']);
+        ->and($confirmed['required'])->toBe(['password', 'password_confirmation'])
+        // The partner is validated by the same rule, so it accepts exactly what the field does — every
+        // type word, not the first one or a `string` fallback standing in for a union.
+        ->and(convertFieldRules([['array_or_object'], ['confirmed']])->schema['properties']['f_confirmation'])
+        ->toBe(['type' => ['array', 'object']]);
 });
 
 /**

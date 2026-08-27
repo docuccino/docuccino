@@ -51,7 +51,7 @@ function allowedAssociativeJsonDecodes(): array
         // contract. Measured against the recorded goldens: 41 such schemas, none carrying an `example`,
         // which is the only free-form position that would survive to the document. It also cannot use
         // JsonValue — an integration may import only the public core surface (`IntegrationsArchTest`).
-        'php/laravel/src/Integrations/Validation/Transformers/AdditionalPropertiesRuleTransformer.php:45' => 'rule parameter → additionalProperties schema',
+        'php/laravel/src/Integrations/Validation/Transformers/AdditionalPropertiesRuleTransformer.php:57' => 'rule parameter → additionalProperties schema',
 
         // Asks the same carrier for its value schema's `type` WORD and nothing else, to tell whether a
         // map's values are objects. The decoded value is discarded on the next line; the schema that
