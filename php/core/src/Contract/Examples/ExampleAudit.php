@@ -146,7 +146,7 @@ final class ExampleAudit
                 /** @var array<string, mixed> $raw */
                 [$response, $segments] = Refs::follow($document, $raw, [...$operation->segments, 'responses', $status]);
 
-                foreach ($this->inContent($response, $segments) as $site) {
+                foreach ([...$this->inHeaders($response, $segments), ...$this->inContent($response, $segments)] as $site) {
                     $sites[] = [$site[0], $site[1], $operation->label().' → '.$status.' '.$site[2]];
                 }
             }
@@ -175,6 +175,48 @@ final class ExampleAudit
         sort($names);
 
         return $names;
+    }
+
+    /**
+     * The `example` / `examples` beside each documented response header, and every example inside that
+     * header's own schema. A header object is Parameter-like, so its examples sit exactly where a
+     * parameter's do — and a hand-written one is as copyable, and as unverified, as a body's.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  list<string>  $segments
+     * @return list<array{0: list<string>, 1: list<string>, 2: string}>
+     */
+    private function inHeaders(array $node, array $segments): array
+    {
+        $headers = $node['headers'] ?? null;
+
+        if (! is_array($headers)) {
+            return [];
+        }
+
+        $names = array_map(strval(...), array_keys($headers));
+        sort($names);
+
+        $sites = [];
+        foreach ($names as $name) {
+            $header = $headers[$name];
+            if (! is_array($header)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $header */
+            [$definition, $where] = Refs::follow($this->index->document(), $header, [...$segments, 'headers', $name]);
+
+            foreach ($this->beside($definition, $where, [...$where, 'schema']) as $site) {
+                $sites[] = [$site[0], $site[1], 'header '.$name];
+            }
+
+            foreach ($this->inSchema([...$where, 'schema']) as $site) {
+                $sites[] = [$site[0], $site[1], 'header '.$name];
+            }
+        }
+
+        return $sites;
     }
 
     /**

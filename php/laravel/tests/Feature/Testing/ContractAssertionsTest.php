@@ -223,3 +223,75 @@ it('falls back to whatever the document does write when it writes no uir', funct
 
     expect(ApiContract::artifactPath())->toEndWith('/docs/openapi-3.1.json');
 });
+
+/*
+ * The rate-limit integration documents a `429` with `Retry-After` and the `X-RateLimit-*` trio. Those
+ * header claims used to be published and never held to anything; these three pin the whole path — the
+ * real workbench build, the real emitter, the real assertion.
+ */
+it('passes a 429 whose rate-limit headers say what the document says they say', function (): void {
+    workbenchContract();
+
+    $response = contractResponse('GET', '/api/rate-limited', status: 429, body: '{"message":"Too Many Attempts."}', headers: [
+        'Content-Type' => 'application/json',
+        'Retry-After' => '30',
+        'X-RateLimit-Limit' => '60',
+        'X-RateLimit-Remaining' => '0',
+        'X-RateLimit-Reset' => '1735689600',
+    ]);
+
+    expect(ApiContract::assertions()->assertValidResponse($response))->toBe($response);
+});
+
+it('fails a 429 whose rate-limit header is not the type the document publishes', function (): void {
+    workbenchContract();
+
+    try {
+        ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/rate-limited', status: 429, body: '{"message":"Too Many Attempts."}', headers: [
+            'Content-Type' => 'application/json',
+            'Retry-After' => 'in a bit',
+            'X-RateLimit-Limit' => '60',
+            'X-RateLimit-Remaining' => '0',
+            'X-RateLimit-Reset' => '1735689600',
+        ]));
+    } catch (AssertionFailedError $failure) {
+        expect($failure->getMessage())
+            ->toContain('the response header Retry-After')
+            ->toContain('must match the type: integer')
+            ->toContain('/responses/429/headers/Retry-After/schema')
+            ->toContain('from     integration:rate-limit (integration)');
+
+        return;
+    }
+
+    throw new RuntimeException('the assertion should have failed');
+});
+
+/*
+ * The integration publishes those four headers WITHOUT `required`, so a 429 that omits one is not a
+ * violation — an absent optional header is exactly what the contract allowed. Pinned rather than
+ * assumed: the day the integration marks them required, this row is the one that says so.
+ */
+it('lets a 429 omit a rate-limit header the document does not mark required', function (): void {
+    workbenchContract();
+
+    $response = contractResponse('GET', '/api/rate-limited', status: 429, body: '{"message":"Too Many Attempts."}', headers: [
+        'Content-Type' => 'application/json',
+        'X-RateLimit-Limit' => '60',
+    ]);
+
+    expect(ApiContract::assertions()->assertValidResponse($response))->toBe($response);
+});
+
+it('reduces the response headers Laravel sent, repeats and all, to the neutral exchange', function (): void {
+    $response = contractResponse('GET', '/api/forms', headers: [
+        'Content-Type' => 'application/json',
+        'X-Chunk' => ['1', '2'],
+    ]);
+
+    $exchange = ApiContract::exchangeFor($response->baseRequest, $response);
+
+    expect($exchange->responseHeader('x-chunk'))->toBe(['1', '2'])
+        ->and($exchange->responseHeader('Content-Type'))->toBe(['application/json'])
+        ->and($exchange->responseHeader('X-Nothing'))->toBe([]);
+});

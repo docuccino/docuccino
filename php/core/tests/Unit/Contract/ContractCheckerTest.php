@@ -274,3 +274,222 @@ it('reads an operation whose responses member is not a map', function (): void {
     expect($result->response->violations[0]->message)
         ->toBe('responded 200, which the contract does not document (it documents none)');
 });
+
+it('checks the documented response headers against the ones the response sent', function (array $sent, array $expected): void {
+    $result = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":1}',
+        requestBody: '{"reference":"INV-1"}',
+        responseHeaders: $sent,
+    ));
+
+    expect(array_map(static fn ($v): string => $v->where().': '.$v->message, $result->response->violations))->toBe($expected);
+})->with([
+    'every documented header, or none but the required one' => [
+        ['Location' => ['/api/invoices/42'], 'X-RateLimit-Remaining' => ['4'], 'X-Legacy' => ['true']],
+        [],
+    ],
+    'the required one alone' => [['Location' => ['/api/invoices/42']], []],
+    'a required header the response never sent' => [
+        ['X-RateLimit-Remaining' => ['4']],
+        ['the response header Location: is documented as required, but the response did not send it'],
+    ],
+    'an optional header the response never sent is nobody’s violation' => [
+        ['Location' => ['/api/invoices/42']],
+        [],
+    ],
+    'a value that is not the documented type' => [
+        ['Location' => ['/api/invoices/42'], 'X-RateLimit-Remaining' => ['plenty']],
+        ['the response header X-RateLimit-Remaining: The data (string) must match the type: integer'],
+    ],
+    'a numeric string read as the integer it stands for, and held to the constraint' => [
+        ['Location' => ['/api/invoices/42'], 'X-RateLimit-Remaining' => ['-1']],
+        ['the response header X-RateLimit-Remaining: Number must be greater than or equal to 0'],
+    ],
+    'the header name is matched case-insensitively' => [['location' => ['/api/invoices/42']], []],
+    'a $ref into components/headers resolves' => [
+        ['Location' => ['/api/invoices/42'], 'X-Legacy' => ['maybe']],
+        ['the response header X-Legacy: The data (string) must match the type: boolean'],
+    ],
+]);
+
+/*
+ * OpenAPI: "If a response header is defined with the name Content-Type, it SHALL be ignored." The
+ * fixture documents that header as an integer precisely so a check that read it would have to fail.
+ */
+it('ignores a Content-Type entry in the headers map, as the specification requires', function (): void {
+    $result = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":1}',
+        requestBody: '{"reference":"INV-1"}',
+        responseHeaders: ['Location' => ['/api/invoices/42'], 'Content-Type' => ['application/json']],
+    ));
+
+    expect($result->response->ok())->toBeTrue()
+        ->and($result->notes())->toBe([]);
+});
+
+it('holds every value of a header the response sent more than once', function (): void {
+    $result = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":1}',
+        requestBody: '{"reference":"INV-1"}',
+        responseHeaders: ['Location' => ['/api/invoices/42'], 'X-Chunk' => ['1', 'two', '3']],
+    ));
+
+    expect(array_map(static fn ($v): string => $v->where().': '.$v->message, $result->response->violations))
+        ->toBe(['the response header X-Chunk (value 2): The data (string) must match the type: integer']);
+});
+
+it('names the declaration and the producer behind a required header nobody sent', function (): void {
+    $missing = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":1}',
+        requestBody: '{"reference":"INV-1"}',
+    ))->response->violations[0];
+
+    expect($missing->schemaPointer)->toBe('/paths/~1api~1invoices/post/responses/201/headers/Location')
+        ->and($missing->provenance->lines())->toBe([
+            'integration:redirect (integration) — app/Http/Controllers/InvoiceController.php:44 in App\Http\Controllers\InvoiceController::store',
+        ]);
+});
+
+it('points a header value violation at the header’s own schema', function (): void {
+    $violation = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":1}',
+        requestBody: '{"reference":"INV-1"}',
+        responseHeaders: ['Location' => ['/api/invoices/42'], 'X-RateLimit-Remaining' => ['plenty']],
+    ))->response->violations[0];
+
+    expect($violation->schemaPointer)
+        ->toBe('/paths/~1api~1invoices/post/responses/201/headers/X-RateLimit-Remaining/schema');
+});
+
+it('passes with a note where a documented header cannot be checked', function (array $sent, string $note): void {
+    $result = checkContract(
+        contractExchange(
+            'POST',
+            '/api/invoices',
+            status: 201,
+            responseBody: '{"reference":"INV-1","total":1}',
+            requestBody: '{"reference":"INV-1"}',
+            responseHeaders: ['Location' => ['/api/invoices/42']] + $sent,
+        ),
+        // A header with neither `schema` nor `content` is not a document OAS would accept — so it is
+        // written here rather than into the fixture, which answers to the OpenAPI meta-schema.
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['post']['responses']['201']['headers']['X-Trace'] = [
+                'description' => 'Whatever the tracer emitted.',
+            ];
+
+            return $document;
+        },
+    );
+
+    expect($result->response->ok())->toBeTrue()
+        ->and($result->notes())->toContain($note);
+})->with([
+    'a header object with no schema' => [
+        ['X-Trace' => ['abc123']],
+        'the contract documents no schema for the response header X-Trace',
+    ],
+    'a content-typed header' => [
+        ['X-Signature' => ['ey.J.x']],
+        'the response header X-Signature is documented as a content object, which the check does not decode',
+    ],
+]);
+
+it('reads every uncheckable header rather than only the first', function (): void {
+    $result = checkContract(
+        contractExchange(
+            'POST',
+            '/api/invoices',
+            status: 201,
+            responseBody: '{"reference":"INV-1","total":1}',
+            requestBody: '{"reference":"INV-1"}',
+            responseHeaders: ['Location' => ['/a'], 'X-Trace' => ['abc'], 'X-Signature' => ['ey']],
+        ),
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['post']['responses']['201']['headers']['X-Trace'] = [];
+
+            return $document;
+        },
+    );
+
+    // One note per finding, in the order the document lists the headers.
+    expect($result->notes())->toBe([
+        'the response header X-Signature is documented as a content object, which the check does not decode; '.
+        'the contract documents no schema for the response header X-Trace',
+    ]);
+});
+
+it('reports a header and a body that both disagree, rather than stopping at the first', function (): void {
+    $result = checkContract(contractExchange(
+        'POST',
+        '/api/invoices',
+        status: 201,
+        responseBody: '{"reference":"INV-1","total":"lots"}',
+        requestBody: '{"reference":"INV-1"}',
+        responseHeaders: ['Location' => ['/a'], 'X-RateLimit-Remaining' => ['plenty']],
+    ));
+
+    expect(array_map(static fn ($v): string => $v->where(), $result->response->violations))
+        ->toBe(['the response header X-RateLimit-Remaining', 'the response body at /total']);
+});
+
+it('leaves a response the contract documents no headers for alone', function (): void {
+    $result = checkContract(contractExchange(
+        'GET',
+        '/api/invoices/42',
+        responseBody: '{"reference":"INV-1","total":1}',
+        responseHeaders: ['X-Whatever' => ['anything']],
+    ));
+
+    expect($result->response->ok())->toBeTrue()
+        ->and($result->notes())->toBe([]);
+});
+
+it('degrades over a headers map that is not one, and over an entry that is not an object', function (mixed $headers, bool $ok): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices/42', responseBody: '{"reference":"a","total":1}', responseHeaders: ['X-Odd' => ['1']]),
+        static function (array $document) use ($headers): array {
+            $document['paths']['/api/invoices/{invoice}']['get']['responses']['200']['headers'] = $headers;
+
+            return $document;
+        },
+    );
+
+    expect($result->response->ok())->toBe($ok);
+})->with([
+    'a headers member that is a string' => ['nope', true],
+    'an entry that is a string' => [['X-Odd' => 'nope'], true],
+    'a $ref that goes nowhere' => [['X-Odd' => ['$ref' => '#/components/headers/Gone']], true],
+]);
+
+it('says out loud that a parameter documented without a schema was not checked', function (): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices', query: ['page' => '2'], headers: ['X-Tenant' => 'acme'], responseBody: '[]'),
+        static function (array $document): array {
+            unset($document['paths']['/api/invoices']['get']['parameters'][0]['schema']);
+            $document['paths']['/api/invoices']['get']['parameters'][0]['content'] = [
+                'application/json' => ['schema' => ['type' => 'integer']],
+            ];
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeTrue()
+        ->and($result->notes())->toContain('?page is documented as a content object, which the check does not decode');
+});
