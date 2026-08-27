@@ -73,7 +73,7 @@ final class Refs
      * @param  array<string, mixed>  $document
      * @param  array<string, mixed>  $node
      * @param  list<string>  $segments  pointer segments addressing $node
-     * @return array{0: array<string, mixed>, 1: list<string>}|null
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null
      */
     public static function member(array $document, array $node, string $member, array $segments): ?array
     {

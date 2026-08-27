@@ -184,9 +184,11 @@ it('fails a payload that is not JSON at all, and one that is not there', functio
 ]);
 
 /*
- * A webhook the document publishes no body for is the one shape here that FAILS rather than noting. The
- * rest below are the check saying it cannot read what the document published; this is the document
- * publishing nothing at all, which is what an undocumented status already is on the inbound half.
+ * Two shapes here FAIL rather than noting, and both are the document rather than the check. A webhook
+ * the document publishes no body for is the document publishing nothing at all, which is what an
+ * undocumented status already is on the inbound half; a body behind a `$ref` that lands nowhere is the
+ * document being broken. The degradation rows further down are the other thing entirely — the check
+ * saying it cannot read what the document did publish.
  */
 it('fails a delivery the contract publishes no body for at all', function (): void {
     $outcome = checkDelivery('ping.sent', '{"anything":true}');
@@ -197,6 +199,36 @@ it('fails a delivery the contract publishes no body for at all', function (): vo
         ->and($outcome->violations[0]->message)
         ->toBe('documents no delivered body, so there is nothing here for a payload to be held to');
 });
+
+it('fails a delivery documented behind a reference the contract does not define', function (array $body, string $pointer): void {
+    // A `$ref` that lands nowhere degrades to the `$ref` node itself, which has no `content` — so
+    // without this the delivery falls through to the "no media types" NOTE and passes. One typo in a
+    // reference would erase the body it names and report the erasure as outbound coverage.
+    $outcome = checkDelivery('invoice.paid', '{"anything":true}', static function (array $document) use ($body): array {
+        $document['components']['requestBodies']['Loop'] = ['$ref' => '#/components/requestBodies/Knot'];
+        $document['components']['requestBodies']['Knot'] = ['$ref' => '#/components/requestBodies/Loop'];
+        $document['webhooks']['invoice.paid']['post']['requestBody'] = $body;
+
+        return $document;
+    });
+
+    expect($outcome->ok())->toBeFalse()
+        ->and($outcome->note)->toBeNull()
+        ->and($outcome->violations[0]->location)->toBe('the delivered body')
+        ->and($outcome->violations[0]->message)
+        ->toBe('is documented at '.$pointer.', which the contract does not define');
+})->with([
+    // The message names the reference that went nowhere, which for a name nothing defines is the one
+    // written on the webhook and for a loop is the hop the chain gave up on — where to go and look.
+    'a reference at a name nothing defines' => [
+        ['$ref' => '#/components/requestBodies/InvoiceDelivery'],
+        '#/components/requestBodies/InvoiceDelivery',
+    ],
+    'a reference chain that never lands' => [
+        ['$ref' => '#/components/requestBodies/Loop'],
+        '#/components/requestBodies/Loop',
+    ],
+]);
 
 /*
  * The degradation contract: where the document cannot be checked rather than being wrong, the outcome

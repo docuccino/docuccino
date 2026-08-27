@@ -69,7 +69,15 @@ final class ContractChecker
             )]);
         }
 
-        [$body, $segments] = $documented;
+        [$body, $segments, $dangling] = $documented;
+
+        if ($dangling !== null) {
+            return Outcome::failed([Violation::ofExchange(sprintf(
+                'is documented at %s, which the contract does not define',
+                $dangling,
+            ), 'the delivered body')]);
+        }
+
         $content = $body['content'] ?? null;
 
         if (! is_array($content) || $content === []) {
