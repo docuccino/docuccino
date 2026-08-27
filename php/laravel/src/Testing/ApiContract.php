@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Testing;
 use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\ContractMessages;
+use Docuccino\Core\Contract\ContractWebhook;
 use Docuccino\Core\Contract\Coverage\CoverageReport;
 use Docuccino\Core\Contract\Exchange;
 use Docuccino\Laravel\Support\ArtifactLocator;
@@ -14,6 +15,7 @@ use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 use Illuminate\Container\Container;
 use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
+use JsonException;
 use PHPUnit\Framework\Assert;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\HeaderBag;
@@ -197,6 +199,70 @@ final class ApiContract
         // The exchange matched the contract and violated nothing: register that as the assertion it is,
         // so a test whose only check is this one is not reported as having performed none.
         Assert::assertThat($failures, Assert::isEmpty());
+    }
+
+    /**
+     * Resolve the webhook by NAME, reduce the payload to the bytes it would be delivered as, and fail
+     * the test when the two disagree.
+     *
+     * `$method` is only ever needed for a name the document publishes under more than one; with one, it
+     * is the one.
+     */
+    public static function assertWebhook(string $name, mixed $payload, ?string $method = null): void
+    {
+        $index = self::index();
+
+        if (! $index->supportsWebhooks()) {
+            Assert::fail(ContractMessages::webhooksUnsupported(
+                $index,
+                'Export the document as UIR and point the assertions at it: php artisan docuccino:export',
+            ));
+        }
+
+        $candidates = $method === null ? $index->webhooksNamed($name) : array_values(array_filter(
+            $index->webhooksNamed($name),
+            static fn (ContractWebhook $webhook): bool => strcasecmp($webhook->method, $method) === 0,
+        ));
+
+        if ($candidates === []) {
+            Assert::fail(ContractMessages::undocumentedWebhook(
+                $name,
+                $method,
+                $index,
+                'The artifact predates this webhook — rebuild it: php artisan docuccino:export',
+            ));
+        }
+
+        if (count($candidates) > 1) {
+            Assert::fail(ContractMessages::ambiguousWebhook(
+                $name,
+                $candidates,
+                sprintf("Name the one you send: assertValidWebhook('%s', \$payload, method: '%s').", $name, strtolower($candidates[0]->method)),
+            ));
+        }
+
+        $webhook = $candidates[0];
+
+        try {
+            $json = WebhookPayload::json($payload);
+        } catch (JsonException $exception) {
+            Assert::fail(sprintf(
+                "Docuccino cannot read the payload dispatched for %s as JSON: %s.\n".
+                'Pass the array, the JSON string or the object your application actually delivers.',
+                $webhook->label(),
+                $exception->getMessage(),
+            ));
+        }
+
+        $outcome = (new ContractChecker($index))->delivery($webhook, $json);
+
+        if (! $outcome->ok()) {
+            Assert::fail(ContractMessages::delivery($webhook, $outcome));
+        }
+
+        // The payload matched the documented body and violated nothing: register that as the assertion
+        // it is, so a test whose only check is this one is not reported as having performed none.
+        Assert::assertThat($outcome->violations, Assert::isEmpty());
     }
 
     /**
