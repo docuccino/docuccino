@@ -268,11 +268,15 @@ final readonly class CoverageReport
             $row->unexercised(),
         );
 
-        // A null status is the operation documenting no response at all, which is one row and never a
-        // list — so there is nothing to join, and saying "404" for it would invent a promise.
-        return $statuses === [null]
-            ? '(no responses documented)'
-            : implode(', ', array_map(static fn (?string $status): string => PlainText::of((string) $status), $statuses));
+        // A null status is the operation promising nothing a status could name, which is one row and
+        // never a list — so there is nothing to join, and saying "404" for it would invent a promise.
+        // It says which of the two reasons applies, or a document whose every response key is
+        // unreachable would read "no responses documented" directly above the note naming them.
+        if ($statuses === [null]) {
+            return $row->unreachable === [] ? '(no responses documented)' : '(no response a status can name)';
+        }
+
+        return implode(', ', array_map(static fn (?string $status): string => PlainText::of((string) $status), $statuses));
     }
 
     /** The spaces that take an already-escaped column value out to its width. */

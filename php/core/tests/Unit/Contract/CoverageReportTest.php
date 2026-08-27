@@ -306,6 +306,20 @@ it('still names an unreachable response key on a report with nothing missing', f
         );
 });
 
+it('says which kind of nothing an operation with no reachable response promises', function (): void {
+    // "no responses documented" directly above a note naming two documented responses is the report
+    // contradicting itself, so the column says which of the two reasons the row has no status.
+    $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => [
+        'x-docuccino' => ['id' => 'op:v1:0123456789abcdef'],
+        'responses' => ['4xx' => ['description' => 'x']],
+    ]]]]);
+
+    expect(CoverageReport::of($index, [])->render())
+        ->toContain('GET /a  (no response a status can name)  op:v1:0123456789abcdef')
+        ->toContain('so it is in neither count above: GET /a 4xx')
+        ->not->toContain('(no responses documented)');
+});
+
 it('leaves the unreachable note off a document whose response keys are all reachable', function (): void {
     expect(CoverageReport::of(contractIndex(), [])->render())->not->toContain('no status can ever resolve to');
 });

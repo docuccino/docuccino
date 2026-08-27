@@ -218,7 +218,9 @@ The one thing that counts nowhere is a response key no status can resolve to —
 where OpenAPI spells the range `4XX`, or a word like `ok`. Nothing can ever produce a response that
 matches it, so counting it would put `--min=100` permanently out of reach. The report names each one
 under the numbers rather than dropping it quietly, because a short denominator with no explanation is
-worse than the key was.
+worse than the key was. An operation whose response keys are *all* unreachable reads
+`(no response a status can name)` rather than `(no responses documented)` — it documented responses;
+none of them can be met.
 
 Logs accumulate until something clears them, which is what the `--reset` in the recipe is for: skip it
 and the report unions this run with every earlier one, reading more generous than the truth. If the logs
