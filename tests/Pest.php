@@ -1363,6 +1363,34 @@ function pointersIn(mixed $node): array
 }
 
 /**
+ * Every `x-docuccino.id` stated anywhere under a node, keyed by the JSON pointer that carries it.
+ *
+ * Pointers are RFC 6901 escaped, so a failure names the same location the schema validator would.
+ *
+ * @return array<string, string>
+ */
+function nodeIdsIn(mixed $node, string $pointer = ''): array
+{
+    if (! is_array($node)) {
+        return [];
+    }
+
+    $found = [];
+
+    $meta = $node['x-docuccino'] ?? null;
+    if (is_array($meta) && isset($meta['id']) && is_string($meta['id'])) {
+        $found[$pointer] = $meta['id'];
+    }
+
+    foreach ($node as $key => $value) {
+        $token = str_replace(['~', '/'], ['~0', '~1'], (string) $key);
+        $found = array_merge($found, nodeIdsIn($value, $pointer.'/'.$token));
+    }
+
+    return $found;
+}
+
+/**
  * One operation's emitted representation as bytes: its own canonical node plus every component it
  * transitively `$ref`s. `$subject` is a `METHOD /path` pair.
  */

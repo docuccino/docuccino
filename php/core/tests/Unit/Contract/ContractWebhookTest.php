@@ -43,7 +43,7 @@ it('finds a webhook by name, and carries its id and its pointer segments', funct
 
     expect($webhook->name)->toBe('invoice.paid')
         ->and($webhook->method)->toBe('POST')
-        ->and($webhook->id)->toBe('op:v1:aaaainvoicepaid')
+        ->and($webhook->id)->toBe('op:v1:aaaaainvoicepaid')
         ->and($webhook->segments)->toBe(['webhooks', 'invoice.paid', 'post']);
 });
 
@@ -91,7 +91,7 @@ it('keeps webhooks out of the inbound lookup entirely', function (): void {
 });
 
 it('indexes a webhook operation id like any other node', function (): void {
-    expect(contractIndex()->identities()['op:v1:aaaainvoicepaid'])->toBe(['webhooks', 'invoice.paid', 'post']);
+    expect(contractIndex()->identities()['op:v1:aaaaainvoicepaid'])->toBe(['webhooks', 'invoice.paid', 'post']);
 });
 
 /*
@@ -271,7 +271,7 @@ it('says what a failing delivery got wrong, and which webhook promised otherwise
 
     expect(ContractMessages::delivery($webhook, $outcome))
         ->toContain('The payload dispatched for POST webhooks.invoice.paid does not match the documented contract.')
-        ->toContain('webhook    POST webhooks.invoice.paid  op:v1:aaaainvoicepaid')
+        ->toContain('webhook    POST webhooks.invoice.paid  op:v1:aaaaainvoicepaid')
         ->toContain('the delivered payload at /total')
         ->toContain('must match the type: number')
         ->toContain('schema   /components/schemas/Invoice/properties/total')
@@ -365,8 +365,8 @@ it('refuses to guess which of a name is meant, and names the choice', function (
 
     expect($message)
         ->toContain('webhooks.invoice.voided is documented for more than one method')
-        ->toContain('PUT webhooks.invoice.voided  op:v1:aaaavoidedput')
-        ->toContain('POST webhooks.invoice.voided  op:v1:aaaavoidedpost')
+        ->toContain('PUT webhooks.invoice.voided  op:v1:aaaaaaavoidedput')
+        ->toContain('POST webhooks.invoice.voided  op:v1:aaaaaavoidedpost')
         ->toContain('Name the one you send.');
 });
 
