@@ -18,7 +18,7 @@ it('names the operation, the failing member and the producer that wrote the sche
 
     expect($message)
         ->toContain('GET /api/invoices/42 does not match the documented contract.')
-        ->toContain('operation  GET /api/invoices/{invoice}  op:v1:aaaainvoiceshow')
+        ->toContain('operation  GET /api/invoices/{invoice}  op:v1:aaaaainvoiceshow')
         ->toContain('status     200')
         ->toContain('the response body at /total')
         ->toContain('must match the type: number')
@@ -256,7 +256,7 @@ it('shows an artifact its own escape sequences rather than obeying them', functi
 
     $index = contractIndex(static function (array $document) use ($forgery): array {
         $document['components']['schemas']['Invoice']['properties']['total']['x-docuccino']['provenance'][0]['source']['file'] = 'app/Models/Invoice.php'.$forgery;
-        $document['paths']['/api/invoices/{invoice}']['get']['x-docuccino']['id'] = 'op:v1:aaaainvoiceshow'.$forgery;
+        $document['paths']['/api/invoices/{invoice}']['get']['x-docuccino']['id'] = 'op:v1:aaaaainvoiceshow'.$forgery;
 
         return $document;
     });
@@ -267,7 +267,7 @@ it('shows an artifact its own escape sequences rather than obeying them', functi
     $message = ContractMessages::exchange($result->operation, $exchange, $result);
 
     expect($message)
-        ->toContain('operation  GET /api/invoices/{invoice}  op:v1:aaaainvoiceshow\x0A\x1B[32mAll contract assertions passed\x1B[0m\x0A')
+        ->toContain('operation  GET /api/invoices/{invoice}  op:v1:aaaaainvoiceshow\x0A\x1B[32mAll contract assertions passed\x1B[0m\x0A')
         ->toContain('from     integration:eloquent (integration) — app/Models/Invoice.php\x0A\x1B[32mAll contract assertions passed\x1B[0m\x0A')
         ->not->toContain("\x1b")
         ->and(explode("\n", $message))->not->toContain('All contract assertions passed');

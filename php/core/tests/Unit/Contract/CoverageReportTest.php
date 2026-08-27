@@ -19,7 +19,7 @@ use Docuccino\Core\Contract\Coverage\ResponseCoverage;
  */
 
 it('lists every documented operation in the document order, with the responses it promises', function (): void {
-    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoiceshow@200']);
+    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaaainvoiceshow@200']);
 
     $rows = array_map(
         static fn (OperationCoverage $row): string => $row->label.' '.implode('|', array_map(
@@ -53,7 +53,7 @@ it('counts a delivery the run recorded, and one it never did', function (): void
     // The outbound half of the gate. Without this the report calls a document complete while every
     // webhook in it is unmeasured — the reading more generous than the truth the whole report exists to
     // stop, and the one nothing in the suite can reach over HTTP.
-    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoicepaid', 'op:v1:aaaavoidedput']);
+    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaaainvoicepaid', 'op:v1:aaaaaaavoidedput']);
 
     $deliveries = [];
     foreach ($report->rows as $row) {
@@ -76,7 +76,7 @@ it('counts a delivery the run recorded, and one it never did', function (): void
 
 it('counts responses and operations apart, and scores on responses', function (): void {
     $report = CoverageReport::of(contractIndex(), [
-        'op:v1:aaaainvoiceshow@200', 'op:v1:aaaainvoicestore@201', 'op:v1:notinthedocument@200',
+        'op:v1:aaaaainvoiceshow@200', 'op:v1:aaaainvoicestore@201', 'op:v1:notinthedocument@200',
     ]);
 
     // Six routes promising eight responses and eight webhooks promising a delivery apiece: the 201 and
@@ -94,8 +94,8 @@ it('counts responses and operations apart, and scores on responses', function ()
 it('reads a status through the operation’s own grammar, so a range and a default light up', function (): void {
     $report = CoverageReport::of(contractIndex(), [
         'op:v1:aaaainvoicestore@422',   // no `422` documented; the documented `4XX` is what it answered
-        'op:v1:aaaainvoiceshow@503',    // nothing but `default` could have described this
-        'op:v1:aaaainvoicekill@204',    // documented with no content at all, and still a promise kept
+        'op:v1:aaaaainvoiceshow@503',    // nothing but `default` could have described this
+        'op:v1:aaaaainvoicekill@204',    // documented with no content at all, and still a promise kept
     ]);
 
     $exercised = [];
@@ -117,7 +117,7 @@ it('reads a status through the operation’s own grammar, so a range and a defau
 it('counts an operation reached at a status it does not document, and no response of it', function (): void {
     // The status is undocumented, so the assertion failed — and the operation was still reached. Lighting
     // a response here would credit the run with a promise nothing checked.
-    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoicekill@500']);
+    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaaainvoicekill@500']);
 
     expect($report->exercisedOperations())->toBe(1)
         ->and($report->exercisedResponses())->toBe(0)
@@ -129,7 +129,7 @@ it('reads a bare id as the operation reached and no response proved', function (
     // Two writers spell this: a request-only assertion, which proves nothing about what came back, and a
     // log an older release wrote before statuses were recorded. Both may credit the operation and
     // neither may credit a response — a stale log can only ever read LOWER than the truth.
-    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoiceshow', 'op:v1:aaaainvoiceindex']);
+    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaaainvoiceshow', 'op:v1:aaaainvoiceindex']);
 
     expect($report->exercisedOperations())->toBe(2)
         ->and($report->exercisedResponses())->toBe(0)
@@ -139,7 +139,7 @@ it('reads a bare id as the operation reached and no response proved', function (
 });
 
 it('credits nothing for an entry that names no operation of this contract', function (): void {
-    $report = CoverageReport::of(contractIndex(), ['GET /api/invoices', 'op:v1:aaaa', '', 'op:v1:aaaainvoiceshow@200']);
+    $report = CoverageReport::of(contractIndex(), ['GET /api/invoices', 'op:v1:aaaa', '', 'op:v1:aaaaainvoiceshow@200']);
 
     expect($report->exercisedResponses())->toBe(1)
         ->and($report->exercisedOperations())->toBe(1);
@@ -200,10 +200,10 @@ it('calls an empty document covered rather than dividing by nothing', function (
 
 it('clears a floor it exactly meets, and the one it prints', function (): void {
     $report = CoverageReport::of(contractIndex(), [
-        'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaaainvoicerecent@200',
-        'op:v1:aaaainvoiceshow@200', 'op:v1:aaaaexportsfeed@200',
-        'op:v1:aaaaalertraised', 'op:v1:aaaadigestsent', 'op:v1:aaaaexportready',
-        'op:v1:aaaainvoicepaid', 'op:v1:aaaavoidedput',
+        'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaainvoicerecent@200',
+        'op:v1:aaaaainvoiceshow@200', 'op:v1:aaaaaexportsfeed@200',
+        'op:v1:aaaaaalertraised', 'op:v1:aaaaaadigestsent', 'op:v1:aaaaaexportready',
+        'op:v1:aaaaainvoicepaid', 'op:v1:aaaaaaavoidedput',
     ]);
 
     // 10 of 16 is 62.5, which prints exactly — five responses and five deliveries, so a delivery is worth
@@ -218,10 +218,10 @@ it('clears a floor it exactly meets, and the one it prints', function (): void {
 
 it('names the responses never exercised, and the honest floor to move to', function (): void {
     $rendered = CoverageReport::of(contractIndex(), [
-        'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaaainvoicerecent@200',
-        'op:v1:aaaainvoiceshow@200', 'op:v1:aaaaexportsfeed@200', 'op:v1:aaaainvoicekill@204',
-        'op:v1:aaaaalertraised', 'op:v1:aaaadigestsent', 'op:v1:aaaaexportready', 'op:v1:aaaainvoicepaid',
-        'op:v1:aaaavoidedput', 'op:v1:aaaavoidedpost', 'op:v1:aaaapingsent', 'op:v1:aaaareceiptsent',
+        'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaainvoicerecent@200',
+        'op:v1:aaaaainvoiceshow@200', 'op:v1:aaaaaexportsfeed@200', 'op:v1:aaaaainvoicekill@204',
+        'op:v1:aaaaaalertraised', 'op:v1:aaaaaadigestsent', 'op:v1:aaaaaexportready', 'op:v1:aaaaainvoicepaid',
+        'op:v1:aaaaaaavoidedput', 'op:v1:aaaaaavoidedpost', 'op:v1:aaaaaaaapingsent', 'op:v1:aaaaareceiptsent',
     ])->render(100.0);
 
     expect($rendered)->toContain('14 of 16 documented responses and webhook deliveries exercised (87.5%, floor 100%)')
@@ -230,20 +230,20 @@ it('names the responses never exercised, and the honest floor to move to', funct
         // Every operation was reached and every webhook delivered; the two promises nobody proved are an
         // error response apiece.
         ->toContain('POST /api/invoices           4XX      op:v1:aaaainvoicestore')
-        ->toContain('GET /api/invoices/{invoice}  default  op:v1:aaaainvoiceshow')
+        ->toContain('GET /api/invoices/{invoice}  default  op:v1:aaaaainvoiceshow')
         ->toContain('move the floor to 87 and ratchet it up');
 });
 
 it('names a webhook nobody delivered in the same listing, under the delivery it never made', function (): void {
     $rendered = CoverageReport::of(contractIndex(), [])->render(100.0);
 
-    expect($rendered)->toContain('POST webhooks.invoice.paid      delivery      op:v1:aaaainvoicepaid')
-        ->toContain('PUT webhooks.invoice.voided     delivery      op:v1:aaaavoidedput');
+    expect($rendered)->toContain('POST webhooks.invoice.paid      delivery      op:v1:aaaaainvoicepaid')
+        ->toContain('PUT webhooks.invoice.voided     delivery      op:v1:aaaaaaavoidedput');
 });
 
 it('renders the same bytes whatever order the entries were recorded in', function (): void {
-    $forwards = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoiceshow@200', 'op:v1:aaaainvoiceindex@200']);
-    $backwards = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoiceshow@200']);
+    $forwards = CoverageReport::of(contractIndex(), ['op:v1:aaaaainvoiceshow@200', 'op:v1:aaaainvoiceindex@200']);
+    $backwards = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoiceindex@200', 'op:v1:aaaaainvoiceshow@200']);
 
     expect($forwards->render(100.0))->toBe($backwards->render(100.0));
 });
