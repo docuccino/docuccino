@@ -1799,6 +1799,7 @@ function contractExchange(
     string $requestBody = '',
     ?string $requestContentType = 'application/json',
     array $responseHeaders = [],
+    bool $ambiguousEmptyRequestBody = false,
 ): Exchange {
     return new Exchange(
         method: $method,
@@ -1808,6 +1809,7 @@ function contractExchange(
         headers: $headers,
         requestBody: $requestBody,
         requestContentType: $requestContentType,
+        ambiguousEmptyRequestBody: $ambiguousEmptyRequestBody,
         responseBody: $responseBody,
         responseContentType: $responseContentType,
         responseHeaders: $responseHeaders,

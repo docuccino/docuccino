@@ -271,7 +271,7 @@ final class ApiContract
             ));
         }
 
-        $outcome = (new ContractChecker($index))->delivery($webhook, $json);
+        $outcome = (new ContractChecker($index))->delivery($webhook, $json, WebhookPayload::emptyIsAmbiguous($payload));
 
         if (! $outcome->ok()) {
             Assert::fail(ContractMessages::delivery($webhook, $outcome));
@@ -334,6 +334,11 @@ final class ApiContract
             cookies: self::strings($request->cookies->all()),
             requestBody: $request->getContent(),
             requestContentType: $request->headers->get('Content-Type'),
+            // PHP has one array and JSON has two containers, so `json_encode([])` is `[]` and there is
+            // no PHP value the JSON test helpers — which take `array $data` — would write as `{}`.
+            // A JSON request body of `[]` therefore says nothing about which the author meant, and the
+            // check reads it as whichever the contract accepts.
+            ambiguousEmptyRequestBody: $request->isJson(),
             responseBody: $body === false ? '' : $body,
             responseContentType: $base->headers->get('Content-Type'),
             responseHeaders: self::headerValues($base->headers),
