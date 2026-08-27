@@ -308,19 +308,33 @@ it('fails a 429 whose rate-limit header is not the type the document publishes',
 });
 
 /*
- * The integration publishes those four headers WITHOUT `required`, so a 429 that omits one is not a
- * violation — an absent optional header is exactly what the contract allowed. Pinned rather than
- * assumed: the day the integration marks them required, this row is the one that says so.
+ * The integration publishes all four as `required`, because ThrottleRequests sends all four. This is the
+ * only place the required-header branch is exercised against a document the product really generated —
+ * every other proof of it stands on a hand-written contract, which cannot show that anything Docuccino
+ * emits ever reaches it.
  */
-it('lets a 429 omit a rate-limit header the document does not mark required', function (): void {
+it('fails a 429 that omits a rate-limit header the document marks required', function (): void {
     workbenchContract();
 
-    $response = contractResponse('GET', '/api/rate-limited', status: 429, body: '{"message":"Too Many Attempts."}', headers: [
-        'Content-Type' => 'application/json',
-        'X-RateLimit-Limit' => '60',
-    ]);
+    try {
+        ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/rate-limited', status: 429, body: '{"message":"Too Many Attempts."}', headers: [
+            'Content-Type' => 'application/json',
+            'X-RateLimit-Limit' => '60',
+        ]));
+    } catch (AssertionFailedError $failure) {
+        expect($failure->getMessage())
+            ->toContain('the response header Retry-After')
+            ->toContain('is documented as required, but the response did not send it')
+            ->toContain('/responses/429/headers/Retry-After')
+            ->toContain('from     integration:rate-limit (integration)')
+            // Every absent one is named, not just the first — three headers went missing here.
+            ->toContain('the response header X-RateLimit-Remaining')
+            ->toContain('the response header X-RateLimit-Reset');
 
-    expect(ApiContract::assertions()->assertValidResponse($response))->toBe($response);
+        return;
+    }
+
+    throw new RuntimeException('the assertion should have failed');
 });
 
 it('reduces the response headers Laravel sent, repeats and all, to the neutral exchange', function (): void {

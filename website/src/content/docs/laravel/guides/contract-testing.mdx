@@ -144,6 +144,9 @@ What they hold you to:
   [`429`](/laravel/documenting/rate-limiting/) — every one of them is read as the type documented
   beside it, the same way a query parameter is. A header marked `required` that the response never sent
   fails; an optional one it never sent does not, because the contract said it might not be there.
+  Docuccino marks one `required` where the framework leaves no branch in which it is absent — a
+  redirect's `Location`, and all four throttle headers — and you can say the same about your own with
+  [`#[ResponseHeader(required: true)]`](/laravel/reference/attributes/#responseheader).
   Header names are matched case-insensitively, and a header the response sent more than once
   (`Set-Cookie`) is held to the schema once per value it sent.
 - **A response header the check cannot read passes with a note**, the same way a `text/csv` body does:
