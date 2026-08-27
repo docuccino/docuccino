@@ -12,6 +12,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Support\Fqcn;
 use Illuminate\Support\Str;
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
@@ -102,6 +103,8 @@ final class DataClassReflector
     private const WITH_CAST = 'Spatie\\LaravelData\\Attributes\\WithCast';
 
     private const DATETIME_CAST = 'Spatie\\LaravelData\\Casts\\DateTimeInterfaceCast';
+
+    private const WITH_TRANSFORMER = 'Spatie\\LaravelData\\Attributes\\WithTransformer';
 
     private const DATA_COLLECTION_OF = 'Spatie\\LaravelData\\Attributes\\DataCollectionOf';
 
@@ -291,7 +294,7 @@ final class DataClassReflector
 
     /**
      * Laravel rule tokens recovered from a property's spatie validation attributes, read via
-     * {@see \ReflectionAttribute::getArguments()} — the attribute is never instantiated, so no spatie
+     * {@see ReflectionAttribute::getArguments()} — the attribute is never instantiated, so no spatie
      * rule logic runs. {@see DataValidationRules} feeds them through the shared validation chain.
      *
      * @return list<string>
@@ -689,7 +692,7 @@ final class DataClassReflector
     /**
      * The first map attribute's raw value — either a literal key or a mapper FQCN.
      *
-     * @param  list<\ReflectionAttribute<object>>  $attributes
+     * @param  list<ReflectionAttribute<object>>  $attributes
      */
     private function mapValue(array $attributes, string $directional): ?string
     {
@@ -743,6 +746,15 @@ final class DataClassReflector
             'upper' => Str::upper($property),
             default => null,
         };
+    }
+
+    /**
+     * Whether the property carries any `#[WithTransformer]`. Which transformer it is never matters —
+     * one replaces serialisation outright, so the declared shape stops predicting the wire.
+     */
+    public function isPropertyTransformed(string $fqcn, string $property): bool
+    {
+        return $this->property($fqcn, $property)?->getAttributes(self::WITH_TRANSFORMER, ReflectionAttribute::IS_INSTANCEOF) !== [];
     }
 
     private function property(string $fqcn, string $property): ?ReflectionProperty
