@@ -53,13 +53,7 @@ it('holds every fixture that claims to be a UIR document to the UIR schema', fun
         }
     }
 
-    // The one document the schema is short for: its Path Item Object stops at `query` and has no
-    // word for OAS 3.2's `additionalOperations`, which the downlevel emitters do handle. Pinned
-    // rather than papered over — when the schema grows the member this goes red and comes out.
-    expect(array_keys($failures))->toBe(['oas32-only-members.uir.json'])
-        ->and(implode("\n", $failures['oas32-only-members.uir.json']))
-        ->toContain('/paths/~1events')
-        ->toContain('additionalOperations');
+    expect($failures)->toBe([]);
 });
 
 it('holds every fixture node id to the id grammar the schema states', function () use ($uirFixtures): void {
