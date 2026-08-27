@@ -923,9 +923,23 @@ recording refuses and writes nothing: a half-merged recording is worse than none
 Coverage needs none of that, and gets none of it. It is a whole-suite AGGREGATE, so no worker can answer
 it at all — not because the data is split but because none of them knows when the others have finished,
 and a shard does not even share a machine with the ones it would have to wait for. So it is not asked
-inside the run. `CoverageLog` has each process append the ids it met to a file of its own, with no lock,
+inside the run. `CoverageLog` has each process append what it reached to a file of its own, with no lock,
 because a union has nothing to reconcile; `CoverageMerge` unions N directories of those afterwards, and
-`docuccino:coverage` reports and gates. Three properties carry it:
+`docuccino:coverage` reports and gates.
+
+What is counted is a documented RESPONSE, not an operation. A `422` is a promise of its own — the type a
+consumer writes a `catch` against — so a suite asserting only happy paths reaches every operation and
+proves none of them, and a number counting operations calls that full coverage: the too-generous reading
+a gate exists to prevent. So a log entry is `op:…@422`, resolved to a documented response key through
+`ContractOperation::responseKeyFor()` — the same grammar the checker picks a response with, so a coverage
+row and a failure message can never disagree about where a status belonged. A `default`, and a response
+documented with no content, are each one promise; an operation documenting no response at all carries one
+row asking only whether it was reached. The report prints operations exercised beside responses
+exercised, and only the response number meets `--min`. The second entry form is the bare `op:…`: an
+operation reached with no response proved, which is what a request-only assertion, and a log an older
+release wrote, can honestly claim — so a stale log reads LOWER than the truth and never higher.
+
+Three properties carry it:
 
 - **A name is unique per writing process, never per worker.** It carries the runner's worker token where
   there is one — a directory of `w3.…` reads better than one of hashes — but the pid and four random
@@ -938,17 +952,17 @@ because a union has nothing to reconcile; `CoverageMerge` unions N directories o
   the parent pid would refuse two shard invocations sharing a machine, which the design sanctions), so
   the report says how far apart the logs it merged were written where that is longer than a run.
 - **The merged answer is a function of the run and of nothing else.** Sets have no first writer, so the
-  same ids come back whatever the worker count, whichever file each id was seen in, and whatever order
+  same entries come back whatever the worker count, whichever file each was seen in, and whatever order
   the directories were named — the parallel report equals the single-process one exactly.
 - **An incomplete merge is never averaged.** A directory that cannot be read — absent, or there and
   refusing to open, at the top of a named path or nested anywhere under one — a directory holding no log,
-  and a file that does not read back as ids each take the whole merge out of gating and are named. A gate
+  and a file that does not read back as entries each take the whole merge out of gating and are named. A gate
   that quietly measured three of four shards is worse than no gate. Two things make that guarantee hold
   rather than nearly hold. The walk propagates a subdirectory it could not open BY NAME instead of
   merging what it could reach, because one `--path` over a downloaded artifact tree is the recommended
-  shape and a shard nobody could read is not a shard that ran clean. And a log line is held to the id
+  shape and a shard nobody could read is not a shard that ran clean. And a log line is held to the entry
   SHAPE, not merely to being printable: a worker killed part way through a write leaves an ASCII prefix
-  of an id, which would otherwise merge as an id, match no operation, and undercount in silence. What is
+  of one, which would otherwise merge as an entry, match no operation, and undercount in silence. What is
   left is a directory nobody NAMED, which nothing in the merge can see — so the documented CI recipe
   names each shard's directory as a `--path` of its own, and the count is a gate over exactly the shards
   it was told to expect.

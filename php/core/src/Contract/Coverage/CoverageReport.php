@@ -8,9 +8,14 @@ use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Support\PlainText;
 
 /**
- * "Which documented operations did the suite never exercise?" — matched by stable id, listed in the
- * document's own order (path, then the canonical method order), so the report is a function of the
- * contract and the run, never of the order tests happened to execute.
+ * "Which documented responses did the suite never exercise?" — matched by stable id, listed in the
+ * document's own order (path, the canonical method order, then ascending status), so the report is a
+ * function of the contract and the run, never of the order tests happened to execute.
+ *
+ * Responses rather than operations, because a response is what the contract promises a client: a suite
+ * that only ever asserts the happy path has proved nothing about the `422` somebody writes a `catch`
+ * against, and a number counting operations calls that full coverage. Both numbers are printed — only
+ * the response one is compared to a floor.
  *
  * Ids, never paths: an id survives a path rename, so a renamed route reads as still covered rather
  * than as one operation appearing and another vanishing.
@@ -23,44 +28,100 @@ final readonly class CoverageReport
     private function __construct(public array $rows) {}
 
     /**
-     * @param  list<string>  $exercised  operation ids the run touched
+     * @param  list<string>  $exercised  what the run reached, as coverage log entries: an operation id
+     *                                   with the status it answered, or a bare id where the run reached
+     *                                   the operation without proving any response of it
      */
     public static function of(ContractIndex $index, array $exercised): self
     {
-        $seen = array_fill_keys($exercised, true);
+        $touched = [];
+        $statuses = [];
+
+        foreach ($exercised as $entry) {
+            $parsed = CoverageLog::parse($entry);
+
+            if ($parsed === null) {
+                continue;
+            }
+
+            $touched[$parsed['id']] = true;
+
+            if ($parsed['status'] !== null) {
+                $statuses[$parsed['id']][] = $parsed['status'];
+            }
+        }
 
         $rows = [];
         foreach ($index->operations() as $operation) {
+            $reached = $operation->id !== null && isset($touched[$operation->id]);
+
+            // Which response a status was checked against is the operation's own grammar, so a coverage
+            // row and a failure message can never disagree about where a 422 belonged.
+            $seen = [];
+            foreach ($operation->id === null ? [] : ($statuses[$operation->id] ?? []) as $status) {
+                $key = $operation->responseKeyFor($status);
+
+                if ($key !== null) {
+                    $seen[$key] = true;
+                }
+            }
+
+            $keys = $operation->responseKeys();
+
             $rows[] = new OperationCoverage(
                 id: $operation->id,
                 label: $operation->label(),
-                exercised: $operation->id !== null && isset($seen[$operation->id]),
+                exercised: $reached,
+                responses: $keys === []
+                    ? [new ResponseCoverage(null, $reached)]
+                    : array_map(
+                        static fn (string $key): ResponseCoverage => new ResponseCoverage($key, isset($seen[$key])),
+                        $keys,
+                    ),
             );
         }
 
         return new self($rows);
     }
 
-    /** @return list<OperationCoverage> */
+    /**
+     * Every operation with a documented response the run never reached — the listing, so an operation
+     * whose happy path is covered and whose errors are not appears here with its errors named.
+     *
+     * @return list<OperationCoverage>
+     */
     public function missing(): array
     {
-        return array_values(array_filter($this->rows, static fn (OperationCoverage $row): bool => ! $row->exercised));
+        return array_values(array_filter($this->rows, static fn (OperationCoverage $row): bool => ! $row->complete()));
     }
 
-    public function total(): int
+    public function totalOperations(): int
     {
         return count($this->rows);
     }
 
-    public function exercisedCount(): int
+    public function exercisedOperations(): int
     {
-        return $this->total() - count($this->missing());
+        return count(array_filter($this->rows, static fn (OperationCoverage $row): bool => $row->exercised));
     }
 
-    /** Percentage of documented operations exercised. An empty document is fully covered, vacuously. */
+    public function totalResponses(): int
+    {
+        return array_sum(array_map(static fn (OperationCoverage $row): int => count($row->responses), $this->rows));
+    }
+
+    public function exercisedResponses(): int
+    {
+        return $this->totalResponses() - array_sum(array_map(
+            static fn (OperationCoverage $row): int => count($row->unexercised()),
+            $this->rows,
+        ));
+    }
+
+    /** Percentage of documented responses exercised. An empty document is fully covered, vacuously. */
     public function percentage(): float
     {
-        return $this->total() === 0 ? 100.0 : 100 * $this->exercisedCount() / $this->total();
+        return $this->totalResponses() === 0 ? 100.0 : 100 * $this->exercisedResponses() / $this->totalResponses();
     }
 
     public function complete(): bool
@@ -80,9 +141,9 @@ final readonly class CoverageReport
     /**
      * A report a developer can paste into a pull request, and the body of the coverage assertion.
      * Passing $minimum names the floor that was missed and the honest measured value to move it to.
-     * Labels and ids are the artifact's own strings, so both go through {@see PlainText} first.
-     */
-    /**
+     * Labels, ids and status keys are the artifact's own strings, so all three go through
+     * {@see PlainText} first.
+     *
      * @param  string|null  $exportCommand  how this application exports, for the one remediation that needs
      *                                      naming a command — core cannot know, so the caller says.
      */
@@ -90,29 +151,42 @@ final readonly class CoverageReport
     {
         $missing = $this->missing();
 
-        $lines = [sprintf(
-            'Docuccino contract coverage: %d of %d documented operations exercised (%s%%%s).',
-            $this->exercisedCount(),
-            $this->total(),
-            self::number($this->percentage()),
-            $minimum === null ? '' : sprintf(', floor %s%%', self::number($minimum)),
-        )];
+        $lines = [
+            sprintf(
+                'Docuccino contract coverage: %d of %d documented responses exercised (%s%%%s).',
+                $this->exercisedResponses(),
+                $this->totalResponses(),
+                self::number($this->percentage()),
+                $minimum === null ? '' : sprintf(', floor %s%%', self::number($minimum)),
+            ),
+            sprintf(
+                '%d of %d documented operations were reached at all%s.',
+                $this->exercisedOperations(),
+                $this->totalOperations(),
+                $minimum === null ? '' : ' — the floor is measured against responses, not operations',
+            ),
+        ];
 
         if ($missing === []) {
-            return $lines[0];
+            return implode("\n", $lines);
         }
 
         // Escape before measuring, or an escaped label is wider than the column it was padded to. And
         // measure in characters rather than bytes, or a label with an accent in it pads short.
         $labels = array_map(static fn (OperationCoverage $row): string => PlainText::of($row->label), $missing);
-        $width = max(array_map(self::characters(...), $labels));
+        $statuses = array_map(self::statuses(...), $missing);
+
+        $labelWidth = max(array_map(self::characters(...), $labels));
+        $statusWidth = max(array_map(self::characters(...), $statuses));
 
         $lines[] = '';
         $lines[] = 'Never exercised:';
 
         foreach ($missing as $index => $row) {
-            $pad = str_repeat(' ', max(0, $width - self::characters($labels[$index])));
-            $lines[] = '  '.$labels[$index].$pad.'  '.($row->id === null ? '(no id)' : PlainText::of($row->id));
+            $lines[] = '  '
+                .$labels[$index].self::pad($labels[$index], $labelWidth)
+                .'  '.$statuses[$index].self::pad($statuses[$index], $statusWidth)
+                .'  '.($row->id === null ? '(no id)' : PlainText::of($row->id));
         }
 
         if ($minimum !== null) {
@@ -136,6 +210,27 @@ final readonly class CoverageReport
         }
 
         return implode("\n", $lines);
+    }
+
+    /** The statuses of one operation the run never reached, as the column names them. */
+    private static function statuses(OperationCoverage $row): string
+    {
+        $statuses = array_map(
+            static fn (ResponseCoverage $response): ?string => $response->status,
+            $row->unexercised(),
+        );
+
+        // A null status is the operation documenting no response at all, which is one row and never a
+        // list — so there is nothing to join, and saying "404" for it would invent a promise.
+        return $statuses === [null]
+            ? '(no responses documented)'
+            : implode(', ', array_map(static fn (?string $status): string => PlainText::of((string) $status), $statuses));
+    }
+
+    /** The spaces that take an already-escaped column value out to its width. */
+    private static function pad(string $value, int $width): string
+    {
+        return str_repeat(' ', max(0, $width - self::characters($value)));
     }
 
     /**

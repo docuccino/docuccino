@@ -256,9 +256,9 @@ to know about the others.
 A recording is one operation's, so workers only have to take turns: each one compares its candidate
 against the file under an exclusive lock and writes only if it wins. Because the winner is decided by
 the bodies and never by their order, the file you commit is the same however the workers raced for it.
-[Contract coverage](/laravel/guides/contract-testing/#report-the-endpoints-your-suite-never-touched) is
-a whole-suite question — which operations did *nobody* touch — so it needs no lock and no turns at all:
-each process writes a log of its own and a command unions them once the run is over.
+[Contract coverage](/laravel/guides/contract-testing/#report-the-responses-your-suite-never-proved) is
+a whole-suite question — which documented responses did *nobody* prove — so it needs no lock and no
+turns at all: each process writes a log of its own and a command unions them once the run is over.
 </Aside>
 
 ### Credentials never reach the file

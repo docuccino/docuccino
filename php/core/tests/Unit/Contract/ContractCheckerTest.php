@@ -246,6 +246,22 @@ it('checks only the half it was asked for', function (): void {
         ->and($checker->check($exchange, false, true)->request)->toBeNull();
 });
 
+it('names the documented statuses in status order, and names only what a status could match', function (): void {
+    // One grammar: what the message lists is what responseKeyFor() would resolve to, so a reader is never
+    // pointed at a `responses` member the checker itself would skip.
+    $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => ['responses' => [
+        '5XX' => ['description' => 'x'],
+        '404' => ['description' => 'x'],
+        '200' => ['description' => 'x'],
+        'broken' => 'not a response object',
+    ]]]]]);
+
+    $result = (new ContractChecker($index))->check(contractExchange('GET', '/a', status: 302));
+
+    expect($result->response->violations[0]->message)
+        ->toBe('responded 302, which the contract does not document (it documents 200, 404, 5XX)');
+});
+
 it('reads an operation whose responses member is not a map', function (): void {
     $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => ['responses' => 'nope']]]]);
     $result = (new ContractChecker($index))->check(contractExchange('GET', '/a'));
