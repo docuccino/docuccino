@@ -250,7 +250,34 @@ final class ApiContract
             requestContentType: $request->headers->get('Content-Type'),
             responseBody: $body === false ? '' : $body,
             responseContentType: $base->headers->get('Content-Type'),
+            responseHeaders: self::responseHeaders($base),
         );
+    }
+
+    /**
+     * Every value the response sent under each header name. A list per name rather than one string:
+     * a response may send `Set-Cookie` more than once, and the contract check holds each value it sent
+     * to the documented schema.
+     *
+     * @return array<string, list<string>>
+     */
+    private static function responseHeaders(Response $base): array
+    {
+        $headers = [];
+        foreach ($base->headers->all() as $name => $values) {
+            $kept = [];
+            foreach ($values as $value) {
+                if (is_string($value)) {
+                    $kept[] = $value;
+                }
+            }
+
+            if ($kept !== []) {
+                $headers[(string) $name] = $kept;
+            }
+        }
+
+        return $headers;
     }
 
     private static function notify(ObservedExchange $exchange): void

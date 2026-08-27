@@ -10,7 +10,7 @@ it('passes a document whose examples all satisfy the schema beside them', functi
     $report = (new ExampleAudit(contractIndex()))->run();
 
     expect($report->ok())->toBeTrue()
-        ->and($report->checked)->toBe(2);
+        ->and($report->checked)->toBe(3);
 });
 
 /*
@@ -198,7 +198,7 @@ it('never follows a $ref while descending, so a recursive schema terminates', fu
     $report = (new ExampleAudit(contractIndex()))->run();
 
     // Line refers to itself through `child`; the audit still finishes and still sees Line's own example.
-    expect($report->checked)->toBe(2);
+    expect($report->checked)->toBe(3);
 });
 
 it('finds nothing in a document with no examples at all', function (): void {
@@ -247,4 +247,29 @@ it('records a schema the validator will not read instead of throwing, and audits
         // so `ok()` still answers only for the examples it managed to check.
         ->and($report->findings)->toHaveCount(1)
         ->and($report->findings[0]->pointer)->toBe('/components/schemas/Widget/properties/active/example');
+});
+
+it('audits the example beside a documented response header, which nothing else verifies', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['post']['responses']['201']['headers']['X-RateLimit-Remaining']['example'] = 'plenty';
+
+        return $document;
+    })))->run();
+
+    expect($report->findings)->toHaveCount(1)
+        ->and($report->findings[0]->label)->toBe('POST /api/invoices → 201 header X-RateLimit-Remaining')
+        ->and($report->findings[0]->pointer)
+        ->toBe('/paths/~1api~1invoices/post/responses/201/headers/X-RateLimit-Remaining/example')
+        ->and($report->findings[0]->violations[0]->message)->toBe('The data (string) must match the type: integer');
+});
+
+it('follows a $ref out of the headers map and audits an example inside the header’s own schema', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['headers']['Legacy']['schema']['example'] = 'yes';
+
+        return $document;
+    })))->run();
+
+    expect(array_map(static fn ($f): string => $f->pointer, $report->findings))
+        ->toBe(['/components/headers/Legacy/schema/example']);
 });

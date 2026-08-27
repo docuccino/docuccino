@@ -18,6 +18,8 @@ final readonly class Exchange
      * @param  array<string, mixed>  $query  decoded query parameters, nesting preserved
      * @param  array<string, string>  $headers  request headers; lookup is case-insensitive
      * @param  array<string, string>  $cookies
+     * @param  array<string, list<string>>  $responseHeaders  every value sent under each name — a list,
+     *                                                        because a response may send one name twice
      */
     public function __construct(
         public string $method,
@@ -30,6 +32,7 @@ final readonly class Exchange
         public ?string $requestContentType = null,
         public string $responseBody = '',
         public ?string $responseContentType = null,
+        public array $responseHeaders = [],
     ) {}
 
     public function header(string $name): ?string
@@ -41,6 +44,23 @@ final readonly class Exchange
         }
 
         return null;
+    }
+
+    /**
+     * Every value the response sent under this name, empty when it sent none. Header names are
+     * case-insensitive, so the lookup is.
+     *
+     * @return list<string>
+     */
+    public function responseHeader(string $name): array
+    {
+        foreach ($this->responseHeaders as $header => $values) {
+            if (strcasecmp($header, $name) === 0) {
+                return $values;
+            }
+        }
+
+        return [];
     }
 
     /** `GET /api/invoices/42` — how a failure message names the exchange itself. */

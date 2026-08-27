@@ -91,6 +91,13 @@ If your published spec genuinely needs a documented number, state it yourself wi
 [Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) — a deliberate claim you
 maintain and review, rather than a build artifact that drifts.
 
+Every header here is also a claim your test suite can hold the application to.
+[`assertValidResponse()`](/laravel/guides/contract-testing/#assert-an-exchange) checks the response
+headers alongside the body, so a `429` that sends `Retry-After: soon` fails against the `integer` the
+document publishes — and the failure names the rate-limit integration as the producer that wrote it.
+Because these four are documented as optional, a `429` that omits one is not a failure; one that sends
+a value the document contradicts is.
+
 ## The body follows your error style
 
 Middleware synthesizes the `429`, so no `throw` announces it — Docuccino asks the

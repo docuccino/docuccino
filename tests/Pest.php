@@ -1722,6 +1722,7 @@ function contractOperationDocumenting(array $responses): ContractOperation
  *
  * @param  array<string, mixed>  $query
  * @param  array<string, string>  $headers
+ * @param  array<string, list<string>>  $responseHeaders
  */
 function contractExchange(
     string $method,
@@ -1733,6 +1734,7 @@ function contractExchange(
     array $headers = [],
     string $requestBody = '',
     ?string $requestContentType = 'application/json',
+    array $responseHeaders = [],
 ): Exchange {
     return new Exchange(
         method: $method,
@@ -1744,6 +1746,7 @@ function contractExchange(
         requestContentType: $requestContentType,
         responseBody: $responseBody,
         responseContentType: $responseContentType,
+        responseHeaders: $responseHeaders,
     );
 }
 
@@ -1778,7 +1781,7 @@ function workbenchContract(?callable $mutateConfig = null): string
  * A `TestResponse` for an exchange that never went through the router, so a contract test can pin the
  * exact request and response it is asserting about.
  *
- * @param  array<string, string>  $headers  response headers
+ * @param  array<string, string|list<string>>  $headers  response headers
  * @param  array<string, string>  $requestHeaders
  * @return TestResponse<Response>
  */
