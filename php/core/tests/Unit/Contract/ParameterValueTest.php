@@ -60,3 +60,74 @@ it('ignores a properties member that is not a map of schemas', function (): void
 
     expect($coerced->a)->toBe('1');
 });
+
+it('reads the type through the same grammar the validator resolves, not off the node in front of it', function (?array $schema, mixed $expected): void {
+    // Every spelling here is one the generator itself emits: `representation.nullable = 'anyof'`
+    // writes the `anyOf`, the 3.0 downlevel emitter writes the multi-type `anyOf` and the `allOf`
+    // wrapper it hoists `$ref` siblings into, and an enum-backed allow-list writes the `$ref`.
+    expect(ParameterValue::coerce('1000', $schema, contractSchemaDocument()))->toBe($expected);
+})->with([
+    'a literal type' => [['type' => 'integer'], 1000],
+    'a literal type beside an extension member' => [['type' => 'integer', 'x-docuccino' => ['id' => 'x']], 1000],
+    'a nullable type array' => [['type' => ['integer', 'null']], 1000],
+    'an anyOf' => [['anyOf' => [['type' => 'integer'], ['type' => 'null']]], 1000],
+    'a oneOf' => [['oneOf' => [['type' => 'integer'], ['type' => 'null']]], 1000],
+    'an allOf' => [['allOf' => [['type' => 'integer']]], 1000],
+    'a $ref' => [['$ref' => '#/components/schemas/PerPage'], 1000],
+    'a $ref hoisted into an allOf beside its siblings' => [
+        ['allOf' => [['$ref' => '#/components/schemas/PerPage'], ['maximum' => 100]]], 1000,
+    ],
+    'a $ref chain' => [['$ref' => '#/components/schemas/PerPageAlias'], 1000],
+    'a $ref inside an anyOf' => [['anyOf' => [['$ref' => '#/components/schemas/PerPage'], ['type' => 'null']]], 1000],
+    'an enum with no type of its own' => [['enum' => [10, 25, 1000]], 1000],
+    'an enum behind a $ref' => [['$ref' => '#/components/schemas/UntypedSizes'], 1000],
+]);
+
+it('leaves a string alone where the contract says nothing it can read a type from', function (?array $schema): void {
+    expect(ParameterValue::coerce('1000', $schema, contractSchemaDocument()))->toBe('1000');
+})->with([
+    // A reference the document does not define is not a quiet "no coercion": SchemaCheck cannot
+    // resolve it either, so the check fails naming the pointer (ContractCheckerTest pins that).
+    'a $ref at a name nothing defines' => [['$ref' => '#/components/schemas/Ghost']],
+    // A sibling does not stand in for the half that would not resolve. The node means "whatever Ghost
+    // says AND an integer", and half of that is unreadable — so the type is unknown, not `integer`.
+    'a $ref at a name nothing defines, beside a type of its own' => [['$ref' => '#/components/schemas/Ghost', 'type' => 'integer']],
+    'a draft-07 definitions pointer' => [['$ref' => '#/definitions/PerPage']],
+    'a reference into another file' => [['$ref' => 'other.json#/PerPage']],
+    'a $ref that composes its way back to itself' => [['$ref' => '#/components/schemas/Cycle']],
+    'a composition nested past the depth bound' => [array_reduce(
+        range(1, 12),
+        static fn (array $carry, int $level): array => ['allOf' => [$carry]],
+        ['type' => 'integer'],
+    )],
+    'a composition keyword that is not a list of schemas' => [['anyOf' => 'integer']],
+    'a branch that is not a schema' => [['anyOf' => ['integer', 42]]],
+    'an empty schema' => [[]],
+    'no schema at all' => [null],
+]);
+
+it('leaves a string alone where the contract permits a string, whatever else it permits', function (?array $schema): void {
+    // The value already satisfies the contract as it arrived, so converting can only take a pass
+    // away: `anyOf: [{integer, minimum: 100}, {string}]` accepts `1000` as sent and rejects it as a
+    // number. A union that admits several readings resolves toward the wire.
+    expect(ParameterValue::coerce('1000', $schema, contractSchemaDocument()))->toBe('1000');
+})->with([
+    'an integer-or-string union' => [['anyOf' => [['type' => 'integer'], ['type' => 'string']]]],
+    'a multi-type including string' => [['type' => ['integer', 'string']]],
+    'an allOf that cannot be satisfied at all' => [['allOf' => [['type' => 'integer'], ['type' => 'string']]]],
+    'an enum whose members are of several types' => [['enum' => [10, 'all']]],
+]);
+
+it('still refuses a string that is not unambiguously the documented type, behind a reference', function (): void {
+    expect(ParameterValue::coerce('abc', ['$ref' => '#/components/schemas/PerPage'], contractSchemaDocument()))->toBe('abc')
+        ->and(ParameterValue::coerce('1.5', ['anyOf' => [['type' => 'integer'], ['type' => 'null']]], contractSchemaDocument()))->toBe('1.5')
+        ->and(ParameterValue::coerce('yes', ['allOf' => [['type' => 'boolean']]], contractSchemaDocument()))->toBe('yes');
+});
+
+it('reads items and properties out of the same resolution the type came from', function (): void {
+    $document = contractSchemaDocument();
+
+    expect(ParameterValue::coerce('1,2,3', ['$ref' => '#/components/schemas/SizeList'], $document))->toBe([1, 2, 3])
+        ->and(ParameterValue::coerce('4,5', ['allOf' => [['$ref' => '#/components/schemas/SizeList']]], $document))->toBe([4, 5])
+        ->and(ParameterValue::coerce(['size' => '7'], ['$ref' => '#/components/schemas/SizeFilter'], $document)->size)->toBe(7);
+});

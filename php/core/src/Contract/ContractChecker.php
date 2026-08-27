@@ -235,7 +235,7 @@ final class ContractChecker
             $label = count($values) === 1 ? $parameter->label() : sprintf('%s (value %d)', $parameter->label(), $index + 1);
 
             foreach ($this->validate(
-                ParameterValue::coerce($value, $parameter->schema()),
+                ParameterValue::coerce($value, $parameter->schema(), $this->index->document()),
                 $parameter->schemaSegments(),
                 $label,
             ) as $violation) {

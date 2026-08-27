@@ -1731,6 +1731,45 @@ function contractIndex(?callable $mutate = null): ContractIndex
 }
 
 /**
+ * The ways one document can write `type: integer` without the word appearing on the node a reader
+ * lands on: behind a component reference, behind either composition, and behind the `allOf` wrapper
+ * the 3.0 downlevel emitter hoists a `$ref`'s siblings into. Each expects `#/components/schemas/PerPage`
+ * to be an integer schema in the document under test.
+ *
+ * @return array<string, array{array<string, mixed>}>
+ */
+function contractSchemaSpellings(): array
+{
+    return [
+        'a $ref' => [['$ref' => '#/components/schemas/PerPage']],
+        'an anyOf' => [['anyOf' => [['type' => 'integer'], ['type' => 'null']]]],
+        'a oneOf' => [['oneOf' => [['type' => 'integer'], ['type' => 'null']]]],
+        'an allOf' => [['allOf' => [['type' => 'integer']]]],
+        'a $ref hoisted into an allOf beside its siblings' => [['allOf' => [['$ref' => '#/components/schemas/PerPage']]]],
+        'a $ref inside an anyOf' => [['anyOf' => [['$ref' => '#/components/schemas/PerPage'], ['type' => 'null']]]],
+    ];
+}
+
+/**
+ * The component schemas the parameter-coercion tests resolve against: one of each spelling a `type`
+ * can hide behind — a plain component, an alias chain, an untyped enum, a list, an object, and a
+ * composition that references its way back to itself.
+ *
+ * @return array<string, mixed>
+ */
+function contractSchemaDocument(): array
+{
+    return ['components' => ['schemas' => [
+        'PerPage' => ['type' => 'integer', 'minimum' => 1],
+        'PerPageAlias' => ['$ref' => '#/components/schemas/PerPage'],
+        'UntypedSizes' => ['enum' => [10, 25, 1000]],
+        'SizeList' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/PerPage']],
+        'SizeFilter' => ['type' => 'object', 'properties' => ['size' => ['$ref' => '#/components/schemas/PerPage']]],
+        'Cycle' => ['allOf' => [['$ref' => '#/components/schemas/Cycle']]],
+    ]]];
+}
+
+/**
  * One operation documenting exactly the `responses` map given — the smallest thing that can be asked
  * which response a status resolves to.
  *
