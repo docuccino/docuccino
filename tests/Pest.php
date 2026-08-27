@@ -1840,6 +1840,35 @@ function contractResponse(
 }
 
 /**
+ * The warnings a callable triggers, and nothing else. The contract assertions surface a "passed, but"
+ * note on PHPUnit's warning channel, which is a channel and not a return value — so a test that wants to
+ * read one has to stand in front of the runner's own handler for the length of the call.
+ *
+ * Restored in a `finally`: leaving a handler installed would make every later test in the process report
+ * this one's warnings.
+ *
+ * @return list<string>
+ */
+function warningsRaisedBy(callable $callable): array
+{
+    $warnings = [];
+
+    set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+        $warnings[] = $message;
+
+        return true;
+    }, E_USER_WARNING);
+
+    try {
+        $callable();
+    } finally {
+        restore_error_handler();
+    }
+
+    return $warnings;
+}
+
+/**
  * A directory of this process's own, under the gitignored build tree, for a coverage-log fixture. Each
  * one carries the pid and eight random bytes, so two parallel workers running the same test never share
  * a fixture — and so the sweep below can only ever be taking away its own caller's.

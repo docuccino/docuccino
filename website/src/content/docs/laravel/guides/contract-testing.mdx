@@ -132,7 +132,9 @@ What they hold you to:
 - **The media type must be documented** for that status, `application/problem+json` and vendor `+json`
   types included.
 - **A body JSON Schema cannot check passes with a note** rather than passing blank — a `text/csv`
-  download, or a media type documented with no schema.
+  download, or a media type documented with no schema. The note is raised on your runner's warning
+  channel, against the test that produced it, so a pass that proved less than it looks like says so
+  (`pest --display-warnings`, `phpunit --display-warnings`). It never fails a test on its own.
 - **Query and header values are read as the type the contract documents.** `?page=2` is checked as the
   integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
@@ -198,8 +200,12 @@ What it holds you to:
 - **The payload must satisfy the documented body**, including every enum in it. A sender that starts
   delivering a status outside the published set breaks every client generated from the document, and
   this is the only assertion that sees it.
-- **A body JSON Schema cannot check passes with a note** rather than passing blank — a webhook
-  documented with no body, or a media type documented with no schema.
+- **A webhook the document publishes no body for fails.** Nothing is in the way there — the document
+  simply says nothing about what you deliver, so there is no contract for the payload to be held to, and
+  a pass would claim one had been checked. It is the outbound twin of a status nobody wrote down.
+- **A body JSON Schema cannot check passes with a note** rather than passing blank — a `text/csv`
+  delivery, or a media type documented with no schema — and the note reaches the same warning channel
+  the exchange assertions use.
 
 The assertion reads the same artifact as everything else on this page. Assert against the **UIR**
 export, or an OpenAPI 3.1 or 3.2 one: 3.0 defines no `webhooks` member, so a 3.0 artifact dropped every
@@ -222,6 +228,11 @@ covered rather than as one endpoint vanishing and another appearing.
 happy path has touched every endpoint and proved none of those promises — so a number counting endpoints
 calls that full coverage, which is exactly the too-generous reading a coverage gate exists to prevent.
 The report prints both numbers and gates on responses.
+
+**A webhook you document counts too.** `assertValidWebhook()` records the delivery it just checked, and
+every documented webhook carries one row of its own — so a document whose outbound half nothing asserts
+can never read as complete. The row is the *delivery*, never the webhook's own responses: those are what
+the **receiver** answers, and nothing in a sending application's suite can exercise one.
 
 Coverage is a question about the **whole** suite, and no test can see the whole suite: a parallel worker
 holds its own share, a shard holds its own machine's, and neither can know when the others have
@@ -277,6 +288,7 @@ Never exercised:
   GET    /api/invoices                 422            op:v1:k9wd2mrb7ks9tvzq
   GET    /api/invoices/{invoice}       404, default   op:v1:h4dqx2mrb7ks9tvz
   POST   /api/invoices/{invoice}/void  201, 409, 422  op:v1:p6nw3jc8ygf5s0ea
+  POST   webhooks.invoice.paid         delivery       op:v1:m2xq8bd4nf6ha1cy
 
 Cover them, or — if this is the honest measured floor for now — move the floor to 70 and ratchet it up from there.
 ```
@@ -289,7 +301,7 @@ the gap the number is about.
 Every documented response counts as one, including a `204` documented with no body and a `default`
 error response: both are promises a client can be handed. An operation that documents no responses at
 all has no status to name, so it reads `(no responses documented)` and counts once — as "was it ever
-reached".
+reached". A webhook counts once too, under `delivery`.
 
 The one thing that counts nowhere is a response key no status can resolve to — `4xx` in lower case
 where OpenAPI spells the range `4XX`, or a word like `ok`. Nothing can ever produce a response that
@@ -305,7 +317,7 @@ it merged were written far enough apart to be more than one run, the report says
 
 Treat the floor the way you treat a line-coverage floor: set it to what you measure today, and raise it
 as you close gaps. A floor you cannot meet is a floor somebody deletes. `--min=100` is "every documented
-response".
+response answered, and every documented webhook delivered".
 
 <Aside type="note" title="Only a response that was checked and agreed counts">
 A response counts when the assertion actually looked at it and it matched. `assertValidRequest()`

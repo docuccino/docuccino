@@ -78,6 +78,73 @@ it('catches an example on a request body and on a parameter', function (): void 
         ->and($labels)->toContain('POST /api/invoices → request body application/json');
 });
 
+/*
+ * The outbound half. A webhook publishes a body and response headers of exactly the same kind, and an
+ * example beside one is copied by exactly the same reader — so the walk owes them the same audit. One
+ * instance of a lie under `paths` means a class, and `webhooks` is the other member of it.
+ */
+it('catches a webhook example that lies about the payload it publishes', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['webhooks']['invoice.paid']['post']['requestBody']['content']['application/json']['example'] = ['total' => 'free'];
+
+        return $document;
+    })))->run();
+
+    expect($report->ok())->toBeFalse()
+        ->and($report->findings)->toHaveCount(1)
+        ->and($report->findings[0]->label)->toBe('POST webhooks.invoice.paid → request body application/json')
+        ->and($report->findings[0]->pointer)
+        ->toBe('/webhooks/invoice.paid/post/requestBody/content/application~1json/example');
+});
+
+it('catches a webhook response-header example that lies, the way it does a route’s', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['webhooks']['invoice.paid']['post']['responses']['200']['headers']['X-Delivery-Attempt'] = [
+            'schema' => ['type' => 'integer'],
+            'example' => 'first',
+        ];
+
+        return $document;
+    })))->run();
+
+    expect(array_map(static fn ($f): string => $f->label, $report->findings))
+        ->toBe(['POST webhooks.invoice.paid → 200 header X-Delivery-Attempt'])
+        ->and($report->findings[0]->pointer)
+        ->toBe('/webhooks/invoice.paid/post/responses/200/headers/X-Delivery-Attempt/example');
+});
+
+it('finds one lie under paths and the same lie under webhooks, and finds them both', function (): void {
+    // The same example, written twice into the two halves of one document. Either half going unwalked
+    // reads here as a count of one, which is what a sweep stopping one member short looks like.
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $lie = ['total' => 'free'];
+        $document['paths']['/api/invoices']['post']['requestBody']['content']['application/json']['example'] = $lie;
+        $document['webhooks']['invoice.paid']['post']['requestBody']['content']['application/json']['example'] = $lie;
+
+        return $document;
+    })))->run();
+
+    expect(array_map(static fn ($f): string => $f->label, $report->findings))->toBe([
+        'POST /api/invoices → request body application/json',
+        'POST webhooks.invoice.paid → request body application/json',
+    ]);
+});
+
+it('walks a webhook body reached through a $ref, and audits every webhook once', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['requestBodies']['InvoiceDelivery'] = $document['webhooks']['invoice.paid']['post']['requestBody'];
+        $document['components']['requestBodies']['InvoiceDelivery']['content']['application/json']['example'] = ['total' => 'free'];
+        $document['webhooks']['invoice.paid']['post']['requestBody'] = ['$ref' => '#/components/requestBodies/InvoiceDelivery'];
+
+        return $document;
+    })))->run();
+
+    // The pointer names where a reader would go and look, which is the component the `$ref` lands on.
+    expect($report->findings)->toHaveCount(1)
+        ->and($report->findings[0]->pointer)
+        ->toBe('/components/requestBodies/InvoiceDelivery/content/application~1json/example');
+});
+
 it('catches an example nested inside a component schema', function (): void {
     $report = (new ExampleAudit(contractIndex(static function (array $document): array {
         $document['components']['schemas']['Invoice']['properties']['total']['example'] = 'lots';

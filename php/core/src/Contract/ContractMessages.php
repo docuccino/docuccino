@@ -107,6 +107,35 @@ final class ContractMessages
     }
 
     /**
+     * A payload no encoder would turn into bytes, which is not a payload the application could have
+     * delivered either. The encoder's own words go through {@see PlainText} like everything else: they
+     * are the one string in a delivery failure that came from neither the artifact nor the test.
+     */
+    public static function unreadableDelivery(ContractWebhook $webhook, string $reason, ?string $hint = null): string
+    {
+        return self::withHint(sprintf(
+            'Docuccino cannot read the payload dispatched for %s as JSON: %s.',
+            PlainText::of($webhook->label()),
+            PlainText::of(rtrim(trim($reason), '.')),
+        ), $hint);
+    }
+
+    /**
+     * What a passing exchange check could not look at, or null where it looked at everything.
+     * {@see unchecked()}.
+     */
+    public static function uncheckedExchange(Exchange $exchange, CheckResult $result): ?string
+    {
+        return self::unchecked($exchange->label(), $result->notes());
+    }
+
+    /** The same for a delivery. {@see unchecked()}. */
+    public static function uncheckedDelivery(ContractWebhook $webhook, Outcome $outcome): ?string
+    {
+        return self::unchecked($webhook->label(), $outcome->note === null ? [] : [$outcome->note]);
+    }
+
+    /**
      * The webhook nobody documented, with the names the contract does publish — or, when the name is
      * there and the method is not, the methods it is published for.
      */
@@ -292,6 +321,33 @@ final class ContractMessages
         }
 
         return self::withHint(implode("\n", $lines), $hint);
+    }
+
+    /**
+     * A pass that proved less than it looks like it did, as ONE line, or null where there is nothing to
+     * say.
+     *
+     * A check that could not read what the document published passes with a note rather than passing
+     * silently — a `text/csv` body, a header documented with no schema — and a note nobody is told is
+     * how a suite comes to believe it has contract coverage it does not have. One line rather than the
+     * block a failure gets, because this travels on a run's warning channel, where most runners show the
+     * first line and truncate: the subject frames it and the finding follows immediately.
+     *
+     * @param  list<string>  $notes
+     */
+    private static function unchecked(string $subject, array $notes): ?string
+    {
+        $kept = array_values(array_filter($notes, static fn (string $note): bool => trim($note) !== ''));
+
+        if ($kept === []) {
+            return null;
+        }
+
+        return sprintf(
+            '%s passed, but part of the contract was not checked: %s.',
+            PlainText::of($subject),
+            implode('; ', array_map(PlainText::of(...), $kept)),
+        );
     }
 
     /**

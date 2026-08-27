@@ -79,6 +79,46 @@ it('fails an exchange the document describes no operation for', function (): voi
     throw new RuntimeException('the assertion should have failed');
 });
 
+/*
+ * A pass that could not read what the document published says so, on the channel a developer running the
+ * suite actually sees. A note nobody is told is how a suite comes to believe it has contract coverage it
+ * does not have — and the docs promise these notes exist.
+ *
+ * The artifact here is a real build with one media type edited, deliberately: Docuccino's own producer
+ * publishes a JSON schema for every response it writes, so the population an inbound note fires against
+ * is a hand-written or imported document, and that is what this stands in for.
+ */
+it('warns the developer that an exchange passed having proved less than it looks like', function (): void {
+    $path = workbenchContract();
+    $document = json_decode((string) file_get_contents($path), true);
+
+    $content = $document['paths']['/api/forms']['get']['responses']['200']['content'];
+    expect($content)->toHaveKey('application/json');
+
+    $document['paths']['/api/forms']['get']['responses']['200']['content'] = ['text/csv' => $content['application/json']];
+    file_put_contents($path, (string) json_encode($document));
+    ApiContract::using($path);
+
+    $warnings = warningsRaisedBy(static function (): void {
+        ApiContract::assertions()->assertValidResponse(
+            contractResponse('GET', '/api/forms', body: "id,title\n1,Intake\n", headers: ['Content-Type' => 'text/csv']),
+        );
+    });
+
+    expect($warnings)->toBe([
+        'GET /api/forms passed, but part of the contract was not checked: '.
+        'the response body is text/csv, which JSON Schema cannot check.',
+    ]);
+});
+
+it('says nothing at all about an exchange it checked in full', function (): void {
+    workbenchContract();
+
+    expect(warningsRaisedBy(static function (): void {
+        ApiContract::assertions()->assertValidExchange(contractResponse('GET', '/api/forms', body: '[{"id":1,"title":"Intake"}]'));
+    }))->toBe([]);
+});
+
 it('checks the request, the response, or both, as asked', function (): void {
     workbenchContract();
 

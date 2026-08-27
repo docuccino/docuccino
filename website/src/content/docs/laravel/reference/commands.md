@@ -533,13 +533,18 @@ docuccino:coverage
 | --- | --- | --- |
 | `document` | configured key / all | Which document(s) to measure. Unknown → exit 1. |
 | `--path` | directory, repeatable / the document's [`coverage.log`](/laravel/reference/configuration/#coverage) | Directories to merge. Subdirectories are walked, but name each shard's directory rather than the tree they land in — only a directory you named can be reported as missing. |
-| `--min` | `0`–`100` / `0` | Floor, measured against documented **responses**. Below it the command exits 1. A value outside the range errors. |
+| `--min` | `0`–`100` / `0` | Floor, measured against documented **responses** and webhook **deliveries**. Below it the command exits 1. A value outside the range errors. |
 | `--reset` | flag / off | Deletes the log files in those directories and exits `0`, reporting how many. Nothing else in them is touched. |
 
 **The gated number is documented responses.** A documented `422` is a promise of its own — it is what a
 consumer writes a `catch` against — so a suite that only asserts the happy path has touched every
 endpoint and proved none of them. The report prints operations exercised beside responses exercised, and
 compares only responses to `--min`.
+
+Each documented **webhook** is counted alongside them, as one `delivery` row lit by
+`assertValidWebhook()` — otherwise a document whose outbound half nothing asserts reads as fully
+covered. A webhook's own responses are what the *receiver* answers, and nothing in a sending
+application's suite can exercise one, so they are never counted.
 
 It reads the artifact your suite asserted against — never a fresh build — so the command and the
 [contract assertions](/laravel/guides/contract-testing/) can only ever be talking about the same
@@ -574,6 +579,7 @@ Never exercised:
   GET    /api/invoices                 422            op:v1:k9wd2mrb7ks9tvzq
   GET    /api/invoices/{invoice}       404, default   op:v1:h4dqx2mrb7ks9tvz
   POST   /api/invoices/{invoice}/void  201, 409, 422  op:v1:p6nw3jc8ygf5s0ea
+  POST   webhooks.invoice.paid         delivery       op:v1:m2xq8bd4nf6ha1cy
 
 Cover them, or — if this is the honest measured floor for now — move the floor to 70 and ratchet it up from there.
 ```

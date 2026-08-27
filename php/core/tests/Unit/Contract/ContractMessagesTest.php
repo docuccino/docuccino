@@ -47,6 +47,59 @@ it('stops listing violations before the list stops being read', function (): voi
     expect(ContractMessages::exchange($result->operation, $exchange, $result))->toContain('… and 5 more.');
 });
 
+/*
+ * The note channel. A check that could not read what the document published passes with a NOTE, and a
+ * note nobody is told is a pass that proved nothing and said nothing — which is how a suite comes to
+ * believe it has contract coverage it does not have.
+ */
+it('says an exchange passed having proved less than it looks like, naming every half that could not be read', function (): void {
+    $exchange = contractExchange(
+        'GET',
+        '/api/exports',
+        responseBody: 'a,b',
+        responseContentType: 'text/csv',
+        query: ['cursor' => 'abc'],
+    );
+    $result = checkContract($exchange, static function (array $document): array {
+        // A query parameter documented with `content` rather than a schema: the request half's own way
+        // of being uncheckable, so the line carries a finding from each half rather than only the last.
+        $document['paths']['/api/exports']['get']['parameters'] = [
+            ['name' => 'cursor', 'in' => 'query', 'content' => ['application/json' => []]],
+        ];
+
+        return $document;
+    });
+
+    expect(ContractMessages::uncheckedExchange($exchange, $result))->toBe(
+        'GET /api/exports passed, but part of the contract was not checked: '.
+        '?cursor is documented as a content object, which the check does not decode; '.
+        'the response body is text/csv, which JSON Schema cannot check.'
+    );
+});
+
+it('says nothing at all about an exchange it checked in full', function (): void {
+    $exchange = contractExchange('GET', '/api/invoices/42', responseBody: '{"reference":"INV-1","total":12.5,"lines":[]}');
+
+    expect(ContractMessages::uncheckedExchange($exchange, checkContract($exchange)))->toBeNull();
+});
+
+it('escapes an artifact string on its way into an exchange note', function (): void {
+    // A parameter name out of a generated artifact nobody re-read, in a message that reaches a terminal.
+    $forged = "cursor\x1b[32mAll contract assertions passed";
+    $exchange = contractExchange('GET', '/api/exports', responseBody: 'a,b', responseContentType: 'text/csv', query: [$forged => 'abc']);
+    $result = checkContract($exchange, static function (array $document) use ($forged): array {
+        $document['paths']['/api/exports']['get']['parameters'] = [
+            ['name' => $forged, 'in' => 'query', 'content' => ['application/json' => []]],
+        ];
+
+        return $document;
+    });
+
+    expect(ContractMessages::uncheckedExchange($exchange, $result))
+        ->toContain('?cursor\x1B[32mAll contract assertions passed is documented as a content object')
+        ->not->toContain("\x1b");
+});
+
 it('tells a reader which paths the contract does document for the method they tried', function (): void {
     $message = ContractMessages::undocumented(
         contractExchange('GET', '/api/credits'),

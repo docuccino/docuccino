@@ -16,7 +16,8 @@ use Throwable;
  * Where the contract cannot be checked rather than being wrong — a `text/csv` body, a media type or a
  * header with no schema — the outcome passes with a NOTE rather than passing silently. A pass that
  * proved nothing and says nothing is how a suite ends up believing it has contract coverage it does not
- * have. A document that points NOWHERE is the other case and is not a note: a `$ref` at a name nothing
+ * have, so a note is owed a reader: {@see ContractMessages::uncheckedExchange()} is how one is said.
+ * A document that points NOWHERE is the other case and is not a note: a `$ref` at a name nothing
  * defines is broken rather than uncheckable, so it fails naming the pointer — otherwise one typo in a
  * reference turns the contract it guards into a no-op that reports success.
  */
@@ -50,13 +51,22 @@ final class ContractChecker
      *
      * The outbound half. There is no exchange to match — a webhook is found by name — so the caller
      * resolves it off {@see ContractIndex::webhooksNamed()} and hands the one it means here.
+     *
+     * A webhook the document publishes NO body for fails rather than noting, which is the one place the
+     * outbound half parts company with the inbound one's notes. Everything else here is the check saying
+     * it cannot read what the document published; that is the document publishing nothing at all, which
+     * is what an undocumented status already is on the way in — there is no contract to be right or
+     * wrong about, and a pass would claim one had been checked.
      */
     public function delivery(ContractWebhook $webhook, string $payload): Outcome
     {
         $documented = $webhook->requestBody($this->index->document());
 
         if ($documented === null) {
-            return Outcome::passed(sprintf('the contract documents no delivered body for %s', $webhook->label()));
+            return Outcome::failed([Violation::ofExchange(
+                'documents no delivered body, so there is nothing here for a payload to be held to',
+                $webhook->label(),
+            )]);
         }
 
         [$body, $segments] = $documented;
