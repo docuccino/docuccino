@@ -13,6 +13,16 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.10.5
+
+### Features
+
+- **core**: report an annotation-only schema change without gating on it ([#256](https://github.com/docuccino/docuccino/pull/256))
+
+### Bug fixes
+
+- **core**: read a generated key as its kind, not its identity ([#257](https://github.com/docuccino/docuccino/pull/257))
+
 ## v0.10.4
 
 ### Features
