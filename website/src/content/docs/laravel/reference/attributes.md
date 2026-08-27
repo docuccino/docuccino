@@ -125,13 +125,21 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public int $status = 200,
+    public bool $required = false,
 )
 ```
 
 Documents a single response header on a given status code. Repeat it freely — headers are grouped and
 merged per status. Omit `type` and the header is documented as a string.
 
+Set `required: true` when your server sends the header on *every* response at that status. A client
+generated from the document can then type it non-optional, and
+[`assertValidResponse()`](/laravel/guides/contract-testing/#assert-an-exchange) fails a response that
+leaves it out. The default is `false`, which says only that the header may arrive — so a header nobody
+made a promise about never fails a test for being absent.
+
 ```php
+#[ResponseHeader(name: 'X-Request-Id', type: 'string', description: 'Echoed on every response', required: true)]
 #[ResponseHeader(name: 'X-RateLimit-Remaining', type: 'integer', description: 'Calls left this window')]
 #[ResponseHeader(name: 'Retry-After', type: 'integer', description: 'Seconds to wait', status: 429)]
 public function index(): AnonymousResourceCollection { /* … */ }

@@ -566,7 +566,7 @@ responses without discarding the rest:
 | Attribute | Use it to… |
 | --- | --- |
 | [`#[Response]`](/laravel/reference/attributes/#response) | Add a status, or set the `description`, `type` or `mediaType` of one — repeatable for several statuses. |
-| [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status (`status: 200` by default). |
+| [`#[ResponseHeader]`](/laravel/reference/attributes/#responseheader) | Document a response header on a given status (`status: 200` by default), and say with `required: true` when the server always sends it. |
 | [`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) | Drop an auto-inferred response by status code. |
 | [`#[Example]`](/laravel/reference/attributes/#example) | Pin the payload a reader copies — see [Example payloads](/laravel/documenting/examples/). |
 
