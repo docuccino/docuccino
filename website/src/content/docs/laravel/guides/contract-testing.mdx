@@ -149,6 +149,68 @@ What they hold you to:
   entry in a `headers` map is ignored entirely — OpenAPI says it is, because `content` is what
   describes the media type.
 
+## Assert a webhook you send
+
+Everything above is the inbound half: requests your API answers, which your suite already makes. The
+other half is the payload your application *delivers* — and no HTTP test in your suite goes anywhere
+near it, so it is the half of the document that drifts silently.
+
+`assertValidWebhook()` closes it. Give it the name the webhook is published under and the payload you
+are about to dispatch, and it is held to the schema the document publishes for that name:
+
+<Tabs>
+	<TabItem label="Your test">
+	```php
+	use App\Webhooks\InvoicePaid;
+
+	it('delivers a payload subscribers can rely on', function () {
+	    $this->assertValidWebhook('invoice.paid', new InvoicePaid(
+	        invoiceId: 42,
+	        amountInCents: 1250,
+	        paidAt: '2026-03-01T09:00:00Z',
+	    ));
+	});
+	```
+	</TabItem>
+	<TabItem label="When it disagrees">
+	```text
+	The payload dispatched for POST webhooks.invoice.paid does not match the documented contract.
+
+	  webhook    POST webhooks.invoice.paid  op:v1:kgfeda3prpqaw73i
+
+	  the delivered payload at /amountInCents
+	    The data (string) must match the type: integer
+	    schema   /components/schemas/InvoicePaid/properties/amountInCents
+	    from     inference (inference) — app/Webhooks/InvoicePaid.php:19
+	```
+	</TabItem>
+</Tabs>
+
+Pass the payload in whatever form your code holds it at the moment it dispatches — the event object, a
+Data object, an array, a `Jsonable`, or JSON text you already encoded. It becomes the bytes your
+subscriber would receive, and those are what the schema judges. An object that says what its own JSON
+is (`toJson()`, `jsonSerialize()`) is asked rather than encoded around.
+
+What it holds you to:
+
+- **The name must be documented.** A webhook nobody wrote down fails, naming the ones the contract does
+  publish.
+- **The payload must satisfy the documented body**, including every enum in it. A sender that starts
+  delivering a status outside the published set breaks every client generated from the document, and
+  this is the only assertion that sees it.
+- **A body JSON Schema cannot check passes with a note** rather than passing blank — a webhook
+  documented with no body, or a media type documented with no schema.
+
+The assertion reads the same artifact as everything else on this page. Assert against the **UIR**
+export, or an OpenAPI 3.1 or 3.2 one: 3.0 defines no `webhooks` member, so a 3.0 artifact dropped every
+webhook it had, and the assertion says exactly that rather than reporting your webhook as undocumented.
+
+<Aside type="tip" title="One name, two methods">
+Where two classes publish the same name under different methods, the two bodies are different
+contracts and nothing picks between them for you. Say which you send:
+`assertValidWebhook('invoice.paid', $payload, method: 'put')`.
+</Aside>
+
 ## Report the responses your suite never proved
 
 Every response assertion records the documented response it matched — the operation's stable
