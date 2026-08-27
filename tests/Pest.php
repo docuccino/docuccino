@@ -1900,9 +1900,10 @@ function shippedLints(): array
  * returning its component schema and the diagnostics the conversion raised. Nested, because the wrap
  * question this answers is only ever asked of a property.
  *
+ * @param  DType|null  $things  the declared type of the collection property; a list of the item class by default
  * @return array{schema: array<string, mixed>, codes: list<string>, diagnostics: array<string, Diagnostic>}
  */
-function convertNestedWrap(string $fqcn, ?string $wrap): array
+function convertNestedWrap(string $fqcn, ?string $wrap, ?DType $things = null): array
 {
     $item = NestedWrapItemData::class;
 
@@ -1910,7 +1911,7 @@ function convertNestedWrap(string $fqcn, ?string $wrap): array
         $fqcn => new ClassMetadata($fqcn, [
             new PropertyMetadata(
                 'things',
-                new ListT(new ClassT($item)),
+                $things ?? new ListT(new ClassT($item)),
             ),
         ]),
         $item => new ClassMetadata($item, [

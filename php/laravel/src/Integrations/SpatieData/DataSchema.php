@@ -55,6 +55,8 @@ use Docuccino\Laravel\Integrations\Support\SpatieDataEnvelope;
 #[ExtensionOrder(priority: Priorities::EARLY)]
 final class DataSchema implements TypeToSchema
 {
+    private readonly NestedCollectionWrap $nestedWrap;
+
     /**
      * @param  string  $dateFormat  the app's `data.date_format` (a PHP date() format), read through
      *                              {@see DateWireFormat} — the same reading the request side gives it,
@@ -65,8 +67,9 @@ final class DataSchema implements TypeToSchema
         private readonly ComponentHoist $hoist = new ComponentHoist,
         private readonly string $dateFormat = DateWireFormat::DEFAULT_FORMAT,
         private readonly WrapResolver $wrap = new WrapResolver,
-        private readonly ?NestedCollectionWrap $nestedWrap = null,
-    ) {}
+    ) {
+        $this->nestedWrap = new NestedCollectionWrap($this->reflector, $this->wrap);
+    }
 
     public function supports(DType $type): bool
     {
@@ -179,8 +182,7 @@ final class DataSchema implements TypeToSchema
      */
     private function propertySchema(string $fqcn, string $property, DType $clean, SchemaContext $context): array
     {
-        $wrapped = ($this->nestedWrap ?? new NestedCollectionWrap($this->reflector, $this->wrap))
-            ->diagnose($fqcn, $property, $clean);
+        $wrapped = $this->nestedWrap->diagnose($fqcn, $property, $clean);
         if ($wrapped !== null) {
             $context->diagnostic($wrapped);
         }

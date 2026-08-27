@@ -523,9 +523,14 @@ Resolve it whichever way your API actually behaves:
   you send.
 
 The diagnostic stays quiet where nothing will be wrapped: no global `data.wrap`, a property carrying any
-transformer, or a class that turns wrapping off for its whole transformation with `withoutWrapping()` or
+transformer, a paginated collection (whose `data`/`links`/`meta` envelope the schema already publishes),
+or a class that turns wrapping off for its whole transformation with `withoutWrapping()` or
 `WrapExecutionType::Disabled` — the shape a problem-details carrier usually takes, where `Disabled`
 propagates into the nested values too.
+
+The wrap is read from the class that declares the property, because that class publishes one shared
+schema wherever it is used. A class returned directly would be wrapped, so the diagnostic reports it
+even where some other root nests it under a `Disabled` transformation.
 
 ## Conventions Docuccino honors
 

@@ -6,10 +6,7 @@ namespace Docuccino\Laravel\Integrations\SpatieData;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
-use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
-use Docuccino\Core\Inference\DType\ListT;
-use Docuccino\Core\Inference\DType\UnionT;
 
 /**
  * Says when laravel-data will wrap a nested collection that this document describes as a bare array.
@@ -19,6 +16,12 @@ use Docuccino\Core\Inference\DType\UnionT;
  * `type: array`. The shape is not modelled, because a `#[WithTransformer]` can replace serialisation
  * outright and no static read can see through one — so the divergence is reported to the author
  * instead, which is the only party who can resolve it.
+ *
+ * Two shapes it does not answer for. A collection reached through an Illuminate `Collection` generic is
+ * wrapped by spatie and is not recognised here — a miss, pending a count of how often one is written.
+ * And the wrap is read from the class DECLARING the property, so a collection nested under a different
+ * root that disables wrapping is still reported; the same class returned directly would be wrapped, so
+ * the report is right about the component even where it is loud about one use of it.
  */
 final class NestedCollectionWrap
 {
@@ -45,7 +48,7 @@ final class NestedCollectionWrap
             return null;
         }
 
-        $item = $this->item($fqcn, $property, $clean);
+        $item = $this->reflector->nestedCollectionItem($fqcn, $property, $clean);
         if ($item === null || $this->reflector->isPropertyTransformed($fqcn, $property)) {
             return null;
         }
@@ -60,37 +63,7 @@ final class NestedCollectionWrap
                 $item,
                 $key,
             ),
-            help: sprintf(
-                'Unwrap the property with a `#[WithTransformer]` that returns the bare list, so the wire matches the document; or, if the envelope is intended, state the wrapped shape in an overlay. A property carrying any `#[WithTransformer]` is left alone, since a transformer replaces serialisation and its output cannot be read statically.',
-            ),
+            help: 'Unwrap the property with a `#[WithTransformer]` that returns the bare list, so the wire matches the document; or, if the envelope is intended, state the wrapped shape in an overlay. A property carrying any `#[WithTransformer]` is left alone, since a transformer replaces serialisation and its output cannot be read statically.',
         );
-    }
-
-    /**
-     * The item class where the property is a nested collection of Data, else null. Three spellings
-     * reach here: a `#[DataCollectionOf(X)]` attribute, a `DataCollection<*, X>`, and a plain array
-     * whose recovered generic is a Data class.
-     */
-    private function item(string $fqcn, string $property, DType $clean): ?string
-    {
-        $declared = $this->reflector->dataCollectionOf($fqcn, $property);
-        if ($declared !== null) {
-            return $declared;
-        }
-
-        foreach ($clean instanceof UnionT ? $clean->members : [$clean] as $member) {
-            if ($member instanceof ListT && $member->value instanceof ClassT && DataClassReflector::isData($member->value->fqcn)) {
-                return $member->value->fqcn;
-            }
-
-            if ($member instanceof ClassT && DataClassReflector::isDataCollection($member->fqcn)) {
-                $value = DataClassReflector::collectionValueType($member);
-                if ($value instanceof ClassT && DataClassReflector::isData($value->fqcn)) {
-                    return $value->fqcn;
-                }
-            }
-        }
-
-        return null;
     }
 }
