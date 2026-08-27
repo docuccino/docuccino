@@ -10,8 +10,8 @@ use Docuccino\Laravel\Support\CoverageLogPath;
 use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 
 /**
- * Which documented responses this process exercised, by stable operation id and status — never by path,
- * for the reason {@see CoverageReport} gives.
+ * Which documented responses and webhook deliveries this process exercised, by stable operation id and
+ * status — never by path, for the reason {@see CoverageReport} gives.
  *
  * A process is all it can speak for, which is the whole shape of the feature: a worker sees its own
  * share of the suite and nothing else, and no worker can know when the others have finished. So
@@ -103,7 +103,7 @@ final class CoverageRecorder implements ContractObserver
 
     /**
      * What this process exercised, as coverage log entries. Sorted, so two runs that exercised the same
-     * responses hand back the same list whatever order the tests ran in.
+     * responses and deliveries hand back the same list whatever order the tests ran in.
      *
      * @return list<string>
      */

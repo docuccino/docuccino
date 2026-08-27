@@ -8,14 +8,16 @@ use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Support\PlainText;
 
 /**
- * "Which documented responses did the suite never exercise?" — matched by stable id, listed in the
- * document's own order (path, the canonical method order, then ascending status), so the report is a
- * function of the contract and the run, never of the order tests happened to execute.
+ * "Which documented responses and webhook deliveries did the suite never exercise?" — matched by stable
+ * id, listed in the document's own order (paths first — path, the canonical method order, then ascending
+ * status — then the webhooks), so the report is a function of the contract and the run, never of the
+ * order tests happened to execute.
  *
  * Responses rather than operations, because a response is what the contract promises a client: a suite
  * that only ever asserts the happy path has proved nothing about the `422` somebody writes a `catch`
- * against, and a number counting operations calls that full coverage. Both numbers are printed — only
- * the response one is compared to a floor.
+ * against, and a number counting operations calls that full coverage. A webhook's delivery is the same
+ * promise pointing outward, and counts beside them. Both numbers are printed — only the response and
+ * delivery one is compared to a floor.
  *
  * Ids, never paths: an id survives a path rename, so a renamed route reads as still covered rather
  * than as one operation appearing and another vanishing.
@@ -101,8 +103,9 @@ final readonly class CoverageReport
     }
 
     /**
-     * Every operation with a documented response the run never reached — the listing, so an operation
-     * whose happy path is covered and whose errors are not appears here with its errors named.
+     * Every row with something the run never reached — the listing, so an operation whose happy path is
+     * covered and whose errors are not appears here with its errors named, and a webhook nothing
+     * delivered appears with its `delivery`.
      *
      * @return list<OperationCoverage>
      */
@@ -134,7 +137,10 @@ final readonly class CoverageReport
         ));
     }
 
-    /** Percentage of documented responses exercised. An empty document is fully covered, vacuously. */
+    /**
+     * Percentage of documented responses and webhook deliveries exercised. An empty document is fully
+     * covered, vacuously.
+     */
     public function percentage(): float
     {
         return $this->totalResponses() === 0 ? 100.0 : 100 * $this->exercisedResponses() / $this->totalResponses();
@@ -169,7 +175,7 @@ final readonly class CoverageReport
 
         $lines = [
             sprintf(
-                'Docuccino contract coverage: %d of %d documented responses exercised (%s%%%s).',
+                'Docuccino contract coverage: %d of %d documented responses and webhook deliveries exercised (%s%%%s).',
                 $this->exercisedResponses(),
                 $this->totalResponses(),
                 self::number($this->percentage()),
@@ -179,7 +185,7 @@ final readonly class CoverageReport
                 '%d of %d documented operations were reached at all%s.',
                 $this->exercisedOperations(),
                 $this->totalOperations(),
-                $minimum === null ? '' : ' — the floor is measured against responses, not operations',
+                $minimum === null ? '' : ' — the floor is measured against responses and deliveries, not operations',
             ),
         ];
 

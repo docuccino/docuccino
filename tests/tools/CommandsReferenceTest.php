@@ -13,6 +13,25 @@ use Spatie\LaravelPackageTools\Package;
  * here until every page that lists them says so.
  */
 
+/** Every command the provider registers, as its class name against its declared $signature. */
+function registeredCommandSignatures(): array
+{
+    $package = new Package;
+    (new DocuccinoServiceProvider(new Container))->configurePackage($package);
+
+    $signatures = [];
+    foreach ($package->commands as $class) {
+        /** @var class-string $class */
+        $signature = (new ReflectionClass($class))->getDefaultProperties()['signature'] ?? '';
+
+        expect($signature)->toBeString()->not->toBe('', $class.' declares no $signature');
+
+        $signatures[$class] = (string) $signature;
+    }
+
+    return $signatures;
+}
+
 /** Every command the provider registers, as the artisan name its signature declares. */
 function registeredCommandNames(): array
 {
@@ -130,4 +149,82 @@ it('names every registered command in the reference page front matter', function
     ));
 
     expect($missing)->toBe([], 'commands missing from the page description');
+});
+
+/**
+ * The fenced signature block the reference page prints for each command, keyed by artisan name: a block
+ * whose first line is the command's own name is the page reproducing its signature.
+ */
+function commandSignatureBlocks(): array
+{
+    preg_match_all('/^```\n(docuccino:\w+)\n(.*?)^```$/ms', commandsReferencePage(), $matches, PREG_SET_ORDER);
+
+    $blocks = [];
+    foreach ($matches as $match) {
+        $blocks[$match[1]] = $match[2];
+    }
+
+    return $blocks;
+}
+
+it('prints every registered command’s signature on the reference page, argument for argument', function (): void {
+    // The page reproduces each signature verbatim in a block of its own, and a signature nobody checks is
+    // a promise to remember: an option added, renamed or REDESCRIBED drifts from the command it documents
+    // with the whole suite green. Read the lines off the command, and the page has to carry them.
+    $blocks = commandSignatureBlocks();
+
+    $missing = [];
+    $counted = 0;
+    foreach (registeredCommandSignatures() as $class => $signature) {
+        $lines = preg_split('/\r?\n/', trim($signature)) ?: [];
+        $block = $blocks[trim($lines[0])] ?? null;
+
+        if ($block === null) {
+            $missing[] = $class.': no signature block at all';
+
+            continue;
+        }
+
+        foreach (array_slice($lines, 1) as $line) {
+            $line = trim($line);
+
+            if ($line === '') {
+                continue;
+            }
+
+            $counted++;
+
+            if (! str_contains($block, $line)) {
+                $missing[] = $class.': '.$line;
+            }
+        }
+    }
+
+    // A signature reader that stopped seeing lines would make the assertion above vacuous.
+    expect($counted)->toBeGreaterThan(20)
+        ->and($missing)->toBe([], 'signature lines the reference page does not print');
+});
+
+it('prints no signature line the reference page invented for itself', function (): void {
+    // The other direction: an option removed from a command has to leave the page too, or the page
+    // documents a flag artisan will refuse.
+    $declared = [];
+    foreach (registeredCommandSignatures() as $signature) {
+        foreach (preg_split('/\r?\n/', trim($signature)) ?: [] as $line) {
+            $declared[trim($line)] = true;
+        }
+    }
+
+    $printed = [];
+    foreach (commandSignatureBlocks() as $block) {
+        foreach (preg_split('/\r?\n/', trim($block)) ?: [] as $line) {
+            if (trim($line) !== '') {
+                $printed[] = trim($line);
+            }
+        }
+    }
+
+    expect($printed)->not->toBeEmpty()
+        ->and(array_values(array_filter($printed, static fn (string $line): bool => ! isset($declared[$line]))))
+        ->toBe([], 'signature lines on the page that no command declares');
 });

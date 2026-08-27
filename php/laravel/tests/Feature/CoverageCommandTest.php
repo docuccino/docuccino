@@ -78,7 +78,7 @@ it('reports what the logs cover, out of the document the suite asserted against'
 
     $this->artisan('docuccino:coverage')
         ->expectsOutputToContain('Coverage — default')
-        ->expectsOutputToContain('3 of '.$this->total.' documented responses exercised')
+        ->expectsOutputToContain('3 of '.$this->total.' documented responses and webhook deliveries exercised')
         ->expectsOutputToContain('documented operations were reached at all')
         ->expectsOutputToContain('Never exercised:')
         ->assertSuccessful();
@@ -94,11 +94,11 @@ it('gates on responses, not on operations — every endpoint hit and the errors 
     CoverageLog::for($this->logs, '1')->append($this->happy);
 
     $this->artisan('docuccino:coverage', ['--min' => '100'])
-        ->expectsOutputToContain(count($this->happy).' of '.$this->total.' documented responses exercised')
+        ->expectsOutputToContain(count($this->happy).' of '.$this->total.' documented responses and webhook deliveries exercised')
         // One expectation, not two: Mockery routes an output line to the first expectation that matches
         // it, so a second substring of the same line would never be seen.
         ->expectsOutputToContain(sprintf(
-            '%d of %d documented operations were reached at all — the floor is measured against responses, not operations.',
+            '%d of %d documented operations were reached at all — the floor is measured against responses and deliveries, not operations.',
             count($this->operations),
             count($this->operations),
         ))
@@ -153,7 +153,7 @@ it('merges the directories it is given, in any order, and says the same thing ea
 
     foreach ([['shard-1', 'shard-2'], ['shard-2', 'shard-1']] as $order) {
         $this->artisan('docuccino:coverage', ['--path' => array_map(fn (string $s): string => $this->root.'/'.$s, $order)])
-            ->expectsOutputToContain('4 of '.$this->total.' documented responses exercised')
+            ->expectsOutputToContain('4 of '.$this->total.' documented responses and webhook deliveries exercised')
             ->expectsOutputToContain('2 log files, 4 entries')
             ->assertSuccessful();
     }
@@ -169,7 +169,7 @@ it('refuses to gate on a merge it could not complete', function (array $paths, s
     $this->artisan('docuccino:coverage', ['--min' => '0', '--path' => array_map(fn (string $s): string => $this->root.'/'.$s, $paths)])
         ->expectsOutputToContain('The coverage logs are incomplete')
         ->expectsOutputToContain($says)
-        ->doesntExpectOutputToContain('documented responses exercised')
+        ->doesntExpectOutputToContain('documented responses and webhook deliveries exercised')
         ->assertFailed();
 })->with([
     'a shard whose logs never arrived' => [['shard-1', 'shard-missing'], 'could not be read'],

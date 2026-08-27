@@ -934,8 +934,15 @@ a gate exists to prevent. So a log entry is `op:…@422`, resolved to a document
 `ContractOperation::responseKeyFor()` — the same grammar the checker picks a response with, so a coverage
 row and a failure message can never disagree about where a status belonged. A `default`, and a response
 documented with no content, are each one promise; an operation documenting no response at all carries one
-row asking only whether it was reached. The report prints operations exercised beside responses
-exercised, and only the response number meets `--min`. The second entry form is the bare `op:…`: an
+row asking only whether it was reached.
+
+A documented WEBHOOK is counted beside them, which is the same argument pointing outward: a document
+whose outbound half nothing asserts would otherwise read as fully covered. It carries ONE row, keyed
+`delivery` and lit by a passing delivery check, rather than one row per documented response — a
+webhook's responses are what the RECEIVER answers, and nothing in the sending application's suite can
+exercise one, so counting them would publish a floor nobody could ever meet. So the numbers the report
+prints are operations exercised beside responses and deliveries exercised, and only the second meets
+`--min`. The second entry form is the bare `op:…`: an
 operation reached with no response proved, which is what a request-only assertion, an assertion that
 FAILED, and a log an older release wrote, can honestly claim — so a stale log reads LOWER than the truth
 and never higher. A pass carrying a NOTE — a `text/csv` body, a media type the contract gives no schema
