@@ -230,7 +230,8 @@ minted, and re-export it if it does. The warning is advisory — `--enforce` nev
 quiet when either side carries a single identity of that kind, where one node replaced by another says
 the same thing and is far likelier.
 
-Responses and parameters are read through `components` on **both** sides, so one that moved between
+Every node OpenAPI lets a Reference Object stand in for — a path item, a request body, a response, a
+parameter, a security scheme — is read through `components` on **both** sides, so one that moved between
 inline and [shared](/laravel/documenting/errors/#repeated-bodies-become-shared-components) is not itself
 a change, while an edit to a shared one is reported against every operation that `$ref`s it. A parameter
 written as a bare `{"$ref": …}` states no `name` and no `in` — the pair that tells one parameter from
@@ -269,12 +270,21 @@ Webhooks are diffed as the operations they are, under `webhooks.<name>` in place
 call the API promises to make, and a consumer writes an endpoint against it, so removing one or narrowing
 what it sends is breaking on the same terms as an operation under `paths`.
 
-A parameter or response written as a `$ref` is compared as the component it points at. The contract comes
+A node written as a `$ref` is compared as the component it points at. The contract comes
 from the component and never from the pointer's neighbours: a parameter takes its `name`, `in`, `required`,
-`deprecated` and `schema` from there, and a response its `headers` and `content` — so a `required: false`
-next to a pointer at a component that says `required: true` changes nothing, and the diff reports nothing.
+`deprecated` and `schema` from there, a response its `headers` and `content`, and a path item the
+operations and shared parameters under it — so a `required: false` next to a pointer at a component that
+says `required: true` changes nothing, and the diff reports nothing.
 A `description` beside the pointer still wins, and anything else stated there — `style`, `explode`,
 `example`, an `x-` extension — is read as written.
+
+A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
+another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
+request body is spelled that way on one side only, that endpoint or that body drops out of the comparison
+and the changeset carries one non-breaking entry naming the pointer (`pathItem.unresolved-ref`,
+`requestBody.unresolved-ref`): reporting every operation under it removed would blame a pointer it could
+not open, and reporting nothing would hide it. Where both sides carry the same unfollowable pointer the
+document did not change there, and nothing is reported.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino

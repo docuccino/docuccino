@@ -1130,6 +1130,271 @@ it('counts a $ref parameter\'s identity as the component\'s when judging overlap
     expect(diffOf(diffHoistedParams(), $new)->disjointIdentities)->toBe(['parameter']);
 });
 
+// --- Hoisted path items and request bodies ($ref) ---------------------------
+
+/**
+ * `diffBase()` with its one path hoisted into `components.pathItems` and reached by a `$ref` — the same
+ * endpoint, spelled the way OAS lets a document share one. The name is escaped into the pointer, so a name
+ * carrying a `/` or a `~` is still the name the pointer reaches.
+ *
+ * @return array<string, mixed>
+ */
+function diffHoistedPathItem(string $name = 'Form', string $token = 'Form'): array
+{
+    $doc = diffBase();
+    $item = $doc['paths']['/api/v1/forms/{id}'];
+
+    $doc['paths']['/api/v1/forms/{id}'] = ['$ref' => '#/components/pathItems/'.$token];
+    $doc['components']['pathItems'] = [$name => $item];
+
+    return $doc;
+}
+
+/**
+ * `diffBase()` with a request body on its one operation: stated inline, or hoisted into
+ * `components.requestBodies` and reached by a `$ref`. Tightened, it demands a property it used to accept
+ * without — the commonest breaking edit a request body carries.
+ *
+ * @return array<string, mixed>
+ */
+function diffBodyDoc(bool $hoisted, bool $tightened = false): array
+{
+    $schema = ['type' => 'object', 'properties' => ['title' => ['type' => 'string']]];
+
+    if ($tightened) {
+        $schema['required'] = ['title'];
+    }
+
+    $doc = diffBase();
+    $body = ['content' => ['application/json' => ['schema' => $schema]]];
+
+    if (! $hoisted) {
+        $doc['paths']['/api/v1/forms/{id}']['get']['requestBody'] = $body;
+
+        return $doc;
+    }
+
+    $doc['paths']['/api/v1/forms/{id}']['get']['requestBody'] = ['$ref' => '#/components/requestBodies/Form'];
+    $doc['components']['requestBodies'] = ['Form' => $body];
+
+    return $doc;
+}
+
+it('reads a path item as the path item it points at', function (): void {
+    // Hoisting a path is a move, not an API change, and the diff has to be the same either way round: read
+    // as written, a pointer states no operations at all, so one side spelling the path that way reported
+    // every operation and response under it removed — a release blocked over how the document was spelled.
+    expect(diffOf(diffBase(), diffHoistedPathItem())->isEmpty())->toBeTrue()
+        ->and(diffOf(diffHoistedPathItem(), diffBase())->isEmpty())->toBeTrue()
+        ->and(diffOf(diffHoistedPathItem(), diffHoistedPathItem('Shared', 'Shared'))->isEmpty())->toBeTrue();
+
+    // Emptiness is only worth what the comparison behind it was: unresolved, the operation is invisible and
+    // all three of those pass while nothing is compared at all.
+    $gone = diffHoistedPathItem();
+    unset($gone['components']['pathItems']['Form']['get']);
+
+    expect(changesByCode(diffOf(diffHoistedPathItem(), $gone)))->toHaveKey('operation.removed');
+});
+
+it('reports a break made behind a path item $ref', function (): void {
+    // The worst answer this component can give. Both sides spell the path with a pointer, the operations
+    // behind it are never read, and a response that stopped existing ships as "No API changes."
+    $new = diffHoistedPathItem();
+    unset($new['components']['pathItems']['Form']['get']['responses']['200']);
+
+    $changeset = diffOf(diffHoistedPathItem(), $new);
+    $changes = changesByCode($changeset);
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($changes)->toHaveKey('response.removed')
+        ->and($changes['response.removed']->breaking)->toBeTrue()
+        ->and($changes['response.removed']->path)->toBe('GET /api/v1/forms/{id} responses 200');
+});
+
+it('reads a webhook path item as the path item it points at', function (): void {
+    // Webhooks are the same contract read the other way, and they are `$ref`ed the same way.
+    $inline = diffWebhook();
+    $hoisted = $inline;
+    $hoisted['webhooks']['formSaved'] = ['$ref' => '#/components/pathItems/FormSaved'];
+    $hoisted['components']['pathItems'] = ['FormSaved' => $inline['webhooks']['formSaved']];
+
+    $broken = $hoisted;
+    unset($broken['components']['pathItems']['FormSaved']['post']['responses']['200']);
+
+    expect(diffOf($inline, $hoisted)->isEmpty())->toBeTrue()
+        ->and(diffOf($hoisted, $inline)->isEmpty())->toBeTrue()
+        ->and(changesByCode(diffOf($hoisted, $broken)))->toHaveKey('response.removed');
+});
+
+it('counts an identity behind a path item $ref when judging overlap', function (): void {
+    // The warning that a kind paired nothing has to read a path item the way the pairing does, or a document
+    // whose paths are pointers looks to carry no operation identity at all and it goes quiet on exactly the
+    // pairing failure it exists to flag.
+    $old = diffHoistedPathItem();
+    $old['components']['pathItems']['Form']['put'] = [
+        'x-docuccino' => ['id' => 'op:v1:1111111111111111'],
+        'operationId' => 'forms.update',
+        'responses' => ['200' => ['description' => 'Saved']],
+    ];
+
+    $new = $old;
+    $new['components']['pathItems']['Form']['get']['x-docuccino']['id'] = 'op:v1:2222222222222222';
+    $new['components']['pathItems']['Form']['put']['x-docuccino']['id'] = 'op:v1:3333333333333333';
+
+    expect(diffOf($old, $new)->disjointIdentities)->toBe(['operation']);
+});
+
+it('reads a component name a pointer had to escape, whatever the bucket', function (callable $hoist): void {
+    // `~1` and `~0` are how a name carrying a `/` or a `~` is spelled in a pointer. A resolver comparing the
+    // raw text finds nothing and calls a perfectly resolvable reference dangling — which reads as the
+    // endpoint, the body, the parameter or the response it names having gone away.
+    [$inline, $hoisted, $edited] = $hoist('v1/forms~x', 'v1~1forms~0x');
+
+    // The emptiness above is worth nothing on its own: it is also what a pointer nothing follows produces,
+    // so the same pair has to report an edit made behind that escaped name.
+    expect(diffOf($inline, $hoisted)->isEmpty())->toBeTrue()
+        ->and(diffOf($hoisted, $inline)->isEmpty())->toBeTrue()
+        ->and(diffOf($hoisted, $edited)->breakingChanges())->not->toBeEmpty();
+})->with([
+    'pathItems' => [static function (string $name, string $token): array {
+        $hoisted = diffHoistedPathItem($name, $token);
+        $edited = $hoisted;
+        unset($edited['components']['pathItems'][$name]['get']['responses']['200']);
+
+        return [diffBase(), $hoisted, $edited];
+    }],
+    'requestBodies' => [static function (string $name, string $token): array {
+        $hoisted = diffBodyDoc(true);
+        $hoisted['components']['requestBodies'] = [$name => $hoisted['components']['requestBodies']['Form']];
+        $hoisted['paths']['/api/v1/forms/{id}']['get']['requestBody'] = ['$ref' => '#/components/requestBodies/'.$token];
+
+        $edited = $hoisted;
+        $edited['components']['requestBodies'][$name]['content']['application/json']['schema']['required'] = ['title'];
+
+        return [diffBodyDoc(false), $hoisted, $edited];
+    }],
+    'parameters' => [static function (string $name, string $token): array {
+        $inline = diffBase();
+        $hoisted = $inline;
+        $hoisted['components']['parameters'] = [$name => $inline['paths']['/api/v1/forms/{id}']['get']['parameters'][1]];
+        $hoisted['paths']['/api/v1/forms/{id}']['get']['parameters'][1] = ['$ref' => '#/components/parameters/'.$token];
+
+        $edited = $hoisted;
+        $edited['components']['parameters'][$name]['required'] = true;
+
+        return [$inline, $hoisted, $edited];
+    }],
+    'responses' => [static function (string $name, string $token): array {
+        $inline = diffBase();
+        $hoisted = $inline;
+        $hoisted['components']['responses'] = [$name => $inline['paths']['/api/v1/forms/{id}']['get']['responses']['200']];
+        $hoisted['paths']['/api/v1/forms/{id}']['get']['responses']['200'] = ['$ref' => '#/components/responses/'.$token];
+
+        $edited = $hoisted;
+        unset($edited['components']['responses'][$name]['content']['application/json']['schema']['properties']['title']);
+
+        return [$inline, $hoisted, $edited];
+    }],
+]);
+
+it('reports nothing where both documents point at the same path item it cannot follow', function (callable $break): void {
+    // A pointer this differ cannot open is a comparison it cannot make — but two documents spelling one path
+    // with one pointer are the same document there, and an unchanged document reports nothing, exactly as an
+    // unresolved response or parameter `$ref` already does.
+    $doc = $break(diffHoistedPathItem());
+
+    expect(diffOf($doc, $doc)->isEmpty())->toBeTrue();
+})->with([
+    'a name the document does not declare' => [static function (array $doc): array {
+        unset($doc['components']['pathItems']);
+
+        return $doc;
+    }],
+    'a chain of pointers' => [static function (array $doc): array {
+        $doc['components']['pathItems'] = [
+            'Form' => ['$ref' => '#/components/pathItems/Other'],
+            'Other' => $doc['components']['pathItems']['Form'],
+        ];
+
+        return $doc;
+    }],
+    'a cycle' => [static function (array $doc): array {
+        $doc['components']['pathItems']['Form'] = ['$ref' => '#/components/pathItems/Form'];
+
+        return $doc;
+    }],
+    'a pointer into another document' => [static function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}'] = ['$ref' => 'shared.yaml#/pathItems/Form'];
+
+        return $doc;
+    }],
+    'a pointer at a member inside a component' => [static function (array $doc): array {
+        $doc['paths']['/api/v1/forms/{id}'] = ['$ref' => '#/components/pathItems/Form/get'];
+
+        return $doc;
+    }],
+]);
+
+it('reports a path item $ref it cannot follow as a comparison it could not make', function (): void {
+    // Both other answers claim knowledge the differ hasn't got. Every operation removed blocks a release
+    // over a pointer it could not open; nothing at all is the silence the pointer caused, dressed as a pass.
+    $dangling = diffHoistedPathItem();
+    unset($dangling['components']['pathItems']);
+
+    $changeset = diffOf(diffBase(), $dangling);
+    $changes = changesByCode($changeset);
+
+    expect($changeset->changes)->toHaveCount(1)
+        ->and($changeset->isBreaking())->toBeFalse()
+        ->and($changes)->toHaveKey('pathItem.unresolved-ref')
+        ->and($changes['pathItem.unresolved-ref']->path)->toBe('/api/v1/forms/{id}')
+        ->and($changes['pathItem.unresolved-ref']->fields[0]->toArray())
+        ->toBe(['field' => '$ref', 'old' => null, 'new' => '#/components/pathItems/Form']);
+
+    $back = changesByCode(diffOf($dangling, diffBase()));
+
+    expect($back)->toHaveKey('pathItem.unresolved-ref')
+        ->and($back['pathItem.unresolved-ref']->fields[0]->toArray())
+        ->toBe(['field' => '$ref', 'old' => '#/components/pathItems/Form', 'new' => null]);
+});
+
+it('reads a request body as the body it points at', function (): void {
+    // Read as written a pointer states no `content`, which produces this same emptiness while comparing
+    // nothing — so the pair has to report an edit made behind the pointer as well.
+    expect(diffOf(diffBodyDoc(false), diffBodyDoc(true))->isEmpty())->toBeTrue()
+        ->and(diffOf(diffBodyDoc(true), diffBodyDoc(false))->isEmpty())->toBeTrue()
+        ->and(diffOf(diffBodyDoc(true), diffBodyDoc(true, true))->breakingChanges())->not->toBeEmpty();
+});
+
+it('reports a request body tightened behind a $ref', function (bool $oldHoisted, bool $newHoisted): void {
+    // A pointer read as a body states no `content`, so the media-type walk ran over nothing at all and a body
+    // that stopped accepting what every client sends reported no breaking change.
+    $changeset = diffOf(diffBodyDoc($oldHoisted), diffBodyDoc($newHoisted, true));
+    $changes = changesByCode($changeset);
+
+    expect($changeset->isBreaking())->toBeTrue()
+        ->and($changes)->toHaveKey('schema.required-added')
+        ->and($changes['schema.required-added']->breaking)->toBeTrue();
+})->with([
+    'both sides hoisted' => [true, true],
+    'hoisted then inline' => [true, false],
+    'inline then hoisted' => [false, true],
+]);
+
+it('reports a request body $ref it cannot follow as a comparison it could not make', function (): void {
+    $dangling = diffBodyDoc(true);
+    unset($dangling['components']['requestBodies']);
+
+    $changeset = diffOf(diffBodyDoc(false), $dangling);
+    $changes = changesByCode($changeset);
+
+    expect($changeset->changes)->toHaveCount(1)
+        ->and($changeset->isBreaking())->toBeFalse()
+        ->and($changes)->toHaveKey('requestBody.unresolved-ref')
+        ->and($changes['requestBody.unresolved-ref']->path)->toBe('GET /api/v1/forms/{id} requestBody')
+        ->and(diffOf($dangling, $dangling)->isEmpty())->toBeTrue();
+});
+
 // --- Path-item parameters ---------------------------------------------------
 
 /**
@@ -1667,6 +1932,32 @@ function diffSecured(array $scheme = ['type' => 'apiKey', 'in' => 'header', 'nam
 
     return $doc;
 }
+
+it('reads a security scheme as the scheme it points at', function (): void {
+    // `components.securitySchemes` takes a Reference Object too, and a scheme is compared member by member —
+    // so read as written, a pointer IS the contract: hoisting one reported `$ref`, `type`, `in` and `name` as
+    // the way in changing, which is breaking, on a contract that had not moved.
+    $scheme = ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-Api-Key'];
+
+    $inline = diffSecured($scheme);
+    $inline['components']['securitySchemes']['shared'] = $scheme;
+
+    $hoisted = diffSecured(['$ref' => '#/components/securitySchemes/shared']);
+    $hoisted['components']['securitySchemes']['shared'] = $scheme;
+
+    expect(diffOf($inline, $hoisted)->isEmpty())->toBeTrue()
+        ->and(diffOf($hoisted, $inline)->isEmpty())->toBeTrue();
+
+    // And an edit to the shared scheme still breaks the name that points at it, which is the name a
+    // requirement asks for.
+    $changed = $hoisted;
+    $changed['components']['securitySchemes']['shared']['in'] = 'query';
+    $breaking = diffOf($hoisted, $changed)->breakingChanges();
+
+    expect($breaking)->toHaveCount(1)
+        ->and($breaking[0]->code)->toBe('securityScheme.changed')
+        ->and($breaking[0]->path)->toBe('components.securitySchemes.apiKey');
+});
 
 it('reports a scheme that changed how a client authenticates as breaking', function (): void {
     // Never compared at all, this said nothing: the key a client had been sending in a header now has to
