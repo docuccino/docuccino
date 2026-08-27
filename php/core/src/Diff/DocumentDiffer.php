@@ -130,11 +130,11 @@ final class DocumentDiffer
     /**
      * A path item whose `$ref` reached no path item states no operations, so nothing under that path can be
      * compared — on EITHER side, since the operations the other side spells out have nothing to pair
-     * against. Reporting them removed would claim knowledge the differ hasn't got (the endpoint may be
-     * whole, in a document this resolver cannot open), and reporting nothing would claim the opposite. So
-     * the path drops out of the comparison and the changeset says so, once, non-breaking — except where
-     * both sides carry the SAME unfollowable pointer, which is a document that did not change here and is
-     * reported as unchanged for the same reason an unresolved response or parameter `$ref` is.
+     * against. Naming each one removed would claim knowledge the differ hasn't got, and reporting nothing
+     * would claim the opposite. So the path drops out of the comparison and the changeset says so once,
+     * with {@see unresolvedBreaks()} deciding what the unknown costs — except where both sides carry the
+     * same pointer for the same reason, which is a document that did not change here and is reported as
+     * unchanged for the same reason an unresolved response or parameter `$ref` is.
      *
      * @param  list<Change>  $changes
      */
@@ -147,8 +147,8 @@ final class DocumentDiffer
             $oldRef = $oldUnresolved[$path] ?? null;
             $newRef = $newUnresolved[$path] ?? null;
 
-            if ($oldRef !== $newRef) {
-                $changes[] = new Change(ChangeKind::Changed, ChangeTarget::Operation, 'pathItem:'.$path, $path, false, 'pathItem.unresolved-ref', [new FieldChange('$ref', $oldRef, $newRef)]);
+            if (! UnresolvedRef::same($oldRef, $newRef)) {
+                $changes[] = new Change(ChangeKind::Changed, ChangeTarget::Operation, 'pathItem:'.$path, $path, self::unresolvedBreaks($oldRef, $newRef), 'pathItem.unresolved-ref', [new FieldChange('$ref', $oldRef?->ref, $newRef?->ref)]);
             }
         }
 
@@ -368,8 +368,8 @@ final class DocumentDiffer
         [$oldContent, $oldRef] = self::requestBody($old, $oldRefs);
         [$newContent, $newRef] = self::requestBody($new, $newRefs);
 
-        if ($oldRef !== $newRef) {
-            $changes[] = new Change(ChangeKind::Changed, ChangeTarget::Operation, $opId, $path.' requestBody', false, 'requestBody.unresolved-ref', [new FieldChange('$ref', $oldRef, $newRef)]);
+        if (! UnresolvedRef::same($oldRef, $newRef)) {
+            $changes[] = new Change(ChangeKind::Changed, ChangeTarget::Operation, $opId, $path.' requestBody', self::unresolvedBreaks($oldRef, $newRef), 'requestBody.unresolved-ref', [new FieldChange('$ref', $oldRef?->ref, $newRef?->ref)]);
 
             return;
         }
@@ -636,7 +636,7 @@ final class DocumentDiffer
     }
 
     /**
-     * @param  array<string, string>  $skip  paths no comparison can be made at ({@see diffOperations()})
+     * @param  array<string, UnresolvedRef>  $skip  paths no comparison can be made at ({@see diffOperations()})
      * @return list<array{0: ?string, 1: string, 2: string, 3: OperationEntry}>
      */
     private function operationEntries(UirDocument $document, ComponentRefs $refs, Pairing $pairing, array $skip): array
@@ -711,9 +711,24 @@ final class DocumentDiffer
     }
 
     /**
+     * What a pointer the differ could not follow costs. Unresolved, the change under it is UNKNOWN, and
+     * unknown is only safe while the document might still be whole — which a pointer into another file
+     * leaves open and a local one does not. A `#/components/…` pointer at a name the NEW document does not
+     * declare publishes nothing at that position for any reader of it, so the operations, parameters,
+     * schemas and security requirements it stood for are gone from the contract, which is exactly what
+     * renaming or dropping a component under a pointer leaves behind. Only the new side's answer decides:
+     * a document already broken there published nothing left to break, and repairing one is not a breaking
+     * change.
+     */
+    private static function unresolvedBreaks(?UnresolvedRef $old, ?UnresolvedRef $new): bool
+    {
+        return $new !== null && $new->undeclared && ($old === null || ! $old->undeclared);
+    }
+
+    /**
      * Path → the pointer that reached no path item, for every path either document spells with one.
      *
-     * @return array<string, string>
+     * @return array<string, UnresolvedRef>
      */
     private function unresolvedPathItems(UirDocument $document, ComponentRefs $refs): array
     {
@@ -882,7 +897,7 @@ final class DocumentDiffer
      * The schema each media type of an operation's request body declares, and the pointer that reached no
      * request body. A body is not modelled, so it is read out of the operation's remaining members.
      *
-     * @return array{0: array<string, mixed>, 1: string|null}
+     * @return array{0: array<string, mixed>, 1: UnresolvedRef|null}
      */
     private static function requestBody(Operation $op, ComponentRefs $refs): array
     {

@@ -275,16 +275,25 @@ from the component and never from the pointer's neighbours: a parameter takes it
 `deprecated` and `schema` from there, a response its `headers` and `content`, and a path item the
 operations and shared parameters under it — so a `required: false` next to a pointer at a component that
 says `required: true` changes nothing, and the diff reports nothing.
-A `description` beside the pointer still wins, and anything else stated there — `style`, `explode`,
-`example`, an `x-` extension — is read as written.
+A `summary` or a `description` beside the pointer still wins — OpenAPI gives a Reference Object those two
+members of its own and says every other sibling is ignored — so a `style`, an `explode` or an `x-`
+extension written there describes nothing and the component's answer stands.
 
 A pointer the diff cannot follow — a name the document does not declare, a chain, a cycle, a pointer into
 another file — is a comparison it cannot make, and it says so rather than guessing. Where a path item or a
 request body is spelled that way on one side only, that endpoint or that body drops out of the comparison
-and the changeset carries one non-breaking entry naming the pointer (`pathItem.unresolved-ref`,
+and the changeset carries one entry naming the pointer (`pathItem.unresolved-ref`,
 `requestBody.unresolved-ref`): reporting every operation under it removed would blame a pointer it could
-not open, and reporting nothing would hide it. Where both sides carry the same unfollowable pointer the
-document did not change there, and nothing is reported.
+not open, and reporting nothing would hide it.
+
+Whether that entry is **breaking** is whether the new document is the reason. A local `#/components/…`
+pointer at a name it does not declare publishes nothing at that position for anybody reading the
+document, so the endpoint — its parameters, its response schemas, its authentication requirement — or the
+body is gone, and the entry is breaking. That is what renaming or removing a `components` entry a pointer
+still names leaves behind. A pointer into another file, a chain or a cycle is the resolver stopping rather
+than the document being wrong — the endpoint may be whole where it lives — and stays non-breaking.
+Repairing a broken pointer is not a breaking change either, and where both sides carry the same pointer
+for the same reason the document did not change there and nothing is reported.
 
 An operation's parameters are its own plus the ones its path item declares for every operation under it,
 minus any the operation restates for the same `name` and `in` — the override OpenAPI specifies. Docuccino

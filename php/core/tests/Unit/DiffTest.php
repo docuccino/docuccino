@@ -1151,6 +1151,21 @@ function diffHoistedPathItem(string $name = 'Form', string $token = 'Form'): arr
 }
 
 /**
+ * `diffBase()` with its one path spelled as a pointer into ANOTHER document: unresolvable here, and no
+ * evidence at all that the endpoint has gone — the case a pointer this document itself broke must not be
+ * read as.
+ *
+ * @return array<string, mixed>
+ */
+function diffExternalPathItem(): array
+{
+    $doc = diffBase();
+    $doc['paths']['/api/v1/forms/{id}'] = ['$ref' => 'shared.yaml#/pathItems/Form'];
+
+    return $doc;
+}
+
+/**
  * `diffBase()` with a request body on its one operation: stated inline, or hoisted into
  * `components.requestBodies` and reached by a `$ref`. Tightened, it demands a property it used to accept
  * without — the commonest breaking edit a request body carries.
@@ -1176,6 +1191,23 @@ function diffBodyDoc(bool $hoisted, bool $tightened = false): array
 
     $doc['paths']['/api/v1/forms/{id}']['get']['requestBody'] = ['$ref' => '#/components/requestBodies/Form'];
     $doc['components']['requestBodies'] = ['Form' => $body];
+
+    return $doc;
+}
+
+/**
+ * `diffBase()` with two security schemes: one stated, and one reaching it through a `$ref` while writing a
+ * description of its own beside the pointer.
+ *
+ * @return array<string, mixed>
+ */
+function diffHoistedScheme(string $description): array
+{
+    $doc = diffBase();
+    $doc['components']['securitySchemes'] = [
+        'Bearer' => ['type' => 'http', 'scheme' => 'bearer', 'description' => 'The component says this.'],
+        'Legacy' => ['$ref' => '#/components/securitySchemes/Bearer', 'description' => $description],
+    ];
 
     return $doc;
 }
@@ -1335,13 +1367,13 @@ it('reports nothing where both documents point at the same path item it cannot f
     }],
 ]);
 
-it('reports a path item $ref it cannot follow as a comparison it could not make', function (): void {
-    // Both other answers claim knowledge the differ hasn't got. Every operation removed blocks a release
-    // over a pointer it could not open; nothing at all is the silence the pointer caused, dressed as a pass.
-    $dangling = diffHoistedPathItem();
-    unset($dangling['components']['pathItems']);
+it('reports a path item $ref it cannot OPEN as a comparison it could not make', function (): void {
+    // Both other answers claim knowledge the differ hasn't got. Every operation removed blames a pointer
+    // into a document this resolver cannot open; nothing at all is the silence the pointer caused, dressed
+    // as a pass. Non-breaking is honest only here, where the endpoint may be whole over there.
+    $external = diffExternalPathItem();
 
-    $changeset = diffOf(diffBase(), $dangling);
+    $changeset = diffOf(diffBase(), $external);
     $changes = changesByCode($changeset);
 
     expect($changeset->changes)->toHaveCount(1)
@@ -1349,13 +1381,93 @@ it('reports a path item $ref it cannot follow as a comparison it could not make'
         ->and($changes)->toHaveKey('pathItem.unresolved-ref')
         ->and($changes['pathItem.unresolved-ref']->path)->toBe('/api/v1/forms/{id}')
         ->and($changes['pathItem.unresolved-ref']->fields[0]->toArray())
-        ->toBe(['field' => '$ref', 'old' => null, 'new' => '#/components/pathItems/Form']);
+        ->toBe(['field' => '$ref', 'old' => null, 'new' => 'shared.yaml#/pathItems/Form']);
 
-    $back = changesByCode(diffOf($dangling, diffBase()));
+    $back = changesByCode(diffOf($external, diffBase()));
 
     expect($back)->toHaveKey('pathItem.unresolved-ref')
         ->and($back['pathItem.unresolved-ref']->fields[0]->toArray())
-        ->toBe(['field' => '$ref', 'old' => '#/components/pathItems/Form', 'new' => null]);
+        ->toBe(['field' => '$ref', 'old' => 'shared.yaml#/pathItems/Form', 'new' => null]);
+});
+
+it('tells a path item $ref this document BROKE from one it cannot open', function (): void {
+    // The two reach the same dead end and mean opposite things. A local pointer at a `components.pathItems`
+    // name the document does not declare publishes nothing at that path for any reader of it — the
+    // operations, their parameters, their response schemas and their authentication requirement are all
+    // gone — and that is what renaming or dropping that entry leaves behind. Answered as one with the
+    // pointer into another file, a removed endpoint passed `assertNoBreakingChanges()` and asked its
+    // versioning policy for no major bump.
+    $undeclared = diffHoistedPathItem();
+    unset($undeclared['components']['pathItems']);
+
+    $broken = diffOf(diffBase(), $undeclared);
+    $unopenable = diffOf(diffBase(), diffExternalPathItem());
+
+    expect(changesByCode($broken))->toHaveKey('pathItem.unresolved-ref')
+        ->and($broken->isBreaking())->toBeTrue()
+        ->and(changesByCode($unopenable))->toHaveKey('pathItem.unresolved-ref')
+        ->and($unopenable->isBreaking())->toBeFalse();
+});
+
+it('answers every spelling of a path that publishes no operation the same way', function (callable $blank): void {
+    // All three publish the same contract — no operation at that path — so a gate that stops two of them
+    // and passes the third is keying on how the document was spelled rather than on what it says. The
+    // pointer was the one that passed.
+    expect(diffOf(diffBase(), $blank())->isBreaking())->toBeTrue();
+})->with([
+    'an empty path item' => [static function (): array {
+        $doc = diffBase();
+        $doc['paths']['/api/v1/forms/{id}'] = [];
+
+        return $doc;
+    }],
+    'a path item stating nothing the differ models' => [static function (): array {
+        $doc = diffBase();
+        $doc['paths']['/api/v1/forms/{id}'] = ['summary' => 'Forms'];
+
+        return $doc;
+    }],
+    'a local pointer at a name the document does not declare' => [static function (): array {
+        $doc = diffHoistedPathItem();
+        unset($doc['components']['pathItems']);
+
+        return $doc;
+    }],
+]);
+
+it('charges a broken path item pointer to the side that broke it', function (): void {
+    // Only what the NEW document publishes can be lost: one already broken there had nothing left to break,
+    // and repairing one is not a breaking change — a gate that fails the fix is a gate people switch off.
+    $undeclared = diffHoistedPathItem();
+    unset($undeclared['components']['pathItems']);
+
+    $renamed = $undeclared;
+    $renamed['paths']['/api/v1/forms/{id}'] = ['$ref' => '#/components/pathItems/Other'];
+
+    $moved = diffOf($undeclared, $renamed);
+
+    expect(diffOf($undeclared, diffBase())->isBreaking())->toBeFalse()
+        ->and(changesByCode($moved))->toHaveKey('pathItem.unresolved-ref')
+        ->and($moved->isBreaking())->toBeFalse();
+});
+
+it('tells a chain off a declared name from a name that was never declared', function (): void {
+    // Same pointer text, two different answers: one document declares the name and chains off it, which is
+    // this resolver stopping one hop in, and the other declares nothing at all, which is the document being
+    // broken. Compared as pointer text alone the two read as the same document there, and the break is lost.
+    $chained = diffHoistedPathItem();
+    $chained['components']['pathItems'] = [
+        'Form' => ['$ref' => '#/components/pathItems/Other'],
+        'Other' => $chained['components']['pathItems']['Form'],
+    ];
+
+    $undeclared = diffHoistedPathItem();
+    unset($undeclared['components']['pathItems']);
+
+    $changeset = diffOf($chained, $undeclared);
+
+    expect(changesByCode($changeset))->toHaveKey('pathItem.unresolved-ref')
+        ->and($changeset->isBreaking())->toBeTrue();
 });
 
 it('reads a request body as the body it points at', function (): void {
@@ -1381,18 +1493,88 @@ it('reports a request body tightened behind a $ref', function (bool $oldHoisted,
     'inline then hoisted' => [false, true],
 ]);
 
-it('reports a request body $ref it cannot follow as a comparison it could not make', function (): void {
-    $dangling = diffBodyDoc(true);
-    unset($dangling['components']['requestBodies']);
+it('reports a request body $ref it cannot OPEN as a comparison it could not make', function (): void {
+    $external = diffBodyDoc(true);
+    $external['paths']['/api/v1/forms/{id}']['get']['requestBody'] = ['$ref' => 'shared.yaml#/requestBodies/Form'];
 
-    $changeset = diffOf(diffBodyDoc(false), $dangling);
+    $changeset = diffOf(diffBodyDoc(false), $external);
     $changes = changesByCode($changeset);
 
     expect($changeset->changes)->toHaveCount(1)
         ->and($changeset->isBreaking())->toBeFalse()
         ->and($changes)->toHaveKey('requestBody.unresolved-ref')
         ->and($changes['requestBody.unresolved-ref']->path)->toBe('GET /api/v1/forms/{id} requestBody')
-        ->and(diffOf($dangling, $dangling)->isEmpty())->toBeTrue();
+        ->and(diffOf($external, $external)->isEmpty())->toBeTrue();
+});
+
+it('reports a request body behind a $ref this document broke as breaking', function (): void {
+    // The walk returns before the media types, so what the body now demands is unknown — and a body no
+    // reader can open is not one a client can still send. The tightening it hides here is the same edit
+    // reported breaking while the component was still declared.
+    $undeclared = diffBodyDoc(true, true);
+    unset($undeclared['components']['requestBodies']);
+
+    $changeset = diffOf(diffBodyDoc(false), $undeclared);
+
+    expect(changesByCode($changeset))->toHaveKey('requestBody.unresolved-ref')
+        ->and($changeset->isBreaking())->toBeTrue()
+        ->and(diffOf($undeclared, diffBodyDoc(false))->isBreaking())->toBeFalse()
+        ->and(diffOf($undeclared, $undeclared)->isEmpty())->toBeTrue();
+});
+
+it('takes a description from beside the $ref and the contract from the component', function (callable $case): void {
+    // OAS gives a Reference Object two members of its own beside the pointer — `summary` and `description`
+    // — says they override the component's, and says every other sibling is ignored. Two of these resolvers
+    // read that the other way round, so a description written at the referring site was invisible: editing
+    // one reported nothing at all, at a position whose prose the diff otherwise reports.
+    [$old, $new, $code] = $case();
+
+    expect(changesByCode(diffOf($old, $new)))->toHaveKey($code);
+})->with([
+    'a parameter' => [static function (): array {
+        $old = diffBase();
+        $param = $old['paths']['/api/v1/forms/{id}']['get']['parameters'][1];
+        $param['description'] = 'The component says this.';
+        $old['components']['parameters'] = ['Status' => $param];
+        $old['paths']['/api/v1/forms/{id}']['get']['parameters'][1] = ['$ref' => '#/components/parameters/Status', 'description' => 'Which forms to return.'];
+
+        $new = $old;
+        $new['paths']['/api/v1/forms/{id}']['get']['parameters'][1]['description'] = 'Which forms to return, by state.';
+
+        return [$old, $new, 'parameter.description-changed'];
+    }],
+    'a response' => [static function (): array {
+        $old = diffBase();
+        $old['components']['responses'] = ['Form' => $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']];
+        $old['paths']['/api/v1/forms/{id}']['get']['responses']['200'] = ['$ref' => '#/components/responses/Form', 'description' => 'The form.'];
+
+        $new = $old;
+        $new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['description'] = 'The form, as stored.';
+
+        return [$old, $new, 'response.description-changed'];
+    }],
+    'a security scheme' => [static function (): array {
+        $old = diffHoistedScheme('Send the bearer token.');
+        $new = diffHoistedScheme('Send the bearer token in the Authorization header.');
+
+        return [$old, $new, 'securityScheme.description-changed'];
+    }],
+]);
+
+it('ignores a member beside a $ref that is not the referring node\'s to state', function (): void {
+    // The other half of the same OAS rule, and the reason all four resolvers read the contract off the
+    // component: a `type` written beside a pointer describes nothing, and honouring it reports the way into
+    // the API changing for a scheme that has not moved.
+    $stated = diffBase();
+    $stated['components']['securitySchemes'] = [
+        'Bearer' => ['type' => 'http', 'scheme' => 'bearer'],
+        'Legacy' => ['$ref' => '#/components/securitySchemes/Bearer'],
+    ];
+
+    $overreaching = $stated;
+    $overreaching['components']['securitySchemes']['Legacy'] += ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-Token'];
+
+    expect(diffOf($stated, $overreaching)->isEmpty())->toBeTrue();
 });
 
 // --- Path-item parameters ---------------------------------------------------
