@@ -12,6 +12,10 @@ use Docuccino\Core\Contract\Coverage\ResponseCoverage;
  * is a promise of its own, and a suite that only ever asserts the happy path has proved none of them.
  * The fixture carries every shape that decision has to get right — a range key, a `default`, and a
  * response documented with no content at all.
+ *
+ * A documented WEBHOOK is a promise of the same kind, made in the other direction, so it is counted with
+ * them: one `delivery` row apiece, because a webhook's own responses are what the RECEIVER answers and
+ * nothing in the sending application's suite can exercise those.
  */
 
 it('lists every documented operation in the document order, with the responses it promises', function (): void {
@@ -25,6 +29,8 @@ it('lists every documented operation in the document order, with the responses i
         $report->rows,
     );
 
+    // Routes in the document's order, then webhooks in the index's: by name, then by the canonical
+    // method order, so a name published twice reads PUT before POST whatever the artifact spelled first.
     expect($rows)->toBe([
         'GET /api/exports 200=n',
         'GET /api/invoices 200=n',
@@ -32,7 +38,40 @@ it('lists every documented operation in the document order, with the responses i
         'GET /api/invoices/recent 200=n',
         'GET /api/invoices/{invoice} 200=y|default=n',
         'DELETE /api/invoices/{invoice} 204=n',
+        'POST webhooks.alert.raised delivery=n',
+        'POST webhooks.digest.sent delivery=n',
+        'POST webhooks.export.ready delivery=n',
+        'POST webhooks.invoice.paid delivery=n',
+        'PUT webhooks.invoice.voided delivery=n',
+        'POST webhooks.invoice.voided delivery=n',
+        'POST webhooks.ping.sent delivery=n',
+        'POST webhooks.receipt.sent delivery=n',
     ]);
+});
+
+it('counts a delivery the run recorded, and one it never did', function (): void {
+    // The outbound half of the gate. Without this the report calls a document complete while every
+    // webhook in it is unmeasured — the reading more generous than the truth the whole report exists to
+    // stop, and the one nothing in the suite can reach over HTTP.
+    $report = CoverageReport::of(contractIndex(), ['op:v1:aaaainvoicepaid', 'op:v1:aaaavoidedput']);
+
+    $deliveries = [];
+    foreach ($report->rows as $row) {
+        if (str_contains($row->label, 'webhooks.')) {
+            $deliveries[$row->label] = $row->responses[0]->status.'='.($row->responses[0]->exercised ? 'y' : 'n');
+        }
+    }
+
+    expect($deliveries)->toBe([
+        'POST webhooks.alert.raised' => 'delivery=n',
+        'POST webhooks.digest.sent' => 'delivery=n',
+        'POST webhooks.export.ready' => 'delivery=n',
+        'POST webhooks.invoice.paid' => 'delivery=y',
+        'PUT webhooks.invoice.voided' => 'delivery=y',
+        'POST webhooks.invoice.voided' => 'delivery=n',
+        'POST webhooks.ping.sent' => 'delivery=n',
+        'POST webhooks.receipt.sent' => 'delivery=n',
+    ])->and($report->exercisedResponses())->toBe(2);
 });
 
 it('counts responses and operations apart, and scores on responses', function (): void {
@@ -40,14 +79,15 @@ it('counts responses and operations apart, and scores on responses', function ()
         'op:v1:aaaainvoiceshow@200', 'op:v1:aaaainvoicestore@201', 'op:v1:notinthedocument@200',
     ]);
 
-    // Six operations promising eight responses: the 201 and the 200 are two of the eight, and the two
-    // operations they belong to still owe a `4XX` and a `default` apiece.
-    expect($report->totalOperations())->toBe(6)
+    // Six routes promising eight responses and eight webhooks promising a delivery apiece: the 201 and
+    // the 200 are two of the sixteen, and the two operations they belong to still owe a `4XX` and a
+    // `default` apiece.
+    expect($report->totalOperations())->toBe(14)
         ->and($report->exercisedOperations())->toBe(2)
-        ->and($report->totalResponses())->toBe(8)
+        ->and($report->totalResponses())->toBe(16)
         ->and($report->exercisedResponses())->toBe(2)
-        ->and($report->percentage())->toBe(25.0)
-        ->and($report->missing())->toHaveCount(6)
+        ->and($report->percentage())->toBe(12.5)
+        ->and($report->missing())->toHaveCount(14)
         ->and($report->complete())->toBeFalse();
 });
 
@@ -94,8 +134,8 @@ it('reads a bare id as the operation reached and no response proved', function (
     expect($report->exercisedOperations())->toBe(2)
         ->and($report->exercisedResponses())->toBe(0)
         ->and($report->percentage())->toBe(0.0)
-        ->and($report->render())->toContain('0 of 8 documented responses exercised (0%)')
-        ->toContain('2 of 6 documented operations were reached at all');
+        ->and($report->render())->toContain('0 of 16 documented responses exercised (0%)')
+        ->toContain('2 of 14 documented operations were reached at all');
 });
 
 it('credits nothing for an entry that names no operation of this contract', function (): void {
@@ -162,12 +202,15 @@ it('clears a floor it exactly meets, and the one it prints', function (): void {
     $report = CoverageReport::of(contractIndex(), [
         'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaaainvoicerecent@200',
         'op:v1:aaaainvoiceshow@200', 'op:v1:aaaaexportsfeed@200',
+        'op:v1:aaaaalertraised', 'op:v1:aaaadigestsent', 'op:v1:aaaaexportready',
+        'op:v1:aaaainvoicepaid', 'op:v1:aaaavoidedput',
     ]);
 
-    // 5 of 8 is 62.5, which prints exactly — and the operations number reads a far more generous 5 of 6,
-    // which is the whole reason both are printed and only one is gated.
+    // 10 of 16 is 62.5, which prints exactly — five responses and five deliveries, so a delivery is worth
+    // exactly what a response is to the gated number. The operations line reads a far more generous
+    // 10 of 14, which is the whole reason both are printed and only one is gated.
     expect($report->render())->toContain('(62.5%)')
-        ->toContain('5 of 6 documented operations were reached at all')
+        ->toContain('10 of 14 documented operations were reached at all')
         ->and($report->meets(62.5))->toBeTrue()
         ->and($report->meets(62.51))->toBeFalse()
         ->and($report->meets(50.0))->toBeTrue();
@@ -177,15 +220,25 @@ it('names the responses never exercised, and the honest floor to move to', funct
     $rendered = CoverageReport::of(contractIndex(), [
         'op:v1:aaaainvoiceindex@200', 'op:v1:aaaainvoicestore@201', 'op:v1:aaaainvoicerecent@200',
         'op:v1:aaaainvoiceshow@200', 'op:v1:aaaaexportsfeed@200', 'op:v1:aaaainvoicekill@204',
+        'op:v1:aaaaalertraised', 'op:v1:aaaadigestsent', 'op:v1:aaaaexportready', 'op:v1:aaaainvoicepaid',
+        'op:v1:aaaavoidedput', 'op:v1:aaaavoidedpost', 'op:v1:aaaapingsent', 'op:v1:aaaareceiptsent',
     ])->render(100.0);
 
-    expect($rendered)->toContain('6 of 8 documented responses exercised (75%, floor 100%)')
-        ->toContain('6 of 6 documented operations were reached at all — the floor is measured against responses, not operations.')
+    expect($rendered)->toContain('14 of 16 documented responses exercised (87.5%, floor 100%)')
+        ->toContain('14 of 14 documented operations were reached at all — the floor is measured against responses, not operations.')
         ->toContain('Never exercised:')
-        // Every operation was reached; the two promises nobody proved are an error response apiece.
+        // Every operation was reached and every webhook delivered; the two promises nobody proved are an
+        // error response apiece.
         ->toContain('POST /api/invoices           4XX      op:v1:aaaainvoicestore')
         ->toContain('GET /api/invoices/{invoice}  default  op:v1:aaaainvoiceshow')
-        ->toContain('move the floor to 75 and ratchet it up');
+        ->toContain('move the floor to 87 and ratchet it up');
+});
+
+it('names a webhook nobody delivered in the same listing, under the delivery it never made', function (): void {
+    $rendered = CoverageReport::of(contractIndex(), [])->render(100.0);
+
+    expect($rendered)->toContain('POST webhooks.invoice.paid      delivery      op:v1:aaaainvoicepaid')
+        ->toContain('PUT webhooks.invoice.voided     delivery      op:v1:aaaavoidedput');
 });
 
 it('renders the same bytes whatever order the entries were recorded in', function (): void {

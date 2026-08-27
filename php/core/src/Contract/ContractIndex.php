@@ -177,6 +177,8 @@ final class ContractIndex
      * document's content, so two runs over the same artifact list them identically.
      *
      * @return list<ContractWebhook>
+     *
+     * @internal
      */
     public function webhooks(): array
     {
@@ -202,6 +204,8 @@ final class ContractIndex
      * message offers instead.
      *
      * @return list<string>
+     *
+     * @internal
      */
     public function webhookNames(): array
     {
@@ -226,7 +230,11 @@ final class ContractIndex
         return ! str_starts_with($this->openApiVersion(), '3.0');
     }
 
-    /** The OpenAPI version the document declares, empty when it declares none. */
+    /**
+     * The OpenAPI version the document declares, empty when it declares none.
+     *
+     * @internal
+     */
     public function openApiVersion(): string
     {
         $version = $this->document['openapi'] ?? null;

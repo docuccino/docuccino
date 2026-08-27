@@ -150,6 +150,149 @@ it('refuses to guess between the methods one name is published under', function 
     throw new RuntimeException('the assertion should have failed');
 });
 
+/*
+ * The outbound half of the coverage report. A delivery is not an exchange — there is no operation and no
+ * TestResponse — so it reaches the recorder by a road of its own, and lands in the report as the one
+ * thing a sending application's suite can prove about a webhook.
+ */
+it('counts a webhook it asserted, and the ones the suite never delivered', function (): void {
+    workbenchWebhookContract();
+
+    ApiContract::assertions()->assertValidWebhook('form.submitted', new FormSubmitted(7, '2026-01-01T00:00:00Z'));
+
+    $report = ApiContract::report();
+    $deliveries = [];
+    foreach ($report->rows as $row) {
+        if (str_contains($row->label, 'webhooks.')) {
+            $deliveries[$row->label] = $row->responses[0]->status.'='.($row->responses[0]->exercised ? 'y' : 'n');
+        }
+    }
+
+    // Two webhooks documented, one delivered. Before this the report counted neither, so `--min=100`
+    // called the outbound half complete having measured none of it.
+    expect($deliveries)->toBe([
+        'POST webhooks.form.submitted' => 'delivery=y',
+        'PUT webhooks.widget.archived' => 'delivery=n',
+    ])->and($report->complete())->toBeFalse()
+        ->and($report->render(100.0))->toContain('PUT webhooks.widget.archived');
+});
+
+it('writes a delivery to the coverage log a bootstrap asked for, like any other entry', function (): void {
+    $directory = coverageFixtureDir('webhook');
+
+    try {
+        workbenchWebhookContract();
+        ApiContract::recordCoverage($directory);
+
+        ApiContract::assertions()->assertValidWebhook('form.submitted', new FormSubmitted(7, '2026-01-01T00:00:00Z'));
+
+        $exercised = ApiContract::coverage()->exercised();
+
+        // No status: a webhook's statuses are what the RECEIVER answers, and nothing a sender's suite
+        // does can exercise one — recording a `200` here would credit a promise nobody kept.
+        expect($exercised)->toHaveCount(1)
+            ->and($exercised[0])->not->toContain('@')
+            ->and(file_get_contents((string) ApiContract::coverage()->logPath()))->toBe($exercised[0].'
+');
+    } finally {
+        removeCoverageFixture($directory);
+    }
+});
+
+/*
+ * A pass that could not read what the document published says so, on the channel a developer running the
+ * suite actually sees. A note nobody is told is how a suite comes to believe it has contract coverage it
+ * does not have — and the docs promise these notes exist.
+ */
+it('warns the developer that a delivery passed having proved less than it looks like', function (): void {
+    // A real build of a real `#[Webhook(mediaType: 'text/csv')]`, not a document written to suit this:
+    // the producer publishes the media type the attribute names, and JSON Schema cannot check that body.
+    workbenchContract(static function (array $raw): array {
+        app()->setBasePath(dirname(__DIR__, 3));
+        $raw['webhooks'] = ['dir' => 'tests/Fixtures/Webhooks/Uncheckable'];
+
+        return $raw;
+    });
+
+    $warnings = warningsRaisedBy(static function (): void {
+        ApiContract::assertions()->assertValidWebhook('report.ready', ['reference' => 'RPT-1']);
+    });
+
+    expect($warnings)->toBe([
+        'POST webhooks.report.ready passed, but part of the contract was not checked: '.
+        'the delivered payload is text/csv, which JSON Schema cannot check.',
+    ]);
+});
+
+it('says nothing at all about a delivery it checked in full', function (): void {
+    workbenchWebhookContract();
+
+    expect(warningsRaisedBy(static function (): void {
+        ApiContract::assertions()->assertValidWebhook('form.submitted', new FormSubmitted(7, '2026-01-01T00:00:00Z'));
+    }))->toBe([]);
+});
+
+/*
+ * A webhook the document publishes no body for is a test-authoring error, not a checker limitation:
+ * nothing is in the way, the document simply says nothing, and a green assertion would claim a payload
+ * had been held to something. Docuccino's own producer always writes a body, so this fires only on a
+ * document a hand or an overlay wrote — which is exactly why the artifact here is edited rather than
+ * generated.
+ */
+it('fails a webhook the document publishes no delivered body for at all', function (): void {
+    $path = workbenchWebhookContract();
+    $document = json_decode((string) file_get_contents($path), true);
+
+    expect($document['webhooks']['form.submitted']['post']['requestBody'] ?? null)->toBeArray();
+
+    unset($document['webhooks']['form.submitted']['post']['requestBody']);
+    file_put_contents($path, (string) json_encode($document));
+    ApiContract::using($path);
+
+    try {
+        ApiContract::assertions()->assertValidWebhook('form.submitted', new FormSubmitted(7, '2026-01-01T00:00:00Z'));
+    } catch (AssertionFailedError $failure) {
+        expect($failure->getMessage())
+            ->toContain('The payload dispatched for POST webhooks.form.submitted does not match the documented contract.')
+            ->toContain('POST webhooks.form.submitted')
+            ->toContain('documents no delivered body, so there is nothing here for a payload to be held to');
+
+        return;
+    }
+
+    throw new RuntimeException('the assertion should have failed');
+});
+
+it('shows a forged webhook name its own escape sequences rather than obeying them', function (): void {
+    // The one line of the new assertions that interpolates without escaping first. A name is the
+    // document's string as much as the caller's — a hand-written or imported artifact can publish
+    // anything under `webhooks`, and the hint prints it straight into a terminal.
+    $forgery = "\x1b[32mAll contract assertions passed";
+    $path = workbenchContract(static function (array $raw): array {
+        app()->setBasePath(dirname(__DIR__, 3));
+        $raw['webhooks'] = ['dir' => 'tests/Fixtures/Webhooks/Contested'];
+
+        return $raw;
+    });
+
+    $document = json_decode((string) file_get_contents($path), true);
+    $document['webhooks']['shipment.updated'.$forgery] = $document['webhooks']['shipment.updated'];
+    file_put_contents($path, (string) json_encode($document));
+    ApiContract::using($path);
+
+    try {
+        ApiContract::assertions()->assertValidWebhook('shipment.updated'.$forgery, ['reference' => 'SHP-1']);
+    } catch (AssertionFailedError $failure) {
+        expect($failure->getMessage())
+            ->toContain("assertValidWebhook('shipment.updated\\x1B[32mAll contract assertions passed', \$payload")
+            ->not->toContain($forgery);
+
+        return;
+    }
+
+    throw new RuntimeException('the assertion should have failed');
+});
+
 it('says a 3.0 artifact cannot carry webhooks rather than that the webhook is undocumented', function (): void {
     workbenchWebhookContract();
 

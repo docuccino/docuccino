@@ -184,6 +184,21 @@ it('fails a payload that is not JSON at all, and one that is not there', functio
 ]);
 
 /*
+ * A webhook the document publishes no body for is the one shape here that FAILS rather than noting. The
+ * rest below are the check saying it cannot read what the document published; this is the document
+ * publishing nothing at all, which is what an undocumented status already is on the inbound half.
+ */
+it('fails a delivery the contract publishes no body for at all', function (): void {
+    $outcome = checkDelivery('ping.sent', '{"anything":true}');
+
+    expect($outcome->ok())->toBeFalse()
+        ->and($outcome->note)->toBeNull()
+        ->and($outcome->violations[0]->location)->toBe('POST webhooks.ping.sent')
+        ->and($outcome->violations[0]->message)
+        ->toBe('documents no delivered body, so there is nothing here for a payload to be held to');
+});
+
+/*
  * The degradation contract: where the document cannot be checked rather than being wrong, the outcome
  * PASSES with a note. One row per way that happens — a pass that says nothing is how a suite comes to
  * believe it has outbound coverage it does not have.
@@ -194,10 +209,6 @@ it('passes with a note where there is nothing a payload can be checked against',
     expect($outcome->ok())->toBeTrue()
         ->and($outcome->note)->toBe($note);
 })->with([
-    'no delivered body documented' => [
-        'ping.sent',
-        'the contract documents no delivered body for POST webhooks.ping.sent',
-    ],
     'a body with no media types' => [
         'digest.sent',
         'the contract documents a delivered body with no media types for POST webhooks.digest.sent',
@@ -233,6 +244,51 @@ it('says what a failing delivery got wrong, and which webhook promised otherwise
         ->toContain('must match the type: number')
         ->toContain('schema   /components/schemas/Invoice/properties/total')
         ->toContain('from     integration:eloquent (integration) — app/Models/Invoice.php:31');
+});
+
+it('says a delivery it could not read the body of passed having proved less than it looks like', function (): void {
+    $index = contractIndex();
+    $webhook = $index->webhooksNamed('export.ready')[0];
+    $outcome = (new ContractChecker($index))->delivery($webhook, '{"anything":true}');
+
+    // One line, and the finding is in it: this goes to a run's warning channel, where a runner shows the
+    // first line and truncates. A note nobody is told is a pass that proved nothing and said nothing.
+    expect(ContractMessages::uncheckedDelivery($webhook, $outcome))
+        ->toBe('POST webhooks.export.ready passed, but part of the contract was not checked: the delivered payload is text/csv, which JSON Schema cannot check.');
+});
+
+it('says nothing at all about a delivery it checked in full', function (): void {
+    $index = contractIndex();
+    $webhook = $index->webhooksNamed('invoice.paid')[0];
+    $outcome = (new ContractChecker($index))->delivery($webhook, '{"reference":"INV-1","total":12.5,"lines":[]}');
+
+    expect(ContractMessages::uncheckedDelivery($webhook, $outcome))->toBeNull();
+});
+
+it('escapes an artifact string on its way into a note, the way every other message does', function (): void {
+    // A media type key nobody re-read, in the one message that goes somewhere a terminal renders.
+    $index = contractIndex(static function (array $document): array {
+        $content = $document['webhooks']['export.ready']['post']['requestBody']['content'];
+        $document['webhooks']['export.ready']['post']['requestBody']['content'] = [
+            "text/\x1b[32mcsv" => reset($content),
+        ];
+
+        return $document;
+    });
+    $webhook = $index->webhooksNamed('export.ready')[0];
+
+    expect(ContractMessages::uncheckedDelivery($webhook, (new ContractChecker($index))->delivery($webhook, '{}')))
+        ->toContain('text/\x1B[32mcsv')
+        ->not->toContain("\x1b");
+});
+
+it('says a payload no encoder could read was dispatched for this webhook, in the encoder’s own escaped words', function (): void {
+    $webhook = contractIndex()->webhooksNamed('invoice.paid')[0];
+
+    expect(ContractMessages::unreadableDelivery($webhook, "Type is \x1b[32mnot supported.", 'Pass what you deliver.'))
+        ->toContain('Docuccino cannot read the payload dispatched for POST webhooks.invoice.paid as JSON: Type is \x1B[32mnot supported.')
+        ->toContain('Pass what you deliver.')
+        ->not->toContain("\x1b");
 });
 
 it('tells a reader which webhooks the contract does publish', function (): void {

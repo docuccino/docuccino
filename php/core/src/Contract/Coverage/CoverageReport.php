@@ -82,6 +82,21 @@ final readonly class CoverageReport
             );
         }
 
+        // The outbound half, after the inbound one and in the index's own order. A webhook carries ONE
+        // row, keyed `delivery`, rather than one per documented response: its `responses` are what the
+        // RECEIVER answers, and nothing in the sending application's suite can exercise those — counting
+        // them would publish a floor nobody could ever meet. The delivery is what a sender can prove.
+        foreach ($index->webhooks() as $webhook) {
+            $reached = $webhook->id !== null && isset($touched[$webhook->id]);
+
+            $rows[] = new OperationCoverage(
+                id: $webhook->id,
+                label: $webhook->label(),
+                exercised: $reached,
+                responses: [new ResponseCoverage('delivery', $reached)],
+            );
+        }
+
         return new self($rows);
     }
 

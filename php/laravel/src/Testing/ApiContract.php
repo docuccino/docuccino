@@ -10,6 +10,7 @@ use Docuccino\Core\Contract\ContractMessages;
 use Docuccino\Core\Contract\ContractWebhook;
 use Docuccino\Core\Contract\Coverage\CoverageReport;
 use Docuccino\Core\Contract\Exchange;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Support\ArtifactLocator;
 use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 use Illuminate\Container\Container;
@@ -196,6 +197,8 @@ final class ApiContract
             Assert::fail(ContractMessages::exchange($operation, $exchange, $result));
         }
 
+        self::warn(ContractMessages::uncheckedExchange($exchange, $result));
+
         // The exchange matched the contract and violated nothing: register that as the assertion it is,
         // so a test whose only check is this one is not reported as having performed none.
         Assert::assertThat($failures, Assert::isEmpty());
@@ -203,10 +206,15 @@ final class ApiContract
 
     /**
      * Resolve the webhook by NAME, reduce the payload to the bytes it would be delivered as, and fail
-     * the test when the two disagree.
+     * the test when the two disagree — or when the document publishes no body for it to be held to.
      *
      * `$method` is only ever needed for a name the document publishes under more than one; with one, it
      * is the one.
+     *
+     * A delivery does not go through {@see notify()}: an {@see ObservedExchange} needs an operation and a
+     * `TestResponse`, and a delivery has neither. It reaches the coverage recorder by id and WITHOUT a
+     * status — a webhook's statuses are what the RECEIVER answers, and nothing a sender's suite does can
+     * exercise one — which is the delivery row {@see CoverageReport} counts it as.
      */
     public static function assertWebhook(string $name, mixed $payload, ?string $method = null): void
     {
@@ -237,20 +245,29 @@ final class ApiContract
             Assert::fail(ContractMessages::ambiguousWebhook(
                 $name,
                 $candidates,
-                sprintf("Name the one you send: assertValidWebhook('%s', \$payload, method: '%s').", $name, strtolower($candidates[0]->method)),
+                sprintf(
+                    "Name the one you send: assertValidWebhook('%s', \$payload, method: '%s').",
+                    PlainText::of($name),
+                    PlainText::of(strtolower($candidates[0]->method)),
+                ),
             ));
         }
 
         $webhook = $candidates[0];
 
+        // Recorded here, before the check, exactly as notify() is: a delivery that disagrees is still one
+        // the suite asserted about.
+        if ($webhook->id !== null) {
+            self::coverage()->record($webhook->id);
+        }
+
         try {
             $json = WebhookPayload::json($payload);
         } catch (JsonException $exception) {
-            Assert::fail(sprintf(
-                "Docuccino cannot read the payload dispatched for %s as JSON: %s.\n".
-                'Pass the array, the JSON string or the object your application actually delivers.',
-                $webhook->label(),
+            Assert::fail(ContractMessages::unreadableDelivery(
+                $webhook,
                 $exception->getMessage(),
+                'Pass the array, the JSON string or the object your application actually delivers.',
             ));
         }
 
@@ -259,6 +276,8 @@ final class ApiContract
         if (! $outcome->ok()) {
             Assert::fail(ContractMessages::delivery($webhook, $outcome));
         }
+
+        self::warn(ContractMessages::uncheckedDelivery($webhook, $outcome));
 
         // The payload matched the documented body and violated nothing: register that as the assertion
         // it is, so a test whose only check is this one is not reported as having performed none.
@@ -345,6 +364,22 @@ final class ApiContract
         }
 
         return $out;
+    }
+
+    /**
+     * A check that passed having proved less than it looks like it did, on the run's own warning channel.
+     *
+     * `trigger_error()` rather than a print or a log: the runner records it against the TEST that
+     * produced it, so it survives `--parallel` — a worker's issues travel home with its result, where
+     * anything written to output is interleaved with a dozen other workers' or swallowed outright. It
+     * never fails a passing test by itself; a suite configured to fail on warnings has asked for exactly
+     * this, which is the same bargain every other library emitting one strikes.
+     */
+    private static function warn(?string $message): void
+    {
+        if ($message !== null) {
+            trigger_error($message, E_USER_WARNING);
+        }
     }
 
     private static function notify(ObservedExchange $exchange): void
