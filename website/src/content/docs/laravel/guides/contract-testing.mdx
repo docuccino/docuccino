@@ -292,6 +292,10 @@ Every example in the document goes through the same validator the response asser
 content, request bodies, parameters, named `examples` maps, and examples nested anywhere inside a
 component schema.
 
+The count is the examples the validator actually judged. One it refused to judge — a schema no validator
+will read — is not a passing example, so it is kept out of that number and named separately at the foot
+of the failure, alongside what the validator objected to.
+
 ```text
 1 of 34 documented examples does not match the schema beside it.
 

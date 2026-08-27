@@ -11,10 +11,13 @@ namespace Docuccino\Core\Contract\Examples;
  * `uncheckable` is the third answer, and it is not a finding: the validator refused the schema, so the
  * audit knows nothing about the example beside it either way. Keeping it apart from `findings` is what
  * lets a checker limitation be reported as one rather than as an example that contradicts its contract.
+ * It is kept out of `checked` for the same reason — a denominator counting examples nobody could check
+ * reads as having proved more than the audit did.
  */
 final readonly class ExampleReport
 {
     /**
+     * @param  int  $checked  examples the validator actually judged, uncheckable ones excluded
      * @param  list<ExampleFinding>  $findings
      * @param  list<ExampleUncheckable>  $uncheckable
      */
