@@ -155,6 +155,88 @@
       }
     }
   },
+  "webhooks": {
+    "alert.raised": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaaalertraised" },
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": {} }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "digest.sent": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaadigestsent" },
+        "requestBody": { "required": true, "content": {} },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "export.ready": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaaexportready" },
+        "requestBody": {
+          "required": true,
+          "content": { "text/csv": { "schema": { "type": "string" } } }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "invoice.paid": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaainvoicepaid" },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } }
+          }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "invoice.voided": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaavoidedpost" },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } }
+          }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      },
+      "put": {
+        "x-docuccino": { "id": "op:v1:aaaavoidedput" },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } }
+          }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "ping.sent": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaapingsent" },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    },
+    "receipt.sent": {
+      "post": {
+        "x-docuccino": { "id": "op:v1:aaaareceiptsent" },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } },
+            "application/xml": { "schema": { "type": "string" } }
+          }
+        },
+        "responses": { "200": { "description": "Delivery accepted." } }
+      }
+    }
+  },
   "components": {
     "headers": {
       "Legacy": { "description": "Sent while the old client is still out there.", "schema": { "type": "boolean" } }

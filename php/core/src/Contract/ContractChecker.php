@@ -10,7 +10,8 @@ use Throwable;
 /**
  * The OAS half of contract checking: match an {@see Exchange} to its operation, pick the documented
  * response for the status, the `content` entry and the `headers` map for the response and the
- * parameters and body for the request, then hand each payload to {@see SchemaCheck}.
+ * parameters and body for the request, then hand each payload to {@see SchemaCheck}. {@see delivery()}
+ * is the outbound half, and reaches the same body check by the same road.
  *
  * Where the contract cannot be checked rather than being wrong — a `text/csv` body, a media type or a
  * header with no schema — the outcome passes with a NOTE rather than passing silently. A pass that
@@ -40,6 +41,49 @@ final class ContractChecker
             operation: $operation,
             request: $checkRequest ? $this->request($operation, $exchange) : null,
             response: $checkResponse ? $this->response($operation, $exchange) : null,
+        );
+    }
+
+    /**
+     * The payload the application dispatched for a documented webhook, against the body the document
+     * publishes for it.
+     *
+     * The outbound half. There is no exchange to match — a webhook is found by name — so the caller
+     * resolves it off {@see ContractIndex::webhooksNamed()} and hands the one it means here.
+     */
+    public function delivery(ContractWebhook $webhook, string $payload): Outcome
+    {
+        $documented = $webhook->requestBody($this->index->document());
+
+        if ($documented === null) {
+            return Outcome::passed(sprintf('the contract documents no delivered body for %s', $webhook->label()));
+        }
+
+        [$body, $segments] = $documented;
+        $content = $body['content'] ?? null;
+
+        if (! is_array($content) || $content === []) {
+            return Outcome::passed(sprintf('the contract documents a delivered body with no media types for %s', $webhook->label()));
+        }
+
+        /** @var array<string, mixed> $content */
+        $key = MediaType::select($content, null);
+
+        if ($key === null) {
+            return Outcome::passed(sprintf(
+                'the contract documents %s under several media types (%s), so there is nothing here one payload answers to',
+                $webhook->label(),
+                implode(', ', array_map(strval(...), array_keys($content))),
+            ));
+        }
+
+        return $this->body(
+            $payload,
+            $content[$key],
+            [...$segments, 'content', $key, 'schema'],
+            $key,
+            'the delivered payload',
+            'the delivery',
         );
     }
 

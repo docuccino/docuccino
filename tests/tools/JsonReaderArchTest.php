@@ -44,7 +44,7 @@ function allowedAssociativeJsonDecodes(): array
         // and the typed model the semantic diff reads (`ContractIndex::comparable()`). The associative
         // copy is only ever walked to LOCATE a node — operation ids, paths, methods, pointer segments —
         // and is never re-emitted or compared.
-        'php/core/src/Contract/ContractIndex.php:61' => 'contract lookup index; validation reads graph()',
+        'php/core/src/Contract/ContractIndex.php:69' => 'contract lookup index; validation reads graph()',
 
         // The decoded value lands on `additionalProperties` — a SCHEMA, and every position inside a
         // schema that a PHP array cannot spell is one canonicalisation restores from the keyword's own
