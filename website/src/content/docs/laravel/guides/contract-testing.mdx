@@ -322,6 +322,16 @@ command's `--against` does:
 $this->assertNoBreakingChanges('origin/main');
 ```
 
+Prose never fails this. A schema's `title`, `description`, `example`, `examples`, `externalDocs` and
+`$comment` are reported as `schema.annotation-changed` and are never breaking, so a rewritten
+description cannot fail a build. `default`, `readOnly`, `writeOnly` and `deprecated` are not in that
+group.
+
+A **recorded** example is published beside its schema rather than inside one, so it is not compared at
+all — a suite that records its own payloads has never been able to fail this assertion because the last
+run sent different ids. Full rule, including what else the diff does not see, under
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
+
 The failure renders the changeset, then says where each broken node came from:
 
 ```text
