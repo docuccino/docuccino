@@ -136,6 +136,25 @@ final readonly class InvoicePaid { /* … */ }
 `docuccino:diff` compares webhooks as the operations they are, under `webhooks.<name>` in place of a
 path, so removing one or narrowing its payload is a breaking change like any other.
 
+## Test what you send
+
+A webhook is the half of your contract no HTTP test touches: nothing in your suite calls it, so a
+payload that drifts from its own documentation reaches your subscribers before it reaches you.
+`assertValidWebhook()` holds the payload you are about to dispatch to the schema this page just
+published for it:
+
+```php
+use App\Webhooks\InvoicePaid;
+
+it('delivers a payload subscribers can rely on', function () {
+    $this->assertValidWebhook('invoice.paid', new InvoicePaid(42, 1250, '2026-03-01T09:00:00Z'));
+});
+```
+
+Pass the payload in whatever form your code holds it — the object, an array, JSON text. Full setup,
+what the failures look like and the rest of the contract assertions are on [Contract
+testing](/laravel/guides/contract-testing/#assert-a-webhook-you-send).
+
 ## What Docuccino tells you
 
 A directory that isn't there, a blank or contested name, a payload that resolves to no shape — each
