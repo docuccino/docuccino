@@ -257,12 +257,13 @@ recorded](/laravel/documenting/examples/#examples-your-tests-recorded).
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
-| `examples.recordings-empty` | info | The recordings directory holds no recordings, so the document publishes none | Run your suite with the recorder registered, or drop `examples.recordings` |
+| `examples.recordings-empty` | info | The recordings directory holds no recordings, so the document publishes none | Recording is opt-in per assertion: pass `recordAs:` at the assertions whose responses you want published, and run your suite with the recorder registered. Or drop `examples.recordings` |
 | `examples.recordings-escapes-base` | warning | `examples.recordings` doesn't name a path inside your application — it leaves the root, or a symlink in it does — so the directory was never read and no recorded examples were published | Write it relative to the application root, or point it at a directory inside the application |
 | `examples.recording-unreadable` | warning | A file in the recordings directory isn't a recording Docuccino can read, or records an operation its filename doesn't name | Re-record it, or delete it. The message names the file |
 | `examples.recording-orphaned` | warning | A recording is for an operation this document no longer has — the route was renamed, moved or removed | Delete the file, then re-record whatever replaced it. The message names the endpoint it came from |
 | `examples.recording-unsafe` | warning | A committed recording still holds what looks like a credential, so it wasn't published | Re-record it; a credential string is replaced on the way out. A number is reported and left alone, because a placeholder where the schema says integer would make the example contradict its own contract — stop returning it. If the value really is public, list the pointer the message names under `lint.leakage.allow` — a bare property name silences the lint but never the redaction. The message names the pointer, never the value |
-| `examples.recording-name-unpublished` | warning | A recording named a scenario on an error response, and a named example there would take that response out of the component other routes share | The body publishes without the name. Record it unnamed, or set `representation.errors.components` to `false` if the names matter more |
+| `examples.recording-unnamed` | info | A committed recording holds a body no assertion named — a file from before recording became opt-in. It still publishes, and no run will ever refresh it | Pass `recordAs:` at the assertion that produces that body and the next run replaces it, or delete the file if the endpoint no longer needs an example |
+| `examples.recording-name-unpublished` | info | A recording named a scenario on an error response, and a named example there would take that response out of the component other routes share | Nothing, usually: the body publishes as the singular `example` and only the name is dropped. Set `representation.errors.components` to `false` if the names matter more |
 
 ## Lint rules
 

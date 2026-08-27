@@ -849,13 +849,23 @@ The file format, the store, the redaction and the whole-document audit are core
 (`Core\Examples\*`): the input is a data file rather than Laravel code, exactly as for the content
 subsystem. Five decisions carry the feature:
 
-- **Curation is the author's, and it happens in the diff.** The recorder narrows a suite's many
-  responses to one candidate per (status, media type, name) and the human reviews the committed file. The
-  narrowing is a function of the bodies and never of the run: only an exchange whose RESPONSE half was
-  checked and passed is recorded (so a body cannot illustrate a schema it contradicts), and the winner
-  is the most POPULATED body, then the shorter, then the lexicographically smaller —
-  `RecordedExample::outranks()`. A first-come rule would let reordering a test file change a published
-  example, which is the same defect `ComponentNames` exists to prevent, one node down.
+- **Recording is OPT-IN per assertion, and `recordAs:` is the asking.** Checking an exchange and
+  publishing it as documentation have opposite ideal coverage — check as many exchanges as the suite can
+  produce, publish one deliberately chosen response per operation — so tying them together hands the
+  documentation decision to whichever test happened to answer with the best-ranking body. An assertion
+  that names no scenario therefore checks and records nothing. An UNNAMED body is a read-only shape:
+  files holding one are still read and published (an upgrade takes no example out of a document) and
+  `examples.recording-unnamed` says so, since no run will refresh one.
+- **Curation is the author's, and it happens in the diff.** Among the responses a suite records under one
+  name the recorder keeps one, and the human reviews the committed file. The narrowing is a function of
+  the bodies and never of the run: only an exchange whose RESPONSE half was checked and passed is
+  recorded (so a body cannot illustrate a schema it contradicts), and the winner is the most POPULATED
+  body, then the shorter, then the smaller by the bytes it would PUBLISH — `RecordedExample::outranks()`.
+  That last term is the published encoding rather than `Json::stable()`, which sorts an object's members
+  and so ties two bodies holding the same members in a different order while the files they write differ;
+  a tie there would hand the choice back to arrival. A first-come rule would let reordering a test file
+  change a published example, which is the same defect `ComponentNames` exists to prevent, one node
+  down.
 - **A committed body is rewritten only when its SHAPE changes** (`ResponseShape`, keyed into
   `ExampleRecording::with()`). A `created_at`, a UUID or an autoincrement key moves the body on every
   run and the structure on none of them, so re-recording an unchanged suite is a no-op on the file and
@@ -881,12 +891,12 @@ subsystem. Five decisions carry the feature:
   `declareExamples()` fills the declaration bags, and `ResponseDraft::freeze()` publishes a declaration
   over an illustration whichever ran first, which is why nothing here depends on the recorded extension
   running before or after `AttributeExamplesExtension`.
-- **A recording may be NAMED, and a name is what decides which member it publishes into.** A test names
-  the scenario it set up (`assertValidResponse(recordAs: 'empty-cart')`); named recordings publish
-  together as the media type's `examples` map, unnamed ones as the singular `example`, and naming one
-  scenario for a (status, media type) drops the unnamed candidate for it — OAS carries `example` or
-  `examples` and never both, so a file keeping one would keep something the document cannot publish
-  (`ExampleRecording::normalised()`). A name is never derived from the test's name: renaming a test would
+- **A recording's NAME decides which member it publishes into.** A test names the scenario it set up
+  (`assertValidResponse(recordAs: 'empty-cart')`); named recordings publish together as the media type's
+  `examples` map, a legacy unnamed body as the singular `example`, and naming one scenario for a
+  (status, media type) drops the unnamed candidate for it — OAS carries `example` or `examples` and never
+  both, so a file keeping one would keep something the document cannot publish
+  (`ExampleRecording::normalised()`), and that is also the upgrade path off an unnamed file. A name is never derived from the test's name: renaming a test would
   then rename a published example. `ResponseDraft::freeze()` resolves the rest — a declared map takes
   named illustrations into it (a name passed at a call site is a name somebody CHOSE, unlike a key of our
   own) and wins every key it also spells, while a declared singular publishes alone, since filing a
@@ -894,7 +904,8 @@ subsystem. Five decisions carry the feature:
   `SharedErrorResponses` leaves a media type already carrying an `examples` map whole, so on a status it
   groups (`SharedErrorResponses::shares()` — the same grammar, read once) the names are not published at
   all, the best body goes out as the singular `example`, and `examples.recording-name-unpublished` says
-  so.
+  so — at INFO, because with naming now the only way to record, every recorded error body reaches it and
+  the one remaining remedy is a document-wide setting.
 
 Two supporting notes. `RouteContext::$operationId` carries the already-minted id into the draft phase,
 because a recording is filed under identity (so it survives a route rename) and deriving the id a second

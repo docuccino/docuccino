@@ -49,9 +49,10 @@ trait AssertsApiContract
     /**
      * The response matches the schema the contract documents for its status and media type.
      *
-     * `recordAs:` names the scenario this test set up — `recordAs: 'empty-cart'` — so that a suite
-     * with the recorder on publishes it as that entry of the operation's `examples` map rather than
-     * competing with every other response for the one unnamed slot. Ignored when nothing is recording.
+     * `recordAs:` names the scenario this test set up — `recordAs: 'empty-cart'` — and naming it is
+     * what asks for it to be PUBLISHED, as that entry of the operation's `examples` map. Checking is
+     * every exchange's business; publishing is a choice, so an assertion that names nothing checks the
+     * response and records none of it. Ignored when nothing is recording.
      *
      * @param  TestResponse<Response>  $response
      * @return TestResponse<Response>
@@ -64,7 +65,8 @@ trait AssertsApiContract
     }
 
     /**
-     * Both halves at once. `recordAs:` names the scenario, as on {@see assertValidResponse()}.
+     * Both halves at once. `recordAs:` names the scenario to publish, as on {@see assertValidResponse()},
+     * and nothing is recorded without it.
      *
      * @param  TestResponse<Response>  $response
      * @return TestResponse<Response>

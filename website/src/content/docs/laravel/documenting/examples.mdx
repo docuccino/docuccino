@@ -184,7 +184,14 @@ in them — and the build still executes nothing, because the execution already 
    \Docuccino\Laravel\Testing\ApiContract::record();
    ```
 
-3. **Run your suite**, then read the diff:
+3. **Name the responses worth publishing**, one assertion at a time:
+
+   ```php
+   $this->getJson('/api/invoices/42')->assertOk()->assertValidExchange();                    // checked
+   $this->getJson('/api/invoices/42')->assertOk()->assertValidExchange(recordAs: 'paid');    // checked and published
+   ```
+
+4. **Run your suite**, then read the diff:
 
    ```bash
    php artisan test
@@ -192,6 +199,31 @@ in them — and the build still executes nothing, because the execution already 
    ```
 
 </Steps>
+
+### Recording is a deliberate act
+
+`recordAs:` is not decoration on top of a recorder that was already going to publish something. It is
+the whole of what asks for a response to be published, and an assertion without it checks the response
+and records none of it.
+
+The two decisions pull in opposite directions. **Checking** wants every exchange your suite can throw at
+the contract, because that is how a defect gets found — a suite with hundreds of `assertValidExchange()`
+calls and no recordings is a suite doing its job. **Publishing** wants one response per operation,
+chosen by someone who knows which one a reader should see. Tie the two together and the second decision
+gets made by whichever test happened to answer with the highest-ranking body — which is how a factory's
+`"key": "qui-et-voluptatibus"` ends up as the illustration of an endpoint, and how a nullable column
+that is sometimes null rewrites a committed file on alternate runs.
+
+So the endpoints you want illustrated get a name, the rest get checked, and what your document shows is
+something you chose.
+
+<Aside type="note" title="If your suite already records">
+Files recorded before this are still read, and still publish, so upgrading takes no example out of your
+document. Nothing will re-record them, though, so each build reports them once as
+`examples.recording-unnamed`. Pass `recordAs:` at the assertion that produces the body and the next run
+replaces the file's entry with the named one; delete the file if the endpoint no longer needs an
+example.
+</Aside>
 
 You get one file per operation, named after its stable `x-docuccino.id` — so renaming a route carries
 its recordings with it:
@@ -230,10 +262,10 @@ its recordings with it:
 
 ### The curating is yours, and it happens in the diff
 
-A suite produces dozens of responses per endpoint, most of them near-duplicates and some of them
-carrying real data. So the recorder narrows that down to one candidate per status, media type and
-[name](#name-the-scenarios-worth-showing), and then hands it to the only reviewer who can judge
-it — you, reading a diff, before the file is committed.
+You choose which responses are candidates at all, by [naming them](#name-the-scenarios-worth-showing).
+Where several tests share one name, the recorder narrows those down to one body per status, media type
+and name, and then hands it to the only reviewer who can judge it — you, reading a diff, before the file
+is committed.
 
 Three rules do the narrowing, and each of them exists so the file is a function of your responses
 rather than of the run that produced them:
@@ -241,7 +273,7 @@ rather than of the run that produced them:
 | Rule | Why |
 | --- | --- |
 | Only an exchange whose **response was checked and passed** is recorded | A body that contradicts its own schema can never become the illustration of it |
-| The published body is the one that **fills in the most of the shape** — then the shorter of two that tie | Reordering your tests never changes what the document shows, and the example a reader copies is the one with the most of the contract in it |
+| The published body is the one that **fills in the most of the shape** — then the shorter, then the smaller by the bytes it would publish | Reordering your tests never changes what the document shows, and the example a reader copies is the one with the most of the contract in it |
 | A committed body is left **byte-identical while its shape is unchanged** | A `created_at`, a UUID or an autoincrement key moves on every run and the structure on none of them, so re-recording an unchanged suite rewrites nothing |
 
 That last one is what keeps your artifact stable. Re-record as often as you like: the file changes when
@@ -297,9 +329,8 @@ so with an `examples.recording-unsafe` warning naming the pointer (never the val
 
 ### Name the scenarios worth showing
 
-A suite that exercises an empty cart, a full one and a locked one has three payloads worth publishing,
-and one unnamed slot to publish them in. Name them at the call site — the test already knows which
-scenario it set up:
+A suite that exercises an empty cart, a full one and a locked one has three payloads worth publishing.
+Name them at the call site — the test already knows which scenario it set up:
 
 ```php
 $this->getJson('/api/carts/1')->assertValidResponse(recordAs: 'empty-cart');
@@ -322,11 +353,12 @@ name so adding a scenario never moves another:
 ```
 
 A name may hold letters, digits, dots, dashes and underscores — it becomes a key a generated client
-reads, so the assertion refuses anything else at the line that wrote it. Naming one scenario for a
-status names them all: OpenAPI carries `example` or `examples` and never both, so once a name is in
-play the unnamed candidates for that status stop being recorded. Taking a name back out of your tests
-is the one change re-recording can't make for you — a recorded name is never deleted on the strength of
-a run that might have been a partial one, so delete the file and record it again.
+reads, so the assertion refuses anything else at the line that wrote it. Where several tests share one
+name, the best body of them is published, decided by the [three
+rules](#the-curating-is-yours-and-it-happens-in-the-diff) and never by which test ran first. Taking a
+name back out of your tests is the one change re-recording can't make for you — a recorded name is
+never deleted on the strength of a run that might have been a partial one, so delete the file and
+record it again.
 
 The name is always yours. Docuccino will not derive one from the test's name, because renaming a test
 would then rename a published example — a change to your contract that nobody asked for.
@@ -340,11 +372,11 @@ application really did answer this — so it beats a shape inference merely deri
 name you passed at a call site *is* a choice, though, so a named recording can sit beside the examples
 you curated:
 
-| You wrote | An unnamed recording | Named recordings |
-| --- | --- | --- |
-| nothing | publishes as the media type's `example` | publish as an `examples` map of their names |
-| a singular `#[Example]` | yours, alone | yours, alone |
-| named `#[Example]`s | yours, alone | yours plus the recorded names — yours wins any name you both spell |
+| You wrote | Named recordings |
+| --- | --- |
+| nothing | publish as an `examples` map of their names |
+| a singular `#[Example]` | yours, alone |
+| named `#[Example]`s | yours plus the recorded names — yours wins any name you both spell |
 
 A singular example is the one place a recording has nowhere to go: filing it beside yours would mean
 inventing a name for *yours*, which is not Docuccino's to choose.
@@ -357,7 +389,7 @@ Docuccino collapses an error body repeated across operations into one shared com
 `$ref`s. A media type carrying an `examples` map can't take part in that, so a named recording on a
 4xx or 5xx would quietly drop an *unrelated* route's 404 back inline. Rather than let one route's tests
 change another route's document, the body publishes there as the singular `example` and an
-`examples.recording-name-unpublished` warning tells you the name went nowhere. Turn
+`examples.recording-name-unpublished` note tells you the name went nowhere — nothing else is lost. Turn
 [`representation.errors.components`](/laravel/reference/configuration/#representation) off if you would
 rather have the names.
 </Aside>
@@ -375,7 +407,8 @@ about each one.
 | `examples.recording-unreadable` | warning | A file in it isn't a recording Docuccino can read |
 | `examples.recording-orphaned` | warning | A recording for an operation this document no longer has — the route was renamed, moved or removed |
 | `examples.recording-unsafe` | warning | A committed body still holds what looks like a credential; it wasn't published |
-| `examples.recording-name-unpublished` | warning | A recorded name on an error response the document shares as a component; the body publishes without it |
+| `examples.recording-unnamed` | info | A committed body no assertion named — from before recording was opt-in. It still publishes, and no run will refresh it |
+| `examples.recording-name-unpublished` | info | A recorded name on an error response the document shares as a component; the body publishes without it |
 
 <Aside type="caution" title="An example that doesn't match its schema is a lie">
 Inference can't be wrong about a shape it derived; a hand-written example can say anything at all, and
