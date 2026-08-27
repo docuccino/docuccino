@@ -14,12 +14,13 @@ use JsonException;
 use stdClass;
 
 /**
- * A generated document, indexed for lookup by (method, concrete request path) and by node id.
+ * A generated document, indexed for lookup by (method, concrete request path), by webhook name, and by
+ * node id.
  *
- * The entry point for contract testing: given a UIR artifact and one observed exchange,
- * {@see ContractChecker} answers whether the exchange matches what the document promises, and
- * {@see ProvenanceTrail} answers who promised it. Framework-neutral throughout — an adapter supplies
- * the exchange, this package supplies the verdict.
+ * The entry point for contract testing: given a UIR artifact and one observed exchange — or one
+ * payload dispatched for a documented webhook — {@see ContractChecker} answers whether it matches what
+ * the document promises, and {@see ProvenanceTrail} answers who promised it. Framework-neutral
+ * throughout — an adapter supplies the observation, this package supplies the verdict.
  *
  * It reads the raw decoded document rather than {@see UirDocument} because
  * everything downstream — JSON Schema validation, the provenance trail, the example audit — needs the
@@ -35,12 +36,14 @@ final class ContractIndex
     /**
      * @param  array<string, mixed>  $document
      * @param  list<ContractOperation>  $operations
+     * @param  list<ContractWebhook>  $webhooks
      * @param  string  $json  the document's own JSON text, kept because associative decoding cannot
      *                        tell an empty object from an empty array and JSON Schema very much can
      */
     private function __construct(
         private readonly array $document,
         private readonly array $operations,
+        private readonly array $webhooks,
         private readonly string $json,
     ) {}
 
@@ -50,7 +53,12 @@ final class ContractIndex
      */
     public static function fromArray(array $document, ?string $json = null): self
     {
-        return new self($document, self::index($document), $json ?? (string) json_encode($document));
+        return new self(
+            $document,
+            self::index($document),
+            self::indexWebhooks($document),
+            $json ?? (string) json_encode($document),
+        );
     }
 
     /**
@@ -165,6 +173,68 @@ final class ContractIndex
     }
 
     /**
+     * Every documented webhook, ordered by name then by the canonical method order — a function of the
+     * document's content, so two runs over the same artifact list them identically.
+     *
+     * @return list<ContractWebhook>
+     */
+    public function webhooks(): array
+    {
+        return $this->webhooks;
+    }
+
+    /**
+     * The webhooks published under this name, in canonical method order. A name is the whole lookup:
+     * {@see match()} is inbound-only by construction, and a webhook has no path to match on.
+     *
+     * @return list<ContractWebhook>
+     */
+    public function webhooksNamed(string $name): array
+    {
+        return array_values(array_filter(
+            $this->webhooks,
+            static fn (ContractWebhook $webhook): bool => $webhook->name === $name,
+        ));
+    }
+
+    /**
+     * The distinct names the document publishes webhooks under, sorted — what a "no such webhook"
+     * message offers instead.
+     *
+     * @return list<string>
+     */
+    public function webhookNames(): array
+    {
+        $names = [];
+        foreach ($this->webhooks as $webhook) {
+            $names[$webhook->name] = true;
+        }
+
+        $sorted = array_keys($names);
+        sort($sorted, SORT_STRING);
+
+        return $sorted;
+    }
+
+    /**
+     * Whether this artifact's FORMAT has a `webhooks` member at all: OpenAPI 3.0 defines none, so a
+     * document downlevelled to it dropped every webhook it had. That is a different answer from
+     * "documents no webhooks", and a caller owes its reader the difference.
+     */
+    public function supportsWebhooks(): bool
+    {
+        return ! str_starts_with($this->openApiVersion(), '3.0');
+    }
+
+    /** The OpenAPI version the document declares, empty when it declares none. */
+    public function openApiVersion(): string
+    {
+        $version = $this->document['openapi'] ?? null;
+
+        return is_string($version) ? $version : '';
+    }
+
+    /**
      * Where every node carrying an `x-docuccino` id lives, as `id => pointer segments`. Both id forms
      * are read ({@see NodeIdentity}), so an OpenAPI export with flat ids maps as well as UIR does.
      *
@@ -260,6 +330,51 @@ final class ContractIndex
         }
 
         return $operations;
+    }
+
+    /**
+     * The `webhooks` map, indexed the same way {@see index()} does `paths` — by a sorted key rather
+     * than by the order the document happens to spell them in.
+     *
+     * @param  array<string, mixed>  $document
+     * @return list<ContractWebhook>
+     */
+    private static function indexWebhooks(array $document): array
+    {
+        $webhooks = $document['webhooks'] ?? null;
+
+        if (! is_array($webhooks)) {
+            return [];
+        }
+
+        $names = array_map(strval(...), array_keys($webhooks));
+        sort($names, SORT_STRING);
+
+        $indexed = [];
+        foreach ($names as $name) {
+            $item = $webhooks[$name];
+            if (! is_array($item)) {
+                continue;
+            }
+
+            foreach (PathItem::METHODS as $method) {
+                $operation = $item[$method] ?? null;
+                if (! is_array($operation)) {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $operation */
+                $indexed[] = new ContractWebhook(
+                    id: NodeIdentity::inArray($operation),
+                    name: $name,
+                    method: strtoupper($method),
+                    operation: $operation,
+                    segments: ['webhooks', $name, $method],
+                );
+            }
+        }
+
+        return $indexed;
     }
 
     /**
