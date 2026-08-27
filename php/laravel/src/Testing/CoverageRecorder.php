@@ -10,8 +10,8 @@ use Docuccino\Laravel\Support\CoverageLogPath;
 use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 
 /**
- * Which operations this process touched, by stable id — never by path, for the reason
- * {@see CoverageReport} gives.
+ * Which documented responses this process exercised, by stable operation id and status — never by path,
+ * for the reason {@see CoverageReport} gives.
  *
  * A process is all it can speak for, which is the whole shape of the feature: a worker sees its own
  * share of the suite and nothing else, and no worker can know when the others have finished. So
@@ -21,7 +21,7 @@ use Docuccino\Laravel\Testing\Contracts\ContractObserver;
 final class CoverageRecorder implements ContractObserver
 {
     /** @var array<string, true> */
-    private array $ids = [];
+    private array $entries = [];
 
     private bool $logging = false;
 
@@ -29,41 +29,49 @@ final class CoverageRecorder implements ContractObserver
 
     private ?CoverageLog $log = null;
 
+    /**
+     * A response counts only where the response half was actually checked. `assertValidRequest()` proves
+     * nothing about what came back, so it records the operation as reached and no response of it —
+     * counting one there is exactly the too-generous number this whole report exists to stop.
+     */
     public function observed(ObservedExchange $exchange): void
     {
         $id = $exchange->operationId();
 
         if ($id !== null) {
-            $this->record($id);
+            $this->record($id, $exchange->result->response === null ? null : $exchange->status());
         }
     }
 
     /**
-     * Record one exercised operation, by id.
+     * Record one exercised response, by operation id and the status it answered. Pass no status for an
+     * operation the run reached without proving any response of it.
      *
-     * Anything that is not an operation id is dropped rather than recorded: this is public, a log line
-     * is held to the id shape when it is read back, and a caller passing a stray string would otherwise
+     * Anything that is not an entry is dropped rather than recorded: this is public, a log line is held
+     * to the entry shape when it is read back, and a caller passing a stray string would otherwise
      * condemn the whole file its process wrote. Nothing is lost by dropping it — an id that is not an
      * operation's matches no operation in the report either.
      */
-    public function record(string $id): void
+    public function record(string $id, ?int $status = null): void
     {
-        if (isset($this->ids[$id]) || ! CoverageLog::isId($id)) {
+        $entry = CoverageLog::entry($id, $status);
+
+        if ($entry === null || isset($this->entries[$entry])) {
             return;
         }
 
-        $this->ids[$id] = true;
+        $this->entries[$entry] = true;
 
         if ($this->logging) {
-            $this->log()->append([$id]);
+            $this->log()->append([$entry]);
         }
     }
 
     /**
-     * Start writing this process's ids to a coverage log, for `docuccino:coverage` to merge.
+     * Start writing this process's entries to a coverage log, for `docuccino:coverage` to merge.
      *
-     * Pass a directory to override `coverage.log`. Each id is appended the first time it is seen, so a
-     * suite that crashes half way still leaves behind what it had reached.
+     * Pass a directory to override `coverage.log`. Each entry is appended the first time it is seen, so
+     * a suite that crashes half way still leaves behind what it had reached.
      */
     public function logTo(?string $directory = null): self
     {
@@ -81,23 +89,23 @@ final class CoverageRecorder implements ContractObserver
     }
 
     /**
-     * Sorted, so two runs that exercised the same operations hand back the same list whatever order
-     * the tests ran in.
+     * What this process exercised, as coverage log entries. Sorted, so two runs that exercised the same
+     * responses hand back the same list whatever order the tests ran in.
      *
      * @return list<string>
      */
     public function exercised(): array
     {
-        $ids = array_keys($this->ids);
-        sort($ids);
+        $entries = array_keys($this->entries);
+        sort($entries);
 
-        return $ids;
+        return $entries;
     }
 
     /** Forget what this process recorded. What it already wrote to its log stays written. */
     public function forget(): void
     {
-        $this->ids = [];
+        $this->entries = [];
     }
 
     /**
