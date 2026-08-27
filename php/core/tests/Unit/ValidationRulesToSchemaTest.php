@@ -125,6 +125,28 @@ it('nests dot notation and wildcard arrays', function (): void {
     ]);
 });
 
+// Laravel reads `\.` in a rule key as a dot belonging to the field name rather than a descent, so a
+// builder that split on every dot published a field called `meta\` holding one called
+// `validation_overrides` — a shape the application never validates and no client can send. One
+// grammar, read by every reader of a body path: FieldPath.
+it('reads an escaped dot as part of the field name rather than a descent', function (): void {
+    $driver = new DefaultValidationRulesToSchema(fakeTransformers());
+    $schema = $driver->convert(fakeRuleSet([
+        'meta\.validation_overrides' => ['required', 'str'],
+        'meta.locale' => ['str'],
+    ]), ruleContext())->schema;
+
+    // The escape is grammar, so what the document publishes is the key itself: one property whose own
+    // name holds a dot, beside the `meta` the unescaped key nested into.
+    expect($schema['properties'])->toHaveKeys(['meta.validation_overrides', 'meta'])
+        ->and($schema['properties']['meta.validation_overrides'])->toBe(['type' => 'string'])
+        ->and($schema['properties']['meta'])->toBe([
+            'type' => 'object',
+            'properties' => ['locale' => ['type' => 'string']],
+        ])
+        ->and($schema['required'])->toBe(['meta.validation_overrides']);
+});
+
 it('publishes a `*` child as the value schema of a node that declares additionalProperties', function (): void {
     // `additionalProperties` and `items` are the SAME slot for two different containers — an object's
     // values and an array's items — and mutually exclusive on one schema. A `*` segment names whichever
