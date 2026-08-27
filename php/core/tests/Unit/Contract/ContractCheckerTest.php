@@ -474,7 +474,6 @@ it('degrades over a headers map that is not one, and over an entry that is not a
 })->with([
     'a headers member that is a string' => ['nope', true],
     'an entry that is a string' => [['X-Odd' => 'nope'], true],
-    'a $ref that goes nowhere' => [['X-Odd' => ['$ref' => '#/components/headers/Gone']], true],
 ]);
 
 it('says out loud that a parameter documented without a schema was not checked', function (): void {
@@ -492,4 +491,248 @@ it('says out loud that a parameter documented without a schema was not checked',
 
     expect($result->request->ok())->toBeTrue()
         ->and($result->notes())->toContain('?page is documented as a content object, which the check does not decode');
+});
+
+it('fails a header whose declaration is a reference the contract does not define', function (array $entry, string $pointer): void {
+    // The whole check runs off the node the `$ref` lands on. Where it lands nowhere there is no
+    // `required` and no `schema` to read, so an absent header would otherwise be judged against
+    // nothing and reported as a pass — a one-character typo turning the contract into a no-op.
+    $result = checkContract(
+        contractExchange(
+            'POST',
+            '/api/invoices',
+            status: 201,
+            responseBody: '{"reference":"INV-1","total":1}',
+            requestBody: '{"reference":"INV-1"}',
+            responseHeaders: ['Location' => ['/api/invoices/42']],
+        ),
+        static function (array $document) use ($entry): array {
+            $document['components']['headers']['RateLimit'] = ['required' => true, 'schema' => ['type' => 'integer']];
+            $document['components']['headers']['Loop'] = ['$ref' => '#/components/headers/Knot'];
+            $document['components']['headers']['Knot'] = ['$ref' => '#/components/headers/Loop'];
+            $document['paths']['/api/invoices']['post']['responses']['201']['headers']['RateLimit'] = $entry;
+
+            return $document;
+        },
+    );
+
+    $violation = collect($result->response->violations)
+        ->first(static fn ($v): bool => $v->location === 'the response header RateLimit');
+
+    expect($result->response->ok())->toBeFalse()
+        ->and($violation)->not->toBeNull()
+        ->and($violation->message)->toContain('which the contract does not define')
+        ->and($violation->schemaPointer)->toBe($pointer);
+})->with([
+    // The pointer names the last node the chain reached, which for a name nothing defines is the
+    // declaration itself and for a loop is where the loop closes — in both cases, where to go and look.
+    'a reference at a name nothing defines' => [
+        ['$ref' => '#/components/headers/RateLimitt'],
+        '/paths/~1api~1invoices/post/responses/201/headers/RateLimit',
+    ],
+    'a reference chain that never lands' => [
+        ['$ref' => '#/components/headers/Loop'],
+        '/components/headers/Knot',
+    ],
+]);
+
+it('fails a request parameter documented behind a reference the contract does not define', function (): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices', headers: ['X-Tenant' => 'acme'], responseBody: '[]'),
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['get']['parameters'][] = ['$ref' => '#/components/parameters/Cursor'];
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeFalse()
+        ->and($result->request->violations[0]->message)
+        ->toContain('#/components/parameters/Cursor')
+        ->and($result->request->violations[0]->message)->toContain('which the contract does not define');
+});
+
+it('fails a request body documented behind a reference the contract does not define', function (): void {
+    $result = checkContract(
+        contractExchange(
+            'POST',
+            '/api/invoices',
+            status: 201,
+            responseBody: '{"reference":"INV-1","total":1}',
+            requestBody: '{"reference":"INV-1"}',
+            responseHeaders: ['Location' => ['/api/invoices/42']],
+        ),
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['post']['requestBody'] = ['$ref' => '#/components/requestBodies/Draft'];
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeFalse()
+        ->and($result->request->violations[0]->message)->toContain('#/components/requestBodies/Draft');
+});
+
+it('fails a response documented behind a reference the contract does not define', function (): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices/42', responseBody: '{"reference":"INV-1","total":1}'),
+        static function (array $document): array {
+            $document['paths']['/api/invoices/{invoice}']['get']['responses']['200'] = ['$ref' => '#/components/responses/Invoice'];
+
+            return $document;
+        },
+    );
+
+    expect($result->response->ok())->toBeFalse()
+        ->and($result->response->violations[0]->message)->toContain('#/components/responses/Invoice');
+});
+
+it('says out loud that a schema which is not schema-shaped was not checked', function (mixed $schema): void {
+    // `schema` being PRESENT is not the question — a string, a number or a null there is as
+    // uncheckable as no schema at all, and reading presence alone passed the value in silence.
+    $result = checkContract(
+        contractExchange(
+            'GET',
+            '/api/invoices',
+            query: ['page' => 'zzz'],
+            headers: ['X-Tenant' => 'acme'],
+            responseBody: '[]',
+        ),
+        static function (array $document) use ($schema): array {
+            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = $schema;
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeTrue()
+        ->and($result->notes())->toContain('the contract documents no schema for ?page');
+})->with([
+    'a type name where a schema belongs' => ['integer'],
+    'a number' => [42],
+    'a null' => [null],
+]);
+
+it('keeps checking against a schema written as an empty object', function (): void {
+    // Associative decoding spells `{}` as `[]`, and the empty schema accepts everything — so this
+    // passes with nothing to say, which is the truth rather than a silence.
+    $result = checkContract(
+        contractExchange(
+            'GET',
+            '/api/invoices',
+            query: ['page' => 'zzz'],
+            headers: ['X-Tenant' => 'acme'],
+            responseBody: '[]',
+        ),
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = [];
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeTrue()
+        ->and($result->notes())->toBe([]);
+});
+
+it('fails rather than crashing where a schema points at a definition nothing resolves', function (string $ref): void {
+    // The validator parses each schema as it reaches it and THROWS over an unresolvable reference.
+    // `#/definitions/…` is the everyday one: it is what an artifact converted from Swagger 2.0 or
+    // draft-07 carries, and every assertion against such a document died with a stack trace.
+    $result = checkContract(
+        contractExchange(
+            'GET',
+            '/api/invoices',
+            query: ['page' => '2'],
+            headers: ['X-Tenant' => 'acme'],
+            responseBody: '[]',
+        ),
+        static function (array $document) use ($ref): array {
+            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = ['$ref' => $ref];
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeFalse()
+        ->and($result->request->violations[0]->location)->toBe('?page')
+        ->and($result->request->violations[0]->message)->toContain('could not be checked against the contract')
+        ->and($result->request->violations[0]->schemaPointer)
+        ->toBe('/paths/~1api~1invoices/get/parameters/0/schema');
+})->with([
+    'a component nothing defines' => ['#/components/schemas/Missing'],
+    'a draft-07 definitions pointer' => ['#/definitions/Thing'],
+]);
+
+it('fails rather than crashing where a BODY schema points at a definition nothing resolves', function (): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices/42', responseBody: '{"reference":"INV-1","total":1}'),
+        static function (array $document): array {
+            $document['paths']['/api/invoices/{invoice}']['get']['responses']['200']['content']['application/json']['schema']
+                = ['$ref' => '#/definitions/Invoice'];
+
+            return $document;
+        },
+    );
+
+    expect($result->response->ok())->toBeFalse()
+        ->and($result->response->violations[0]->location)->toBe('the response body')
+        ->and($result->response->violations[0]->message)->toContain('could not be checked against the contract');
+});
+
+it('orders response header violations by name rather than by the order the document wrote them', function (array $headers, array $expected): void {
+    // Two documents saying exactly the same thing must fail identically. An order read off the
+    // document's key order makes the failure a function of how the file happened to be written.
+    $result = checkContract(
+        contractExchange(
+            'GET',
+            '/api/invoices/42',
+            responseBody: '{"reference":"INV-1","total":1}',
+            responseHeaders: ['X-A' => ['no'], 'X-B' => ['no'], 'X-C' => ['no']],
+        ),
+        static function (array $document) use ($headers): array {
+            $document['paths']['/api/invoices/{invoice}']['get']['responses']['200']['headers'] = $headers;
+
+            return $document;
+        },
+    );
+
+    expect(array_map(static fn ($v): string => $v->location, $result->response->violations))->toBe($expected);
+})->with(function () {
+    $integer = ['schema' => ['type' => 'integer']];
+    $expected = ['the response header X-A', 'the response header X-B', 'the response header X-C'];
+
+    return [
+        'written in order' => [['X-A' => $integer, 'X-B' => $integer, 'X-C' => $integer], $expected],
+        'written out of order' => [['X-C' => $integer, 'X-A' => $integer, 'X-B' => $integer], $expected],
+    ];
+});
+
+it('documents every fixture header with a schema or a content, as OAS requires', function (): void {
+    // The schema-less header cases above are written as MUTATIONS rather than into the fixture, on
+    // the grounds that the fixture is a document OAS accepts. Nothing held the fixture to that, so
+    // this does — and it counts what it found, so a walk that stopped seeing header objects fails
+    // rather than passing forever on nothing.
+    $document = loadFixture('contract.uir.json');
+
+    $found = [];
+    foreach ($document['paths'] as $path => $item) {
+        foreach ($item as $method => $operation) {
+            foreach ($operation['responses'] ?? [] as $status => $response) {
+                foreach ($response['headers'] ?? [] as $name => $header) {
+                    $found[$path.' '.$method.' '.$status.' '.$name] = array_key_exists('schema', $header)
+                        || array_key_exists('content', $header)
+                        || array_key_exists('$ref', $header);
+                }
+            }
+        }
+    }
+
+    foreach ($document['components']['headers'] as $name => $header) {
+        $found['components/headers/'.$name] = array_key_exists('schema', $header)
+            || array_key_exists('content', $header);
+    }
+
+    expect(count($found))->toBeGreaterThanOrEqual(6)
+        ->and(array_keys(array_filter($found, static fn (bool $ok): bool => ! $ok)))->toBe([]);
 });

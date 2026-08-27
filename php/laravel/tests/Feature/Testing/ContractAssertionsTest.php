@@ -295,3 +295,16 @@ it('reduces the response headers Laravel sent, repeats and all, to the neutral e
         ->and($exchange->responseHeader('Content-Type'))->toBe(['application/json'])
         ->and($exchange->responseHeader('X-Nothing'))->toBe([]);
 });
+
+it('keeps a repeated REQUEST header to its first value, which is what a parameter is', function (): void {
+    // Both halves read the same header bag; they differ only in what a documented thing can be. A
+    // response header is checked once per value it sent, and an `in: header` parameter has one value.
+    $response = contractResponse('GET', '/api/forms');
+    $request = $response->baseRequest;
+    $request->headers->set('X-Trace', ['first', 'second'], false);
+
+    $exchange = ApiContract::exchangeFor($request, $response);
+
+    expect($exchange->header('x-trace'))->toBe('first')
+        ->and($exchange->header('X-Nothing'))->toBeNull();
+});

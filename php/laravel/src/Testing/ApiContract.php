@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Assert;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -244,27 +245,27 @@ final class ApiContract
             path: $request->getPathInfo(),
             status: $base->getStatusCode(),
             query: $query,
-            headers: self::headers($request),
+            headers: self::headers($request->headers),
             cookies: self::strings($request->cookies->all()),
             requestBody: $request->getContent(),
             requestContentType: $request->headers->get('Content-Type'),
             responseBody: $body === false ? '' : $body,
             responseContentType: $base->headers->get('Content-Type'),
-            responseHeaders: self::responseHeaders($base),
+            responseHeaders: self::headerValues($base->headers),
         );
     }
 
     /**
-     * Every value the response sent under each header name. A list per name rather than one string:
-     * a response may send `Set-Cookie` more than once, and the contract check holds each value it sent
-     * to the documented schema.
+     * Every value sent under each header name. A list per name rather than one string: a message may
+     * send `Set-Cookie` more than once, and the contract check holds each value it sent to the
+     * documented schema.
      *
-     * @return array<string, list<string>>
+     * @return array<string, non-empty-list<string>>
      */
-    private static function responseHeaders(Response $base): array
+    private static function headerValues(HeaderBag $headers): array
     {
-        $headers = [];
-        foreach ($base->headers->all() as $name => $values) {
+        $out = [];
+        foreach ($headers->all() as $name => $values) {
             $kept = [];
             foreach ($values as $value) {
                 if (is_string($value)) {
@@ -273,11 +274,11 @@ final class ApiContract
             }
 
             if ($kept !== []) {
-                $headers[(string) $name] = $kept;
+                $out[(string) $name] = $kept;
             }
         }
 
-        return $headers;
+        return $out;
     }
 
     private static function notify(ObservedExchange $exchange): void
@@ -315,20 +316,17 @@ final class ApiContract
     }
 
     /**
+     * The first value under each name — what a request parameter documented `in: header` is checked
+     * against, since a parameter has one value.
+     *
      * @return array<string, string>
      */
-    private static function headers(Request $request): array
+    private static function headers(HeaderBag $headers): array
     {
-        $headers = [];
-        foreach ($request->headers->all() as $name => $values) {
-            $first = $values[0] ?? null;
-
-            if (is_string($first)) {
-                $headers[(string) $name] = $first;
-            }
-        }
-
-        return $headers;
+        return array_map(
+            static fn (array $values): string => $values[0],
+            self::headerValues($headers),
+        );
     }
 
     /**

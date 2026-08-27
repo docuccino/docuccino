@@ -280,7 +280,24 @@ final class ContractIndex
             }
 
             /** @var array<string, mixed> $parameter */
-            [$definition, $where] = Refs::follow($document, $parameter, [...$segments, (string) $index]);
+            [$definition, $where, $dangling] = Refs::follow($document, $parameter, [...$segments, (string) $index]);
+
+            // A `$ref` at a name the document does not define leaves nothing to read `name`, `in` or
+            // `schema` off. Dropping it here would make the parameter simply cease to be checked, so it
+            // is kept and reported: the checker fails naming the pointer.
+            if ($dangling !== null) {
+                $out[] = new ContractParameter(
+                    name: '',
+                    in: '',
+                    required: false,
+                    definition: $definition,
+                    segments: $where,
+                    label: 'the parameter at '.Pointer::of($where),
+                    danglingRef: $dangling,
+                );
+
+                continue;
+            }
 
             $name = $definition['name'] ?? null;
             $in = $definition['in'] ?? null;
@@ -313,13 +330,24 @@ final class ContractIndex
     {
         $merged = [];
         foreach ($own as $parameter) {
-            $merged[$parameter->in.':'.$parameter->name] = $parameter;
+            $merged[self::mergeKey($parameter)] = $parameter;
         }
 
         foreach ($shared as $parameter) {
-            $merged[$parameter->in.':'.$parameter->name] ??= $parameter;
+            $merged[self::mergeKey($parameter)] ??= $parameter;
         }
 
         return array_values($merged);
+    }
+
+    /**
+     * What "the same parameter" means for that merge. A dangling one has no name and no location to be
+     * the same BY, so it keys on where it was written — two unresolvable `$ref`s are two findings.
+     */
+    private static function mergeKey(ContractParameter $parameter): string
+    {
+        return $parameter->danglingRef === null
+            ? $parameter->in.':'.$parameter->name
+            : 'at:'.Pointer::of($parameter->segments);
     }
 }

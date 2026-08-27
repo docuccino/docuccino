@@ -12,6 +12,10 @@ namespace Docuccino\Core\Contract;
  * A `Content-Type` entry is dropped: OpenAPI says a response header of that name SHALL be ignored,
  * because `content` is what describes the media type.
  *
+ * The map comes back sorted by name. Every index in this package sorts, for the same reason: an order
+ * read off the document's key order would make the order of the violations a response produces a
+ * function of how the document happened to be written rather than of what it says.
+ *
  * @internal
  */
 final class ResponseHeaders
@@ -30,17 +34,20 @@ final class ResponseHeaders
             return [];
         }
 
-        $out = [];
-        foreach ($headers as $key => $header) {
-            $name = (string) $key;
+        $names = array_map(strval(...), array_keys($headers));
+        sort($names);
 
+        $out = [];
+        foreach ($names as $name) {
             if (strcasecmp($name, 'Content-Type') === 0) {
                 continue;
             }
 
+            $header = $headers[$name];
+
             /** @var array<string, mixed> $node */
             $node = is_array($header) ? $header : [];
-            [$definition, $where] = Refs::follow($document, $node, [...$segments, 'headers', $name]);
+            [$definition, $where, $dangling] = Refs::follow($document, $node, [...$segments, 'headers', $name]);
 
             $out[] = new ContractParameter(
                 name: $name,
@@ -49,6 +56,7 @@ final class ResponseHeaders
                 definition: $definition,
                 segments: $where,
                 label: 'the response header '.$name,
+                danglingRef: $dangling,
             );
         }
 

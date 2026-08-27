@@ -7,12 +7,10 @@ namespace Docuccino\Core\Contract\Examples;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Contract\Refs;
+use Docuccino\Core\Contract\RefusedSchema;
+use Docuccino\Core\Contract\ResponseHeaders;
 use Docuccino\Core\Contract\SchemaCheck;
 use Docuccino\Core\Draft\SchemaKeywords;
-use Docuccino\Core\Provenance\ClassNames;
-use Docuccino\Core\Provenance\MessagePaths;
-use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
-use Docuccino\Core\Support\PlainText;
 use Throwable;
 
 /**
@@ -39,17 +37,9 @@ final class ExampleAudit
 {
     private readonly SchemaCheck $schema;
 
-    private readonly MessagePaths $messagePaths;
-
-    private readonly ClassNames $classNames;
-
     public function __construct(private readonly ContractIndex $index)
     {
         $this->schema = new SchemaCheck($index);
-
-        $paths = new RootRelativeSourcePathResolver('');
-        $this->messagePaths = new MessagePaths($paths);
-        $this->classNames = new ClassNames($paths);
     }
 
     public function run(): ExampleReport
@@ -63,6 +53,20 @@ final class ExampleAudit
 
             $value = Pointer::readGraph($this->index->graph(), $exampleSegments);
 
+            // No schema beside it is the same nothing a refused one leaves. `check()` answers `[]` to
+            // both — "nothing disagreed" — and counting that as checked makes the report claim an
+            // example was held to a contract that was never there.
+            if (! $this->schema->has($schemaSegments)) {
+                $uncheckable[] = new ExampleUncheckable(
+                    Pointer::of($exampleSegments),
+                    Pointer::of($schemaSegments),
+                    $label,
+                    'the contract puts no schema beside it',
+                );
+
+                continue;
+            }
+
             try {
                 $violations = $this->schema->check($value, $schemaSegments, 'the example');
             } catch (Throwable $refused) {
@@ -70,7 +74,7 @@ final class ExampleAudit
                     Pointer::of($exampleSegments),
                     Pointer::of($schemaSegments),
                     $label,
-                    $this->reason($refused),
+                    RefusedSchema::reason($refused),
                 );
 
                 continue;
@@ -87,21 +91,6 @@ final class ExampleAudit
         }
 
         return new ExampleReport($checked, $findings, $uncheckable);
-    }
-
-    /**
-     * Why the validator would not take the schema, in its own words. A thrown message is somebody
-     * else's text, so it is relativised before it goes anywhere: a diagnostic naming the build machine
-     * would make one machine's document differ from another's. An exception with nothing to say is
-     * named by its class instead, through {@see ClassNames} — an anonymous one names a file too.
-     */
-    private function reason(Throwable $refused): string
-    {
-        $message = trim($refused->getMessage());
-
-        return $message === ''
-            ? $this->classNames->of($refused)
-            : rtrim(PlainText::of($this->messagePaths->relative($message)), '.');
     }
 
     /**
@@ -182,37 +171,24 @@ final class ExampleAudit
      * header's own schema. A header object is Parameter-like, so its examples sit exactly where a
      * parameter's do — and a hand-written one is as copyable, and as unverified, as a body's.
      *
+     * WHICH headers those are is {@see ResponseHeaders}'s answer, the same one the assertions check
+     * against, so the audit can never hold an example to a header the check ignores or miss one it does.
+     *
      * @param  array<string, mixed>  $node
      * @param  list<string>  $segments
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
     private function inHeaders(array $node, array $segments): array
     {
-        $headers = $node['headers'] ?? null;
-
-        if (! is_array($headers)) {
-            return [];
-        }
-
-        $names = array_map(strval(...), array_keys($headers));
-        sort($names);
-
         $sites = [];
-        foreach ($names as $name) {
-            $header = $headers[$name];
-            if (! is_array($header)) {
-                continue;
+
+        foreach (ResponseHeaders::of($this->index->document(), $node, $segments) as $header) {
+            foreach ($this->beside($header->definition, $header->segments, $header->schemaSegments()) as $site) {
+                $sites[] = [$site[0], $site[1], 'header '.$header->name];
             }
 
-            /** @var array<string, mixed> $header */
-            [$definition, $where] = Refs::follow($this->index->document(), $header, [...$segments, 'headers', $name]);
-
-            foreach ($this->beside($definition, $where, [...$where, 'schema']) as $site) {
-                $sites[] = [$site[0], $site[1], 'header '.$name];
-            }
-
-            foreach ($this->inSchema([...$where, 'schema']) as $site) {
-                $sites[] = [$site[0], $site[1], 'header '.$name];
+            foreach ($this->inSchema($header->schemaSegments()) as $site) {
+                $sites[] = [$site[0], $site[1], 'header '.$header->name];
             }
         }
 
