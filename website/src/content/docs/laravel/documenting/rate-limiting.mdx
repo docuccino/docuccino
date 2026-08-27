@@ -40,18 +40,22 @@ separately represented.
 	  "headers": {
 	    "Retry-After": {
 	      "description": "Seconds to wait before making another request.",
+	      "required": true,
 	      "schema": { "type": "integer" }
 	    },
 	    "X-RateLimit-Limit": {
 	      "description": "The maximum number of requests permitted in the current window.",
+	      "required": true,
 	      "schema": { "type": "integer" }
 	    },
 	    "X-RateLimit-Remaining": {
 	      "description": "The number of requests remaining in the current window.",
+	      "required": true,
 	      "schema": { "type": "integer" }
 	    },
 	    "X-RateLimit-Reset": {
 	      "description": "Unix timestamp (seconds, UTC) at which the current rate limit window resets.",
+	      "required": true,
 	      "schema": { "type": "integer" }
 	    }
 	  },
@@ -91,12 +95,24 @@ If your published spec genuinely needs a documented number, state it yourself wi
 [Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) — a deliberate claim you
 maintain and review, rather than a build artifact that drifts.
 
+## All four are required
+
+Laravel's `ThrottleRequests` sets `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
+`X-RateLimit-Reset` on every `429` it produces — there is no branch in which it sends only some of them
+— so all four are published with `"required": true`. That is what lets a generated client type them
+non-optional instead of guarding every read, and it is the strongest true statement the document can
+make: publishing them as optional would describe a weaker server than the one you are running.
+
 Every header here is also a claim your test suite can hold the application to.
 [`assertValidResponse()`](/laravel/guides/contract-testing/#assert-an-exchange) checks the response
 headers alongside the body, so a `429` that sends `Retry-After: soon` fails against the `integer` the
-document publishes — and the failure names the rate-limit integration as the producer that wrote it.
-Because these four are documented as optional, a `429` that omits one is not a failure; one that sends
-a value the document contradicts is.
+document publishes, and a `429` that omits `Retry-After` altogether fails too — in both cases the
+failure names the rate-limit integration as the producer that wrote the claim.
+
+If your application replaces the `429` renderer and drops those headers, that test failure is the
+point: your responses and your published document disagree, and they disagreed before anything checked.
+Either send the headers, or say what you really send with an
+[Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice).
 
 ## The body follows your error style
 
