@@ -18,7 +18,8 @@ use Illuminate\Console\Command;
 use JsonException;
 
 /**
- * Reports which documented responses the test suite exercised, out of the logs the suite wrote.
+ * Reports which documented responses and webhook deliveries the test suite exercised, out of the logs
+ * the suite wrote.
  *
  * It is a command rather than an assertion because coverage is a question about the WHOLE suite, and no
  * test can see the whole suite: a parallel worker holds its own share, a shard holds its own machine's,
@@ -46,10 +47,10 @@ final class CoverageCommand extends Command
     protected $signature = 'docuccino:coverage
         {document? : The configured document key (defaults to every document)}
         {--path=* : A coverage log directory to merge (repeatable; defaults to the document\'s own)}
-        {--min=0 : Fail below this percentage of documented responses}
+        {--min=0 : Fail below this percentage of documented responses and webhook deliveries}
         {--reset : Delete the logs and exit, leaving the directory ready for a run}';
 
-    protected $description = 'Report which documented responses your test suite exercised.';
+    protected $description = 'Report which documented responses and webhook deliveries your test suite exercised.';
 
     public function handle(DocumentBuilder $builder): int
     {

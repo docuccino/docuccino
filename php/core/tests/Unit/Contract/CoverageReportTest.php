@@ -134,7 +134,7 @@ it('reads a bare id as the operation reached and no response proved', function (
     expect($report->exercisedOperations())->toBe(2)
         ->and($report->exercisedResponses())->toBe(0)
         ->and($report->percentage())->toBe(0.0)
-        ->and($report->render())->toContain('0 of 16 documented responses exercised (0%)')
+        ->and($report->render())->toContain('0 of 16 documented responses and webhook deliveries exercised (0%)')
         ->toContain('2 of 14 documented operations were reached at all');
 });
 
@@ -157,7 +157,7 @@ it('gives an operation that documents no response one row, and keeps it honest',
         ->and($report->render())->toContain($shows);
 })->with([
     'never reached' => [false, 'GET /a  (no responses documented)  op:v1:aaaaaaaaaaaaaaaa'],
-    'reached' => [true, '1 of 1 documented responses exercised (100%)'],
+    'reached' => [true, '1 of 1 documented responses and webhook deliveries exercised (100%)'],
 ]);
 
 it('orders an operation’s responses by family and then by status, whatever the document did', function (array $keys, array $ordered, array $unreachable): void {
@@ -193,7 +193,7 @@ it('calls an empty document covered rather than dividing by nothing', function (
         ->and($report->complete())->toBeTrue()
         ->and($report->meets(100.0))->toBeTrue()
         ->and($report->render())->toBe(
-            "Docuccino contract coverage: 0 of 0 documented responses exercised (100%).\n".
+            "Docuccino contract coverage: 0 of 0 documented responses and webhook deliveries exercised (100%).\n".
             '0 of 0 documented operations were reached at all.'
         );
 });
@@ -224,8 +224,8 @@ it('names the responses never exercised, and the honest floor to move to', funct
         'op:v1:aaaavoidedput', 'op:v1:aaaavoidedpost', 'op:v1:aaaapingsent', 'op:v1:aaaareceiptsent',
     ])->render(100.0);
 
-    expect($rendered)->toContain('14 of 16 documented responses exercised (87.5%, floor 100%)')
-        ->toContain('14 of 14 documented operations were reached at all — the floor is measured against responses, not operations.')
+    expect($rendered)->toContain('14 of 16 documented responses and webhook deliveries exercised (87.5%, floor 100%)')
+        ->toContain('14 of 14 documented operations were reached at all — the floor is measured against responses and deliveries, not operations.')
         ->toContain('Never exercised:')
         // Every operation was reached and every webhook delivered; the two promises nobody proved are an
         // error response apiece.

@@ -227,7 +227,7 @@ covered rather than as one endpoint vanishing and another appearing.
 `catch` against, and what their generated client types an error as. A suite that only ever asserts the
 happy path has touched every endpoint and proved none of those promises — so a number counting endpoints
 calls that full coverage, which is exactly the too-generous reading a coverage gate exists to prevent.
-The report prints both numbers and gates on responses.
+The report prints both numbers and gates on responses and deliveries.
 
 **A webhook you document counts too.** `assertValidWebhook()` records the delivery it just checked, and
 every documented webhook carries one row of its own — so a document whose outbound half nothing asserts
@@ -281,8 +281,8 @@ Coverage — default
 /app/storage/docuccino/coverage
 8 log files, 29 entries
 
-Docuccino contract coverage: 29 of 41 documented responses exercised (70.73%, floor 85%).
-21 of 23 documented operations were reached at all — the floor is measured against responses, not operations.
+Docuccino contract coverage: 29 of 41 documented responses and webhook deliveries exercised (70.73%, floor 85%).
+21 of 23 documented operations were reached at all — the floor is measured against responses and deliveries, not operations.
 
 Never exercised:
   GET    /api/invoices                 422            op:v1:k9wd2mrb7ks9tvzq

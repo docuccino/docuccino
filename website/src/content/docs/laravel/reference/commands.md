@@ -519,13 +519,13 @@ analysis that wedges costs you one rebuild rather than the session.
 
 ## `docuccino:coverage`
 
-Report which documented responses your test suite exercised.
+Report which documented responses and webhook deliveries your test suite exercised.
 
 ```
 docuccino:coverage
     {document? : The configured document key (defaults to every document)}
     {--path=* : A coverage log directory to merge (repeatable; defaults to the document's own)}
-    {--min=0 : Fail below this percentage of documented responses}
+    {--min=0 : Fail below this percentage of documented responses and webhook deliveries}
     {--reset : Delete the logs and exit, leaving the directory ready for a run}
 ```
 
@@ -536,10 +536,10 @@ docuccino:coverage
 | `--min` | `0`–`100` / `0` | Floor, measured against documented **responses** and webhook **deliveries**. Below it the command exits 1. A value outside the range errors. |
 | `--reset` | flag / off | Deletes the log files in those directories and exits `0`, reporting how many. Nothing else in them is touched. |
 
-**The gated number is documented responses.** A documented `422` is a promise of its own — it is what a
-consumer writes a `catch` against — so a suite that only asserts the happy path has touched every
-endpoint and proved none of them. The report prints operations exercised beside responses exercised, and
-compares only responses to `--min`.
+**The gated number is documented responses and webhook deliveries.** A documented `422` is a promise of
+its own — it is what a consumer writes a `catch` against — so a suite that only asserts the happy path
+has touched every endpoint and proved none of them. The report prints operations exercised beside
+responses and deliveries exercised, and compares only the latter to `--min`.
 
 Each documented **webhook** is counted alongside them, as one `delivery` row lit by
 `assertValidWebhook()` — otherwise a document whose outbound half nothing asserts reads as fully
@@ -548,7 +548,7 @@ application's suite can exercise one, so they are never counted.
 
 It reads the artifact your suite asserted against — never a fresh build — so the command and the
 [contract assertions](/laravel/guides/contract-testing/) can only ever be talking about the same
-responses. Operations are matched by stable `x-docuccino.id`, so a renamed route reads as still
+responses and deliveries. Operations are matched by stable `x-docuccino.id`, so a renamed route reads as still
 covered rather than as one endpoint vanishing and another appearing.
 
 **Why a command and not an assertion.** Coverage is a question about the *whole* suite, and no test can
@@ -572,8 +572,8 @@ Coverage — default
 /app/storage/docuccino/coverage
 8 log files, 29 entries
 
-Docuccino contract coverage: 29 of 41 documented responses exercised (70.73%, floor 85%).
-21 of 23 documented operations were reached at all — the floor is measured against responses, not operations.
+Docuccino contract coverage: 29 of 41 documented responses and webhook deliveries exercised (70.73%, floor 85%).
+21 of 23 documented operations were reached at all — the floor is measured against responses and deliveries, not operations.
 
 Never exercised:
   GET    /api/invoices                 422            op:v1:k9wd2mrb7ks9tvzq
