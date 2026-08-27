@@ -122,7 +122,7 @@ final class ContractMessages
         if ($report->uncheckable !== []) {
             $lines[] = '';
             $lines[] = sprintf(
-                '%d more could not be checked at all — the validator refused the schema beside %s, so this says nothing about %s either way.',
+                '%d more could not be checked at all — no schema this could be checked against sits beside %s, so this says nothing about %s either way.',
                 count($report->uncheckable),
                 count($report->uncheckable) === 1 ? 'it' : 'them',
                 count($report->uncheckable) === 1 ? 'it' : 'them',

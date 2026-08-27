@@ -273,3 +273,61 @@ it('follows a $ref out of the headers map and audits an example inside the heade
     expect(array_map(static fn ($f): string => $f->pointer, $report->findings))
         ->toBe(['/components/headers/Legacy/schema/example']);
 });
+
+it('counts an example with no schema beside it as uncheckable rather than as checked', function (): void {
+    // `check()` answers "no violations" both where nothing disagreed and where there was no schema to
+    // disagree with. Counting the second as checked inflates the denominator the report renders, so
+    // "0 of 4 examples do not match" claims four examples were held to a contract.
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['post']['responses']['201']['headers']['X-Trace'] = [
+            'description' => 'Whatever the tracer emitted.',
+            'example' => 'abc123',
+        ];
+
+        return $document;
+    })))->run();
+
+    expect($report->checked)->toBe(3)
+        ->and($report->findings)->toBe([])
+        ->and($report->uncheckable)->toHaveCount(1)
+        ->and($report->uncheckable[0]->pointer)
+        ->toBe('/paths/~1api~1invoices/post/responses/201/headers/X-Trace/example')
+        ->and($report->uncheckable[0]->label)->toBe('POST /api/invoices → 201 header X-Trace')
+        ->and($report->uncheckable[0]->reason)->toBe('the contract puts no schema beside it');
+});
+
+it('leaves an example beside a Content-Type response header unaudited, as the check does', function (): void {
+    // OAS says a response header of that name SHALL be ignored — `content` describes the media type —
+    // so auditing an example beside one would hold a document to a claim nothing enforces. The audit
+    // reads the same index the assertions do, so the two can never disagree about which headers exist.
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['post']['responses']['201']['headers']['Content-Type']['example'] = 'not an integer';
+
+        return $document;
+    })))->run();
+
+    expect($report->ok())->toBeTrue()
+        ->and($report->checked)->toBe(3)
+        ->and($report->uncheckable)->toBe([]);
+});
+
+it('audits response header examples in name order rather than in the document’s key order', function (array $headers): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document) use ($headers): array {
+        $document['paths']['/api/invoices']['post']['responses']['201']['headers'] = $headers;
+
+        return $document;
+    })))->run();
+
+    expect(array_map(static fn ($f): string => $f->label, $report->findings))->toBe([
+        'POST /api/invoices → 201 header X-A',
+        'POST /api/invoices → 201 header X-B',
+        'POST /api/invoices → 201 header X-C',
+    ]);
+})->with(function () {
+    $lying = ['schema' => ['type' => 'integer'], 'example' => 'no'];
+
+    return [
+        'written in order' => [['X-A' => $lying, 'X-B' => $lying, 'X-C' => $lying]],
+        'written out of order' => [['X-C' => $lying, 'X-A' => $lying, 'X-B' => $lying]],
+    ];
+});
