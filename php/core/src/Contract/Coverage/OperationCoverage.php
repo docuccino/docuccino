@@ -11,12 +11,15 @@ final readonly class OperationCoverage
      * @param  bool  $exercised  the suite produced SOME response for this operation — the coarse half,
      *                           printed beside the gated number rather than instead of it
      * @param  list<ResponseCoverage>  $responses
+     * @param  list<string>  $unreachable  documented response keys no status can name, so counted in
+     *                                     neither half — a defect in the document, reported as one
      */
     public function __construct(
         public ?string $id,
         public string $label,
         public bool $exercised,
         public array $responses,
+        public array $unreachable = [],
     ) {}
 
     /** @return list<ResponseCoverage> */

@@ -78,6 +78,7 @@ final readonly class CoverageReport
                         static fn (string $key): ResponseCoverage => new ResponseCoverage($key, isset($seen[$key])),
                         $keys,
                     ),
+                unreachable: $operation->unreachableResponseKeys(),
             );
         }
 
@@ -167,10 +168,24 @@ final readonly class CoverageReport
             ),
         ];
 
-        if ($missing === []) {
-            return implode("\n", $lines);
+        if ($missing !== []) {
+            $lines = [...$lines, ...$this->listing($missing, $minimum, $exportCommand)];
         }
 
+        // Last, and printed whether or not anything is missing: a document can be at 100% and still name
+        // a response no run could ever have exercised, and that is exactly when the short denominator
+        // needs explaining.
+        return implode("\n", [...$lines, ...$this->unreachable()]);
+    }
+
+    /**
+     * The "Never exercised" table and the two remediations that go under it.
+     *
+     * @param  non-empty-list<OperationCoverage>  $missing
+     * @return list<string>
+     */
+    private function listing(array $missing, ?float $minimum, ?string $exportCommand): array
+    {
         // Escape before measuring, or an escaped label is wider than the column it was padded to. And
         // measure in characters rather than bytes, or a label with an accent in it pads short.
         $labels = array_map(static fn (OperationCoverage $row): string => PlainText::of($row->label), $missing);
@@ -179,8 +194,7 @@ final readonly class CoverageReport
         $labelWidth = max(array_map(self::characters(...), $labels));
         $statusWidth = max(array_map(self::characters(...), $statuses));
 
-        $lines[] = '';
-        $lines[] = 'Never exercised:';
+        $lines = ['', 'Never exercised:'];
 
         foreach ($missing as $index => $row) {
             $lines[] = '  '
@@ -209,7 +223,41 @@ final readonly class CoverageReport
             );
         }
 
-        return implode("\n", $lines);
+        return $lines;
+    }
+
+    /**
+     * The documented responses no status could ever name. They are in neither count — nothing can
+     * resolve to one, so a denominator carrying one could never be filled and a 100% floor would be
+     * unreachable forever — but a key silently missing from the report is how that stays a mystery, so
+     * the report names each one and what a response key is allowed to be.
+     *
+     * @return list<string>
+     */
+    private function unreachable(): array
+    {
+        $named = [];
+        foreach ($this->rows as $row) {
+            foreach ($row->unreachable as $key) {
+                $named[] = PlainText::of($row->label).' '.PlainText::of($key);
+            }
+        }
+
+        if ($named === []) {
+            return [];
+        }
+
+        return [
+            '',
+            sprintf(
+                '%d documented %s named by a key no status can ever resolve to, so %s in neither count above: %s. '.
+                'A response key is a three-digit status, an uppercase range (4XX), or default.',
+                count($named),
+                count($named) === 1 ? 'response is' : 'responses are',
+                count($named) === 1 ? 'it is' : 'they are',
+                implode(', ', $named),
+            ),
+        ];
     }
 
     /** The statuses of one operation the run never reached, as the column names them. */

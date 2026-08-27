@@ -24,11 +24,16 @@ final readonly class CoverageLog
 
     private const string AT = '@';
 
-    /** The algorithm version is read loosely: a log a newer identity algorithm wrote is still a log. */
-    private const string ID_PATTERN = '/^op:v\d+:[0-9a-z]{16}$/D';
+    /**
+     * The shape of an operation id, spelled once because both entry forms are built out of it. The
+     * algorithm version is read loosely: a log a newer identity algorithm wrote is still a log.
+     */
+    private const string ID = 'op:v\d+:[0-9a-z]{16}';
+
+    private const string ID_PATTERN = '/^'.self::ID.'$/D';
 
     /** The same id with the status it answered, which is the entry a response assertion writes. */
-    private const string RESPONSE_PATTERN = '/^op:v\d+:[0-9a-z]{16}@[1-5]\d{2}$/D';
+    private const string RESPONSE_PATTERN = '/^'.self::ID.self::AT.'[1-5]\d{2}$/D';
 
     public function __construct(public string $directory, public string $file) {}
 

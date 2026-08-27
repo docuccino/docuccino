@@ -248,18 +248,23 @@ it('checks only the half it was asked for', function (): void {
 
 it('names the documented statuses in status order, and names only what a status could match', function (): void {
     // One grammar: what the message lists is what responseKeyFor() would resolve to, so a reader is never
-    // pointed at a `responses` member the checker itself would skip.
+    // pointed at a `responses` member the checker itself would skip. `4xx` and `twohundred` are the case
+    // that matters — both are perfectly good response OBJECTS, so no is_array() guard drops them, and no
+    // status resolves to either.
     $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => ['responses' => [
         '5XX' => ['description' => 'x'],
         '404' => ['description' => 'x'],
         '200' => ['description' => 'x'],
+        '4xx' => ['description' => 'x'],
+        'twohundred' => ['description' => 'x'],
         'broken' => 'not a response object',
     ]]]]]);
 
     $result = (new ContractChecker($index))->check(contractExchange('GET', '/a', status: 302));
 
     expect($result->response->violations[0]->message)
-        ->toBe('responded 302, which the contract does not document (it documents 200, 404, 5XX)');
+        ->toBe('responded 302, which the contract does not document (it documents 200, 404, 5XX)')
+        ->and($index->operations()[0]->unreachableResponseKeys())->toBe(['4xx', 'twohundred']);
 });
 
 it('reads an operation whose responses member is not a map', function (): void {

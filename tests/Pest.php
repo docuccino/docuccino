@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Contract\ContractOperation;
 use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
@@ -1696,6 +1697,17 @@ function contractIndex(?callable $mutate = null): ContractIndex
     $document = loadFixture('contract.uir.json');
 
     return ContractIndex::fromArray($mutate === null ? $document : $mutate($document));
+}
+
+/**
+ * One operation documenting exactly the `responses` map given — the smallest thing that can be asked
+ * which response a status resolves to.
+ *
+ * @param  array<array-key, mixed>  $responses
+ */
+function contractOperationDocumenting(array $responses): ContractOperation
+{
+    return ContractIndex::fromArray(['paths' => ['/a' => ['get' => ['responses' => $responses]]]])->operations()[0];
 }
 
 /**

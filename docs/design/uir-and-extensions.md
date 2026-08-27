@@ -936,8 +936,18 @@ row and a failure message can never disagree about where a status belonged. A `d
 documented with no content, are each one promise; an operation documenting no response at all carries one
 row asking only whether it was reached. The report prints operations exercised beside responses
 exercised, and only the response number meets `--min`. The second entry form is the bare `op:…`: an
-operation reached with no response proved, which is what a request-only assertion, and a log an older
-release wrote, can honestly claim — so a stale log reads LOWER than the truth and never higher.
+operation reached with no response proved, which is what a request-only assertion, an assertion that
+FAILED, and a log an older release wrote, can honestly claim — so a stale log reads LOWER than the truth
+and never higher. A pass carrying a NOTE — a `text/csv` body, a media type the contract gives no schema
+— counts as exercised: the gap is in the document, and no assertion could close it, so refusing the
+credit would leave the endpoint permanently uncoverable.
+
+`responseKeys()` is the same grammar read the other way round, and lists exactly what `responseKeyFor()`
+can select. A documented key outside it — `4xx` where OAS spells `4XX`, a word like `ok` — is valid JSON,
+passes the meta-schema, and can never be resolved to, so it is in neither count: a denominator carrying
+one could never be filled and a 100% floor would be out of reach forever. `CoverageReport` names each one
+under the numbers rather than dropping it silently. And only a three-digit status has a range at all —
+reading the first digit of 1000 as a family would answer `1XX`, which no log entry can carry.
 
 Three properties carry it:
 
