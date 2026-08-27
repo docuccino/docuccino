@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit\Postman;
 
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Emit\SchemaExampleFactory;
 use Docuccino\Core\Support\Arr;
 use stdClass;
@@ -120,7 +121,10 @@ final class SavedExample
         sort($names, SORT_STRING);
 
         foreach ($names as $name) {
-            $header = Arr::stringKeyed(is_array($declared[$name] ?? null) ? $declared[$name] : []);
+            // A header object may be written as a `$ref` exactly as the response around it may, and a
+            // header read off the pointer node has no `schema` — so it would drop out of the example
+            // for having been shared.
+            $header = self::dereference(Arr::stringKeyed(is_array($declared[$name] ?? null) ? $declared[$name] : []), $components);
             $member = $examples->member($header['schema'] ?? null, $components);
 
             // A header whose schema admits no value is a header the response cannot carry.
@@ -179,22 +183,21 @@ final class SavedExample
     }
 
     /**
-     * @param  array<string, mixed>  $response
+     * An OAS object with its `$ref` chain followed, through {@see Refs} — the one resolver, so a chain,
+     * a cycle and an escaped pointer read here exactly as they read in the contract half. Every pointer
+     * that can stand at these positions is `#/components/…`, so the components map IS the document root
+     * it resolves against.
+     *
+     * A reference landing nowhere comes back as the node it stood on, which carries no `content`, no
+     * `headers` and no `description` — a saved example of nothing rather than a saved example of
+     * whatever happened to be nearby.
+     *
+     * @param  array<string, mixed>  $node
      * @param  array<string, mixed>  $components
      * @return array<string, mixed>
      */
-    private static function dereference(array $response, array $components): array
+    private static function dereference(array $node, array $components): array
     {
-        $ref = $response['$ref'] ?? null;
-
-        if (! is_string($ref) || ! str_starts_with($ref, '#/components/responses/')) {
-            return $response;
-        }
-
-        $name = substr($ref, strlen('#/components/responses/'));
-        $declared = Arr::stringKeyed(is_array($components['responses'] ?? null) ? $components['responses'] : []);
-        $target = $declared[$name] ?? null;
-
-        return is_array($target) ? Arr::stringKeyed($target) : $response;
+        return Refs::follow(['components' => $components], $node, [])[0];
     }
 }

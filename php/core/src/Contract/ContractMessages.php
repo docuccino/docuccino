@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Contract;
 
+use Docuccino\Core\Contract\Examples\ExampleFinding;
 use Docuccino\Core\Contract\Examples\ExampleReport;
 use Docuccino\Core\Diff\Change;
 use Docuccino\Core\Diff\Changeset;
@@ -55,9 +56,21 @@ final class ContractMessages
         return implode("\n", $lines);
     }
 
-    /** The operation nobody documented, with the paths the contract does document for that method. */
+    /**
+     * The operation nobody documented, with the paths the contract does document for that method.
+     *
+     * Unless the contract DOES document the path and the reference it stands behind is broken, which
+     * is a different fact and the only one of the two a reader can act on: nothing was added or
+     * removed, a `$ref` names a path item the document never defines.
+     */
     public static function undocumented(Exchange $exchange, ContractIndex $index, ?string $hint = null): string
     {
+        $broken = self::unresolvedPathItem($exchange->path, $index->unresolvedPaths());
+
+        if ($broken !== null) {
+            return self::withHint(self::brokenPathItem($exchange->label(), 'path', $broken[0], $broken[1]), $hint);
+        }
+
         $candidates = [];
         foreach ($index->operations() as $operation) {
             if ($operation->method === strtoupper($exchange->method)) {
@@ -141,6 +154,17 @@ final class ContractMessages
      */
     public static function undocumentedWebhook(string $name, ?string $method, ContractIndex $index, ?string $hint = null): string
     {
+        $broken = $index->unresolvedWebhooks()[$name] ?? null;
+
+        if ($broken !== null) {
+            return self::withHint(self::brokenPathItem(
+                ($method === null ? '' : strtoupper($method).' ').'webhooks.'.$name,
+                'webhook',
+                $name,
+                $broken,
+            ), $hint);
+        }
+
         $published = $index->webhooksNamed($name);
 
         $lines = [sprintf(
@@ -212,12 +236,24 @@ final class ContractMessages
         ]), $hint);
     }
 
-    /** Examples that do not satisfy the schema they sit beside. */
+    /**
+     * Examples that do not satisfy the schema they sit beside, and the references the audit went
+     * looking for examples behind and found nothing at.
+     *
+     * The two are counted apart in the headline and listed together underneath: a broken pointer is not
+     * an example that disagrees with its schema, and folding it into that number would make the count
+     * describe something the document does not contain.
+     */
     public static function examples(ExampleReport $report): string
     {
+        $broken = array_values(array_filter(
+            $report->findings,
+            static fn (ExampleFinding $finding): bool => $finding->brokenRef !== null,
+        ));
+
         // Two different counts decide the grammar: the noun follows how many were checked, the verb
         // and the pronoun follow how many failed.
-        $failed = count($report->findings);
+        $failed = count($report->findings) - count($broken);
 
         $lines = [
             sprintf(
@@ -230,6 +266,16 @@ final class ContractMessages
             ),
             '',
         ];
+
+        if ($broken !== []) {
+            $lines[] = sprintf(
+                '%d reference%s the contract does not define, so nothing behind %s was read at all.',
+                count($broken),
+                count($broken) === 1 ? ' names something' : 's name something',
+                count($broken) === 1 ? 'it' : 'them',
+            );
+            $lines[] = '';
+        }
 
         foreach ($report->findings as $finding) {
             $lines[] = '  '.PlainText::of($finding->label);
@@ -425,6 +471,54 @@ final class ContractMessages
         }
 
         return $lines;
+    }
+
+    /**
+     * Which unresolved path item a concrete request path stands behind, as `[template, reference]`,
+     * or null. Templates are tried in sorted order and the most specific match wins, exactly as
+     * {@see ContractIndex::match()} chooses between two that both bind — otherwise the message could
+     * name a different path item from the one the request would have been checked against.
+     *
+     * @param  array<string, string>  $unresolved  template => the reference
+     * @return array{0: string, 1: string}|null
+     */
+    private static function unresolvedPathItem(string $path, array $unresolved): ?array
+    {
+        $best = null;
+        $bestMask = '';
+
+        foreach ($unresolved as $template => $reference) {
+            $parsed = PathTemplate::parse($template);
+
+            if ($parsed->bind($path) === null) {
+                continue;
+            }
+
+            $mask = $parsed->literalMask();
+            if ($best === null || $mask > $bestMask) {
+                $best = [$template, $reference];
+                $bestMask = $mask;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * What a path item behind a reference that lands nowhere says. One wording for both halves: a
+     * `$ref` naming nothing is the same broken document inbound and outbound, and the reader's next
+     * move — define the component or fix the pointer — is the same too.
+     */
+    private static function brokenPathItem(string $subject, string $kind, string $name, string $reference): string
+    {
+        return implode("\n", [
+            sprintf('%s is documented behind a reference the contract does not define.', PlainText::of($subject)),
+            '',
+            sprintf('  %-10s %s', $kind, PlainText::of($name)),
+            '  reference  '.PlainText::of($reference),
+            '',
+            '  Nothing defines that path item, so the contract describes no operation there.',
+        ]);
     }
 
     private static function indent(string $text): string

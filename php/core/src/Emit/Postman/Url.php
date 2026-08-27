@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Emit\Postman;
 
+use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\SchemaExampleFactory;
@@ -296,7 +297,7 @@ final readonly class Url
             $headers[] = ['key' => 'Content-Type', 'value' => $contentType];
         }
 
-        $accept = $this->accept($operation);
+        $accept = $this->accept($operation, $components);
         if ($accept !== null) {
             $headers[] = ['key' => 'Accept', 'value' => $accept];
         }
@@ -336,9 +337,15 @@ final readonly class Url
     }
 
     /**
+     * What the operation says it returns, from the lowest 2xx that declares any media type. The
+     * response is `$ref` followed first: a shape shared into `components.responses` describes the same
+     * payload as one written inline, and a request that carried an `Accept` only when the document
+     * happened not to share it would content-negotiate differently for the same endpoint.
+     *
      * @param  array<string, mixed>  $operation
+     * @param  array<string, mixed>  $components
      */
-    private function accept(array $operation): ?string
+    private function accept(array $operation, array $components): ?string
     {
         $responses = Arr::stringKeyed(is_array($operation['responses'] ?? null) ? $operation['responses'] : []);
 
@@ -349,8 +356,10 @@ final readonly class Url
         sort($codes, SORT_STRING);
 
         foreach ($codes as $code) {
-            $response = Arr::stringKeyed(is_array($responses[$code] ?? null) ? $responses[$code] : []);
-            $content = is_array($response['content'] ?? null) ? $response['content'] : [];
+            $written = Arr::stringKeyed(is_array($responses[$code] ?? null) ? $responses[$code] : []);
+            [$response, , $unresolved] = Refs::follow(['components' => $components], $written, []);
+
+            $content = $unresolved === null && is_array($response['content'] ?? null) ? $response['content'] : [];
             $types = array_map(strval(...), array_keys($content));
 
             if ($types !== []) {
@@ -570,6 +579,15 @@ final readonly class Url
     }
 
     /**
+     * A Parameter Object with its `$ref` chain followed, through {@see Refs} — the one resolver, so a
+     * chain, a cycle and an escaped pointer read here exactly as they read in the contract half.
+     * Every pointer that can stand at this position is `#/components/…`, so the components map IS the
+     * document root it resolves against.
+     *
+     * A reference landing nowhere degrades to the empty parameter, which {@see merge()} then drops for
+     * having no `name` and no `in`: a `$ref` node says nothing about where a value goes, and a query
+     * string named after it would be worse than the parameter's absence.
+     *
      * @param  array<string, mixed>  $components
      * @return array<string, mixed>
      */
@@ -579,17 +597,8 @@ final readonly class Url
             return [];
         }
 
-        $parameter = Arr::stringKeyed($parameter);
-        $ref = $parameter['$ref'] ?? null;
+        [$resolved, , $unresolved] = Refs::follow(['components' => $components], Arr::stringKeyed($parameter), []);
 
-        if (! is_string($ref) || ! str_starts_with($ref, '#/components/parameters/')) {
-            return $parameter;
-        }
-
-        $name = substr($ref, strlen('#/components/parameters/'));
-        $declared = Arr::stringKeyed(is_array($components['parameters'] ?? null) ? $components['parameters'] : []);
-        $target = $declared[$name] ?? null;
-
-        return is_array($target) ? Arr::stringKeyed($target) : [];
+        return $unresolved === null ? $resolved : [];
     }
 }

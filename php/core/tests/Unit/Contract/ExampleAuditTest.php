@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Contract\ContractMessages;
 use Docuccino\Core\Contract\Examples\ExampleAudit;
 use Docuccino\Core\Draft\SchemaKeywords;
 
@@ -397,4 +398,156 @@ it('audits response header examples in name order rather than in the document’
         'written in order' => [['X-A' => $lying, 'X-B' => $lying, 'X-C' => $lying]],
         'written out of order' => [['X-C' => $lying, 'X-A' => $lying, 'X-B' => $lying]],
     ];
+});
+
+/*
+ * A `$ref` that names nothing the document defines is a broken document, not an uncheckable one —
+ * `ContractChecker` has always failed on it, and the audit used to walk past it: no `content` under a
+ * pointer node, so every example beneath it silently left the walk AND the `checked` count, and a
+ * suite reported that all the examples it could find were fine.
+ */
+it('reports a reference the document does not define rather than skipping what is behind it', function (string $where, callable $break, string $label, string $pointer): void {
+    $report = (new ExampleAudit(contractIndex($break)))->run();
+
+    $broken = array_values(array_filter($report->findings, static fn ($f): bool => $f->brokenRef !== null));
+
+    expect($report->ok())->toBeFalse()
+        ->and($broken)->toHaveCount(1)
+        ->and($broken[0]->brokenRef)->toBe('#/components/'.$where)
+        ->and($broken[0]->label)->toBe($label)
+        ->and($broken[0]->pointer)->toBe($pointer)
+        ->and($broken[0]->violations[0]->message)->toBe('is documented at #/components/'.$where.', which the contract does not define')
+        ->and($report->uncheckable)->toBe([]);
+})->with([
+    'a request body' => [
+        'requestBodies/Gone',
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['post']['requestBody'] = ['$ref' => '#/components/requestBodies/Gone'];
+
+            return $document;
+        },
+        'POST /api/invoices → request body',
+        '/paths/~1api~1invoices/post/requestBody',
+    ],
+    'a response' => [
+        'responses/Gone',
+        static function (array $document): array {
+            $document['paths']['/api/invoices']['get']['responses']['200'] = ['$ref' => '#/components/responses/Gone'];
+
+            return $document;
+        },
+        'GET /api/invoices → 200',
+        '/paths/~1api~1invoices/get/responses/200',
+    ],
+    'a path item' => [
+        'pathItems/Gone',
+        static function (array $document): array {
+            $document['paths']['/api/exports'] = ['$ref' => '#/components/pathItems/Gone'];
+
+            return $document;
+        },
+        '/api/exports',
+        '/paths/~1api~1exports',
+    ],
+    'a webhook path item' => [
+        'pathItems/Gone',
+        static function (array $document): array {
+            $document['webhooks']['invoice.paid'] = ['$ref' => '#/components/pathItems/Gone'];
+
+            return $document;
+        },
+        'webhooks.invoice.paid',
+        '/webhooks/invoice.paid',
+    ],
+]);
+
+it('keeps auditing every other example once one reference is broken', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['post']['requestBody'] = ['$ref' => '#/components/requestBodies/Gone'];
+
+        return $document;
+    })))->run();
+
+    // The fixture's other examples still went through the validator: one broken pointer costs the
+    // audit what is behind it and nothing else.
+    expect($report->checked)->toBeGreaterThan(0)
+        ->and(array_filter($report->findings, static fn ($f): bool => $f->brokenRef === null))->toBe([]);
+});
+
+it('counts a broken reference apart from an example that failed its schema', function (): void {
+    $message = ContractMessages::examples((new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['get']['responses']['200'] = ['$ref' => '#/components/responses/Gone'];
+
+        return $document;
+    })))->run());
+
+    expect($message)->toContain('0 of ')
+        ->toContain('1 reference names something the contract does not define')
+        ->toContain('#/components/responses/Gone');
+});
+
+/*
+ * An entry of an `examples` map is an Example Object OR a Reference Object naming one in
+ * `components.examples`. Requiring `value` on the node as written meant a shared example — the very
+ * one several operations copy — was never held to any schema at all.
+ */
+it('audits an example shared through components.examples', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['examples']['Wrong'] = ['value' => ['total' => 'free']];
+        $document['paths']['/api/invoices']['get']['responses']['200']['content']['application/json']['examples'] = [
+            'shared' => ['$ref' => '#/components/examples/Wrong'],
+        ];
+
+        return $document;
+    })))->run();
+
+    // Audited at the component it lives in — where a reader would go and edit it — and against the
+    // schema at the use site, which is the contract it has to satisfy.
+    expect($report->findings)->toHaveCount(1)
+        ->and($report->findings[0]->pointer)->toBe('/components/examples/Wrong/value')
+        ->and($report->findings[0]->label)->toBe('GET /api/invoices → 200 application/json')
+        ->and($report->findings[0]->brokenRef)->toBeNull();
+});
+
+it('checks a shared example exactly as many times as an inline one', function (): void {
+    $shared = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['examples']['Right'] = ['value' => [['total' => 1]]];
+        $document['paths']['/api/invoices']['get']['responses']['200']['content']['application/json']['examples'] = [
+            'ok' => ['$ref' => '#/components/examples/Right'],
+        ];
+
+        return $document;
+    })))->run();
+
+    $inline = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['get']['responses']['200']['content']['application/json']['examples'] = [
+            'ok' => ['value' => [['total' => 1]]],
+        ];
+
+        return $document;
+    })))->run();
+
+    // Whether that value satisfies the fixture's schema is not the point — that the two spellings are
+    // judged identically is, so the verdicts are compared rather than asserted good.
+    expect($shared->checked)->toBe($inline->checked)
+        ->and(array_map(static fn ($f): array => [$f->label, count($f->violations)], $shared->findings))
+        ->toBe(array_map(static fn ($f): array => [$f->label, count($f->violations)], $inline->findings))
+        ->and($inline->checked)->toBeGreaterThan(3);
+});
+
+it('reports an example reference the document does not define', function (): void {
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['get']['responses']['200']['content']['application/json']['examples'] = [
+            'shared' => ['$ref' => '#/components/examples/Gone'],
+        ];
+
+        return $document;
+    })))->run();
+
+    $broken = array_values(array_filter($report->findings, static fn ($f): bool => $f->brokenRef !== null));
+
+    expect($broken)->toHaveCount(1)
+        ->and($broken[0]->brokenRef)->toBe('#/components/examples/Gone')
+        ->and($broken[0]->label)->toBe('GET /api/invoices → 200 application/json → example shared')
+        ->and($broken[0]->pointer)->toBe('/paths/~1api~1invoices/get/responses/200/content/application~1json/examples/shared');
 });
