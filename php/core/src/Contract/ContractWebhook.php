@@ -36,7 +36,7 @@ final readonly class ContractWebhook
      * The documented delivery body and the segments addressing it, `$ref` followed.
      *
      * @param  array<string, mixed>  $document
-     * @return array{0: array<string, mixed>, 1: list<string>}|null
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null
      */
     public function requestBody(array $document): ?array
     {
