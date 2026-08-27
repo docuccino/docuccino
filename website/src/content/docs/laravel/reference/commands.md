@@ -582,6 +582,11 @@ The middle column is the statuses that operation documents and the suite never p
 document's own order. An operation is listed as soon as one of its responses is unproved, so an endpoint
 whose happy path is covered and whose errors are not appears with its errors named.
 
+A response key no status can resolve to — `4xx` where OpenAPI spells the range `4XX`, or a word like
+`ok` — is in neither count, because nothing could ever exercise it and a floor of 100 would be
+unreachable if it were. The report names each one under the numbers so a short denominator is never a
+mystery.
+
 ## `docuccino:explain`
 
 Explain why one endpoint is documented the way it is, layer by layer.

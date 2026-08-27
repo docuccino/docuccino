@@ -14,6 +14,9 @@ namespace Docuccino\Core\Contract;
  */
 final readonly class ContractOperation
 {
+    /** Where a response key that is none of the three OAS forms sorts — last, and out of every count. */
+    private const int UNREACHABLE = 3;
+
     private PathTemplate $template;
 
     /**
@@ -87,15 +90,18 @@ final readonly class ContractOperation
      * Which documented response a status resolves to: the exact code first, then the OAS range (`2XX`),
      * then `default` — null when the contract documents no response this status could be.
      *
-     * This is the operation's one status grammar. Everything that asks what a status was checked
-     * against, or whether one was ever seen, reads it here, so a coverage row and a failure message can
-     * never disagree about which response a 422 belonged to.
+     * This is the operation's one status grammar, and {@see responseKeys()} is the same grammar read
+     * the other way round: everything this can return is listed there, and nothing else is. So a
+     * coverage row, a denominator and a failure message can never disagree about which response a 422
+     * belonged to, nor name one a status could never have reached.
+     *
+     * @internal
      */
     public function responseKeyFor(int $status): ?string
     {
         $responses = $this->responses();
 
-        foreach ([(string) $status, substr((string) $status, 0, 1).'XX', 'default'] as $key) {
+        foreach (self::candidates($status) as $key) {
             if (is_array($responses[$key] ?? null)) {
                 return $key;
             }
@@ -105,23 +111,36 @@ final readonly class ContractOperation
     }
 
     /**
-     * The documented response keys, ordered exact codes ascending, then ranges, then anything else,
-     * then `default` — a function of the key set alone, so two runs list them identically.
+     * The documented response keys a status can actually reach, ordered exact codes ascending, then
+     * ranges, then `default` — a function of the key set alone, so two runs list them identically.
+     *
+     * A key outside the grammar is {@see unreachableResponseKeys()} instead of appearing here, because
+     * anything counting responses would otherwise carry a row nothing can ever fill.
      *
      * @return list<string>
+     *
+     * @internal
      */
     public function responseKeys(): array
     {
-        $keys = [];
-        foreach ($this->responses() as $key => $response) {
-            if (is_array($response)) {
-                $keys[] = (string) $key;
-            }
-        }
+        return $this->keys(true);
+    }
 
-        usort($keys, static fn (string $a, string $b): int => [self::rank($a), self::code($a), $a] <=> [self::rank($b), self::code($b), $b]);
-
-        return $keys;
+    /**
+     * The documented response keys no status can ever reach — `4xx` in lower case, `ok`, `twohundred`.
+     * Each is valid JSON and passes the OAS meta-schema, and each is still a promise nothing can be
+     * checked against or recorded as met.
+     *
+     * They are excluded from every count rather than dropped from sight: {@see Coverage\CoverageReport}
+     * names them, which is where a reader wondering why a denominator is short will be looking.
+     *
+     * @return list<string>
+     *
+     * @internal
+     */
+    public function unreachableResponseKeys(): array
+    {
+        return $this->keys(false);
     }
 
     /** The documented status keys, for a "the contract documents 200, 404" message. */
@@ -163,21 +182,63 @@ final readonly class ContractOperation
         return is_array($responses) ? $responses : [];
     }
 
-    /** Which family a response key belongs to, lowest first: exact code, range, anything else, `default`. */
+    /**
+     * The documented keys on one side of the grammar or the other, sorted. Every array-valued member of
+     * `responses` is on exactly one side, so the two together are the whole map and neither can quietly
+     * lose a key.
+     *
+     * @return list<string>
+     */
+    private function keys(bool $reachable): array
+    {
+        $keys = [];
+        foreach ($this->responses() as $key => $response) {
+            if (is_array($response) && (self::rank((string) $key) !== self::UNREACHABLE) === $reachable) {
+                $keys[] = (string) $key;
+            }
+        }
+
+        usort($keys, static fn (string $a, string $b): int => [self::rank($a), self::code($a), $a] <=> [self::rank($b), self::code($b), $b]);
+
+        return $keys;
+    }
+
+    /**
+     * The keys a status could name, most specific first. Only a three-digit status has an exact key or a
+     * range — OAS spells both in three digits — so anything else can reach `default` alone: reading the
+     * first digit of 1000 as a family would resolve it to `1XX`, which no coverage entry can carry, and
+     * the checker and the report would disagree about it forever.
+     *
+     * @return list<string>
+     */
+    private static function candidates(int $status): array
+    {
+        return $status < 100 || $status > 999
+            ? ['default']
+            : [(string) $status, intdiv($status, 100).'XX', 'default'];
+    }
+
+    /**
+     * Which family a response key belongs to, lowest first: exact code, range, `default`, anything else.
+     *
+     * The range is matched case-SENSITIVELY, because OAS spells it `4XX` and a document writing `4xx`
+     * has written a key no status resolves to — reading it loosely here and strictly in
+     * {@see candidates()} is how a response gets counted and can never be exercised.
+     */
     private static function rank(string $key): int
     {
         return match (true) {
             preg_match('/^\d{3}$/D', $key) === 1 => 0,
-            preg_match('/^\dXX$/Di', $key) === 1 => 1,
-            $key === 'default' => 3,
-            default => 2,
+            preg_match('/^\dXX$/D', $key) === 1 => 1,
+            $key === 'default' => 2,
+            default => self::UNREACHABLE,
         };
     }
 
     /** The status a key sorts at within its family — `4XX` sorts where `400` would. */
     private static function code(string $key): int
     {
-        if (preg_match('/^(\d)XX$/Di', $key, $matches) === 1) {
+        if (preg_match('/^(\d)XX$/D', $key, $matches) === 1) {
             return ((int) $matches[1]) * 100;
         }
 

@@ -120,26 +120,30 @@ it('gives an operation that documents no response one row, and keeps it honest',
     'reached' => [true, '1 of 1 documented responses exercised (100%)'],
 ]);
 
-it('orders an operation’s responses by family and then by status, whatever the document did', function (array $keys, array $ordered): void {
+it('orders an operation’s responses by family and then by status, whatever the document did', function (array $keys, array $ordered, array $unreachable): void {
     // The listing is a function of the key SET, never of the order the artifact happened to write them.
     $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => [
         'x-docuccino' => ['id' => 'op:v1:aaaaaaaaaaaaaaaa'],
         'responses' => array_fill_keys($keys, ['description' => 'x']),
     ]]]]);
 
+    $row = CoverageReport::of($index, [])->rows[0];
+
     $statuses = array_map(
         static fn (ResponseCoverage $response): ?string => $response->status,
-        CoverageReport::of($index, [])->rows[0]->responses,
+        $row->responses,
     );
 
-    expect($statuses)->toBe($ordered);
+    expect($statuses)->toBe($ordered)
+        ->and($row->unreachable)->toBe($unreachable);
 })->with([
-    'exact codes ascending' => [['404', '200', '201'], ['200', '201', '404']],
-    'a range sorts where its family starts' => [['default', '4XX', '200'], ['200', '4XX', 'default']],
-    'an exact code beats the range covering it' => [['4XX', '404'], ['404', '4XX']],
-    'every family at once' => [['default', '5XX', '503', '1XX', '200'], ['200', '503', '1XX', '5XX', 'default']],
-    'a key of no family sorts before default and after a range' => [['default', 'weird', '2XX'], ['2XX', 'weird', 'default']],
-    'written backwards, read the same' => [['4XX', '201'], ['201', '4XX']],
+    'exact codes ascending' => [['404', '200', '201'], ['200', '201', '404'], []],
+    'a range sorts where its family starts' => [['default', '4XX', '200'], ['200', '4XX', 'default'], []],
+    'an exact code beats the range covering it' => [['4XX', '404'], ['404', '4XX'], []],
+    'every family at once' => [['default', '5XX', '503', '1XX', '200'], ['200', '503', '1XX', '5XX', 'default'], []],
+    'a key of no family is no response row at all' => [['default', 'weird', '2XX'], ['2XX', 'default'], ['weird']],
+    'a range OAS does not spell is no response row either' => [['4xx', '200'], ['200'], ['4xx']],
+    'written backwards, read the same' => [['4XX', '201'], ['201', '4XX'], []],
 ]);
 
 it('calls an empty document covered rather than dividing by nothing', function (): void {
@@ -260,4 +264,60 @@ it('measures the label column in characters, so an accented path still lines up'
     expect($rendered)->toContain('GET /api/facturé')
         // Padding by bytes would leave this row one column short of every other one.
         ->and(array_unique($columns))->toHaveCount(1);
+});
+
+it('names a response key no status can resolve to, and counts it in neither half', function (): void {
+    // `4xx` and `ok` are valid response objects that pass the OAS meta-schema and that nothing can ever
+    // exercise. Counted, they would put a 100% floor permanently out of reach; dropped silently, the
+    // short denominator would be a mystery. So: out of both counts, and named.
+    $index = contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['get']['responses']['4xx'] = ['description' => 'Bad'];
+        $document['paths']['/api/invoices']['get']['responses']['ok'] = ['description' => 'Fine'];
+
+        return $document;
+    });
+
+    $before = CoverageReport::of(contractIndex(), []);
+    $after = CoverageReport::of($index, []);
+
+    expect($after->totalResponses())->toBe($before->totalResponses())
+        ->and($after->render())->toContain(
+            '2 documented responses are named by a key no status can ever resolve to, so they are in neither '.
+            'count above: GET /api/invoices 4xx, GET /api/invoices ok. A response key is a three-digit status, '.
+            'an uppercase range (4XX), or default.',
+        );
+});
+
+it('still names an unreachable response key on a report with nothing missing', function (): void {
+    // The report a fully covered suite prints is exactly where a short denominator needs explaining, and
+    // it is the one that returns before the listing.
+    $index = ContractIndex::fromArray(['paths' => ['/a' => ['get' => [
+        'x-docuccino' => ['id' => 'op:v1:0123456789abcdef'],
+        'responses' => ['200' => ['description' => 'x'], 'twohundred' => ['description' => 'x']],
+    ]]]]);
+
+    $report = CoverageReport::of($index, ['op:v1:0123456789abcdef@200']);
+
+    expect($report->complete())->toBeTrue()
+        ->and($report->meets(100.0))->toBeTrue()
+        ->and($report->render(100.0))->toContain(
+            '1 documented response is named by a key no status can ever resolve to, so it is in neither '.
+            'count above: GET /a twohundred.',
+        );
+});
+
+it('leaves the unreachable note off a document whose response keys are all reachable', function (): void {
+    expect(CoverageReport::of(contractIndex(), [])->render())->not->toContain('no status can ever resolve to');
+});
+
+it('escapes an unreachable response key out of the artifact', function (): void {
+    $index = contractIndex(static function (array $document): array {
+        $document['paths']['/api/invoices']['get']['responses']["ok\x1b[32m"] = ['description' => 'x'];
+
+        return $document;
+    });
+
+    expect(CoverageReport::of($index, [])->render())
+        ->toContain('GET /api/invoices ok\x1B[32m')
+        ->not->toContain("\x1b");
 });
