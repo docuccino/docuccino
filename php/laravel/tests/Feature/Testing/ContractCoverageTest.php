@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\Coverage\CoverageLog;
 use Docuccino\Core\Contract\Coverage\CoverageMerge;
 use Docuccino\Core\Contract\Coverage\CoverageReport;
+use Docuccino\Core\Contract\Outcome;
+use Docuccino\Core\Contract\Violation;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Testing\CoverageRecorder;
+use Docuccino\Laravel\Testing\ObservedExchange;
 use Docuccino\Laravel\Testing\ParallelRun;
+use PHPUnit\Framework\AssertionFailedError;
 
 /*
  * Contract coverage: what a process records, what it writes down, and — the whole point of writing it
@@ -61,6 +66,50 @@ it('credits a request-only assertion with the operation and with no response of 
     expect($report->exercisedOperations())->toBe(1)
         ->and($report->exercisedResponses())->toBe(0);
 });
+
+it('credits no response for an assertion that failed', function (): void {
+    // The number reads generous exactly where it must not: the body violated the schema, the test went
+    // red, and the response the suite has just DISPROVED would have counted as exercised.
+    try {
+        ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '{}'));
+    } catch (AssertionFailedError) {
+        // The point is what the recorder did with what it saw.
+    }
+
+    $exercised = ApiContract::coverage()->exercised();
+    $report = ApiContract::report();
+
+    expect($exercised)->toHaveCount(1)
+        ->and($exercised[0])->not->toContain('@')
+        ->and($report->exercisedResponses())->toBe(0)
+        ->and($report->exercisedOperations())->toBe(1);
+});
+
+it('credits a response from what the check proved, not from the status it answered', function (?Outcome $outcome, ?string $credited): void {
+    $operation = ApiContract::index()->match('GET', '/api/forms');
+    $response = contractResponse('GET', '/api/forms', body: '[]');
+    $request = $response->baseRequest;
+
+    $recorder = new CoverageRecorder;
+    $recorder->observed(new ObservedExchange(
+        operation: $operation,
+        exchange: ApiContract::exchangeFor($request, $response),
+        request: $request,
+        response: $response,
+        result: new CheckResult($operation, null, $outcome),
+    ));
+
+    expect($recorder->exercised())->toBe([$operation->id.$credited]);
+})->with([
+    // Every shape an Outcome comes in, and what each one honestly proves about the response.
+    'a response the schema accepted' => [Outcome::passed(), '@200'],
+    // A note is the CONTRACT saying it cannot be checked — a text/csv body, a media type with no
+    // schema. No assertion a suite could write closes that, so refusing the credit would leave the
+    // endpoint permanently uncoverable and a 100% floor out of reach for a defect in the document.
+    'a response nothing could check' => [Outcome::passed('the response body is text/csv, which JSON Schema cannot check'), '@200'],
+    'a response that disagreed' => [Outcome::failed([Violation::ofExchange('nope')]), ''],
+    'a half that never ran' => [null, ''],
+]);
 
 it('reports the responses the run never touched, in the document’s own order', function (): void {
     ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'));

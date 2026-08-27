@@ -30,17 +30,30 @@ final class CoverageRecorder implements ContractObserver
     private ?CoverageLog $log = null;
 
     /**
-     * A response counts only where the response half was actually checked. `assertValidRequest()` proves
-     * nothing about what came back, so it records the operation as reached and no response of it —
-     * counting one there is exactly the too-generous number this whole report exists to stop.
+     * A response counts only where the response half ran AND agreed with the contract — read off the
+     * result, never off the bare status. Two cases hang on that, and both are the too-generous number
+     * this whole report exists to stop: `assertValidRequest()` checks nothing that came back, and an
+     * assertion that FAILED has proved the response does not keep the promise, which is the opposite of
+     * having exercised it. Either records the operation as reached and no response of it.
+     *
+     * A pass carrying a NOTE — a `text/csv` body, a media type the contract gives no schema — does
+     * count. The exchange happened and the documented response answered it; what could not be checked
+     * is a gap in the DOCUMENT, and there is no assertion a suite could write that would close it. Not
+     * crediting it would leave such an endpoint permanently uncoverable and a 100% floor unreachable
+     * for a defect the operator cannot fix from the test side. The document's own weakness is a
+     * separate report, and the check says so in the note either way.
      */
     public function observed(ObservedExchange $exchange): void
     {
         $id = $exchange->operationId();
 
-        if ($id !== null) {
-            $this->record($id, $exchange->result->response === null ? null : $exchange->status());
+        if ($id === null) {
+            return;
         }
+
+        $response = $exchange->result->response;
+
+        $this->record($id, $response !== null && $response->ok() ? $exchange->status() : null);
     }
 
     /**
