@@ -252,6 +252,32 @@ Patches or adds a single property of the *inferred* request body schema.
 public function update(UpdateUserRequest $request, int $id): UserResource { /* … */ }
 ```
 
+The name is a field path, written the way a validation rule key is written. A `.` descends into an
+object, a `*` names an element of an array, and `\.` is a dot that belongs to the field name itself:
+
+```php
+#[BodyParameter(name: 'meta.source', type: 'string', description: 'Where the order came from.')]
+#[BodyParameter(name: 'lines.*.quantity', type: 'int', description: 'How many of this item.')]
+#[BodyParameter(name: 'meta\.raw', type: 'string')] // one field, whose name is `meta.raw`
+```
+
+Containers on the way are created if the body doesn't have them, and `required: true` marks the field
+required on the object that holds it — `meta.source` becomes a required member of `meta`, and the body
+itself becomes required.
+
+A path only lands where the body can carry it. If the field it nests under is documented as a scalar,
+as an `allOf`/`anyOf`/`oneOf`, or as a `$ref` to a shared component — where the property would appear
+in every other operation using that component — nothing is written and
+[`attribute.body-parameter-parent`](/laravel/reference/diagnostics/#attributes) says so. For a scalar,
+document the parent as an object first:
+
+```php
+#[BodyParameter(name: 'meta', type: 'object')]
+#[BodyParameter(name: 'meta.source', type: 'string')]
+```
+
+Order doesn't matter — a parent is applied before its children whichever way round you write them.
+
 ### `#[RuleSchema]`
 
 Targets `CLASS`, not repeatable.
