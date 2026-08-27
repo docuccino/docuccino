@@ -228,10 +228,14 @@ Treat the floor the way you treat a line-coverage floor: set it to what you meas
 as you close gaps. A floor you cannot meet is a floor somebody deletes. `--min=100` is "every documented
 response".
 
-<Aside type="note" title="assertValidRequest() covers no response">
-`assertValidRequest()` checks what your test sent and nothing that came back, so it credits the
-operation as reached and none of its responses. Use `assertValidResponse()` or `assertValidExchange()`
-for a response to count. Logs written by a Docuccino older than the response-granular report read the
+<Aside type="note" title="Only a response that was checked and agreed counts">
+A response counts when the assertion actually looked at it and it matched. `assertValidRequest()`
+checks what your test sent and nothing that came back, and an assertion that FAILED has proved the
+response does *not* keep the promise — either way the operation is credited as reached and none of its
+responses. Use `assertValidResponse()` or `assertValidExchange()`, and let it pass, for a response to
+count. A pass that could not check the body — a `text/csv` response, a media type your document gives
+no schema — does count: the exchange happened, and no assertion you could write would close a gap
+that is in the document. Logs written by a Docuccino older than the response-granular report read the
 same way: every operation reached, no response proved — so an old log can only ever read lower than the
 truth, never higher. `--reset` before the run clears them.
 </Aside>
