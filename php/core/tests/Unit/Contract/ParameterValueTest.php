@@ -280,3 +280,20 @@ it('reads a bracketed map as the object it stands for wherever the contract perm
     'an array-or-object multi-type' => [['type' => ['array', 'object']]],
     'an array-or-object union written as an anyOf' => [['anyOf' => [['type' => 'array'], ['type' => 'object']]]],
 ]);
+
+it('takes the type of an enum with no type of its own from every kind of member it can hold', function (string $value, array $enum, mixed $expected): void {
+    // The members say what the set is, so the table that reads them owes a row per kind of member a
+    // decoded document can hold. A kind read as the wrong type is a parameter converted — or left
+    // alone — against a set the document does close.
+    expect(ParameterValue::coerce($value, ['enum' => $enum]))->toBe($expected);
+})->with([
+    'null members' => ['1000', [null], '1000'],
+    'boolean members' => ['true', [true, false], true],
+    'integer members' => ['1000', [10, 1000], 1000],
+    'float members' => ['12.5', [12.5, 25.0], 12.5],
+    'list members' => ['a,b', [['a', 'b']], ['a', 'b']],
+    'map members' => ['1000', [['status' => 'paid']], '1000'],
+    'string members' => ['1000', ['1000', 'all'], '1000'],
+    // Several kinds leave `string` in the union, which is the reading that converts nothing.
+    'members of several kinds' => ['1000', [10, 'all'], '1000'],
+]);
