@@ -13,6 +13,23 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.11.0
+
+### Breaking changes
+
+- **core**: gate contract coverage on documented responses, not operations ([#260](https://github.com/docuccino/docuccino/pull/260))
+  - `docuccino:coverage --min` is measured against documented responses rather than operations, so an existing floor will read lower. `CoverageReport::total()` and `exercisedCount()` are removed rather than silently re-meaning; `missing()` changes from "operations never exercised" to "operations with any unexercised response". `documentedStatuses()` renders in family order, so `{500, 5XX, 1XX}` reads `500, 1XX, 5XX` where it read `1XX, 500, 5XX`. `assertValidRequest()` no longer credits a response.
+
+### Features
+
+- **core**: hold the payload a webhook dispatches to its contract ([#262](https://github.com/docuccino/docuccino/pull/262))
+- **core**: check the response headers the document publishes ([#261](https://github.com/docuccino/docuccino/pull/261))
+- **laravel**: report a nested data collection that will be wrapped ([#265](https://github.com/docuccino/docuccino/pull/265))
+
+### Bug fixes
+
+- **laravel**: mark the response headers the framework always sends as required ([#263](https://github.com/docuccino/docuccino/pull/263))
+
 ## v0.10.5
 
 ### Features
