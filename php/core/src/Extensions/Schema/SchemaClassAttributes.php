@@ -51,6 +51,11 @@ use ReflectionClass;
  * derives the set from the attributes package and fails on one that is in neither. Adding an attribute
  * is then a decision about whether a type may carry it, made once, instead of a twenty-eighth silent
  * drop.
+ *
+ * Honoured is not the same as read at every route, which is the third state {@see CONDITIONAL} names:
+ * an attribute a type IS read for, where the reading stands down for some routes. That one is not
+ * answerable from a class alone — it needs the whole route set — so it is reported from
+ * {@see UnusableBodyDeclarations} rather than by {@see unread()}.
  */
 final class SchemaClassAttributes
 {
@@ -67,6 +72,22 @@ final class SchemaClassAttributes
         Hidden::class => 'the properties left out of the schema',
         Mock::class => 'the mock hints on its properties',
         BodyParameter::class => 'a field of the request body recovered from it',
+    ];
+
+    /**
+     * The subset of {@see HONOURED} whose reading is conditional on the ROUTE, each with the condition
+     * as the diagnostic states it. A row here says the attribute is read on a type and still reaches
+     * nothing at some routes, which is a report {@see unread()} cannot make — it sees one class, and
+     * the answer is a function of every route the type is bound to.
+     *
+     * {@see UnusableBodyDeclarations} is what makes that report, and `UnusableBodyDeclarationsTest`
+     * holds the two together: a second row added here with no observation site of its own would
+     * otherwise inherit the first's wording and say something false about it.
+     *
+     * @var array<class-string, string>
+     */
+    public const array CONDITIONAL = [
+        BodyParameter::class => 'only where the route documents a request body',
     ];
 
     /**

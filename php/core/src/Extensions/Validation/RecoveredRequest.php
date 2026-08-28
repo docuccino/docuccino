@@ -17,6 +17,7 @@ use Docuccino\Core\Extensions\Schema\MockHints;
 use Docuccino\Core\Extensions\Schema\PropertyAnnotations;
 use Docuccino\Core\Extensions\Schema\SchemaClassAttributes;
 use Docuccino\Core\Extensions\Schema\SchemaIdentity;
+use Docuccino\Core\Extensions\Schema\UnusableBodyDeclarations;
 use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Provenance\ClassNames;
@@ -132,6 +133,7 @@ final class RecoveredRequest
         }
 
         $context->recordDependencyFiles(DeclarationFiles::of($sourceClass));
+        $this->observe($sourceClass, $context);
 
         $metadata = $context->engine->classMetadata(new ClassRef($sourceClass));
         $context->recordDependencyFiles($metadata->dependencyFiles);
@@ -203,6 +205,23 @@ final class RecoveredRequest
     private function unread(string $sourceClass, RouteContext $context): array
     {
         return $sourceClass === $context->actionRef->class ? [] : SchemaClassAttributes::unread($sourceClass);
+    }
+
+    /**
+     * Record what this route saw about the type's `#[BodyParameter]` — read here, or read at a verb
+     * that documents no body ({@see UnusableBodyDeclarations}). The verdict is the document's to reach,
+     * so only the observation is made here.
+     *
+     * The same stand-down {@see unread()} takes for a source class that IS the action: one declaration
+     * site serves both roles there, and the route attribute bag reads it whatever the verb.
+     */
+    private function observe(string $sourceClass, RouteContext $context): void
+    {
+        if ($sourceClass === $context->actionRef->class) {
+            return;
+        }
+
+        UnusableBodyDeclarations::observe($context, $sourceClass, self::documentsBody($context));
     }
 
     private function applyRequestBody(OperationDraft $operation, RouteContext $context, ValidationSchema $result, Contribution $contribution, ?string $sourceClass, bool $declaredRequired = false): void
