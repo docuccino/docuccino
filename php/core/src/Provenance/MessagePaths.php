@@ -25,7 +25,9 @@ namespace Docuccino\Core\Provenance;
  * 1. **Exclusions.** A run behind a `#` is a URI fragment, a `/` behind a `\` is an escape, a POSIX
  *    run carrying a backslash is a regex or a JSON string, a run carrying a brace is a URI template.
  *    None of those reaches the ladder at all, unless proof opened the run or a root already accounts
- *    for the text in front of the character objected to.
+ *    for the text in front of the character objected to. What they refuse is the PATH RUN and not
+ *    the sentence it sits in: a match crosses an interior space, so one routinely spans a template
+ *    AND the file named after it, and refusing all of it published the file ({@see rewrite()}).
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
  *    anything but a filesystem path, so those are always reduced. All three are proof from the first
  *    character, and nothing a template is spelled with opens that way — a route signature, a path
@@ -182,7 +184,12 @@ final readonly class MessagePaths
         $trailing = substr($match, strlen($run));
 
         if (! $this->couldBeAPath($run)) {
-            return $match;
+            // An exclusion refuses a PATH RUN, not the sentence around it. {@see pathRun()} is where
+            // one ends, so the refused text keeps every character and what follows goes back through
+            // the same pass — and since that answer is never empty, the recursion still shortens.
+            $refused = self::pathRun($run);
+
+            return $refused.$this->scrub(substr($run, strlen($refused)).$trailing);
         }
 
         foreach (self::candidates($run) as $candidate) {

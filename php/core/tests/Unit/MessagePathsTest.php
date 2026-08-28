@@ -821,3 +821,52 @@ it('emits the same bytes for a Windows checkout and a POSIX one, with a backslas
         ->toBe((new MessagePaths(new RootRelativeSourcePathResolver('C:\\Users\\bob\\dev\\checkout')))->relative($thrown('C:\\Users\\bob\\dev\\checkout', '\\')))
         ->toBe('Failed in app/Http/X.php');
 });
+
+it('refuses the path run an exclusion objects to, and not the sentence carrying on after it', function (string $case, string $message, string $expected): void {
+    // A match crosses an interior space, so one routinely spans a template AND the file named after
+    // it — and refusing the whole match published the file, on every build where a third-party
+    // message names a URI template or carries a backslash before naming a path. What the exclusion
+    // objects to is the path run; the rest of the sentence goes back through the same pass.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a template, then the file it was declared in',
+        'Route /api/users/{user} declared in /app/root/routes/api.php',
+        'Route /api/users/{user} declared in routes/api.php',
+    ],
+    [
+        'a backslash in the prose, then a file',
+        'Bad /x\\y in /app/root/app/Secret.php',
+        'Bad /x\\y in app/Secret.php',
+    ],
+    [
+        'a brace and a backslash before the file',
+        'Refused /api/{a} and /some\\where before /app/root/app/X.php',
+        'Refused /api/{a} and /some\\where before app/X.php',
+    ],
+    // The control: two ordinary paths in one sentence were never the shape at issue.
+    ['two ordinary paths', 'Copy /app/root/a.php to /app/root/b.php', 'Copy a.php to b.php'],
+]);
+
+it('consumes at least one character of every run it refuses, so the pass terminates', function (): void {
+    // The termination argument executed rather than asserted. `rewrite()` re-enters the pass on what
+    // is left of a refused run, so a refusal that consumed nothing would recurse forever; what makes
+    // that impossible is that `pathRun()` never answers with the empty string, whatever it is given.
+    $pathRun = new ReflectionMethod(MessagePaths::class, 'pathRun');
+
+    foreach (['/', '/ x/y', '/a', '/api/{a}/b and /c/d.php', '/x\\y in /app/root/x.php', '/a b c'] as $run) {
+        expect($pathRun->invoke(null, $run))->not->toBe('')
+            ->and($run)->toStartWith((string) $pathRun->invoke(null, $run));
+    }
+
+    // And the whole thing under a message that refuses over and over: fifty templates in one sentence
+    // is fifty refusals, each shortening what is left, and the file at the end still arrives.
+    $message = 'Unknown routes '.implode(' and ', array_fill(0, 50, '/api/x/{a}')).' plus /app/root/app/X.php';
+
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toEndWith('plus app/X.php')
+        ->toContain('/api/x/{a} and /api/x/{a}');
+});
