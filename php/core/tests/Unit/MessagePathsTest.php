@@ -548,16 +548,34 @@ it('still refuses a backslash run no root accounts for', function (string $case,
     ['a path outside every root, followed by a class', 'Failed in /Users/ca rol/secret/X.php for App\\Foo'],
 ]);
 
-it('redacts a machine root out of a braced run without needing the anchor at all', function (): void {
+it('redacts a machine root out of a braced run without needing the anchor at all', function (string $case, string $configured, string $expected): void {
     // Why the anchor is asked of the ladder's roots and not of `machineRoots()`: the temp directory and
     // the include path are redacted LITERALLY, after the run pass, so a brace never protected them.
     // Adding them to the anchor would be a second way to say what this already says.
-    $message = sprintf('Could not open %s/build/{a,b}/x.php', sys_get_temp_dir());
-    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+    //
+    // The prefix is an INPUT for the reason the depth row above states. `sys_get_temp_dir()` is `/tmp` on
+    // a Linux runner and five segments deep on a mac, and a one-segment root is one `machineRoots()`
+    // REFUSES — so reading it would assert the deep answer on one machine and the shallow one on
+    // another, which is a test that agrees with whatever the host happens to be.
+    $restore = (string) ini_get('include_path');
 
-    expect($scrubbed)->toBe('Could not open build/{a,b}/x.php')
-        ->and($scrubbed)->not->toContain(sys_get_temp_dir());
-});
+    try {
+        ini_set('include_path', '.'.PATH_SEPARATOR.$configured);
+        $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))
+            ->relative(sprintf('Could not open %s/build/{a,b}/x.php', $configured));
+    } finally {
+        ini_set('include_path', $restore);
+    }
+
+    expect($scrubbed)->toBe($expected);
+})->with([
+    ['a two-segment root', '/opt/php', 'Could not open build/{a,b}/x.php'],
+    ['a root as deep as a mac temp dir', '/var/folders/ab/cd/T', 'Could not open build/{a,b}/x.php'],
+    // The other half, and the reason the depth line exists: one segment is not a machine word, so the
+    // run keeps it. That is the decision that leaves `Route /tmp/upload is documented` alone, read here
+    // through a brace instead of through prose.
+    ['a one-segment root', '/tmp', 'Could not open /tmp/build/{a,b}/x.php'],
+]);
 
 it('reduces the machine half of a braced wrapper run and leaves the braces where they stood', function (string $case, string $message, string $expected): void {
     // The brace can sit anywhere in the run, including inside the part that survives the strip. What a
