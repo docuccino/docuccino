@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Docuccino\Core\Draft;
 
 /**
- * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Six
+ * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Seven
  * questions live here: the classification {@see SchemaDraft::declareShape()} reasons over — shape,
- * refinement or annotation — the subschema position {@see SUBSCHEMA_POSITIONS} a keyword's
+ * refinement or annotation, and so also whether a keyword is one this model knows at all
+ * ({@see knows()}, the set the diff's three decision tables are held against) — the subschema
+ * position {@see SUBSCHEMA_POSITIONS} a keyword's
  * value occupies, which is what tells a reader an array there is a JSON object rather than a list,
  * which keywords a semantic DIFF may treat as a non-event ({@see ANNOTATION_ONLY}, a narrower
  * question than the first), which say nothing about the INSTANCE, so a reader deciding whether one
@@ -224,6 +226,18 @@ final class SchemaKeywords
     public static function annotations(): array
     {
         return self::ANNOTATIONS;
+    }
+
+    /**
+     * Whether the draft model classifies `$keyword` at all — as a shape, a refinement or an annotation.
+     * The three diff decision tables owe an answer for exactly the keywords this says yes to; anything
+     * else a document carries is data beside the contract rather than a term nobody decided.
+     */
+    public static function knows(string $keyword): bool
+    {
+        return in_array($keyword, self::SHAPE, true)
+            || array_key_exists($keyword, self::REFINEMENTS)
+            || in_array($keyword, self::ANNOTATIONS, true);
     }
 
     /** Whether `$keyword` constrains values of a given instance type rather than shaping or describing them. */

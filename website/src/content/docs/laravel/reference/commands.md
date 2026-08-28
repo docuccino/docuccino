@@ -356,6 +356,38 @@ as the bound; two booleans compare as the flag, where absent is "not exclusive".
 against a number on the other is the one comparison that cannot be made without folding in the sibling
 keyword, so it is reported and counted breaking.
 
+**A `discriminator` is read member by member**, because it is the keyword that decides which type a client
+builds. Rename the tag property and every client reads a field that is no longer the tag: that is
+`schema.discriminator-changed` and breaking on both sides, with no reading where clients keep working. A
+`mapping` is a map, so its entries pair by tag value and reordering one is not a change. An entry removed
+is `schema.discriminator-narrowed` and breaking either way; an entry added is
+`schema.discriminator-widened`, safe on a request and breaking on a response, since a reader now meets a
+variant it has no case for; and an entry *repointed* — the same tag, a different schema — is
+`schema.discriminator-changed`, breaking, and the edit this exists for: the payload still validates and the
+client still compiles, so it fails at run time in your consumer's application as a mis-typed object. The
+keyword itself arriving is `schema.discriminator-added`, breaking on both sides because payloads must now
+carry the tag; it leaving is `schema.discriminator-removed`, safe on a request and breaking on a response,
+exactly as a dropped `enum` is. Every other member is compared as a value, so a member OpenAPI adds to the
+object later is read the day it appears.
+
+**`nullable` is read beside the type it belongs to.** Withdrawing a null — `nullable: true` becoming
+`false`, or the keyword going while the type stays — is `schema.nullable-narrowed` and breaking on both
+sides: the server stops accepting a value your clients are still sending. Admitting one is
+`schema.nullable-widened`, safe on a request and breaking on a response, for the same reason a value
+joining a response `enum` is. Because OpenAPI 3.0's `nullable: true` and 3.1's `type: [string, null]` are
+one statement in two dialects, migrating between them reports no nullability change at all — the keyword
+is read together with the type union beside it, so switching spellings is not mistaken for a contract
+change. Writing `nullable: false` out where nothing was written reports nothing either, since that is what
+its absence already meant.
+
+**`$id`, `$anchor` and `$schema` are read as what they are.** A `$ref` can name an `$id` or an `$anchor`,
+and the diff resolves no pointers, so a name changed or removed may leave one naming nothing:
+`schema.identity-changed`, breaking. A name *arriving* is the same code and not breaking — nothing could
+have pointed at it before. `$schema` names the dialect every keyword beside it is read in, so a comparison
+that spans a change to it has compared two languages; that is `schema.dialect-changed` and breaking,
+including when an explicit `$schema` arrives where there was none, because nothing in the diff can tell a
+restatement of the dialect already in force from a migration to another one.
+
 Two positions have no direction to report, and the diff says so rather than guessing. Under `not`,
 narrowing the subschema *widens* what the API accepts; under `if`, a change moves values between the
 `then` and `else` branches. A change under either is reported at the keyword carrying it and counted as

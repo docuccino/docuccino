@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Docuccino\Core\Diff;
 
 /**
- * Which way one refinement keyword moved between two schemas. `Incomparable` is a finding rather than
- * a shrug: two `pattern`s, two dialects of `exclusiveMinimum`, a `multipleOf` neither side divides —
- * the change is real and its direction is what cannot be computed, so it is reported and classed
- * breaking.
+ * Which way one keyword moved between two schemas — a refinement's own value space
+ * ({@see SchemaRefinement}), and the members {@see SchemaReading} compares beside it, since the
+ * direction vocabulary is the same one and the verdict it earns is too. `Incomparable` is a finding
+ * rather than a shrug: two `pattern`s, two dialects of `exclusiveMinimum`, a `multipleOf` neither side
+ * divides, a discriminator mapping entry repointed — the change is real and its direction is what
+ * cannot be computed, so it is reported and classed breaking.
  *
  * @internal
  */
