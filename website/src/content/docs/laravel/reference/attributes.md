@@ -23,6 +23,13 @@ A `type:` string (where present) is parsed by the same grammar as your docblocks
 file's own `use` statements and namespace, so `#[Response(type: 'InvoiceResource')]` finds the class
 you'd expect without a `::class` reference.
 
+One word means more in an attribute than it does in a docblock: `object`. Read off your code it means
+"an instance of something", whose wire shape a `JsonSerializable` may make anything — so inference stays
+vague about it. Written by hand it is the JSON word, said about the wire by the one person who knows, so
+it documents a free-form map: an object whose keys aren't enumerated, the same thing
+`array<string, mixed>` says. `array` is not that word — a PHP array is a JSON array or a JSON object, so
+say `list<T>` or `array<string, T>` for the one you mean.
+
 ## At a glance
 
 All 31 attributes, grouped by what they do:
@@ -263,15 +270,15 @@ object, a `*` names an element of an array, and `\.` is a dot that belongs to th
 
 Containers on the way are created if the body doesn't have them, and `required: true` marks the field
 required on the object that holds it — `meta.source` becomes a required member of `meta`, and the body
-itself becomes required.
+itself becomes required. Leaving `required` off says nothing rather than saying "optional": a field your
+validation rules already made required stays required.
 
 Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
 [undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —
 and a declaration inside it answers the question, so `validation.container-undecided` stops firing for
-that field. Only that question: a `nullable` field stays nullable.
-
-`type: 'object'` documents a free-form map — an object whose keys aren't enumerated — which is the answer
-for a field the endpoint takes as one:
+that field. Only that question: a `nullable` field stays nullable. Naming the field itself answers it
+too, as long as the `type:` says which shape it is — `object` for a free-form map, `list<int>` for a
+list. `array` and `mixed` are the two that don't, so the notice keeps naming the field:
 
 ```php
 #[BodyParameter(name: 'meta.scoring.scores', type: 'object', description: 'Scores keyed by criterion id.')]

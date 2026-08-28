@@ -381,19 +381,24 @@ final class AttributeRequestBodyExtension implements OperationExtension
     }
 
     /**
-     * Adds or drops a name in the `required` list, order-stable and duplicate-free.
+     * Adds a name to the `required` list, order-stable and duplicate-free. It only ever ADDS: the
+     * attribute's `required` defaults to `false`, so the absent argument and the written one reach here
+     * as the same bool, and taking that as "optional" would let a declaration that came to document a
+     * type quietly de-require a field the recovered rules said the server insists on — publishing a
+     * contract a consumer's generated client can build a rejected request from. An author who means
+     * optional has nothing on this attribute to say it with; the honest answer today is to correct the
+     * rules the requirement was recovered from, or to patch the body with an overlay.
      *
      * @param  list<string>  $required
      * @return list<string>
      */
     private function withRequired(array $required, string $name, bool $isRequired): array
     {
-        $required = array_values(array_filter($required, static fn (string $entry): bool => $entry !== $name));
-        if ($isRequired) {
-            $required[] = $name;
+        if (! $isRequired || in_array($name, $required, true)) {
+            return $required;
         }
 
-        return $required;
+        return [...$required, $name];
     }
 
     /**

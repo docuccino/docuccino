@@ -241,7 +241,7 @@ happy path has touched every endpoint and proved none of those promises — so a
 calls that full coverage, which is exactly the too-generous reading a coverage gate exists to prevent.
 The report prints both numbers and gates on responses and deliveries.
 
-**A webhook you document counts too.** `assertValidWebhook()` records the delivery it just checked, and
+**A webhook you document counts too.** A passing `assertValidWebhook()` records the delivery it checked, and
 every documented webhook carries one row of its own — so a document whose outbound half nothing asserts
 can never read as complete. The row is the *delivery*, never the webhook's own responses: those are what
 the **receiver** answers, and nothing in a sending application's suite can exercise one.
@@ -331,7 +331,7 @@ Treat the floor the way you treat a line-coverage floor: set it to what you meas
 as you close gaps. A floor you cannot meet is a floor somebody deletes. `--min=100` is "every documented
 response answered, and every documented webhook delivered".
 
-<Aside type="note" title="Only a response that was checked and agreed counts">
+<Aside type="note" title="Only a response or delivery that was checked and agreed counts">
 A response counts when the assertion actually looked at it and it matched. `assertValidRequest()`
 checks what your test sent and nothing that came back, and an assertion that FAILED has proved the
 response does *not* keep the promise — either way the operation is credited as reached and none of its
@@ -341,6 +341,10 @@ no schema — does count: the exchange happened, and no assertion you could writ
 that is in the document. Logs written by a Docuccino older than the response-granular report read the
 same way: every operation reached, no response proved — so an old log can only ever read lower than the
 truth, never higher. `--reset` before the run clears them.
+
+A **delivery** is credited on the same rule: the payload was held to the documented body and agreed. One
+that violated it, or that could not be read as JSON at all, is a delivery the run has disproved and
+counts as none — and, as above, a pass that could not check the payload still counts.
 </Aside>
 
 ### Sharded CI

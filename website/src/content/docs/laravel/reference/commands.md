@@ -560,7 +560,7 @@ its own — it is what a consumer writes a `catch` against — so a suite that o
 has touched every endpoint and proved none of them. The report prints operations exercised beside
 responses and deliveries exercised, and compares only the latter to `--min`.
 
-Each documented **webhook** is counted alongside them, as one `delivery` row lit by
+Each documented **webhook** is counted alongside them, as one `delivery` row lit by a passing
 `assertValidWebhook()` — otherwise a document whose outbound half nothing asserts reads as fully
 covered. A webhook's own responses are what the *receiver* answers, and nothing in a sending
 application's suite can exercise one, so they are never counted.
