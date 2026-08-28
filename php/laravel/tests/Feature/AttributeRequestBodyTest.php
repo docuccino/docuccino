@@ -565,3 +565,101 @@ it('leaves a recovered required list alone, at any depth, when a declaration say
         ->and($scoring['properties']['scores'])->toBe(['type' => 'object', 'additionalProperties' => []])
         ->and($diagnostics)->toBe([]);
 });
+
+it('stands the note down only where a body declaration can reach the field', function (string $verb, array $reported): void {
+    // `report()` runs ahead of the verb branch, and a read verb sends the recovered rules to QUERY
+    // parameters instead of a body ({@see RecoveredRequest}). A #[BodyParameter] reaches a request body
+    // and nothing else, so on a GET it settles nothing about the query parameter the rules produced —
+    // and standing the notice down for it would leave that parameter wider than the rules left it with
+    // nothing said, which is the exact case the consult exists to avoid.
+    $rules = new RuleSet([
+        'meta' => [ValidationRule::of('array')],
+        'other' => [ValidationRule::of('array')],
+    ]);
+
+    $context = new RouteContext(
+        route: new RouteDescriptor([strtoupper($verb)], 'api/things'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet([new BodyParameter(name: 'meta.scoring')]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions,
+    );
+
+    RuleSetNormalizer::report((new RuleSetNormalizer)->normalize($rules), $context);
+
+    $fields = array_map(
+        static fn (Diagnostic $d): string => (string) preg_replace('/^Validation field "([^"]+)".*$/', '$1', $d->message),
+        $context->components->diagnostics(),
+    );
+
+    expect($fields)->toBe($reported);
+})->with([
+    // The verbs whose recovered rules become a body: the declaration reaches the field and settles it.
+    'post' => ['post', ['other']],
+    'put' => ['put', ['other']],
+    'patch' => ['patch', ['other']],
+    // …and the verbs whose rules become query parameters, where it reaches nothing.
+    'get' => ['get', ['meta', 'other']],
+    'head' => ['head', ['meta', 'other']],
+]);
+
+it('takes a written `required: false` off the list, at any depth, and leaves the siblings', function (): void {
+    // The other half of "says nothing about it": the declaration now has a way to say `optional`, and a
+    // declaration outranks the rules it patches. Widening is the direction that costs a consumer
+    // nothing — a request the server accepts stays valid — where the narrow reading marks one invalid.
+    $seed = function (OperationDraft $operation): void {
+        $operation->set('requestBody', [
+            'required' => true,
+            'content' => ['application/json' => ['schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string'],
+                    'meta' => ['type' => 'object', 'properties' => [
+                        'scoring' => [
+                            'type' => 'object',
+                            'properties' => ['scores' => ['type' => 'array'], 'other' => ['type' => 'string']],
+                            'required' => ['scores', 'other'],
+                        ],
+                    ]],
+                ],
+                'required' => ['title', 'meta'],
+            ]]],
+        ], Contribution::integration('form-request'));
+    };
+
+    $diagnostics = [];
+    $body = runBodyParameters([
+        new BodyParameter(name: 'title', type: 'string', required: false),
+        new BodyParameter(name: 'meta.scoring.scores', type: 'object', required: false),
+    ], $seed, $diagnostics);
+
+    $schema = $body['content']['application/json']['schema'];
+
+    expect($schema['required'])->toBe(['meta'])
+        ->and($schema['properties']['meta']['properties']['scoring']['required'])->toBe(['other'])
+        // The body itself is still required — the rules said so, and one optional property is not a
+        // statement about whether the request carries a body at all.
+        ->and($body['required'])->toBeTrue()
+        ->and($diagnostics)->toBe([]);
+});
+
+it('empties a required list a declaration takes the last name off', function (): void {
+    // The keyword goes rather than being published as `[]`, which OAS forbids and a consumer's
+    // generator reads as a schema with a required member it cannot name.
+    $seed = function (OperationDraft $operation): void {
+        $operation->set('requestBody', [
+            'content' => ['application/json' => ['schema' => [
+                'type' => 'object',
+                'properties' => ['title' => ['type' => 'string']],
+                'required' => ['title'],
+            ]]],
+        ], Contribution::integration('form-request'));
+    };
+
+    $body = runBodyParameters([new BodyParameter(name: 'title', required: false)], $seed);
+    $schema = $body['content']['application/json']['schema'];
+
+    expect($schema)->not->toHaveKey('required')
+        ->and($body)->not->toHaveKey('required');
+});

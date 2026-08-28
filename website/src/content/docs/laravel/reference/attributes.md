@@ -247,7 +247,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $format = null,
-    public bool $required = false,
+    public ?bool $required = null,
     public mixed $example = null,
 )
 ```
@@ -270,8 +270,12 @@ object, a `*` names an element of an array, and `\.` is a dot that belongs to th
 
 Containers on the way are created if the body doesn't have them, and `required: true` marks the field
 required on the object that holds it — `meta.source` becomes a required member of `meta`, and the body
-itself becomes required. Leaving `required` off says nothing rather than saying "optional": a field your
-validation rules already made required stays required.
+itself becomes required. `required: false` is the opposite statement and takes the field back off that
+list, for the case where your rules make a field required that the endpoint really accepts without.
+
+Leaving `required` off is neither: it says nothing, so a field your validation rules already made
+required stays required. That is why the argument is `?bool` — a declaration written to document a
+`type:` must not quietly de-require a field the server insists on.
 
 Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
 [undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —
@@ -451,9 +455,13 @@ public function index(): AnonymousResourceCollection { /* … */ }
 It is the last word on the parameter, whatever documented it: a rule set recovered from a FormRequest,
 a paginator key, the route's own path segment, or a parameter attribute on the controller class an
 action opts out of. An `in:` that names no location drops nothing and says so
-([`attribute.ignore-param-location`](/laravel/reference/diagnostics/#attributes)); a `name:` that
-matches nothing is silent, because naming a key only some of a controller's actions document is the
-ordinary way a class-level declaration is written.
+([`attribute.ignore-param-location`](/laravel/reference/diagnostics/#attributes)), and so does a
+`name:` on the action that matches no parameter
+([`attribute.ignore-param-unmatched`](/laravel/reference/diagnostics/#attributes)) — a subtraction
+leaves no evidence, so without that report a typo'd or renamed name looks exactly like one that
+worked, and the message lists what the operation does document so the difference is visible beside it.
+A declaration inherited from the controller class stays silent: naming a key only some of its actions
+document is the ordinary way a class-level declaration is written.
 
 ### `#[IgnoreResponse]`
 
@@ -481,9 +489,10 @@ It drops **exactly** the status it names and no other. There is no positive form
 method-level declaration never contest each other — both apply, and the action drops the union. It
 cannot name a range key such as `3XX`, since `status:` is an `int`, and that is the answer in both
 directions: an ignore takes a status away and establishes nothing, so it neither retires the range a
-member sits in nor narrows one. A `status:` that matches nothing is silent, exactly as `#[IgnoreParam]`'s
-unmatched `name:` is, because listing a status only some of a controller's actions document is the
-ordinary way a class-level declaration is written.
+member sits in nor narrows one. A `status:` on the action that no producer would ever have written drops nothing
+and says so ([`attribute.ignore-response-unmatched`](/laravel/reference/diagnostics/#attributes)),
+listing the statuses the operation does document — exactly as `#[IgnoreParam]`'s unmatched `name:`
+does, and silent on an inherited declaration for the same reason.
 
 ## Metadata
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Extensions;
 
-use Docuccino\Attributes\IgnoreResponse;
 use Docuccino\Attributes\Response;
 use Docuccino\Attributes\ResponseHeader;
 use Docuccino\Core\Diagnostics\Diagnostic;
@@ -29,7 +28,9 @@ use Docuccino\Laravel\Support\IgnoredResponses;
  * {@see IgnoredResponses} before it converts anything, because a response removed after its body was
  * converted leaves the components that body hoisted behind. What the sweep still catches is a producer
  * this package does not own — a third-party extension in an earlier phase — where an orphan is the
- * lesser of the two defects. This extension's own writes below consult like every other producer.
+ * lesser of the two defects. It removes only what is standing there, so the declaration is credited for
+ * what it really took away ({@see IgnoredResponses::sweep()}). This extension's own writes below consult
+ * like every other producer.
  */
 final class AttributeResponsesExtension implements OperationExtension
 {
@@ -48,9 +49,7 @@ final class AttributeResponsesExtension implements OperationExtension
         // namespace, so authors don't have to write FQCNs to get a real class instead of a bare object.
         $imports = ImportContext::forFile($context->actionRef->file === '' ? null : $context->actionRef->file);
 
-        foreach ($context->attributes->all(IgnoreResponse::class) as $ignore) {
-            $operation->removeResponse((string) $ignore->status);
-        }
+        IgnoredResponses::sweep($operation, $context);
 
         $this->reportIllegalComponents($context);
 

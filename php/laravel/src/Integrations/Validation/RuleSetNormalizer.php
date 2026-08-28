@@ -10,6 +10,7 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
 use Docuccino\Core\Extensions\Validation\FieldPath;
+use Docuccino\Core\Extensions\Validation\RecoveredRequest;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\DType\UnknownT;
@@ -80,6 +81,11 @@ final class RuleSetNormalizer
      * one, so the document will not say "either" and asking for rules that would say it again is a note
      * fired where nothing can be done. A declaration that settles nothing is not one of those, and
      * standing the note down for it would leave the field wider than the rules left it with nothing said.
+     *
+     * Only where a body is written at all: this runs ahead of the verb branch, and a read verb sends the
+     * same rules to QUERY parameters ({@see RecoveredRequest::documentsBody()}), which a declaration
+     * about the body cannot reach. Reading the declarations there would stand the note down for a
+     * parameter nothing had answered the question for.
      */
     public static function report(RuleSet $normalized, RouteContext $context): void
     {
@@ -88,7 +94,9 @@ final class RuleSetNormalizer
             return;
         }
 
-        $declared = $context->attributes->all(BodyParameter::class);
+        $declared = RecoveredRequest::documentsBody($context)
+            ? $context->attributes->all(BodyParameter::class)
+            : [];
         $types = new TypeStringParser;
 
         foreach ($undecided as $field) {
