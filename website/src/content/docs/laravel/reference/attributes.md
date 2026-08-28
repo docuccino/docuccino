@@ -132,18 +132,31 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public int $status = 200,
-    public bool $required = false,
+    public ?bool $required = null,
 )
 ```
 
 Documents a single response header on a given status code. Repeat it freely — headers are grouped and
-merged per status. Omit `type` and the header is documented as a string.
+merged per status.
+
+The declaration says what you write and nothing else. Docuccino documents headers of its own — a
+redirect's `Location`, the `Retry-After` and `X-RateLimit-*` on a
+[throttled](/laravel/documenting/rate-limiting/) `429` — and a declaration naming one of those adds
+the members you state to what is already there instead of replacing it:
+
+```php
+#[ResponseHeader(name: 'Retry-After', status: 429, description: 'Seconds to wait — we set this per plan.')]
+```
+
+leaves the header its recovered `integer` type and its `required: true`, and publishes your sentence
+beside them. Write `type:` to change the type, `required:` to change the promise. Omit `type` on a
+header nothing else documented and it is published as a string.
 
 Set `required: true` when your server sends the header on *every* response at that status. A client
 generated from the document can then type it non-optional, and
 [`assertValidResponse()`](/laravel/guides/contract-testing/#assert-an-exchange) fails a response that
-leaves it out. The default is `false`, which says only that the header may arrive — so a header nobody
-made a promise about never fails a test for being absent.
+leaves it out. Write `required: false` to say the opposite — the header may or may not arrive — which
+is also what an undeclared header means, so leaving it out promises nothing either way.
 
 ```php
 #[ResponseHeader(name: 'X-Request-Id', type: 'string', description: 'Echoed on every response', required: true)]

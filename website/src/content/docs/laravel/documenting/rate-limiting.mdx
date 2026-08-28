@@ -111,8 +111,11 @@ failure names the rate-limit integration as the producer that wrote the claim.
 
 If your application replaces the `429` renderer and drops those headers, that test failure is the
 point: your responses and your published document disagree, and they disagreed before anything checked.
-Either send the headers, or say what you really send with an
-[Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice).
+Either send the headers, or say what you really send —
+[`#[ResponseHeader(name: 'Retry-After', status: 429, required: false)]`](/laravel/reference/attributes/#responseheader)
+on the action states the one member you are correcting and leaves the rest of the header standing, and
+an [Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice) says it once for a whole
+document.
 
 ## The body follows your error style
 
