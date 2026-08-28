@@ -24,9 +24,12 @@ namespace Docuccino\Core\Provenance;
  *
  * 1. **Exclusions.** A run behind a `#` is a URI fragment, a `/` behind a `\` is an escape, a POSIX
  *    run carrying a backslash is a regex or a JSON string, a run carrying a brace is a URI template.
- *    None of those reaches the ladder at all.
+ *    None of those reaches the ladder at all, unless proof already opened the run.
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
- *    anything but a filesystem path, so those are always reduced.
+ *    anything but a filesystem path, so those are always reduced. A wrapper is proof from the first
+ *    character, and nothing a template is spelled with opens that way — a route signature, a path
+ *    template and a JSON pointer all start at a `/` or a `#` — so a run that OPENS with one is a path
+ *    even where it also carries a brace, and the braces are a shell glob rather than a placeholder.
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
  *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
  *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
@@ -166,12 +169,19 @@ final readonly class MessagePaths
     }
 
     /**
-     * The exclusions. A brace makes a run a URI template rather than a file anyone named, and a
-     * backslash inside a POSIX run makes it an escaped string — a `regex:` rule, a JSON pointer in a
-     * quoted message — not a path with a separator.
+     * The exclusions, and the one thing that opens ahead of them. A brace makes a run a URI template
+     * rather than a file anyone named, and a backslash inside a POSIX run makes it an escaped string —
+     * a `regex:` rule, a JSON pointer in a quoted message — not a path with a separator. Both give way
+     * to a run OPENING with a local wrapper scheme, which no template can (see reason 2): the braces in
+     * `glob://…/{Support,Http}/*.php` are a shell glob, and refusing the run over them keeps the
+     * absolute prefix in front of them.
      */
     private static function couldBeAPath(string $run): bool
     {
+        if (self::wrapper($run) !== null) {
+            return true;
+        }
+
         if (str_contains($run, '{') || str_contains($run, '}')) {
             return false;
         }

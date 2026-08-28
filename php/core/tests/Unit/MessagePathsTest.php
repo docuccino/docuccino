@@ -275,15 +275,86 @@ it('has a decision about every stream wrapper the running PHP has registered', f
     expect($undecided())->toBe('');
 });
 
-it('leaves a wrapper run alone once a brace has made it a template', function (): void {
-    // The one place proof does not win: the exclusions run first, and a brace says URI template. A
-    // glob brace pattern is therefore the wrapper run that keeps its absolute path — pinned rather
-    // than fixed, because reordering the two would let a braced run reach the ladder, and that is the
-    // direction that must be impossible.
-    $message = 'Could not open glob:///app/root/app/{Support,Http}/*.php';
+it('reads the wrapper table the same way once a brace is in the run', function (string $scheme, bool $proof): void {
+    // A brace says URI template, but only where the run does not already open with proof. Nothing a
+    // template is spelled with opens `<scheme>://`: a route signature, a path template and a JSON
+    // pointer all start at a `/` or a `#`, and a wrapper scheme is proof from the FIRST character. So
+    // the brace exclusion may yield to it without ever admitting a template, and `{Support,Http}` in a
+    // glob is read as the shell glob it is instead of keeping the absolute prefix in front of it — the
+    // brace pattern being the most ordinary thing a `glob://` run is spelled with.
+    //
+    // The false half gains nothing: those name a host or no file at all, so a braced one is left
+    // exactly as it arrived. Derived from the table rather than spelled again, so a scheme added to
+    // either half is answered here too; the anti-vacuity assertions in the guard above are what keep
+    // the derivation from emptying out and passing forever.
+    $message = 'Could not open '.$scheme.':///app/root/app/{Support,Http}/*.php';
 
     expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($proof ? 'Could not open '.$scheme.'://app/{Support,Http}/*.php' : $message);
+})->with(function (): array {
+    /** @var array<string, bool> $wrappers */
+    $wrappers = (new ReflectionClass(MessagePaths::class))->getReflectionConstant('WRAPPERS')?->getValue();
+
+    $rows = [];
+
+    foreach ($wrappers as $scheme => $proof) {
+        $rows[$scheme.'://'] = [$scheme, $proof];
+    }
+
+    return $rows;
+});
+
+it('leaves a braced run alone where nothing but the brace opens it', function (string $case, string $message): void {
+    // The other side of the same flip, and the one that must be impossible to get wrong. Each row is a
+    // template an author wrote or a tool quoted back, and none of them opens with a scheme the table
+    // calls proof — so the brace is all there is to go on, and it still refuses the whole run.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
         ->toBe($message);
+})->with([
+    ['a bare path template', 'Unknown route /api/users/{user}'],
+    ['a path template naming a file', 'Unknown route /api/users/{user}/avatar.png'],
+    ['a route signature a parser quoted', 'Malformed inline YAML at line 3 (near "GET /api/forms/{form}").'],
+    ['a JSON pointer at a placeholder', 'Unresolved reference: #/components/schemas/User/properties/{name}'],
+    ['a URL whose path is templated', 'GET http://api.example.com/{region}/forms returned 500'],
+    ['a server URL whose host is templated', 'GET https://{region}.api.example.com/v1/forms returned 500'],
+    ['an array shape quoted in a message', 'Expected array{id: int, name: string}'],
+]);
+
+it('reduces the machine half of a braced wrapper run and leaves the braces where they stood', function (string $case, string $message, string $expected): void {
+    // The brace can sit anywhere in the run, including inside the part that survives the strip. What a
+    // recognised root buys is a prefix strip, which cannot invent text — so a templated directory under
+    // the root keeps every character it had while the machine word in front of it goes.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a brace in the surviving half',
+        'Could not open file:///app/root/{tenant}/routes.php',
+        'Could not open file://{tenant}/routes.php',
+    ],
+    [
+        'a brace inside an archive',
+        'Internal error in phar:///app/root/vendor/acme/acme.phar/{a,b}/X.php',
+        'Internal error in phar://vendor/acme/acme.phar/{a,b}/X.php',
+    ],
+    [
+        'a glob under the root',
+        'Could not open glob:///app/root/app/{Support,Http}/*.php',
+        'Could not open glob://app/{Support,Http}/*.php',
+    ],
+]);
+
+it('scrubs a braced wrapper run that no root accounts for', function (): void {
+    // The degradation, reached through a brace: outside every root there is no prefix to strip, so the
+    // basename is all that may survive — and the machine's own user is what a `glob://` pattern under a
+    // `$HOME` would otherwise have published.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/Users/ca rol/checkout')))
+        ->relative('Could not open glob:///Users/ca rol/secret/{Support,Http}/*.php');
+
+    expect($scrubbed)->toBe('Could not open glob://{Support,Http}/*.php')
+        ->and($scrubbed)->not->toContain('ca rol');
 });
 
 it('reads a route signature after every method a route can carry', function (string $method): void {
