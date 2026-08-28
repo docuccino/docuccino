@@ -284,15 +284,16 @@ final readonly class MessagePaths
     /** A wrapper scheme, a Windows drive or a UNC share — shapes nothing but a path has. */
     private static function proven(string $run): bool
     {
-        if (str_starts_with($run, '\\\\')) {
-            return true;
-        }
+        return self::windowsRooted($run) || self::wrapper($run) !== null;
+    }
 
-        if (preg_match('#^[A-Za-z]:[\\\\/]#', $run) === 1) {
-            return true;
-        }
-
-        return self::wrapper($run) !== null;
+    /**
+     * A Windows drive or a UNC share: the two shapes that spell a separator with a backslash, and so
+     * the only two whose backslashes {@see stripped()} may rewrite.
+     */
+    private static function windowsRooted(string $run): bool
+    {
+        return str_starts_with($run, '\\\\') || preg_match('#^[A-Za-z]:[\\\\/]#', $run) === 1;
     }
 
     /**
@@ -420,18 +421,35 @@ final readonly class MessagePaths
         return $this->stripped($path) ?? $this->paths->relative($path);
     }
 
-    /** The path under the root the ladder recognised, or null where it recognised none. */
+    /**
+     * The path under the root the ladder recognised, or null where it recognised none.
+     *
+     * The ladder is asked in one spelling — a backslash is a separator to it — but what comes back is
+     * PUBLISHED, and only a Windows run may keep that spelling: there the two ways of writing one path
+     * have to emit the same bytes, and everywhere else a backslash is a character the application
+     * wrote, in a filename or in a regex it quoted. Normalisation is 1:1 in length, so the same count
+     * of characters off the end of the ORIGINAL is the strip, said in the author's own hand.
+     */
     private function stripped(string $path): ?string
     {
-        $answer = $this->paths->relative(rtrim(str_replace('\\', '/', $path), '/').'/'.self::PROBE);
+        $normalised = rtrim(str_replace('\\', '/', $path), '/');
+        $answer = $this->paths->relative($normalised.'/'.self::PROBE);
 
         if ($answer === self::PROBE) {
             return '';
         }
 
-        return str_ends_with($answer, '/'.self::PROBE)
-            ? substr($answer, 0, -strlen('/'.self::PROBE))
-            : null;
+        if (! str_ends_with($answer, '/'.self::PROBE)) {
+            return null;
+        }
+
+        $under = substr($answer, 0, -strlen('/'.self::PROBE));
+
+        // A ladder that answered something other than the run's own tail has invented text, so there
+        // is nothing to take the original's spelling from: publish what it said and nothing more.
+        return $under === '' || self::windowsRooted($path) || ! str_ends_with($normalised, $under)
+            ? $under
+            : substr(substr($path, 0, strlen($normalised)), -strlen($under));
     }
 
     /** Where the archive ends and the path inside it begins, or null when the run names no archive. */

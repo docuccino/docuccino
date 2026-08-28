@@ -792,3 +792,32 @@ it('scrubs the file a callable label names and leaves the rest of the label alon
     ['a label already relative', 'bootstrap/app.php::closure@42', 'bootstrap/app.php::closure@42'],
     ['a label naming one segment', 'app.php::closure@42', 'app.php::closure@42'],
 ]);
+
+it('keeps a backslash the application wrote, and rewrites only the one Windows spells a separator with', function (string $case, string $message, string $expected): void {
+    // The ladder is asked in one spelling, and the answer is PUBLISHED. A Windows run has to keep the
+    // rewrite — the two ways of writing one path must emit the same bytes, which is the whole promise
+    // at the top of this file — while a POSIX run's backslash is a character somebody typed: a
+    // filename, a regex the message quoted, a class name against the path. Stripping the prefix and
+    // restating the rest in a spelling nobody used is the over-scrub direction, quietly.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($expected);
+})->with([
+    ['a backslash in a file name', 'Could not open /app/root/app/Rules\\Regex.php', 'Could not open app/Rules\\Regex.php'],
+    ['a regex under the root', 'Refused /app/root/x\\d+/y', 'Refused x\\d+/y'],
+    ['a brace and a backslash together', 'Read /app/root/a{b}\\c/X.php', 'Read a{b}\\c/X.php'],
+    // The root itself keeps nothing, so there is no tail to spell either way.
+    ['nothing left under the root', 'mkdir(/app/root): Permission denied', 'mkdir(): Permission denied'],
+]);
+
+it('emits the same bytes for a Windows checkout and a POSIX one, with a backslash inside the path', function (): void {
+    // The pair the row above cannot state on its own: the separator rewrite is what makes these two
+    // agree, so a fix that stopped rewriting everywhere would pass every row above and break this.
+    $thrown = static fn (string $root, string $separator): string => sprintf(
+        'Failed in %s',
+        $root.$separator.implode($separator, ['app', 'Http', 'X.php']),
+    );
+
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/home/alice/checkout')))->relative($thrown('/home/alice/checkout', '/')))
+        ->toBe((new MessagePaths(new RootRelativeSourcePathResolver('C:\\Users\\bob\\dev\\checkout')))->relative($thrown('C:\\Users\\bob\\dev\\checkout', '\\')))
+        ->toBe('Failed in app/Http/X.php');
+});
