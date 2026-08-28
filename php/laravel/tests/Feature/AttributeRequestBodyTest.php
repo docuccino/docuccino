@@ -521,3 +521,47 @@ it('stops reporting a container as undecided only for a declaration that settles
     'a field whose name holds a dot settles neither' => [new BodyParameter(name: 'meta\.scoring'), ['meta', 'other']],
 ]);
 
+/**
+ * `required` is the recovered body's, not the declaration's. The attribute's own `required` defaults to
+ * `false` and an author cannot spell the difference between that default and a written `false`, so a
+ * declaration that came to document a TYPE must not read as one that came to make a field optional —
+ * a consumer's generated client would build requests the server rejects.
+ */
+it('leaves a recovered required list alone, at any depth, when a declaration says nothing about it', function (): void {
+    $seed = function (OperationDraft $operation): void {
+        $operation->set('requestBody', [
+            'required' => true,
+            'content' => ['application/json' => ['schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string'],
+                    'meta' => ['type' => 'object', 'properties' => [
+                        'scoring' => [
+                            'type' => 'object',
+                            'properties' => ['scores' => ['type' => 'array'], 'other' => ['type' => 'string']],
+                            'required' => ['scores', 'other'],
+                        ],
+                    ]],
+                ],
+                'required' => ['title'],
+            ]]],
+        ], Contribution::integration('form-request'));
+    };
+
+    $diagnostics = [];
+    $body = runBodyParameters([
+        new BodyParameter(name: 'title', type: 'int'),
+        new BodyParameter(name: 'meta.scoring.scores', type: 'object'),
+    ], $seed, $diagnostics);
+
+    $schema = $body['content']['application/json']['schema'];
+    $scoring = $schema['properties']['meta']['properties']['scoring'];
+
+    // Both the field the declaration documented and the sibling beside it keep the requirement the
+    // rules recovered, in the order they were recovered in.
+    expect($scoring['required'])->toBe(['scores', 'other'])
+        ->and($schema['required'])->toBe(['title'])
+        // …and the declaration did land: this is the same write, not a write that stopped happening.
+        ->and($scoring['properties']['scores'])->toBe(['type' => 'object', 'additionalProperties' => []])
+        ->and($diagnostics)->toBe([]);
+});

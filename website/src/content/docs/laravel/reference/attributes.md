@@ -270,7 +270,8 @@ object, a `*` names an element of an array, and `\.` is a dot that belongs to th
 
 Containers on the way are created if the body doesn't have them, and `required: true` marks the field
 required on the object that holds it — `meta.source` becomes a required member of `meta`, and the body
-itself becomes required.
+itself becomes required. Leaving `required` off says nothing rather than saying "optional": a field your
+validation rules already made required stays required.
 
 Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
 [undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —
