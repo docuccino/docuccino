@@ -77,6 +77,22 @@ final class FieldNode
     }
 
     /**
+     * A `type` keyword as the list of words it states — one for a scalar type, several for a union, none
+     * where nothing typed it. The ONE reading of that keyword, so a node assembling itself and a rule
+     * asking what the field is ({@see ValidationField::types()}) cannot come to different answers.
+     *
+     * @return list<string>
+     */
+    public static function typeWords(mixed $type): array
+    {
+        return match (true) {
+            is_string($type) => [$type],
+            is_array($type) => array_values(array_filter($type, is_string(...))),
+            default => [],
+        };
+    }
+
+    /**
      * Assemble this node into a JSON Schema fragment, applying the nullable policy last so a node
      * renders `type: [t, null]` (or an `anyOf` null branch) consistently with the rest of the
      * document — a node already carrying several types taking null as one more member.
@@ -127,12 +143,7 @@ final class FieldNode
      */
     private static function applyNullable(array $schema, RepresentationPolicy $policy): array
     {
-        $type = $schema['type'] ?? null;
-        $types = match (true) {
-            is_string($type) => [$type],
-            is_array($type) => array_values(array_filter($type, is_string(...))),
-            default => [],
-        };
+        $types = self::typeWords($schema['type'] ?? null);
 
         if ($types === []) {
             return $schema;

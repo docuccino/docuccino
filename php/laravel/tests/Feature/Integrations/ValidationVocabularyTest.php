@@ -479,6 +479,23 @@ it('routes every declared rule name to exactly one transformer', function (strin
 })->with(handledRuleNameRows());
 
 /**
+ * A nullable field the rules left as either container. `null` joins the words the field already carries
+ * under the default policy and takes a branch of its own beside them under `anyof` — the node assembling
+ * itself reads that `type` keyword the same way a rule asking what the field is does, so a union survives
+ * both readings intact rather than one of them collapsing it.
+ */
+it('widens an undecided container for null under either nullable policy', function (): void {
+    $folded = convertLaravelRules(['meta' => 'array_or_object|nullable'])->schema['properties']['meta'];
+    $branched = convertLaravelRules(
+        ['meta' => 'array_or_object|nullable'],
+        new RepresentationPolicy(nullable: 'anyof'),
+    )->schema['properties']['meta'];
+
+    expect($folded)->toBe(['type' => ['array', 'object', 'null']])
+        ->and($branched)->toBe(['anyOf' => [['type' => 'array'], ['type' => 'object'], ['type' => 'null']]]);
+});
+
+/**
  * The other half of reading an authored example against every type word: text that reads as NEITHER
  * container publishes nothing and names both words, rather than standing as the string it was typed as.
  */

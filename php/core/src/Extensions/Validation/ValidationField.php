@@ -43,7 +43,12 @@ final readonly class ValidationField
         return $this->path;
     }
 
-    /** The field's scalar `type`, when a single string type has been set. */
+    /**
+     * The field's `type` where exactly one is set, and null where none is — or where SEVERAL are, which
+     * is a legal state a rule can leave the field in ({@see setTypes()}). A rule that acts on the answer
+     * wants {@see types()}: reading a union as "untyped" here loses the very fact the union states, and
+     * every reader that has asked this question and then done something with it has had to be fixed.
+     */
     public function type(): ?string
     {
         $type = $this->node->keywords['type'] ?? null;
@@ -60,13 +65,7 @@ final readonly class ValidationField
      */
     public function types(): array
     {
-        $type = $this->node->keywords['type'] ?? null;
-
-        return match (true) {
-            is_string($type) => [$type],
-            is_array($type) => array_values(array_filter($type, is_string(...))),
-            default => [],
-        };
+        return FieldNode::typeWords($this->node->keywords['type'] ?? null);
     }
 
     public function set(string $keyword, mixed $value): void
