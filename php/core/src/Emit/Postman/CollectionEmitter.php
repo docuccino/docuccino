@@ -477,7 +477,7 @@ final readonly class CollectionEmitter implements ReportingEmitter
     private function body(array $operation, array $components, string $signature, array &$diagnostics): array
     {
         $written = is_array($operation['requestBody'] ?? null) ? Arr::stringKeyed($operation['requestBody']) : [];
-        [$requestBody, , $unresolved] = Refs::follow(['components' => $components], $written, []);
+        [$requestBody, , $unresolved] = Ref::follow($written, $components);
 
         $content = $unresolved === null && is_array($requestBody['content'] ?? null)
             ? Arr::stringKeyed($requestBody['content'])

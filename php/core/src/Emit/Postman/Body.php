@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit\Postman;
 
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
-use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\SchemaExampleFactory;
@@ -24,7 +23,7 @@ use stdClass;
  *
  * **A schema is READ, not assumed to be spelled out.** `#/components/schemas/CreateUser` and the object
  * written inline describe one payload, and a collection where only one of the two carries a body is a
- * collection whose contents depend on whether a shape happened to be shared. {@see Refs} follows the
+ * collection whose contents depend on whether a shape happened to be shared. {@see Ref} follows the
  * chain — the one resolver, hop-capped and cycle-terminating — and {@see fields()} folds `allOf` for
  * the form kinds, which need the property list itself rather than a value built from it.
  *
@@ -206,9 +205,6 @@ final class Body
      * nothing degrades to the empty schema — the `$ref` node says nothing about the payload, and
      * reading `type` or `properties` off it would answer for a shape nobody wrote.
      *
-     * `Refs` resolves against a document root, and every pointer that can stand here is
-     * `#/components/…`, so the components map IS that root.
-     *
      * @param  array<string, mixed>  $media
      * @param  array<string, mixed>  $components
      * @return array{0: array<string, mixed>, 1: string|null}
@@ -217,7 +213,7 @@ final class Body
     {
         $written = is_array($media['schema'] ?? null) ? Arr::stringKeyed($media['schema']) : [];
 
-        [$schema, , $unresolved] = Refs::follow(['components' => $components], $written, []);
+        [$schema, , $unresolved] = Ref::follow($written, $components);
 
         return [$unresolved === null ? $schema : [], $unresolved];
     }
@@ -251,7 +247,7 @@ final class Body
                 continue;
             }
 
-            [$resolved, , $unresolved] = Refs::follow(['components' => $components], Arr::stringKeyed($branch), []);
+            [$resolved, , $unresolved] = Ref::follow(Arr::stringKeyed($branch), $components);
 
             if ($unresolved !== null) {
                 continue;

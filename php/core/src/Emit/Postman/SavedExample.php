@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit\Postman;
 
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
-use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Emit\SchemaExampleFactory;
 use Docuccino\Core\Support\Arr;
 use stdClass;
@@ -68,7 +67,7 @@ final class SavedExample
     {
         // A $ref'd response resolves first, so an error shape shared across operations yields the same
         // example wherever it is referenced.
-        $response = self::dereference($response, $components);
+        $response = Ref::follow($response, $components)[0];
 
         $content = Arr::stringKeyed(is_array($response['content'] ?? null) ? $response['content'] : []);
         $types = array_map(strval(...), array_keys($content));
@@ -124,7 +123,7 @@ final class SavedExample
             // A header object may be written as a `$ref` exactly as the response around it may, and a
             // header read off the pointer node has no `schema` — so it would drop out of the example
             // for having been shared.
-            $header = self::dereference(Arr::stringKeyed(is_array($declared[$name] ?? null) ? $declared[$name] : []), $components);
+            $header = Ref::follow(Arr::stringKeyed(is_array($declared[$name] ?? null) ? $declared[$name] : []), $components)[0];
             $member = $examples->member($header['schema'] ?? null, $components);
 
             // A header whose schema admits no value is a header the response cannot carry.
@@ -180,24 +179,5 @@ final class SavedExample
         }
 
         return [rtrim((new CanonicalJsonSerializer)->serialize($value[0] ?? new stdClass), "\n"), 'json'];
-    }
-
-    /**
-     * An OAS object with its `$ref` chain followed, through {@see Refs} — the one resolver, so a chain,
-     * a cycle and an escaped pointer read here exactly as they read in the contract half. Every pointer
-     * that can stand at these positions is `#/components/…`, so the components map IS the document root
-     * it resolves against.
-     *
-     * A reference landing nowhere comes back as the node it stood on, which carries no `content`, no
-     * `headers` and no `description` — a saved example of nothing rather than a saved example of
-     * whatever happened to be nearby.
-     *
-     * @param  array<string, mixed>  $node
-     * @param  array<string, mixed>  $components
-     * @return array<string, mixed>
-     */
-    private static function dereference(array $node, array $components): array
-    {
-        return Refs::follow(['components' => $components], $node, [])[0];
     }
 }

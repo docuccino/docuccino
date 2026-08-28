@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Emit\Postman;
 
-use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\SchemaExampleFactory;
@@ -55,8 +54,19 @@ final readonly class Url
     {
         $merged = [];
 
-        foreach ([...$shared, ...$own] as $parameter) {
-            $parameter = $this->dereference($parameter, $components);
+        foreach ([...$shared, ...$own] as $written) {
+            if (! is_array($written)) {
+                continue;
+            }
+
+            [$parameter, , $unresolved] = Ref::follow(Arr::stringKeyed($written), $components);
+
+            // A reference landing nowhere says nothing about where a value goes, so the parameter is
+            // dropped: a query string named after a pointer would be worse than its absence.
+            if ($unresolved !== null) {
+                continue;
+            }
+
             $name = $parameter['name'] ?? null;
             $in = $parameter['in'] ?? null;
 
@@ -357,7 +367,7 @@ final readonly class Url
 
         foreach ($codes as $code) {
             $written = Arr::stringKeyed(is_array($responses[$code] ?? null) ? $responses[$code] : []);
-            [$response, , $unresolved] = Refs::follow(['components' => $components], $written, []);
+            [$response, , $unresolved] = Ref::follow($written, $components);
 
             $content = $unresolved === null && is_array($response['content'] ?? null) ? $response['content'] : [];
             $types = array_map(strval(...), array_keys($content));
@@ -576,29 +586,5 @@ final readonly class Url
     private function describe(array $parameter): string
     {
         return Description::parameter($parameter);
-    }
-
-    /**
-     * A Parameter Object with its `$ref` chain followed, through {@see Refs} — the one resolver, so a
-     * chain, a cycle and an escaped pointer read here exactly as they read in the contract half.
-     * Every pointer that can stand at this position is `#/components/…`, so the components map IS the
-     * document root it resolves against.
-     *
-     * A reference landing nowhere degrades to the empty parameter, which {@see merge()} then drops for
-     * having no `name` and no `in`: a `$ref` node says nothing about where a value goes, and a query
-     * string named after it would be worse than the parameter's absence.
-     *
-     * @param  array<string, mixed>  $components
-     * @return array<string, mixed>
-     */
-    private function dereference(mixed $parameter, array $components): array
-    {
-        if (! is_array($parameter)) {
-            return [];
-        }
-
-        [$resolved, , $unresolved] = Refs::follow(['components' => $components], Arr::stringKeyed($parameter), []);
-
-        return $unresolved === null ? $resolved : [];
     }
 }
