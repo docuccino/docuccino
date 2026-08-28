@@ -327,9 +327,34 @@ against. Branches are paired by what they *are* — a schema's identity, then th
 its content — never by where they sit, so reordering a `oneOf` is not a change, while swapping one branch
 for another is a removal plus an addition. `contains` demands a matching element, so it arriving narrows
 unless its own bounds say it asserts nothing — `minContains: 0` with no `maxContains` capping how many may
-match. Those two bounds are the only refinements the diff compares at all: `minItems`, `maxLength`,
-`minimum`, `multipleOf` and the rest are not read, so tightening one is reported nowhere.
-`prefixItems` pairs by index, because index 2 constrains the third element and nothing else.
+match — and those two bounds keep a code of their own (`schema.contains-bound-narrowed`) because they
+bound a keyword rather than the value. `prefixItems` pairs by index, because index 2 constrains the third
+element and nothing else.
+
+**Refinement keywords are read too, each in its own value space.** Tightening a `maxLength`, raising a
+`minimum`, turning on `uniqueItems`, rewriting a `pattern` — every one of these changes what the API
+accepts or returns, and every one used to pass `--enforce` as safe. A bound *tightened* is
+`schema.refinement-narrowed` and breaking on both sides: a request starts rejecting a body a writer used
+to send, and a schema's request/response role can under-state its audience. A bound *relaxed* is
+`schema.refinement-widened`, safe on a request and breaking on a response for the same reason a value
+joining a response `enum` is — a reader can now meet a value it has no case for. Each change names the
+keyword in its `fields`, so the changeset says which bound moved and from what to what.
+
+Which way a keyword moves is the keyword's own question, not its family's: `maximum` narrows downward and
+`minimum` narrows upward, `multipleOf` narrows to a multiple of what it was (2 → 4, never 2 → 3), and
+`uniqueItems` narrows off-to-on. A keyword's absence counts as a value, so writing out `minLength: 0` is
+a restatement of the default and reports nothing, while `minimum: 0` is a floor arriving where there was
+none. `pattern`, `const`, `contentEncoding` and `contentMediaType` have no order between two values at
+all: one arriving narrows and one leaving widens, but a value *changed* is reported as
+`schema.refinement-changed` and counted breaking rather than guessed at — deciding whether one regex
+accepts everything another does is not a question to answer by eye at a release gate.
+
+`exclusiveMinimum` and `exclusiveMaximum` mean different things in different drafts — a boolean modifier
+on the `minimum`/`maximum` beside them in draft-04, the bound itself in 2020-12 — and both spellings are
+read, which matters when `old` is an artifact written before you migrated dialects. Two numbers compare
+as the bound; two booleans compare as the flag, where absent is "not exclusive". A boolean on one side
+against a number on the other is the one comparison that cannot be made without folding in the sibling
+keyword, so it is reported and counted breaking.
 
 Two positions have no direction to report, and the diff says so rather than guessing. Under `not`,
 narrowing the subschema *widens* what the API accepts; under `if`, a change moves values between the

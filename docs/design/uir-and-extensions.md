@@ -250,11 +250,58 @@ pairs by key and a composition list pairs by what a member IS — identity, then
 its content, never its position, `ComponentNames`' rule applied to branches — and the position already says
 which of those two applies.
 
+**Refinement** is the same defect one level down and a different set of questions. A refinement carries
+no subschema, so there is no polarity to invert, no `if` to make a direction incomputable and no member
+list to pair; what a `maxLength: 3` is worth beside a `maxLength: 100` is a direction in the keyword's
+own VALUE space. `Diff\SchemaRefinement` records one decision per refinement keyword and
+`Diff\RefinementKind` is the closed set of readings, an enum for the same reason `SchemaMember` is one:
+
+- `UpperBound` / `LowerBound` — a ceiling or a floor, lower and higher being narrower respectively.
+  `maximum` and `minimum` sit at the same place in a schema and point opposite ways, which is why the
+  direction is the keyword's own rather than the family's. Each row also carries what the keyword's
+  ABSENCE means, so `minLength: 0` written out is a restatement of the default floor while `minimum: 0`
+  is a floor arriving where there was none.
+- `Divisor` — `multipleOf`, where narrower is "a multiple of what it was": the multiples of 4 are a
+  subset of the multiples of 2, and 2 against 3 orders neither way. Read with a relative tolerance,
+  because a decimal step does not divide exactly in binary (`0.1 / 0.05` is 2.0000000000000004) and a
+  reader with none calls an ordinary relaxation a change nothing can order.
+- `Flag` — `uniqueItems`, off where nobody wrote it, so turning it on narrows.
+- `Opaque` — `pattern`, `const`, `contentEncoding`, `contentMediaType`: two values with no order between
+  them at all. Presence still orders (one arriving narrows, one leaving widens); a value CHANGED is
+  reported as the change it is and classed breaking. A regex containment argument is a real decision
+  procedure and nobody should improvise one at a release gate.
+- `Elsewhere` — `enum`, `format` and `contentSchema`, each already a member of the diff's own vocabulary,
+  plus `contains`' own `minContains`/`maxContains`. Those two are read beside the keyword they bound,
+  because they are inert without it and because whether they assert anything is what decides what that
+  keyword's PRESENCE is worth; a second reading here would report a bound that constrains nothing.
+- `Undecided` — a refinement the draft model knows and nobody has decided, read as a change nothing can
+  order rather than as silence.
+
+The verdict is the one the enum comparison beside it already makes. A bound TIGHTENED is breaking on both
+sides — a request rejects a body a writer used to send, and a schema's `request` flag can under-state its
+audience — while one RELAXED is safe for a writer and hands a response reader a value it has no case for,
+the `schema.enum-value-added` argument exactly. A change nothing can order is breaking for the reason
+every indeterminate answer here is. Three codes carry all of it — `schema.refinement-narrowed`,
+`-widened`, `-changed` — each naming the keyword in its `fields`, because a code per keyword per
+direction is forty-odd classifications where the keyword is already the field.
+
+`exclusiveMinimum`/`exclusiveMaximum` changed MEANING between drafts, and a reader that assumes one
+dialect silently mis-answers the other — which is what a diff is handed whenever `old` is an artifact
+written before a migration. draft-04 spells exclusivity as a boolean modifier on the `minimum`/`maximum`
+beside it; 2020-12 spells it as the bound itself. Both are read: two numbers compare as the bound, two
+booleans as the flag they are (absent is "not exclusive", and turning it on narrows at either end). A
+boolean against a NUMBER is the one case nothing here can order, because telling `exclusiveMinimum: true`
+from `exclusiveMinimum: 5` means folding the sibling keyword this comparison does not read — so it is
+reported and classed breaking rather than guessed at.
+
 Every keyword the draft model gives a subschema position needs a row, and a keyword with no row is read
 CONDITIONALLY rather than skipped: a keyword the model learns before anyone decides its polarity is
 reported conservatively instead of passing as safe. That is a degradation and not a plan —
 `SchemaCompositionDiffTest` derives the set from `Draft\SchemaKeywords` and fails, in both directions,
-until the row is written.
+until the row is written. Every refinement owes a row on exactly the same terms, and owes its own guard:
+a refinement occupies no position, so the composition guard is blind to it by construction and nothing in
+the suite failed while sixteen keywords stayed unread. `SchemaRefinementDiffTest` derives that set from
+`Draft\SchemaKeywords::refinements()` instead.
 
 ## 2. Identity model
 
