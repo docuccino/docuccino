@@ -2,21 +2,38 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\IgnoreResponse;
+use Docuccino\Attributes\ResponseHeader;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Extensions\Context\AttributeSet;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Contracts\OperationExtension;
+use Docuccino\Core\Extensions\Contracts\OperationPhase;
+use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
+use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Laravel\Extensions\AttributeResponsesExtension;
+use Docuccino\Laravel\Facades\Docuccino;
+use Docuccino\Laravel\Support\IgnoredResponses;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\IgnoredAuthorizeAction;
 use Docuccino\Laravel\Tests\Fixtures\LaravelActions\IgnoredHtmlAction;
 use Docuccino\Laravel\Tests\Support\TraceScript;
@@ -68,6 +85,7 @@ function ignoreResponseEngine(): TypeEngine
             ),
             $controller.'throttled' => new ActionAnalysis(returns: [new ReturnSite($inline, $location)]),
             $controller.'created' => new ActionAnalysis(returns: [new ReturnSite($resource, $location)]),
+            $controller.'uncreated' => new ActionAnalysis(returns: [new ReturnSite($resource, $location)]),
             $controller.'paginated' => new ActionAnalysis(returns: [new ReturnSite($collection, $location)]),
             $controller.'jsonPaginated' => new ActionAnalysis(returns: [new ReturnSite($collection, $location)]),
             $controller.'queried' => new ActionAnalysis(returns: [new ReturnSite($collection, $location)]),
@@ -401,4 +419,95 @@ it('reports nothing where every declaration matched', function (): void {
     ));
 
     expect($reports)->toHaveCount(3);
+});
+
+it('credits an ignore whose response a producer outside this package wrote', function (): void {
+    // The backstop the class docblock names: every built-in producer CONSULTS the attribute, so the
+    // sweep that removes a response after the fact only ever fires for a producer this package does not
+    // own. A removal that recorded nothing left the pass above reporting the one declaration that had
+    // just done the most work — and telling the author to delete it, which republishes the response.
+    $foreign = new #[ExtensionOrder(priority: Priorities::FIRST)] class implements OperationExtension
+    {
+        public function phase(): OperationPhase
+        {
+            return OperationPhase::Responses;
+        }
+
+        public function handle(OperationDraft $operation, RouteContext $context): void
+        {
+            $operation->response('451')
+                ->setDescription('Unavailable For Legal Reasons', Contribution::integration('third-party'));
+        }
+    };
+
+    Docuccino::extend($foreign);
+
+    $controller = IgnoredResponsesController::class;
+    $result = localityBuild(
+        static function (Router $router) use ($controller): void {
+            $router->get('api/ignored-responses/foreign', [$controller, 'foreign']);
+            $router->get('api/ignored-responses/companion', [$controller, 'companion']);
+        },
+        ignoreResponseEngine(...),
+    );
+
+    $document = $result->document->toArray();
+
+    // Anti-vacuity: the same extension writes the 451 on the companion, which drops nothing — so a
+    // build where the extension never ran fails here rather than agreeing that nothing was dropped.
+    expect(ignoreResponseStatuses($document, 'get', '/api/ignored-responses/companion'))->toContain('451')
+        ->and(ignoreResponseStatuses($document, 'get', '/api/ignored-responses/foreign'))->not->toContain('451')
+        ->and(ignoreResponseUnmatched($result, '/api/ignored-responses/foreign'))->toBe([]);
+});
+
+it('reports the ignore a re-home that never happens would have needed', function (): void {
+    // The api-resources re-home only fires for a resource wrapped around a fresh `create()`. Consulting
+    // the attribute ABOVE that check credits the declaration on every single-resource action that
+    // happens to carry one — a speculative call site, and the warning it silences is the reader's only
+    // evidence that the declaration reaches nothing.
+    $controller = IgnoredResponsesController::class;
+    $result = localityBuild(
+        static function (Router $router) use ($controller): void {
+            $router->get('api/ignored-responses/uncreated', [$controller, 'uncreated']);
+        },
+        ignoreResponseEngine(...),
+    );
+
+    $found = ignoreResponseUnmatched($result, '/api/ignored-responses/uncreated');
+
+    expect($found)->toHaveCount(1)
+        ->and($found[0]->message)->toContain('status: 201')
+        // The 200 the re-home would have taken away is still there, which is what makes the 201 a
+        // status nothing would have written rather than one something declined to write.
+        ->and(ignoreResponseStatuses($result->document->toArray(), 'get', '/api/ignored-responses/uncreated'))
+        ->toBe(['200']);
+});
+
+it('credits the ignore that drops a status a #[ResponseHeader] alone would have published', function (): void {
+    // Naming a header AT a status is a statement that the status exists, so the header attribute is a
+    // producer in its own right and the consult beside it is not speculative — the 500 dropped here is
+    // one that would really have been written. Both halves are pinned: with the declaration the status
+    // is gone AND the drop is on the record, so the pass that reads that record stays silent.
+    $attributes = static fn (array $set): RouteContext => new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/forms'),
+        actionRef: new ActionRef('', 'App\\C', 'index'),
+        attributes: new AttributeSet($set),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+
+    $header = new ResponseHeader(name: 'X-Trace', status: 500);
+
+    $published = new OperationDraft;
+    (new AttributeResponsesExtension)->handle($published, $attributes([$header]));
+
+    $dropped = new OperationDraft;
+    $context = $attributes([$header, new IgnoreResponse(status: 500)]);
+    (new AttributeResponsesExtension)->handle($dropped, $context);
+
+    // Anti-vacuity first: the header attribute really does publish the status on its own.
+    expect($published->responseStatuses())->toBe(['500'])
+        ->and($dropped->responseStatuses())->toBe([])
+        ->and($context->notes()->all()[IgnoredResponses::MATCHED_CHANNEL][IgnoredResponses::MATCHED_KEY] ?? [])
+        ->toBe(['500']);
 });

@@ -69,6 +69,16 @@ final class IgnoredResponsesController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /**
+     * A resource that is NOT wrapped around a fresh `create()`, so the 200 → 201 re-home never happens
+     * and nothing here would ever write the 201 the declaration drops.
+     */
+    #[IgnoreResponse(status: 201)]
+    public function uncreated(): ArticleResource
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A paginated resource collection, whose 200 is rewrapped in the length-aware envelope. */
     #[IgnoreResponse(status: 200)]
     public function paginated(): AnonymousResourceCollection
@@ -131,6 +141,17 @@ final class IgnoredResponsesController
     #[IgnoreResponse(status: 599)]
     #[IgnoreResponse(status: 599)]
     public function repeated(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /**
+     * A status only a producer OUTSIDE this package writes. Nothing built in would ever ask about the
+     * declaration, so what removes the response is the attribute pass's own backstop sweep — routed
+     * ad-hoc beside an extension that writes the 451, since there is nothing in the workbench that does.
+     */
+    #[IgnoreResponse(status: 451)]
+    public function foreign(): JsonResponse
     {
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }

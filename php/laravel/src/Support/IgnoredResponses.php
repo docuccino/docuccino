@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Support;
 
 use Docuccino\Attributes\IgnoreResponse;
+use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\MappedResponse;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Inference\ThrownException;
@@ -57,6 +58,30 @@ final class IgnoredResponses
         }
 
         return false;
+    }
+
+    /**
+     * The BACKSTOP: remove every response the route drops that something has ALREADY written, and
+     * record each removal as the match it is.
+     *
+     * Every built-in producer consults {@see drops()} before it converts anything, so what is left for
+     * this to find is a producer this package does not own — a third-party extension in an earlier
+     * phase. The `hasResponse()` guard is what makes the removal a match rather than a guess: a status
+     * standing in the draft is one something really wrote, and crediting the declaration for it is the
+     * difference between an author being told nothing and being told to delete a declaration that is
+     * the only reason the response is gone.
+     */
+    public static function sweep(OperationDraft $operation, RouteContext $context): void
+    {
+        foreach ($context->attributes->all(IgnoreResponse::class) as $ignore) {
+            $status = (string) $ignore->status;
+            if (! $operation->hasResponse($status)) {
+                continue;
+            }
+
+            self::recordMatch($context, $status);
+            $operation->removeResponse($status);
+        }
     }
 
     /** {@see MATCHED_CHANNEL}. */
