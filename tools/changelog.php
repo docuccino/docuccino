@@ -232,6 +232,13 @@ function changelog_supplemented(array $releases, ?string $pending, array $tags, 
         if ($supplement['entries'] === []) {
             throw new RuntimeException(sprintf('the %s supplement lists no entries.', $version));
         }
+
+        // The reason is printed on every run, so it is held to what a title is held to — an escape
+        // sequence in it drives the terminal reading the report.
+        $problems = conventional_text_problems(trim($supplement['reason']), sprintf('the %s supplement reason', $version));
+        if ($problems !== []) {
+            throw new RuntimeException(implode(' ', $problems));
+        }
     }
 
     $notes = [];

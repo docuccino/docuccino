@@ -168,6 +168,71 @@ function conventional_scope_list(): string
 }
 
 /**
+ * Everything wrong with a piece of author-written text this repository will publish or print.
+ *
+ * The changelog files are Markdown that a renderer passes raw HTML straight through, and the
+ * generator prints to a terminal, so plain text is not what the destination reads. Two ways out of
+ * it, both reproduced rather than imagined:
+ *
+ * - A control character. PCRE's `.` excludes `\n` and nothing else, while CommonMark counts a bare
+ *   `\r` as a line ending, so `a fix\r## v9.9.9` forges a whole release section into a published
+ *   changelog; `\x1b` drives the terminal the generator reports through.
+ * - A `<` that opens a tag. `<script>` in the description reaches the docs site as a script.
+ *
+ * Deliberately allowed: everything Markdown renders as visible, inert text — emphasis, a link, an
+ * entity — and anything at all inside a code span, which CommonMark binds tighter than raw HTML.
+ * Unbackticked, `<` before a letter is refused even where no tag closes it: the renderer eats it
+ * either way, so refusing it keeps the entry saying what it looks like.
+ *
+ * @return list<string>
+ */
+function conventional_text_problems(string $text, string $label): array
+{
+    $problems = [];
+
+    // C0, DEL, and the UTF-8 spelling of C1. Byte ranges rather than `\p{Cc}/u`, which reports no
+    // match at all on text that is not valid UTF-8 — the same answer it gives for clean text.
+    if (preg_match('/[\x00-\x1F\x7F]|\xC2[\x80-\x9F]/', $text, $matches) === 1) {
+        $problems[] = sprintf(
+            '%s carries the control character %s — it must be one line of plain text, since a bare carriage return is a Markdown line ending and an escape drives the terminal.',
+            $label,
+            conventional_codepoint($matches[0]),
+        );
+    }
+
+    if (preg_match('~<[A-Za-z!?/]~', conventional_without_code_spans($text), $matches) === 1) {
+        $problems[] = sprintf(
+            '%s opens raw HTML with `%s` — the changelog is Markdown that passes HTML through unescaped, so write it as words or wrap it in `backticks`.',
+            $label,
+            $matches[0],
+        );
+    }
+
+    return $problems;
+}
+
+/**
+ * `U+XXXX` for a control character, which is greppable where the character itself is invisible.
+ *
+ * @internal
+ */
+function conventional_codepoint(string $character): string
+{
+    return sprintf('U+%04X', ord(strlen($character) === 1 ? $character : $character[1]));
+}
+
+/**
+ * The text with its code spans blanked out. CommonMark binds a code span tighter than raw HTML, so
+ * `` `<script>` `` renders as the literal text it looks like and is not this gate's business.
+ *
+ * @internal
+ */
+function conventional_without_code_spans(string $text): string
+{
+    return preg_replace('/(`+)[\s\S]*?\1/', ' ', $text) ?? $text;
+}
+
+/**
  * Everything wrong with a title/body pair, as reader-facing sentences. Empty means valid.
  *
  * The two halves are cross-checked in both directions: a `!` without a `BREAKING CHANGE:` footer
@@ -180,6 +245,13 @@ function conventional_title_problems(string $title, string $body = ''): array
     $subject = trim($title);
     if ($subject === '') {
         return ['the title is empty — it must read `type(scope): description`.'];
+    }
+
+    // Ahead of the grammar: a title carrying a `\r` parses perfectly well, and reporting it as
+    // "no conventional type" would name the wrong thing to fix.
+    $text = conventional_text_problems($subject, 'the title');
+    if ($text !== []) {
+        return $text;
     }
 
     $parsed = conventional_parse($subject);
@@ -224,6 +296,12 @@ function conventional_title_problems(string $title, string $body = ''): array
 
     if ($footer === '') {
         $problems[] = 'the `BREAKING CHANGE:` footer has no text — say what breaks and what to do instead.';
+    }
+
+    // The footer is the only part of a body the changelog publishes, so it is held to what the
+    // title is held to. The rest of a body is never rendered anywhere and is left alone.
+    if ($footer !== null && $footer !== '') {
+        $problems = [...$problems, ...conventional_text_problems($footer, 'the `BREAKING CHANGE:` footer')];
     }
 
     return $problems;

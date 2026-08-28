@@ -363,6 +363,25 @@ it('refuses a supplement that would make it a general hand-edit backdoor', funct
         ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a recorded fix (#10)']]]],
         'the v1.1.0 supplement entry #10 is in the commit record already ("a recorded fix")',
     ],
+    // The reason is printed on every run, so it is held to what a message is held to.
+    'a reason that drives the terminal' => [
+        ['v1.1.0' => ['reason' => "the record was \x1b[31mdestroyed\x1b[0m.", 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'the v1.1.0 supplement reason carries the control character U+001B',
+    ],
+    'a reason that opens raw HTML' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed <script>alert(1)</script>.', 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'the v1.1.0 supplement reason opens raw HTML',
+    ],
+    // The whole point of routing every entry through the title gate: what the gate refuses in a
+    // pull request title it refuses here too, a forged release heading included.
+    'an entry forging a release heading' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => "feat(core): a feature\r## v9.9.9 forged (#11)"]]]],
+        'is not a valid message: the title carries the control character U+000D',
+    ],
+    'an entry carrying a script element' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a feature <script>alert(1)</script> (#11)']]]],
+        'is not a valid message: the title opens raw HTML',
+    ],
     'the same pull request twice' => [
         ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [
             ['subject' => 'feat(core): a feature (#11)'],
