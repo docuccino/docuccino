@@ -210,12 +210,17 @@ it('keeps every #[Mock] parameter optional and null by default', function (): vo
     expect([$named->faker, $named->seedGroup, $named->property])->toBe(['safeEmail', 'person', 'email']);
 });
 
-it('keeps a written #[BodyParameter] optionality distinguishable from an unwritten one', function (): void {
-    // This one patches a body a recovery has already proved requirements for, so "the author said
-    // optional" and "the author said nothing" must not arrive as the same value: reading the default as
-    // optional de-requires a field the server insists on, and publishing a contract a generated client
-    // can build a rejected request from. The three states are the whole point of the nullable type.
-    expect((new BodyParameter(name: 'nickname'))->required)->toBeNull()
-        ->and((new BodyParameter(name: 'nickname', required: false))->required)->toBeFalse()
-        ->and((new BodyParameter(name: 'nickname', required: true))->required)->toBeTrue();
-});
+it('keeps a written parameter optionality distinguishable from an unwritten one', function (string $class, string $name): void {
+    // These patch a parameter or a body an integration may already have proved requirements for, so "the
+    // author said optional" and "the author said nothing" must not arrive as the same value: reading the
+    // default as optional de-requires something the server insists on, and publishes a contract a
+    // generated client can build a rejected request from. The three states are why the type is nullable.
+    expect((new $class(name: $name))->required)->toBeNull()
+        ->and((new $class(name: $name, required: false))->required)->toBeFalse()
+        ->and((new $class(name: $name, required: true))->required)->toBeTrue();
+})->with([
+    'QueryParameter' => [QueryParameter::class, 'search'],
+    'HeaderParameter' => [HeaderParameter::class, 'X-Tenant'],
+    'CookieParameter' => [CookieParameter::class, 'session'],
+    'BodyParameter' => [BodyParameter::class, 'nickname'],
+]);
