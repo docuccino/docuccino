@@ -42,11 +42,10 @@ use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
  */
 final class TypeStringParser
 {
-    public function __construct(
-        private readonly PhpDocParserStack $stack = new PhpDocParserStack,
-        /** Whether `object` is read as the author's word rather than the analyser's — {@see parseDeclared()}. */
-        private readonly bool $declared = false,
-    ) {}
+    /** Whether `object` is read as the author's word rather than the analyser's — {@see parseDeclared()}. */
+    private bool $declared = false;
+
+    public function __construct(private readonly PhpDocParserStack $stack = new PhpDocParserStack) {}
 
     /**
      * The same grammar, read as an AUTHOR wrote it rather than as an analyser inferred it from source.
@@ -62,7 +61,12 @@ final class TypeStringParser
      */
     public function parseDeclared(string $type, ?ImportContext $imports = null): DType
     {
-        return $this->declared ? $this->parse($type, $imports) : (new self($this->stack, declared: true))->parse($type, $imports);
+        // The mode has one way in, and it is this method: nothing can construct a parser that already
+        // reads `object` the author's way, so no caller reaches that reading without asking for it.
+        $author = new self($this->stack);
+        $author->declared = true;
+
+        return $author->parse($type, $imports);
     }
 
     public function parse(string $type, ?ImportContext $imports = null): DType
