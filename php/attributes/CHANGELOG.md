@@ -11,10 +11,10 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 ### Breaking changes
 
-- let a parameter declaration say nothing about required
-  - `QueryParameter::$required`, `HeaderParameter::$required` and `CookieParameter::$required` are `?bool` rather than `bool`, and default to `null` rather than `false`. Code reading one of those properties into a `bool` must widen; a declaration that already spells `required: false` now writes that onto the parameter instead of being indistinguishable from silence, and one that omits `required` no longer publishes `required: false` on the parameter it documents.
-- let a body declaration say a field is optional
-  - `BodyParameter::$required` is `?bool` rather than `bool`, and defaults to `null` rather than `false`. Code reading the property into a `bool` must widen; a `#[BodyParameter]` that already spells `required: false` now takes the field off the body's `required` list instead of being ignored.
+- let a parameter declaration say nothing about required ([#284](https://github.com/docuccino/docuccino/pull/284))
+  - `$required` on `#[QueryParameter]`, `#[HeaderParameter]`, `#[CookieParameter]` and `#[ResponseHeader]` is now `?bool` defaulting to `null`. A declaration that relied on the old `false` default to mark a parameter optional must now say `required: false`.
+- let a body declaration say a field is optional ([#280](https://github.com/docuccino/docuccino/pull/280))
+  - `BodyParameter::$required` is now `?bool` defaulting to `null`. Code constructing the attribute positionally, or reading `$required` as a `bool`, must handle the third state.
 
 ## v0.10.0
 

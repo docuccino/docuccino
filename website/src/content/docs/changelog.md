@@ -17,39 +17,25 @@ Each package repository also carries its own `CHANGELOG.md` with just its entrie
 
 ### Breaking changes
 
-- **laravel**: let a response-header declaration say nothing about what it did not write
-  - a `#[ResponseHeader]` that omits `type` no longer publishes `schema: {type: string}` over a type another layer proved, and no longer replaces the description, the promise or the sibling headers it did not name — a document in that position gains the recovered type and loses the stated `string`. `Docuccino\Attributes\ResponseHeader::$required` is `?bool` rather than `bool` and defaults to `null` rather than `false`; code reading that property into a `bool` must widen.
-- **laravel**: publish only the model keys a response actually carries
+- **laravel**: let a response-header declaration say nothing about what it did not write ([#287](https://github.com/docuccino/docuccino/pull/287))
+  - `Exchange::$headers` is `array<string, list<string>>`; `Exchange::header()` returns a list. Callers reading a single string must take the first element.
+- **laravel**: publish only the model keys a response actually carries ([#285](https://github.com/docuccino/docuccino/pull/285))
   - an Eloquent model schema stops publishing keys the server does not return — an append or a `$with` relation named in `$hidden` or absent from a `$visible` allow-list, a name written in both lists, and the framework's own `exists`, `timestamps`, `incrementing`, `preventsLazyLoading`, `wasRecentlyCreated` and `usesUniqueIds` properties. A client generated from the new document loses fields it was never receiving, and a diff against a previously published document reports those keys as removals.
-- **attributes**: let a parameter declaration say nothing about required
-  - `QueryParameter::$required`, `HeaderParameter::$required` and `CookieParameter::$required` are `?bool` rather than `bool`, and default to `null` rather than `false`. Code reading one of those properties into a `bool` must widen; a declaration that already spells `required: false` now writes that onto the parameter instead of being indistinguishable from silence, and one that omits `required` no longer publishes `required: false` on the parameter it documents.
-- **core**: say so when a parameter documents a schema no reader can take
-  - ContractParameter::schema() is `@internal` — nothing outside core called it, and the ParameterSchema it returns is core's reading of a declaration rather than a shape to freeze at v1.
-- **core**: tell an absent answer from an answer nobody can read
-  - ContractParameter::schema() returns a ParameterSchema rather than an array or null, and ContractParameter::hasSchema() is gone — the fact it stood in for is the kind on the returned value. Exchange::$headers is `array<string, list<string>>` and `Exchange::header()` returns a list, matching the response half; an adapter that passed one string per name passes a one-element list.
-- **attributes**: let a body declaration say a field is optional
-  - `BodyParameter::$required` is `?bool` rather than `bool`, and defaults to `null` rather than `false`. Code reading the property into a `bool` must widen; a `#[BodyParameter]` that already spells `required: false` now takes the field off the body's `required` list instead of being ignored.
-- **core**: drop ValidationField::type(), which answers a union with null
+- **attributes**: let a parameter declaration say nothing about required ([#284](https://github.com/docuccino/docuccino/pull/284))
+  - `$required` on `#[QueryParameter]`, `#[HeaderParameter]`, `#[CookieParameter]` and `#[ResponseHeader]` is now `?bool` defaulting to `null`. A declaration that relied on the old `false` default to mark a parameter optional must now say `required: false`.
+- **core**: tell an absent answer from an answer nobody can read ([#281](https://github.com/docuccino/docuccino/pull/281))
+  - `ContractParameter::schema()` returns a `ParameterSchema` rather than `?array`. Call `->read()` for the node and `->kind` for why there isn't one.
+- **attributes**: let a body declaration say a field is optional ([#280](https://github.com/docuccino/docuccino/pull/280))
+  - `BodyParameter::$required` is now `?bool` defaulting to `null`. Code constructing the attribute positionally, or reading `$required` as a `bool`, must handle the third state.
+- **core**: drop ValidationField::type(), which answers a union with null ([#279](https://github.com/docuccino/docuccino/pull/279))
   - `ValidationField::type()` is removed from the rule-transformer surface a third-party `RuleTransformer` is handed. Use `types(): list<string>`, which answers every type word the field carries: one for a scalar type, several for a union, none where nothing has typed it yet. Null is never among the words — nullability is a flag the schema applies as it assembles, so a rule running after `nullable` still reads what the field is. `count($types) === 1 ? $types[0] : null` restores the old answer exactly, and restores the defect with it: branch on the words instead — `$types === []` is "nothing has typed this", and a field stating several is a case to handle, not one to fall through.
 
 ### Bug fixes
 
-- **laravel**: withhold a #[PathParameter] the route template has no segment for
-- **laravel**: report an #[InDocs] key that names no configured document
-- **core**: report a #[Hidden] name that hid nothing instead of publishing the field
-- **repo**: read a pull request reference as claimed across the whole changelog
-- **repo**: refuse a message the renderer would read as more than text
-- **repo**: restore the entries a squashed stack took out of v0.11.0's changelog
-- **laravel**: read a body declaration only where a body is written
-- **laravel**: credit an ignore exactly where a response was really dropped
-- **laravel**: escape the two values the ignore-location report quotes
-- **laravel**: report an ignore that dropped nothing instead of accepting it silently
-- **laravel**: keep a requirement a body declaration says nothing about
-- **laravel**: silence the container notice only where a declaration settles it
-- **laravel**: credit a webhook delivery for what the check proved
-- **laravel**: read a field's children as paths rather than as a string prefix
-- **core**: give the declared reading of a type string one way in
-- **laravel**: let a nested body declaration reach the key it names
+- **laravel**: report an author-supplied name that matched nothing instead of dropping it silently ([#283](https://github.com/docuccino/docuccino/pull/283))
+- **repo**: restore the entries a squashed stack took out of v0.11.0's changelog ([#282](https://github.com/docuccino/docuccino/pull/282))
+- **laravel**: credit a webhook delivery for what the check proved ([#277](https://github.com/docuccino/docuccino/pull/277))
+- **laravel**: let a nested body declaration reach the key it names ([#276](https://github.com/docuccino/docuccino/pull/276))
 
 ## v0.11.0
 
