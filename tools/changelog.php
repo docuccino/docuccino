@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+require_once __DIR__.'/changelog-supplements.php';
 require_once __DIR__.'/conventional-commit.php';
 
 /*
@@ -11,6 +12,12 @@ require_once __DIR__.'/conventional-commit.php';
  * every time: one `php/<pkg>/CHANGELOG.md` per package (so each rides the subtree split into its
  * own repository and onto Packagist) plus one aggregate page for the docs site. The files are
  * generated artifacts — the commit messages are the source.
+ *
+ * The one exception is a supplement (tools/changelog-supplements.php): curated entries for an
+ * already-RELEASED version whose commit record was destroyed and can no longer be fixed. It is
+ * built so it cannot become a general hand-edit backdoor — see changelog_supplemented(), which
+ * refuses one for the pending range, for a version that is not a tag here, and for a pull request
+ * the commits now carry themselves.
  *
  * Deterministic, like everything else here: the same commit range produces byte-identical files.
  * That is also why no entry carries a date — the pending release's date would change on every
@@ -107,6 +114,207 @@ function changelog_collect(array $commits): array
     }
 
     return ['changes' => $changes, 'warnings' => array_values(array_unique($warnings))];
+}
+
+/**
+ * The changes one version's supplement contributes, after every guard has passed.
+ *
+ * Each entry is the commit message the release should have carried, so it goes through the title
+ * gate and then through changelog_collect() — the same grammar, the same buckets, the same
+ * rendering as a real commit. Everything that can go wrong throws: a supplement that quietly
+ * contributes nothing is how the record gets lost a second time.
+ *
+ * The `(#N)` reference is mandatory because it is the identity the duplicate guard reads — an entry
+ * the commits have since started carrying themselves must be deleted, not rendered twice. That
+ * identity is document-wide, not per-release: `$recorded` is keyed by reference across EVERY
+ * release, because a pull request belongs to one version and claiming one another version already
+ * carries is the same defect wearing a different number.
+ *
+ * @param  array{reason: string, entries: list<array{subject: string, body?: string}>}  $supplement
+ * @param  array<int, array{version: string, description: string, supplemented: bool}>  $recorded
+ * @return list<array{type: string, scope: string|null, package: string|null, breaking: bool, note: string|null, description: string, reference: int|null}>
+ */
+function changelog_supplement_changes(string $version, array $supplement, array $recorded): array
+{
+    $changes = [];
+    $seen = [];
+
+    foreach ($supplement['entries'] as $entry) {
+        $subject = $entry['subject'];
+        $body = $entry['body'] ?? '';
+
+        $problems = conventional_title_problems($subject, $body);
+        if ($problems !== []) {
+            throw new RuntimeException(sprintf(
+                'the %s supplement entry "%s" is not a valid message: %s',
+                $version,
+                $subject,
+                implode(' ', $problems),
+            ));
+        }
+
+        $collected = changelog_collect([['subject' => $subject, 'body' => $body, 'parents' => 1]]);
+        if ($collected['changes'] === []) {
+            throw new RuntimeException(sprintf(
+                'the %s supplement entry "%s" produces no changelog entry — a supplement restores user-facing entries only.',
+                $version,
+                $subject,
+            ));
+        }
+
+        $change = $collected['changes'][0];
+        $reference = $change['reference'];
+
+        if ($reference === null) {
+            throw new RuntimeException(sprintf(
+                'the %s supplement entry "%s" carries no `(#N)` pull request reference, which is the identity the duplicate guard reads.',
+                $version,
+                $subject,
+            ));
+        }
+
+        if (in_array($reference, $seen, true)) {
+            throw new RuntimeException(sprintf('the %s supplement lists #%d twice.', $version, $reference));
+        }
+
+        $existing = $recorded[$reference] ?? null;
+        if ($existing !== null) {
+            throw new RuntimeException($existing['supplemented']
+                ? sprintf(
+                    'the %s supplement entry #%d is in the %s supplement already ("%s") — a pull request has one entry, under one release.',
+                    $version,
+                    $reference,
+                    $existing['version'],
+                    $existing['description'],
+                )
+                : sprintf(
+                    'the %s supplement entry #%d is in the commit record already, under %s ("%s") — delete the supplement entry, the source it stood in for is back.',
+                    $version,
+                    $reference,
+                    $existing['version'],
+                    $existing['description'],
+                ));
+        }
+
+        $seen[] = $reference;
+        $changes[] = $change;
+    }
+
+    return $changes;
+}
+
+/**
+ * Fold the supplements into the releases the commits produced, newest first.
+ *
+ * A supplement is read for a SHIPPED version only. `$tags` is every release tag this repository
+ * carries, which is the source of truth a stale supplement is measured against; `$pending` is the
+ * unreleased range's version, which is refused outright because its commit messages can still be
+ * written correctly. Anything applied is reported, so the exception is visible on every run.
+ *
+ * @param  list<array{version: string, changes: list<array{type: string, scope: string|null, package: string|null, breaking: bool, note: string|null, description: string, reference: int|null}>}>  $releases
+ * @param  list<string>  $tags
+ * @param  array<string, array{reason: string, entries: list<array{subject: string, body?: string}>}>  $supplements
+ * @return array{releases: list<array{version: string, changes: list<array{type: string, scope: string|null, package: string|null, breaking: bool, note: string|null, description: string, reference: int|null}>}>, notes: list<string>}
+ */
+function changelog_supplemented(array $releases, ?string $pending, array $tags, array $supplements = CHANGELOG_SUPPLEMENTS): array
+{
+    foreach ($supplements as $version => $supplement) {
+        if ($pending !== null && $version === $pending) {
+            throw new RuntimeException(sprintf(
+                '%s is the pending release, not a shipped one — write the commit message correctly instead of supplementing it.',
+                $version,
+            ));
+        }
+
+        if (! in_array($version, $tags, true)) {
+            throw new RuntimeException(sprintf(
+                '%s is not a release tag in this repository — a supplement names a version that has already shipped.',
+                $version,
+            ));
+        }
+
+        if (trim($supplement['reason']) === '') {
+            throw new RuntimeException(sprintf(
+                'the %s supplement carries no reason — it must say what happened to the commit record, so a reader can tell a repair from a convenience.',
+                $version,
+            ));
+        }
+
+        if ($supplement['entries'] === []) {
+            throw new RuntimeException(sprintf('the %s supplement lists no entries.', $version));
+        }
+
+        // The reason is printed on every run, so it is held to what a title is held to — an escape
+        // sequence in it drives the terminal reading the report.
+        $problems = conventional_text_problems(trim($supplement['reason']), sprintf('the %s supplement reason', $version));
+        if ($problems !== []) {
+            throw new RuntimeException(implode(' ', $problems));
+        }
+    }
+
+    $notes = [];
+    $out = $releases;
+
+    $index = [];
+    foreach ($releases as $position => $release) {
+        $index[$release['version']] = $position;
+    }
+
+    // Every `(#N)` the commits already carry, across every release rather than the one being
+    // supplemented: a reference claimed twice puts one pull request under two versions with two
+    // descriptions, and the release it landed in is not the release a stale supplement names.
+    $recorded = [];
+    foreach ($releases as $release) {
+        foreach ($release['changes'] as $change) {
+            if ($change['reference'] !== null && ! array_key_exists($change['reference'], $recorded)) {
+                $recorded[$change['reference']] = [
+                    'version' => $release['version'],
+                    'description' => $change['description'],
+                    'supplemented' => false,
+                ];
+            }
+        }
+    }
+
+    foreach ($supplements as $version => $supplement) {
+        $position = $index[$version] ?? null;
+
+        // Read even when the version is out of range, so a stale entry cannot hide behind a
+        // baseline that happens not to render it.
+        $added = changelog_supplement_changes($version, $supplement, $recorded);
+
+        foreach ($added as $change) {
+            if ($change['reference'] !== null) {
+                $recorded[$change['reference']] = [
+                    'version' => $version,
+                    'description' => $change['description'],
+                    'supplemented' => true,
+                ];
+            }
+        }
+
+        if ($position === null) {
+            $notes[] = sprintf(
+                'the %s supplement is outside the rendered range and was not applied — check the baseline.',
+                $version,
+            );
+
+            continue;
+        }
+
+        // Appended, so a version with no supplement renders byte-identically to before there was
+        // such a thing at all, and a supplemented one keeps the commit-derived entries in their
+        // order with the curated ones behind them.
+        $out[$position] = ['version' => $version, 'changes' => [...$out[$position]['changes'], ...$added]];
+        $notes[] = sprintf(
+            'supplemented %s with %d curated entries — %s',
+            $version,
+            count($added),
+            $supplement['reason'],
+        );
+    }
+
+    return ['releases' => $out, 'notes' => $notes];
 }
 
 /**
@@ -379,14 +587,11 @@ function changelog_read_releases(string $baseline): array
 {
     // Reachable from HEAD but not from the baseline — history, not string comparison, so a branch,
     // a SHA or `HEAD` works as a baseline just as well as a tag does.
-    $listed = changelog_git('tag', '--merged', 'HEAD', '--no-merged', $baseline, '--sort=v:refname', '-l', 'v*');
+    $tags = changelog_tags('--merged', 'HEAD', '--no-merged', $baseline);
 
-    $tags = [];
-    foreach (explode("\n", $listed) as $tag) {
-        if (trim($tag) !== '') {
-            $tags[] = trim($tag);
-        }
-    }
+    // Every release this repository carries, baseline or no baseline: a supplement is measured
+    // against what has actually shipped, not against the slice the caller asked to render.
+    $shipped = changelog_tags('--merged', 'HEAD');
 
     $releases = [];
     $warnings = [];
@@ -407,11 +612,34 @@ function changelog_read_releases(string $baseline): array
         $releases[] = ['version' => $next, 'changes' => $pending['changes']];
     }
 
+    $supplemented = changelog_supplemented(array_reverse($releases), $next, $shipped);
+
     return [
-        'releases' => array_reverse($releases),
-        'warnings' => array_values(array_unique($warnings)),
+        'releases' => $supplemented['releases'],
+        'warnings' => [...array_values(array_unique($warnings)), ...$supplemented['notes']],
         'next' => $next,
     ];
+}
+
+/**
+ * Release tags, oldest first, from a `git tag` selection.
+ *
+ * @return list<string>
+ *
+ * @internal
+ */
+function changelog_tags(string ...$selection): array
+{
+    $listed = changelog_git('tag', ...[...$selection, '--sort=v:refname', '-l', 'v*']);
+
+    $tags = [];
+    foreach (explode("\n", $listed) as $tag) {
+        if (trim($tag) !== '') {
+            $tags[] = trim($tag);
+        }
+    }
+
+    return $tags;
 }
 
 /** @internal */
@@ -481,5 +709,11 @@ function changelog_main(): int
 }
 
 if (conventional_is_entry_script(__FILE__)) {
-    exit(changelog_main());
+    try {
+        exit(changelog_main());
+    } catch (RuntimeException $exception) {
+        fwrite(STDERR, 'changelog: '.$exception->getMessage()."\n");
+
+        exit(1);
+    }
 }

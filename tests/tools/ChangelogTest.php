@@ -259,3 +259,313 @@ it('bumps the version from the changes, pre-1.0 and after', function (string $cu
     'stable breaking' => ['v1.4.2', ['feat(core)!: a break'], 'v2.0.0'],
     'a tag without the v' => ['1.4.2', ['fix(core): a fix'], 'v1.4.3'],
 ]);
+
+/*
+ * Supplements — the one exception to "the commit messages are the source", for an already-released
+ * version whose commit record was destroyed and can no longer be fixed. The mechanism is proved on
+ * synthetic tables; the last test in this file reads the REAL table against this repository's real
+ * tags, which is the half that catches a supplement going stale.
+ */
+
+it('folds a supplement for a shipped release in beside the commits, in section order', function () {
+    $releases = [['version' => 'v1.1.0', 'changes' => changelog_collect([
+        ['subject' => 'fix(core): a recorded fix (#10)'],
+    ])['changes']]];
+
+    $supplemented = changelog_supplemented($releases, 'v1.2.0', ['v1.0.0', 'v1.1.0'], [
+        'v1.1.0' => [
+            'reason' => 'the stack squashed into one commit and took the rest of the messages with it.',
+            'entries' => [
+                ['subject' => 'feat(core): a lost feature (#11)'],
+                ['subject' => 'fix(laravel)!: a lost break (#12)', 'body' => 'BREAKING CHANGE: the method is gone.'],
+            ],
+        ],
+    ]);
+
+    $aggregate = changelog_documents($supplemented['releases'])['website/src/content/docs/changelog.md'];
+
+    expect($supplemented['notes'])->toHaveCount(1)
+        ->and($supplemented['notes'][0])->toContain('supplemented v1.1.0 with 2 curated entries')
+        // The reason travels with the run, so the exception is visible every time it is used.
+        ->and($supplemented['notes'][0])->toContain('took the rest of the messages with it')
+        // Breaking first, then the buckets in their usual order, and the supplemented entries are
+        // rendered by the same code as the commit-derived one above them.
+        ->and($aggregate)->toContain(<<<'MARKDOWN'
+        ## v1.1.0
+
+        ### Breaking changes
+
+        - **laravel**: a lost break ([#12](https://github.com/docuccino/docuccino/pull/12))
+          - the method is gone.
+
+        ### Features
+
+        - **core**: a lost feature ([#11](https://github.com/docuccino/docuccino/pull/11))
+
+        ### Bug fixes
+
+        - **core**: a recorded fix ([#10](https://github.com/docuccino/docuccino/pull/10))
+        MARKDOWN);
+});
+
+it('routes a supplemented entry to its own package file, like any other entry', function () {
+    $supplemented = changelog_supplemented(
+        [['version' => 'v1.1.0', 'changes' => []]],
+        null,
+        ['v1.1.0'],
+        ['v1.1.0' => [
+            'reason' => 'the record was destroyed by a squash.',
+            'entries' => [
+                ['subject' => 'feat(core): a lost feature (#11)'],
+                ['subject' => 'fix(laravel): a lost fix (#12)'],
+            ],
+        ]],
+    );
+
+    $documents = changelog_documents($supplemented['releases']);
+
+    expect($documents['php/core/CHANGELOG.md'])->toContain('- a lost feature ([#11]')
+        ->and($documents['php/core/CHANGELOG.md'])->not->toContain('a lost fix')
+        ->and($documents['php/laravel/CHANGELOG.md'])->toContain('- a lost fix ([#12]')
+        ->and($documents['php/laravel/CHANGELOG.md'])->not->toContain('a lost feature')
+        ->and($documents['php/attributes/CHANGELOG.md'])->toContain('_No user-facing changes yet._')
+        ->and($documents['php/inference-phpstan/CHANGELOG.md'])->toContain('_No user-facing changes yet._');
+});
+
+it('refuses a supplement that would make it a general hand-edit backdoor', function (array $supplements, string $expected) {
+    $releases = [['version' => 'v1.1.0', 'changes' => changelog_collect([
+        ['subject' => 'fix(core): a recorded fix (#10)'],
+    ])['changes']]];
+
+    expect(static fn (): array => changelog_supplemented($releases, 'v1.2.0', ['v1.0.0', 'v1.1.0'], $supplements))
+        ->toThrow(RuntimeException::class, $expected);
+})->with([
+    // The line that must never be crossed: for the range still being written, the fix is the
+    // commit message.
+    'the pending release' => [
+        ['v1.2.0' => ['reason' => 'because I said so.', 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'v1.2.0 is the pending release, not a shipped one',
+    ],
+    'a version that was never tagged' => [
+        ['v9.9.9' => ['reason' => 'a typo.', 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'v9.9.9 is not a release tag in this repository',
+    ],
+    'no reason for the repair' => [
+        ['v1.1.0' => ['reason' => "  \n", 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'the v1.1.0 supplement carries no reason',
+    ],
+    'no entries at all' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => []]],
+        'the v1.1.0 supplement lists no entries',
+    ],
+    // The drift guard: history caught up, so the supplement has to go.
+    'a pull request the commits now carry' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a recorded fix (#10)']]]],
+        'the v1.1.0 supplement entry #10 is in the commit record already, under v1.1.0 ("a recorded fix")',
+    ],
+    // The reason is printed on every run, so it is held to what a message is held to.
+    'a reason that drives the terminal' => [
+        ['v1.1.0' => ['reason' => "the record was \x1b[31mdestroyed\x1b[0m.", 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'the v1.1.0 supplement reason carries the control character U+001B',
+    ],
+    'a reason that opens raw HTML' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed <script>alert(1)</script>.', 'entries' => [['subject' => 'feat(core): a feature (#11)']]]],
+        'the v1.1.0 supplement reason opens raw HTML',
+    ],
+    // The whole point of routing every entry through the title gate: what the gate refuses in a
+    // pull request title it refuses here too, a forged release heading included.
+    'an entry forging a release heading' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => "feat(core): a feature\r## v9.9.9 forged (#11)"]]]],
+        'is not a valid message: the title carries the control character U+000D',
+    ],
+    'an entry carrying a script element' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a feature <script>alert(1)</script> (#11)']]]],
+        'is not a valid message: the title opens raw HTML',
+    ],
+    'the same pull request twice' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [
+            ['subject' => 'feat(core): a feature (#11)'],
+            ['subject' => 'fix(core): the same pull request (#11)'],
+        ]]],
+        'the v1.1.0 supplement lists #11 twice',
+    ],
+    // Without a reference there is no identity to check for duplication, so it is refused.
+    'no pull request reference' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a feature']]]],
+        'carries no `(#N)` pull request reference',
+    ],
+    'a subject the title gate would reject' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core) a feature (#11)']]]],
+        'is not a valid message: the title is missing the colon after the type',
+    ],
+    'a scope outside the allow-list' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(tooling): a feature (#11)']]]],
+        'is not a valid message: scope `tooling` is not in the allow-list',
+    ],
+    // The `!`/footer pairing the pull request title gate enforces holds for a restored entry too —
+    // it is the half that was lost when v0.11.0's stack collapsed.
+    'a break with no footer to explain it' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core)!: a break (#11)']]]],
+        'the body has no `BREAKING CHANGE:` footer',
+    ],
+    'a footer with no break marked' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [
+            ['subject' => 'feat(core): a break (#11)', 'body' => 'BREAKING CHANGE: it moved.'],
+        ]]],
+        'the title is not marked `!`',
+    ],
+    'a type that produces no entry' => [
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'chore(core): tidy up (#11)']]]],
+        'produces no changelog entry — a supplement restores user-facing entries only',
+    ],
+]);
+
+it('reports a supplement the baseline leaves out of range rather than dropping it', function () {
+    $supplemented = changelog_supplemented([['version' => 'v1.1.0', 'changes' => []]], null, ['v1.0.0', 'v1.1.0'], [
+        'v1.0.0' => [
+            'reason' => 'the record was destroyed.',
+            // Still read, so a malformed or stale entry cannot hide behind a baseline that happens
+            // not to render its version.
+            'entries' => [['subject' => 'feat(core): a lost feature (#11)']],
+        ],
+    ]);
+
+    expect($supplemented['notes'])->toBe([
+        'the v1.0.0 supplement is outside the rendered range and was not applied — check the baseline.',
+    ])->and($supplemented['releases'])->toBe([['version' => 'v1.1.0', 'changes' => []]]);
+});
+
+it('leaves a release with no supplement exactly as the commits produced it', function () {
+    $releases = [
+        ['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']],
+        ['version' => 'v1.0.0', 'changes' => changelog_collect([['subject' => 'feat(laravel): an older feature (#4)']])['changes']],
+    ];
+
+    $supplemented = changelog_supplemented($releases, null, ['v1.0.0', 'v1.1.0'], [
+        'v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a lost feature (#11)']]],
+    ]);
+
+    $before = changelog_documents($releases);
+    $after = changelog_documents($supplemented['releases']);
+
+    // v1.0.0's section is byte-identical, and so is the whole of the package it never touched.
+    expect(explode("## v1.0.0\n", $after['website/src/content/docs/changelog.md'], 2)[1])
+        ->toBe(explode("## v1.0.0\n", $before['website/src/content/docs/changelog.md'], 2)[1])
+        ->and($after['php/laravel/CHANGELOG.md'])->toBe($before['php/laravel/CHANGELOG.md'])
+        ->and($after['php/attributes/CHANGELOG.md'])->toBe($before['php/attributes/CHANGELOG.md']);
+});
+
+it('appends the curated entries behind the ones the commits recorded', function () {
+    // Two recorded entries in one section, so the merge ORDER is observable: with one of each, or
+    // with none recorded, a supplement prepended and a supplement appended render identically and
+    // the invariant in changelog_supplemented() is a sentence nothing holds to.
+    $releases = [['version' => 'v1.1.0', 'changes' => changelog_collect([
+        ['subject' => 'fix(core): the first recorded fix (#10)'],
+        ['subject' => 'fix(core): the second recorded fix (#20)'],
+    ])['changes']]];
+
+    $supplemented = changelog_supplemented($releases, null, ['v1.1.0'], [
+        'v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [
+            ['subject' => 'fix(core): the first lost fix (#11)'],
+            ['subject' => 'fix(core): the second lost fix (#12)'],
+        ]],
+    ]);
+
+    expect(array_column($supplemented['releases'][0]['changes'], 'description'))
+        ->toBe(['the first recorded fix', 'the second recorded fix', 'the first lost fix', 'the second lost fix'])
+        ->and(changelog_documents($supplemented['releases'])['php/core/CHANGELOG.md'])
+        ->toContain(<<<'MARKDOWN'
+        ### Bug fixes
+
+        - the first recorded fix ([#10](https://github.com/docuccino/docuccino/pull/10))
+        - the second recorded fix ([#20](https://github.com/docuccino/docuccino/pull/20))
+        - the first lost fix ([#11](https://github.com/docuccino/docuccino/pull/11))
+        - the second lost fix ([#12](https://github.com/docuccino/docuccino/pull/12))
+        MARKDOWN);
+});
+
+it('reads a pull request as claimed across the whole changelog, not one release', function (array $releases, array $supplements, string $expected) {
+    // A `(#N)` is a pull request's identity, and a pull request ships in exactly one release. Read
+    // per-release, the guard misses the case that actually renders one number under two versions
+    // with two descriptions.
+    expect(static fn (): array => changelog_supplemented($releases, null, ['v1.0.0', 'v1.1.0'], $supplements))
+        ->toThrow(RuntimeException::class, $expected);
+})->with([
+    'the commits carry it under an older release' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']],
+            ['version' => 'v1.0.0', 'changes' => changelog_collect([['subject' => 'feat(laravel): an older feature (#4)']])['changes']],
+        ],
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a lost fix (#4)']]]],
+        'the v1.1.0 supplement entry #4 is in the commit record already, under v1.0.0 ("an older feature")',
+    ],
+    'the commits carry it under a newer release' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']],
+            ['version' => 'v1.0.0', 'changes' => []],
+        ],
+        ['v1.0.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a lost fix (#10)']]]],
+        'the v1.0.0 supplement entry #10 is in the commit record already, under v1.1.0 ("a recorded fix")',
+    ],
+    // Two supplements can collide on one pull request just as a supplement and the commits can.
+    'another supplement claimed it first' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => []],
+            ['version' => 'v1.0.0', 'changes' => []],
+        ],
+        [
+            'v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a lost feature (#11)']]],
+            'v1.0.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): the same pull request (#11)']]],
+        ],
+        'the v1.0.0 supplement entry #11 is in the v1.1.0 supplement already ("a lost feature")',
+    ],
+]);
+
+it('renders byte-identical documents for the same supplement', function () {
+    $supplement = ['v1.1.0' => [
+        'reason' => 'the record was destroyed.',
+        'entries' => [
+            ['subject' => 'fix(laravel)!: a lost break (#12)', 'body' => 'BREAKING CHANGE: the method is gone.'],
+            ['subject' => 'feat(core): a lost feature (#11)'],
+        ],
+    ]];
+
+    $render = static fn (): array => changelog_documents(changelog_supplemented(
+        [['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']]],
+        null,
+        ['v1.1.0'],
+        $supplement,
+    )['releases']);
+
+    expect($render())->toBe($render());
+});
+
+it('holds the shipped supplement table to this repository real history', function () {
+    // The one test here that reads real git and the real table, because that is the only thing a
+    // stale supplement can be measured against: a version that stops being a tag, or a pull request
+    // the commits start carrying themselves, fails the generator rather than rendering quietly.
+    $command = sprintf('php %s --stdout 2>/dev/null', escapeshellarg(dirname(__DIR__, 2).'/tools/changelog.php'));
+
+    $output = [];
+    $status = 0;
+    exec($command, $output, $status);
+
+    $aggregate = implode("\n", $output);
+    $section = explode("\n## v0.10.5", explode("## v0.11.0\n", $aggregate, 2)[1] ?? '', 2)[0];
+    $entries = preg_grep('/^- \*\*/', explode("\n", $section)) ?: [];
+
+    expect($status)->toBe(0)
+        // v0.11.0 shipped thirteen pull requests; five survive in the commit record, eight are
+        // supplemented. A number lower than thirteen means the repair has come undone.
+        ->and(CHANGELOG_SUPPLEMENTS['v0.11.0']['entries'])->toHaveCount(8)
+        ->and($entries)->toHaveCount(13)
+        ->and($section)->toContain('### Breaking changes')
+        // The footer that existed nowhere in git, restored where a consumer will actually read it.
+        ->and($section)->toContain('- **laravel**: record an example only where an assertion names it ([#271](https://github.com/docuccino/docuccino/pull/271))')
+        ->and($section)->toContain('  - `ApiContract::record()` no longer publishes an example for every checked response.');
+
+    foreach (array_keys(CHANGELOG_SUPPLEMENTS) as $version) {
+        expect(trim(shell_exec(sprintf('git -C %s tag -l %s', escapeshellarg(dirname(__DIR__, 2)), escapeshellarg($version))) ?? ''))
+            ->toBe($version);
+    }
+});

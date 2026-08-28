@@ -7,6 +7,13 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.12.0
+
+### Breaking changes
+
+- let a body declaration say a field is optional
+  - `BodyParameter::$required` is `?bool` rather than `bool`, and defaults to `null` rather than `false`. Code reading the property into a `bool` must widen; a `#[BodyParameter]` that already spells `required: false` now takes the field off the body's `required` list instead of being ignored.
+
 ## v0.10.0
 
 ### Breaking changes
