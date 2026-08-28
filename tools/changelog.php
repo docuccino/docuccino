@@ -125,10 +125,13 @@ function changelog_collect(array $commits): array
  * contributes nothing is how the record gets lost a second time.
  *
  * The `(#N)` reference is mandatory because it is the identity the duplicate guard reads — an entry
- * the commits have since started carrying themselves must be deleted, not rendered twice.
+ * the commits have since started carrying themselves must be deleted, not rendered twice. That
+ * identity is document-wide, not per-release: `$recorded` is keyed by reference across EVERY
+ * release, because a pull request belongs to one version and claiming one another version already
+ * carries is the same defect wearing a different number.
  *
  * @param  array{reason: string, entries: list<array{subject: string, body?: string}>}  $supplement
- * @param  list<array{type: string, scope: string|null, package: string|null, breaking: bool, note: string|null, description: string, reference: int|null}>  $recorded
+ * @param  array<int, array{version: string, description: string, supplemented: bool}>  $recorded
  * @return list<array{type: string, scope: string|null, package: string|null, breaking: bool, note: string|null, description: string, reference: int|null}>
  */
 function changelog_supplement_changes(string $version, array $supplement, array $recorded): array
@@ -174,15 +177,23 @@ function changelog_supplement_changes(string $version, array $supplement, array 
             throw new RuntimeException(sprintf('the %s supplement lists #%d twice.', $version, $reference));
         }
 
-        foreach ($recorded as $existing) {
-            if ($existing['reference'] === $reference) {
-                throw new RuntimeException(sprintf(
-                    'the %s supplement entry #%d is in the commit record already ("%s") — delete the supplement entry, the source it stood in for is back.',
+        $existing = $recorded[$reference] ?? null;
+        if ($existing !== null) {
+            throw new RuntimeException($existing['supplemented']
+                ? sprintf(
+                    'the %s supplement entry #%d is in the %s supplement already ("%s") — a pull request has one entry, under one release.',
                     $version,
                     $reference,
+                    $existing['version'],
+                    $existing['description'],
+                )
+                : sprintf(
+                    'the %s supplement entry #%d is in the commit record already, under %s ("%s") — delete the supplement entry, the source it stood in for is back.',
+                    $version,
+                    $reference,
+                    $existing['version'],
                     $existing['description'],
                 ));
-            }
         }
 
         $seen[] = $reference;
@@ -249,13 +260,38 @@ function changelog_supplemented(array $releases, ?string $pending, array $tags, 
         $index[$release['version']] = $position;
     }
 
+    // Every `(#N)` the commits already carry, across every release rather than the one being
+    // supplemented: a reference claimed twice puts one pull request under two versions with two
+    // descriptions, and the release it landed in is not the release a stale supplement names.
+    $recorded = [];
+    foreach ($releases as $release) {
+        foreach ($release['changes'] as $change) {
+            if ($change['reference'] !== null && ! array_key_exists($change['reference'], $recorded)) {
+                $recorded[$change['reference']] = [
+                    'version' => $release['version'],
+                    'description' => $change['description'],
+                    'supplemented' => false,
+                ];
+            }
+        }
+    }
+
     foreach ($supplements as $version => $supplement) {
         $position = $index[$version] ?? null;
-        $recorded = $position === null ? [] : $out[$position]['changes'];
 
         // Read even when the version is out of range, so a stale entry cannot hide behind a
         // baseline that happens not to render it.
         $added = changelog_supplement_changes($version, $supplement, $recorded);
+
+        foreach ($added as $change) {
+            if ($change['reference'] !== null) {
+                $recorded[$change['reference']] = [
+                    'version' => $version,
+                    'description' => $change['description'],
+                    'supplemented' => true,
+                ];
+            }
+        }
 
         if ($position === null) {
             $notes[] = sprintf(
@@ -267,8 +303,9 @@ function changelog_supplemented(array $releases, ?string $pending, array $tags, 
         }
 
         // Appended, so a version with no supplement renders byte-identically to before there was
-        // such a thing at all.
-        $out[$position] = ['version' => $version, 'changes' => [...$recorded, ...$added]];
+        // such a thing at all, and a supplemented one keeps the commit-derived entries in their
+        // order with the curated ones behind them.
+        $out[$position] = ['version' => $version, 'changes' => [...$out[$position]['changes'], ...$added]];
         $notes[] = sprintf(
             'supplemented %s with %d curated entries — %s',
             $version,

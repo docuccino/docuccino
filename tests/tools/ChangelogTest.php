@@ -361,7 +361,7 @@ it('refuses a supplement that would make it a general hand-edit backdoor', funct
     // The drift guard: history caught up, so the supplement has to go.
     'a pull request the commits now carry' => [
         ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a recorded fix (#10)']]]],
-        'the v1.1.0 supplement entry #10 is in the commit record already ("a recorded fix")',
+        'the v1.1.0 supplement entry #10 is in the commit record already, under v1.1.0 ("a recorded fix")',
     ],
     // The reason is printed on every run, so it is held to what a message is held to.
     'a reason that drives the terminal' => [
@@ -454,6 +454,72 @@ it('leaves a release with no supplement exactly as the commits produced it', fun
         ->and($after['php/laravel/CHANGELOG.md'])->toBe($before['php/laravel/CHANGELOG.md'])
         ->and($after['php/attributes/CHANGELOG.md'])->toBe($before['php/attributes/CHANGELOG.md']);
 });
+
+it('appends the curated entries behind the ones the commits recorded', function () {
+    // Two recorded entries in one section, so the merge ORDER is observable: with one of each, or
+    // with none recorded, a supplement prepended and a supplement appended render identically and
+    // the invariant in changelog_supplemented() is a sentence nothing holds to.
+    $releases = [['version' => 'v1.1.0', 'changes' => changelog_collect([
+        ['subject' => 'fix(core): the first recorded fix (#10)'],
+        ['subject' => 'fix(core): the second recorded fix (#20)'],
+    ])['changes']]];
+
+    $supplemented = changelog_supplemented($releases, null, ['v1.1.0'], [
+        'v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [
+            ['subject' => 'fix(core): the first lost fix (#11)'],
+            ['subject' => 'fix(core): the second lost fix (#12)'],
+        ]],
+    ]);
+
+    expect(array_column($supplemented['releases'][0]['changes'], 'description'))
+        ->toBe(['the first recorded fix', 'the second recorded fix', 'the first lost fix', 'the second lost fix'])
+        ->and(changelog_documents($supplemented['releases'])['php/core/CHANGELOG.md'])
+        ->toContain(<<<'MARKDOWN'
+        ### Bug fixes
+
+        - the first recorded fix ([#10](https://github.com/docuccino/docuccino/pull/10))
+        - the second recorded fix ([#20](https://github.com/docuccino/docuccino/pull/20))
+        - the first lost fix ([#11](https://github.com/docuccino/docuccino/pull/11))
+        - the second lost fix ([#12](https://github.com/docuccino/docuccino/pull/12))
+        MARKDOWN);
+});
+
+it('reads a pull request as claimed across the whole changelog, not one release', function (array $releases, array $supplements, string $expected) {
+    // A `(#N)` is a pull request's identity, and a pull request ships in exactly one release. Read
+    // per-release, the guard misses the case that actually renders one number under two versions
+    // with two descriptions.
+    expect(static fn (): array => changelog_supplemented($releases, null, ['v1.0.0', 'v1.1.0'], $supplements))
+        ->toThrow(RuntimeException::class, $expected);
+})->with([
+    'the commits carry it under an older release' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']],
+            ['version' => 'v1.0.0', 'changes' => changelog_collect([['subject' => 'feat(laravel): an older feature (#4)']])['changes']],
+        ],
+        ['v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a lost fix (#4)']]]],
+        'the v1.1.0 supplement entry #4 is in the commit record already, under v1.0.0 ("an older feature")',
+    ],
+    'the commits carry it under a newer release' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => changelog_collect([['subject' => 'fix(core): a recorded fix (#10)']])['changes']],
+            ['version' => 'v1.0.0', 'changes' => []],
+        ],
+        ['v1.0.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): a lost fix (#10)']]]],
+        'the v1.0.0 supplement entry #10 is in the commit record already, under v1.1.0 ("a recorded fix")',
+    ],
+    // Two supplements can collide on one pull request just as a supplement and the commits can.
+    'another supplement claimed it first' => [
+        [
+            ['version' => 'v1.1.0', 'changes' => []],
+            ['version' => 'v1.0.0', 'changes' => []],
+        ],
+        [
+            'v1.1.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'feat(core): a lost feature (#11)']]],
+            'v1.0.0' => ['reason' => 'the record was destroyed.', 'entries' => [['subject' => 'fix(core): the same pull request (#11)']]],
+        ],
+        'the v1.0.0 supplement entry #11 is in the v1.1.0 supplement already ("a lost feature")',
+    ],
+]);
 
 it('renders byte-identical documents for the same supplement', function () {
     $supplement = ['v1.1.0' => [
