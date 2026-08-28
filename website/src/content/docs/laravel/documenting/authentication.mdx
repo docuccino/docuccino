@@ -230,6 +230,18 @@ inferred from middleware.
 <Aside title="Name a scheme that exists">
 `#[Security]` references a scheme by the name it's registered under. Use your own key from
 `security.schemes`, or one of the integration names — `sanctumToken`, `sanctumStateful`, `passport`.
+
+Docuccino checks this over the finished document, whichever way the requirement got there —
+attribute, `security.default`, `security.document` or an overlay. A requirement naming a scheme
+nothing defines is a
+[`security.undefined-scheme`](/laravel/reference/diagnostics/#security-schemes) error: OpenAPI
+requires every requirement to name a declared scheme, so the document is invalid and a generated
+client has nothing to build the credential from. An OAuth2 requirement asking for a scope none of that
+scheme's flows declare is a
+[`security.undeclared-scope`](/laravel/reference/diagnostics/#security-schemes) warning.
+
+Either way the reference stays in the document. Dropping it would leave a *valid* document saying the
+endpoint is public, which is the one answer worse than an invalid one.
 </Aside>
 
 ## Authorization: roles & permissions

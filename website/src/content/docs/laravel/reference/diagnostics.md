@@ -209,6 +209,17 @@ correct-but-vaguer document rather than dropping the endpoint.
 | `rate-limit.unregistered-limiter` | info | A route throttles on a named limiter nothing registers with `RateLimiter::for()`, so the allowance can't be documented | Register it in a service provider, or state the allowance inline as `throttle:60,1` — see [Named limiters](/laravel/documenting/rate-limiting/#named-limiters) |
 | `rate-limit.multiple-throttles` | info | A route carries more than one throttle middleware; one `429` is documented from the first | Nothing. The others are still enforced — they just aren't separately representable in OpenAPI |
 
+## Security schemes
+
+Checked over the finished document, so overlays, transformers and config all count. A
+[security requirement](/laravel/documenting/authentication/) names its scheme by key rather than by
+`$ref`, so nothing else in the pipeline resolves it.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `security.undefined-scheme` | error | An operation or the document names a security scheme that `components.securitySchemes` never defines. OpenAPI requires every requirement to name a declared scheme, so the document is invalid and a generated client has nothing to build the credential from | Add the scheme under this document's `security.schemes`, or name one it already defines — the message lists them. The reference is still published: dropping it would leave a valid document saying the endpoint is public, which is the one answer worse than an invalid one |
+| `security.undeclared-scope` | warning | An OAuth2 requirement asks for a scope none of that scheme's flows declare, so the document contradicts itself and an authorization server following it would refuse the token | Declare the scope under that scheme's `flows.*.scopes`, or ask for one it offers — the message lists them |
+
 ## Webhooks
 
 Webhooks are collected from `#[Webhook]` classes under the directory you configure. See
