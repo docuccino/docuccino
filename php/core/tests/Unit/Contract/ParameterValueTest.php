@@ -193,9 +193,9 @@ it('walks a branching schema once per node rather than once per path through it'
     // A bound on how DEEP the walk goes is no bound at all on how MUCH it does: k branches followed
     // nine levels is k^9 visits of a document a few hundred bytes long. Measured before this walk
     // remembered where it had been — one coerce() call, peak memory 4MB throughout, so no memory limit
-    // stops it: k=5 1.9s, k=6 8.3s, k=7 31.8s, k=8 over ninety seconds. Each row below took over ten
-    // seconds on that walk and takes under two milliseconds on this one, which is the four orders of
-    // magnitude the second below is asserted against.
+    // stops it: k=5 1.9s, k=6 8.3s, k=7 31.8s, k=8 over ninety seconds. The two rows below are that
+    // walk at k=6, measured at 8.7s and 10.0s against under a millisecond each on this one — so the
+    // second asserted below is a threshold neither a slow machine nor a fast one can straddle.
     $started = microtime(true);
 
     ParameterValue::coerce('1000', ['$ref' => '#/components/schemas/Fan'], $document);
