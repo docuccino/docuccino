@@ -7,7 +7,22 @@ User-facing changes to `docuccino/laravel` — features, fixes, performance work
 taken from the commit messages scoped `laravel`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.11.1
+
+### Bug fixes
+
+- keep a requirement a body declaration says nothing about
+- silence the container notice only where a declaration settles it
+- credit a webhook delivery for what the check proved
+- read a field's children as paths rather than as a string prefix
+- let a nested body declaration reach the key it names
+
 ## v0.11.0
+
+### Breaking changes
+
+- record an example only where an assertion names it ([#271](https://github.com/docuccino/docuccino/pull/271))
+  - `ApiContract::record()` no longer publishes an example for every checked response. An exchange is recorded only where the assertion names the scenario — `assertValidExchange(recordAs: 'with-tags')` — so a suite that records today records nothing tomorrow until its call sites name what is worth publishing. Committed recordings already on disk are still read and still publish; each build reports them once as `examples.recording-unnamed`, since no run will refresh them. An explicit `recordAs: ''` now raises rather than being ignored.
 
 ### Features
 
@@ -16,6 +31,8 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 ### Bug fixes
 
 - mark the response headers the framework always sends as required ([#263](https://github.com/docuccino/docuccino/pull/263))
+- read a #[BodyParameter] name as a field path, not a map key ([#269](https://github.com/docuccino/docuccino/pull/269))
+- read a bare array rule as either container, not as a list ([#270](https://github.com/docuccino/docuccino/pull/270))
 
 ## v0.10.4
 

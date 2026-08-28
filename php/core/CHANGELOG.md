@@ -7,6 +7,12 @@ User-facing changes to `docuccino/core` — features, fixes, performance work an
 taken from the commit messages scoped `core`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.11.1
+
+### Bug fixes
+
+- give the declared reading of a type string one way in
+
 ## v0.11.0
 
 ### Breaking changes
@@ -18,6 +24,14 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 - hold the payload a webhook dispatches to its contract ([#262](https://github.com/docuccino/docuccino/pull/262))
 - check the response headers the document publishes ([#261](https://github.com/docuccino/docuccino/pull/261))
+- hold a security requirement to the schemes the document publishes ([#272](https://github.com/docuccino/docuccino/pull/272))
+
+### Bug fixes
+
+- read a parameter's type in the grammar the validator reads ([#266](https://github.com/docuccino/docuccino/pull/266))
+- read an ambiguous empty body as the container the contract accepts ([#267](https://github.com/docuccino/docuccino/pull/267))
+- follow a $ref wherever the grammar permits one ([#268](https://github.com/docuccino/docuccino/pull/268))
+- resolve a Reference Object before the diff decides what changed ([#273](https://github.com/docuccino/docuccino/pull/273))
 
 ## v0.10.5
 

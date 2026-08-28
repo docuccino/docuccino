@@ -113,7 +113,9 @@ it prevents.
   `inference-phpstan` are packages, `repo`, `website`, `ci` map to none. The changelogs are
   **generated** from those messages (`composer changelog`, and automatically on every push to
   `main`): never hand-edit `php/*/CHANGELOG.md` or `website/src/content/docs/changelog.md`, fix the
-  commit message instead. Release flow in [`RELEASING.md`](./RELEASING.md).
+  commit message instead. The one exception is a version already RELEASED whose commit record was
+  destroyed and so cannot be fixed — `tools/changelog-supplements.php`, refused for the pending
+  range and guarded against going stale ([`RELEASING.md`](./RELEASING.md)). Release flow in [`RELEASING.md`](./RELEASING.md).
 
 ## Monorepo layout
 

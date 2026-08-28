@@ -40,7 +40,10 @@ anything with `composer lint:pr-title -- --title='feat(core): …'`.
 
 `feat`, `fix`, `perf` and anything breaking become changelog entries. `php/*/CHANGELOG.md` and the
 site's [changelog page](website/src/content/docs/changelog.md) are **generated** by
-`tools/changelog.php` — never edit them; fix the commit message.
+`tools/changelog.php` — never edit them; fix the commit message. The single exception is a released
+version whose commit record was destroyed and can no longer be fixed, which is repaired in
+`tools/changelog-supplements.php` and nowhere else — see
+[RELEASING.md](RELEASING.md#supplements-the-one-exception-and-why-it-cannot-spread).
 
 ## Submitting changes
 

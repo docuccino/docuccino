@@ -103,6 +103,32 @@ What lands in them:
 Versions come from the pending changes: below `1.0.0` a breaking change moves the minor and
 everything else the patch; from `1.0.0` on it is plain semver.
 
+#### Supplements: the one exception, and why it cannot spread
+
+A stack merged bottom-up puts its commits on the branch below it, so squashing that branch collapses
+the whole stack into one message. v0.11.0 shipped thirteen pull requests and its commit record
+carries five — a `BREAKING CHANGE:` footer among the eight that went. A released tag's messages
+cannot be rewritten, so the entries live in
+[`tools/changelog-supplements.php`](tools/changelog-supplements.php): curated messages, keyed to the
+version that lost them, with a `reason` recording what happened to the source.
+
+They are not a hand-edit backdoor, and the generator refuses everything that would make them one:
+
+- **Shipped versions only.** A supplement for the pending release, or for a version that is not a
+  tag in this repository, aborts the run. For the range still being written the fix is the commit
+  message, which is exactly what a supplement cannot substitute for.
+- **A message, not a line.** Each entry is written as the commit it should have been and goes
+  through the pull request title gate and then the same collector, buckets and renderer as a real
+  commit — including the `!`/footer pairing. A supplemented entry is indistinguishable in the
+  output, and nothing that would fail the title gate gets in.
+- **`(#N)` required.** The pull request number is the entry's identity, and it is what the guard
+  reads: if the commits ever start carrying that pull request themselves, the generator fails and
+  the supplement has to be deleted.
+- **Said out loud.** Every run prints which version was supplemented, with how many entries and why.
+
+Avoiding the whole situation is cheaper: merge a stack top-down, or rebase each branch onto `main`
+before merging it, so every pull request squashes its own commits and nobody else's.
+
 ### Repository settings this depends on
 
 Two settings live outside the code, and without them the title gate is decorative — a merge whose
