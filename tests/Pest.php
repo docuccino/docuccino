@@ -6,6 +6,7 @@ use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\ContractOperation;
+use Docuccino\Core\Contract\ContractParameter;
 use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
@@ -1718,6 +1719,60 @@ function scriptWatch(int $builds, ?callable $onBuild = null): ScriptedBuildRunne
     app()->instance(BuildRunner::class, $runner);
 
     return $runner;
+}
+
+/**
+ * The contract fixture with path items moved into `components.pathItems` and `$ref`ed from where they
+ * stood. OAS permits that spelling at every path-item position, this repo's own downlevel emitter
+ * inlines documents that use it, and a reader which does not follow it sees a path publishing nothing
+ * at all — so the two spellings are held to producing one index.
+ *
+ * @param  list<string>  $keys  which entries to hoist; every one when empty
+ * @param  'paths'|'webhooks'  $member
+ * @return array<string, mixed>
+ */
+function contractWithReferencedPathItems(array $keys = [], string $member = 'paths'): array
+{
+    $document = loadFixture('contract.uir.json');
+
+    /** @var array<string, mixed> $map */
+    $map = $document[$member];
+    $keys = $keys === [] ? array_map(strval(...), array_keys($map)) : $keys;
+
+    foreach ($keys as $key) {
+        $name = 'Shared'.preg_replace('/[^A-Za-z0-9]/', '', $key);
+
+        $document['components']['pathItems'][$name] = $map[$key];
+        $document[$member][$key] = ['$ref' => '#/components/pathItems/'.$name];
+    }
+
+    return $document;
+}
+
+/**
+ * How a test names what an index holds, without naming a pointer: an operation's label, its stable id,
+ * the parameters it inherited and the responses it documents. Everything a `$ref` must not change.
+ *
+ * @return array<string, mixed>
+ */
+function contractIndexShape(ContractIndex $index): array
+{
+    $shape = ['operations' => [], 'webhooks' => []];
+
+    foreach ($index->operations() as $operation) {
+        $shape['operations'][] = [
+            $operation->label(),
+            $operation->id,
+            array_map(static fn (ContractParameter $p): string => $p->in.':'.$p->name, $operation->parameters),
+            $operation->responseKeys(),
+        ];
+    }
+
+    foreach ($index->webhooks() as $webhook) {
+        $shape['webhooks'][] = [$webhook->label(), $webhook->id];
+    }
+
+    return $shape;
 }
 
 /**
