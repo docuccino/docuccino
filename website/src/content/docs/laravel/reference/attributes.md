@@ -331,6 +331,42 @@ document the parent as an object first:
 
 Order doesn't matter — a parent is applied before its children whichever way round you write them.
 
+#### On the action, or on the request type
+
+The two declaration sites say different things, and both are read.
+
+On the **action** the declaration is that operation's. It patches that operation's body, which means
+the body is written out in full there instead of pointing at the shared component the request class
+would otherwise be published as.
+
+On the **request class** — a Form Request, a DTO, a Data class — the declaration is the type's. A
+free-form map whose keys no rule can enumerate is a fact about the type, identical on every endpoint
+that accepts it, so it belongs on the class:
+
+```php
+#[BodyParameter(name: 'overrides', type: 'object', description: 'Arbitrary per-tenant overrides.')]
+final class UpdateTenantRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return ['name' => 'required|string', 'overrides' => 'array'];
+    }
+}
+```
+
+The declaration goes into the `UpdateTenantRequest` component, so every operation accepting that
+request keeps its `$ref` to it — and a client generated from the document keeps a single named type for
+the shape, instead of one inline body per endpoint that mentioned it.
+
+Write both and both apply: the class's first, the action's over the top of it for the fields it names.
+An action class that is its own request class — a `laravel-actions` action — has one declaration site
+for the two roles, and it keeps the action meaning it has always had.
+
+Anything else a request class declares that only an action is read for — `#[Summary]`, `#[Response]`, a
+parameter attribute — raises
+[`attribute.schema-class-unread`](/laravel/reference/diagnostics/#attributes) and names where it does
+belong.
+
 ### `#[RuleSchema]`
 
 Targets `CLASS`, not repeatable.

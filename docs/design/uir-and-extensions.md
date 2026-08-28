@@ -1519,6 +1519,37 @@ OpenAPI Overlay 1.0) < programmatic config(50)`. Field-level PatchGuard:
   correct class-level declaration seen once per sibling action, and the last names a member of a
   published range the attribute has no way to spell.
 - Within a layer, more-specific target beats less-specific (method attr > class attr).
+- **Within a layer, a declaration on the TYPE is the least specific target of all.** Several attributes
+  are legal on an action, on the controller class that owns it, and on a class that is a request or
+  response type; those are not three spellings of one thing. A declaration on the type is true of every
+  operation that accepts it, so it belongs to the COMPONENT, and the operation keeps its `$ref`; a
+  declaration on the action is one operation's, so it applies to that operation's own body and
+  dereferences it. Both are layer 40 and the ladder's existing rule settles them without a mechanism
+  beside it: same layer, more-specific target lands second and wins the fields it names, with the
+  type's declaration underneath it.
+  `#[BodyParameter]` is where this is implemented — `Extensions\Validation\RecoveredRequest` reads the
+  type's, `Laravel\Extensions\AttributeRequestBodyExtension` the action's, and one
+  `Extensions\Validation\DeclaredBodyFields` does the writing for both, so the field-path grammar and
+  the shallowest-first ordering cannot fork. Which is a CONSUMER's rule before it is an author's: the
+  named component is what a client generator turns into a named type, and restating a fact about a type
+  per action cost them that type on every action that said it, plus any evidence that two operations
+  accept the same shape.
+  One class in both roles is the exception, and it is a carve-out rather than a rule: where the request
+  source class IS the route's action (laravel-actions), one declaration site serves both, the route
+  attribute bag already reads it, and the operation-level meaning it has is the one that exists.
+- **`TARGET_CLASS` is two roles, and only one of them is a schema.** An action class goes through the
+  route attribute bag, which reads every attribute the package ships; a TYPE is read by reflection, for
+  a handful. `Extensions\Schema\SchemaClassAttributes` is the exhaustive table of which — every
+  class-target attribute is honoured on a type or named with where it IS read — and a declaration in the
+  second half raises `attribute.schema-class-unread` instead of being dropped in silence. The table is
+  checked against the attributes package, so adding an attribute is a decision about types rather than a
+  silent drop nobody made.
+  Measured over the corpus's 48 request-source classes: 2 firings, both actionable, and both on the
+  fixture written to provoke it — nothing an application had already written fires it, because every
+  class-level declaration out there is one a type IS read for. The carve-out is what earns that: firing
+  on a source class that is also the action would add 2 hits, and BOTH are unactionable — the attribute
+  is read there, through the route bag — which is half the channel saying "your correct declaration did
+  nothing".
 - Within the docblock layer, `@summary`/`@description` beat the free-prose split, and declaring
   EITHER hands both fields to the tags — the prose above them was written for whoever maintains
   the action, and half of that note is worse in the document than none of it. `DocBlockReader::read()`
