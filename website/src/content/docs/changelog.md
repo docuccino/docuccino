@@ -17,14 +17,23 @@ Each package repository also carries its own `CHANGELOG.md` with just its entrie
 
 ### Breaking changes
 
+- **core**: say so when a parameter documents a schema no reader can take
+  - ContractParameter::schema() is `@internal` — nothing outside core called it, and the ParameterSchema it returns is core's reading of a declaration rather than a shape to freeze at v1.
 - **core**: tell an absent answer from an answer nobody can read
-  - ContractParameter::schema() returns a ParameterSchema rather than an array or null, and ContractParameter::hasSchema() is gone — the fact it stood in for is the kind on the returned value. Exchange::$headers is array<string, list<string>> and Exchange::header() returns a list, matching the response half; an adapter that passed one string per name passes a one-element list.
+  - ContractParameter::schema() returns a ParameterSchema rather than an array or null, and ContractParameter::hasSchema() is gone — the fact it stood in for is the kind on the returned value. Exchange::$headers is `array<string, list<string>>` and `Exchange::header()` returns a list, matching the response half; an adapter that passed one string per name passes a one-element list.
+- **attributes**: let a body declaration say a field is optional
+  - `BodyParameter::$required` is `?bool` rather than `bool`, and defaults to `null` rather than `false`. Code reading the property into a `bool` must widen; a `#[BodyParameter]` that already spells `required: false` now takes the field off the body's `required` list instead of being ignored.
 - **core**: drop ValidationField::type(), which answers a union with null
   - `ValidationField::type()` is removed from the rule-transformer surface a third-party `RuleTransformer` is handed. Use `types(): list<string>`, which answers every type word the field carries: one for a scalar type, several for a union, none where nothing has typed it yet. Null is never among the words — nullability is a flag the schema applies as it assembles, so a rule running after `nullable` still reads what the field is. `count($types) === 1 ? $types[0] : null` restores the old answer exactly, and restores the defect with it: branch on the words instead — `$types === []` is "nothing has typed this", and a field stating several is a case to handle, not one to fall through.
 
 ### Bug fixes
 
+- **repo**: read a pull request reference as claimed across the whole changelog
+- **repo**: refuse a message the renderer would read as more than text
 - **repo**: restore the entries a squashed stack took out of v0.11.0's changelog
+- **laravel**: read a body declaration only where a body is written
+- **laravel**: credit an ignore exactly where a response was really dropped
+- **laravel**: escape the two values the ignore-location report quotes
 - **laravel**: report an ignore that dropped nothing instead of accepting it silently
 - **laravel**: keep a requirement a body declaration says nothing about
 - **laravel**: silence the container notice only where a declaration settles it

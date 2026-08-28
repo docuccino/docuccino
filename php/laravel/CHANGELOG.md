@@ -11,6 +11,9 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 ### Bug fixes
 
+- read a body declaration only where a body is written
+- credit an ignore exactly where a response was really dropped
+- escape the two values the ignore-location report quotes
 - report an ignore that dropped nothing instead of accepting it silently
 - keep a requirement a body declaration says nothing about
 - silence the container notice only where a declaration settles it
