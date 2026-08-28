@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Eloquent;
 
-use Docuccino\Attributes\Hidden as DocuccinoHidden;
 use Docuccino\Core\Extensions\BuiltIn\JsonTypes;
+use Docuccino\Core\Extensions\Schema\SchemaIdentity;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\NullT;
@@ -163,11 +163,6 @@ final class EloquentModelReflector
         $reflection = new ReflectionClass($fqcn);
         $defaults = $reflection->getDefaultProperties();
 
-        $classHidden = [];
-        foreach ($reflection->getAttributes(DocuccinoHidden::class) as $attribute) {
-            $classHidden = [...$classHidden, ...$attribute->newInstance()->properties];
-        }
-
         $traits = self::traits($fqcn);
 
         // $casts merged with the casts() method (Laravel 11+), the method winning on a key conflict —
@@ -180,7 +175,9 @@ final class EloquentModelReflector
             'visible' => self::stringList($defaults['visible'] ?? []),
             'appends' => self::stringList($defaults['appends'] ?? []),
             'casts' => $casts,
-            'classHidden' => $classHidden,
+            // Read through the one owner of the deny-list, not off reflection again: a second reader is
+            // free to disagree with the one that reports an unmatched name ({@see SchemaIdentity}).
+            'classHidden' => SchemaIdentity::hidden($fqcn),
             'fillable' => self::stringList($defaults['fillable'] ?? []),
             'dates' => self::stringList($defaults['dates'] ?? []),
             // `$with` relations are eager-loaded on every query, so they serialise on every response.

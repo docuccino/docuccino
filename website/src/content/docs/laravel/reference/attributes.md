@@ -203,6 +203,16 @@ Path params are inherently required (no `required` param).
 public function show(string $uuid): UserResource { /* … */ }
 ```
 
+Alone among the parameter attributes it cannot **add** what it names, only refine it: OpenAPI requires
+every `in: path` parameter to correspond to a template variable, so a `name:` that is no `{segment}` of
+the route's own URI is withheld rather than published, and the action's own declaration says so
+([`attribute.path-parameter-unmatched`](/laravel/reference/diagnostics/#attributes)). Publishing it
+would make the document invalid, and it would describe nothing the server accepts — no request has
+anywhere to put it — so leaving it out costs the reader nothing. A declaration inherited from a
+controller is withheld in the same way and stays silent: a segment only some of the class's actions have
+is the ordinary way a class-level one is written. A parameter that is not in the URI is
+`#[QueryParameter]`, `#[HeaderParameter]` or `#[CookieParameter]`.
+
 ### `#[HeaderParameter]`
 
 ```php
@@ -355,6 +365,16 @@ class Customer extends Model {}
 public string $internalRiskScore;
 ```
 
+A name that matches no property the schema publishes hides nothing and says so
+([`attribute.hidden-unmatched`](/laravel/reference/diagnostics/#attributes)), listing what the schema
+does publish so the typo is visible beside it — a subtraction leaves no evidence, so without that report
+a name gone stale through a rename looks exactly like one that worked, while the field it was written to
+keep out is published under the new spelling. The property form has no name to get wrong, and so cannot
+miss. It is not raised for an Eloquent **model**: a model's documented columns are recovered from
+`@property` tags, `$casts` and `$fillable` rather than declared, so a name outside them is far more
+often a column nobody documented than a name anybody typed wrong — and deleting the deny-list entry
+would be the one action that leaks the column the day somebody adds the tag.
+
 `#[Hidden]` affects the **output** schema only. A property that is hidden from responses but still
 accepted in the request is intentional (and the data-leakage lint surfaces it) — to drop a property
 from the documented **request** body, use `#[HiddenFromRequest]` below.
@@ -432,6 +452,13 @@ It **narrows, it doesn't rescue**: the attribute is applied after each document'
 `routes.include` / `routes.exclude` patterns and closure filter, so a route those already excluded
 stays excluded no matter what you list here. To add a route to a document, widen the document's route
 patterns.
+
+It is an **allow-list**, so a key naming no configured document does not fall back to including the
+route — a declaration whose keys name no document that exists excludes the route from every one of them.
+A key nobody configured is reported
+([`attribute.in-docs-unknown`](/laravel/reference/diagnostics/#attributes)), once for the key however
+many routes it covers, naming those routes and listing the documents that do exist. To keep a route out
+of every document on purpose, use `#[ExcludeFromDocs]`.
 
 ### `#[IgnoreParam]`
 
