@@ -9,8 +9,17 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 ## v0.12.0
 
+### Breaking changes
+
+- let a response-header declaration say nothing about what it did not write
+  - a `#[ResponseHeader]` that omits `type` no longer publishes `schema: {type: string}` over a type another layer proved, and no longer replaces the description, the promise or the sibling headers it did not name — a document in that position gains the recovered type and loses the stated `string`. `Docuccino\Attributes\ResponseHeader::$required` is `?bool` rather than `bool` and defaults to `null` rather than `false`; code reading that property into a `bool` must widen.
+- publish only the model keys a response actually carries
+  - an Eloquent model schema stops publishing keys the server does not return — an append or a `$with` relation named in `$hidden` or absent from a `$visible` allow-list, a name written in both lists, and the framework's own `exists`, `timestamps`, `incrementing`, `preventsLazyLoading`, `wasRecentlyCreated` and `usesUniqueIds` properties. A client generated from the new document loses fields it was never receiving, and a diff against a previously published document reports those keys as removals.
+
 ### Bug fixes
 
+- withhold a #[PathParameter] the route template has no segment for
+- report an #[InDocs] key that names no configured document
 - read a body declaration only where a body is written
 - credit an ignore exactly where a response was really dropped
 - escape the two values the ignore-location report quotes

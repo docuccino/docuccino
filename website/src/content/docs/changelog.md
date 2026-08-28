@@ -17,6 +17,12 @@ Each package repository also carries its own `CHANGELOG.md` with just its entrie
 
 ### Breaking changes
 
+- **laravel**: let a response-header declaration say nothing about what it did not write
+  - a `#[ResponseHeader]` that omits `type` no longer publishes `schema: {type: string}` over a type another layer proved, and no longer replaces the description, the promise or the sibling headers it did not name — a document in that position gains the recovered type and loses the stated `string`. `Docuccino\Attributes\ResponseHeader::$required` is `?bool` rather than `bool` and defaults to `null` rather than `false`; code reading that property into a `bool` must widen.
+- **laravel**: publish only the model keys a response actually carries
+  - an Eloquent model schema stops publishing keys the server does not return — an append or a `$with` relation named in `$hidden` or absent from a `$visible` allow-list, a name written in both lists, and the framework's own `exists`, `timestamps`, `incrementing`, `preventsLazyLoading`, `wasRecentlyCreated` and `usesUniqueIds` properties. A client generated from the new document loses fields it was never receiving, and a diff against a previously published document reports those keys as removals.
+- **attributes**: let a parameter declaration say nothing about required
+  - `QueryParameter::$required`, `HeaderParameter::$required` and `CookieParameter::$required` are `?bool` rather than `bool`, and default to `null` rather than `false`. Code reading one of those properties into a `bool` must widen; a declaration that already spells `required: false` now writes that onto the parameter instead of being indistinguishable from silence, and one that omits `required` no longer publishes `required: false` on the parameter it documents.
 - **core**: say so when a parameter documents a schema no reader can take
   - ContractParameter::schema() is `@internal` — nothing outside core called it, and the ParameterSchema it returns is core's reading of a declaration rather than a shape to freeze at v1.
 - **core**: tell an absent answer from an answer nobody can read
@@ -28,6 +34,9 @@ Each package repository also carries its own `CHANGELOG.md` with just its entrie
 
 ### Bug fixes
 
+- **laravel**: withhold a #[PathParameter] the route template has no segment for
+- **laravel**: report an #[InDocs] key that names no configured document
+- **core**: report a #[Hidden] name that hid nothing instead of publishing the field
 - **repo**: read a pull request reference as claimed across the whole changelog
 - **repo**: refuse a message the renderer would read as more than text
 - **repo**: restore the entries a squashed stack took out of v0.11.0's changelog
