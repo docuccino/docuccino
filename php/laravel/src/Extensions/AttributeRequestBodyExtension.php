@@ -79,9 +79,10 @@ final class AttributeRequestBodyExtension implements OperationExtension
 
         foreach ($this->shallowestFirst($bodyParameters) as $attribute) {
             // A field the server insists on is a body the server insists on, however deep the field
-            // sits — and only the top level of `required` is on the root schema to say so.
+            // sits — and only the top level of `required` is on the root schema to say so. A written
+            // `required: false` says nothing about the body: the request still carries one.
             $documented = $this->apply($schema, $attribute, $context);
-            $bodyRequired = $bodyRequired || ($documented && $attribute->required);
+            $bodyRequired = $bodyRequired || ($documented && $attribute->required === true);
         }
 
         $operation->set('requestBody', $this->assembleBody($mediaType, $schema, $bodyRequired), Contribution::attribute($context->actionSource()));
@@ -192,7 +193,7 @@ final class AttributeRequestBodyExtension implements OperationExtension
      * @param  list<string>  $walked  the segments already descended through, for the refusal
      * @return BodyPathRefusal|null
      */
-    private function write(array &$node, array $segments, array $property, bool $required, array $walked): ?array
+    private function write(array &$node, array $segments, array $property, ?bool $required, array $walked): ?array
     {
         $segment = $segments[0];
         $rest = array_slice($segments, 1);
@@ -381,24 +382,31 @@ final class AttributeRequestBodyExtension implements OperationExtension
     }
 
     /**
-     * Adds a name to the `required` list, order-stable and duplicate-free. It only ever ADDS: the
-     * attribute's `required` defaults to `false`, so the absent argument and the written one reach here
-     * as the same bool, and taking that as "optional" would let a declaration that came to document a
-     * type quietly de-require a field the recovered rules said the server insists on — publishing a
-     * contract a consumer's generated client can build a rejected request from. An author who means
-     * optional has nothing on this attribute to say it with; the honest answer today is to correct the
-     * rules the requirement was recovered from, or to patch the body with an overlay.
+     * The `required` list once one declaration has had its say about `$name`, order-stable and
+     * duplicate-free.
+     *
+     * The absent argument arrives as `null` and changes nothing: a declaration written to document a
+     * TYPE says nothing about whether the server insists on the field, and reading it as "optional"
+     * would quietly de-require what the recovered rules proved — a contract a consumer's generated
+     * client can build a rejected request from. A written `false` is the opposite: the author's own
+     * statement at a layer that outranks the recovery, and it is applied. Both directions can be wrong,
+     * and they are not equally wrong — an over-wide body costs a consumer a field they need not have
+     * sent, while an over-narrow one marks a request the server accepts as invalid.
      *
      * @param  list<string>  $required
      * @return list<string>
      */
-    private function withRequired(array $required, string $name, bool $isRequired): array
+    private function withRequired(array $required, string $name, ?bool $isRequired): array
     {
-        if (! $isRequired || in_array($name, $required, true)) {
+        if ($isRequired === null) {
             return $required;
         }
 
-        return [...$required, $name];
+        if (! $isRequired) {
+            return array_values(array_filter($required, static fn (string $each): bool => $each !== $name));
+        }
+
+        return in_array($name, $required, true) ? $required : [...$required, $name];
     }
 
     /**

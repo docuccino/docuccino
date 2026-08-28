@@ -209,3 +209,13 @@ it('keeps every #[Mock] parameter optional and null by default', function (): vo
 
     expect([$named->faker, $named->seedGroup, $named->property])->toBe(['safeEmail', 'person', 'email']);
 });
+
+it('keeps a written #[BodyParameter] optionality distinguishable from an unwritten one', function (): void {
+    // This one patches a body a recovery has already proved requirements for, so "the author said
+    // optional" and "the author said nothing" must not arrive as the same value: reading the default as
+    // optional de-requires a field the server insists on, and publishing a contract a generated client
+    // can build a rejected request from. The three states are the whole point of the nullable type.
+    expect((new BodyParameter(name: 'nickname'))->required)->toBeNull()
+        ->and((new BodyParameter(name: 'nickname', required: false))->required)->toBeFalse()
+        ->and((new BodyParameter(name: 'nickname', required: true))->required)->toBeTrue();
+});
