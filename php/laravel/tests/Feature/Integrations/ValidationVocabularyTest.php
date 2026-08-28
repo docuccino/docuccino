@@ -217,6 +217,10 @@ it('maps every schema-producing string rule to its fragment', function (array $r
     'array_or_object (bounded)' => [[['array_or_object'], ['size', ['3']]], ['maxItems' => 3, 'maxProperties' => 3, 'minItems' => 3, 'minProperties' => 3, 'type' => ['array', 'object']]],
     // The `_confirmation` partner is asserted on separately; this row is the field's own schema.
     'array_or_object (confirmed)' => [[['array_or_object'], ['confirmed']], ['type' => ['array', 'object']]],
+    // An authored example is read against BOTH words, so whichever container the author wrote reads as
+    // the shape it is rather than as the text of it.
+    'array_or_object (a JSON object example)' => [[['array_or_object'], ['example', ['{"a":1}']]], ['example' => ['a' => 1], 'type' => ['array', 'object']]],
+    'array_or_object (a JSON array example)' => [[['array_or_object'], ['example', ['[1,2]']]], ['example' => [1, 2], 'type' => ['array', 'object']]],
 
     // DateWireRuleTransformer — a date-typed property's own wire format, stated by the recovering
     // integration because the rule vocabulary has no word for it. The parameter is the PHP `date()` format
@@ -473,6 +477,25 @@ it('routes every declared rule name to exactly one transformer', function (strin
 
     expect($matching)->toHaveCount(1);
 })->with(handledRuleNameRows());
+
+/**
+ * The other half of reading an authored example against every type word: text that reads as NEITHER
+ * container publishes nothing and names both words, rather than standing as the string it was typed as.
+ */
+it('refuses an authored example that reads as neither container', function (): void {
+    $context = vocabularyContext();
+    $ordered = (new RuleOrdering)->order(new RuleSet(['f' => [
+        ValidationRule::of('array_or_object'),
+        ValidationRule::of('example', ['n/a']),
+    ]]));
+
+    $result = (new DefaultValidationRulesToSchema(ValidationIntegration::transformers()))->convert($ordered, $context);
+    $diagnostics = $context->components()->diagnostics();
+
+    expect($result->schema['properties']['f'])->toBe(['type' => ['array', 'object']])
+        ->and(array_map(static fn ($d): string => $d->code, $diagnostics))->toBe(['docblock.example-untypable'])
+        ->and($diagnostics[0]->message)->toContain('does not read as array/object');
+});
 
 it('raises an info diagnostic for a rule no transformer handles', function (): void {
     // `mac_address` is outside the mapped vocabulary, so the field stays permissive and the unhandled
