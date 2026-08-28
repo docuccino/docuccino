@@ -256,12 +256,6 @@ final class ApiContract
 
         $webhook = $candidates[0];
 
-        // Recorded here, before the check, exactly as notify() is: a delivery that disagrees is still one
-        // the suite asserted about.
-        if ($webhook->id !== null) {
-            self::coverage()->record($webhook->id);
-        }
-
         try {
             $json = WebhookPayload::json($payload);
         } catch (JsonException $exception) {
@@ -276,6 +270,17 @@ final class ApiContract
 
         if (! $outcome->ok()) {
             Assert::fail(ContractMessages::delivery($webhook, $outcome));
+        }
+
+        // Credited only here, on the rule {@see CoverageRecorder::observed()} states in full for the
+        // inbound half: what the check PROVED, never that a test asserted about it. A payload that
+        // violated the documented body — or would not encode, which fails above before there is an
+        // outcome to read — has disproved the delivery. A pass carrying a NOTE counts, for the reason
+        // given there: a body documented under no media type, or under several, is a gap in the
+        // DOCUMENT that no assertion could close. Ahead of the note, so a suite that turns warnings
+        // into failures still records what it proved.
+        if ($webhook->id !== null) {
+            self::coverage()->record($webhook->id);
         }
 
         self::warn(ContractMessages::uncheckedDelivery($webhook, $outcome));

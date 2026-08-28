@@ -111,6 +111,45 @@ it('credits a response from what the check proved, not from the status it answer
     'a half that never ran' => [null, ''],
 ]);
 
+/*
+ * The outbound half, held to the same rule. A delivery reaches the recorder by a road of its own — no
+ * TestResponse, no observers, and no `$result->ok()` to hang off — so the two halves are pinned side by
+ * side here: what a delivery earns is what the check PROVED about it, never that a test asserted about
+ * it and went red.
+ */
+it('credits a delivery from what the check proved, not from having asserted about it', function (?string $fixture, string $name, mixed $payload, bool $credited): void {
+    app()->setBasePath(dirname(__DIR__, 3));
+    workbenchContract(static function (array $raw) use ($fixture): array {
+        $raw['webhooks'] = ['dir' => $fixture ?? 'workbench/app/Webhooks'];
+
+        return $raw;
+    });
+
+    $webhooks = ApiContract::index()->webhooksNamed($name);
+    $id = $webhooks === [] ? null : $webhooks[0]->id;
+
+    try {
+        // The note row says so on the run's warning channel; standing in front of it keeps this test
+        // about the credit rather than about the warning.
+        warningsRaisedBy(static fn () => ApiContract::assertions()->assertValidWebhook($name, $payload));
+    } catch (AssertionFailedError) {
+        // The point is what the recorder did with what it saw.
+    }
+
+    expect(ApiContract::coverage()->exercised())->toBe($credited ? [(string) $id] : [])
+        ->and(ApiContract::report()->exercisedResponses())->toBe($credited ? 1 : 0);
+})->with([
+    'a payload the schema accepted' => [null, 'form.submitted', ['formId' => 7, 'submittedAt' => '2026-01-01T00:00:00Z'], true],
+    // A note is the CONTRACT saying it cannot be checked — here a text/csv delivered body. Same answer
+    // as the response half, for the same reason: no assertion a suite could write closes a gap in the
+    // document, and refusing the credit would leave the webhook permanently uncoverable.
+    'a delivery nothing could check' => ['tests/Fixtures/Webhooks/Uncheckable', 'report.ready', ['reference' => 'RPT-1'], true],
+    'a payload that violated the documented body' => [null, 'form.submitted', ['formId' => 'seven', 'submittedAt' => 'now'], false],
+    // Fails before there is an Outcome at all, which is a delivery even less proved than a failed one.
+    'a payload no encoder could turn into bytes' => [null, 'form.submitted', ['handle' => fopen('php://memory', 'r')], false],
+    'a name the document does not publish' => [null, 'invoice.paid', ['id' => 1], false],
+]);
+
 it('reports the responses the run never touched, in the document’s own order', function (): void {
     ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'));
 
