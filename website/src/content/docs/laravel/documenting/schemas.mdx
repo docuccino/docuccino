@@ -92,7 +92,9 @@ output from the [timacdonald/json-api](/laravel/packages/timacdonald-json-api/) 
 When a model appears in your output, Docuccino documents it from its columns and casts, refined by
 the model's own conventions: `$hidden` and class-level `#[Hidden]` remove properties, `$visible`
 restricts to an allow-list, and `$casts` (whether the `$casts` property or the `casts()` method) set
-each column's shape. Columns come from the model's `@property` / `@property-read` docblock tags — the
+each column's shape. Those two lists reach everything the model serializes — a column, an appended
+attribute, an eager-loaded relation — exactly as Eloquent applies them, so a name you hide is a name
+the document doesn't publish. Columns come from the model's `@property` / `@property-read` docblock tags — the
 ide-helper convention — so a model whose attributes are magic still documents fully. Even without those
 tags there's a floor: a `$casts` key is a column (typed from its cast), a `$dates` entry is a date-time
 column, and a `$fillable`-only name is a permissive column. Every serialized column is marked required (a
@@ -150,7 +152,9 @@ as a nested schema under its snake-cased key — a to-many relation as an array 
 to-one relation as a nullable reference. Nesting is bounded by the same component-sharing that hoists
 every model to a reusable `#/components/schemas` entry: a relation back to a model already being
 expanded (a cycle, or a self-relation) resolves to a `$ref` rather than recursing forever, so deeply
-related models stay a graph of references, never an infinite inline expansion.
+related models stay a graph of references, never an infinite inline expansion. A relation you hide is
+left out, under the name it's loaded by — `$hidden = ['latestPost']`, the relation's own name, rather
+than the snake-cased key it serializes as, which is the name Eloquent matches too.
 
 **Polymorphic relations.** A `morphTo` becomes a `oneOf` of the possible models, with a
 `discriminator` when every variant is registered in a morph map — so clients can tell the variants
