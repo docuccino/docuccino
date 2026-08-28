@@ -366,7 +366,8 @@ An **inline** `validate()` / `Validator::make()` body has no source class to nam
 stays inline at the operation. To patch a single property of the inferred body — a description, an
 example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying
 one keeps its body inline for that operation, because the patch adjusts a property the shared
-component must not carry. To illustrate the body as a whole — the payload a reader would send —
+component must not carry. Its name is a field path written the way a rule key is — `meta.source`
+patches `source` inside `meta` — so a nested field is named the same way in both places. To illustrate the body as a whole — the payload a reader would send —
 [`#[Example]`](/laravel/reference/attributes/#example) takes `request: true`, and has a page of its
 own: [Example payloads](/laravel/documenting/examples/). To say something about the body in prose —
 "send only the fields you're changing" — see [Prose for the body
