@@ -76,7 +76,8 @@ function accountedFor32Values(): array
         // `content` rather than `schema` — so the parameter goes with it.
         'parameter.in.querystring' => 'downlevel.value-not-in-3.1',
         // Only the member has no 3.1 spelling: `form` is the one cookie style 3.1 knows, and it is also
-        // 3.1's default there, so the parameter stands.
+        // 3.1's default there, so the parameter stands — and stands alone, since both styles default
+        // `explode` to true and no `explode` reproduces RFC 6265 escaping regardless.
         'parameter.style.cookie' => 'downlevel.value-not-in-3.1',
     ];
 }
@@ -84,8 +85,8 @@ function accountedFor32Values(): array
 /**
  * A 3.2 document carrying a `querystring` parameter at every position one can stand — a path item's own
  * list, an operation's list, the shared bucket, a `$ref` naming it, and a second `$ref` reaching it through
- * another name — plus the cookie `style` 3.2 added, and the query and cookie parameters 3.1 spells the same
- * way as the control.
+ * another name — plus the cookie `style` 3.2 added over both a primitive and an object, and the query and
+ * cookie parameters 3.1 spells the same way as the control.
  *
  * Inline rather than a fixture FILE: the UIR schema's own `in` enum stops at 3.1's four locations, so a
  * file carrying one would be a UIR document the product is right to refuse, and the corpus-wide guards
@@ -127,6 +128,12 @@ function documentWith32OnlyValues(): array
                     'parameters' => [
                         $raw('events'),
                         ['name' => 'session', 'in' => 'cookie', 'style' => 'cookie', 'schema' => ['type' => 'string']],
+                        // And once over an object, the only shape `explode` is not inert on: this is the
+                        // subject that would catch the drop minting an `explode` beside the fallback style.
+                        ['name' => 'prefs', 'in' => 'cookie', 'style' => 'cookie', 'schema' => [
+                            'type' => 'object',
+                            'properties' => ['theme' => ['type' => 'string']],
+                        ]],
                     ],
                     'responses' => ['200' => ['description' => 'Events.']],
                 ],
@@ -501,14 +508,15 @@ it('reports each lost parameter once, at the position that lost it', function (s
         )),
     );
 
-    // Five, and the two `$ref` use sites are not among them: a shared parameter is reported where it is
+    // Six, and the two `$ref` use sites are not among them: a shared parameter is reported where it is
     // DEFINED, the way a dropped security scheme is, rather than again at every operation naming it.
-    expect($messages)->toHaveCount(5, $format)
+    expect($messages)->toHaveCount(6, $format)
         ->and($messages[0])->toContain('`search`')->toContain('#/paths/~1search/parameters/0')
         ->and($messages[1])->toContain('`events`')->toContain('#/paths/~1events/get/parameters/0')
         ->and($messages[2])->toContain('`style: cookie`')->toContain('#/paths/~1events/get/parameters/1/style')
-        ->and($messages[3])->toContain('shared parameter `RawQuery`')->toContain('every `$ref` naming it')
-        ->and($messages[4])->toContain('shared parameter `AliasedQuery`')
+        ->and($messages[3])->toContain('`style: cookie`')->toContain('#/paths/~1events/get/parameters/2/style')
+        ->and($messages[4])->toContain('shared parameter `RawQuery`')->toContain('every `$ref` naming it')
+        ->and($messages[5])->toContain('shared parameter `AliasedQuery`')
         ->toContain('resolves through `#/components/parameters/RawQuery`');
 })->with(['openapi-3.1', 'openapi-3.0']);
 
@@ -522,9 +530,20 @@ it('takes the parameter member the drop emptied rather than publishing it empty'
     expect($decoded['paths']['/search'])->not->toHaveKey('parameters', $format)
         ->and($decoded['paths']['/tickets']['get'])->not->toHaveKey('parameters', $format)
         ->and($decoded['paths']['/tickets']['post'])->not->toHaveKey('parameters', $format)
-        // The cookie parameter kept its list, minus the style member and the parameter beside it.
+        // The cookie parameters kept their list, minus the style member and the parameter beside them —
+        // and minus nothing else and PLUS nothing else. The object one is the assertion that matters:
+        // `explode` is where a fallback style could be compensated for, both versions default it to true
+        // over `form` and `cookie` alike, and no `explode` value reproduces RFC 6265 escaping, so the
+        // honest answer is to write none. An `explode` appearing here is the emitter having guessed.
         ->and($decoded['paths']['/events']['get']['parameters'])
-        ->toBe([['name' => 'session', 'in' => 'cookie', 'schema' => ['type' => 'string']]], $format)
+        // Canonical order, not source order — the canonicalizer sorts a parameter list.
+        ->toBe([
+            ['name' => 'prefs', 'in' => 'cookie', 'schema' => [
+                'type' => 'object',
+                'properties' => ['theme' => ['type' => 'string']],
+            ]],
+            ['name' => 'session', 'in' => 'cookie', 'schema' => ['type' => 'string']],
+        ], $format)
         ->and(array_keys($decoded['components']['parameters']))->toBe(['Page'], $format);
 })->with(['openapi-3.1', 'openapi-3.0']);
 

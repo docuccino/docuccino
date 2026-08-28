@@ -145,6 +145,14 @@ final readonly class OpenApi31DownlevelEmitter implements ReportingEmitter
      * the older version's own default is the nearest true thing: 3.1 spells only `form` for a cookie
      * parameter's `style`, which is what every 3.1 cookie parameter already says.
      *
+     * `DROP_MEMBER` writes NOTHING in the dropped member's place, and `explode` is the near miss that says
+     * why. 3.2 defaults it to true for `style: cookie` exactly as 3.1 does for the `form` a cookie
+     * parameter falls back to, so the drop moves it nowhere; and no `explode` would reproduce `cookie`
+     * anyway, since `form` percent-encodes where `cookie` escapes nothing and joins an exploded value on
+     * `&` rather than `; `. Pinning one would trade a lost spelling for a false one. Read that default off
+     * the PROSE — the vendored meta-schemas annotate `explode` false for any style not literally `form`,
+     * contradicting 3.2's own text, and a JSON Schema `default` is an annotation nothing applies.
+     *
      * @var array<string, array<string, array<string, array{string, string}>>>
      */
     private const array VALUES_32 = [
@@ -158,7 +166,7 @@ final readonly class OpenApi31DownlevelEmitter implements ReportingEmitter
             'style' => [
                 'cookie' => [
                     self::DROP_MEMBER,
-                    'The parameter stands, at the only cookie style OpenAPI 3.1 spells — `form`, whose `explode` defaults to true where `cookie`\'s defaults to false. State `explode: false` beside the style if the cookie has to stay a single value in the 3.1 and 3.0 artifacts.',
+                    'The parameter stands at `form`, the only cookie style OpenAPI 3.1 spells and its default there, and nothing is written in the dropped member\'s place: both styles default `explode` to true, so an exploded value stays exploded. What the older artifacts cannot say is the rest of RFC 6265 — `form` percent-encodes where `cookie` escapes nothing, and joins an exploded array or object on `&` rather than `; `. Keep the 3.2 artifact for consumers that need the cookie wire format.',
                 ],
             ],
         ],
