@@ -14,6 +14,7 @@ use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
+use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Support\UnmatchedIgnore;
 
 /**
@@ -111,7 +112,9 @@ final class IgnoredParametersExtension implements OperationExtension
      * tool can understand is not worth making the author look up.
      *
      * A value that names no location at all is the other thing: it dropped nothing, and it cannot be read
-     * as any of four words, so it is reported rather than guessed at.
+     * as any of four words, so it is reported rather than guessed at — quoting both of the author's
+     * values through {@see PlainText}, the way its sibling report does, because a diagnostic message is
+     * also emitted into `x-docuccino.diagnostics` and read back out of there by something else.
      *
      * @return list<string>
      */
@@ -131,8 +134,8 @@ final class IgnoredParametersExtension implements OperationExtension
             code: 'attribute.ignore-param-location',
             message: sprintf(
                 '#[IgnoreParam(name: "%s", in: "%s")] names no parameter location, so nothing was dropped.',
-                $ignore->name,
-                $ignore->in,
+                PlainText::of($ignore->name),
+                PlainText::of($ignore->in),
             ),
             source: $context->actionSource(),
             routeSignature: $context->route->signature(),

@@ -2,17 +2,26 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Extensions\Context\AttributeSet;
+use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Laravel\Extensions\IgnoredParametersExtension;
 use Docuccino\Laravel\Tests\Support\TraceScript;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
@@ -235,4 +244,30 @@ it('reports nothing where every declaration matched', function (): void {
     ));
 
     expect($reports)->toHaveCount(3);
+});
+
+it('escapes the two values it did not write into the location report', function (): void {
+    // The name and the `in:` are the author's, but a diagnostic message is not only printed: it reaches
+    // `x-docuccino.diagnostics` in the emitted document, where a `jq -r` re-arms an escape sequence that
+    // survived as bytes. The sibling report next door already puts both through `PlainText`.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/forms'),
+        actionRef: new ActionRef('', 'App\\C', 'index'),
+        attributes: new AttributeSet([new IgnoreParam(name: "X-Trace\x1b[31m", in: "bo\x07dy")]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+
+    (new IgnoredParametersExtension)->handle(new OperationDraft, $context);
+
+    $reports = array_values(array_filter(
+        $context->components->diagnostics(),
+        static fn (Diagnostic $diagnostic): bool => $diagnostic->code === 'attribute.ignore-param-location',
+    ));
+
+    expect($reports)->toHaveCount(1)
+        ->and($reports[0]->message)->not->toContain("\x1b")
+        ->and($reports[0]->message)->not->toContain("\x07")
+        ->and($reports[0]->message)->toContain('\x1B')
+        ->and($reports[0]->message)->toContain('\x07');
 });
