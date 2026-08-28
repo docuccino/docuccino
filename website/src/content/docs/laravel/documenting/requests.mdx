@@ -366,7 +366,8 @@ An **inline** `validate()` / `Validator::make()` body has no source class to nam
 stays inline at the operation. To patch a single property of the inferred body — a description, an
 example — use [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter); an operation carrying
 one keeps its body inline for that operation, because the patch adjusts a property the shared
-component must not carry. To illustrate the body as a whole — the payload a reader would send —
+component must not carry. Its name is a field path written the way a rule key is — `meta.source`
+patches `source` inside `meta` — so a nested field is named the same way in both places. To illustrate the body as a whole — the payload a reader would send —
 [`#[Example]`](/laravel/reference/attributes/#example) takes `request: true`, and has a page of its
 own: [Example payloads](/laravel/documenting/examples/). To say something about the body in prose —
 "send only the fields you're changing" — see [Prose for the body
@@ -470,6 +471,12 @@ are. It constrains the value, and the container is whatever else established it 
 above, or, for a Spatie Data property, the [type its docblock
 states](/laravel/packages/spatie-data/#requests-from-a-data-class). With nothing else to go on, `array`
 plus a `*` child is a JSON array, which is all the information there is.
+
+An `array` rule with **no** child rules at all — no `*`, no named keys — settles nothing either way, and
+a free-form map passes it exactly as a list does. Docuccino documents both, `"type": ["array", "object"]`,
+and bounds both (`max:3` writes `maxItems` and `maxProperties`, whichever the request turns out to send).
+The build says so with a `validation.container-undecided` notice naming the field: add `field.*` rules or
+dotted `field.<key>` rules and the document narrows to the one you meant.
 
 ### Documenting a custom rule
 
@@ -766,7 +773,7 @@ uploads](#file-uploads) below. Anything not listed leaves the property permissiv
 | `integer`, `int` | `integer` |
 | `numeric` | `number` |
 | `boolean`, `bool` | `boolean` |
-| `array` | `array` |
+| `array` | `array` where a `*` or named child key says which container the field is; `[array, object]` on its own, since Laravel's `array` covers both. |
 | `email` | `string`, `format: email` |
 | `uuid` | `string`, `format: uuid` |
 | `ulid` | `string`, `format: ulid` |

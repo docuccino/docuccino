@@ -221,6 +221,38 @@ final class ContractIndex
     }
 
     /**
+     * The path templates whose path item is written as a `$ref` the document does not define, as
+     * `template => the reference`, sorted. Empty where every reference lands.
+     *
+     * A path item that points nowhere has no methods to read, so the path publishes no operations —
+     * and every lookup and every count here would then report exactly what an undocumented route
+     * reports. This is the difference: the document DOES describe that path, and a typo in one
+     * pointer is a broken document rather than a missing route. An index cannot fail an assertion, so
+     * it keeps the fact and {@see ContractMessages::undocumented()} says it.
+     *
+     * @return array<string, string>
+     *
+     * @internal
+     */
+    public function unresolvedPaths(): array
+    {
+        return self::unresolvedPathItems($this->document, 'paths');
+    }
+
+    /**
+     * The same for `webhooks`, as `name => the reference` — the outbound half of one defect, and
+     * {@see ContractMessages::undocumentedWebhook()} says it.
+     *
+     * @return array<string, string>
+     *
+     * @internal
+     */
+    public function unresolvedWebhooks(): array
+    {
+        return self::unresolvedPathItems($this->document, 'webhooks');
+    }
+
+    /**
      * Whether this artifact's FORMAT has a `webhooks` member at all: OpenAPI 3.0 defines none, so a
      * document downlevelled to it dropped every webhook it had. That is a different answer from
      * "documents no webhooks", and a caller owes its reader the difference.
@@ -290,6 +322,15 @@ final class ContractIndex
     }
 
     /**
+     * The `paths` map, one entry per (path item, method).
+     *
+     * A path item may be written as a `$ref` into `components.pathItems`, so it is followed
+     * ({@see Refs::follow()}) before anything is read off it — a reference is a spelling, not a
+     * different contract, and an operation behind one indexes exactly as the same operation written
+     * inline does. The `path` stays the USE SITE's template, which is what a request binds against;
+     * only the pointer segments move to where a reader would go and look, as {@see
+     * ContractOperation::responseFor()} already has them.
+     *
      * @param  array<string, mixed>  $document
      * @return list<ContractOperation>
      */
@@ -306,13 +347,22 @@ final class ContractIndex
 
         $operations = [];
         foreach ($templates as $template) {
-            $item = $paths[$template];
-            if (! is_array($item)) {
+            $written = $paths[$template];
+            if (! is_array($written)) {
                 continue;
             }
 
-            /** @var array<string, mixed> $item */
-            $shared = self::parameters($document, $item['parameters'] ?? null, ['paths', $template, 'parameters']);
+            /** @var array<string, mixed> $written */
+            [$item, $at, $dangling] = Refs::follow($document, $written, ['paths', $template]);
+
+            // Nothing to index behind a pointer that lands nowhere: which methods it publishes is
+            // precisely what could not be read. {@see unresolvedPaths()} keeps the fact so the reader
+            // is told the pointer is broken rather than that the route is undocumented.
+            if ($dangling !== null) {
+                continue;
+            }
+
+            $shared = self::parameters($document, $item['parameters'] ?? null, [...$at, 'parameters']);
 
             foreach (PathItem::METHODS as $method) {
                 $operation = $item[$method] ?? null;
@@ -321,7 +371,7 @@ final class ContractIndex
                 }
 
                 /** @var array<string, mixed> $operation */
-                $segments = ['paths', $template, $method];
+                $segments = [...$at, $method];
 
                 $operations[] = new ContractOperation(
                     id: NodeIdentity::inArray($operation),
@@ -342,7 +392,8 @@ final class ContractIndex
 
     /**
      * The `webhooks` map, indexed the same way {@see index()} does `paths` — by a sorted key rather
-     * than by the order the document happens to spell them in.
+     * than by the order the document happens to spell them in, and with a path item written as a
+     * `$ref` followed for the same reason.
      *
      * @param  array<string, mixed>  $document
      * @return list<ContractWebhook>
@@ -360,8 +411,15 @@ final class ContractIndex
 
         $indexed = [];
         foreach ($names as $name) {
-            $item = $webhooks[$name];
-            if (! is_array($item)) {
+            $written = $webhooks[$name];
+            if (! is_array($written)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $written */
+            [$item, $at, $dangling] = Refs::follow($document, $written, ['webhooks', $name]);
+
+            if ($dangling !== null) {
                 continue;
             }
 
@@ -377,12 +435,51 @@ final class ContractIndex
                     name: $name,
                     method: strtoupper($method),
                     operation: $operation,
-                    segments: ['webhooks', $name, $method],
+                    segments: [...$at, $method],
                 );
             }
         }
 
         return $indexed;
+    }
+
+    /**
+     * The entries of a path-item map whose `$ref` chain never lands — a name nothing defines, or a
+     * cycle, which {@see Refs::follow()} reports the same way because both leave the same nothing to
+     * read.
+     *
+     * @param  array<string, mixed>  $document
+     * @param  'paths'|'webhooks'  $member
+     * @return array<string, string>
+     */
+    private static function unresolvedPathItems(array $document, string $member): array
+    {
+        $map = $document[$member] ?? null;
+
+        if (! is_array($map)) {
+            return [];
+        }
+
+        $keys = array_map(strval(...), array_keys($map));
+        sort($keys, SORT_STRING);
+
+        $found = [];
+        foreach ($keys as $key) {
+            $node = $map[$key];
+
+            if (! is_array($node)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $node */
+            $dangling = Refs::follow($document, $node, [$member, $key])[2];
+
+            if ($dangling !== null) {
+                $found[$key] = $dangling;
+            }
+        }
+
+        return $found;
     }
 
     /**

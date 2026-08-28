@@ -255,11 +255,12 @@ resolved against the document; broken refs become diagnostics. `null` compiles n
 ```
 
 Points at a directory of response recordings your test suite wrote, one committed file per operation,
-named after the operation's stable id. The build **reads** those files and publishes each body as the
-`example` beside the schema documented for that status and media type — no test runs, no route is
-dispatched, no database is opened. A test that names its scenario
-(`assertValidResponse(recordAs: 'empty-cart')`) publishes into an `examples` map instead, so several
-scenarios can appear together.
+named after the operation's stable id. The build **reads** those files and publishes each body beside
+the schema documented for that status and media type — no test runs, no route is dispatched, no
+database is opened. Recording is opt-in per assertion: a test asks for its response to be published by
+naming the scenario it set up (`assertValidResponse(recordAs: 'empty-cart')`), and the names publish
+together as an `examples` map, so several scenarios can appear at once. An assertion that names nothing
+checks the response and records none of it.
 
 A recorded example sits at the `integration(20)` rung of the precedence ladder — above inference, below
 anything you wrote, so an [`#[Example]`](/laravel/reference/attributes/#example) or an `@example`

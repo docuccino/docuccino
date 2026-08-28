@@ -39,6 +39,18 @@ final class WebhookPayload
     }
 
     /**
+     * Whether a `[]` in those bytes could as easily have been `{}`.
+     *
+     * True of everything {@see json()} encodes, because PHP's one array is both containers and
+     * `json_encode` has to pick — and false of the one branch that encodes nothing: a payload handed
+     * over as JSON text already says which it is, in its own bytes.
+     */
+    public static function emptyIsAmbiguous(mixed $payload): bool
+    {
+        return ! is_string($payload);
+    }
+
+    /**
      * @throws JsonException
      */
     private static function encode(mixed $value): string

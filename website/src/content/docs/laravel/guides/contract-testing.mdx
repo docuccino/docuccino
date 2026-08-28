@@ -139,11 +139,23 @@ What they hold you to:
   integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
   Docuccino documents it as.
+- **`postJson($uri, [])` sends the empty body it looks like.** PHP has one array where JSON has two
+  containers, so `json_encode([])` writes `[]`, and there is no argument you could pass those helpers
+  that would write `{}`. Where the operation documents a body an empty object satisfies, that `[]` is
+  read as the empty object; where it documents a list, it stays the list it looks like, `minItems` and
+  all. Nothing else moves: a populated array against an object body still fails, and so does an empty
+  one against an object whose properties are required. The same reading covers a webhook payload you
+  hand over as a PHP array — JSON *text* you pass as a string already said which container it is, and
+  is taken at its word. Your responses are never re-read this way, because `[]` in a response body is
+  what your clients really receive.
 - **The response headers the document publishes are checked, not just the body.** A `Location` on a
   `201`, the `Retry-After` and `X-RateLimit-*` on a
   [`429`](/laravel/documenting/rate-limiting/) — every one of them is read as the type documented
   beside it, the same way a query parameter is. A header marked `required` that the response never sent
   fails; an optional one it never sent does not, because the contract said it might not be there.
+  Docuccino marks one `required` where the framework leaves no branch in which it is absent — a
+  redirect's `Location`, and all four throttle headers — and you can say the same about your own with
+  [`#[ResponseHeader(required: true)]`](/laravel/reference/attributes/#responseheader).
   Header names are matched case-insensitively, and a header the response sent more than once
   (`Set-Cookie`) is held to the schema once per value it sent.
 - **A response header the check cannot read passes with a note**, the same way a `text/csv` body does:
@@ -411,24 +423,31 @@ of the failure, alongside what the validator objected to.
 ## Record your suite's responses
 
 The bodies your assertions just checked are also the most honest examples your document could carry.
-Turn the recorder on where you [set the assertions up](#setup), and every checked response becomes a
-candidate for the operation it came from:
+Turn the recorder on where you [set the assertions up](#setup):
 
 ```php
 // tests/TestCase.php or tests/Pest.php, beside registerMacros()
 \Docuccino\Laravel\Testing\ApiContract::record();
 ```
 
-A test that set up a scenario worth publishing can name it, and the name reaches the document:
+Then say which responses are worth publishing, one assertion at a time. `recordAs:` names the scenario
+the test set up, and naming it is what asks for it:
 
 ```php
-$this->getJson('/api/carts/1')->assertValidResponse(recordAs: 'empty-cart');
+$this->getJson('/api/carts/1')->assertOk()->assertValidExchange();                       // checked
+$this->getJson('/api/carts/1')->assertOk()->assertValidExchange(recordAs: 'empty-cart'); // checked and published
 ```
 
+Recording is deliberate because checking and publishing want opposite things. Check every exchange you
+can — that is how you find a contract defect. Publish one response per operation, chosen by you — that
+is documentation. An assertion that names no scenario checks the response and records none of it, so a
+suite full of `assertValidExchange()` calls never fills your document with whatever a factory happened
+to generate.
+
 Recording writes committed files that the *build* reads — it publishes nothing on its own, and
-executes nothing at build time. Where the files live, how a candidate is chosen, what gets redacted on
-the way out and how a recorded example ranks against one you wrote are all on [Example
-payloads](/laravel/documenting/examples/#examples-your-tests-recorded).
+executes nothing at build time. Where the files live, how the best of several tests sharing a name is
+chosen, what gets redacted on the way out and how a recorded example ranks against one you wrote are
+all on [Example payloads](/laravel/documenting/examples/#examples-your-tests-recorded).
 
 Recording survives `--parallel` too, and differently: a recording is one operation's, and the best body
 for it is a total order on the bodies themselves — so workers take turns on a lock rather than writing

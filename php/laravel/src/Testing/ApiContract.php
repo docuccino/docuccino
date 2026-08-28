@@ -73,10 +73,11 @@ final class ApiContract
     /**
      * Record what this run's responses look like, as the examples the document publishes.
      *
-     * One line in a test bootstrap and the suite starts writing a committed file per operation; the
-     * build reads those files, and goes on executing nothing. Pass a directory to override
-     * `examples.recordings`. See {@see ExampleRecorder} for what gets chosen and what gets redacted,
-     * and `recordAs:` on the response assertions for publishing several named scenarios at once.
+     * One line in a test bootstrap, and every assertion that NAMES its scenario — `recordAs:` on the
+     * response assertions — writes a committed file for its operation; the build reads those files, and
+     * goes on executing nothing. Nothing else is recorded: an assertion that names no scenario is
+     * checking a response, not choosing what the document shows. Pass a directory to override
+     * `examples.recordings`. See {@see ExampleRecorder} for what gets chosen and what gets redacted.
      */
     public static function record(?string $directory = null): ExampleRecorder
     {
@@ -167,8 +168,8 @@ final class ApiContract
      * and fail the test when the contract and the exchange disagree — in that order, so an observer
      * sees a failing exchange as well as a passing one.
      *
-     * `$recordAs` names the scenario for {@see ExampleRecorder}, and is ignored by a suite that is not
-     * recording.
+     * `$recordAs` names the scenario for {@see ExampleRecorder} — and asks for it: nothing is recorded
+     * from an exchange that named none. It is ignored by a suite that is not recording.
      *
      * @param  TestResponse<Response>  $response
      */
@@ -271,7 +272,7 @@ final class ApiContract
             ));
         }
 
-        $outcome = (new ContractChecker($index))->delivery($webhook, $json);
+        $outcome = (new ContractChecker($index))->delivery($webhook, $json, WebhookPayload::emptyIsAmbiguous($payload));
 
         if (! $outcome->ok()) {
             Assert::fail(ContractMessages::delivery($webhook, $outcome));
@@ -334,6 +335,11 @@ final class ApiContract
             cookies: self::strings($request->cookies->all()),
             requestBody: $request->getContent(),
             requestContentType: $request->headers->get('Content-Type'),
+            // PHP has one array and JSON has two containers, so `json_encode([])` is `[]` and there is
+            // no PHP value the JSON test helpers — which take `array $data` — would write as `{}`.
+            // A JSON request body of `[]` therefore says nothing about which the author meant, and the
+            // check reads it as whichever the contract accepts.
+            ambiguousEmptyRequestBody: $request->isJson(),
             responseBody: $body === false ? '' : $body,
             responseContentType: $base->headers->get('Content-Type'),
             responseHeaders: self::headerValues($base->headers),

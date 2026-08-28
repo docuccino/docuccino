@@ -6,6 +6,7 @@ use Docuccino\Core\Contract\CheckResult;
 use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\ContractOperation;
+use Docuccino\Core\Contract\ContractParameter;
 use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
@@ -1721,6 +1722,60 @@ function scriptWatch(int $builds, ?callable $onBuild = null): ScriptedBuildRunne
 }
 
 /**
+ * The contract fixture with path items moved into `components.pathItems` and `$ref`ed from where they
+ * stood. OAS permits that spelling at every path-item position, this repo's own downlevel emitter
+ * inlines documents that use it, and a reader which does not follow it sees a path publishing nothing
+ * at all — so the two spellings are held to producing one index.
+ *
+ * @param  list<string>  $keys  which entries to hoist; every one when empty
+ * @param  'paths'|'webhooks'  $member
+ * @return array<string, mixed>
+ */
+function contractWithReferencedPathItems(array $keys = [], string $member = 'paths'): array
+{
+    $document = loadFixture('contract.uir.json');
+
+    /** @var array<string, mixed> $map */
+    $map = $document[$member];
+    $keys = $keys === [] ? array_map(strval(...), array_keys($map)) : $keys;
+
+    foreach ($keys as $key) {
+        $name = 'Shared'.preg_replace('/[^A-Za-z0-9]/', '', $key);
+
+        $document['components']['pathItems'][$name] = $map[$key];
+        $document[$member][$key] = ['$ref' => '#/components/pathItems/'.$name];
+    }
+
+    return $document;
+}
+
+/**
+ * How a test names what an index holds, without naming a pointer: an operation's label, its stable id,
+ * the parameters it inherited and the responses it documents. Everything a `$ref` must not change.
+ *
+ * @return array<string, mixed>
+ */
+function contractIndexShape(ContractIndex $index): array
+{
+    $shape = ['operations' => [], 'webhooks' => []];
+
+    foreach ($index->operations() as $operation) {
+        $shape['operations'][] = [
+            $operation->label(),
+            $operation->id,
+            array_map(static fn (ContractParameter $p): string => $p->in.':'.$p->name, $operation->parameters),
+            $operation->responseKeys(),
+        ];
+    }
+
+    foreach ($index->webhooks() as $webhook) {
+        $shape['webhooks'][] = [$webhook->label(), $webhook->id];
+    }
+
+    return $shape;
+}
+
+/**
  * The contract-testing fixture: a small, provenance-carrying UIR document covering the shapes the
  * checker has to get right (a `$ref`'d component, a recursive one, a status range, a `default`, a
  * literal path beating a placeholder, a media type JSON Schema cannot check) — and, under `webhooks`,
@@ -1734,6 +1789,45 @@ function contractIndex(?callable $mutate = null): ContractIndex
     $document = loadFixture('contract.uir.json');
 
     return ContractIndex::fromArray($mutate === null ? $document : $mutate($document));
+}
+
+/**
+ * The ways one document can write `type: integer` without the word appearing on the node a reader
+ * lands on: behind a component reference, behind either composition, and behind the `allOf` wrapper
+ * the 3.0 downlevel emitter hoists a `$ref`'s siblings into. Each expects `#/components/schemas/PerPage`
+ * to be an integer schema in the document under test.
+ *
+ * @return array<string, array{array<string, mixed>}>
+ */
+function contractSchemaSpellings(): array
+{
+    return [
+        'a $ref' => [['$ref' => '#/components/schemas/PerPage']],
+        'an anyOf' => [['anyOf' => [['type' => 'integer'], ['type' => 'null']]]],
+        'a oneOf' => [['oneOf' => [['type' => 'integer'], ['type' => 'null']]]],
+        'an allOf' => [['allOf' => [['type' => 'integer']]]],
+        'a $ref hoisted into an allOf beside its siblings' => [['allOf' => [['$ref' => '#/components/schemas/PerPage']]]],
+        'a $ref inside an anyOf' => [['anyOf' => [['$ref' => '#/components/schemas/PerPage'], ['type' => 'null']]]],
+    ];
+}
+
+/**
+ * The component schemas the parameter-coercion tests resolve against: one of each spelling a `type`
+ * can hide behind — a plain component, an alias chain, an untyped enum, a list, an object, and a
+ * composition that references its way back to itself.
+ *
+ * @return array<string, mixed>
+ */
+function contractSchemaDocument(): array
+{
+    return ['components' => ['schemas' => [
+        'PerPage' => ['type' => 'integer', 'minimum' => 1],
+        'PerPageAlias' => ['$ref' => '#/components/schemas/PerPage'],
+        'UntypedSizes' => ['enum' => [10, 25, 1000]],
+        'SizeList' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/PerPage']],
+        'SizeFilter' => ['type' => 'object', 'properties' => ['size' => ['$ref' => '#/components/schemas/PerPage']]],
+        'Cycle' => ['allOf' => [['$ref' => '#/components/schemas/Cycle']]],
+    ]]];
 }
 
 /**
@@ -1766,6 +1860,7 @@ function contractExchange(
     string $requestBody = '',
     ?string $requestContentType = 'application/json',
     array $responseHeaders = [],
+    bool $ambiguousEmptyRequestBody = false,
 ): Exchange {
     return new Exchange(
         method: $method,
@@ -1775,6 +1870,7 @@ function contractExchange(
         headers: $headers,
         requestBody: $requestBody,
         requestContentType: $requestContentType,
+        ambiguousEmptyRequestBody: $ambiguousEmptyRequestBody,
         responseBody: $responseBody,
         responseContentType: $responseContentType,
         responseHeaders: $responseHeaders,

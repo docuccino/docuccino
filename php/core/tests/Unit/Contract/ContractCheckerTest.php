@@ -736,3 +736,62 @@ it('documents every fixture header with a schema or a content, as OAS requires',
     expect(count($found))->toBeGreaterThanOrEqual(6)
         ->and(array_keys(array_filter($found, static fn (bool $ok): bool => ! $ok)))->toBe([]);
 });
+
+it('checks a parameter whose type is behind a reference or a composition against that type', function (array $schema): void {
+    // The coercion that reads `?page=2` back as an integer has to unwrap whatever the document wrote
+    // the type behind, because the validator it feeds does. A reader that saw only a literal `type`
+    // handed the wire string to a schema that says `integer`, and every such request failed.
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices', query: ['page' => '2'], headers: ['X-Tenant' => 'acme'], responseBody: '[]'),
+        static function (array $document) use ($schema): array {
+            $document['components']['schemas']['PerPage'] = ['type' => 'integer', 'minimum' => 1];
+            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = $schema;
+
+            return $document;
+        },
+    );
+
+    expect($result->request->violations)->toBe([])
+        ->and($result->request->ok())->toBeTrue();
+})->with(contractSchemaSpellings());
+
+it('still fails a parameter that is not the documented type, whatever the type is written behind', function (array $schema): void {
+    // Negative half of the same table: widening the reader must not widen what passes. `?page=abc`
+    // still has to read as the type problem it is rather than becoming the integer zero.
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices', query: ['page' => 'abc'], headers: ['X-Tenant' => 'acme'], responseBody: '[]'),
+        static function (array $document) use ($schema): array {
+            $document['components']['schemas']['PerPage'] = ['type' => 'integer', 'minimum' => 1];
+            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = $schema;
+
+            return $document;
+        },
+    );
+
+    // A union reports one leaf per branch it failed, so the assertion is that the type problem is
+    // among them — not that it is the only thing the validator had to say.
+    expect(array_map(static fn ($v): string => $v->where().': '.$v->message, $result->request->violations))
+        ->toContain('?page: The data (string) must match the type: integer');
+})->with(contractSchemaSpellings());
+
+it('checks a response header whose type is behind a reference or a composition against that type', function (array $schema): void {
+    // Both halves reach coercion through the one shared parameter check, so a fix to the request half
+    // alone would have left every non-string response header failing.
+    $result = checkContract(
+        contractExchange(
+            'POST',
+            '/api/invoices',
+            status: 201,
+            responseBody: '{"reference":"INV-1","total":1}',
+            responseHeaders: ['Location' => ['/api/invoices/42'], 'X-RateLimit-Remaining' => ['4']],
+        ),
+        static function (array $document) use ($schema): array {
+            $document['components']['schemas']['PerPage'] = ['type' => 'integer', 'minimum' => 0];
+            $document['paths']['/api/invoices']['post']['responses']['201']['headers']['X-RateLimit-Remaining']['schema'] = $schema;
+
+            return $document;
+        },
+    );
+
+    expect($result->response->violations)->toBe([]);
+})->with(contractSchemaSpellings());
