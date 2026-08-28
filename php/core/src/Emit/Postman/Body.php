@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Emit\Postman;
 
 use Docuccino\Core\Canonical\CanonicalJsonSerializer;
+use Docuccino\Core\Contract\Pointer;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Emit\SchemaExampleFactory;
@@ -147,7 +148,8 @@ final class Body
      */
     private static function form(string $base, array $media, array $schema, array $components, SchemaExampleFactory $examples, string $signature, array &$diagnostics): ?array
     {
-        [$properties, $required] = self::fields($schema, $components);
+        $folded = [];
+        [$properties, $required] = self::fields($schema, $components, $folded);
 
         if ($properties === []) {
             if ($schema !== [] && ($schema['type'] ?? 'object') !== 'object') {
@@ -227,11 +229,18 @@ final class Body
      * property named twice is one property and the outer schema, then the earlier branch, keeps the
      * say; `required` accumulates, since `in_array` is all it is asked.
      *
+     * **Bounded by the document, not by the depth cap.** A pointer is folded ONCE across the whole
+     * walk, so `k` branches referencing a shape already folded cost `k` visits rather than `k` to the
+     * power of the cap — which is seconds of pure CPU on a document under a kilobyte, at flat memory,
+     * so no limit anywhere stops it. Skipping costs the answer nothing: a conjunction is a union, and
+     * whatever is behind a pointer met twice is already in the set the first visit merged.
+     *
      * @param  array<string, mixed>  $schema  the media type's schema, `$ref` already followed
      * @param  array<string, mixed>  $components
+     * @param  array<string, true>  $folded  the pointers this walk has already folded
      * @return array{0: array<string, mixed>, 1: list<mixed>}
      */
-    private static function fields(array $schema, array $components, int $depth = 0): array
+    private static function fields(array $schema, array $components, array &$folded, int $depth = 0): array
     {
         $properties = is_array($schema['properties'] ?? null) ? Arr::stringKeyed($schema['properties']) : [];
         $required = is_array($schema['required'] ?? null) ? array_values($schema['required']) : [];
@@ -247,13 +256,25 @@ final class Body
                 continue;
             }
 
-            [$resolved, , $unresolved] = Ref::follow(Arr::stringKeyed($branch), $components);
+            [$resolved, $where, $unresolved] = Ref::follow(Arr::stringKeyed($branch), $components);
 
             if ($unresolved !== null) {
                 continue;
             }
 
-            [$theirs, $theirRequired] = self::fields($resolved, $components, $depth + 1);
+            // An inline branch is written out once and so is walked once; a pointer can be written any
+            // number of times, and is folded on the first of them.
+            if ($where !== []) {
+                $pointer = Pointer::of($where);
+
+                if (isset($folded[$pointer])) {
+                    continue;
+                }
+
+                $folded[$pointer] = true;
+            }
+
+            [$theirs, $theirRequired] = self::fields($resolved, $components, $folded, $depth + 1);
 
             $properties += $theirs;
             $required = [...$required, ...$theirRequired];

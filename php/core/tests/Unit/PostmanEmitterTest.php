@@ -1074,3 +1074,71 @@ it('emits nothing for a path item behind a reference that names nothing, and eve
 
     expect(array_map(static fn (array $i): string => (string) $i['name'], $collection['item']))->toBe(['GET /here']);
 });
+
+it('folds a self-referencing allOf in work bounded by the document, not by the depth cap', function (): void {
+    // Eight branches, each pointing back at the shape that holds them. A fold that bounds only DEPTH
+    // walks every path through them — 8^8 node visits at a cap of 8, measured at 31 seconds of pure
+    // CPU on a document of under a kilobyte, at flat memory, so no limit anywhere ends it. Folding a
+    // pointer once makes the same document eight visits. The budget is what separates the two: it is
+    // fifteen times the depth-bounded run's own measurement, so nothing but the defect reaches it.
+    $document = postmanDocumentWithPaths(['/things' => ['post' => [
+        'requestBody' => ['content' => ['application/x-www-form-urlencoded' => [
+            'schema' => ['$ref' => '#/components/schemas/Knot'],
+        ]]],
+        'responses' => ['204' => ['description' => 'No content']],
+    ]]]);
+    $document['components']['schemas']['Knot'] = [
+        'type' => 'object',
+        'properties' => ['name' => ['type' => 'string']],
+        'allOf' => array_fill(0, 8, ['$ref' => '#/components/schemas/Knot']),
+    ];
+
+    $startedAt = hrtime(true);
+    /** @var array<string, mixed> $request */
+    $request = postman($document)['item'][0]['request'];
+    $seconds = (hrtime(true) - $startedAt) / 1e9;
+
+    // And the answer is the one the unbounded walk gave: a shape conjoined with itself has its own
+    // fields and no others.
+    expect($request['body'])->toBe(['mode' => 'urlencoded', 'urlencoded' => [
+        ['key' => 'name', 'value' => 'string', 'type' => 'text', 'disabled' => true],
+    ]])
+        ->and($seconds)->toBeLessThan(2.0);
+});
+
+it('folds a shape reached down two branches at once, once, and keeps every field of it', function (): void {
+    // The other half of folding by pointer: a diamond is not a cycle, and skipping the second arrival
+    // must not cost the body the fields behind it. Both branches reach `Shared`; `size` is folded on
+    // the first and is still in the form when the second is skipped.
+    $document = postmanDocumentWithPaths(['/things' => ['post' => [
+        'requestBody' => ['content' => ['application/x-www-form-urlencoded' => ['schema' => ['allOf' => [
+            ['$ref' => '#/components/schemas/Left'],
+            ['$ref' => '#/components/schemas/Right'],
+        ]]]]],
+        'responses' => ['204' => ['description' => 'No content']],
+    ]]]);
+    $document['components']['schemas']['Shared'] = [
+        'type' => 'object',
+        'properties' => ['size' => ['type' => 'integer']],
+        'required' => ['size'],
+    ];
+    $document['components']['schemas']['Left'] = [
+        'type' => 'object',
+        'properties' => ['name' => ['type' => 'string']],
+        'allOf' => [['$ref' => '#/components/schemas/Shared']],
+    ];
+    $document['components']['schemas']['Right'] = [
+        'type' => 'object',
+        'properties' => ['colour' => ['type' => 'string']],
+        'allOf' => [['$ref' => '#/components/schemas/Shared']],
+    ];
+
+    /** @var array<string, mixed> $request */
+    $request = postman($document)['item'][0]['request'];
+
+    expect($request['body'])->toBe(['mode' => 'urlencoded', 'urlencoded' => [
+        ['key' => 'colour', 'value' => 'string', 'type' => 'text', 'disabled' => true],
+        ['key' => 'name', 'value' => 'string', 'type' => 'text', 'disabled' => true],
+        ['key' => 'size', 'value' => '0', 'type' => 'text'],
+    ]]);
+});
