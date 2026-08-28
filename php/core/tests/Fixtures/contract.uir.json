@@ -73,6 +73,26 @@
           "201": {
             "x-docuccino": { "id": "res:v1:aaaainvoicemade" },
             "description": "Created",
+            "headers": {
+              "Location": {
+                "required": true,
+                "description": "Where the new invoice lives.",
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      { "producer": "integration:redirect", "layer": "integration", "fields": ["type"],
+                        "source": { "file": "app/Http/Controllers/InvoiceController.php", "line": 44, "symbol": "App\\Http\\Controllers\\InvoiceController::store" } }
+                    ]
+                  },
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Remaining": { "schema": { "type": "integer", "minimum": 0 }, "example": 4 },
+              "X-Chunk": { "schema": { "type": "integer" } },
+              "Content-Type": { "schema": { "type": "integer" } },
+              "X-Signature": { "content": { "application/jose": { "schema": { "type": "string" } } } },
+              "X-Legacy": { "$ref": "#/components/headers/Legacy" }
+            },
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" } } }
           },
           "4XX": {
@@ -136,6 +156,9 @@
     }
   },
   "components": {
+    "headers": {
+      "Legacy": { "description": "Sent while the old client is still out there.", "schema": { "type": "boolean" } }
+    },
     "schemas": {
       "Invoice": {
         "x-docuccino": {

@@ -103,6 +103,10 @@ call `registerMacros()`. A production install loads none of it.
 	  operation  GET /api/invoices  op:v1:kgfeda3prpqaw73i
 	  status     200
 
+	  the response header X-Request-Id
+	    is documented as required, but the response did not send it
+	    schema   /paths/~1api~1invoices/get/responses/200/headers/X-Request-Id
+
 	  the response body at /data/0/total
 	    The data (string) must match the type: number
 	    schema   /components/schemas/Invoice/properties/total
@@ -116,7 +120,7 @@ Three assertions cover the exchange, as methods on your test case or as chained 
 | Assertion | Checks |
 | --- | --- |
 | `assertValidRequest($response)` | The path, query, header and cookie parameters, and the request body, against what the operation documents. |
-| `assertValidResponse($response)` | The status, the media type, and the body against the schema documented for that pair. |
+| `assertValidResponse($response)` | The status, the media type, the response headers, and the body against the schema documented for that pair. |
 | `assertValidExchange($response)` | Both halves. |
 
 Each returns the response, so they chain with Laravel's own assertions in any order.
@@ -133,6 +137,17 @@ What they hold you to:
   integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
   Docuccino documents it as.
+- **The response headers the document publishes are checked, not just the body.** A `Location` on a
+  `201`, the `Retry-After` and `X-RateLimit-*` on a
+  [`429`](/laravel/documenting/rate-limiting/) — every one of them is read as the type documented
+  beside it, the same way a query parameter is. A header marked `required` that the response never sent
+  fails; an optional one it never sent does not, because the contract said it might not be there.
+  Header names are matched case-insensitively, and a header the response sent more than once
+  (`Set-Cookie`) is held to the schema once per value it sent.
+- **A response header the check cannot read passes with a note**, the same way a `text/csv` body does:
+  a header documented with no schema, or documented with `content` instead of one. A `Content-Type`
+  entry in a `headers` map is ignored entirely — OpenAPI says it is, because `content` is what
+  describes the media type.
 
 ## Report the responses your suite never proved
 

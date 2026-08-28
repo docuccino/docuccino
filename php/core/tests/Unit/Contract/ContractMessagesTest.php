@@ -86,7 +86,7 @@ it('counts the examples it checked as well as the ones that lied', function (): 
     })))->run();
 
     expect(ContractMessages::examples($report))
-        ->toContain('1 of 3 documented examples does not match the schema beside it.')
+        ->toContain('1 of 4 documented examples does not match the schema beside it.')
         ->toContain('components/schemas/Invoice')
         ->toContain('at /components/schemas/Invoice/properties/total/example')
         ->toContain('from     integration:eloquent (integration) — app/Models/Invoice.php:31');
@@ -101,7 +101,7 @@ it('agrees the verb with how many lied, not with how many it checked', function 
     })))->run();
 
     expect(ContractMessages::examples($report))
-        ->toContain('2 of 3 documented examples do not match the schema beside them.');
+        ->toContain('2 of 4 documented examples do not match the schema beside them.');
 });
 
 it('names the examples nobody could check, rather than leaving them out of the count and the message', function (): void {
@@ -120,7 +120,7 @@ it('names the examples nobody could check, rather than leaving them out of the c
 
     expect($report->uncheckable)->toHaveCount(1)
         ->and(ContractMessages::examples($report))
-        ->toContain('1 of 3 documented examples does not match the schema beside it.')
+        ->toContain('1 of 4 documented examples does not match the schema beside it.')
         ->toContain('1 more could not be checked at all')
         ->toContain('at /components/schemas/Invoice/properties/ref/example')
         ->toContain('schema   /components/schemas/Invoice/properties/ref')

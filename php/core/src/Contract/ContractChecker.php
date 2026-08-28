@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace Docuccino\Core\Contract;
 
 use JsonException;
+use Throwable;
 
 /**
  * The OAS half of contract checking: match an {@see Exchange} to its operation, pick the documented
- * response for the status, the `content` entry for the media type and the parameters for the request,
- * then hand each payload to {@see SchemaCheck}.
+ * response for the status, the `content` entry and the `headers` map for the response and the
+ * parameters and body for the request, then hand each payload to {@see SchemaCheck}.
  *
- * Where the contract cannot be checked rather than being wrong — a `text/csv` body, a media type with
- * no schema — the outcome passes with a NOTE rather than passing silently. A pass that proved nothing
- * and says nothing is how a suite ends up believing it has contract coverage it does not have.
+ * Where the contract cannot be checked rather than being wrong — a `text/csv` body, a media type or a
+ * header with no schema — the outcome passes with a NOTE rather than passing silently. A pass that
+ * proved nothing and says nothing is how a suite ends up believing it has contract coverage it does not
+ * have. A document that points NOWHERE is the other case and is not a note: a `$ref` at a name nothing
+ * defines is broken rather than uncheckable, so it fails naming the pointer — otherwise one typo in a
+ * reference turns the contract it guards into a no-op that reports success.
  */
 final class ContractChecker
 {
@@ -58,7 +62,134 @@ final class ContractChecker
             ))]);
         }
 
-        [$response, $segments] = $documented;
+        [$response, $segments, $dangling] = $documented;
+
+        if ($dangling !== null) {
+            return Outcome::failed([Violation::ofExchange(sprintf(
+                'is documented at %s, which the contract does not define',
+                $dangling,
+            ))]);
+        }
+
+        $headers = $this->responseHeaders($response, $segments, $exchange);
+        $body = $this->responseBody($response, $segments, $exchange);
+
+        $violations = [...$headers->violations, ...$body->violations];
+
+        return $violations === []
+            ? Outcome::passed(self::note($headers->note, $body->note))
+            : Outcome::failed($violations);
+    }
+
+    /**
+     * The documented `headers` map against what came back.
+     *
+     * A header the response sent MORE THAN ONCE is checked once per value: the contract says what the
+     * header looks like, and a response that sent `Set-Cookie` three times made that claim three times.
+     * Joining them into one comma list would hand the schema a value nothing sent, and RFC 9110 forbids
+     * joining `Set-Cookie` at all.
+     *
+     * @param  array<string, mixed>  $response
+     * @param  list<string>  $segments
+     */
+    private function responseHeaders(array $response, array $segments, Exchange $exchange): Outcome
+    {
+        $violations = [];
+        $notes = [];
+
+        foreach (ResponseHeaders::of($this->index->document(), $response, $segments) as $header) {
+            [$found, $note] = $this->checkParameter(
+                $header,
+                $exchange->responseHeader($header->name),
+                // An absent OPTIONAL header is not a violation — the contract said it might be there.
+                $header->required ? 'is documented as required, but the response did not send it' : null,
+            );
+
+            foreach ($found as $violation) {
+                $violations[] = $violation;
+            }
+
+            if ($note !== null) {
+                $notes[] = $note;
+            }
+        }
+
+        return $violations === [] ? Outcome::passed(self::note(...$notes)) : Outcome::failed($violations);
+    }
+
+    /**
+     * One documented parameter against the values the exchange carried under its name: unresolvable
+     * declaration, then absent-but-required, then a schema nothing can be checked against, then the
+     * values themselves. Both halves ask this — OAS makes a response header object a parameter without
+     * `name` and `in` ({@see ContractParameter}), so the two would otherwise each carry a copy of the
+     * order those come in, and drift.
+     *
+     * @param  list<mixed>  $values  every value sent under that name; a request parameter has at most
+     *                               one, a response may have sent a header several times
+     * @param  string|null  $absent  what to say when nothing was sent, or null where absence is not a
+     *                               violation
+     * @return array{0: list<Violation>, 1: string|null}
+     */
+    private function checkParameter(ContractParameter $parameter, array $values, ?string $absent): array
+    {
+        // A `$ref` at a name the document does not define leaves nothing to read `required` or `schema`
+        // off — so a required header behind one would check as optional-and-unschema'd and report a
+        // pass. A document that points nowhere is broken, not uncheckable, so it fails naming the
+        // pointer.
+        if ($parameter->danglingRef !== null) {
+            return [[new Violation(
+                location: $parameter->label(),
+                pointer: '',
+                message: sprintf('is documented at %s, which the contract does not define', $parameter->danglingRef),
+                schemaPointer: Pointer::of($parameter->segments),
+                provenance: ProvenanceTrail::none(),
+            )], null];
+        }
+
+        if ($values === []) {
+            if ($absent === null) {
+                return [[], null];
+            }
+
+            // The pointer names the DECLARATION, which is the node that says `required`; the trail is
+            // read from its schema, which is the node a producer signs.
+            return [[new Violation(
+                location: $parameter->label(),
+                pointer: '',
+                message: $absent,
+                schemaPointer: Pointer::of($parameter->segments),
+                provenance: ProvenanceTrail::at($this->index->document(), $parameter->schemaSegments()),
+            )], null];
+        }
+
+        if (! $parameter->hasSchema()) {
+            return [[], isset($parameter->definition['content'])
+                ? sprintf('%s is documented as a content object, which the check does not decode', $parameter->label())
+                : sprintf('the contract documents no schema for %s', $parameter->label())];
+        }
+
+        $violations = [];
+        foreach ($values as $index => $value) {
+            $label = count($values) === 1 ? $parameter->label() : sprintf('%s (value %d)', $parameter->label(), $index + 1);
+
+            foreach ($this->validate(
+                ParameterValue::coerce($value, $parameter->schema()),
+                $parameter->schemaSegments(),
+                $label,
+            ) as $violation) {
+                $violations[] = $violation;
+            }
+        }
+
+        return [$violations, null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     * @param  list<string>  $segments
+     */
+    private function responseBody(array $response, array $segments, Exchange $exchange): Outcome
+    {
         $content = $response['content'] ?? null;
 
         if (! is_array($content) || $content === []) {
@@ -101,24 +232,23 @@ final class ContractChecker
      */
     public function request(ContractOperation $operation, Exchange $exchange): Outcome
     {
-        $violations = $this->parameters($operation, $exchange);
+        $parameters = $this->parameters($operation, $exchange);
         $body = $this->requestBody($operation, $exchange);
 
-        foreach ($body->violations as $violation) {
-            $violations[] = $violation;
-        }
+        $violations = [...$parameters->violations, ...$body->violations];
 
-        return $violations === [] ? Outcome::passed($body->note) : Outcome::failed($violations);
+        return $violations === []
+            ? Outcome::passed(self::note($parameters->note, $body->note))
+            : Outcome::failed($violations);
     }
 
-    /**
-     * @return list<Violation>
-     */
-    private function parameters(ContractOperation $operation, Exchange $exchange): array
+    private function parameters(ContractOperation $operation, Exchange $exchange): Outcome
     {
         $bound = $operation->bind($exchange->path) ?? [];
 
         $violations = [];
+        $notes = [];
+
         foreach ($operation->parameters as $parameter) {
             $value = match ($parameter->in) {
                 'path' => $bound[$parameter->name] ?? null,
@@ -128,32 +258,26 @@ final class ContractChecker
                 default => null,
             };
 
-            if ($value === null) {
+            [$found, $note] = $this->checkParameter(
+                $parameter,
+                $value === null ? [] : [$value],
                 // A missing PATH parameter is not a contract violation: the request could not have
                 // matched this template without one, so its absence means the template did not bind.
-                if ($parameter->required && $parameter->in !== 'path') {
-                    $violations[] = new Violation(
-                        location: $parameter->label(),
-                        pointer: '',
-                        message: 'is documented as required, but the request did not send it',
-                        schemaPointer: Pointer::of($parameter->segments),
-                        provenance: ProvenanceTrail::at($this->index->document(), $parameter->segments),
-                    );
-                }
+                $parameter->required && $parameter->in !== 'path'
+                    ? 'is documented as required, but the request did not send it'
+                    : null,
+            );
 
-                continue;
+            foreach ($found as $violation) {
+                $violations[] = $violation;
             }
 
-            foreach ($this->schema->check(
-                ParameterValue::coerce($value, $parameter->schema()),
-                $parameter->schemaSegments(),
-                $parameter->label(),
-            ) as $violation) {
-                $violations[] = $violation;
+            if ($note !== null) {
+                $notes[] = $note;
             }
         }
 
-        return $violations;
+        return $violations === [] ? Outcome::passed(self::note(...$notes)) : Outcome::failed($violations);
     }
 
     private function requestBody(ContractOperation $operation, Exchange $exchange): Outcome
@@ -164,7 +288,14 @@ final class ContractChecker
             return Outcome::passed();
         }
 
-        [$body, $segments] = $documented;
+        [$body, $segments, $dangling] = $documented;
+
+        if ($dangling !== null) {
+            return Outcome::failed([Violation::ofExchange(sprintf(
+                'is documented at %s, which the contract does not define',
+                $dangling,
+            ), 'the request body')]);
+        }
 
         if (trim($exchange->requestBody) === '') {
             return ($body['required'] ?? false) === true
@@ -231,6 +362,42 @@ final class ContractChecker
             return Outcome::failed([Violation::ofExchange(sprintf('%s is not valid JSON: %s', $location, $exception->getMessage()), $half)]);
         }
 
-        return Outcome::failedOrPassed($this->schema->check($data, $schemaSegments, $location));
+        return Outcome::failedOrPassed($this->validate($data, $schemaSegments, $location));
+    }
+
+    /**
+     * {@see SchemaCheck} parses each schema as it reaches it, so one it will not parse — a `$ref` at a
+     * name nothing defines, and `#/definitions/…` is the everyday one, since that is what an artifact
+     * converted from Swagger 2.0 carries — throws rather than answering. Passing that off as a note
+     * would put the check back where a dangling reference reports success, so it fails, naming the
+     * pointer that went nowhere.
+     *
+     * @param  list<string>  $schemaSegments
+     * @return list<Violation>
+     */
+    private function validate(mixed $data, array $schemaSegments, string $location): array
+    {
+        try {
+            return $this->schema->check($data, $schemaSegments, $location);
+        } catch (Throwable $refused) {
+            return [new Violation(
+                location: $location,
+                pointer: '',
+                message: 'could not be checked against the contract: '.RefusedSchema::reason($refused),
+                schemaPointer: Pointer::of($schemaSegments),
+                provenance: ProvenanceTrail::at($this->index->document(), $schemaSegments),
+            )];
+        }
+    }
+
+    /**
+     * One half's notes as the single note an {@see Outcome} carries. Several uncheckable things in one
+     * half read as one sentence per finding rather than as one finding surviving.
+     */
+    private static function note(?string ...$notes): ?string
+    {
+        $kept = array_values(array_filter($notes, static fn (?string $note): bool => $note !== null));
+
+        return $kept === [] ? null : implode('; ', $kept);
     }
 }

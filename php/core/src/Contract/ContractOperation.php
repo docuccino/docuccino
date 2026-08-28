@@ -67,10 +67,12 @@ final readonly class ContractOperation
 
     /**
      * The documented response for a status code and the pointer segments that address it. A `$ref` into
-     * `components/responses` is followed, so the segments name where a reader would actually go and look.
+     * `components/responses` is followed, so the segments name where a reader would actually go and look;
+     * one that lands nowhere comes back as the third element, for the caller to fail on
+     * ({@see Refs::follow()}).
      *
      * @param  array<string, mixed>  $document
-     * @return array{0: array<string, mixed>, 1: list<string>}|null
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null
      */
     public function responseFor(array $document, int $status): ?array
     {
@@ -152,10 +154,11 @@ final readonly class ContractOperation
     }
 
     /**
-     * The documented request body and the segments addressing it, `$ref` followed.
+     * The documented request body and the segments addressing it, `$ref` followed — with the reference
+     * that landed nowhere as the third element, as {@see responseFor()} has it.
      *
      * @param  array<string, mixed>  $document
-     * @return array{0: array<string, mixed>, 1: list<string>}|null
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null
      */
     public function requestBody(array $document): ?array
     {
