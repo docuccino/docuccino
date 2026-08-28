@@ -220,11 +220,10 @@ final class ContractChecker
 
         $schema = $parameter->schema();
 
-        // The two uncheckable answers are different facts and get different sentences, and the match is
-        // over the whole set so a fourth answer could not be added without one being written for it.
         return match ($schema->kind) {
-            ParameterSchemaKind::Checkable => [$this->checkValues($parameter, $schema, $values), null],
+            ParameterSchemaKind::Schema => [$this->checkValues($parameter, $schema, $values), null],
             ParameterSchemaKind::Content => [[], sprintf('%s is documented as a content object, which the check does not decode', $parameter->label())],
+            ParameterSchemaKind::Malformed => [[], sprintf('%s is documented with a declaration this check cannot read', $parameter->label())],
             ParameterSchemaKind::Absent => [[], sprintf('the contract documents no schema for %s', $parameter->label())],
         };
     }
@@ -244,7 +243,7 @@ final class ContractChecker
             $label = count($values) === 1 ? $parameter->label() : sprintf('%s (value %d)', $parameter->label(), $index + 1);
 
             foreach ($this->validate(
-                ParameterValue::coerce($value, $schema->node, $this->index->document()),
+                $schema->read($value, $this->index->document()),
                 $parameter->schemaSegments(),
                 $label,
             ) as $violation) {

@@ -32,10 +32,9 @@ final readonly class ContractParameter
     ) {}
 
     /**
-     * What the contract gives this to be checked against — the WHOLE answer, because two of the three
-     * the document can make are "nothing was checked" for different reasons. {@see ParameterSchema}
-     * says why that is one value rather than a schema beside a flag that says whether the null meant
-     * anything.
+     * What the contract gives this to be checked against — the whole answer ({@see ParameterSchemaKind}).
+     *
+     * @internal
      */
     public function schema(): ParameterSchema
     {

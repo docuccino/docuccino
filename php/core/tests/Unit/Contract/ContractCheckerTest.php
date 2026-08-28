@@ -247,6 +247,34 @@ it('says out loud that a parameter with no schema member at all was not checked'
         ->and($result->notes())->toContain('the contract documents no schema for ?page');
 });
 
+/**
+ * The third answer, which a nullable schema folded into the second: something IS written where the
+ * check looks and no reader can take it. "Nothing was written" and "nobody could read what was" are
+ * different facts about the document — the distinction `requestBody` already draws
+ * ({@see Refs::malformed()}) — and telling a reader their parameter documents no schema when it
+ * documents one they mistyped sends them to the wrong place.
+ */
+it('says out loud that a parameter documented with something no reader can take was not checked', function (mixed $written, string $member): void {
+    $result = checkContract(
+        contractExchange('GET', '/api/invoices', query: ['page' => 'zzz'], headers: ['X-Tenant' => ['acme']], responseBody: '[]'),
+        static function (array $document) use ($written, $member): array {
+            unset($document['paths']['/api/invoices']['get']['parameters'][0]['schema']);
+            $document['paths']['/api/invoices']['get']['parameters'][0][$member] = $written;
+
+            return $document;
+        },
+    );
+
+    expect($result->request->ok())->toBeTrue()
+        ->and($result->notes())->toContain('?page is documented with a declaration this check cannot read')
+        ->and($result->notes())->not->toContain('the contract documents no schema for ?page');
+})->with([
+    'a type name where a schema belongs' => ['integer', 'schema'],
+    'a number where a schema belongs' => [42, 'schema'],
+    'an explicit null' => [null, 'schema'],
+    'a content member that is not a map of media types' => ['application/json', 'content'],
+]);
+
 it('names the source of a parameter that disagrees with its schema', function (): void {
     $result = (new ContractChecker(contractIndex()))->check(
         contractExchange('GET', '/api/invoices', query: ['page' => 'first'], headers: ['X-Tenant' => ['a']], responseBody: '[]'),
@@ -686,32 +714,6 @@ it('fails a response documented behind a reference the contract does not define'
     expect($result->response->ok())->toBeFalse()
         ->and($result->response->violations[0]->message)->toContain('#/components/responses/Invoice');
 });
-
-it('says out loud that a schema which is not schema-shaped was not checked', function (mixed $schema): void {
-    // `schema` being PRESENT is not the question — a string, a number or a null there is as
-    // uncheckable as no schema at all, and reading presence alone passed the value in silence.
-    $result = checkContract(
-        contractExchange(
-            'GET',
-            '/api/invoices',
-            query: ['page' => 'zzz'],
-            headers: ['X-Tenant' => ['acme']],
-            responseBody: '[]',
-        ),
-        static function (array $document) use ($schema): array {
-            $document['paths']['/api/invoices']['get']['parameters'][0]['schema'] = $schema;
-
-            return $document;
-        },
-    );
-
-    expect($result->request->ok())->toBeTrue()
-        ->and($result->notes())->toContain('the contract documents no schema for ?page');
-})->with([
-    'a type name where a schema belongs' => ['integer'],
-    'a number' => [42],
-    'a null' => [null],
-]);
 
 it('keeps checking against a schema written as an empty object', function (): void {
     // Associative decoding spells `{}` as `[]`, and the empty schema accepts everything — so this
