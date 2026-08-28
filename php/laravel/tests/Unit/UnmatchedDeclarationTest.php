@@ -7,7 +7,7 @@ use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Laravel\Support\UnmatchedDeclaration;
 
 /*
- * The message half of the three "this declaration matched nothing" reports. The author wrote a name;
+ * The message half of the four "this declaration matched nothing" reports. The author wrote a name;
  * what makes the report a remedy rather than a complaint is the list of what there WAS to name, which
  * is where they will see their typo. These pin the things that list has to get right — a cap, an empty
  * set, a value nobody may print as it stands, and the sentence each member wraps it in.
@@ -96,10 +96,13 @@ it('says no documents are configured rather than naming an empty list', function
 });
 
 it('gives each member the sentence its own kind of name belongs in', function (): void {
-    // One list renderer, three sentences: a sentence that fitted all of them would be true of none, and
+    // One list renderer, four sentences: a sentence that fitted all of them would be true of none, and
     // the cap and the escaping are the only halves that are policy.
     $parameter = UnmatchedDeclaration::parameter(new IgnoreParam(name: 'trace'), ['query:sort'], null, null)->message;
     $document = UnmatchedDeclaration::document('admn', ['GET api/a'], ['default'], stranded: false)->message;
+    $path = UnmatchedDeclaration::pathParameter('postId', ['post'], null, null)->message;
+
     expect($parameter)->toContain('It documents query:sort.')
-        ->and($document)->toContain('The configured documents are default.');
+        ->and($document)->toContain('The configured documents are default.')
+        ->and($path)->toContain('It has {post}.');
 });

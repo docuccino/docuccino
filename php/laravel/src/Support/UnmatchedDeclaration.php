@@ -14,25 +14,27 @@ use Docuccino\Core\Support\PlainText;
 /**
  * The one report for an author-supplied name that matched nothing — `#[IgnoreParam]` naming a parameter
  * this operation does not document, `#[IgnoreResponse]` naming a status no producer would have written,
- * `#[InDocs]` naming a document nobody configured.
+ * `#[InDocs]` naming a document nobody configured, `#[PathParameter]` naming a segment the route has no
+ * template variable for.
  *
  * A name that matches nothing leaves no evidence of its own: a parameter that was never there and a
  * parameter that was dropped both leave the same document, and a route pinned to a document that does
  * not exist reads exactly like a route somebody meant to keep out. So an author who typo'd a name, or
- * kept one through a rename, sees exactly what a working declaration produces. All three members say the
+ * kept one through a rename, sees exactly what a working declaration produces. All four members say the
  * same three things — the declaration as written, that it took no effect, and what there WAS to name so
- * the typo is visible beside it — so they say them from here rather than three times.
+ * the typo is visible beside it — so they say them from here rather than four times.
  *
  * Warning, not info: the document is not wrong (nothing was dropped, so nothing is missing that should
  * be there), but the author asked for something and did not get it, which is a request refused rather
  * than a build that widened. It is also the level the neighbouring refusals already use —
- * `attribute.ignore-param-location`, `attribute.error-component-unread`.
+ * `attribute.ignore-param-location`, `attribute.error-component-unread`. The one exception is
+ * {@see pathParameter()}, which is an Error and says there why.
  *
  * Where a declaration is INHERITED from a controller class rather than written on the action, only the
- * members whose class-level form has an ordinary reading stay silent — the ignores, where an author
- * drops a key only some of the class's actions take. `#[InDocs]` has no such reading: a key nobody
- * configured is wrong wherever it is written, so it is reported once for the key rather than once per
- * route.
+ * members whose class-level form has an ordinary reading stay silent — the ignores and the path
+ * parameter, where an author covers a key or a segment only some of the class's actions have.
+ * `#[InDocs]` has no such reading: a key nobody configured is wrong wherever it is written, so it is
+ * reported once for the key rather than once per route.
  */
 final class UnmatchedDeclaration
 {
@@ -110,6 +112,35 @@ final class UnmatchedDeclaration
     }
 
     /**
+     * A `#[PathParameter]` naming no `{segment}` of the route template. `$template` is the segments the
+     * route does have.
+     *
+     * Error, not warning, and the only member here that is: OAS requires every `in: path` parameter to
+     * correspond to a template variable, so publishing one would be an invalid document — and unlike an
+     * unresolvable security requirement, which is a true fact with nowhere to point, this parameter
+     * describes nothing the server accepts. Withholding it therefore loses nothing true, so the document
+     * stays valid and this says what was refused.
+     *
+     * @param  list<string>  $template
+     */
+    public static function pathParameter(string $name, array $template, ?Source $source, ?string $routeSignature): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Error,
+            code: 'attribute.path-parameter-unmatched',
+            message: sprintf(
+                '#[PathParameter(name: "%s")] documented nothing: this route\'s template has no {%s} segment, and a path parameter OpenAPI has no template variable for would make the document invalid. %s',
+                PlainText::of($name),
+                PlainText::of($name),
+                self::template($template),
+            ),
+            source: $source,
+            routeSignature: $routeSignature,
+            help: 'Correct the name to a segment of the route\'s own URI, or delete the declaration — a segment that was renamed keeps its old spelling only in the attribute. A query, header or cookie parameter that is not in the URI is #[QueryParameter], #[HeaderParameter] or #[CookieParameter]; only a path parameter has to be in the template. A segment only some of a controller\'s actions have belongs on the class, where an action without it is not a mistake.',
+        );
+    }
+
+    /**
      * What the operation is left documenting. `$plural` is the caller's own noun, so the sentence never
      * has to work out which member is asking.
      *
@@ -136,5 +167,17 @@ final class UnmatchedDeclaration
         return $listing === null
             ? 'No documents are configured at all.'
             : sprintf('The configured documents are %s.', $listing);
+    }
+
+    /**
+     * @param  list<string>  $template
+     */
+    private static function template(array $template): string
+    {
+        $listing = NameList::of(array_map(static fn (string $name): string => '{'.$name.'}', $template));
+
+        return $listing === null
+            ? 'It has no path parameters at all.'
+            : sprintf('It has %s.', $listing);
     }
 }

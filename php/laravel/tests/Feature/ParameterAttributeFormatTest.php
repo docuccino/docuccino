@@ -35,6 +35,9 @@ function runFormatAttributes(array $attributes, ?callable $seed = null): array
         extensions: new ResolvedExtensions(
             typeToSchema: DefaultTypeMappers::all(),
         ),
+        // The template's own segment, which the builder fills in for a real route: a `#[PathParameter]`
+        // is only applied where the URI has somewhere to put it.
+        pathParameters: ['thing'],
     );
 
     $operation = new OperationDraft;

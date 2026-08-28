@@ -203,6 +203,16 @@ Path params are inherently required (no `required` param).
 public function show(string $uuid): UserResource { /* … */ }
 ```
 
+Alone among the parameter attributes it cannot **add** what it names, only refine it: OpenAPI requires
+every `in: path` parameter to correspond to a template variable, so a `name:` that is no `{segment}` of
+the route's own URI is withheld rather than published, and the action's own declaration says so
+([`attribute.path-parameter-unmatched`](/laravel/reference/diagnostics/#attributes)). Publishing it
+would make the document invalid, and it would describe nothing the server accepts — no request has
+anywhere to put it — so leaving it out costs the reader nothing. A declaration inherited from a
+controller is withheld in the same way and stays silent: a segment only some of the class's actions have
+is the ordinary way a class-level one is written. A parameter that is not in the URI is
+`#[QueryParameter]`, `#[HeaderParameter]` or `#[CookieParameter]`.
+
 ### `#[HeaderParameter]`
 
 ```php
