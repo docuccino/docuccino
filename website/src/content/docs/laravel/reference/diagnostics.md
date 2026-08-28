@@ -233,7 +233,7 @@ Webhooks are collected from `#[Webhook]` classes under the directory you configu
 | `webhook.name-collision` | error | Two classes claim one webhook name and method, so one of them isn't in the document | Give one a name of its own — a webhook name is the contract a consumer subscribes to |
 | `webhook.operation-collision` | error | A webhook already documents that method from another class, so this one isn't in the document | Give one of them its own name, or a method the other doesn't use |
 | `webhook.method-unknown` | warning | A `#[Webhook]` asks for an HTTP method OpenAPI has no path-item member for, so it's documented as `POST` | Use one of the methods the message lists |
-| `webhook.payload-unresolved` | warning | A webhook's payload type resolves to no shape, so its body is an unconstrained object | Name a class or array shape the payload is built from, or drop the payload argument to document the annotated class itself — see [Annotate the payload](/laravel/documenting/webhooks/#annotate-the-payload) |
+| `webhook.payload-unresolved` | warning | A webhook's payload type resolves to no shape, so its body is an unconstrained object | Name a class or array shape the payload is built from, or drop the payload argument to document the annotated class itself — see [Annotate the payload](/laravel/documenting/webhooks/#annotate-the-payload). `payload: 'object'` resolves: in an attribute that word is the JSON one, and it documents a free-form map |
 | `webhook.build-failed` | error | Documenting one webhook threw, so it isn't in the document | The message quotes the failure and names the webhook |
 
 ## Narrative content

@@ -150,6 +150,35 @@ it('credits a delivery from what the check proved, not from having asserted abou
     'a name the document does not publish' => [null, 'invoice.paid', ['id' => 1], false],
 ]);
 
+/*
+ * …and the credit is recorded BEFORE the note is raised, which only a suite that fails on warnings can
+ * tell apart. The ordinary handler swallows the note and both orders look identical; a suite that turns
+ * one into a failure would, with the record behind it, lose the credit for a check that had already
+ * proved the delivery — reversing a decision the row above states on purpose.
+ */
+it('records what a delivery proved before raising the note that can fail the test', function (): void {
+    app()->setBasePath(dirname(__DIR__, 3));
+    workbenchContract(static function (array $raw): array {
+        $raw['webhooks'] = ['dir' => 'tests/Fixtures/Webhooks/Uncheckable'];
+
+        return $raw;
+    });
+
+    // What `failOnWarning` amounts to from inside the call: the note becomes a throw.
+    set_error_handler(static function (int $severity, string $message): bool {
+        throw new RuntimeException($message);
+    }, E_USER_WARNING);
+
+    try {
+        expect(static fn () => ApiContract::assertions()->assertValidWebhook('report.ready', ['reference' => 'RPT-1']))
+            ->toThrow(RuntimeException::class);
+    } finally {
+        restore_error_handler();
+    }
+
+    expect(ApiContract::coverage()->exercised())->toHaveCount(1);
+});
+
 it('reports the responses the run never touched, in the document’s own order', function (): void {
     ApiContract::assertions()->assertValidResponse(contractResponse('GET', '/api/forms', body: '[]'));
 
