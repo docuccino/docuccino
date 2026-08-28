@@ -116,11 +116,7 @@ function typeGrammarTestedKeywords(): array
  */
 function typeGrammarSourceKeywords(): array
 {
-    /** @var list<PhpToken> $tokens */
-    $tokens = array_values(array_filter(
-        PhpToken::tokenize((string) file_get_contents(dirname(__DIR__, 2).'/src/TypeGrammar/TypeStringParser.php')),
-        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
-    ));
+    $tokens = significantTokens((string) file_get_contents(dirname(__DIR__, 2).'/src/TypeGrammar/TypeStringParser.php'));
 
     $start = null;
     foreach ($tokens as $index => $token) {

@@ -28,23 +28,7 @@ declare(strict_types=1);
  */
 function typeStringParserCallsIn(string $directory, string $method): array
 {
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
-
-    $found = [];
-    foreach ($files as $file) {
-        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
-            continue;
-        }
-
-        $relative = str_replace($directory.'/', '', $file->getPathname());
-        foreach (typeStringParserCallLines((string) file_get_contents($file->getPathname()), $method) as $line) {
-            $found[] = $relative.':'.$line;
-        }
-    }
-
-    sort($found);
-
-    return $found;
+    return sourceLinesIn($directory, static fn (string $source): array => typeStringParserCallLines($source, $method));
 }
 
 /**
@@ -59,11 +43,7 @@ function typeStringParserCallsIn(string $directory, string $method): array
  */
 function typeStringParserCallLines(string $source, string $method): array
 {
-    /** @var list<PhpToken> $tokens */
-    $tokens = array_values(array_filter(
-        PhpToken::tokenize($source),
-        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
-    ));
+    $tokens = significantTokens($source);
 
     $holders = [];
     foreach ($tokens as $index => $token) {

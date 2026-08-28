@@ -479,11 +479,7 @@ function canonicalizerSchemaOrder(): array
  */
 function literalSetDeclarations(string $source, array $members, int $threshold = 3): array
 {
-    /** @var list<PhpToken> $tokens */
-    $tokens = array_values(array_filter(
-        PhpToken::tokenize($source),
-        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
-    ));
+    $tokens = significantTokens($source);
 
     $found = [];
     $name = null;
@@ -959,6 +955,71 @@ function importsMatching(string $package, string $pattern): array
 }
 
 /**
+ * The source's tokens with whitespace, comments and the tags around them dropped, so a token's
+ * neighbour is the neighbour PHP reads.
+ *
+ * Every scan here that reads PHP's own grammar rather than a spelling of it starts from this — a set
+ * enumerated by a `const` or a `match`, an associative `json_decode`, a type string read with the
+ * analyser's parser. Doc comments go with the rest, which is why a `@param` naming a symbol is never
+ * a call and an example in a docblock is never a declaration.
+ *
+ * @return list<PhpToken>
+ */
+function significantTokens(string $source): array
+{
+    return array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $token): bool => ! $token->isIgnorable(),
+    ));
+}
+
+/**
+ * Every PHP source under a directory, as `relative path => absolute path`, in byte order.
+ *
+ * @param  string|null  $relativeTo  what the keys are relative to; the directory itself by default
+ * @return array<string, string>
+ */
+function phpSourcesIn(string $directory, ?string $relativeTo = null): array
+{
+    $found = [];
+    $base = rtrim($relativeTo ?? $directory, '/').'/';
+
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)) as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $found[str_replace($base, '', $file->getPathname())] = $file->getPathname();
+    }
+
+    ksort($found);
+
+    return $found;
+}
+
+/**
+ * What a per-source line scan finds across a directory of PHP sources, as sorted `relative/path.php:LINE`
+ * strings — the shape every "nothing in here does X" arch test asserts against.
+ *
+ * @param  callable(string): list<int>  $lines
+ * @return list<string>
+ */
+function sourceLinesIn(string $directory, callable $lines, ?string $relativeTo = null): array
+{
+    $found = [];
+
+    foreach (phpSourcesIn($directory, $relativeTo) as $relative => $path) {
+        foreach ($lines((string) file_get_contents($path)) as $line) {
+            $found[] = $relative.':'.$line;
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
+/**
  * The same scan over any directory of PHP sources: every namespaced name they NAME IN CODE, matched
  * against $pattern without its leading backslash, as sorted `relative/path.php: FQCN` strings.
  *
@@ -974,17 +1035,12 @@ function importsMatching(string $package, string $pattern): array
  */
 function referencesIn(string $directory, string $pattern): array
 {
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
-
     $found = [];
-    foreach ($files as $file) {
-        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
-            continue;
-        }
 
-        foreach (namesInSource((string) file_get_contents($file->getPathname())) as $name) {
+    foreach (phpSourcesIn($directory) as $relative => $path) {
+        foreach (namesInSource((string) file_get_contents($path)) as $name) {
             if (preg_match($pattern, $name) === 1) {
-                $found[str_replace($directory.'/', '', $file->getPathname()).': '.$name] = true;
+                $found[$relative.': '.$name] = true;
             }
         }
     }
@@ -1012,24 +1068,7 @@ function referencesIn(string $directory, string $pattern): array
  */
 function associativeJsonDecodesIn(string $directory): array
 {
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
-
-    $found = [];
-    foreach ($files as $file) {
-        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
-            continue;
-        }
-
-        $relative = str_replace(dirname($directory, 3).'/', '', $file->getPathname());
-
-        foreach (associativeJsonDecodeLines((string) file_get_contents($file->getPathname())) as $line) {
-            $found[] = $relative.':'.$line;
-        }
-    }
-
-    sort($found);
-
-    return $found;
+    return sourceLinesIn($directory, associativeJsonDecodeLines(...), dirname($directory, 3));
 }
 
 /**
@@ -1039,11 +1078,7 @@ function associativeJsonDecodesIn(string $directory): array
  */
 function associativeJsonDecodeLines(string $source): array
 {
-    /** @var list<PhpToken> $tokens */
-    $tokens = array_values(array_filter(
-        PhpToken::tokenize($source),
-        static fn (PhpToken $t): bool => ! $t->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
-    ));
+    $tokens = significantTokens($source);
 
     $lines = [];
 
@@ -1846,7 +1881,7 @@ function contractOperationDocumenting(array $responses): ContractOperation
  * decide which operation it is.
  *
  * @param  array<string, mixed>  $query
- * @param  array<string, string>  $headers
+ * @param  array<string, list<string>>  $headers
  * @param  array<string, list<string>>  $responseHeaders
  */
 function contractExchange(
