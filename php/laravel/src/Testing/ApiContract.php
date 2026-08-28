@@ -336,7 +336,7 @@ final class ApiContract
             path: $request->getPathInfo(),
             status: $base->getStatusCode(),
             query: $query,
-            headers: self::headers($request->headers),
+            headers: self::headerValues($request->headers),
             cookies: self::strings($request->cookies->all()),
             requestBody: $request->getContent(),
             requestContentType: $request->headers->get('Content-Type'),
@@ -352,9 +352,13 @@ final class ApiContract
     }
 
     /**
-     * Every value sent under each header name. A list per name rather than one string: a message may
-     * send `Set-Cookie` more than once, and the contract check holds each value it sent to the
-     * documented schema.
+     * Every value sent under each header name, for whichever half is asking — a `HeaderBag` is the same
+     * bag on both sides, and both halves of the neutral {@see Exchange} model the same list.
+     *
+     * A list per name rather than one string: a message may send `Set-Cookie`, `Accept` or a proxy's
+     * `X-Forwarded-For` more than once, and the contract check holds each value it sent to the
+     * documented schema. Keeping the first alone was how a second value that violated the schema went
+     * unlooked at, on the half nobody had rewritten yet.
      *
      * @return array<string, non-empty-list<string>>
      */
@@ -424,20 +428,6 @@ final class ApiContract
         throw new RuntimeException(
             'Docuccino cannot tell which request produced this response. Assert on the TestResponse a '.
             'test-suite call returned ($this->getJson(…)), which carries its own request.'
-        );
-    }
-
-    /**
-     * The first value under each name — what a request parameter documented `in: header` is checked
-     * against, since a parameter has one value.
-     *
-     * @return array<string, string>
-     */
-    private static function headers(HeaderBag $headers): array
-    {
-        return array_map(
-            static fn (array $values): string => $values[0],
-            self::headerValues($headers),
         );
     }
 

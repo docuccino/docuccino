@@ -1846,7 +1846,7 @@ function contractOperationDocumenting(array $responses): ContractOperation
  * decide which operation it is.
  *
  * @param  array<string, mixed>  $query
- * @param  array<string, string>  $headers
+ * @param  array<string, list<string>>  $headers
  * @param  array<string, list<string>>  $responseHeaders
  */
 function contractExchange(
