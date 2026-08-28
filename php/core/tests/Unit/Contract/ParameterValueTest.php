@@ -131,3 +131,117 @@ it('reads items and properties out of the same resolution the type came from', f
         ->and(ParameterValue::coerce('4,5', ['allOf' => [['$ref' => '#/components/schemas/SizeList']]], $document))->toBe([4, 5])
         ->and(ParameterValue::coerce(['size' => '7'], ['$ref' => '#/components/schemas/SizeFilter'], $document)->size)->toBe(7);
 });
+
+it('stops a schema that reaches itself at the second visit instead of following it forever', function (array $schema, array $document, mixed $expected): void {
+    // A list documented as its own items is the shape a depth bound cannot hold on its own: splitting
+    // a comma list hands `explode` the same string back when there is no comma, so the value never
+    // shrinks and the walk restarts at zero on every entry into `items`. Followed, this segfaults PHP
+    // at its stack limit — with no exception for the check above it to turn into a violation.
+    expect(ParameterValue::coerce('1000', $schema, $document))->toBe($expected);
+})->with([
+    'a list whose items are the list itself' => [
+        ['$ref' => '#/components/schemas/Tree'],
+        ['components' => ['schemas' => [
+            'Tree' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Tree']],
+        ]]],
+        ['1000'],
+    ],
+    'a list whose items compose their way back to it' => [
+        ['$ref' => '#/components/schemas/Wrap'],
+        ['components' => ['schemas' => [
+            'Wrap' => ['type' => 'array', 'items' => ['allOf' => [['$ref' => '#/components/schemas/Wrap']]]],
+        ]]],
+        ['1000'],
+    ],
+    'a pair of lists that are each other items' => [
+        ['$ref' => '#/components/schemas/Ping'],
+        ['components' => ['schemas' => [
+            'Ping' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Pong']],
+            'Pong' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Ping']],
+        ]]],
+        [['1000']],
+    ],
+    'a list that reaches itself through an alias' => [
+        ['$ref' => '#/components/schemas/Alias'],
+        ['components' => ['schemas' => [
+            'Alias' => ['$ref' => '#/components/schemas/Loop'],
+            'Loop' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Alias']],
+        ]]],
+        ['1000'],
+    ],
+    // Cutting the branch that comes back is not cutting the node: the arm that says `integer` is still
+    // read, so an entry the document does describe is still converted.
+    'a list whose items are an integer or the list itself' => [
+        ['$ref' => '#/components/schemas/Mixed'],
+        ['components' => ['schemas' => [
+            'Mixed' => ['type' => 'array', 'items' => [
+                'anyOf' => [['type' => 'integer'], ['$ref' => '#/components/schemas/Mixed']],
+            ]],
+        ]]],
+        [1000],
+    ],
+    'a composition that references its way back to itself' => [
+        ['$ref' => '#/components/schemas/Cycle'],
+        ['components' => ['schemas' => [
+            'Cycle' => ['allOf' => [['$ref' => '#/components/schemas/Cycle']]],
+        ]]],
+        '1000',
+    ],
+]);
+
+it('walks a branching schema once per node rather than once per path through it', function (array $document): void {
+    // A bound on how DEEP the walk goes is no bound at all on how MUCH it does: k branches followed
+    // nine levels is k^9 visits of a document a few hundred bytes long. Measured before this walk
+    // remembered where it had been — one coerce() call, peak memory 4MB throughout, so no memory limit
+    // stops it: k=5 1.9s, k=6 8.3s, k=7 31.8s, k=8 over ninety seconds. Each row below took over ten
+    // seconds on that walk and takes under two milliseconds on this one, which is the four orders of
+    // magnitude the second below is asserted against.
+    $started = microtime(true);
+
+    ParameterValue::coerce('1000', ['$ref' => '#/components/schemas/Fan'], $document);
+
+    expect(microtime(true) - $started)->toBeLessThan(1.0);
+})->with([
+    // A cycle: caught by the pointers on the path, on the second visit rather than the ninth level.
+    'a node whose branches all point back at it' => [
+        ['components' => ['schemas' => [
+            'Fan' => ['allOf' => array_fill(0, 6, ['$ref' => '#/components/schemas/Fan'])],
+        ]]],
+    ],
+    // Not a cycle: no path repeats a pointer, so nothing on the path can catch it. This one is held
+    // by the memo — every (pointer, depth, path) is walked once however many paths arrive at it.
+    'a ladder of references that repeats none of them' => [
+        ['components' => ['schemas' => array_reduce(
+            range(1, 8),
+            static fn (array $carry, int $rung): array => [
+                ...$carry,
+                'Rung'.$rung => ['allOf' => array_fill(0, 6, [
+                    '$ref' => '#/components/schemas/'.($rung === 8 ? 'Leaf' : 'Rung'.($rung + 1)),
+                ])],
+            ],
+            [
+                'Fan' => ['allOf' => array_fill(0, 6, ['$ref' => '#/components/schemas/Rung1'])],
+                'Leaf' => ['type' => 'integer'],
+            ],
+        )]],
+    ],
+]);
+
+it('keeps reading a self-referential object as deep as the value it was sent actually goes', function (): void {
+    // The other side of the cut: a step into a property CONSUMES the value, so it cannot recur without
+    // end whatever the schema says. Stopping there because the schema names itself would leave
+    // `filter[child][size]=3` unconverted and fail a request the document permits.
+    $coerced = ParameterValue::coerce(
+        ['child' => ['size' => '3'], 'size' => '7'],
+        ['$ref' => '#/components/schemas/Node'],
+        ['components' => ['schemas' => [
+            'Node' => ['type' => 'object', 'properties' => [
+                'child' => ['$ref' => '#/components/schemas/Node'],
+                'size' => ['type' => 'integer'],
+            ]],
+        ]]],
+    );
+
+    expect($coerced->size)->toBe(7)
+        ->and($coerced->child->size)->toBe(3);
+});

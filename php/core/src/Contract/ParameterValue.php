@@ -26,15 +26,21 @@ use stdClass;
  *
  * @internal
  *
- * @phpstan-type Flattened array{types: list<string>, items: array<string, mixed>|null, properties: array<string, array<string, mixed>>}
+ * @phpstan-type Flattened array{types: list<string>, items: array<string, mixed>|null, properties: array<string, array<string, mixed>>, path: list<string>}
  */
 final class ParameterValue
 {
     /**
-     * A composition nested this deep is a document defending itself against a reader rather than one a
-     * reader meant to write. {@see Refs} bounds a straight `$ref` chain; this bounds everything else,
-     * a schema that composes its way back to itself (`A: {allOf: [{$ref: A}]}`) included — which is
-     * legal, and a walk of it with no bound is a hang.
+     * How far the reader follows a document into itself. One walk counts a composition branch and a
+     * step into `items` or a property alike, because it IS one walk: a step into `items` re-reads a
+     * schema, and a walk that started that read again at zero would follow `A: {items: {$ref: A}}`
+     * until the stack ran out. Past this depth a document is defending itself against a reader rather
+     * than one a reader meant to write. {@see Refs} bounds a straight `$ref` chain.
+     *
+     * Depth is a bound on how DEEP the walk goes and none at all on how MUCH it does, so it is not
+     * alone: a branching schema visits k^depth nodes without ever repeating one on a path. The two
+     * companions below make the bound one on work — `$seen` cuts a schema that reaches itself at the
+     * second visit rather than the ninth level, and the memo walks each (pointer, depth, path) once.
      */
     private const int MAX_DEPTH = 8;
 
@@ -46,14 +52,38 @@ final class ParameterValue
      */
     public static function coerce(mixed $value, ?array $schema, array $document = []): mixed
     {
-        $flat = self::flatten($schema, $document, 0);
+        $memo = [];
+
+        return self::read($value, $schema, $document, 0, [], $memo);
+    }
+
+    /**
+     * One node of the walk: what this schema says the value may be, and the value read back as it.
+     *
+     * The two ways the walk goes deeper differ in whether the value goes with it, and that is what
+     * decides whether the path travels too. Stepping into a member of a map or a list CONSUMES the
+     * value, so it cannot recur without end whatever the schema says, and forgetting the path there
+     * is what lets a self-referential object schema still be read at every level `filter[a][b]`
+     * actually has. Splitting a comma list consumes nothing — `explode(',', 'x')` hands back the same
+     * string in a one-element list — so that step carries the path, and a list documented as its own
+     * items is cut instead of followed until the stack runs out.
+     *
+     * @param  array<string, mixed>|null  $schema
+     * @param  array<string, mixed>  $document
+     * @param  list<string>  $seen  the pointers this walk has resolved without the value shrinking, so
+     *                              a schema that reaches itself is cut on the second visit
+     * @param  array<string, Flattened>  $memo
+     */
+    private static function read(mixed $value, ?array $schema, array $document, int $depth, array $seen, array &$memo): mixed
+    {
+        $flat = self::flatten($schema, $document, $depth, $seen, $memo);
 
         if (is_string($value)) {
-            $value = self::fromString($value, $flat, $document);
+            return self::fromString($value, $flat, $document, $depth, $memo);
         }
 
         if (is_array($value)) {
-            return self::fromArray($value, $flat, $document);
+            return self::fromArray($value, $flat, $document, $depth, $seen, $memo);
         }
 
         return $value;
@@ -62,8 +92,9 @@ final class ParameterValue
     /**
      * @param  Flattened  $flat
      * @param  array<string, mixed>  $document
+     * @param  array<string, Flattened>  $memo
      */
-    private static function fromString(string $value, array $flat, array $document): mixed
+    private static function fromString(string $value, array $flat, array $document, int $depth, array &$memo): mixed
     {
         $types = $flat['types'];
 
@@ -90,7 +121,7 @@ final class ParameterValue
         // `?sort=name,-created_at` is the comma list representation the generator documents by default.
         if (in_array('array', $types, true)) {
             return array_map(
-                static fn (string $item): mixed => self::coerce($item, $flat['items'], $document),
+                static fn (string $item): mixed => self::read($item, $flat['items'], $document, $depth + 1, $flat['path'], $memo),
                 explode(',', $value),
             );
         }
@@ -102,18 +133,30 @@ final class ParameterValue
      * @param  array<array-key, mixed>  $value
      * @param  Flattened  $flat
      * @param  array<string, mixed>  $document
+     * @param  list<string>  $seen
+     * @param  array<string, Flattened>  $memo
      */
-    private static function fromArray(array $value, array $flat, array $document): mixed
+    private static function fromArray(array $value, array $flat, array $document, int $depth, array $seen, array &$memo): mixed
     {
         if (array_is_list($value)) {
-            return array_map(static fn (mixed $item): mixed => self::coerce($item, $flat['items'], $document), $value);
+            return array_map(
+                static fn (mixed $item): mixed => self::read($item, $flat['items'], $document, $depth + 1, $seen, $memo),
+                $value,
+            );
         }
 
         // A bracketed query parameter (`filter[status]=paid`) arrives as a map: an object to JSON Schema.
         $object = new stdClass;
 
         foreach ($value as $key => $item) {
-            $object->{(string) $key} = self::coerce($item, $flat['properties'][(string) $key] ?? null, $document);
+            $object->{(string) $key} = self::read(
+                $item,
+                $flat['properties'][(string) $key] ?? null,
+                $document,
+                $depth + 1,
+                $seen,
+                $memo,
+            );
         }
 
         return in_array('array', $flat['types'], true) ? array_values(get_object_vars($object)) : $object;
@@ -121,7 +164,9 @@ final class ParameterValue
 
     /**
      * Everything the validator would read off this node about what a value here may be: the types it
-     * permits, the `items` it holds each entry of a list to, and the `properties` it names.
+     * permits, the `items` it holds each entry of a list to, and the `properties` it names — plus the
+     * `path` of pointers that got here, which is what the walk into an `items` or a property carries
+     * on with so that step continues this walk rather than starting a new one at zero.
      *
      * One walk rather than three, because three readers of one grammar is the defect this fixes: the
      * `items` behind a `$ref` has to come from the same resolution the types did, or a list documented
@@ -137,19 +182,29 @@ final class ParameterValue
      * than state alternative readings of the value itself, so a type read out of one would be the type
      * of a member and not of this.
      *
+     * A document may reach itself, and the two ways it does that are bounded here rather than by depth
+     * (which {@see MAX_DEPTH} says why it cannot do alone). A pointer already on the path is a cycle,
+     * so it reads as nothing on the second visit. A pointer NOT on the path may still be reached along
+     * many paths — `A: {allOf: [{$ref: B}, {$ref: B}, …]}` down a few levels is `k^depth` visits of a
+     * document a few hundred bytes long — so each (pointer, depth, path) is walked once and answered
+     * from the memo after that. The key names every input the answer depends on, which is what makes
+     * reusing it the same walk rather than a shortcut through a different one.
+     *
      * @param  array<string, mixed>|null  $schema
      * @param  array<string, mixed>  $document
+     * @param  list<string>  $seen
+     * @param  array<string, Flattened>  $memo
      * @return Flattened
      */
-    private static function flatten(?array $schema, array $document, int $depth): array
+    private static function flatten(?array $schema, array $document, int $depth, array $seen, array &$memo): array
     {
-        $empty = ['types' => [], 'items' => null, 'properties' => []];
+        $empty = ['types' => [], 'items' => null, 'properties' => [], 'path' => $seen];
 
         if ($schema === null || $depth > self::MAX_DEPTH) {
             return $empty;
         }
 
-        [$node, , $dangling] = Refs::follow($document, $schema, []);
+        [$node, $segments, $dangling] = Refs::follow($document, $schema, []);
 
         // A reference the document does not define makes the WHOLE node unreadable — a `type` sibling
         // does not stand in for the half that would not resolve, because the node means "whatever that
@@ -159,6 +214,23 @@ final class ParameterValue
         // the pointer that went nowhere. The check this feeds is already going to fail and say why.
         if ($dangling !== null) {
             return $empty;
+        }
+
+        $pointer = $segments === [] ? null : implode('/', $segments);
+        $key = null;
+
+        if ($pointer !== null) {
+            if (in_array($pointer, $seen, true)) {
+                return $empty;
+            }
+
+            $key = implode("\0", [$pointer, (string) $depth, ...$seen]);
+
+            if (array_key_exists($key, $memo)) {
+                return $memo[$key];
+            }
+
+            $seen = [...$seen, $pointer];
         }
 
         $types = self::declared($node);
@@ -186,7 +258,7 @@ final class ParameterValue
                 }
 
                 /** @var array<string, mixed> $branch */
-                $inner = self::flatten($branch, $document, $depth + 1);
+                $inner = self::flatten($branch, $document, $depth + 1, $seen, $memo);
 
                 $types = [...$types, ...$inner['types']];
                 // The first branch that names one wins, exactly as the node's own does over a branch's.
@@ -195,7 +267,18 @@ final class ParameterValue
             }
         }
 
-        return ['types' => array_values(array_unique($types)), 'items' => $items, 'properties' => $properties];
+        $flat = [
+            'types' => array_values(array_unique($types)),
+            'items' => $items,
+            'properties' => $properties,
+            'path' => $seen,
+        ];
+
+        if ($key !== null) {
+            $memo[$key] = $flat;
+        }
+
+        return $flat;
     }
 
     /**
