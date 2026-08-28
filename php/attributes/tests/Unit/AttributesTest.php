@@ -210,11 +210,12 @@ it('keeps every #[Mock] parameter optional and null by default', function (): vo
     expect([$named->faker, $named->seedGroup, $named->property])->toBe(['safeEmail', 'person', 'email']);
 });
 
-it('keeps a written parameter optionality distinguishable from an unwritten one', function (string $class, string $name): void {
-    // These patch a parameter or a body an integration may already have proved requirements for, so "the
-    // author said optional" and "the author said nothing" must not arrive as the same value: reading the
-    // default as optional de-requires something the server insists on, and publishes a contract a
-    // generated client can build a rejected request from. The three states are why the type is nullable.
+it('keeps a written optionality distinguishable from an unwritten one', function (string $class, string $name): void {
+    // These patch something an integration may already have proved a requirement for, so "the author
+    // said optional" and "the author said nothing" must not arrive as the same value: reading the
+    // default as optional de-requires a parameter the server insists on — or a response header it
+    // always sends — and publishes a contract a generated client can build a rejected request from, or
+    // a check that lets a missing header pass. The three states are why the type is nullable.
     expect((new $class(name: $name))->required)->toBeNull()
         ->and((new $class(name: $name, required: false))->required)->toBeFalse()
         ->and((new $class(name: $name, required: true))->required)->toBeTrue();
@@ -223,4 +224,26 @@ it('keeps a written parameter optionality distinguishable from an unwritten one'
     'HeaderParameter' => [HeaderParameter::class, 'X-Tenant'],
     'CookieParameter' => [CookieParameter::class, 'session'],
     'BodyParameter' => [BodyParameter::class, 'nickname'],
+    'ResponseHeader' => [ResponseHeader::class, 'Retry-After'],
 ]);
+
+// The dataset above proves the rows it lists; this reads the constructors instead, so an attribute that
+// grows a `required` tomorrow arrives here rather than shipping two-valued unnoticed.
+it('keeps every patched `required` three-valued', function (): void {
+    $found = [];
+    foreach (attributeCatalogue() as [$class]) {
+        foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
+            if ($parameter->getName() !== 'required') {
+                continue;
+            }
+
+            $found[] = $class;
+
+            expect((string) $parameter->getType())->toBe('?bool')
+                ->and($parameter->getDefaultValue())->toBeNull();
+        }
+    }
+
+    // A scan that stopped seeing its shapes must fail rather than pass forever.
+    expect(count($found))->toBeGreaterThanOrEqual(5);
+});

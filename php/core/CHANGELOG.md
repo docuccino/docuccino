@@ -20,6 +20,7 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 ### Bug fixes
 
+- report a #[Hidden] name that hid nothing instead of publishing the field
 - give the declared reading of a type string one way in
 
 ## v0.11.0

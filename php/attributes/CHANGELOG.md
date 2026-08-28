@@ -11,6 +11,8 @@ the [repository](https://github.com/docuccino/docuccino) git log.
 
 ### Breaking changes
 
+- let a parameter declaration say nothing about required
+  - `QueryParameter::$required`, `HeaderParameter::$required` and `CookieParameter::$required` are `?bool` rather than `bool`, and default to `null` rather than `false`. Code reading one of those properties into a `bool` must widen; a declaration that already spells `required: false` now writes that onto the parameter instead of being indistinguishable from silence, and one that omits `required` no longer publishes `required: false` on the parameter it documents.
 - let a body declaration say a field is optional
   - `BodyParameter::$required` is `?bool` rather than `bool`, and defaults to `null` rather than `false`. Code reading the property into a `bool` must widen; a `#[BodyParameter]` that already spells `required: false` now takes the field off the body's `required` list instead of being ignored.
 
