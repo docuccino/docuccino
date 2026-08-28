@@ -15,7 +15,7 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Support\PlainText;
-use Docuccino\Laravel\Support\UnmatchedIgnore;
+use Docuccino\Laravel\Support\UnmatchedDeclaration;
 
 /**
  * Applies `#[IgnoreParam]`. It is the only subtractive parameter pass, so it runs in Finalize, after
@@ -73,7 +73,7 @@ final class IgnoredParametersExtension implements OperationExtension
     }
 
     /**
-     * The declarations that dropped nothing, reported for the action's own only — {@see UnmatchedIgnore}
+     * The declarations that dropped nothing, reported for the action's own only — {@see UnmatchedDeclaration}
      * states why an inherited one is silent. `$published` is what the operation is left with, which is
      * what the reader can go and compare their spelling against.
      *
@@ -97,7 +97,7 @@ final class IgnoredParametersExtension implements OperationExtension
 
             $reported[] = $written;
 
-            $context->components->addDiagnostic(UnmatchedIgnore::parameter(
+            $context->components->addDiagnostic(UnmatchedDeclaration::parameter(
                 $ignore,
                 $published,
                 $context->actionSource(),

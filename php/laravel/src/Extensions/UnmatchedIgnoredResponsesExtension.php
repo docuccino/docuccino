@@ -12,7 +12,7 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Laravel\Support\IgnoredResponses;
-use Docuccino\Laravel\Support\UnmatchedIgnore;
+use Docuccino\Laravel\Support\UnmatchedDeclaration;
 
 /**
  * Reports an `#[IgnoreResponse]` that dropped nothing.
@@ -57,7 +57,7 @@ final class UnmatchedIgnoredResponsesExtension implements OperationExtension
 
             $reported[] = $ignore->status;
 
-            $context->components->addDiagnostic(UnmatchedIgnore::response(
+            $context->components->addDiagnostic(UnmatchedDeclaration::response(
                 $ignore->status,
                 $published,
                 $context->actionSource(),

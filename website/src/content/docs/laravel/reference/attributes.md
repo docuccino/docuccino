@@ -443,6 +443,13 @@ It **narrows, it doesn't rescue**: the attribute is applied after each document'
 stays excluded no matter what you list here. To add a route to a document, widen the document's route
 patterns.
 
+It is an **allow-list**, so a key naming no configured document does not fall back to including the
+route — a declaration whose keys name no document that exists excludes the route from every one of them.
+A key nobody configured is reported
+([`attribute.in-docs-unknown`](/laravel/reference/diagnostics/#attributes)), once for the key however
+many routes it covers, naming those routes and listing the documents that do exist. To keep a route out
+of every document on purpose, use `#[ExcludeFromDocs]`.
+
 ### `#[IgnoreParam]`
 
 Targets `CLASS | METHOD | FUNCTION`, repeatable.
