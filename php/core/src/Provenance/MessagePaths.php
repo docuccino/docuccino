@@ -69,16 +69,44 @@ final readonly class MessagePaths
     private const BS = '\\\\';
 
     /**
-     * Stream wrappers that name a file on THIS machine, so a run bearing one is a path by proof
-     * rather than by shape. A URL scheme names a host instead and is not here; `php://` and `data://`
-     * name no file at all.
+     * Every stream wrapper a decision has been taken about, and whether it is proof: true says a run
+     * bearing it can name nothing but a file on THIS machine, so the run is a path by proof rather
+     * than by shape. False is the decision that it is not one, and it is the half that has to be
+     * taken by hand — an over-scrub is the direction that must be impossible — so what the reduction
+     * reads is this table and never what the machine happens to have loaded. `stream_get_wrappers()`
+     * is the source of truth for what is REGISTERED, and it is read by the guard in the tests, which
+     * fails when a registered scheme is decided in neither direction.
+     *
+     * @var array<string, bool>
      */
-    private const LOCAL_WRAPPERS = ['file', 'phar', 'zip', 'compress.zlib', 'compress.bzip2'];
+    private const array WRAPPERS = [
+        // Proof: nothing but a file on this machine. A glob names a filesystem pattern and nothing
+        // else, so the absolute prefix in front of its wildcard is the machine word every other path
+        // here carries.
+        'file' => true,
+        'phar' => true,
+        'zip' => true,
+        'glob' => true,
+        'compress.zlib' => true,
+        'compress.bzip2' => true,
+        // A host, not a file: reducing one states an address the application never wrote.
+        'http' => false,
+        'https' => false,
+        'ftp' => false,
+        'ftps' => false,
+        // No file at all — a stream of the process's own, a message's own bytes, and a field on an
+        // open database connection.
+        'php' => false,
+        'data' => false,
+        'sqlsrv' => false,
+    ];
 
     /**
      * What introduces a route signature rather than a file. `/api/forms` is already left alone for
      * having no filename, but `/api/users.json` has one, and a format suffix is an ordinary way to
-     * spell a route.
+     * spell a route. The methods the document itself carries are the source of truth, so the test
+     * derives its rows from there rather than spelling them again: a method missing here reduces a
+     * signature to its last segment, which is the direction that must be impossible.
      */
     private const METHODS = ['GET ', 'PUT ', 'HEAD ', 'POST ', 'PATCH ', 'TRACE ', 'QUERY ', 'DELETE ', 'OPTIONS '];
 
@@ -165,11 +193,21 @@ final readonly class MessagePaths
         return self::wrapper($run) !== null;
     }
 
+    /**
+     * The schemes {@see WRAPPERS} decided are proof, in the order it spells them.
+     *
+     * @return list<string>
+     */
+    private static function localWrappers(): array
+    {
+        return array_keys(array_filter(self::WRAPPERS));
+    }
+
     /** The wrapper scheme a run carries, if it is one we can prove names a local file. */
     private static function wrapper(string $run): ?string
     {
-        foreach (self::LOCAL_WRAPPERS as $scheme) {
-            if (str_starts_with($run, $scheme.'://')) {
+        foreach (self::WRAPPERS as $scheme => $proof) {
+            if ($proof && str_starts_with($run, $scheme.'://')) {
                 return $scheme;
             }
         }
@@ -352,8 +390,8 @@ final readonly class MessagePaths
         $segments = '(?:'.$body.'*/)*'.$body.'*';
         $windows = '(?:'.$body.'*[/'.self::BS.'])*'.$body.'*';
         $schemes = implode('|', array_map(
-            static fn (string $scheme): string => str_replace('.', '\\.', $scheme),
-            self::LOCAL_WRAPPERS,
+            static fn (string $scheme): string => preg_quote($scheme, '%'),
+            self::localWrappers(),
         ));
 
         return '%'
