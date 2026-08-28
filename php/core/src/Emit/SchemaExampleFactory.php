@@ -35,14 +35,23 @@ use stdClass;
  * — and where that cannot PROVE the constraint met, the value is absent rather than published beside a
  * schema that rejects it.
  *
- * The other nine subschema positions are deliberately not read, and the boundary is here so the next
- * reader inherits a decision rather than an oversight. Two cannot refuse anything this factory
- * publishes: `unevaluatedProperties` and `unevaluatedItems` are satisfied by a value built out of
- * declared members. The remaining seven — `patternProperties`, `propertyNames`, `prefixItems`,
- * `dependentSchemas`, `if`, `then`, `else` — can refuse one, but only where an author wrote a schema
- * that contradicts the members beside it: no producer in this product mints any of them, and no golden
- * document carries one. Reading them would be a mechanism sized to what could be true rather than to
- * what has been measured.
+ * Those two are in scope because they can refuse a value built faithfully from the members beside them,
+ * with the schema saying nothing contradictory: `{type: string, not: {const: 'x'}}` and
+ * `{items: {type: string}, contains: {const: 'wanted'}}` are both consistent, and what runs into the
+ * constraint is a CHOICE THIS FACTORY MADE — which sample a format gets, that an array is built one
+ * element long. `not` is minted by a producer (a `not_in:` rule) and `contains` by none, so the second
+ * is here on the mechanism rather than on a count: they are the same single-position assertion, one
+ * about the value and one about a list's elements, and either is author-writable through an overlay
+ * (a first-class input at precedence 45) or a hand-authored component.
+ *
+ * The other nine subschema positions are deliberately not read, and the same line is what excludes
+ * them, so the next reader inherits a decision rather than an oversight. Two cannot refuse anything
+ * this factory publishes at all: `unevaluatedProperties` and `unevaluatedItems` are satisfied by a
+ * value built out of declared members. The remaining seven — `patternProperties`, `propertyNames`,
+ * `prefixItems`, `dependentSchemas`, `if`, `then`, `else` — can refuse one, but only where the author
+ * wrote a schema contradicting the members beside it: a `propertyNames` refusing a name `properties`
+ * declares, a `prefixItems` refusing what `items` produces. There the document already lies to its
+ * consumer before any example is built, and no example this factory withholds fixes that.
  *
  * @internal
  */
@@ -447,7 +456,7 @@ final readonly class SchemaExampleFactory
             ? $this->subschema($schema['items'], $components, $depth + 1, $stack)
             : null;
 
-        if ($this->requiresMatch($schema)) {
+        if (SchemaKeywords::containsAsserts($schema)) {
             return $this->matching($schema, $item, $components, $depth, $stack);
         }
 
@@ -458,24 +467,22 @@ final readonly class SchemaExampleFactory
     }
 
     /**
-     * Whether `contains` says something an array here must satisfy. `minContains: 0` is the one spelling
-     * that empties it: the keyword still says which elements match, and no array has to have one.
-     *
-     * @param  array<string, mixed>  $schema
-     */
-    private function requiresMatch(array $schema): bool
-    {
-        return array_key_exists('contains', $schema) && ($schema['minContains'] ?? 1) !== 0;
-    }
-
-    /**
      * The one-element array that satisfies `contains`, or null where this factory can build none — an
      * array with no matching element is exactly the request the server rejects.
      *
+     * One element is the only length this factory builds, so the keyword's own bounds decide before any
+     * element does. A floor above 1 wants an array of repeats, which is exactly what a `uniqueItems`
+     * beside it forbids — and this factory does not read `uniqueItems`, so it cannot prove such an array
+     * validates. A cap below 1 forbids the one match it could prove and leaves only an array whose
+     * elements provably do NOT match — where the elements come from `items` and from `contains` itself,
+     * the two shapes it can prove nothing of the sort about, and the empty array that would satisfy the
+     * cap shows a consumer no shape at all. Between the two, ONE proven match answers every bound there
+     * is: never fewer than a floor of 0 or 1, never more than a cap of 1 or above.
+     *
      * The `items` element is tried first: `items` speaks about every element, so that one is admissible
      * by construction, and where it also matches `contains` the array is the one the shape would have
-     * produced anyway. Otherwise the element is built from `contains` itself and used unless `items` is
-     * known to refuse it.
+     * produced anyway. Otherwise the element is built from `contains` itself, and published only where
+     * `items` is known to admit it.
      *
      * @param  array<string, mixed>  $schema
      * @param  array{mixed}|null  $item  the element `items` produced, or null where it admits none
@@ -485,6 +492,12 @@ final readonly class SchemaExampleFactory
      */
     private function matching(array $schema, ?array $item, array $components, int $depth, array $stack): ?array
     {
+        $atMost = SchemaKeywords::maxContains($schema);
+
+        if (SchemaKeywords::minContains($schema) > 1 || ($atMost !== null && $atMost < 1)) {
+            return null;
+        }
+
         $contains = $schema['contains'] ?? null;
 
         if ($item !== null && $this->admits($contains, $item[0]) === true) {
@@ -499,9 +512,11 @@ final readonly class SchemaExampleFactory
             return null;
         }
 
-        return array_key_exists('items', $schema) && $this->admits($schema['items'], $match[0]) === false
-            ? null
-            : [[$match[0]]];
+        // `items` speaks about every element, so the match ships only where it is PROVABLY admitted
+        // there — undecidable reads as refusal here exactly as it does at every other position.
+        return ! array_key_exists('items', $schema) || $this->admits($schema['items'], $match[0]) === true
+            ? [[$match[0]]]
+            : null;
     }
 
     /**
@@ -545,8 +560,8 @@ final readonly class SchemaExampleFactory
      * ONE keyword's verdict on one value. A schema is a conjunction, so a single refusal settles the
      * whole subschema whatever else stands beside it — which is what makes these three enough for the
      * cases that occur: a value set (`not_in:` writes `not: {enum: […]}`) and a type that cannot be the
-     * value's type. Everything else is undecidable, bar an annotation, which says nothing about the
-     * instance at all ({@see SchemaKeywords::annotations()}).
+     * value's type. Everything else is undecidable, bar a keyword that says nothing about the instance
+     * at all ({@see SchemaKeywords::saysNothingAboutTheInstance()}).
      */
     private function keyword(string $keyword, mixed $constraint, mixed $value): ?bool
     {
@@ -554,7 +569,7 @@ final readonly class SchemaExampleFactory
             'type' => $this->typed($constraint, $value),
             'const' => $this->equal($constraint, $value),
             'enum' => $this->listed($constraint, $value),
-            default => in_array($keyword, SchemaKeywords::annotations(), true) ? true : null,
+            default => SchemaKeywords::saysNothingAboutTheInstance($keyword) ? true : null,
         };
     }
 
@@ -629,6 +644,13 @@ final readonly class SchemaExampleFactory
     /**
      * The JSON type of a value this factory built. The empty object is a {@see stdClass} here and never
      * `[]` ({@see JsonValue}), so a keyed array is an object and every other array a list.
+     *
+     * `ParameterValue::enumTypes()` asks the same question of an authored `enum` and answers it
+     * differently ON PURPOSE, so neither may be unified into the other: an integral float is an
+     * `integer` here because JSON Schema's `type` is what the answer is held against, and a `number`
+     * there because a PHP float is what the coercion has to produce; a value no JSON document can hold
+     * is `null` here, because a type this cannot name may not be proven to satisfy anything, and
+     * `string` there, because that is the reading that converts nothing.
      */
     private function jsonType(mixed $value): ?string
     {

@@ -396,6 +396,31 @@ it('keeps the example where the value provably escapes a constraining keyword', 
         '["string"]',
         null,
     ],
+    // A cap with no floor is still something to satisfy: nothing has to match, but what may match is
+    // bounded — so the one-element array carries the match rather than avoiding it.
+    'contains bounded above with no floor' => [
+        [
+            'type' => 'array',
+            'items' => ['type' => 'string'],
+            'contains' => ['const' => 'wanted'],
+            'minContains' => 0,
+            'maxContains' => 2,
+        ],
+        '["wanted"]',
+        '["string"]',
+    ],
+    // One match is never fewer than a floor of 1 and never more than a cap of 1 or above.
+    'contains bounded either side of the one match' => [
+        [
+            'type' => 'array',
+            'items' => ['type' => 'string'],
+            'contains' => ['const' => 'wanted'],
+            'minContains' => 1,
+            'maxContains' => 1,
+        ],
+        '["wanted"]',
+        '["string"]',
+    ],
 ]);
 
 /*
@@ -445,6 +470,49 @@ it('publishes no example where a constraining keyword forbids what it would have
         '[]',
         [],
     ],
+    // `items` speaks about EVERY element, the match built from `contains` included — so an `items` this
+    // factory cannot decide refuses that element exactly as a proven mismatch does. Both rows published
+    // the match before, past an `items` neither audit nor factory reads as admitting it.
+    'contains a const beside a length items does not decide' => [
+        ['type' => 'array', 'items' => ['type' => 'string', 'maxLength' => 3], 'contains' => ['const' => 'abcdef']],
+        '["abcdef"]',
+        [],
+    ],
+    'contains a const beside a pattern items does not decide' => [
+        ['type' => 'array', 'items' => ['type' => 'string', 'pattern' => '^[a-z]$'], 'contains' => ['const' => 'LONG']],
+        '["LONG"]',
+        [],
+    ],
+    // One element is the only length this factory builds, and a floor above 1 wants an array of repeats
+    // — the answer a `uniqueItems` beside it forbids, which this factory does not read.
+    'contains twice over, with items to build from' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => ['type' => 'string'], 'minContains' => 2],
+        '["string"]',
+        [],
+    ],
+    'contains three times over, with nothing to build from' => [
+        ['type' => 'array', 'contains' => ['type' => 'integer'], 'minContains' => 3],
+        '[0]',
+        [],
+    ],
+    // A cap below 1 forbids the one match this factory can prove, and leaves only an array whose
+    // elements provably do NOT match — which is the one thing `items` and `contains` cannot prove.
+    'contains what nothing may match' => [
+        ['type' => 'array', 'contains' => ['type' => 'integer'], 'maxContains' => 0],
+        '[0]',
+        [],
+    ],
+    'contains what nothing may match, floor and all' => [
+        [
+            'type' => 'array',
+            'items' => ['type' => 'string'],
+            'contains' => ['type' => 'string'],
+            'minContains' => 0,
+            'maxContains' => 0,
+        ],
+        '["string"]',
+        [],
+    ],
     // A `not` sits beside a `$ref` as legally as it sits alone, and the reference resolving first is not
     // a reason the constraint goes unread.
     'not beside a reference' => [
@@ -472,8 +540,71 @@ it('answers a forbidden member at the position holding it', function (): void {
 });
 
 /*
+ * Every arm of the three-valued prover, which is what decides both constraining keywords and so what
+ * every row above rests on. Admitted, refused and CANNOT TELL are three different answers and only one
+ * of them publishes: reversing an arm either ships a value the schema forbids or withholds one it
+ * allows, and neither shows up as a test failure unless the arm is pinned here.
+ *
+ * Read through `member()`, the one public surface where a published `null` and a withheld example are
+ * distinguishable — `value()` collapses both to `null`, which is exactly why the positions ask.
+ */
+it('publishes only where the prover proves the constraining keyword escaped', function (array $schema, ?string $published): void {
+    $member = (new SchemaExampleFactory)->member($schema);
+
+    expect($member === null ? null : json_encode($member[0]))->toBe($published);
+})->with([
+    // A `not` that is no schema at all widens to `{}` exactly as a subschema position widens it, and `{}`
+    // admits everything — so there is nothing here to publish.
+    'a not that is no schema at all' => [['type' => 'string', 'not' => 42], null],
+    // An `enum` with no members, and one that is no list: both are sets this factory will not read, and
+    // an unread set is not a set the value provably escapes.
+    'a not enum with no members' => [['type' => 'string', 'not' => ['enum' => []]], null],
+    'a not enum that is no list' => [['type' => 'string', 'not' => ['enum' => 'admin']], null],
+    // A `type` may name a LIST of types, and the value belongs to the set or it does not.
+    'a not type list the value is outside' => [['type' => 'string', 'not' => ['type' => ['integer', 'boolean']]], '"string"'],
+    'a not type list the value is inside' => [['type' => 'string', 'not' => ['type' => ['string', 'null']]], null],
+    'a not type that is no type at all' => [['type' => 'string', 'not' => ['type' => 42]], null],
+    // Two composites are never compared — object member order is not an authored fact — while a
+    // composite against a scalar is different whatever is inside it, either way round.
+    'a not const composite against a composite' => [['const' => ['a' => 1], 'not' => ['const' => ['a' => 1]]], null],
+    'a not const composite against a scalar' => [['type' => 'string', 'not' => ['const' => ['a' => 1]]], '"string"'],
+    'a not const scalar against a composite' => [
+        ['type' => 'object', 'properties' => ['a' => ['type' => 'string']], 'not' => ['const' => 'admin']],
+        '{"a":"string"}',
+    ],
+    // `null` is a JSON type like any other, and a published `null` is a value rather than a silence.
+    'a not type a null value is outside' => [['const' => null, 'not' => ['type' => 'string']], 'null'],
+    'a not type a null value is inside' => [['const' => null, 'not' => ['type' => 'null']], null],
+    // The empty object is a stdClass here and never `[]`, so a keyed array is an object and every other
+    // array a list. Read the three the wrong way round and each of these flips.
+    'a not type a list is outside' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'not' => ['type' => 'object']],
+        '["string"]',
+    ],
+    'a not type a list is inside' => [['type' => 'array', 'items' => ['type' => 'string'], 'not' => ['type' => 'array']], null],
+    'a not type a keyed object is outside' => [
+        ['type' => 'object', 'properties' => ['a' => ['type' => 'string']], 'not' => ['type' => 'array']],
+        '{"a":"string"}',
+    ],
+    'a not type the empty object is outside' => [['type' => 'object', 'not' => ['type' => 'array']], '{}'],
+    'a not type the empty object is inside' => [['type' => 'object', 'not' => ['type' => 'object']], null],
+    // An integral number is an `integer` and every integer is also a `number`; `1` and `1.0` are one
+    // JSON instance, whichever way PHP happens to be holding them.
+    'a not type an integral float is inside' => [['const' => 1.0, 'not' => ['type' => 'integer']], null],
+    'a not type a fractional float is outside' => [['const' => 1.5, 'not' => ['type' => 'integer']], '1.5'],
+    'a not number type an integer is inside' => [['const' => 1, 'not' => ['type' => 'number']], null],
+    'a not const across the two spellings of one number' => [['const' => 1, 'not' => ['const' => 1.0]], null],
+    // A keyword that says nothing about the instance is passed over rather than making the answer
+    // undecidable — so a `not` of nothing but annotations admits everything, and nothing publishes.
+    'a not of nothing but an annotation' => [['type' => 'string', 'not' => ['description' => 'anything']], null],
+    // Every member provably different settles an `enum` too, composites included.
+    'a not enum of members the value is none of' => [['type' => 'string', 'not' => ['enum' => [['a'], 'b']]], '"string"'],
+    'a not enum holding the value' => [['type' => 'string', 'not' => ['enum' => ['string', 'other']]], null],
+]);
+
+/*
  * The durable half. This factory reads the subschema keywords in its own right, and the guard on stale
- * COPIES of that set cannot see it: it reads eight across seven methods, and no one declaration
+ * COPIES of that set cannot see it: it reads eight across six methods, and no one declaration
  * enumerates three. It also has no uniform per-position action to derive — `items: false` means the empty
  * array and `not: false` means anything at all — so what is owed here is COVERAGE, not a derived set.
  *
