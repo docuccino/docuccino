@@ -480,8 +480,15 @@ dotted `field.<key>` rules and the document narrows to the one you meant.
 
 Where the endpoint really does take a free-form map — no keys to enumerate, so no rules to add — say it
 with [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) instead of inventing rules to
-shape a schema. Naming the field, or any key inside it, settles the container the same way, and the
-notice stops.
+shape a schema:
+
+```php
+#[BodyParameter(name: 'meta', type: 'object', description: 'Anything the client wants to keep with the order.')]
+```
+
+Naming any key inside the field settles the container the same way, and the notice stops. Naming the
+field itself settles it as far as its `type:` does — `object` and `list<int>` say which shape it is,
+`array` and `mixed` say nothing the notice wasn't already saying, so it keeps naming the field.
 
 ### Documenting a custom rule
 
