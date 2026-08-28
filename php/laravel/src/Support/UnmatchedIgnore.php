@@ -8,6 +8,7 @@ use Docuccino\Attributes\IgnoreParam;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Provenance\Source;
+use Docuccino\Core\Support\NameList;
 use Docuccino\Core\Support\PlainText;
 
 /**
@@ -19,7 +20,8 @@ use Docuccino\Core\Support\PlainText;
  * sees exactly what a working declaration produces and believes the field is hidden when it is
  * published. Both members say the same three things — the declaration as written, that it took no
  * effect, and what the operation DOES document so the typo is visible beside it — so they say them
- * from here rather than twice.
+ * from here rather than twice. The list itself is {@see NameList}'s: what it caps at and what it
+ * escapes are policy every diagnostic's list of names shares.
  *
  * Warning, not info: the document is true either way (nothing was dropped, so nothing is missing from
  * it), but the author asked for a subtraction and did not get one, which is a request refused rather
@@ -36,9 +38,6 @@ use Docuccino\Core\Support\PlainText;
  */
 final class UnmatchedIgnore
 {
-    /** Past this, the list stops being read and starts being scrolled. Same cap, and the same reason, as a contract failure's own lists. */
-    private const int MAX_PUBLISHED = 8;
-
     /**
      * A name that matched no parameter. `$published` is what the operation is left documenting, as
      * `in:name` keys — read AFTER the pass has done its removals, because the remedy has to name what
@@ -55,7 +54,7 @@ final class UnmatchedIgnore
         return new Diagnostic(
             severity: Severity::Warning,
             code: 'attribute.ignore-param-unmatched',
-            message: $declaration.' dropped nothing: this operation documents no such parameter. '.self::naming('parameter', $published),
+            message: $declaration.' dropped nothing: this operation documents no such parameter. '.self::documenting('parameters', $published),
             source: $source,
             routeSignature: $routeSignature,
             help: 'Correct the name to one this operation documents, or delete the declaration — a parameter that was renamed keeps its old spelling only in the attribute. A key only some of a controller\'s actions take belongs on the class, where an action that never documented it is not a mistake.',
@@ -77,7 +76,7 @@ final class UnmatchedIgnore
                 '#[IgnoreResponse(status: %d)] dropped nothing: no producer would have written a %d response for this operation. %s',
                 $status,
                 $status,
-                self::naming('response', $published),
+                self::documenting('responses', $published),
             ),
             source: $source,
             routeSignature: $routeSignature,
@@ -86,25 +85,17 @@ final class UnmatchedIgnore
     }
 
     /**
-     * What the operation does publish, capped. Every value goes through {@see PlainText}: a parameter
-     * name can be recovered from a validation rule key or a query string an application composes, so it
-     * is not a name this build wrote.
+     * What the operation is left documenting. `$plural` is the caller's own noun, so the sentence never
+     * has to work out which member is asking.
      *
      * @param  list<string>  $published
      */
-    private static function naming(string $kind, array $published): string
+    private static function documenting(string $plural, array $published): string
     {
-        if ($published === []) {
-            return sprintf('It documents no %s at all.', $kind === 'parameter' ? 'parameters' : 'responses');
-        }
+        $listing = NameList::of($published);
 
-        $shown = array_slice($published, 0, self::MAX_PUBLISHED);
-        $extra = count($published) - count($shown);
-
-        return sprintf(
-            'It documents %s%s.',
-            implode(', ', array_map(PlainText::of(...), $shown)),
-            $extra > 0 ? sprintf(' and %d more', $extra) : '',
-        );
+        return $listing === null
+            ? sprintf('It documents no %s at all.', $plural)
+            : sprintf('It documents %s.', $listing);
     }
 }
