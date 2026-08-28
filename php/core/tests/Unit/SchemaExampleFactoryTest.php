@@ -256,6 +256,16 @@ it('reads a boolean subschema as the schema it is, at every position it reads on
     // additionalProperties — read for the object it implies, never for a value, so both booleans agree.
     'additionalProperties: false' => [['additionalProperties' => false], '{}', null, []],
     'additionalProperties: true' => [['additionalProperties' => true], '{}', null, []],
+    // not — `false` admits nothing, so a `not` of it forbids nothing: the constraint is simply absent.
+    'not: false' => [['type' => 'string', 'not' => false], '"string"', null, []],
+    // contains — `true` is matched by any element at all, so the array only has to be non-empty.
+    'contains: true' => [['type' => 'array', 'contains' => true], '[null]', '[]', []],
+    'contains: true beside items' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => true],
+        '["string"]',
+        null,
+        [],
+    ],
     // A union walks past a branch nothing satisfies: `false` is not an alternative any consumer has.
     'anyOf: [false, …]' => [['anyOf' => [false, ['type' => 'string']]], '"string"', 'null', []],
     'anyOf: [true, …]' => [['anyOf' => [true, ['type' => 'string']]], 'null', null, []],
@@ -309,6 +319,14 @@ it('stops publishing a value where its own schema admits none', function (array 
         [],
     ],
     'a union of nothing but false' => [['anyOf' => [false, false]], 'null', []],
+    // `true` admits everything, so a `not` of it admits nothing — the mirror of `not: false` above.
+    'not: true' => [['type' => 'string', 'not' => true], '"string"', []],
+    // No element can match a `contains` of `false`, and an array must carry one match.
+    'contains: false' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => false],
+        '["string"]',
+        [],
+    ],
     '$ref to a false component' => [
         ['$ref' => '#/components/schemas/Never'],
         '{}',
@@ -317,22 +335,166 @@ it('stops publishing a value where its own schema admits none', function (array 
 ]);
 
 /*
- * The durable half. This factory reads the subschema keywords in its own right, and the guard on stale
- * COPIES of that set cannot see it: it reads six across five methods, and no one declaration enumerates
- * three. It also has no uniform per-position action to derive — `items: false` means the empty array
- * and `not: false` means anything at all — so what is owed here is COVERAGE, not a derived set.
+ * Two keywords say what a value may NOT be, and an example published past one is a body the server
+ * rejects — which the consumer discovers by sending it. `not` forbids whatever its subschema admits, and
+ * every `not_in:` rule the validation integration recovers writes one; `contains` forbids an array with
+ * no element matching its subschema, so an array whose `items` and `contains` disagree has no
+ * single-element instance at all.
  *
- * The keywords come from the SOURCE rather than from a list, so teaching the factory to read `not` or
- * `contains` fails this until the boolean case at that position has been decided too.
+ * Neither is satisfiable by construction, so the factory PROVES the constraint met or publishes nothing.
+ * Here is the half it proves: each row's value is held to its own schema through the same audit a build
+ * runs over a hand-written example, and where the old reader published a forbidden byte the row carries
+ * it and the audit refuses it.
+ */
+it('keeps the example where the value provably escapes a constraining keyword', function (array $schema, string $expected, ?string $before): void {
+    expect(exampleJson($schema))->toBe($expected);
+
+    $value = example($schema);
+
+    expect(auditAgainst($value, $schema)->checked)->toBeGreaterThan(0)
+        ->and(auditRefusals($value, $schema))->toBe([]);
+
+    if ($before !== null) {
+        expect(auditRefusals(json_decode($before, false, flags: JSON_THROW_ON_ERROR), $schema))->not->toBe([]);
+    }
+})->with([
+    // The shape of every `not_in:` rule: a value set the sample provably is not in.
+    'not a value set the sample escapes' => [
+        ['type' => 'string', 'not' => ['enum' => ['admin', 'root']]],
+        '"string"',
+        null,
+    ],
+    'not a const the sample escapes' => [['type' => 'string', 'not' => ['const' => 'admin']], '"string"', null],
+    'not a type the sample cannot be' => [['type' => 'string', 'not' => ['type' => 'integer']], '"string"', null],
+    'not an integer set the sample escapes' => [['type' => 'integer', 'not' => ['enum' => [1, 2]]], '0', null],
+    // contains — the `items` element already matches, so the array is the one the shape produces anyway.
+    'contains what items already produces' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => ['type' => 'string']],
+        '["string"]',
+        null,
+    ],
+    // Nothing says what the elements are, so the match itself is the element.
+    'contains with no items to answer to' => [
+        ['type' => 'array', 'contains' => ['type' => 'integer']],
+        '[0]',
+        '[]',
+    ],
+    'contains a const with no items to answer to' => [
+        ['type' => 'array', 'contains' => ['const' => 'wanted']],
+        '["wanted"]',
+        '[]',
+    ],
+    // The match is built from `contains` and `items` is not known to refuse it.
+    'contains a const items does not refuse' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => ['const' => 'wanted']],
+        '["wanted"]',
+        '["string"]',
+    ],
+    // `minContains: 0` empties the keyword: every array matches it, the empty one included.
+    'contains under minContains: 0' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => ['type' => 'integer'], 'minContains' => 0],
+        '["string"]',
+        null,
+    ],
+]);
+
+/*
+ * And the half it cannot prove. A constraint the factory would have to guess at makes the example
+ * ABSENT: a missing example costs a consumer a convenience, and a forbidden one costs them a failed
+ * request. Every row names the byte the old reader published, and the audit refuses each one.
+ */
+it('publishes no example where a constraining keyword forbids what it would have published', function (array $schema, string $before, array $components): void {
+    expect(example($schema, $components))->toBeNull()
+        ->and(auditRefusals(json_decode($before, false, flags: JSON_THROW_ON_ERROR), $schema, $components))->not->toBe([]);
+})->with([
+    // The sharpest case in the report: a `const` upstream naming the very value `not` forbids.
+    'not the const the schema states' => [['const' => 'admin', 'not' => ['const' => 'admin']], '"admin"', []],
+    'not the enum entry the schema picks' => [
+        ['type' => 'string', 'enum' => ['admin', 'other'], 'not' => ['enum' => ['admin']]],
+        '"admin"',
+        [],
+    ],
+    'not the author example beside it' => [
+        ['type' => 'string', 'example' => 'admin', 'not' => ['const' => 'admin']],
+        '"admin"',
+        [],
+    ],
+    'not the sample format supplies' => [
+        ['type' => 'string', 'format' => 'email', 'not' => ['const' => 'user@example.com']],
+        '"user@example.com"',
+        [],
+    ],
+    // `{}` admits everything, so a `not` of it admits nothing — `contains: {}` mislies the same way.
+    'not the empty schema' => [['type' => 'string', 'not' => []], '"string"', []],
+    // A `not` this factory cannot decide is not a `not` it may publish past: widen to no example rather
+    // than guess the sample escapes it.
+    'not a constraint the factory does not check' => [
+        ['type' => 'string', 'not' => ['type' => 'string', 'pattern' => '^str']],
+        '"string"',
+        [],
+    ],
+    // The report's array case: `contains` wants an integer and `items` allows only strings, so no
+    // single-element array satisfies both.
+    'contains a type items forbids' => [
+        ['type' => 'array', 'items' => ['type' => 'string'], 'contains' => ['type' => 'integer']],
+        '["string"]',
+        [],
+    ],
+    'contains a match the factory cannot prove it built' => [
+        ['type' => 'array', 'contains' => ['type' => 'string', 'pattern' => '^a']],
+        '[]',
+        [],
+    ],
+    // A `not` sits beside a `$ref` as legally as it sits alone, and the reference resolving first is not
+    // a reason the constraint goes unread.
+    'not beside a reference' => [
+        ['$ref' => '#/components/schemas/Thing', 'not' => true],
+        '"string"',
+        ['schemas' => ['Thing' => ['type' => 'string']]],
+    ],
+]);
+
+/*
+ * A member the constraint forbids is answered by the POSITION, exactly as a `false` there is: the object
+ * leaves an optional one out, and has no instance at all where it is required.
+ */
+it('answers a forbidden member at the position holding it', function (): void {
+    $schema = [
+        'type' => 'object',
+        'properties' => [
+            'kept' => ['type' => 'string', 'not' => ['const' => 'admin']],
+            'gone' => ['const' => 'admin', 'not' => ['const' => 'admin']],
+        ],
+    ];
+
+    expect(exampleJson($schema))->toBe('{"kept":"string"}')
+        ->and(example(['type' => 'object', 'required' => ['gone'], 'properties' => $schema['properties']]))->toBeNull();
+});
+
+/*
+ * The durable half. This factory reads the subschema keywords in its own right, and the guard on stale
+ * COPIES of that set cannot see it: it reads eight across seven methods, and no one declaration
+ * enumerates three. It also has no uniform per-position action to derive — `items: false` means the empty
+ * array and `not: false` means anything at all — so what is owed here is COVERAGE, not a derived set.
+ *
+ * The keywords come from the SOURCE rather than from a list, so teaching the factory to read
+ * `propertyNames` or `prefixItems` fails this until the boolean case at that position has been decided
+ * too.
  */
 it('pins a boolean at every subschema position the factory reads', function (): void {
-    $read = subschemaKeywordsNamedIn((string) file_get_contents(
-        dirname(__DIR__, 2).'/src/Emit/SchemaExampleFactory.php',
-    ));
+    $source = (string) file_get_contents(dirname(__DIR__, 2).'/src/Emit/SchemaExampleFactory.php');
+    $read = subschemaKeywordsNamedIn($source);
 
     // Anti-vacuity: a scan that stopped seeing the factory's keywords must fail, not pass forever.
-    expect($read)->toContain('items', 'properties', 'allOf', 'anyOf', 'oneOf')
-        ->and(count($read))->toBeGreaterThan(4)
-        // Every one has a row in the dataset above. A seventh keyword lands here first.
-        ->and($read)->toBe(['additionalProperties', 'allOf', 'anyOf', 'items', 'oneOf', 'properties']);
+    expect($read)->toContain('items', 'properties', 'allOf', 'anyOf', 'oneOf', 'not', 'contains')
+        ->and(count($read))->toBeGreaterThan(6)
+        // Every one has a row in the datasets above. A ninth keyword lands here first.
+        ->and($read)->toBe([
+            'additionalProperties', 'allOf', 'anyOf', 'contains', 'items', 'not', 'oneOf', 'properties',
+        ]);
+
+    // The guard EXECUTED rather than claimed: a factory that had learned another position reads as a
+    // longer list here, which is what makes this fail rather than quietly go short.
+    expect(subschemaKeywordsNamedIn($source.'<?php $x = $schema["propertyNames"];'))
+        ->toBe([...$read, 'propertyNames']);
 });
