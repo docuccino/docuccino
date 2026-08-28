@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Diff;
 
 use Docuccino\Core\Draft\SchemaKeywords;
+use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Support\Arr;
 use Docuccino\Core\Support\Hydrate;
 
@@ -41,15 +42,21 @@ use Docuccino\Core\Support\Hydrate;
  * itself ({@see compareSubschema()}) and arriving is breaking on both sides — the tightest narrowing the
  * language has (docs/design/uir-and-extensions.md §1 "The empty-object invariant").
  *
- * Three positions are descended into: `properties`, `items` and `additionalProperties`, which are the
- * object and array contract a generated client types against, and which share a polarity — narrowing
- * the subschema narrows the schema carrying it, so one classification serves all three. The
- * composition and conditional keywords are deliberately not read here and are their own piece of work:
- * their polarity DIFFERS by keyword, so reusing this classification would report the direction
- * backwards. Widening the subschema under `not` narrows the parent; a branch added to `anyOf` widens
- * where the same branch added to `allOf` narrows; and pairing list members needs an identity rule, or
- * reordering `oneOf` reads as rewriting every branch. A differ that is silent there is worse than one
- * that speaks, but not as bad as one that speaks and is wrong.
+ * EVERY subschema position is descended into, composition and conditional keywords included, and what
+ * a change under one is worth is {@see SchemaPolarity}'s recorded decision per keyword rather than one
+ * classification stretched over all of them — because the polarity DIFFERS by keyword, and a shared
+ * classification would report the direction backwards. `properties` keeps a comparison of its own (a
+ * member there is a property a consumer reads, not a constraint), the `contains` bounds are compared
+ * beside the keyword they bound, and everything else runs through {@see comparePositions()}.
+ *
+ * Two things that decision does NOT try to answer, recorded here because a silent limit reads as a
+ * claim. A keyword's polarity is its own; where 2020-12 makes one keyword's outcome depend on a
+ * SIBLING — `contains` and `then` marking items and properties evaluated, so an `unevaluatedItems:
+ * false` beside them means something different — that interaction is unread, and both halves are
+ * reported on their own terms. And a `$ref` still compares opaquely, so a branch naming a component
+ * carries whatever that component's own diff says.
+ *
+ * @phpstan-import-type Rule from SchemaPolarity
  */
 final class SchemaComparator
 {
@@ -79,9 +86,8 @@ final class SchemaComparator
         $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $request, $changes);
         $this->compareRequired($old, $new, $path, $id, $request, $changes);
-        $this->compareProperties($old, $new, $path, $id, $request, $changes);
-        $this->compareItems($old, $new, $path, $id, $request, $changes);
-        $this->compareAdditionalProperties($old, $new, $path, $id, $request, $changes);
+        $this->compareContainsBounds($old, $new, $path, $id, $changes);
+        $this->comparePositions($old, $new, $path, $id, $request, $changes);
 
         return $changes;
     }
@@ -92,9 +98,12 @@ final class SchemaComparator
      * normalises to one, so every comparison above reads it correctly, while `false` is satisfied by
      * nothing and is the one value compared as itself.
      *
-     * An ABSENT subschema reads as the empty one, because that is what it means at all three positions
+     * An ABSENT subschema reads as the empty one, because that is what it means at nearly every position
      * — no `items` constrains no element, and `additionalProperties` defaults to `true`. So is a value
-     * that is no schema at all, which is the widening the canonicaliser publishes for it.
+     * that is no schema at all, which is the widening the canonicaliser publishes for it. The positions
+     * where absence says the OPPOSITE of the empty schema (`not: {}` rejects every value; `contains: {}`
+     * demands an element) never reach here with one side absent: {@see compareSinglePosition()} settles
+     * presence there first, on {@see SchemaPolarity}'s recorded decision.
      *
      * @return list<Change>
      */
@@ -339,37 +348,396 @@ final class SchemaComparator
     }
 
     /**
+     * Every subschema position either side carries, in one sorted pass so the answer never depends on
+     * which side declared what. What a position is worth is {@see SchemaPolarity}'s recorded decision;
+     * a keyword it has no row for is read conservatively rather than skipped.
+     *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
      * @param  list<Change>  $changes
      */
-    private function compareItems(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    private function comparePositions(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
-        if (! array_key_exists('items', $old) && ! array_key_exists('items', $new)) {
-            return;
-        }
+        foreach (Arr::sortedUnion(array_keys($old), array_keys($new)) as $keyword) {
+            $position = SchemaKeywords::positionOf($keyword);
 
-        foreach ($this->compareSubschema($old['items'] ?? null, $new['items'] ?? null, $path.'.items', $id, $request) as $child) {
-            $changes[] = $child;
+            if ($position === null) {
+                continue;
+            }
+
+            $rule = SchemaPolarity::rule($keyword);
+
+            if ($position === SchemaKeywords::POSITION_SCHEMA_MAP) {
+                $this->compareMemberMap($keyword, $rule, $old, $new, $path, $id, $request, $changes);
+            } elseif ($position === SchemaKeywords::POSITION_SCHEMA_LIST) {
+                $this->compareMemberList($keyword, $rule, $old, $new, $path, $id, $request, $changes);
+            } elseif ($position === SchemaKeywords::POSITION_STRING_LIST_MAP) {
+                $this->compareDependentRequired($keyword, $rule, $old, $new, $path, $id, $request, $changes);
+            } else {
+                $this->compareSinglePosition($keyword, $rule, $old, $new, $path, $id, $request, $changes);
+            }
         }
     }
 
     /**
+     * One subschema at `$keyword`. Where the keyword's absence is a claim of its own — `not` and
+     * `contains`, the two positions where no keyword and the empty schema say opposite things —
+     * presence is settled first and the descent happens only where both sides carry one.
+     *
+     * @param  Rule  $rule
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
      * @param  list<Change>  $changes
      */
-    private function compareAdditionalProperties(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    private function compareSinglePosition(string $keyword, array $rule, array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
-        if (! array_key_exists('additionalProperties', $old) && ! array_key_exists('additionalProperties', $new)) {
+        $child = $path.'.'.$keyword;
+        $had = array_key_exists($keyword, $old);
+        $has = array_key_exists($keyword, $new);
+
+        if ($rule['member'] !== SchemaPolarity::MEMBER_EMPTY && $had !== $has) {
+            $changes[] = $this->presence($keyword, $rule, $has, $has ? $new : $old, $child, $id, $request);
+
             return;
         }
 
-        $child = $path.'.additionalProperties';
-
-        foreach ($this->compareSubschema($old['additionalProperties'] ?? null, $new['additionalProperties'] ?? null, $child, $id, $request) as $change) {
+        foreach ($this->reclassified($this->compareSubschema($old[$keyword] ?? null, $new[$keyword] ?? null, $child, $id, $request), $rule) as $change) {
             $changes[] = $change;
         }
+    }
+
+    /**
+     * A map of subschemas. `properties` has its own comparison — a member there is a property a
+     * consumer reads rather than a constraint on one — and at every other map an absent member says
+     * what the empty schema says, so a member arriving or leaving needs no code of its own. A `$defs`
+     * member is the exception: it is a store a `$ref` may name, so presence is a claim.
+     *
+     * @param  Rule  $rule
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareMemberMap(string $keyword, array $rule, array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    {
+        if ($rule['member'] === SchemaPolarity::MEMBER_PROPERTY) {
+            $this->compareProperties($old, $new, $path, $id, $request, $changes);
+
+            return;
+        }
+
+        $oldMembers = Hydrate::mapOrNull($old[$keyword] ?? null) ?? [];
+        $newMembers = Hydrate::mapOrNull($new[$keyword] ?? null) ?? [];
+        $child = $path.'.'.$keyword;
+
+        foreach (Arr::sortedUnion(array_keys($oldMembers), array_keys($newMembers)) as $name) {
+            $member = $child.'.'.$name;
+            $had = array_key_exists($name, $oldMembers);
+            $has = array_key_exists($name, $newMembers);
+
+            if ($rule['member'] === SchemaPolarity::MEMBER_STORE && $had !== $has) {
+                $changes[] = $this->presence($keyword, $rule, $has, $has ? $new : $old, $member, $id, $request);
+
+                continue;
+            }
+
+            foreach ($this->reclassified($this->compareSubschema($oldMembers[$name] ?? null, $newMembers[$name] ?? null, $member, $id, $request), $rule) as $change) {
+                $changes[] = $change;
+            }
+        }
+    }
+
+    /**
+     * A list of subschemas — the composition keywords, plus `prefixItems`, where the INDEX is the
+     * contract (index 2 constrains the third element and nothing else) so the index pairs and an
+     * absent slot is an unconstrained one. Everywhere else the members pair by what they ARE
+     * ({@see pairBranches()}), and the ones left over arrived or went.
+     *
+     * @param  Rule  $rule
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareMemberList(string $keyword, array $rule, array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    {
+        $before = self::branches($old[$keyword] ?? null);
+        $after = self::branches($new[$keyword] ?? null);
+        $child = $path.'.'.$keyword;
+
+        if ($rule['pairing'] === SchemaPolarity::PAIRING_INDEX) {
+            $slots = max(count($before), count($after));
+
+            for ($i = 0; $i < $slots; $i++) {
+                foreach ($this->reclassified($this->compareSubschema($before[$i] ?? null, $after[$i] ?? null, $child.'.'.$i, $id, $request), $rule) as $change) {
+                    $changes[] = $change;
+                }
+            }
+
+            return;
+        }
+
+        [$pairs, $gone, $arrived] = self::pairBranches($before, $after);
+
+        foreach ($pairs as [$i, $j]) {
+            foreach ($this->reclassified($this->compareSubschema($before[$i], $after[$j], $child.'.'.$j, $id, $request), $rule) as $change) {
+                $changes[] = $change;
+            }
+        }
+
+        foreach ($gone as $i) {
+            $changes[] = $this->presence($keyword, $rule, false, $old, $child.'.'.$i, $id, $request);
+        }
+
+        foreach ($arrived as $j) {
+            $changes[] = $this->presence($keyword, $rule, true, $new, $child.'.'.$j, $id, $request);
+        }
+    }
+
+    /**
+     * `dependentRequired`: per property, the properties its presence makes required. A dependency added
+     * narrows what a request accepts exactly as `required` does — and is reported the same way, which
+     * is why the response side is a report rather than a verdict.
+     *
+     * @param  Rule  $rule
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareDependentRequired(string $keyword, array $rule, array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    {
+        $oldMap = Hydrate::mapOrNull($old[$keyword] ?? null) ?? [];
+        $newMap = Hydrate::mapOrNull($new[$keyword] ?? null) ?? [];
+        $stem = $rule['code'] ?? $keyword;
+
+        foreach (Arr::sortedUnion(array_keys($oldMap), array_keys($newMap)) as $name) {
+            $before = Hydrate::stringList($oldMap[$name] ?? null);
+            $after = Hydrate::stringList($newMap[$name] ?? null);
+            $member = $path.'.'.$keyword.'.'.$name;
+
+            if (array_diff($after, $before) !== []) {
+                $changes[] = $this->change(ChangeKind::Changed, $id, $member, $request, 'schema.'.$stem.'-added', $name, $before, $after);
+            }
+
+            if (array_diff($before, $after) !== []) {
+                $changes[] = $this->change(ChangeKind::Changed, $id, $member, false, 'schema.'.$stem.'-removed', $name, $before, $after);
+            }
+        }
+    }
+
+    /**
+     * `minContains`/`maxContains`, the bounds on how many items `contains` has to match. Both are inert
+     * with no `contains` beside them, so they are read only where both sides carry one; where `contains`
+     * itself arrives or leaves, that is the whole change and {@see presence()} states it.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareContainsBounds(array $old, array $new, string $path, string $id, array &$changes): void
+    {
+        if (! array_key_exists('contains', $old) || ! array_key_exists('contains', $new)) {
+            return;
+        }
+
+        $wasAtLeast = self::minContains($old);
+        $isAtLeast = self::minContains($new);
+
+        if ($wasAtLeast !== $isAtLeast) {
+            $changes[] = $this->bound($isAtLeast > $wasAtLeast, $path.'.minContains', $id, 'minContains', $wasAtLeast, $isAtLeast);
+        }
+
+        $wasCapped = Hydrate::intOrNull($old['maxContains'] ?? null);
+        $isCapped = Hydrate::intOrNull($new['maxContains'] ?? null);
+
+        if ($wasCapped !== $isCapped) {
+            // No cap is no bound at all, so one arriving narrows however high it is set.
+            $narrowed = $isCapped !== null && ($wasCapped === null || $isCapped < $wasCapped);
+            $changes[] = $this->bound($narrowed, $path.'.maxContains', $id, 'maxContains', $wasCapped, $isCapped);
+        }
+    }
+
+    /**
+     * A position arriving or leaving, at the positions where that is not the same statement as the
+     * empty schema arriving. The verdict is {@see SchemaPolarity::presenceIsBreaking()}'s recorded
+     * decision rather than one made here; all this arm reads is `contains`' bounds, because whether
+     * that keyword asserts anything at all is a fact about the schema rather than about the keyword.
+     *
+     * @param  Rule  $rule
+     * @param  array<string, mixed>  $carrier  the side that HAS the keyword, where `contains`' bounds are read
+     */
+    private function presence(string $keyword, array $rule, bool $arriving, array $carrier, string $path, string $id, bool $request): Change
+    {
+        $breaking = SchemaPolarity::presenceIsBreaking(
+            $rule['member'],
+            $arriving,
+            $request,
+            self::minContains($carrier) >= 1,
+        );
+
+        return $this->change(
+            $arriving ? ChangeKind::Added : ChangeKind::Removed,
+            $id,
+            $path,
+            $breaking,
+            'schema.'.($rule['code'] ?? $keyword).'-'.($arriving ? 'added' : 'removed'),
+            null,
+            null,
+            null,
+        );
+    }
+
+    /**
+     * The child's changes as the parent's. At a DIRECT position they already are the parent's; at an
+     * INVERSE or CONDITIONAL one the direction the child moves the parent in is the thing that cannot
+     * be computed, so nothing guesses it: each change keeps its own code and path — a true statement
+     * about the subschema that path names — and the verdict is forced to breaking. An annotation-only
+     * edit is the exception, moving no contract at any position.
+     *
+     * @param  list<Change>  $changes
+     * @param  Rule  $rule
+     * @return list<Change>
+     */
+    private function reclassified(array $changes, array $rule): array
+    {
+        if ($rule['polarity'] === SchemaPolarity::DIRECT) {
+            return $changes;
+        }
+
+        $out = [];
+
+        foreach ($changes as $change) {
+            $out[] = $change->breaking || $change->code === 'schema.annotation-changed'
+                ? $change
+                : new Change($change->kind, $change->target, $change->id, $change->path, true, $change->code, $change->fields);
+        }
+
+        return $out;
+    }
+
+    private function bound(bool $narrowed, string $path, string $id, string $field, ?int $old, ?int $new): Change
+    {
+        return $this->change(
+            ChangeKind::Changed,
+            $id,
+            $path,
+            $narrowed,
+            'schema.contains-bound-'.($narrowed ? 'narrowed' : 'widened'),
+            $field,
+            $old,
+            $new,
+        );
+    }
+
+    /**
+     * How many items `contains` has to match. Absent is 1 — the keyword's own default, and what makes
+     * `minContains: 0` a real statement rather than a restatement.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    private static function minContains(array $schema): int
+    {
+        return Hydrate::intOrNull($schema['minContains'] ?? null) ?? 1;
+    }
+
+    /**
+     * One list position's members. A value that is no list is no branch at all — which is the widening
+     * the canonicaliser publishes for it — so a garbage `allOf` reads as absent rather than as a branch
+     * nobody wrote.
+     *
+     * @return list<mixed>
+     */
+    private static function branches(mixed $value): array
+    {
+        return is_array($value) && array_is_list($value) ? $value : [];
+    }
+
+    /**
+     * Which of two lists' branches are the same branch. The ladder is
+     * {@see ComponentNames}' rule applied to a list of branches: a member's own identity, then the
+     * component it names, then its content — never its position, or reordering `oneOf` would read as
+     * rewriting every branch. Where one rung matches two members on a side they pair in index order,
+     * which is immaterial while the rung is what makes them equal.
+     *
+     * The last rung is the only inexact one, and it is why an inline branch edited in place reads as an
+     * edit rather than as one branch gone and another arrived: ONE left over on each side, neither
+     * naming a component, is one branch changed. Two members naming DIFFERENT components are never
+     * that — a branch naming a component IS that component, so swapping the name swaps the branch, and
+     * pairing them would publish `schema.ref-changed` (non-breaking) over a union branch a consumer has
+     * no case for.
+     *
+     * @param  list<mixed>  $old
+     * @param  list<mixed>  $new
+     * @return array{list<array{int, int}>, list<int>, list<int>}
+     */
+    private static function pairBranches(array $old, array $new): array
+    {
+        /** @var list<callable(mixed): ?string> $rungs */
+        $rungs = [self::identityKey(...), self::refKey(...), self::valueKey(...)];
+
+        $pairs = [];
+        $oldLeft = array_keys($old);
+        $newLeft = array_keys($new);
+
+        foreach ($rungs as $rung) {
+            /** @var array<string, list<int>> $waiting */
+            $waiting = [];
+
+            foreach ($newLeft as $j) {
+                $key = $rung($new[$j]);
+
+                if ($key !== null) {
+                    $waiting[$key][] = $j;
+                }
+            }
+
+            $unpaired = [];
+            $taken = [];
+
+            foreach ($oldLeft as $i) {
+                $key = $rung($old[$i]);
+
+                if ($key === null || ($waiting[$key] ?? []) === []) {
+                    $unpaired[] = $i;
+
+                    continue;
+                }
+
+                $j = (int) array_shift($waiting[$key]);
+                $pairs[] = [$i, $j];
+                $taken[$j] = true;
+            }
+
+            $oldLeft = $unpaired;
+            $newLeft = array_values(array_filter($newLeft, static fn (int $j): bool => ! isset($taken[$j])));
+        }
+
+        if (count($oldLeft) === 1 && count($newLeft) === 1
+            && self::refKey($old[$oldLeft[0]]) === null
+            && self::refKey($new[$newLeft[0]]) === null) {
+            $pairs[] = [$oldLeft[0], $newLeft[0]];
+            $oldLeft = [];
+            $newLeft = [];
+        }
+
+        usort($pairs, static fn (array $a, array $b): int => [$a[1], $a[0]] <=> [$b[1], $b[0]]);
+
+        return [$pairs, $oldLeft, $newLeft];
+    }
+
+    /** The Docuccino id a branch carries — the identity every other pairing in the diff runs on. */
+    private static function identityKey(mixed $member): ?string
+    {
+        $map = Hydrate::mapOrNull($member);
+        $meta = $map === null ? null : Hydrate::mapOrNull($map['x-docuccino'] ?? null);
+
+        return $meta === null ? null : Hydrate::stringOrNull($meta['id'] ?? null);
+    }
+
+    /** The component a branch names, which is what the branch IS. */
+    private static function refKey(mixed $member): ?string
+    {
+        $map = Hydrate::mapOrNull($member);
+
+        return $map === null ? null : Hydrate::stringOrNull($map['$ref'] ?? null);
     }
 
     private function change(ChangeKind $kind, string $id, string $path, bool $breaking, string $code, ?string $field, mixed $old, mixed $new): Change
