@@ -139,6 +139,15 @@ What they hold you to:
   integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
   Docuccino documents it as.
+- **`postJson($uri, [])` sends the empty body it looks like.** PHP has one array where JSON has two
+  containers, so `json_encode([])` writes `[]`, and there is no argument you could pass those helpers
+  that would write `{}`. Where the operation documents a body an empty object satisfies, that `[]` is
+  read as the empty object; where it documents a list, it stays the list it looks like, `minItems` and
+  all. Nothing else moves: a populated array against an object body still fails, and so does an empty
+  one against an object whose properties are required. The same reading covers a webhook payload you
+  hand over as a PHP array — JSON *text* you pass as a string already said which container it is, and
+  is taken at its word. Your responses are never re-read this way, because `[]` in a response body is
+  what your clients really receive.
 - **The response headers the document publishes are checked, not just the body.** A `Location` on a
   `201`, the `Retry-After` and `X-RateLimit-*` on a
   [`429`](/laravel/documenting/rate-limiting/) — every one of them is read as the type documented

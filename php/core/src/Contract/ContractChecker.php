@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Core\Contract;
 
 use JsonException;
+use stdClass;
 use Throwable;
 
 /**
@@ -58,7 +59,7 @@ final class ContractChecker
      * is what an undocumented status already is on the way in — there is no contract to be right or
      * wrong about, and a pass would claim one had been checked.
      */
-    public function delivery(ContractWebhook $webhook, string $payload): Outcome
+    public function delivery(ContractWebhook $webhook, string $payload, bool $ambiguousEmptyPayload = false): Outcome
     {
         $documented = $webhook->requestBody($this->index->document());
 
@@ -102,6 +103,7 @@ final class ContractChecker
             $key,
             'the delivered payload',
             'the delivery',
+            $ambiguousEmptyPayload,
         );
     }
 
@@ -390,6 +392,7 @@ final class ContractChecker
             $key,
             'the request body',
             'the request',
+            $exchange->ambiguousEmptyRequestBody,
         );
     }
 
@@ -397,8 +400,10 @@ final class ContractChecker
      * Decode a JSON payload and check it against the media type's schema.
      *
      * @param  list<string>  $schemaSegments
+     * @param  bool  $ambiguousEmpty  whether a `[]` in these bytes could as easily have been `{}`
+     *                                ({@see Exchange::__construct()}), which only the producer knows
      */
-    private function body(string $raw, mixed $media, array $schemaSegments, string $mediaType, string $location, string $half): Outcome
+    private function body(string $raw, mixed $media, array $schemaSegments, string $mediaType, string $location, string $half, bool $ambiguousEmpty = false): Outcome
     {
         if (! MediaType::isJson($mediaType)) {
             return Outcome::passed(sprintf('%s is %s, which JSON Schema cannot check', $location, $mediaType));
@@ -424,7 +429,35 @@ final class ContractChecker
             return Outcome::failed([Violation::ofExchange(sprintf('%s is not valid JSON: %s', $location, $exception->getMessage()), $half)]);
         }
 
-        return Outcome::failedOrPassed($this->validate($data, $schemaSegments, $location));
+        return Outcome::failedOrPassed($this->validate(
+            $ambiguousEmpty ? $this->readEmpty($data, $schemaSegments) : $data,
+            $schemaSegments,
+            $location,
+        ));
+    }
+
+    /**
+     * An empty JSON array, from a producer that has no other way to write an empty JSON object, read as
+     * whichever of the two the contract accepts here.
+     *
+     * The widening is offered to the very schema the body is about to be held to, and taken only where
+     * that schema says yes — so nothing the document rejects starts passing. `[]` against an array with
+     * `minItems: 1` is still the array it looks like and still fails; so is `[]` against an object whose
+     * properties are required, which is the reading that names what is actually missing.
+     *
+     * @param  list<string>  $schemaSegments
+     */
+    private function readEmpty(mixed $data, array $schemaSegments): mixed
+    {
+        if ($data !== []) {
+            return $data;
+        }
+
+        $empty = new stdClass;
+
+        // The label never reaches a reader: these violations are the QUESTION — does the contract take
+        // an empty object here — and are discarded either way.
+        return $this->validate($empty, $schemaSegments, 'the empty object') === [] ? $empty : $data;
     }
 
     /**
