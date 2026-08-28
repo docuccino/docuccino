@@ -13,6 +13,8 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\ResolvedExtensions;
+use Docuccino\Core\Extensions\Validation\RuleSet;
+use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Patch\Contribution;
@@ -21,6 +23,7 @@ use Docuccino\Laravel\Extensions\AttributeRequestBodyExtension;
 use Docuccino\Laravel\Integrations\FormRequest\ValidationRequestExtension;
 use Docuccino\Laravel\Integrations\LaravelActions\ActionValidationExtension;
 use Docuccino\Laravel\Integrations\SpatieData\DataRequestExtension;
+use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 
@@ -336,8 +339,9 @@ it('applies a parent declaration before a child one, whichever order they were w
     ], null, $diagnostics);
 
     expect($body['content']['application/json']['schema']['properties']['meta'])->toBe([
-        'description' => 'Extra metadata.',
         'type' => 'object',
+        'additionalProperties' => [],
+        'description' => 'Extra metadata.',
         'properties' => ['validation_overrides' => ['type' => 'string']],
     ])->and($diagnostics)->toBe([]);
 });
@@ -360,6 +364,140 @@ it('lets a declared object parent rescue a path a recovered scalar would have re
 
     expect($body['content']['application/json']['schema']['properties']['meta'])->toBe([
         'type' => 'object',
+        'additionalProperties' => [],
         'properties' => ['validation_overrides' => ['type' => 'string']],
     ])->and($diagnostics)->toBe([]);
 });
+
+/**
+ * The path grammar end to end, one row per shape the name can take. A declaration either lands or is
+ * refused by name — the row asserting the diagnostic code is what says "silently nothing" is not a third
+ * outcome, and the schema beside it is what says the landing put the property where the name pointed.
+ */
+it('lands, or refuses by name, every shape a field path can take', function (array $seeded, string $name, array $expected, array $codes): void {
+    $seed = $seeded === [] ? null : function (OperationDraft $operation) use ($seeded): void {
+        $operation->set('requestBody', ['content' => ['application/json' => ['schema' => [
+            'type' => 'object',
+            'properties' => $seeded,
+        ]]]], Contribution::integration('form-request'));
+    };
+
+    $diagnostics = [];
+    $body = runBodyParameters([new BodyParameter(name: $name, type: 'string', description: 'D')], $seed, $diagnostics);
+
+    expect($body['content']['application/json']['schema']['properties'])->toBe($expected)
+        ->and(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe($codes);
+})->with(function (): array {
+    $declared = ['type' => 'string', 'description' => 'D'];
+
+    return [
+        'a plain name is a top-level property' => [
+            [], 'nickname', ['nickname' => $declared], [],
+        ],
+        'one level descends into the property it names' => [
+            [], 'meta.locale', ['meta' => ['type' => 'object', 'properties' => ['locale' => $declared]]], [],
+        ],
+        'a deep path builds every level it names' => [
+            [], 'a.b.c.d',
+            ['a' => ['type' => 'object', 'properties' => ['b' => ['type' => 'object', 'properties' => [
+                'c' => ['type' => 'object', 'properties' => ['d' => $declared]],
+            ]]]]],
+            [],
+        ],
+        'an intermediate that does not exist is created beside the ones that do' => [
+            ['meta' => ['type' => 'object', 'properties' => ['locale' => ['type' => 'string']]]],
+            'meta.scoring.scores',
+            ['meta' => ['type' => 'object', 'properties' => [
+                'locale' => ['type' => 'string'],
+                'scoring' => ['type' => 'object', 'properties' => ['scores' => $declared]],
+            ]]],
+            [],
+        ],
+        // Laravel's one word for both containers reaches the body as a union nobody decided. Naming a
+        // key inside it decides it, at a layer that outranks the one that left it open.
+        'an undecided container is settled by the key named inside it' => [
+            ['meta' => ['type' => ['array', 'object']]],
+            'meta.scoring',
+            ['meta' => ['type' => 'object', 'properties' => ['scoring' => $declared]]],
+            [],
+        ],
+        // …and only that question is settled: the server still takes a null, and a document saying
+        // otherwise marks a working request invalid.
+        'settling the container keeps the null the field admits' => [
+            ['meta' => ['type' => ['array', 'object', 'null']]],
+            'meta.scoring',
+            ['meta' => ['type' => ['object', 'null'], 'properties' => ['scoring' => $declared]]],
+            [],
+        ],
+        'a wildcard settles the container the other way and keeps the null too' => [
+            ['lines' => ['type' => ['array', 'object', 'null']]],
+            'lines.*.quantity',
+            ['lines' => ['type' => ['array', 'null'], 'items' => ['type' => 'object', 'properties' => ['quantity' => $declared]]]],
+            [],
+        ],
+        'a scalar parent is refused and left as it was' => [
+            ['meta' => ['type' => 'string']],
+            'meta.locale',
+            ['meta' => ['type' => 'string']],
+            ['attribute.body-parameter-parent'],
+        ],
+        'a composition parent is refused and left as it was' => [
+            ['meta' => ['allOf' => [['type' => 'object']]]],
+            'meta.locale',
+            ['meta' => ['allOf' => [['type' => 'object']]]],
+            ['attribute.body-parameter-parent'],
+        ],
+        'a $ref parent is refused, since every other use would inherit the property' => [
+            ['meta' => ['$ref' => '#/components/schemas/Meta']],
+            'meta.locale',
+            ['meta' => ['$ref' => '#/components/schemas/Meta']],
+            ['attribute.body-parameter-parent'],
+        ],
+        'an escaped dot names one field rather than descending' => [
+            [], 'meta\.raw', ['meta.raw' => $declared], [],
+        ],
+        'a malformed path is refused by name' => [
+            [], 'meta..raw', [], ['attribute.body-parameter-name'],
+        ],
+    ];
+});
+
+/**
+ * The other half of settling the container: the field the rules left open stops being reported as open,
+ * because the document no longer says "either". A note asking for rules that would say what a
+ * declaration has already said fires exactly where nothing can be done.
+ */
+it('stops reporting a container as undecided once a declaration names a key inside it', function (string $declared, array $reported): void {
+    $rules = new RuleSet([
+        'meta' => [ValidationRule::of('array')],
+        'other' => [ValidationRule::of('array')],
+    ]);
+
+    $context = new RouteContext(
+        route: new RouteDescriptor(['POST'], 'api/things'),
+        actionRef: new ActionRef('', null, 'store'),
+        attributes: new AttributeSet($declared === '' ? [] : [new BodyParameter(name: $declared)]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions,
+    );
+
+    RuleSetNormalizer::report((new RuleSetNormalizer)->normalize($rules), $context);
+
+    $fields = array_map(
+        static fn (Diagnostic $d): string => (string) preg_replace('/^Validation field "([^"]+)".*$/', '$1', $d->message),
+        $context->components->diagnostics(),
+    );
+
+    expect($fields)->toBe($reported);
+})->with([
+    'nothing declared leaves both open' => ['', ['meta', 'other']],
+    'a key inside one settles that one' => ['meta.scoring', ['other']],
+    'a key deep inside one settles it too' => ['meta.scoring.scores', ['other']],
+    'a wildcard element settles it as a list' => ['meta.*', ['other']],
+    'naming the field itself settles it' => ['meta', ['other']],
+    'a sibling field settles neither' => ['unrelated.key', ['meta', 'other']],
+    // The escape is why this is a path comparison and not a string prefix: `meta\.scoring` is one
+    // field whose own name holds a dot, and it says nothing about what `meta` is.
+    'a field whose name holds a dot settles neither' => ['meta\.scoring', ['meta', 'other']],
+]);

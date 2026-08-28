@@ -80,6 +80,46 @@ it('degrades imprecise identifiers to a reasoned UnknownT', function (string $ty
     'empty string' => ['', 'empty type string'],
 ]);
 
+/*
+ * The author's vocabulary, which parts company with the analyser's on one word. `object` inferred from
+ * PHP source is an instance of something whose wire shape is genuinely unknown, and stays an open schema
+ * above; written by hand in a declaration it is the JSON word, and a declaration outranks inference.
+ * Everything else is the same grammar, which is the half a regression would break silently.
+ */
+it('reads a declared `object` as the free-form map, wherever in the type string it appears', function (string $type, mixed $expected): void {
+    expect((new TypeStringParser)->parseDeclared($type))->toEqual($expected);
+})->with(function (): array {
+    $map = new MapT(ScalarT::string(), new UnknownT('mixed'));
+
+    return [
+        'the bare word' => ['object', $map],
+        'spelled with capitals' => ['OBJECT', $map],
+        'padded' => [' object ', $map],
+        'nullable' => ['?object', UnionT::of([$map, new NullT])],
+        'a union member' => ['object|null', UnionT::of([$map, new NullT])],
+        'a generic argument' => ['list<object>', new ListT($map)],
+        'an array shorthand element' => ['object[]', new ListT($map)],
+    ];
+});
+
+it('leaves every other declared type to the one grammar', function (string $type): void {
+    // Compared against `parse()` itself rather than against a second expectation, so the declared
+    // reading cannot quietly fork from the inferred one for anything but the word above.
+    $parser = new TypeStringParser;
+
+    expect($parser->parseDeclared($type))->toEqual($parser->parse($type));
+})->with([
+    // `array` is deliberately NOT the object word: a PHP array is a JSON array or a JSON object, which
+    // is the very ambiguity the rule vocabulary has, so it decides nothing an author could be held to.
+    'array', 'list', 'iterable', 'mixed', 'string', 'int', 'array<string, mixed>', 'App\\Models\\User', '',
+]);
+
+it('keeps `object` an open schema when a type string was inferred rather than declared', function (): void {
+    // The other half, and the one that keeps the split honest: an analyser reading `object` off PHP
+    // source has learnt nothing about the wire, and a `JsonSerializable` may make it anything.
+    expect(parseType('object'))->toEqual(new UnknownT('object'));
+});
+
 it('treats an unknown bareword as a class reference and strips a leading slash', function (): void {
     expect(parseType('App\\Models\\User'))->toEqual(new ClassT('App\\Models\\User'))
         ->and(parseType('\\App\\Models\\User'))->toEqual(new ClassT('App\\Models\\User'));

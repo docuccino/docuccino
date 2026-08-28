@@ -55,6 +55,11 @@ arch('built-in integrations consume only the public extension surface')
         // response side, validation on the request side — must read `false` identically, or whichever
         // one rolls its own publishes a string against `type: boolean`.
         'Docuccino\Core\Extensions\Schema\TypedExample',
+        // Same exemption, same reason as EnumDecoration: the ONE reading of a body field path, escapes
+        // included. A body is assembled from validation keys and patched by attributes that name one, so
+        // an integration folding an escaped dot its own way is how a field whose name holds one and a
+        // nested pair of fields start being told apart differently on each side of the build.
+        'Docuccino\Core\Extensions\Validation\FieldPath',
         'Docuccino\Core\Extensions\Validation\RecoveredRequest',
         'Docuccino\Core\Extensions\Validation\ResponseDraftApplier',
         'Docuccino\Core\Extensions\Validation\RuleSet',
