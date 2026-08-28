@@ -37,6 +37,13 @@ use Docuccino\Core\TypeGrammar\TypeStringParser;
  * composition, or a `$ref` to a shared component — which every other operation using that component
  * would inherit the new property from — nothing is written and the refusal is reported.
  *
+ * Naming a key inside a container also SETTLES what that container is. Laravel has one word for both
+ * array shapes, so a bare `array` rule leaves a field a JSON array or a JSON object and the document
+ * says both; an author naming a key inside it has answered the question, and a declaration outranks the
+ * inference and the integration that left it open, which stops raising `validation.container-undecided`
+ * for it. What it settles is only that question — `null` survives the descent, because a field the
+ * server takes as null does not stop being one for having a key documented inside it.
+ *
  * `requestBody` is ONE guarded field every producer writes whole, so a merge can only keep what it can
  * already read: this runs LATE in the Request phase, behind every recoverer that writes a body at the
  * integration layer (FormRequest/inline rules, spatie-Data, laravel-actions, and a third-party
@@ -157,7 +164,7 @@ final class AttributeRequestBodyExtension implements OperationExtension
     private function property(BodyParameter $attribute, RouteContext $context): array
     {
         $property = $attribute->type !== null
-            ? $context->converter()->toSchema($this->types->parse($attribute->type))->schema
+            ? $context->converter()->toSchema($this->types->parseDeclared($attribute->type))->schema
             : ['type' => 'string'];
 
         // After the type keywords, so an explicit format wins over one the type string implied.
@@ -213,7 +220,7 @@ final class AttributeRequestBodyExtension implements OperationExtension
                 }
             }
 
-            $node['type'] = 'array';
+            $node['type'] = self::settledTo($node, 'array');
             $node['items'] = $child;
 
             return null;
@@ -232,14 +239,14 @@ final class AttributeRequestBodyExtension implements OperationExtension
             }
 
             $properties[$segment] = $child;
-            $node['type'] = 'object';
+            $node['type'] = self::settledTo($node, 'object');
             $node['properties'] = $properties;
 
             return null;
         }
 
         $properties[$segment] = $property;
-        $node['type'] = 'object';
+        $node['type'] = self::settledTo($node, 'object');
         $node['properties'] = $properties;
 
         $existing = is_array($node['required'] ?? null)
@@ -254,6 +261,31 @@ final class AttributeRequestBodyExtension implements OperationExtension
         }
 
         return null;
+    }
+
+    /**
+     * The container's `type` once a declaration has said which container it is. A member the rules could
+     * not decide between arrives here as `["array", "object"]` — Laravel has one word for both — and a
+     * declaration naming a key inside it settles that, an attribute outranking the inference and the
+     * integration that left it open. It settles ONLY that question: every other word stays, because
+     * `null` is not an answer to "array or object" and dropping it would tell a consumer their `null` is
+     * invalid when the server takes it.
+     *
+     * @param  array<string, mixed>  $node
+     * @return string|list<string>
+     */
+    private static function settledTo(array $node, string $kind): string|array
+    {
+        $declared = $node['type'] ?? null;
+
+        // The kind first, then everything the declaration says nothing about. Both container words drop
+        // out of the tail — the kind is back at the head, and its rival is the half now answered.
+        $others = array_values(array_filter(
+            array_filter(is_array($declared) ? $declared : [$declared], 'is_string'),
+            static fn (string $type): bool => $type !== 'array' && $type !== 'object',
+        ));
+
+        return $others === [] ? $kind : [$kind, ...$others];
     }
 
     /**

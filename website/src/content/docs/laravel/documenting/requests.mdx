@@ -478,6 +478,11 @@ and bounds both (`max:3` writes `maxItems` and `maxProperties`, whichever the re
 The build says so with a `validation.container-undecided` notice naming the field: add `field.*` rules or
 dotted `field.<key>` rules and the document narrows to the one you meant.
 
+Where the endpoint really does take a free-form map — no keys to enumerate, so no rules to add — say it
+with [`#[BodyParameter]`](/laravel/reference/attributes/#bodyparameter) instead of inventing rules to
+shape a schema. Naming the field, or any key inside it, settles the container the same way, and the
+notice stops.
+
 ### Documenting a custom rule
 
 A custom `ValidationRule` class does its work at runtime, so there's nothing to read from its body. Say

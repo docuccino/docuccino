@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\Validation;
 
+use Docuccino\Attributes\BodyParameter;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\RuleTransformer;
+use Docuccino\Core\Extensions\Validation\FieldPath;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Extensions\Validation\ValidationRule;
 use Docuccino\Laravel\Integrations\Support\FieldPaths;
@@ -70,10 +72,26 @@ final class RuleSetNormalizer
      * Say out loud what the trade above could not decide: one info per field whose container the rules
      * left open, so the widening reaches the author rather than degrading quietly. Every recovery
      * integration calls this with the set it just normalized.
+     *
+     * Rules are not the only way to answer it. A `#[BodyParameter]` naming a key inside the field, or
+     * naming the field itself, says what the container is at a layer that outranks this one — so the
+     * document will not say "either" and asking for rules that would say it again is a note fired where
+     * nothing can be done.
      */
     public static function report(RuleSet $normalized, RouteContext $context): void
     {
+        $declared = array_map(
+            static fn (BodyParameter $attribute): string => $attribute->name,
+            $context->attributes->all(BodyParameter::class),
+        );
+
         foreach (self::undecidedFields($normalized) as $field) {
+            foreach ($declared as $path) {
+                if (FieldPath::isAtOrUnder($path, $field)) {
+                    continue 2;
+                }
+            }
+
             $context->components->addDiagnostic(new Diagnostic(
                 severity: Severity::Info,
                 code: 'validation.container-undecided',

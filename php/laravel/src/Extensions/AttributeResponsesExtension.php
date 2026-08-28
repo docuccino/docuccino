@@ -98,7 +98,7 @@ final class AttributeResponsesExtension implements OperationExtension
 
             // One declared shape, not a keyword-by-keyword patch: whatever a producer worked out about
             // the body it replaces comes off with it (SchemaDraft::declareShape()).
-            $schema = $context->converter()->toSchema($this->types->parse($attribute->type, $imports))->schema;
+            $schema = $context->converter()->toSchema($this->types->parseDeclared($attribute->type, $imports))->schema;
             $response->content($mediaType)->declareShape($schema, Contribution::attribute($context->actionSource()));
         }
 
@@ -186,7 +186,7 @@ final class AttributeResponsesExtension implements OperationExtension
             }
 
             $schema = $header->type !== null
-                ? $context->converter()->toSchema($this->types->parse($header->type, $imports))->schema
+                ? $context->converter()->toSchema($this->types->parseDeclared($header->type, $imports))->schema
                 : ['type' => 'string'];
 
             $entry = ['schema' => $schema];

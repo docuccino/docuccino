@@ -265,6 +265,18 @@ Containers on the way are created if the body doesn't have them, and `required: 
 required on the object that holds it — `meta.source` becomes a required member of `meta`, and the body
 itself becomes required.
 
+Naming a key inside a container also settles what that container is. A bare `array` rule leaves a field
+[undecided](/laravel/documenting/requests/#nested-and-array-fields) — Laravel has one word for both shapes —
+and a declaration inside it answers the question, so `validation.container-undecided` stops firing for
+that field. Only that question: a `nullable` field stays nullable.
+
+`type: 'object'` documents a free-form map — an object whose keys aren't enumerated — which is the answer
+for a field the endpoint takes as one:
+
+```php
+#[BodyParameter(name: 'meta.scoring.scores', type: 'object', description: 'Scores keyed by criterion id.')]
+```
+
 A path only lands where the body can carry it. If the field it nests under is documented as a scalar,
 as an `allOf`/`anyOf`/`oneOf`, or as a `$ref` to a shared component — where the property would appear
 in every other operation using that component — nothing is written and
