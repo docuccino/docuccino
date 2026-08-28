@@ -245,3 +245,38 @@ it('keeps reading a self-referential object as deep as the value it was sent act
     expect($coerced->size)->toBe(7)
         ->and($coerced->child->size)->toBe(3);
 });
+
+it('decodes a comma list against its items even where the contract also permits a plain string', function (string $value, array $schema, mixed $expected): void {
+    // Splitting a comma list is a decode of the REPRESENTATION, not a reading of the value's type:
+    // `?sort=a,evil` is a serialised list, not a string that happens to satisfy `type: string`. Left as
+    // the string it arrived as, the `items` allow-list holds nothing to account and `evil` passes a
+    // document that never permitted it.
+    expect(ParameterValue::coerce($value, $schema))->toBe($expected);
+})->with([
+    'an array' => ['a,evil', ['type' => 'array', 'items' => ['enum' => ['a', 'b']]], ['a', 'evil']],
+    'a string-or-array multi-type' => [
+        'a,evil', ['type' => ['string', 'array'], 'items' => ['enum' => ['a', 'b']]], ['a', 'evil'],
+    ],
+    'a string-or-array union written as an anyOf' => [
+        'a,evil',
+        ['anyOf' => [['type' => 'string'], ['type' => 'array', 'items' => ['enum' => ['a', 'b']]]]],
+        ['a', 'evil'],
+    ],
+    // No comma is still a list of one, and the same decode: the separator is not what makes it a list.
+    'a lone value against a string-or-array multi-type' => ['a', ['type' => ['string', 'array']], ['a']],
+]);
+
+it('reads a bracketed map as the object it stands for wherever the contract permits an object', function (array $schema): void {
+    // The brackets have already said which of the two arrived. Read as a list instead, the keys are
+    // dropped on the floor and `properties`, `required` and the `*Properties` counts all go inert:
+    // `?filters[bogus]=x` re-reads as `["x"]`, which no shape of the object can fail.
+    $coerced = ParameterValue::coerce(['status' => 'paid', 'due' => 'today'], $schema);
+
+    expect($coerced)->toBeInstanceOf(stdClass::class)
+        ->and($coerced->status)->toBe('paid')
+        ->and($coerced->due)->toBe('today');
+})->with([
+    'an object' => [['type' => 'object']],
+    'an array-or-object multi-type' => [['type' => ['array', 'object']]],
+    'an array-or-object union written as an anyOf' => [['anyOf' => [['type' => 'array'], ['type' => 'object']]]],
+]);

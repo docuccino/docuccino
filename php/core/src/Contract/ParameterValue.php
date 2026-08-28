@@ -98,10 +98,22 @@ final class ParameterValue
     {
         $types = $flat['types'];
 
+        // `?sort=name,-created_at` is the comma list representation the generator documents by default.
+        // Splitting it is a REPRESENTATION decode rather than a reading of its type, which is why it
+        // comes before the string rule below rather than after it: a list serialised into a query
+        // string satisfies `type: string` incidentally, and leaving it as the string it arrived as
+        // leaves `items` — the allow-list the document publishes — checking nothing at all.
+        if (in_array('array', $types, true)) {
+            return array_map(
+                static fn (string $item): mixed => self::read($item, $flat['items'], $document, $depth + 1, $flat['path'], $memo),
+                explode(',', $value),
+            );
+        }
+
         // Where the contract permits a STRING, the value that arrived already satisfies it, and reading
         // it back as something else can only take a pass away: `anyOf: [{integer, minimum: 100}, {string}]`
         // accepts `?limit=42` exactly as sent and rejects the integer 42. So a union that admits several
-        // types resolves toward the wire — convert only where the string cannot stand as itself.
+        // scalar types resolves toward the wire — convert only where the string cannot stand as itself.
         if (in_array('string', $types, true)) {
             return $value;
         }
@@ -116,14 +128,6 @@ final class ParameterValue
 
         if (in_array('boolean', $types, true) && in_array($value, ['true', 'false', '1', '0'], true)) {
             return $value === 'true' || $value === '1';
-        }
-
-        // `?sort=name,-created_at` is the comma list representation the generator documents by default.
-        if (in_array('array', $types, true)) {
-            return array_map(
-                static fn (string $item): mixed => self::read($item, $flat['items'], $document, $depth + 1, $flat['path'], $memo),
-                explode(',', $value),
-            );
         }
 
         return $value;
@@ -159,7 +163,12 @@ final class ParameterValue
             );
         }
 
-        return in_array('array', $flat['types'], true) ? array_values(get_object_vars($object)) : $object;
+        // The brackets have already said which of the two this is, so where the contract permits both
+        // the value decides: a map is an object. Reading it as a list instead throws the keys away, and
+        // `properties`, `required` and the `*Properties` counts then have nothing left to check.
+        $list = in_array('array', $flat['types'], true) && ! in_array('object', $flat['types'], true);
+
+        return $list ? array_values(get_object_vars($object)) : $object;
     }
 
     /**
