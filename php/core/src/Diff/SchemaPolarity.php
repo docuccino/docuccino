@@ -99,49 +99,60 @@ final class SchemaPolarity
     }
 
     /**
-     * Whether the KEYWORD arriving or leaving gates — the whole position, not one of its members, so the
-     * baseline on the side without it is no constraint of that kind at all. A constraint arriving
-     * narrows; `contains` arriving narrows only while it asserts something, which `$asserts` carries
-     * because reading its bounds is the comparator's job rather than this class's; and a union arriving
-     * narrows on BOTH sides, because the side that had no `anyOf` was not an empty union — it was
-     * unconstrained. A union LEAVING is the mirror of `schema.enum-removed`: a request widens, while a
-     * response reader loses the closed set of shapes it typed against.
+     * Which way the KEYWORD arriving or leaving moves the schema — the whole position, not one of its
+     * members, so the baseline on the side without it is no constraint of that kind at all. What that
+     * direction is WORTH is not decided here: it is one rule shared with the refinement and reading
+     * tables, stated in full at {@see SchemaComparator::verdict()}, which is the only thing that turns
+     * either answer below into a verdict.
      *
-     * The kinds that cannot reach here are conservative rather than absent: at a position nobody decided
-     * the direction is exactly what is unknown, and the one thing a release gate cannot do is guess in
-     * the safe direction.
+     * `contains` narrows only while it asserts something, which `$asserts` carries because reading its
+     * bounds is the comparator's job rather than this class's. The kinds that cannot reach here are
+     * conservative rather than absent: at a position nobody decided, the direction is exactly what is
+     * unknown, and the one thing a release gate cannot do is guess in the safe direction.
      */
-    public static function keywordPresenceIsBreaking(SchemaMember $member, bool $arriving, bool $request, bool $asserts): bool
+    public static function keywordPresence(SchemaMember $member, bool $arriving, bool $asserts): RefinementMove
     {
         return match ($member) {
-            SchemaMember::Constraint => $arriving,
-            SchemaMember::Bounded => $arriving && $asserts,
-            SchemaMember::Union => $arriving || ! $request,
+            // The side that had no `anyOf` was not carrying an empty union, it was unconstrained — so a
+            // union lands exactly as a constraint does, and the two part company only at the member
+            // question below.
+            SchemaMember::Constraint, SchemaMember::Union => $arriving ? RefinementMove::Narrowed : RefinementMove::Widened,
+            SchemaMember::Bounded => $asserts
+                ? ($arriving ? RefinementMove::Narrowed : RefinementMove::Widened)
+                : RefinementMove::Unchanged,
             // `$defs`, `properties` and `dependentRequired` report per member and never the keyword;
             // an EMPTY position has no presence claim to make at all.
-            SchemaMember::Store, SchemaMember::Property, SchemaMember::Required, SchemaMember::EmptySchema => true,
+            SchemaMember::Store, SchemaMember::Property, SchemaMember::Required, SchemaMember::EmptySchema => RefinementMove::Incomparable,
         };
     }
 
     /**
-     * Whether ONE member of a position arriving or leaving gates, which is a different question from the
-     * keyword above: here the position stood on both sides and the union, intersection or store already
-     * existed. A branch of an intersection arriving narrows; a branch of a union arriving widens what a
-     * request takes and hands a response reader a shape it has no case for; a `$defs` member arriving is
-     * nothing while one leaving may dangle a `$ref` nothing here resolves; and a `dependentRequired`
-     * entry narrows what a request accepts exactly as `required` does, which is why the response side is
-     * a report rather than a verdict.
+     * Which way ONE member of a position arriving or leaving moves the schema, which is a different
+     * question from the keyword above: here the position stood on both sides and the union, intersection
+     * or store already existed. What the direction is worth is again
+     * {@see SchemaComparator::verdict()}'s.
+     *
+     * `Required` is the one row that reads the audience, and the one place a direction is not the value
+     * space's: a `dependentRequired` entry is an obligation on a WRITER, exactly as `required` is, so on
+     * a response — where the usage context is unknown and there is no writer — it moves nothing this
+     * diff will read as a contract. That is the judgment call {@see SchemaComparator::compareRequired()}
+     * already makes, stated once rather than a second exception to the verdict rule.
      */
-    public static function memberPresenceIsBreaking(SchemaMember $member, bool $arriving, bool $request): bool
+    public static function memberPresence(SchemaMember $member, bool $arriving, bool $request): RefinementMove
     {
         return match ($member) {
-            SchemaMember::Constraint => $arriving,
-            SchemaMember::Union => ! $arriving || ! $request,
-            SchemaMember::Store => ! $arriving,
-            SchemaMember::Required => $arriving && $request,
+            SchemaMember::Constraint => $arriving ? RefinementMove::Narrowed : RefinementMove::Widened,
+            SchemaMember::Union => $arriving ? RefinementMove::Widened : RefinementMove::Narrowed,
+            // Arriving is nothing — nothing can name a definition that did not also change — while one
+            // leaving may dangle a `$ref` this comparison does not resolve, which is a direction it
+            // cannot compute rather than one it can.
+            SchemaMember::Store => $arriving ? RefinementMove::Unchanged : RefinementMove::Incomparable,
+            SchemaMember::Required => $request
+                ? ($arriving ? RefinementMove::Narrowed : RefinementMove::Widened)
+                : RefinementMove::Unchanged,
             // `contains` holds one subschema and `properties` has a comparison of its own, so neither
             // has members reaching here; an EMPTY position's members fall out of the keyword comparison.
-            SchemaMember::Bounded, SchemaMember::Property, SchemaMember::EmptySchema => true,
+            SchemaMember::Bounded, SchemaMember::Property, SchemaMember::EmptySchema => RefinementMove::Incomparable,
         };
     }
 

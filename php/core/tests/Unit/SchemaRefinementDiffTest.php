@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\RefinementKind;
 use Docuccino\Core\Diff\RefinementMove;
-use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Diff\SchemaRefinement;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\SchemaKeywords;
@@ -31,23 +30,6 @@ function refinementKeywords(): array
     sort($keywords);
 
     return $keywords;
-}
-
-/**
- * Which keywords the two sides disagree about: the ones the draft model calls a refinement and nobody
- * has decided, and the ones a decision exists for that the draft model does not know. Both are a
- * decision nobody made — one silently unread, one silently unreachable.
- *
- * @param  list<string>  $known
- * @param  list<string>  $decided
- * @return array{list<string>, list<string>}
- */
-function refinementDecisionGaps(array $known, array $decided): array
-{
-    return [
-        array_values(array_diff($known, $decided)),
-        array_values(array_diff($decided, $known)),
-    ];
 }
 
 /** Every refinement this comparison answers for itself — the rest name where they are read instead. */
@@ -85,32 +67,12 @@ function refinementProbeValue(string $keyword): mixed
     };
 }
 
-/**
- * Every change one comparison reports, as `code` plus `!` where it is breaking, sorted so the
- * assertion pins the finding rather than the order the arms happen to run in.
- *
- * @param  array<string, mixed>  $old
- * @param  array<string, mixed>  $new
- * @return list<string>
- */
-function refinementChanges(array $old, array $new, bool $request): array
-{
-    $codes = array_map(
-        static fn ($change): string => $change->code.($change->breaking ? '!' : ''),
-        (new SchemaComparator)->compare($old, $new, 'S', 'sch:v1:0000000000000000', $request),
-    );
-
-    sort($codes);
-
-    return $codes;
-}
-
 it('records a direction decision for every refinement the draft model knows', function (): void {
     // The guard the fix is owed, and the one the composition work could not have provided: refinements
     // are not subschema positions, so a scan keyed to those walks straight past every keyword here.
     $known = refinementKeywords();
 
-    [$undecided, $unreachable] = refinementDecisionGaps($known, SchemaRefinement::decided());
+    [$undecided, $unreachable] = decisionGaps($known, SchemaRefinement::decided());
 
     expect($undecided)->toBe([], 'no direction decision recorded for: '.implode(', ', $undecided))
         ->and($unreachable)->toBe([], 'a direction decision for a keyword the draft model does not know: '.implode(', ', $unreachable))
@@ -128,9 +90,9 @@ it('refuses a refinement keyword nobody has decided', function (): void {
     $known = refinementKeywords();
     $decided = SchemaRefinement::decided();
 
-    expect(refinementDecisionGaps([...$known, 'aRefinementNobodyDecided'], $decided))
+    expect(decisionGaps([...$known, 'aRefinementNobodyDecided'], $decided))
         ->toBe([['aRefinementNobodyDecided'], []])
-        ->and(refinementDecisionGaps($known, [...$decided, 'aDecisionForNoRefinement']))
+        ->and(decisionGaps($known, [...$decided, 'aDecisionForNoRefinement']))
         ->toBe([[], ['aDecisionForNoRefinement']]);
 });
 
@@ -205,12 +167,12 @@ it('reports and gates a refinement arriving, and reports one leaving, at every k
     $bare = ['type' => 'string'];
     $refined = ['type' => 'string', $keyword => refinementProbeValue($keyword)];
 
-    expect(refinementChanges($bare, $refined, request: true))->toBe(['schema.refinement-narrowed!'], $keyword.' arriving on a request')
-        ->and(refinementChanges($bare, $refined, request: false))->toBe(['schema.refinement-narrowed!'], $keyword.' arriving on a response')
-        ->and(refinementChanges($refined, $bare, request: true))->toBe(['schema.refinement-widened'], $keyword.' leaving a request')
-        ->and(refinementChanges($refined, $bare, request: false))->toBe(['schema.refinement-widened!'], $keyword.' leaving a response')
+    expect(schemaDiffCodes($bare, $refined, request: true))->toBe(['schema.refinement-narrowed!'], $keyword.' arriving on a request')
+        ->and(schemaDiffCodes($bare, $refined, request: false))->toBe(['schema.refinement-narrowed!'], $keyword.' arriving on a response')
+        ->and(schemaDiffCodes($refined, $bare, request: true))->toBe(['schema.refinement-widened'], $keyword.' leaving a request')
+        ->and(schemaDiffCodes($refined, $bare, request: false))->toBe(['schema.refinement-widened!'], $keyword.' leaving a response')
         // And the probe is what caused it — a comparison of a schema with itself says nothing.
-        ->and(refinementChanges($refined, $refined, request: true))->toBe([], $keyword.' reports itself changed');
+        ->and(schemaDiffCodes($refined, $refined, request: true))->toBe([], $keyword.' reports itself changed');
 })->with(refinementComparedDataset());
 
 it('classifies every refinement it compares in both directions', function (
@@ -219,8 +181,8 @@ it('classifies every refinement it compares in both directions', function (
     array $onRequest,
     array $onResponse,
 ): void {
-    expect(refinementChanges($old, $new, request: true))->toBe($onRequest, 'request')
-        ->and(refinementChanges($old, $new, request: false))->toBe($onResponse, 'response');
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     // Ceilings: lower is narrower. This is the edit the issue was opened on.
     'maxLength tightened' => [
@@ -431,7 +393,7 @@ it('reads both spellings of exclusivity, and refuses to order the two dialects',
     // spells it as the bound itself. A reader that assumes the number silently mis-answers every
     // draft-04 artifact, which is exactly what a diff is handed when `old` is a document from before a
     // dialect migration.
-    expect(refinementChanges($old, $new, request: true))->toBe($expected);
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($expected);
 })->with([
     'draft-04 exclusivity turned on' => [
         ['type' => 'number', 'minimum' => 1],
@@ -472,14 +434,14 @@ it('refuses to order a bound it cannot read as a number', function (mixed $garba
     // A comparison runs on whatever an artifact holds. A bound nothing can read is not a bound that
     // went away — reporting it as a widening would tell a release gate the contract relaxed when what
     // actually happened is that nobody knows.
-    expect(refinementChanges(['type' => 'string', 'maxLength' => 3], ['type' => 'string', 'maxLength' => $garbage], request: true))
+    expect(schemaDiffCodes(['type' => 'string', 'maxLength' => 3], ['type' => 'string', 'maxLength' => $garbage], request: true))
         ->toBe(['schema.refinement-changed!'])
-        ->and(refinementChanges(['type' => 'array', 'uniqueItems' => true], ['type' => 'array', 'uniqueItems' => $garbage], request: true))
+        ->and(schemaDiffCodes(['type' => 'array', 'uniqueItems' => true], ['type' => 'array', 'uniqueItems' => $garbage], request: true))
         ->toBe(['schema.refinement-changed!'])
-        ->and(refinementChanges(['type' => 'number', 'multipleOf' => 2], ['type' => 'number', 'multipleOf' => $garbage], request: true))
+        ->and(schemaDiffCodes(['type' => 'number', 'multipleOf' => 2], ['type' => 'number', 'multipleOf' => $garbage], request: true))
         ->toBe(['schema.refinement-changed!'])
         // …and the same garbage on both sides is not a change at all.
-        ->and(refinementChanges(['type' => 'string', 'maxLength' => $garbage], ['type' => 'string', 'maxLength' => $garbage], request: true))
+        ->and(schemaDiffCodes(['type' => 'string', 'maxLength' => $garbage], ['type' => 'string', 'maxLength' => $garbage], request: true))
         ->toBe([]);
 })->with([
     'a numeric string' => ['10'],
@@ -499,21 +461,21 @@ it('leaves every refinement with a comparison of its own to that comparison', fu
 
     expect($elsewhere)->toBe(['contentSchema', 'enum', 'format', 'maxContains', 'minContains'])
         // Each still reports, under the code its own comparison publishes and once only.
-        ->and(refinementChanges(['type' => 'string', 'enum' => ['a', 'b']], ['type' => 'string', 'enum' => ['a']], request: true))
+        ->and(schemaDiffCodes(['type' => 'string', 'enum' => ['a', 'b']], ['type' => 'string', 'enum' => ['a']], request: true))
         ->toBe(['schema.enum-value-removed!'])
-        ->and(refinementChanges(['type' => 'string'], ['type' => 'string', 'format' => 'uuid'], request: true))
+        ->and(schemaDiffCodes(['type' => 'string'], ['type' => 'string', 'format' => 'uuid'], request: true))
         ->toBe(['schema.format-changed!'])
-        ->and(refinementChanges(
+        ->and(schemaDiffCodes(
             ['type' => 'array', 'contains' => ['type' => 'string'], 'minContains' => 1],
             ['type' => 'array', 'contains' => ['type' => 'string'], 'minContains' => 2],
             request: true,
         ))->toBe(['schema.contains-bound-narrowed!'])
         // A bound with no `contains` beside it constrains nothing, which is why absorbing the pair into
         // the general comparison would report an edit that moved no contract.
-        ->and(refinementChanges(['type' => 'array', 'minContains' => 1], ['type' => 'array', 'minContains' => 4], request: true))
+        ->and(schemaDiffCodes(['type' => 'array', 'minContains' => 1], ['type' => 'array', 'minContains' => 4], request: true))
         ->toBe([])
         // `contentSchema` is a subschema, so it goes through the position table like any other.
-        ->and(refinementChanges(
+        ->and(schemaDiffCodes(
             ['type' => 'string', 'contentSchema' => ['type' => ['string', 'integer']]],
             ['type' => 'string', 'contentSchema' => ['type' => 'string']],
             request: true,
@@ -523,35 +485,35 @@ it('leaves every refinement with a comparison of its own to that comparison', fu
 it('reports no refinement for a keyword that is not one', function (): void {
     // The filter, executed: the comparison walks every keyword either side carries, so a shape or an
     // annotation reaching it would be reported as a bound that moved.
-    expect(refinementChanges(['type' => 'string', 'title' => 'Was'], ['type' => 'string', 'title' => 'Now'], request: true))
+    expect(schemaDiffCodes(['type' => 'string', 'title' => 'Was'], ['type' => 'string', 'title' => 'Now'], request: true))
         ->toBe(['schema.annotation-changed'])
-        ->and(refinementChanges(['type' => 'string'], ['type' => 'integer'], request: true))
+        ->and(schemaDiffCodes(['type' => 'string'], ['type' => 'integer'], request: true))
         ->toBe(['schema.type-changed!'])
-        ->and(refinementChanges(['type' => 'object', 'required' => []], ['type' => 'object', 'required' => ['a']], request: true))
+        ->and(schemaDiffCodes(['type' => 'object', 'required' => []], ['type' => 'object', 'required' => ['a']], request: true))
         ->toBe(['schema.required-added!']);
 });
 
 it('carries a refinement change up from every subschema position it sits under', function (): void {
     // The narrowing the composition work made visible at the position and this one makes visible at the
     // keyword: `propertyNames: {type: string}` gaining a `maxLength: 3` used to report nothing at all.
-    expect(refinementChanges(
+    expect(schemaDiffCodes(
         ['propertyNames' => ['type' => 'string']],
         ['propertyNames' => ['type' => 'string', 'maxLength' => 3]],
         request: true,
     ))->toBe(['schema.refinement-narrowed!'])
-        ->and(refinementChanges(
+        ->and(schemaDiffCodes(
             ['type' => 'object', 'properties' => ['name' => ['type' => 'string', 'maxLength' => 255]]],
             ['type' => 'object', 'properties' => ['name' => ['type' => 'string', 'maxLength' => 10]]],
             request: true,
         ))->toBe(['schema.refinement-narrowed!'])
-        ->and(refinementChanges(
+        ->and(schemaDiffCodes(
             ['allOf' => [['type' => 'string', 'maxLength' => 255]]],
             ['allOf' => [['type' => 'string', 'maxLength' => 10]]],
             request: true,
         ))->toBe(['schema.refinement-narrowed!'])
         // Under `not` the direction inverts, so the child's verdict cannot carry up: a bound RELAXED
         // there narrows the schema carrying it, and the conservative verdict is what says so.
-        ->and(refinementChanges(
+        ->and(schemaDiffCodes(
             ['not' => ['type' => 'string', 'maxLength' => 10]],
             ['not' => ['type' => 'string', 'maxLength' => 255]],
             request: true,
