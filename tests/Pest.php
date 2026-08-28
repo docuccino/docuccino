@@ -24,7 +24,10 @@ use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\ListT;
+use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
@@ -39,6 +42,8 @@ use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
+use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
+use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
 use Docuccino\Laravel\Integrations\Support\QueryParameterSpec;
 use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
@@ -46,6 +51,7 @@ use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
+use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\FragmentCacheDirs;
 use Docuccino\Laravel\Tests\Support\ScriptedBuildRunner;
@@ -1887,4 +1893,67 @@ function shippedLints(): array
     sort($lints);
 
     return $lints;
+}
+
+/**
+ * Convert a spatie Data class at a NESTED depth through a DataSchema carrying the given global wrap,
+ * returning its component schema and the diagnostics the conversion raised. Nested, because the wrap
+ * question this answers is only ever asked of a property.
+ *
+ * @param  DType|null  $things  the declared type of the collection property; a list of the item class by default
+ * @return array{schema: array<string, mixed>, codes: list<string>, diagnostics: array<string, Diagnostic>}
+ */
+function convertNestedWrap(string $fqcn, ?string $wrap, ?DType $things = null): array
+{
+    $item = NestedWrapItemData::class;
+
+    $engine = new StubTypeEngine(classes: [
+        $fqcn => new ClassMetadata($fqcn, [
+            new PropertyMetadata(
+                'things',
+                $things ?? new ListT(new ClassT($item)),
+            ),
+        ]),
+        $item => new ClassMetadata($item, [
+            new PropertyMetadata('label', ScalarT::string()),
+        ]),
+    ]);
+
+    $components = new ComponentRegistry;
+    $converter = new SchemaConverter(
+        [new DataSchema(
+            wrap: new WrapResolver($wrap),
+        ), ...DefaultTypeMappers::all()],
+        $engine,
+        $components,
+    );
+
+    // A property, never the root: the root envelope is a different question with a different answer.
+    $converter->toSchema(new ListT(new ClassT($fqcn)));
+
+    $schemas = $components->snapshot()['schemas'] ?? [];
+    $short = substr($fqcn, strrpos($fqcn, '\\') + 1);
+
+    $byCode = [];
+    foreach ($components->diagnostics() as $diagnostic) {
+        $byCode[$diagnostic->code] = $diagnostic;
+    }
+
+    return [
+        'schema' => $schemas[$short] ?? [],
+        'codes' => array_map(static fn ($d): string => $d->code, $components->diagnostics()),
+        'diagnostics' => $byCode,
+    ];
+}
+
+/**
+ * Boot spatie's own shipped `data` config with the given wrap, for a test that renders a Data object
+ * through the real laravel-data. Read from the vendor file rather than restated here, so a default the
+ * package changes cannot silently diverge from what these tests assume.
+ */
+function bootLaravelData(?string $wrap): void
+{
+    $defaults = require dirname(__DIR__).'/vendor/spatie/laravel-data/config/data.php';
+
+    config()->set('data', [...$defaults, 'wrap' => $wrap]);
 }

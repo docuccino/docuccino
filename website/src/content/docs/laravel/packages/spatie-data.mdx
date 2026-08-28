@@ -486,6 +486,52 @@ Constructor arguments decide the [example](/laravel/documenting/errors/#examples
 a member passed at that call site is in that body even where the schema marks it `Optional`, and one
 nobody passed is absent even where the schema requires it.
 
+## Nested collections
+
+A `data.wrap` key wraps the response root, and Docuccino documents that envelope. It does not document
+one around a nested collection, and that is a decision rather than an oversight — but the runtime does
+put one there, so the two can disagree.
+
+Laravel Data unwraps a nested single Data object and re-wraps a nested **collection**. With
+`'wrap' => 'data'` set, a property declared as a list of Data objects goes out like this:
+
+```json
+{ "data": { "label": "Tags", "tags": { "data": [ { "label": "urgent" } ] } } }
+```
+
+The schema keeps `tags` as a bare array. Two things make the wrapper impossible to publish honestly: a
+`#[WithTransformer]` replaces serialization outright and its output cannot be read from the source, and
+the property publishes a shared `$ref` that must not carry one caller's envelope to every other use of
+that class.
+
+So Docuccino tells you instead. Where a global wrap is set and a nested data collection carries no
+transformer, the build raises
+[`spatie-data.nested-collection-wrap`](/laravel/reference/diagnostics/#package-integrations):
+
+```text
+App\Data\FieldData::$tags is a nested collection of App\Data\FieldTagData, which laravel-data
+serialises as {"data": [ … ]} because `data.wrap` is set — this document describes it as a bare array.
+```
+
+Resolve it whichever way your API actually behaves:
+
+- **Send the bare array** — give the property a `#[WithTransformer]` that returns the plain list. This
+  is the common choice: a nested envelope has no `meta` or `links` beside it to justify it, and it makes
+  the same field asymmetric with the one your request side accepts.
+- **Keep the envelope** — state the wrapped shape in an
+  [Overlay](/laravel/guides/customizing-output/#openapi-overlays-in-practice), so the document says what
+  you send.
+
+The diagnostic stays quiet where nothing will be wrapped: no global `data.wrap`, a property carrying any
+transformer, a paginated collection (whose `data`/`links`/`meta` envelope the schema already publishes),
+or a class that turns wrapping off for its whole transformation with `withoutWrapping()` or
+`WrapExecutionType::Disabled` — the shape a problem-details carrier usually takes, where `Disabled`
+propagates into the nested values too.
+
+The wrap is read from the class that declares the property, because that class publishes one shared
+schema wherever it is used. A class returned directly would be wrapped, so the diagnostic reports it
+even where some other root nests it under a `Disabled` transformation.
+
 ## Conventions Docuccino honors
 
 Docuccino respects Spatie Data's own attributes and conventions, so the documented schema matches the
