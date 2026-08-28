@@ -117,6 +117,24 @@ final class IgnoredResponsesController
         throw new RuntimeException(__METHOD__.' is documented, not dispatched');
     }
 
+    /**
+     * A status this action answered with before its error handling changed. Nothing writes a 419 now, so
+     * no producer ever asks about the declaration and it drops nothing.
+     */
+    #[IgnoreResponse(status: 419)]
+    public function stale(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
+    /** The same declaration written twice, naming nothing — one mistake, and one report of it. */
+    #[IgnoreResponse(status: 599)]
+    #[IgnoreResponse(status: 599)]
+    public function repeated(): JsonResponse
+    {
+        throw new RuntimeException(__METHOD__.' is documented, not dispatched');
+    }
+
     /** A redirect inference documents under the `3XX` range, with a member of that range dropped. */
     #[IgnoreResponse(status: 302)]
     public function redirect(): RedirectResponse

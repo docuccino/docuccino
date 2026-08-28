@@ -26,16 +26,43 @@ use Docuccino\Core\Inference\ThrownException;
  */
 final class IgnoredResponses
 {
+    /**
+     * The route-local record of which statuses an ignore really took effect on, written by every
+     * consultation below and read once the route's build is over
+     * (`UnmatchedIgnoredResponsesExtension`).
+     *
+     * Keyed by status rather than by declaration, which is what a declaration IS here: two that name one
+     * status — a controller's and its action's — both did their job, and one record answers for both.
+     *
+     * A declaration is consulted PER PRODUCER, as each response is about to be written, so a status no
+     * producer would ever write is simply never asked about and there is nowhere in this class that
+     * could know the declaration went unused. The record is what makes the end of the route's build such
+     * a place. `RouteNotes` is where it lives because it is the one per-route mutable bag, and
+     * because it snapshots and restores — which the rollback below needs anyway.
+     */
+    public const string MATCHED_CHANNEL = 'attribute.ignore-response-matched';
+
+    /** The single key under {@see MATCHED_CHANNEL}; the statuses are the values. */
+    public const string MATCHED_KEY = 'status';
+
     /** Whether the route drops the response it would otherwise document at `$status`. */
     public static function drops(RouteContext $context, string|int $status): bool
     {
         foreach ($context->attributes->all(IgnoreResponse::class) as $ignore) {
             if ((string) $ignore->status === (string) $status) {
+                self::recordMatch($context, $status);
+
                 return true;
             }
         }
 
         return false;
+    }
+
+    /** {@see MATCHED_CHANNEL}. */
+    private static function recordMatch(RouteContext $context, string|int $status): void
+    {
+        $context->notes()->record(self::MATCHED_CHANNEL, self::MATCHED_KEY, (string) $status);
     }
 
     /**
@@ -72,6 +99,12 @@ final class IgnoredResponses
 
         $context->components->restore($components);
         $context->notes()->restore($notes);
+
+        // The rollback took the match `drops()` just recorded with it. The body is rightly gone, but
+        // that the declaration DROPPED something is a fact about the declaration rather than about the
+        // response nobody will see, so it is recorded again on the far side — otherwise the one path
+        // where an ignore does the most work is the one that reads as having done none.
+        self::recordMatch($context, $mapped->draft->status);
 
         return null;
     }
