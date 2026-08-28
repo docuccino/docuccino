@@ -907,3 +907,52 @@ it('reads only as much of a message as it can check, and says where it stopped',
         // And a message of the size that actually arrives is untouched by the bound.
         ->and($paths->relative('Could not open /app/root/app/X.php'))->toBe('Could not open app/X.php');
 });
+
+it('reads a nested scheme the same way wherever the run came from', function (string $case, string $run, ?string $scheme): void {
+    // `wrapper()` is the fold's own reader of `NESTED_SCHEME`, and the pattern already declines to
+    // open a run on a nested URL — so no run the matcher produces can hand it one, and a mutation
+    // that gutted the check passed the whole suite. Asked directly, it must still agree with the
+    // pattern about what a nested scheme is: a reader that saw fewer shapes than the fold it
+    // protects would be a hole.
+    $wrapper = new ReflectionMethod(MessagePaths::class, 'wrapper');
+
+    expect($wrapper->invoke(null, $run))->toBe($scheme);
+})->with([
+    ['a local tail', 'phar:///app/root/x.php', 'phar'],
+    ['a tail that is itself a URL', 'phar://http://example.com/a.gz', null],
+    ['a tail that is another wrapper', 'compress.zlib://compress.bzip2:///home/alice/x.bz2', null],
+    ['a scheme with a dot and a digit', 'zip://s3v4://bucket/x.zip', null],
+    ['a scheme the table calls no proof', 'http:///app/root/x.php', null],
+]);
+
+it('draws the two-segment line once, for the ladder\'s roots and for its own', function (): void {
+    // One predicate, two populations: a root the ladder answered with and a prefix this process can
+    // name for itself. They must not come to disagree — `/app` is a checkout and equally a route
+    // prefix, `/tmp` is a word our own sentences spell — so the depth is measured in one place and
+    // both read it. The literal redaction reaches nothing shallower, so it needs no second test of
+    // its own.
+    $deepEnough = new ReflectionMethod(MessagePaths::class, 'deepEnoughForAMachine');
+    $machineRoots = new ReflectionMethod(MessagePaths::class, 'machineRoots');
+
+    expect($deepEnough->invoke(null, '/app'))->toBeFalse()
+        ->and($deepEnough->invoke(null, '/app/root'))->toBeTrue()
+        ->and($deepEnough->invoke(null, 'C:/Users/bob'))->toBeTrue();
+
+    $restore = (string) ini_get('include_path');
+
+    try {
+        ini_set('include_path', '/tmp'.PATH_SEPARATOR.'/opt/php'.PATH_SEPARATOR.'/x');
+        /** @var list<string> $roots */
+        $roots = $machineRoots->invoke(null);
+    } finally {
+        ini_set('include_path', $restore);
+    }
+
+    expect($roots)->toContain('/opt/php')
+        ->and($roots)->not->toContain('/tmp')
+        ->and($roots)->not->toContain('/x');
+
+    foreach ($roots as $root) {
+        expect($deepEnough->invoke(null, $root))->toBeTrue();
+    }
+});

@@ -87,9 +87,13 @@ final readonly class MessagePaths
 
     /**
      * A URL scheme and its separator, as RFC 3986 spells the scheme. It is what tells a wrapper's
-     * tail apart from a path, and it is written ONCE because two readers need it: the pattern, which
-     * declines to open a run on a nested URL, and {@see wrapper()}, which decides whether an opened
-     * run is proof. A guard reading fewer shapes than the fold it protects is a hole.
+     * tail apart from a path, and two readers spell it the same way. The PATTERN is the one that
+     * decides: declining to open a run on a nested URL is what leaves `compress.zlib://http://…`
+     * whole, so no run the matcher produces reaches {@see couldBeAPath()} carrying one. {@see
+     * wrapper()} asks again anyway, because it is the fold's own reader and is called on strings the
+     * matcher never produced — a candidate cut at a space, a run handed straight to {@see resolve()}
+     * — and a second reader that read fewer shapes than the pattern would be a hole rather than a
+     * conservative default.
      */
     private const NESTED_SCHEME = '[A-Za-z][A-Za-z0-9+.\\-]*://';
 
@@ -261,15 +265,10 @@ final readonly class MessagePaths
 
     /**
      * Whether the ladder recognised a root for this path AND the root is deep enough to be a machine
-     * word. Both halves are the same question — is this prefix something only a machine would be
-     * spelling — and this is the one place it is answered, because reason 3 and the exclusions in
-     * front of it must not disagree about which roots count.
-     *
-     * A one-segment root does not, which is the whole reason the depth is measured. `/app` is a
-     * container's checkout and equally a prefix an application mounts routes under, so trusting it
-     * turned `Unknown route /app/users/profile` into `Unknown route users/profile` — a route nobody
-     * wrote, in a diagnostic somebody will act on. Two segments is the line, the one {@see redact()}
-     * draws for the same reason.
+     * word ({@see deepEnoughForAMachine()}). Both halves are the same question — is this prefix
+     * something only a machine would be spelling — and this is the one place it is asked of the
+     * ladder, because reason 3 and the exclusions in front of it must not disagree about which roots
+     * count.
      *
      * What a shallow root loses is only reason 3: the run carries on to reason 4, so a path that
      * names a file still relativises through the same ladder and `/app/src/Foo.php` is unchanged.
@@ -285,8 +284,20 @@ final readonly class MessagePaths
             return false;
         }
 
-        $root = rtrim(substr($path, 0, strlen($path) - strlen($under)), '/');
+        return self::deepEnoughForAMachine(rtrim(substr($path, 0, strlen($path) - strlen($under)), '/'));
+    }
 
+    /**
+     * Whether a prefix is deep enough that only a machine could be spelling it. A one-segment prefix
+     * is not: `/app` is a container's checkout and equally a prefix an application mounts routes
+     * under, so trusting it turned `Unknown route /app/users/profile` into `Unknown route
+     * users/profile` — a route nobody wrote, in a diagnostic somebody will act on — and `/tmp` is a
+     * word our own sentences spell, which is why {@see machineRoots()} will not redact it literally
+     * either. Two segments is the line, and it is drawn once so the ladder's roots and this process's
+     * own cannot come to disagree about it.
+     */
+    private static function deepEnoughForAMachine(string $root): bool
+    {
         return substr_count($root, '/') >= 2;
     }
 
@@ -486,16 +497,10 @@ final readonly class MessagePaths
     private function redact(string $message): string
     {
         foreach ($this->machineRoots as $root) {
-            $message = str_replace($root.'/', '', $message);
-
-            // A bare root, not a prefix of anything: only where it is deep enough that no sentence of
-            // ours could be spelling it, so `/tmp` in prose survives and an install prefix does not.
-            // TWO segments is that line, not three: PHP's failed-include tail names every entry BARE,
-            // so a three-segment threshold published a two-segment prefix (`/opt/php`) whole while
-            // hiding a deeper one — the same code emitting different bytes for the machine it ran on.
-            if (substr_count($root, '/') >= 2) {
-                $message = str_replace($root, '', $message);
-            }
+            // Both forms: PHP's failed-include tail names every entry BARE as well as using it as a
+            // prefix. Which prefixes may go at all is decided in {@see machineRoots()}, by the same
+            // depth the ladder's roots answer to.
+            $message = str_replace([$root.'/', $root], '', $message);
         }
 
         return $message;
@@ -515,7 +520,9 @@ final readonly class MessagePaths
         foreach ($roots as $root) {
             $root = rtrim(str_replace('\\', '/', trim($root)), '/');
 
-            if ($root !== '' && str_starts_with($root, '/') && str_contains(substr($root, 1), '/')) {
+            // Redaction is a literal replace with nothing to tell a machine word from a sentence of
+            // ours, so only a prefix deep enough to be one gets in at all.
+            if (str_starts_with($root, '/') && self::deepEnoughForAMachine($root)) {
                 $absolute[$root] = strlen($root);
             }
         }
