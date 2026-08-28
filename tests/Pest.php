@@ -11,20 +11,26 @@ use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
+use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Extensions\BuiltIn\DefaultTypeMappers;
+use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
+use Docuccino\Core\Extensions\Context\RouteContext;
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
 use Docuccino\Core\Extensions\Document\UirDocumentDraft;
+use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Extensions\Schema\SchemaConverter;
 use Docuccino\Core\Extensions\Validation\DefaultValidationRulesToSchema;
 use Docuccino\Core\Extensions\Validation\RuleSet;
 use Docuccino\Core\Inference\ActionAnalysis;
+use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ClassT;
@@ -44,6 +50,7 @@ use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Extensions\AttributeParametersExtension;
 use Docuccino\Laravel\Integrations\QueryBuilder\ListValueDescriber;
 use Docuccino\Laravel\Integrations\SpatieData\DataSchema;
 use Docuccino\Laravel\Integrations\SpatieData\WrapResolver;
@@ -256,6 +263,63 @@ function almanacDescriber(): ListValueDescriber
         new PropertyMetadata('title', new UnknownT('test'), 'The almanac\'s display title.'),
         new PropertyMetadata('issued_at', new UnknownT('test')),
     ]));
+}
+
+/**
+ * Run {@see AttributeParametersExtension} over a set of parameter attributes and index what it froze by
+ * name. `$seed` writes whatever a lower layer is meant to have recovered first, so a test can ask what
+ * the attribute layer does ON TOP of an integration rather than only what it mints from nothing.
+ *
+ * @param  list<object>  $attributes
+ * @return array<string, array<string, mixed>>
+ */
+function attributeParameters(array $attributes, ?callable $seed = null): array
+{
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/things/{thing}'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet($attributes),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions(
+            typeToSchema: DefaultTypeMappers::all(),
+        ),
+        // The template's own segment, which the builder fills in for a real route: a `#[PathParameter]`
+        // is only applied where the URI has somewhere to put it.
+        pathParameters: ['thing'],
+    );
+
+    $operation = new OperationDraft;
+    if ($seed !== null) {
+        $seed($operation);
+    }
+    (new AttributeParametersExtension)->handle($operation, $context);
+
+    $byName = [];
+    foreach ($operation->freeze()->parameters as $parameter) {
+        $byName[$parameter->name] = $parameter->toArray();
+    }
+
+    return $byName;
+}
+
+/**
+ * Seeds a `filter` deepObject container onto an operation the way the Query Builder integration recovers
+ * one, with `status` already on the schema's `required` list — the standing fact a bracketed
+ * `#[QueryParameter('filter[...]')]` is then measured against.
+ */
+function deepObjectFilterContainer(OperationDraft $operation): void
+{
+    (new QueryParameterSpec(
+        name: 'filter',
+        schema: [
+            'type' => 'object',
+            'properties' => ['status' => ['type' => 'string'], 'since' => ['type' => 'string']],
+            'required' => ['status'],
+        ],
+        style: 'deepObject',
+        explode: true,
+    ))->applyTo($operation->parameter('query', 'filter'), Contribution::integration('query-builder'));
 }
 
 /**

@@ -9,6 +9,8 @@ use Attribute;
 /**
  * Documents a cookie parameter (patching or adding one). Repeatable; usable on controllers,
  * actions and closure routes.
+ *
+ * `$required` is three-valued — see {@see QueryParameter}.
  */
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 final readonly class CookieParameter
@@ -18,7 +20,7 @@ final readonly class CookieParameter
         public ?string $type = null,
         public ?string $description = null,
         public ?string $format = null,
-        public bool $required = false,
+        public ?bool $required = null,
         public mixed $example = null,
     ) {}
 }

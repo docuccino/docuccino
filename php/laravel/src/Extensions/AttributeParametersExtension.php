@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
 use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Patch\Remove;
 use Docuccino\Core\TypeGrammar\TypeStringParser;
 use Docuccino\Laravel\Support\UnmatchedDeclaration;
 
@@ -29,8 +30,8 @@ use Docuccino\Laravel\Support\UnmatchedDeclaration;
  *
  * A bracketed name (`#[QueryParameter('filter[status]')]`) patches the matching property of a
  * deepObject container parameter when one exists — type/description/format/example/default onto the
- * property schema, `required` onto the container's `required` list — so the deepObject and flat bracketed
- * representations behave identically. With no such container it patches a flat `filter[status]`
+ * property schema, a stated `required` onto or off the container's `required` list — so the deepObject
+ * and flat bracketed representations behave identically. With no such container it patches a flat `filter[status]`
  * parameter instead. Both create the member if it's missing.
  */
 final class AttributeParametersExtension implements OperationExtension
@@ -47,7 +48,7 @@ final class AttributeParametersExtension implements OperationExtension
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
         // Accumulate per container and write the `required` list once — a second equal-layer write
-        // would shadow rather than append.
+        // would shadow rather than append. A later declaration of one child wins over an earlier one.
         $deepRequired = [];
         foreach ($context->attributes->all(QueryParameter::class) as $attribute) {
             $property = $this->deepObjectProperty($operation, $attribute->name);
@@ -60,8 +61,8 @@ final class AttributeParametersExtension implements OperationExtension
 
             [$parentName, $childName, $schema] = $property;
             $this->applyToProperty($schema, $context, $attribute->type, $attribute->description, $attribute->format, $attribute->default, $attribute->example);
-            if ($attribute->required) {
-                $deepRequired[$parentName][] = $childName;
+            if ($attribute->required !== null) {
+                $deepRequired[$parentName][$childName] = $attribute->required;
             }
         }
         $this->applyDeepRequired($operation, $context, $deepRequired);
@@ -130,12 +131,15 @@ final class AttributeParametersExtension implements OperationExtension
         ?string $type,
         ?string $description,
         ?string $format,
-        bool $required,
+        ?bool $required,
         mixed $default,
         mixed $example,
     ): void {
         $contribution = Contribution::attribute($context->actionSource());
 
+        // A null `required` is the absent argument, and the guard reads null as "not specified": a
+        // declaration written to document a type must not de-require a parameter an integration
+        // proved. A written `false` is the author's own statement and outranks that recovery.
         $parameter->setRequired($required, $contribution);
         $parameter->setDescription($description, $contribution);
 
@@ -212,10 +216,12 @@ final class AttributeParametersExtension implements OperationExtension
     }
 
     /**
-     * Merges each container's required child names into its schema's `required` list, once per
-     * container: an equal-layer rewrite would shadow, not merge.
+     * Merges each container's stated child requirements into its schema's `required` list, once per
+     * container: an equal-layer rewrite would shadow, not merge. Only the children a declaration spoke
+     * about reach here — a `true` joins the list, a `false` leaves it — so the ones nobody mentioned
+     * keep whatever the integration recovered, in the order it recovered them.
      *
-     * @param  array<string, list<string>>  $deepRequired
+     * @param  array<string, array<string, bool>>  $deepRequired
      */
     private function applyDeepRequired(OperationDraft $operation, RouteContext $context, array $deepRequired): void
     {
@@ -223,9 +229,19 @@ final class AttributeParametersExtension implements OperationExtension
             $schema = $operation->parameter('query', $parent)->schema();
             $existing = $schema->resolvedField('required') ?? [];
             $existingNames = is_array($existing) ? array_values(array_filter($existing, 'is_string')) : [];
-            $merged = array_values(array_unique([...$existingNames, ...$children]));
 
-            $schema->set('required', $merged, Contribution::attribute($context->actionSource()));
+            $added = array_keys(array_filter($children));
+            $merged = array_values(array_unique([...$existingNames, ...$added]));
+            $merged = array_values(array_filter($merged, static fn (string $each): bool => $children[$each] ?? true));
+
+            if ($merged === $existingNames) {
+                continue;
+            }
+
+            // Emptied rather than emptied-out: every other producer of a `required` list omits the
+            // keyword when it has no members, so a declaration that takes the last one off owes the
+            // same shape — and only the removal sentinel reaches "absent" through the guard.
+            $schema->set('required', $merged === [] ? Remove::value() : $merged, Contribution::attribute($context->actionSource()));
         }
     }
 }

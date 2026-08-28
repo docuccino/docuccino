@@ -165,7 +165,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $format = null,
-    public bool $required = false,
+    public ?bool $required = null,
     public mixed $default = null,
     public mixed $example = null,
 )
@@ -176,6 +176,13 @@ public function __construct(
 #[QueryParameter(name: 'from', type: 'string', format: 'date-time', description: 'Only items created after this moment.')]
 public function index(): AnonymousResourceCollection { /* … */ }
 ```
+
+`required` is three-valued, here and on `#[HeaderParameter]` and `#[CookieParameter]`. `required: true`
+says the server insists on the parameter and `required: false` says it does not — the declaration wins
+over whatever a package integration worked out. Leaving it off is neither: it says nothing, so a
+parameter an integration already proved required stays required. That is why the argument is `?bool` —
+a declaration written to document a `type:` must not quietly de-require a parameter the server insists
+on, which would publish a contract a generated client can build a rejected request from.
 
 A bracketed `name` (`filter[status]`) patches a flat `filter[status]` parameter, or — when the
 document uses the `deepObject` filter style — the `status` property of the `filter` object parameter.
@@ -221,7 +228,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $format = null,
-    public bool $required = false,
+    public ?bool $required = null,
     public mixed $example = null,
 )
 ```
@@ -239,7 +246,7 @@ public function __construct(
     public ?string $type = null,
     public ?string $description = null,
     public ?string $format = null,
-    public bool $required = false,
+    public ?bool $required = null,
     public mixed $example = null,
 )
 ```
