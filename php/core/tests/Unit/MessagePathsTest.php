@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Provenance\MessagePaths;
+use Docuccino\Core\Provenance\PublishableText;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Provenance\SourcePathResolver;
 
@@ -869,4 +870,40 @@ it('consumes at least one character of every run it refuses, so the pass termina
     expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
         ->toEndWith('plus app/X.php')
         ->toContain('/api/x/{a} and /api/x/{a}');
+});
+
+it('gives up a message it could not check rather than publishing it unchecked', function (): void {
+    // The guard executed. `preg_replace_callback` answers null on a PCRE resource limit rather than
+    // throwing, and handing the ORIGINAL back there publishes every machine path in it — a
+    // determinism defect produced by the one pass that exists to prevent one, and reachable on
+    // ordinary path-shaped text well under any size a reader would call unusual. So the refusal is
+    // total: a fixed sentence, identical on every machine.
+    $restore = (string) ini_get('pcre.backtrack_limit');
+
+    try {
+        ini_set('pcre.backtrack_limit', '1');
+        $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))
+            ->relative('Could not open /app/root/app/Secret.php');
+    } finally {
+        ini_set('pcre.backtrack_limit', $restore);
+    }
+
+    expect($scrubbed)->not->toContain('/app/root/app/Secret.php')
+        ->and($scrubbed)->toBe(PublishableText::REFUSED);
+});
+
+it('reads only as much of a message as it can check, and says where it stopped', function (): void {
+    // The bound, and why it is not decoration: one over-long run used to poison the WHOLE message,
+    // so every other path in it was published raw too. A message this long is past anything the
+    // product has ever been handed, and past what the reduction can answer in a sensible time.
+    $paths = new MessagePaths(new RootRelativeSourcePathResolver('/app/root'));
+    $long = 'in /'.str_repeat('seg/', 2048).'file.php and /app/root/app/Secret.php';
+    $scrubbed = $paths->relative($long);
+
+    expect(strlen($long))->toBeGreaterThan(PublishableText::MAX_BYTES)
+        ->and($scrubbed)->not->toContain('/app/root/app/Secret.php')
+        ->and($scrubbed)->toEndWith('…')
+        ->and(strlen($scrubbed))->toBeLessThanOrEqual(PublishableText::MAX_BYTES + 3)
+        // And a message of the size that actually arrives is untouched by the bound.
+        ->and($paths->relative('Could not open /app/root/app/X.php'))->toBe('Could not open app/X.php');
 });

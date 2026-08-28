@@ -165,17 +165,19 @@ final readonly class MessagePaths
 
     public function relative(string $message): string
     {
-        return $this->redact($this->scrub($this->classNames->inText($message)));
+        // Bounded again after the class-name pass, which is the one thing here that can make the text
+        // longer than it arrived: what the run pass reads is what {@see PublishableText} allows.
+        return $this->redact($this->scrub(PublishableText::bounded($this->classNames->inText($message))));
     }
 
     /** The run pass. Recurses on the tail of a match, which is always strictly shorter. */
     private function scrub(string $text): string
     {
-        return preg_replace_callback(
+        return PublishableText::orRefused(preg_replace_callback(
             $this->run,
             fn (array $match): string => $this->rewrite($match[0]),
             $text,
-        ) ?? $text;
+        ));
     }
 
     private function rewrite(string $match): string
