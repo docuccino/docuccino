@@ -60,7 +60,6 @@ final class ExampleAudit
 
         foreach ($this->sites() as $site) {
             [$exampleSegments, $schemaSegments, $label] = $site;
-            $checked++;
 
             $value = Pointer::readGraph($this->index->graph(), $exampleSegments);
 
@@ -76,6 +75,11 @@ final class ExampleAudit
 
                 continue;
             }
+
+            // Counted here rather than at the top of the loop: an example the validator refused is one
+            // the audit knows nothing about, and counting it as checked makes the report read as having
+            // proved more than it did.
+            $checked++;
 
             if ($violations !== []) {
                 $findings[] = new ExampleFinding(Pointer::of($exampleSegments), $label, $violations);

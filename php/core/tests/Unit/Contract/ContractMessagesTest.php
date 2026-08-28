@@ -104,6 +104,29 @@ it('agrees the verb with how many lied, not with how many it checked', function 
         ->toContain('2 of 3 documented examples do not match the schema beside them.');
 });
 
+it('names the examples nobody could check, rather than leaving them out of the count and the message', function (): void {
+    // A refused schema is not a passing example. Dropping it from both the denominator and the body is
+    // how a report comes to claim more than it proved.
+    $report = (new ExampleAudit(contractIndex(static function (array $document): array {
+        $document['components']['schemas']['Invoice']['properties']['total']['example'] = 'lots';
+        $document['components']['schemas']['Invoice']['properties']['ref'] = [
+            'type' => 'object',
+            'additionalProperties' => ['first_name'],
+            'example' => ['first_name' => 'Ada'],
+        ];
+
+        return $document;
+    })))->run();
+
+    expect($report->uncheckable)->toHaveCount(1)
+        ->and(ContractMessages::examples($report))
+        ->toContain('1 of 3 documented examples does not match the schema beside it.')
+        ->toContain('1 more could not be checked at all')
+        ->toContain('at /components/schemas/Invoice/properties/ref/example')
+        ->toContain('schema   /components/schemas/Invoice/properties/ref')
+        ->toContain('additionalProperties must be a json schema (object or boolean)');
+});
+
 it('renders a breaking changeset the way the diff command does, and adds who wrote it', function (): void {
     $old = loadFixture('contract.uir.json');
     $new = $old;

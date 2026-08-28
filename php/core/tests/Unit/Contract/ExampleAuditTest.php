@@ -235,7 +235,9 @@ it('records a schema the validator will not read instead of throwing, and audits
         ]],
     ])))->run();
 
-    expect($report->checked)->toBe(2)
+    // One of the two sites was refused, so only one was checked: counting the refused one in the
+    // denominator would make the report read as having proved more than it did.
+    expect($report->checked)->toBe(1)
         ->and($report->uncheckable)->toHaveCount(1)
         ->and($report->uncheckable[0]->pointer)->toBe('/components/schemas/Prefill/properties/suggestions/example')
         ->and($report->uncheckable[0]->schemaPointer)->toBe('/components/schemas/Prefill/properties/suggestions')

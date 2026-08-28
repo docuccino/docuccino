@@ -134,11 +134,17 @@ What they hold you to:
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array
   Docuccino documents it as.
 
-## Report the endpoints your suite never touched
+## Report the responses your suite never proved
 
-Every assertion records the operation it matched, keyed by the stable `x-docuccino.id` — never by path
-string, so a renamed route reads as still covered rather than as one endpoint vanishing and another
-appearing.
+Every response assertion records the documented response it matched — the operation's stable
+`x-docuccino.id` and the status that came back. Never a path string, so a renamed route reads as still
+covered rather than as one endpoint vanishing and another appearing.
+
+**Responses, not endpoints.** A documented `422` is a promise of its own: it is what a consumer writes a
+`catch` against, and what their generated client types an error as. A suite that only ever asserts the
+happy path has touched every endpoint and proved none of those promises — so a number counting endpoints
+calls that full coverage, which is exactly the too-generous reading a coverage gate exists to prevent.
+The report prints both numbers and gates on responses.
 
 Coverage is a question about the **whole** suite, and no test can see the whole suite: a parallel worker
 holds its own share, a shard holds its own machine's, and neither can know when the others have
@@ -155,7 +161,7 @@ merges once they are done.
    \Docuccino\Laravel\Testing\ApiContract::recordCoverage();
    ```
 
-   Each process appends the ids it meets to a file of its own under
+   Each process appends what it reached to a file of its own under
    [`coverage.log`](/laravel/reference/configuration/#coverage) — `storage/docuccino/coverage` unless
    you say otherwise. Point it somewhere your repository ignores; the logs are per-run build output.
 
@@ -185,16 +191,36 @@ merges once they are done.
 Coverage — default
 ──────────────────
 /app/storage/docuccino/coverage
-8 log files, 17 ids
+8 log files, 29 entries
 
-Docuccino contract coverage: 17 of 23 documented operations exercised (73.91%, floor 85%).
+Docuccino contract coverage: 29 of 41 documented responses exercised (70.73%, floor 85%).
+21 of 23 documented operations were reached at all — the floor is measured against responses, not operations.
 
 Never exercised:
-  DELETE /api/invoices/{invoice}       op:v1:h4dqx2mrb7ks9tvz
-  POST   /api/invoices/{invoice}/void  op:v1:p6nw3jc8ygf5s0ea
+  GET    /api/invoices                 422            op:v1:k9wd2mrb7ks9tvzq
+  GET    /api/invoices/{invoice}       404, default   op:v1:h4dqx2mrb7ks9tvz
+  POST   /api/invoices/{invoice}/void  201, 409, 422  op:v1:p6nw3jc8ygf5s0ea
 
-Cover them, or — if this is the honest measured floor for now — move the floor to 73 and ratchet it up from there.
+Cover them, or — if this is the honest measured floor for now — move the floor to 70 and ratchet it up from there.
 ```
+
+The middle column is the statuses that operation documents and your suite never produced, in the
+document's own order. An operation appears here as soon as one of its responses is unproved, so an
+endpoint whose happy path is covered and whose errors are not is listed with its errors named — that is
+the gap the number is about.
+
+Every documented response counts as one, including a `204` documented with no body and a `default`
+error response: both are promises a client can be handed. An operation that documents no responses at
+all has no status to name, so it reads `(no responses documented)` and counts once — as "was it ever
+reached".
+
+The one thing that counts nowhere is a response key no status can resolve to — `4xx` in lower case
+where OpenAPI spells the range `4XX`, or a word like `ok`. Nothing can ever produce a response that
+matches it, so counting it would put `--min=100` permanently out of reach. The report names each one
+under the numbers rather than dropping it quietly, because a short denominator with no explanation is
+worse than the key was. An operation whose response keys are *all* unreachable reads
+`(no response a status can name)` rather than `(no responses documented)` — it documented responses;
+none of them can be met.
 
 Logs accumulate until something clears them, which is what the `--reset` in the recipe is for: skip it
 and the report unions this run with every earlier one, reading more generous than the truth. If the logs
@@ -202,7 +228,19 @@ it merged were written far enough apart to be more than one run, the report says
 
 Treat the floor the way you treat a line-coverage floor: set it to what you measure today, and raise it
 as you close gaps. A floor you cannot meet is a floor somebody deletes. `--min=100` is "every documented
-operation".
+response".
+
+<Aside type="note" title="Only a response that was checked and agreed counts">
+A response counts when the assertion actually looked at it and it matched. `assertValidRequest()`
+checks what your test sent and nothing that came back, and an assertion that FAILED has proved the
+response does *not* keep the promise — either way the operation is credited as reached and none of its
+responses. Use `assertValidResponse()` or `assertValidExchange()`, and let it pass, for a response to
+count. A pass that could not check the body — a `text/csv` response, a media type your document gives
+no schema — does count: the exchange happened, and no assertion you could write would close a gap
+that is in the document. Logs written by a Docuccino older than the response-granular report read the
+same way: every operation reached, no response proved — so an old log can only ever read lower than the
+truth, never higher. `--reset` before the run clears them.
+</Aside>
 
 ### Sharded CI
 
@@ -241,10 +279,10 @@ token — never overwrite each other.
 
 <Aside type="caution" title="An incomplete merge never produces a number">
 A directory it cannot read — absent, or there and refusing to open, at the top of a named path or nested
-anywhere under one — a directory holding no log, and a file that doesn't read back as ids each fail the
-command with the path named, *before* any percentage is printed. A gate that quietly measured three of
-four shards is worse than no gate — so the answer is "these logs are missing", never a number computed
-from the ones that happened to arrive.
+anywhere under one — a directory holding no log, and a file that doesn't read back as coverage entries
+each fail the command with the path named, *before* any percentage is printed. A gate that quietly
+measured three of four shards is worse than no gate — so the answer is "these logs are missing", never a
+number computed from the ones that happened to arrive.
 
 The one thing it cannot see is a directory you never named, which is why the recipe above names each
 shard rather than the tree they land in.
@@ -265,6 +303,10 @@ it('publishes examples that are actually valid', function () {
 Every example in the document goes through the same validator the response assertions use: response
 content, request bodies, parameters, named `examples` maps, and examples nested anywhere inside a
 component schema.
+
+The count is the examples the validator actually judged. One it refused to judge — a schema no validator
+will read — is not a passing example, so it is kept out of that number and named separately at the foot
+of the failure, alongside what the validator objected to.
 
 ```text
 1 of 34 documented examples does not match the schema beside it.
@@ -301,7 +343,7 @@ payloads](/laravel/documenting/examples/#examples-your-tests-recorded).
 
 Recording survives `--parallel` too, and differently: a recording is one operation's, and the best body
 for it is a total order on the bodies themselves — so workers take turns on a lock rather than writing
-files nobody has to reconcile, as [coverage](#report-the-endpoints-your-suite-never-touched) does.
+files nobody has to reconcile, as [coverage](#report-the-responses-your-suite-never-proved) does.
 
 ## Gate breaking changes
 

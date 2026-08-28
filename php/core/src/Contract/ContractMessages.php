@@ -117,6 +117,26 @@ final class ContractMessages
             }
         }
 
+        // An example nobody could check is not a passing example, and leaving it out of the message
+        // entirely is how a report comes to claim more than it proved.
+        if ($report->uncheckable !== []) {
+            $lines[] = '';
+            $lines[] = sprintf(
+                '%d more could not be checked at all — the validator refused the schema beside %s, so this says nothing about %s either way.',
+                count($report->uncheckable),
+                count($report->uncheckable) === 1 ? 'it' : 'them',
+                count($report->uncheckable) === 1 ? 'it' : 'them',
+            );
+
+            foreach ($report->uncheckable as $uncheckable) {
+                $lines[] = '';
+                $lines[] = '  '.PlainText::of($uncheckable->label);
+                $lines[] = '    at '.PlainText::of($uncheckable->pointer);
+                $lines[] = '      '.PlainText::of($uncheckable->reason);
+                $lines[] = '      schema   '.PlainText::of($uncheckable->schemaPointer);
+            }
+        }
+
         return implode("\n", $lines);
     }
 

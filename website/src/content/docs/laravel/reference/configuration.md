@@ -281,13 +281,14 @@ and reviewed.
 
 Where the contract-coverage recorder writes what your test suite exercised, and where
 [`docuccino:coverage`](/laravel/reference/commands/#docuccinocoverage) reads it back. Each process
-writing — a single test run, one of twenty parallel workers, one of four shards — appends the operation
-ids it met to a file of its own; the command unions them after the run and gates on the percentage.
+writing — a single test run, one of twenty parallel workers, one of four shards — appends the documented
+responses it exercised to a file of its own; the command unions them after the run and gates on the
+percentage.
 
 Nothing in the build reads this. It is a config key rather than an argument at the call site because
 the suite writing and the command gating have to arrive at the same directory. Point it somewhere your
 repository ignores: the logs are per-run build output, not something to commit. See [Contract
-testing](/laravel/guides/contract-testing/#report-the-endpoints-your-suite-never-touched).
+testing](/laravel/guides/contract-testing/#report-the-responses-your-suite-never-proved).
 
 ### `overlays`
 
