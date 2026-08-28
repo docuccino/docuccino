@@ -73,10 +73,7 @@ final class ContractChecker
         [$body, $segments, $dangling] = $documented;
 
         if ($dangling !== null) {
-            return Outcome::failed([Violation::ofExchange(sprintf(
-                'is documented at %s, which the contract does not define',
-                $dangling,
-            ), 'the delivered body')]);
+            return Outcome::failed([Violation::unresolvedRef($dangling, 'the delivered body')]);
         }
 
         $content = $body['content'] ?? null;
@@ -129,10 +126,7 @@ final class ContractChecker
         [$response, $segments, $dangling] = $documented;
 
         if ($dangling !== null) {
-            return Outcome::failed([Violation::ofExchange(sprintf(
-                'is documented at %s, which the contract does not define',
-                $dangling,
-            ))]);
+            return Outcome::failed([Violation::unresolvedRef($dangling)]);
         }
 
         $headers = $this->responseHeaders($response, $segments, $exchange);
@@ -201,12 +195,10 @@ final class ContractChecker
         // pass. A document that points nowhere is broken, not uncheckable, so it fails naming the
         // pointer.
         if ($parameter->danglingRef !== null) {
-            return [[new Violation(
-                location: $parameter->label(),
-                pointer: '',
-                message: sprintf('is documented at %s, which the contract does not define', $parameter->danglingRef),
-                schemaPointer: Pointer::of($parameter->segments),
-                provenance: ProvenanceTrail::none(),
+            return [[Violation::unresolvedRef(
+                $parameter->danglingRef,
+                $parameter->label(),
+                Pointer::of($parameter->segments),
             )], null];
         }
 
@@ -355,10 +347,7 @@ final class ContractChecker
         [$body, $segments, $dangling] = $documented;
 
         if ($dangling !== null) {
-            return Outcome::failed([Violation::ofExchange(sprintf(
-                'is documented at %s, which the contract does not define',
-                $dangling,
-            ), 'the request body')]);
+            return Outcome::failed([Violation::unresolvedRef($dangling, 'the request body')]);
         }
 
         if (trim($exchange->requestBody) === '') {

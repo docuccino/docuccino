@@ -232,8 +232,9 @@ final class ExampleAudit
     }
 
     /**
-     * A reference the document does not define, in the words {@see ContractChecker} already uses for it —
-     * one product, one sentence for one defect.
+     * A reference the document does not define. The sentence is {@see Violation::unresolvedRef()}'s,
+     * which is where {@see ContractChecker} draws it from too — one product, one sentence for one
+     * defect, minted rather than copied.
      *
      * @param  list<string>  $segments  where the reference stands
      */
@@ -242,7 +243,7 @@ final class ExampleAudit
         return new ExampleFinding(
             Pointer::of($segments),
             $label,
-            [Violation::ofExchange(sprintf('is documented at %s, which the contract does not define', $reference), $location)],
+            [Violation::unresolvedRef($reference, $location)],
             brokenRef: $reference,
         );
     }
