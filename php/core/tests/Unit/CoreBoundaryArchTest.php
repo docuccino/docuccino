@@ -13,6 +13,7 @@ declare(strict_types=1);
  * the build.
  */
 use Docuccino\Core\Contract\ContractIndex;
+use Docuccino\Core\Extensions\Validation\ValidationField;
 
 arch('core never depends on the Laravel framework')
     ->expect('Docuccino\Core')
@@ -148,6 +149,47 @@ it('freezes the contract index at the methods outside core actually call', funct
         'provenanceOf',
         'supportsWebhooks',
         'webhooksNamed',
+    ]);
+});
+
+/**
+ * The same freeze over the one façade a THIRD-PARTY rule transformer is handed. Every method here is a
+ * v1 promise the moment it ships, and the cost of one that should not have been made is paid by an
+ * extension author, not by us: `type()` answered a field's type with a single word and null where it
+ * carried several, so three separate readers published a claim about a union they could not see.
+ *
+ * The list is the DECISION and reflection is the source of truth, so a method added without a line
+ * here fails rather than shipping as a promise — and one removed has to be removed here too, which is
+ * where a breaking change stops being silent.
+ */
+it('freezes the rule-transformer field façade at the methods it means to promise', function (): void {
+    $public = [];
+    foreach ((new ReflectionClass(ValidationField::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+        if ($method->getName() !== '__construct' && ! str_contains((string) $method->getDocComment(), '@internal')) {
+            $public[] = $method->getName();
+        }
+    }
+
+    sort($public);
+
+    expect($public)->toBe([
+        'get',
+        'has',
+        'isRequired',
+        'markMultipart',
+        'markNullable',
+        'markOptional',
+        'markRequired',
+        'markSometimes',
+        'mayClaim',
+        'path',
+        'proposeExample',
+        'remove',
+        'set',
+        'setType',
+        'setTypes',
+        'sibling',
+        'types',
     ]);
 });
 
