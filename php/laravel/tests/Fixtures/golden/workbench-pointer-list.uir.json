@@ -2999,8 +2999,7 @@
                   "producer": "attribute",
                   "layer": "attribute",
                   "fields": [
-                    "description",
-                    "required"
+                    "description"
                   ],
                   "source": {
                     "file": "workbench/app/Http/Controllers/WidgetController.php",
@@ -3013,7 +3012,6 @@
             "name": "dry_run",
             "in": "query",
             "description": "Validate without persisting.",
-            "required": false,
             "schema": {
               "x-docuccino": {
                 "provenance": [
@@ -3741,7 +3739,7 @@
     "document": {
       "id": "doc:pointer-list",
       "configHash": "c2031d269636acf4896f5dd1727aa5058a1a0ea6e4bdc311db55e098ce7d1d7e",
-      "contentHash": "122bbcf8ba902c0492819d796f832bfb734450e1dbd676631d3b66466f79ccc2"
+      "contentHash": "26b3666201dbaa060fef098942b1a9de06eff960a1e667ff617a4b0f49aa41f8"
     },
     "generator": {
       "name": "docuccino/laravel",
