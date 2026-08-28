@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Pipeline;
 
+use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Lint\LintOperation;
@@ -51,7 +52,7 @@ final class SecurityAudit
                     continue;
                 }
 
-                $declared = self::declaredScopes($schemes[$name]);
+                $declared = self::declaredScopes($document, $name, $schemes[$name]);
                 if ($declared === null) {
                     continue;
                 }
@@ -83,7 +84,7 @@ final class SecurityAudit
                 severity: Severity::Warning,
                 code: 'security.undeclared-scope',
                 message: sprintf('%s asks for the scope "%s" against the OAuth2 scheme "%s", whose flows declare no such scope, so the document contradicts itself and a client asking for it would be refused a token.', $site, $scope, $name),
-                help: sprintf('Declare it under that scheme\'s flows.*.scopes, or ask for one it offers%s.', self::listed(self::declaredScopes($schemes[$name]) ?? [])),
+                help: sprintf('Declare it under that scheme\'s flows.*.scopes, or ask for one it offers%s.', self::listed(self::declaredScopes($document, $name, $schemes[$name]) ?? [])),
             );
         }
 
@@ -163,11 +164,22 @@ final class SecurityAudit
      * names that are "not otherwise defined or exchanged in-band" — checking either would be inventing a
      * rule the spec does not have.
      *
+     * The catalogue entry may be a Reference Object, which the grammar permits wherever a Security Scheme
+     * Object is written, so it is followed first: read raw, a hoisted `oauth2` scheme has no `type` on the
+     * node and every scope check under it was skipped in silence.
+     *
+     * @param  array<string, mixed>  $document
      * @return list<string>|null
      */
-    private static function declaredScopes(mixed $scheme): ?array
+    private static function declaredScopes(array $document, string $name, mixed $scheme): ?array
     {
-        if (! is_array($scheme) || ($scheme['type'] ?? null) !== 'oauth2' || ! is_array($scheme['flows'] ?? null)) {
+        if (! is_array($scheme)) {
+            return null;
+        }
+
+        [$scheme] = Refs::follow($document, Arr::stringKeyed($scheme), ['components', 'securitySchemes', $name]);
+
+        if (($scheme['type'] ?? null) !== 'oauth2' || ! is_array($scheme['flows'] ?? null)) {
             return null;
         }
 
