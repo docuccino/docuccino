@@ -355,6 +355,16 @@ class Customer extends Model {}
 public string $internalRiskScore;
 ```
 
+A name that matches no property the schema publishes hides nothing and says so
+([`attribute.hidden-unmatched`](/laravel/reference/diagnostics/#attributes)), listing what the schema
+does publish so the typo is visible beside it — a subtraction leaves no evidence, so without that report
+a name gone stale through a rename looks exactly like one that worked, while the field it was written to
+keep out is published under the new spelling. The property form has no name to get wrong, and so cannot
+miss. It is not raised for an Eloquent **model**: a model's documented columns are recovered from
+`@property` tags, `$casts` and `$fillable` rather than declared, so a name outside them is far more
+often a column nobody documented than a name anybody typed wrong — and deleting the deny-list entry
+would be the one action that leaks the column the day somebody adds the tag.
+
 `#[Hidden]` affects the **output** schema only. A property that is hidden from responses but still
 accepted in the request is intentional (and the data-leakage lint surfaces it) — to drop a property
 from the documented **request** body, use `#[HiddenFromRequest]` below.
