@@ -7,10 +7,11 @@ User-facing changes to `docuccino/laravel` — features, fixes, performance work
 taken from the commit messages scoped `laravel`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
-## v0.11.1
+## v0.12.0
 
 ### Bug fixes
 
+- report an ignore that dropped nothing instead of accepting it silently
 - keep a requirement a body declaration says nothing about
 - silence the container notice only where a declaration settles it
 - credit a webhook delivery for what the check proved

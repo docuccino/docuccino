@@ -13,10 +13,19 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
-## v0.11.1
+## v0.12.0
+
+### Breaking changes
+
+- **core**: tell an absent answer from an answer nobody can read
+  - ContractParameter::schema() returns a ParameterSchema rather than an array or null, and ContractParameter::hasSchema() is gone — the fact it stood in for is the kind on the returned value. Exchange::$headers is array<string, list<string>> and Exchange::header() returns a list, matching the response half; an adapter that passed one string per name passes a one-element list.
+- **core**: drop ValidationField::type(), which answers a union with null
+  - `ValidationField::type()` is removed from the rule-transformer surface a third-party `RuleTransformer` is handed. Use `types(): list<string>`, which answers every type word the field carries: one for a scalar type, several for a union, none where nothing has typed it yet. Null is never among the words — nullability is a flag the schema applies as it assembles, so a rule running after `nullable` still reads what the field is. `count($types) === 1 ? $types[0] : null` restores the old answer exactly, and restores the defect with it: branch on the words instead — `$types === []` is "nothing has typed this", and a field stating several is a case to handle, not one to fall through.
 
 ### Bug fixes
 
+- **repo**: restore the entries a squashed stack took out of v0.11.0's changelog
+- **laravel**: report an ignore that dropped nothing instead of accepting it silently
 - **laravel**: keep a requirement a body declaration says nothing about
 - **laravel**: silence the container notice only where a declaration settles it
 - **laravel**: credit a webhook delivery for what the check proved

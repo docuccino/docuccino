@@ -7,7 +7,14 @@ User-facing changes to `docuccino/core` — features, fixes, performance work an
 taken from the commit messages scoped `core`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
-## v0.11.1
+## v0.12.0
+
+### Breaking changes
+
+- tell an absent answer from an answer nobody can read
+  - ContractParameter::schema() returns a ParameterSchema rather than an array or null, and ContractParameter::hasSchema() is gone — the fact it stood in for is the kind on the returned value. Exchange::$headers is array<string, list<string>> and Exchange::header() returns a list, matching the response half; an adapter that passed one string per name passes a one-element list.
+- drop ValidationField::type(), which answers a union with null
+  - `ValidationField::type()` is removed from the rule-transformer surface a third-party `RuleTransformer` is handed. Use `types(): list<string>`, which answers every type word the field carries: one for a scalar type, several for a union, none where nothing has typed it yet. Null is never among the words — nullability is a flag the schema applies as it assembles, so a rule running after `nullable` still reads what the field is. `count($types) === 1 ? $types[0] : null` restores the old answer exactly, and restores the defect with it: branch on the words instead — `$types === []` is "nothing has typed this", and a field stating several is a case to handle, not one to fall through.
 
 ### Bug fixes
 
