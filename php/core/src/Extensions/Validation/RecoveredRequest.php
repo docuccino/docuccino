@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Schema\ClassAnnotations;
+use Docuccino\Core\Extensions\Schema\ClassDeclarations;
 use Docuccino\Core\Extensions\Schema\DeclarationFiles;
 use Docuccino\Core\Extensions\Schema\DocumentedDescriptions;
 use Docuccino\Core\Extensions\Schema\DocumentedExamples;
@@ -20,8 +21,6 @@ use Docuccino\Core\Inference\ClassRef;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Provenance\ClassNames;
 use Docuccino\Core\Support\Fqcn;
-use ReflectionClass;
-use Throwable;
 
 /**
  * Applies a {@see ValidationSchema} to an operation the one way every request-schema source shares:
@@ -175,14 +174,14 @@ final class RecoveredRequest
      *   this reads for is a declaration on a class the bag never sees, which is exactly a source class
      *   that is not the action.
      *
-     * The class's OWN declarations only, as {@see ClassAnnotations} reads its own: PHP does not inherit
-     * class attributes, and a base DTO's declaration describes the base.
+     * What it reads on the class is {@see ClassDeclarations}'s: the class's own declarations, and
+     * silence for one whose constructor rejects its arguments.
      *
      * @return list<BodyParameter>
      */
     public static function declaredOn(?string $sourceClass, RouteContext $context): array
     {
-        if ($sourceClass === null || ! class_exists($sourceClass) || ! self::documentsBody($context)) {
+        if ($sourceClass === null || ! self::documentsBody($context)) {
             return [];
         }
 
@@ -190,17 +189,7 @@ final class RecoveredRequest
             return [];
         }
 
-        $declarations = [];
-        foreach ((new ReflectionClass($sourceClass))->getAttributes(BodyParameter::class) as $declaration) {
-            try {
-                $declarations[] = $declaration->newInstance();
-            } catch (Throwable) {
-                // An argument the constructor rejects is the adapter's `attribute.unreadable` story on an
-                // action; here there is no route bag that collected it, so it simply says nothing.
-            }
-        }
-
-        return $declarations;
+        return ClassDeclarations::of($sourceClass, BodyParameter::class);
     }
 
     /**
