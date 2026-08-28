@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * serialises as — `relationsToArray()` snake-cases only after `getArrayableItems()` has run — so
  * `strong_room` in `$hidden` hides nothing and its relation still serialises.
  *
+ * The class-level `#[Hidden]` subtracts alongside `$hidden`, and here it names a third append.
+ *
  * @property int $id The strongbox id.
  * @property string $label The strongbox label.
  * @property string $combination The combination — hidden.
@@ -46,6 +48,12 @@ final class Strongbox extends Model
      * @var list<string>
      */
     protected $with = ['auditTrail', 'strongRoom', 'keeper'];
+
+    /** The appended accessor the class-level `#[Hidden]` keeps out of the payload. */
+    public function getDisplayNameAttribute(): string
+    {
+        return ucfirst($this->label);
+    }
 
     /** The append that survives the deny-list. */
     public function getPublicNoteAttribute(): string
