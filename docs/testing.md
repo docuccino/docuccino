@@ -222,18 +222,19 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-19)
+## Measured coverage (2026-08-28)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
-floors are set from — measure, then set the floor to the measured integer.
+floors are set from — measure, then set the floor to the measured integer, unless the measured integer
+would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.09%** | 96    | fully in-process-measurable                      |
-| `laravel`           | **95.76%** | 95    | fully in-process-measurable                      |
+| `core`              | **97.51%** | 97    | fully in-process-measurable                      |
+| `laravel`           | **96.00%** | 95    | 96 would leave 0.0035pp — four tenths of a statement |
 | `inference-phpstan` | **44.98%** | 44    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 90.48%     | —     | informational only; no longer a gate             |
+| Overall             | 92.41%     | —     | informational only; no longer a gate             |
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,
@@ -277,7 +278,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **95**, `laravel` **94**, `inference-phpstan` **40**.
+  an aspiration. Current floors: `core` **97**, `laravel` **95**, `inference-phpstan` **44**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
@@ -291,6 +292,12 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   - When a package's coverage rises, **raise that package's floor** in
     `tools/coverage-floors.php` to the new measured integer in the same PR. Each floor is a
     monotonic ratchet.
+  - **Stop one short of a hair-trigger.** The measured integer is the target, not an obligation: where
+    it would sit a fraction of a statement below the figure — `laravel` at 96.00%, where a floor of 96
+    leaves four tenths of one statement — take the integer below and record the arithmetic in the
+    floor's comment, then ratchet the run after the figure clears it with a margin. A floor a single
+    uncovered line trips is a gate that fails for reasons unrelated to test quality, which is the same
+    failure mode the per-package split exists to avoid.
   - **Never lower a floor** without a written justification in the pull request that lowers it (e.g.
     a large subprocess-only subsystem landed in that package, or well-covered classes MOVED to another
     package and took the numerator with them). A drop is a reviewed decision, not a quiet CI edit —

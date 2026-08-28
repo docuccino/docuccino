@@ -28,16 +28,15 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 97.09% (10013/10313) — ratcheted 95 → 96, one
-    // short of the measured integer on purpose. 97 would leave 0.09pp, the same hair-trigger that held
-    // this floor at 95 while the figure sat at 96.37%; 96 locks in the gain with a margin the next
-    // change will not trip. The figure has settled upward across two releases, which is what the earlier
-    // note was waiting for.
-    'core' => 96,
+    // phpdoc type grammar, the contract checker. Measured 97.51% (11656/11954) — ratcheted 96 → 97, the
+    // measured integer at last: 97 now leaves 0.51pp, about sixty statements, rather than the 0.09pp
+    // hair-trigger that held this floor one short while the figure sat at 97.09%.
+    'core' => 97,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 95.76% (9387/9803) — ratcheted 94 → 95: the recovered
-    // container, the date ladder and the request-body prose all answer from rules, reflection and
-    // config, which the in-process suites reach whole.
+    // contract-testing assertions. Measured 96.00% (9757/10164) and HELD at 95, one short of the
+    // measured integer for the reason core's note records: 96 would leave 0.0035pp — four tenths of one
+    // statement — so a single line going uncovered anywhere in the package would fail the gate. Ratchet
+    // it the run after the figure clears 96 with a margin behind it.
     'laravel' => 95,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
