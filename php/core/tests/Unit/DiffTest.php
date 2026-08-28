@@ -386,6 +386,28 @@ it('classifies a removed enum value as breaking', function (): void {
     expect($changes['schema.enum-value-removed']->breaking)->toBeTrue();
 });
 
+it('classifies an enum introduced as breaking on both sides', function (): void {
+    // A closed set arriving where there was none rejects every value outside it, so a writer's valid
+    // request stops being accepted; on a response the `request` flag can under-state the audience — a
+    // shared component serves both directions — and standing this down green-lights exactly that.
+    $old = diffBase();
+    $new = $old;
+    $new['paths']['/api/v1/forms/{id}']['get']['parameters'][0]['schema']['enum'] = [1, 2, 3];
+    $new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['title']['enum'] = ['a', 'b'];
+
+    $paths = [];
+    foreach (diffOf($old, $new)->changes as $change) {
+        if ($change->code === 'schema.enum-added') {
+            $paths[$change->path] = $change->breaking;
+        }
+    }
+
+    expect($paths)->toBe([
+        'GET /api/v1/forms/{id} parameters path:id schema.enum' => true,
+        'GET /api/v1/forms/{id} responses 200 application/json schema.properties.title.enum' => true,
+    ]);
+});
+
 it('classifies a response enum value added as breaking', function (): void {
     $old = diffBase();
     $old['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['status'] = ['type' => 'string', 'enum' => ['draft', 'published']];

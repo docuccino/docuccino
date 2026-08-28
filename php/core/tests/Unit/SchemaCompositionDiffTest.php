@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\SchemaComparator;
+use Docuccino\Core\Diff\SchemaMember;
 use Docuccino\Core\Diff\SchemaPolarity;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Draft\SchemaKeywords;
@@ -154,12 +155,14 @@ it('reads a keyword nobody has decided conservatively rather than skipping it', 
     // decide; the gate meanwhile refuses rather than waving it through.
     expect(SchemaPolarity::rule('aKeywordNobodyDecided'))->toBe([
         'polarity' => SchemaPolarity::CONDITIONAL,
-        'member' => SchemaPolarity::MEMBER_EMPTY,
-        'pairing' => SchemaPolarity::PAIRING_KEY,
+        'member' => SchemaMember::EmptySchema,
+        'pairsByIndex' => false,
         'code' => null,
     ])
-        // A list-valued keyword pairs by content, the one rung available without knowing the position.
-        ->and(SchemaPolarity::rule('anyOf')['pairing'])->toBe(SchemaPolarity::PAIRING_CONTENT);
+        // Pairing by index is the one pairing fact a keyword decides for itself, and an undecided
+        // keyword cannot claim it: nothing knows that its members' positions are their contract.
+        ->and(SchemaPolarity::rule('prefixItems')['pairsByIndex'])->toBeTrue()
+        ->and(SchemaPolarity::rule('anyOf')['pairsByIndex'])->toBeFalse();
 });
 
 it('reports a schema that admits nothing at every subschema position', function (string $keyword): void {
@@ -235,6 +238,56 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['oneOf' => [['$ref' => '#/components/schemas/A']]],
         ['schema.one-of-branch-removed!'], ['schema.one-of-branch-removed!'],
     ],
+    // The KEYWORD arriving is a different statement from a branch arriving, and the one a branch-by-branch
+    // reading gets backwards: the old side was not an empty union, it was unconstrained, so a union
+    // landing on it narrows both sides. `{type: object}` gaining `anyOf: [{required: [a]}]` starts
+    // rejecting the body every writer used to send.
+    'anyOf: keyword arrived' => [
+        ['type' => 'object'],
+        ['type' => 'object', 'anyOf' => [['required' => ['a']]]],
+        ['schema.any-of-branch-added!'], ['schema.any-of-branch-added!'],
+    ],
+    // Leaving is the mirror of `schema.enum-removed`: a request widens, while a response reader loses
+    // the closed set of shapes it typed against and can now be handed anything.
+    'anyOf: keyword left' => [
+        ['type' => 'object', 'anyOf' => [['required' => ['a']]]],
+        ['type' => 'object'],
+        ['schema.any-of-branch-removed'], ['schema.any-of-branch-removed!'],
+    ],
+    // The starkest shape of the same defect: read branch-by-branch this was two non-breaking findings
+    // while every string over three characters had started being rejected.
+    'oneOf: keyword arrived over a plain type' => [
+        ['type' => 'string'],
+        ['oneOf' => [['type' => 'string', 'maxLength' => 3]]],
+        ['schema.one-of-branch-added!', 'schema.type-removed'],
+        ['schema.one-of-branch-added!', 'schema.type-removed'],
+    ],
+    'oneOf: keyword left' => [
+        ['oneOf' => [['$ref' => '#/components/schemas/A'], ['$ref' => '#/components/schemas/B']]],
+        ['type' => 'object'],
+        ['schema.one-of-branch-removed', 'schema.type-added!'],
+        ['schema.one-of-branch-removed!', 'schema.type-added!'],
+    ],
+    // `allOf` in the same position was already right, which is what made the union rule a bug rather
+    // than a missing descent — but it is settled at the keyword now too, as ONE finding rather than one
+    // per branch, because what arrived is the intersection and not a branch of one.
+    'allOf: keyword arrived' => [
+        ['type' => 'object'],
+        ['type' => 'object', 'allOf' => [['required' => ['a']], ['maxProperties' => 2]]],
+        ['schema.all-of-branch-added!'], ['schema.all-of-branch-added!'],
+    ],
+    'allOf: keyword left' => [
+        ['type' => 'object', 'allOf' => [['required' => ['a']], ['maxProperties' => 2]]],
+        ['type' => 'object'],
+        ['schema.all-of-branch-removed'], ['schema.all-of-branch-removed'],
+    ],
+    // `prefixItems` is the one list position where absence IS the empty schema — an unconstrained slot
+    // constrains nothing — so the keyword arriving stays the slots arriving, index by index.
+    'prefixItems: keyword arrived' => [
+        ['type' => 'array'],
+        ['type' => 'array', 'prefixItems' => [['type' => 'string']]],
+        ['schema.type-added!'], ['schema.type-added!'],
+    ],
     // `not` INVERTS, which is why nothing tries to carry the child's verdict up: a type widened under
     // `not` narrows the parent. The code still names what moved; the verdict is conservative.
     'not: added' => [
@@ -308,6 +361,14 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['type' => 'array'],
         ['type' => 'array', 'contains' => ['type' => 'string'], 'minContains' => 0],
         ['schema.contains-added'], ['schema.contains-added'],
+    ],
+    // Unless a cap arrives with it: `maxContains` asserts on its own, so `minContains: 0` beside it says
+    // only that no element need match — not that nothing is being claimed. `["a","b","c"]` was accepted
+    // and now is not.
+    'contains: added with minContains 0 and a cap' => [
+        ['type' => 'array'],
+        ['type' => 'array', 'contains' => ['type' => 'string'], 'minContains' => 0, 'maxContains' => 2],
+        ['schema.contains-added!'], ['schema.contains-added!'],
     ],
     'contains: subschema narrowed' => [
         ['contains' => ['type' => ['string', 'integer']]],
@@ -682,50 +743,77 @@ it('states the one place an indeterminate position stands a change down, and why
         ->toBe(['schema.definition-removed!']);
 });
 
-it('answers the presence verdict for every member kind there is', function (): void {
-    // The lookup table behind every `-added`/`-removed` code, over EVERY kind rather than a sample —
-    // the kinds are read off the class, so one added with no verdict of its own shows up here.
-    $verdicts = [
+it('answers the presence verdict for every member kind there is, at the keyword and at a member', function (): void {
+    // The two lookup tables behind every `-added`/`-removed` code, over EVERY kind rather than a sample.
+    // They answer different questions and differ on the one that matters: a union KEYWORD arriving is
+    // the union constraint arriving where there was none, while a union BRANCH arriving widens a union
+    // that was already there. Each row is [arriving, leaving].
+    $keywordVerdicts = [
         // A constraint arriving narrows whichever way the schema is read; going widens.
-        SchemaPolarity::MEMBER_CONSTRAINT => ['request' => [true, false], 'response' => [true, false]],
-        // `contains` arriving narrows only while it asserts something ($asserts, from `minContains`).
-        SchemaPolarity::MEMBER_BOUNDED => ['request' => [true, false], 'response' => [true, false]],
-        // A union branch going narrows either way; one arriving is safe for a writer and hands a reader
-        // a shape it has no case for.
-        SchemaPolarity::MEMBER_UNION => ['request' => [false, true], 'response' => [true, true]],
-        // A definition arriving asserts nothing; one leaving may dangle a `$ref`.
-        SchemaPolarity::MEMBER_STORE => ['request' => [false, true], 'response' => [false, true]],
-        // The kinds with a comparison of their own never reach the table, and the kind with no presence
-        // decision at all is the one that must not guess: breaking, both directions, both sides.
-        SchemaPolarity::MEMBER_EMPTY => ['request' => [true, true], 'response' => [true, true]],
-        SchemaPolarity::MEMBER_PROPERTY => ['request' => [true, true], 'response' => [true, true]],
-        SchemaPolarity::MEMBER_REQUIRED => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::Constraint->value => ['request' => [true, false], 'response' => [true, false]],
+        // `contains` arriving narrows only while it asserts something ($asserts, from its own bounds).
+        SchemaMember::Bounded->value => ['request' => [true, false], 'response' => [true, false]],
+        // The union arriving narrows both sides; it leaving mirrors `schema.enum-removed` exactly.
+        SchemaMember::Union->value => ['request' => [true, false], 'response' => [true, true]],
+        // The kinds that report per member never reach this table, and a position nobody decided is the
+        // one that must not guess: breaking, both directions, both sides.
+        SchemaMember::Store->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::Property->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::Required->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::EmptySchema->value => ['request' => [true, true], 'response' => [true, true]],
     ];
 
-    // The dataset only proves the rows it lists, so the kinds come from the class and this fails short.
+    $memberVerdicts = [
+        // A branch of an intersection arriving narrows; going widens.
+        SchemaMember::Constraint->value => ['request' => [true, false], 'response' => [true, false]],
+        // A union branch going narrows either way; one arriving is safe for a writer and hands a reader
+        // a shape it has no case for.
+        SchemaMember::Union->value => ['request' => [false, true], 'response' => [true, true]],
+        // A definition arriving asserts nothing; one leaving may dangle a `$ref`.
+        SchemaMember::Store->value => ['request' => [false, true], 'response' => [false, true]],
+        // A `dependentRequired` entry narrows a request exactly as `required` does, and the response
+        // side is a report rather than a verdict.
+        SchemaMember::Required->value => ['request' => [true, false], 'response' => [false, false]],
+        // `contains` holds one subschema and `properties` has a comparison of its own, so neither has
+        // members reaching here; an EMPTY position's members fall out of the keyword comparison.
+        SchemaMember::Bounded->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::Property->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::EmptySchema->value => ['request' => [true, true], 'response' => [true, true]],
+    ];
+
+    // A dataset only proves the rows it lists, so the kinds come from the enum and this fails short.
     // Compared as sets: which kinds exist is the fact, and the order they are declared in is not one.
-    $listed = array_keys($verdicts);
-    $kinds = SchemaPolarity::memberKinds();
-    sort($listed);
+    $kinds = array_map(static fn (SchemaMember $kind): string => $kind->value, SchemaMember::cases());
     sort($kinds);
 
-    expect($listed)->toBe($kinds)
-        ->and(count($kinds))->toBeGreaterThanOrEqual(5);
+    foreach (['keyword' => $keywordVerdicts, 'member' => $memberVerdicts] as $table => $verdicts) {
+        $listed = array_keys($verdicts);
+        sort($listed);
 
-    foreach ($verdicts as $member => $expected) {
+        expect($listed)->toBe($kinds, $table.' table')
+            ->and(count($kinds))->toBeGreaterThanOrEqual(5);
+    }
+
+    foreach (SchemaMember::cases() as $member) {
         foreach (['request' => true, 'response' => false] as $side => $request) {
-            [$arriving, $leaving] = $expected[$side];
+            [$arriving, $leaving] = $keywordVerdicts[$member->value][$side];
 
-            expect(SchemaPolarity::presenceIsBreaking($member, arriving: true, request: $request, asserts: true))
-                ->toBe($arriving, $member.' arriving on a '.$side)
-                ->and(SchemaPolarity::presenceIsBreaking($member, arriving: false, request: $request, asserts: true))
-                ->toBe($leaving, $member.' leaving on a '.$side);
+            expect(SchemaPolarity::keywordPresenceIsBreaking($member, arriving: true, request: $request, asserts: true))
+                ->toBe($arriving, $member->value.' keyword arriving on a '.$side)
+                ->and(SchemaPolarity::keywordPresenceIsBreaking($member, arriving: false, request: $request, asserts: true))
+                ->toBe($leaving, $member->value.' keyword leaving on a '.$side);
+
+            [$arriving, $leaving] = $memberVerdicts[$member->value][$side];
+
+            expect(SchemaPolarity::memberPresenceIsBreaking($member, arriving: true, request: $request))
+                ->toBe($arriving, $member->value.' member arriving on a '.$side)
+                ->and(SchemaPolarity::memberPresenceIsBreaking($member, arriving: false, request: $request))
+                ->toBe($leaving, $member->value.' member leaving on a '.$side);
         }
     }
 
-    // The unknown-entry contract: a kind nobody has given a verdict is not waved through.
-    expect(SchemaPolarity::presenceIsBreaking('aMemberKindNobodyDecided', arriving: true, request: true, asserts: true))->toBeTrue()
-        ->and(SchemaPolarity::presenceIsBreaking('aMemberKindNobodyDecided', arriving: false, request: false, asserts: false))->toBeTrue()
-        // …and `contains` is the one row `$asserts` moves: at `minContains: 0` it arrives asserting nothing.
-        ->and(SchemaPolarity::presenceIsBreaking(SchemaPolarity::MEMBER_BOUNDED, arriving: true, request: true, asserts: false))->toBeFalse();
+    // `contains` is the one row `$asserts` moves: with `minContains: 0` and no cap it arrives asserting
+    // nothing. A kind nobody has given a verdict cannot be spelled at all — the enum is closed and every
+    // match over it carries no default — so the unknown-entry contract is PHPStan's rather than a row.
+    expect(SchemaPolarity::keywordPresenceIsBreaking(SchemaMember::Bounded, arriving: true, request: true, asserts: false))->toBeFalse();
 });

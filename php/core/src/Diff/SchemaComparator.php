@@ -49,12 +49,15 @@ use Docuccino\Core\Support\Hydrate;
  * member there is a property a consumer reads, not a constraint), the `contains` bounds are compared
  * beside the keyword they bound, and everything else runs through {@see comparePositions()}.
  *
- * Two things that decision does NOT try to answer, recorded here because a silent limit reads as a
+ * Three things that decision does NOT try to answer, recorded here because a silent limit reads as a
  * claim. A keyword's polarity is its own; where 2020-12 makes one keyword's outcome depend on a
  * SIBLING — `contains` and `then` marking items and properties evaluated, so an `unevaluatedItems:
  * false` beside them means something different — that interaction is unread, and both halves are
- * reported on their own terms. And a `$ref` still compares opaquely, so a branch naming a component
- * carries whatever that component's own diff says.
+ * reported on their own terms. A `$ref` still compares opaquely, so a branch naming a component
+ * carries whatever that component's own diff says. And the only REFINEMENT pair compared at all is
+ * `contains`' own `minContains`/`maxContains`, because those two are what decides whether the keyword
+ * beside them asserts anything: every other bound — `minItems`, `maxLength`, `minimum`, `multipleOf`,
+ * `maxProperties` — is unread, so tightening one is reported nowhere.
  *
  * @phpstan-import-type Rule from SchemaPolarity
  */
@@ -395,8 +398,8 @@ final class SchemaComparator
         $had = array_key_exists($keyword, $old);
         $has = array_key_exists($keyword, $new);
 
-        if ($rule['member'] !== SchemaPolarity::MEMBER_EMPTY && $had !== $has) {
-            $changes[] = $this->presence($keyword, $rule, $has, $has ? $new : $old, $child, $id, $request);
+        if ($rule['member'] !== SchemaMember::EmptySchema && $had !== $has) {
+            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old, $request), $child, $id);
 
             return;
         }
@@ -419,7 +422,7 @@ final class SchemaComparator
      */
     private function compareMemberMap(string $keyword, array $rule, array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
-        if ($rule['member'] === SchemaPolarity::MEMBER_PROPERTY) {
+        if ($rule['member'] === SchemaMember::Property) {
             $this->compareProperties($old, $new, $path, $id, $request, $changes);
 
             return;
@@ -434,8 +437,8 @@ final class SchemaComparator
             $had = array_key_exists($name, $oldMembers);
             $has = array_key_exists($name, $newMembers);
 
-            if ($rule['member'] === SchemaPolarity::MEMBER_STORE && $had !== $has) {
-                $changes[] = $this->presence($keyword, $rule, $has, $has ? $new : $old, $member, $id, $request);
+            if ($rule['member'] === SchemaMember::Store && $had !== $has) {
+                $changes[] = $this->presence($keyword, $rule, $has, SchemaPolarity::memberPresenceIsBreaking($rule['member'], $has, $request), $member, $id);
 
                 continue;
             }
@@ -452,6 +455,11 @@ final class SchemaComparator
      * absent slot is an unconstrained one. Everywhere else the members pair by what they ARE
      * ({@see pairBranches()}), and the ones left over arrived or went.
      *
+     * The KEYWORD arriving or leaving is settled first, exactly as at a single position, and it is a
+     * different statement from a branch doing so: the side without an `anyOf` was not carrying an empty
+     * union, it was carrying no union constraint at all, so every branch reading as arrived would report
+     * the narrowing as the widening a branch added to an existing union is.
+     *
      * @param  Rule  $rule
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -462,8 +470,16 @@ final class SchemaComparator
         $before = self::branches($old[$keyword] ?? null);
         $after = self::branches($new[$keyword] ?? null);
         $child = $path.'.'.$keyword;
+        $had = array_key_exists($keyword, $old);
+        $has = array_key_exists($keyword, $new);
 
-        if ($rule['pairing'] === SchemaPolarity::PAIRING_INDEX) {
+        if ($rule['member'] !== SchemaMember::EmptySchema && $had !== $has) {
+            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old, $request), $child, $id);
+
+            return;
+        }
+
+        if ($rule['pairsByIndex']) {
             $slots = max(count($before), count($after));
 
             for ($i = 0; $i < $slots; $i++) {
@@ -484,18 +500,18 @@ final class SchemaComparator
         }
 
         foreach ($gone as $i) {
-            $changes[] = $this->presence($keyword, $rule, false, $old, $child.'.'.$i, $id, $request);
+            $changes[] = $this->presence($keyword, $rule, false, SchemaPolarity::memberPresenceIsBreaking($rule['member'], false, $request), $child.'.'.$i, $id);
         }
 
         foreach ($arrived as $j) {
-            $changes[] = $this->presence($keyword, $rule, true, $new, $child.'.'.$j, $id, $request);
+            $changes[] = $this->presence($keyword, $rule, true, SchemaPolarity::memberPresenceIsBreaking($rule['member'], true, $request), $child.'.'.$j, $id);
         }
     }
 
     /**
-     * `dependentRequired`: per property, the properties its presence makes required. A dependency added
-     * narrows what a request accepts exactly as `required` does — and is reported the same way, which
-     * is why the response side is a report rather than a verdict.
+     * `dependentRequired`: per property, the properties its presence makes required. A dependency
+     * arriving or leaving is a presence question like any other, so the verdict is
+     * {@see SchemaPolarity::memberPresenceIsBreaking()}'s rather than one made here.
      *
      * @param  Rule  $rule
      * @param  array<string, mixed>  $old
@@ -514,11 +530,13 @@ final class SchemaComparator
             $member = $path.'.'.$keyword.'.'.$name;
 
             if (array_diff($after, $before) !== []) {
-                $changes[] = $this->change(ChangeKind::Changed, $id, $member, $request, 'schema.'.$stem.'-added', $name, $before, $after);
+                $breaking = SchemaPolarity::memberPresenceIsBreaking($rule['member'], true, $request);
+                $changes[] = $this->change(ChangeKind::Changed, $id, $member, $breaking, 'schema.'.$stem.'-added', $name, $before, $after);
             }
 
             if (array_diff($before, $after) !== []) {
-                $changes[] = $this->change(ChangeKind::Changed, $id, $member, false, 'schema.'.$stem.'-removed', $name, $before, $after);
+                $breaking = SchemaPolarity::memberPresenceIsBreaking($rule['member'], false, $request);
+                $changes[] = $this->change(ChangeKind::Changed, $id, $member, $breaking, 'schema.'.$stem.'-removed', $name, $before, $after);
             }
         }
     }
@@ -538,15 +556,15 @@ final class SchemaComparator
             return;
         }
 
-        $wasAtLeast = self::minContains($old);
-        $isAtLeast = self::minContains($new);
+        $wasAtLeast = SchemaKeywords::minContains($old);
+        $isAtLeast = SchemaKeywords::minContains($new);
 
         if ($wasAtLeast !== $isAtLeast) {
             $changes[] = $this->bound($isAtLeast > $wasAtLeast, $path.'.minContains', $id, 'minContains', $wasAtLeast, $isAtLeast);
         }
 
-        $wasCapped = Hydrate::intOrNull($old['maxContains'] ?? null);
-        $isCapped = Hydrate::intOrNull($new['maxContains'] ?? null);
+        $wasCapped = SchemaKeywords::maxContains($old);
+        $isCapped = SchemaKeywords::maxContains($new);
 
         if ($wasCapped !== $isCapped) {
             // No cap is no bound at all, so one arriving narrows however high it is set.
@@ -556,23 +574,33 @@ final class SchemaComparator
     }
 
     /**
-     * A position arriving or leaving, at the positions where that is not the same statement as the
-     * empty schema arriving. The verdict is {@see SchemaPolarity::presenceIsBreaking()}'s recorded
-     * decision rather than one made here; all this arm reads is `contains`' bounds, because whether
-     * that keyword asserts anything at all is a fact about the schema rather than about the keyword.
+     * The KEYWORD arriving or leaving, where the schema that has it is the only side that can say
+     * whether it asserts anything. That is `contains` and only `contains`: its own bounds are what
+     * decide it, which is a fact about the schema rather than about the keyword, so the decision table
+     * is handed the answer instead of reading it.
      *
      * @param  Rule  $rule
-     * @param  array<string, mixed>  $carrier  the side that HAS the keyword, where `contains`' bounds are read
+     * @param  array<string, mixed>  $carrier  the side that HAS the keyword
      */
-    private function presence(string $keyword, array $rule, bool $arriving, array $carrier, string $path, string $id, bool $request): Change
+    private static function keywordGates(array $rule, bool $arriving, array $carrier, bool $request): bool
     {
-        $breaking = SchemaPolarity::presenceIsBreaking(
+        return SchemaPolarity::keywordPresenceIsBreaking(
             $rule['member'],
             $arriving,
             $request,
-            self::minContains($carrier) >= 1,
+            SchemaKeywords::containsAsserts($carrier),
         );
+    }
 
+    /**
+     * A position, or one of its members, arriving or leaving — reported wherever that is not the same
+     * statement as the empty schema arriving. The verdict is {@see SchemaPolarity}'s recorded decision,
+     * settled by the caller because which of its two tables applies is the caller's question.
+     *
+     * @param  Rule  $rule
+     */
+    private function presence(string $keyword, array $rule, bool $arriving, bool $breaking, string $path, string $id): Change
+    {
         return $this->change(
             $arriving ? ChangeKind::Added : ChangeKind::Removed,
             $id,
@@ -586,11 +614,10 @@ final class SchemaComparator
     }
 
     /**
-     * The child's changes as the parent's. At a DIRECT position they already are the parent's; at an
-     * INVERSE or CONDITIONAL one the direction the child moves the parent in is the thing that cannot
-     * be computed, so nothing guesses it: each change keeps its own code and path — a true statement
-     * about the subschema that path names — and the verdict is forced to breaking. An annotation-only
-     * edit is the exception, moving no contract at any position.
+     * The child's changes as the parent's. At a DIRECT position they already are the parent's; anywhere
+     * else the verdict is forced to breaking and each change keeps its own code and path, which
+     * {@see SchemaPolarity} states in full. An annotation-only edit is the exception, moving no contract
+     * at any position.
      *
      * @param  list<Change>  $changes
      * @param  Rule  $rule
@@ -625,17 +652,6 @@ final class SchemaComparator
             $old,
             $new,
         );
-    }
-
-    /**
-     * How many items `contains` has to match. Absent is 1 — the keyword's own default, and what makes
-     * `minContains: 0` a real statement rather than a restatement.
-     *
-     * @param  array<string, mixed>  $schema
-     */
-    private static function minContains(array $schema): int
-    {
-        return Hydrate::intOrNull($schema['minContains'] ?? null) ?? 1;
     }
 
     /**

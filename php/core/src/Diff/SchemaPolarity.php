@@ -5,65 +5,16 @@ declare(strict_types=1);
 namespace Docuccino\Core\Diff;
 
 use Docuccino\Core\Draft\SchemaKeywords;
-use Docuccino\Core\Extensions\Schema\ComponentNames;
 
 /**
  * One recorded decision per subschema-carrying keyword: which way a change UNDER it moves the schema
- * carrying it, what a member arriving or leaving that position means, and how two sides' members are
- * paired. {@see SchemaComparator} is the only reader; the reason it cannot answer any of this from a
- * keyword's position alone is that `items` and `not` sit at the same position and point opposite ways.
+ * carrying it, what the position or one of its members arriving or leaving means, and whether its
+ * members pair by index. {@see SchemaComparator} is the only reader; the reason it cannot answer any of
+ * this from a keyword's position alone is that `items` and `not` sit at the same position and point
+ * opposite ways. The three axes, and why `then`/`else` are DIRECT where `if` is not, are in
+ * docs/design/uir-and-extensions.md §1 "Diff polarity".
  *
- * POLARITY governs a change UNDER the position and nothing else. Whether the position is there at all
- * is MEMBER's question below, and that one is always exact — no `not` rejects nothing and `not: {}`
- * rejects everything, whatever the polarity of an edit inside it turns out to be:
- *  - `DIRECT` — narrowing the subschema narrows the parent, so the child's classification carries
- *    up unchanged. Every position that constrains the value's own members reads this way.
- *  - `INVERSE` — narrowing the subschema WIDENS the parent (`not`, and only `not`).
- *  - `CONDITIONAL` — no polarity can be computed. `if` moves instances between the `then` and `else`
- *    branches, so narrowing it widens where there is no `else` and is indeterminate where there is;
- *    `$defs`/`definitions` are a STORE rather than an assertion, so a member's polarity is whatever
- *    the `$ref`s naming it are worth, which this class does not resolve.
- *
- * The direction an INVERSE or CONDITIONAL child moves the parent in is exactly what cannot be
- * computed, so nothing tries: the child's own code and path are published unchanged — each a true
- * statement about the subschema the path names — and the VERDICT is forced to breaking. For a release
- * gate a false alarm costs the author one look and a false "safe" costs the consumer a broken client,
- * so the indeterminate case is breaking by decision, not by accident. An annotation-only edit is the
- * one exception, because it moves no contract at any position ({@see SchemaKeywords::annotationOnly()}).
- *
- * `then` and `else` are DIRECT rather than conditional, which is a correction to the obvious reading:
- * `{if: A, then: B}` accepts `(A ∧ B) ∨ ¬A` and `{if: A, else: C}` accepts `A ∨ (¬A ∧ C)`, and
- * narrowing B or C narrows either set. Only `if` itself is non-monotone.
- *
- * MEMBER is what presence means at the position, which is a separate question from polarity because at
- * most positions an absent subschema and the empty schema mean the same thing and at four they do not:
- *  - `EMPTY` — absent IS the empty schema (no `items` constrains no element), so a member arriving or
- *    leaving falls out of the ordinary keyword comparison and needs no code of its own.
- *  - `CONSTRAINT` — absent is not the empty schema, and arriving narrows: `not: {}` rejects every
- *    value while no `not` rejects none.
- *  - `BOUNDED` — `contains`, whose arrival narrows only while `minContains` is at least 1: at
- *    `minContains: 0` the keyword asserts nothing and the bounds are the whole claim.
- *  - `UNION` — a branch of `anyOf`/`oneOf`. Removing one narrows the union and is breaking either way;
- *    adding one widens what a request accepts and is safe there, while a response can now carry a
- *    shape no existing reader has a case for — the `schema.enum-value-added` argument exactly, so it
- *    is breaking on a response.
- *  - `STORE` — a `$defs` member. Arriving is nothing (nothing can name a definition that did not also
- *    change); leaving may dangle a `$ref` this class does not resolve, so it is breaking.
- *  - `PROPERTY` and `REQUIRED` — the two positions with a comparison of their own
- *    ({@see SchemaComparator::compareProperties()} and `dependentRequired`'s per-property lists).
- *
- * PAIRING is how two sides' members are matched. `KEY` and `INDEX` are the position's own semantics —
- * a property name is its identity, and a `prefixItems` index IS the tuple slot it constrains.
- * `CONTENT` is the composition lists, where nothing but the member itself names it: they pair by what a
- * member IS, never by where it sits, on the ladder {@see SchemaComparator::pairBranches()} spells out —
- * {@see ComponentNames}' rule (identity first, content second, position never) applied to branches.
- *
- * Every keyword {@see SchemaKeywords} gives a subschema position needs a row here, and a keyword with
- * no row is read CONDITIONALLY ({@see rule()}) rather than skipped — a keyword the draft model learns
- * before anyone decides its polarity is reported conservatively instead of passing as safe. That is a
- * degradation and not a plan: `SchemaCompositionDiffTest` fails until the row is written.
- *
- * @phpstan-type Rule array{polarity: string, member: string, pairing: string, code: string|null}
+ * @phpstan-type Rule array{polarity: string, member: SchemaMember, pairsByIndex: bool, code: string|null}
  *
  * @internal
  */
@@ -78,43 +29,13 @@ final class SchemaPolarity
     /** Neither — the change is reported and classed breaking. */
     public const string CONDITIONAL = 'conditional';
 
-    /** An absent subschema and the empty schema mean the same thing here. */
-    public const string MEMBER_EMPTY = 'empty';
-
-    /** Absent is not the empty schema: the keyword arriving narrows. */
-    public const string MEMBER_CONSTRAINT = 'constraint';
-
-    /** `contains`, whose arrival narrows only while `minContains` is at least 1. */
-    public const string MEMBER_BOUNDED = 'bounded';
-
-    /** A branch of a union: removing narrows, adding widens (and is breaking on a response). */
-    public const string MEMBER_UNION = 'union';
-
-    /** A `$defs` member — a store a `$ref` may name, not an assertion. */
-    public const string MEMBER_STORE = 'store';
-
-    /** `properties`, which has a comparison of its own. */
-    public const string MEMBER_PROPERTY = 'property';
-
-    /** `dependentRequired`, whose members are string lists rather than subschemas. */
-    public const string MEMBER_REQUIRED = 'required';
-
-    /** Members are matched by their map key. */
-    public const string PAIRING_KEY = 'key';
-
-    /** Members are matched by list index, because the index is the contract. */
-    public const string PAIRING_INDEX = 'index';
-
-    /** Members are matched by identity, then by content — never by position. */
-    public const string PAIRING_CONTENT = 'content';
-
-    /** The position holds a single subschema, so there is nothing to pair. */
-    public const string PAIRING_NONE = 'none';
-
     /**
      * The decision for every keyword carrying a subschema, keyword => rule. `code` is the stem of the
      * `schema.<stem>-added` / `schema.<stem>-removed` pair a position with its own presence semantics
-     * publishes, and null where absence needs no code because it is the empty schema.
+     * publishes, and null where absence needs no code because it is the empty schema. `pairsByIndex` is
+     * the one pairing fact the comparator branches on: a `prefixItems` slot IS the tuple position it
+     * constrains, while everywhere else members pair by what they are ({@see SchemaComparator::pairBranches()})
+     * or by their map key, which the position already says.
      *
      * This IS a second table keyed by the positioned keywords, and what keeps it from going stale is the
      * derived guard in `SchemaCompositionDiffTest` — which reads {@see decided()} against the draft
@@ -126,43 +47,44 @@ final class SchemaPolarity
      */
     private const array RULES = [
         // Draft-07's tail of a tuple, and the two positions every object contract is typed against.
-        'additionalItems' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'additionalProperties' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'items' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'properties' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_PROPERTY, 'pairing' => self::PAIRING_KEY, 'code' => null],
+        'additionalItems' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'additionalProperties' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'items' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'properties' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Property, 'pairsByIndex' => false, 'code' => null],
         // An intersection: every branch holds, so one added narrows and one removed widens.
-        'allOf' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_CONSTRAINT, 'pairing' => self::PAIRING_CONTENT, 'code' => 'all-of-branch'],
+        'allOf' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Constraint, 'pairsByIndex' => false, 'code' => 'all-of-branch'],
         // Unions. `oneOf` demands exactly one match, which is non-monotone where two branches overlap
         // — but a value matching two `oneOf` branches validates against neither, so an overlapping
         // `oneOf` is already a contract no generated client can read. The monotone reading is the one
         // that is true of every well-formed `oneOf`, and it is the reading both take.
-        'anyOf' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_UNION, 'pairing' => self::PAIRING_CONTENT, 'code' => 'any-of-branch'],
-        'oneOf' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_UNION, 'pairing' => self::PAIRING_CONTENT, 'code' => 'one-of-branch'],
+        'anyOf' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Union, 'pairsByIndex' => false, 'code' => 'any-of-branch'],
+        'oneOf' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Union, 'pairsByIndex' => false, 'code' => 'one-of-branch'],
         // A tuple: index 2 is index 2, so the index pairs and a reorder is a real change at each slot.
-        'prefixItems' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_INDEX, 'code' => null],
-        'contains' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_BOUNDED, 'pairing' => self::PAIRING_NONE, 'code' => 'contains'],
-        'not' => ['polarity' => self::INVERSE, 'member' => self::MEMBER_CONSTRAINT, 'pairing' => self::PAIRING_NONE, 'code' => 'not'],
-        'if' => ['polarity' => self::CONDITIONAL, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'then' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'else' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
+        'prefixItems' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => true, 'code' => null],
+        'contains' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Bounded, 'pairsByIndex' => false, 'code' => 'contains'],
+        'not' => ['polarity' => self::INVERSE, 'member' => SchemaMember::Constraint, 'pairsByIndex' => false, 'code' => 'not'],
+        'if' => ['polarity' => self::CONDITIONAL, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'then' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'else' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
         // A member arriving at either constrains what used to be unconstrained, and an absent member
         // constrains nothing — which is what the empty schema there says too.
-        'patternProperties' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_KEY, 'code' => null],
-        'dependentSchemas' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_KEY, 'code' => null],
-        'propertyNames' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'unevaluatedItems' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        'unevaluatedProperties' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
+        'patternProperties' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'dependentSchemas' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'propertyNames' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'unevaluatedItems' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        'unevaluatedProperties' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
         // The decoded content of a string, so narrowing it narrows what the string may hold.
-        'contentSchema' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_EMPTY, 'pairing' => self::PAIRING_NONE, 'code' => null],
-        '$defs' => ['polarity' => self::CONDITIONAL, 'member' => self::MEMBER_STORE, 'pairing' => self::PAIRING_KEY, 'code' => 'definition'],
-        'definitions' => ['polarity' => self::CONDITIONAL, 'member' => self::MEMBER_STORE, 'pairing' => self::PAIRING_KEY, 'code' => 'definition'],
-        'dependentRequired' => ['polarity' => self::DIRECT, 'member' => self::MEMBER_REQUIRED, 'pairing' => self::PAIRING_KEY, 'code' => 'dependent-required'],
+        'contentSchema' => ['polarity' => self::DIRECT, 'member' => SchemaMember::EmptySchema, 'pairsByIndex' => false, 'code' => null],
+        '$defs' => ['polarity' => self::CONDITIONAL, 'member' => SchemaMember::Store, 'pairsByIndex' => false, 'code' => 'definition'],
+        'definitions' => ['polarity' => self::CONDITIONAL, 'member' => SchemaMember::Store, 'pairsByIndex' => false, 'code' => 'definition'],
+        'dependentRequired' => ['polarity' => self::DIRECT, 'member' => SchemaMember::Required, 'pairsByIndex' => false, 'code' => 'dependent-required'],
     ];
 
     /**
      * The rule for `$keyword`. A keyword nobody has decided is read CONDITIONALLY — reported, and
      * classed breaking — rather than skipped: silence is the one answer a release gate cannot recover
-     * from. Its members pair by content, which is the only rung available without knowing the position.
+     * from. A keyword arrives from a document, so the fallback is a runtime one; a {@see SchemaMember}
+     * never does, which is why that axis is decided at analysis time instead.
      *
      * @return Rule
      */
@@ -170,57 +92,57 @@ final class SchemaPolarity
     {
         return self::RULES[$keyword] ?? [
             'polarity' => self::CONDITIONAL,
-            'member' => self::MEMBER_EMPTY,
-            'pairing' => SchemaKeywords::positionOf($keyword) === SchemaKeywords::POSITION_SCHEMA_LIST
-                ? self::PAIRING_CONTENT
-                : self::PAIRING_KEY,
+            'member' => SchemaMember::EmptySchema,
+            'pairsByIndex' => false,
             'code' => null,
         ];
     }
 
     /**
-     * Whether a member ARRIVING or LEAVING at a position gates, which is the presence half of the
-     * decision and exact wherever it is recorded at all: a constraint arriving narrows; a union branch
-     * arriving widens what a request takes and hands a response reader a shape it has no case for; a
-     * `$defs` member arriving is nothing while one leaving may dangle a `$ref` nothing here resolves;
-     * and `contains` arriving narrows only while it asserts something, which `$asserts` carries because
-     * reading `minContains` is the comparator's job rather than this class's.
+     * Whether the KEYWORD arriving or leaving gates — the whole position, not one of its members, so the
+     * baseline on the side without it is no constraint of that kind at all. A constraint arriving
+     * narrows; `contains` arriving narrows only while it asserts something, which `$asserts` carries
+     * because reading its bounds is the comparator's job rather than this class's; and a union arriving
+     * narrows on BOTH sides, because the side that had no `anyOf` was not an empty union — it was
+     * unconstrained. A union LEAVING is the mirror of `schema.enum-removed`: a request widens, while a
+     * response reader loses the closed set of shapes it typed against.
      *
-     * `MEMBER_EMPTY` has no presence decision to apply — absence and the empty schema are supposed to
-     * say the same thing there, so presence is meant to fall out of the ordinary keyword comparison and
-     * never reach here. Arriving at this answer means a position nobody decided has members arriving and
-     * leaving, and the direction is then exactly what is unknown: BREAKING, both ways. The one thing a
-     * release gate cannot do is guess in the safe direction.
+     * The kinds that cannot reach here are conservative rather than absent: at a position nobody decided
+     * the direction is exactly what is unknown, and the one thing a release gate cannot do is guess in
+     * the safe direction.
      */
-    public static function presenceIsBreaking(string $member, bool $arriving, bool $request, bool $asserts): bool
+    public static function keywordPresenceIsBreaking(SchemaMember $member, bool $arriving, bool $request, bool $asserts): bool
     {
         return match ($member) {
-            self::MEMBER_CONSTRAINT => $arriving,
-            self::MEMBER_BOUNDED => $arriving && $asserts,
-            self::MEMBER_UNION => ! $arriving || ! $request,
-            self::MEMBER_STORE => ! $arriving,
-            default => true,
+            SchemaMember::Constraint => $arriving,
+            SchemaMember::Bounded => $arriving && $asserts,
+            SchemaMember::Union => $arriving || ! $request,
+            // `$defs`, `properties` and `dependentRequired` report per member and never the keyword;
+            // an EMPTY position has no presence claim to make at all.
+            SchemaMember::Store, SchemaMember::Property, SchemaMember::Required, SchemaMember::EmptySchema => true,
         };
     }
 
     /**
-     * Every member kind there is, so the dataset over {@see presenceIsBreaking()} reads the set rather
-     * than a second copy of it — a kind added with no verdict of its own falls to the conservative arm,
-     * and the guard is what says so out loud.
-     *
-     * @return list<string>
+     * Whether ONE member of a position arriving or leaving gates, which is a different question from the
+     * keyword above: here the position stood on both sides and the union, intersection or store already
+     * existed. A branch of an intersection arriving narrows; a branch of a union arriving widens what a
+     * request takes and hands a response reader a shape it has no case for; a `$defs` member arriving is
+     * nothing while one leaving may dangle a `$ref` nothing here resolves; and a `dependentRequired`
+     * entry narrows what a request accepts exactly as `required` does, which is why the response side is
+     * a report rather than a verdict.
      */
-    public static function memberKinds(): array
+    public static function memberPresenceIsBreaking(SchemaMember $member, bool $arriving, bool $request): bool
     {
-        $kinds = [];
-
-        foreach ((new \ReflectionClass(self::class))->getConstants() as $name => $value) {
-            if (str_starts_with($name, 'MEMBER_') && is_string($value)) {
-                $kinds[] = $value;
-            }
-        }
-
-        return $kinds;
+        return match ($member) {
+            SchemaMember::Constraint => $arriving,
+            SchemaMember::Union => ! $arriving || ! $request,
+            SchemaMember::Store => ! $arriving,
+            SchemaMember::Required => $arriving && $request,
+            // `contains` holds one subschema and `properties` has a comparison of its own, so neither
+            // has members reaching here; an EMPTY position's members fall out of the keyword comparison.
+            SchemaMember::Bounded, SchemaMember::Property, SchemaMember::EmptySchema => true,
+        };
     }
 
     /**

@@ -319,12 +319,17 @@ the diff does not compare these four at all today, so changing one produces no e
 the same. `allOf` is an intersection, so a branch added narrows the contract (`schema.all-of-branch-added`)
 and a branch removed widens it. `anyOf` and `oneOf` are unions, so a branch removed narrows either way,
 while a branch added is safe on a request and breaking on a response — a reader can now meet a shape it has
-no case for, exactly as it can when a value joins a response `enum`. Branches are paired by what they *are*
-— a schema's identity, then the component it names, then its content — never by where they sit, so
-reordering a `oneOf` is not a change, while swapping one branch for another is a removal plus an addition.
-`contains` demands a matching element, so it arriving narrows unless `minContains: 0` says it asserts
-nothing, and its `minContains`/`maxContains` bounds are compared beside it. `prefixItems` pairs by index,
-because index 2 constrains the third element and nothing else.
+no case for, exactly as it can when a value joins a response `enum`. That is a branch of a union that was
+already there; the union *keyword* arriving is a different change, and breaking on both sides, because the
+schema it landed on was not an empty union but an unconstrained one. It leaving reads like
+`schema.enum-removed`: a request widens, while a response reader loses the closed set of shapes it typed
+against. Branches are paired by what they *are* — a schema's identity, then the component it names, then
+its content — never by where they sit, so reordering a `oneOf` is not a change, while swapping one branch
+for another is a removal plus an addition. `contains` demands a matching element, so it arriving narrows
+unless its own bounds say it asserts nothing — `minContains: 0` with no `maxContains` capping how many may
+match. Those two bounds are the only refinements the diff compares at all: `minItems`, `maxLength`,
+`minimum`, `multipleOf` and the rest are not read, so tightening one is reported nowhere.
+`prefixItems` pairs by index, because index 2 constrains the third element and nothing else.
 
 Two positions have no direction to report, and the diff says so rather than guessing. Under `not`,
 narrowing the subschema *widens* what the API accepts; under `if`, a change moves values between the
