@@ -95,7 +95,7 @@ final class ExampleAudit
 
     /**
      * Every (example, schema, label) triple in the document, in a deterministic order: operations as
-     * the index lists them, then component schemas by name.
+     * the index lists them, then webhooks as it lists them, then component schemas by name.
      *
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
@@ -111,39 +111,68 @@ final class ExampleAudit
                 }
             }
 
-            $body = $operation->requestBody($document);
-            if ($body !== null) {
-                foreach ($this->inContent($body[0], $body[1]) as $site) {
-                    $sites[] = [$site[0], $site[1], $operation->label().' → request body '.$site[2]];
-                }
+            foreach ($this->inOperation($operation->label(), $operation->operation, $operation->segments, $operation->requestBody($document)) as $site) {
+                $sites[] = $site;
             }
+        }
 
-            $responses = $operation->operation['responses'] ?? null;
-            if (! is_array($responses)) {
-                continue;
-            }
-
-            $statuses = array_map(strval(...), array_keys($responses));
-            sort($statuses);
-
-            foreach ($statuses as $status) {
-                $raw = $responses[$status];
-                if (! is_array($raw)) {
-                    continue;
-                }
-
-                /** @var array<string, mixed> $raw */
-                [$response, $segments] = Refs::follow($document, $raw, [...$operation->segments, 'responses', $status]);
-
-                foreach ([...$this->inHeaders($response, $segments), ...$this->inContent($response, $segments)] as $site) {
-                    $sites[] = [$site[0], $site[1], $operation->label().' → '.$status.' '.$site[2]];
-                }
+        // A webhook publishes a body and response headers of exactly the same kind, and an example
+        // beside one is copied by exactly the same reader — the outbound half is not a different sort of
+        // document, only a different half of the same one. It has no parameters: nothing routes to it.
+        foreach ($this->index->webhooks() as $webhook) {
+            foreach ($this->inOperation($webhook->label(), $webhook->operation, $webhook->segments, $webhook->requestBody($document)) as $site) {
+                $sites[] = $site;
             }
         }
 
         foreach ($this->componentSchemaNames() as $name) {
             foreach ($this->inSchema(['components', 'schemas', $name]) as $site) {
                 $sites[] = [$site[0], $site[1], 'components/schemas/'.$name];
+            }
+        }
+
+        return $sites;
+    }
+
+    /**
+     * The sites of one operation object — a route's or a webhook's: its request body, and the headers
+     * and content of each documented response, statuses in sorted order.
+     *
+     * @param  array<string, mixed>  $operation
+     * @param  list<string>  $segments  pointer segments addressing the operation
+     * @param  array{0: array<string, mixed>, 1: list<string>}|null  $body  its request body, `$ref` followed
+     * @return list<array{0: list<string>, 1: list<string>, 2: string}>
+     */
+    private function inOperation(string $label, array $operation, array $segments, ?array $body): array
+    {
+        $sites = [];
+
+        if ($body !== null) {
+            foreach ($this->inContent($body[0], $body[1]) as $site) {
+                $sites[] = [$site[0], $site[1], $label.' → request body '.$site[2]];
+            }
+        }
+
+        $responses = $operation['responses'] ?? null;
+
+        if (! is_array($responses)) {
+            return $sites;
+        }
+
+        $statuses = array_map(strval(...), array_keys($responses));
+        sort($statuses);
+
+        foreach ($statuses as $status) {
+            $raw = $responses[$status];
+            if (! is_array($raw)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $raw */
+            [$response, $where] = Refs::follow($this->index->document(), $raw, [...$segments, 'responses', $status]);
+
+            foreach ([...$this->inHeaders($response, $where), ...$this->inContent($response, $where)] as $site) {
+                $sites[] = [$site[0], $site[1], $label.' → '.$status.' '.$site[2]];
             }
         }
 

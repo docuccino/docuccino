@@ -7,6 +7,7 @@ use Docuccino\Core\Contract\ContractChecker;
 use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Contract\ContractOperation;
 use Docuccino\Core\Contract\Exchange;
+use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
 use Docuccino\Core\Draft\SchemaDraft;
@@ -1362,6 +1363,34 @@ function pointersIn(mixed $node): array
 }
 
 /**
+ * Every `x-docuccino.id` stated anywhere under a node, keyed by the JSON pointer that carries it.
+ *
+ * Pointers are RFC 6901 escaped, so a failure names the same location the schema validator would.
+ *
+ * @return array<string, string>
+ */
+function nodeIdsIn(mixed $node, string $pointer = ''): array
+{
+    if (! is_array($node)) {
+        return [];
+    }
+
+    $found = [];
+
+    $meta = $node['x-docuccino'] ?? null;
+    if (is_array($meta) && isset($meta['id']) && is_string($meta['id'])) {
+        $found[$pointer] = $meta['id'];
+    }
+
+    foreach ($node as $key => $value) {
+        $token = str_replace(['~', '/'], ['~0', '~1'], (string) $key);
+        $found = array_merge($found, nodeIdsIn($value, $pointer.'/'.$token));
+    }
+
+    return $found;
+}
+
+/**
  * One operation's emitted representation as bytes: its own canonical node plus every component it
  * transitively `$ref`s. `$subject` is a `METHOD /path` pair.
  */
@@ -1694,7 +1723,9 @@ function scriptWatch(int $builds, ?callable $onBuild = null): ScriptedBuildRunne
 /**
  * The contract-testing fixture: a small, provenance-carrying UIR document covering the shapes the
  * checker has to get right (a `$ref`'d component, a recursive one, a status range, a `default`, a
- * literal path beating a placeholder, a media type JSON Schema cannot check).
+ * literal path beating a placeholder, a media type JSON Schema cannot check) — and, under `webhooks`,
+ * the outbound half in the shape the producer emits, with one entry per way a delivery can only be
+ * answered with a note.
  *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
  */
@@ -1761,6 +1792,19 @@ function checkContract(Exchange $exchange, ?callable $mutate = null): CheckResul
 }
 
 /**
+ * Check one dispatched payload against the fixture's webhook of that name — its first documented
+ * method, which is the only one for every name but `invoice.voided`.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
+ */
+function checkDelivery(string $name, string $payload, ?callable $mutate = null): Outcome
+{
+    $index = contractIndex($mutate);
+
+    return (new ContractChecker($index))->delivery($index->webhooksNamed($name)[0], $payload);
+}
+
+/**
  * Emit the workbench `default` document as UIR into a temp file and point the contract assertions at
  * it. The one place the Laravel-side contract tests get a real artifact: a real build of the real
  * workbench through the real emitter, not a document written by hand to suit the assertion.
@@ -1775,6 +1819,21 @@ function workbenchContract(?callable $mutateConfig = null): string
     ApiContract::using($path);
 
     return $path;
+}
+
+/**
+ * The same artifact with the workbench's webhook directory configured, so the contract assertions read
+ * an outbound half built by the real producer rather than one written to suit them.
+ */
+function workbenchWebhookContract(): string
+{
+    app()->setBasePath(dirname(__DIR__).'/php/laravel');
+
+    return workbenchContract(static function (array $raw): array {
+        $raw['webhooks'] = ['dir' => 'workbench/app/Webhooks'];
+
+        return $raw;
+    });
 }
 
 /**
@@ -1806,6 +1865,35 @@ function contractResponse(
     $request = Request::create($uri, $method, [], [], [], $server, $requestBody);
 
     return TestResponse::fromBaseResponse(new Response($body, $status, $headers), $request);
+}
+
+/**
+ * The warnings a callable triggers, and nothing else. The contract assertions surface a "passed, but"
+ * note on PHPUnit's warning channel, which is a channel and not a return value — so a test that wants to
+ * read one has to stand in front of the runner's own handler for the length of the call.
+ *
+ * Restored in a `finally`: leaving a handler installed would make every later test in the process report
+ * this one's warnings.
+ *
+ * @return list<string>
+ */
+function warningsRaisedBy(callable $callable): array
+{
+    $warnings = [];
+
+    set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+        $warnings[] = $message;
+
+        return true;
+    }, E_USER_WARNING);
+
+    try {
+        $callable();
+    } finally {
+        restore_error_handler();
+    }
+
+    return $warnings;
 }
 
 /**

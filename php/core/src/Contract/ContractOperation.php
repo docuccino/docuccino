@@ -162,14 +162,7 @@ final readonly class ContractOperation
      */
     public function requestBody(array $document): ?array
     {
-        $body = $this->operation['requestBody'] ?? null;
-
-        if (! is_array($body)) {
-            return null;
-        }
-
-        /** @var array<string, mixed> $body */
-        return Refs::follow($document, $body, [...$this->segments, 'requestBody']);
+        return Refs::member($document, $this->operation, 'requestBody', $this->segments);
     }
 
     /**

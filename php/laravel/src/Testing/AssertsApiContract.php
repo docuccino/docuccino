@@ -28,7 +28,8 @@ use Symfony\Component\HttpFoundation\Response;
  * usually is.
  *
  * `ApiContract::registerMacros()` puts the three exchange assertions on `TestResponse` too, if you
- * prefer `$this->getJson(…)->assertValidResponse()` to wrapping the call.
+ * prefer `$this->getJson(…)->assertValidResponse()` to wrapping the call. {@see assertValidWebhook()}
+ * has no response to hang off, so it stays a method.
  */
 trait AssertsApiContract
 {
@@ -73,6 +74,22 @@ trait AssertsApiContract
         ApiContract::assertExchange($response, true, true, $recordAs);
 
         return $response;
+    }
+
+    /**
+     * The payload your application dispatches for a documented webhook satisfies the schema the
+     * document publishes for it.
+     *
+     * The outbound half of the contract, which no HTTP test can reach: `$payload` is whatever the code
+     * holds at the moment it delivers — the event object, a Data object, an array, JSON text — and it is
+     * held to the webhook's documented body exactly as a request body is.
+     *
+     * `method:` names one of the methods a webhook is published under, and is only needed for a name
+     * published under more than one.
+     */
+    public function assertValidWebhook(string $name, mixed $payload, ?string $method = null): void
+    {
+        ApiContract::assertWebhook($name, $payload, $method);
     }
 
     /**

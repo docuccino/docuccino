@@ -89,6 +89,129 @@ final class ContractMessages
         return self::withHint(implode("\n", $lines), $hint);
     }
 
+    /** A dispatched payload that disagreed with the body its webhook documents. */
+    public static function delivery(ContractWebhook $webhook, Outcome $outcome): string
+    {
+        $lines = [
+            sprintf('The payload dispatched for %s does not match the documented contract.', PlainText::of($webhook->label())),
+            '',
+            '  webhook    '.PlainText::of($webhook->label()).($webhook->id === null ? '' : '  '.PlainText::of($webhook->id)),
+            '',
+        ];
+
+        foreach (self::violationLines($outcome->violations) as $line) {
+            $lines[] = $line;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * A payload no encoder would turn into bytes, which is not a payload the application could have
+     * delivered either. The encoder's own words go through {@see PlainText} like everything else: they
+     * are the one string in a delivery failure that came from neither the artifact nor the test.
+     */
+    public static function unreadableDelivery(ContractWebhook $webhook, string $reason, ?string $hint = null): string
+    {
+        return self::withHint(sprintf(
+            'Docuccino cannot read the payload dispatched for %s as JSON: %s.',
+            PlainText::of($webhook->label()),
+            PlainText::of(rtrim(trim($reason), '.')),
+        ), $hint);
+    }
+
+    /**
+     * What a passing exchange check could not look at, or null where it looked at everything.
+     * {@see unchecked()}.
+     */
+    public static function uncheckedExchange(Exchange $exchange, CheckResult $result): ?string
+    {
+        return self::unchecked($exchange->label(), $result->notes());
+    }
+
+    /** The same for a delivery. {@see unchecked()}. */
+    public static function uncheckedDelivery(ContractWebhook $webhook, Outcome $outcome): ?string
+    {
+        return self::unchecked($webhook->label(), $outcome->note === null ? [] : [$outcome->note]);
+    }
+
+    /**
+     * The webhook nobody documented, with the names the contract does publish — or, when the name is
+     * there and the method is not, the methods it is published for.
+     */
+    public static function undocumentedWebhook(string $name, ?string $method, ContractIndex $index, ?string $hint = null): string
+    {
+        $published = $index->webhooksNamed($name);
+
+        $lines = [sprintf(
+            '%swebhooks.%s is not documented.',
+            $method === null ? '' : PlainText::of(strtoupper($method)).' ',
+            PlainText::of($name),
+        ), ''];
+
+        if ($published !== []) {
+            $lines[] = '  The contract publishes that webhook, for these methods:';
+            foreach ($published as $webhook) {
+                $lines[] = '    '.PlainText::of($webhook->label());
+            }
+        } else {
+            $names = $index->webhookNames();
+            $shown = array_slice($names, 0, self::MAX_PATHS);
+            $extra = count($names) - count($shown);
+
+            if ($shown === []) {
+                $lines[] = '  The contract documents no webhook at all.';
+            } else {
+                $lines[] = '  The contract documents these webhooks:';
+                foreach ($shown as $candidate) {
+                    $lines[] = '    '.PlainText::of($candidate);
+                }
+                if ($extra > 0) {
+                    $lines[] = sprintf('    … and %d more.', $extra);
+                }
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = '  The artifact predates this webhook, or the webhook is excluded from the document.';
+
+        return self::withHint(implode("\n", $lines), $hint);
+    }
+
+    /**
+     * A name published for more than one method, with no method said. Guessing one would check the
+     * payload against a body it was never sent as.
+     *
+     * @param  list<ContractWebhook>  $candidates
+     */
+    public static function ambiguousWebhook(string $name, array $candidates, ?string $hint = null): string
+    {
+        $lines = [
+            sprintf('webhooks.%s is documented for more than one method, so which body this payload answers to is not decidable.', PlainText::of($name)),
+            '',
+        ];
+
+        foreach ($candidates as $candidate) {
+            $lines[] = '  '.PlainText::of($candidate->label()).($candidate->id === null ? '' : '  '.PlainText::of($candidate->id));
+        }
+
+        return self::withHint(implode("\n", $lines), $hint);
+    }
+
+    /**
+     * An artifact whose format cannot carry a webhook contract. Saying "not documented" here would be
+     * false: the webhook may well be documented, in the artifact this one was downlevelled from.
+     */
+    public static function webhooksUnsupported(ContractIndex $index, ?string $hint = null): string
+    {
+        return self::withHint(implode("\n", [
+            sprintf('The contract is OpenAPI %s, which defines no `webhooks` member.', PlainText::of($index->openApiVersion())),
+            '',
+            '  Every webhook the document had was dropped on the way down to 3.0, so there is nothing here',
+            '  to check a delivery against. Assert against the UIR artifact, or a 3.1 or 3.2 export.',
+        ]), $hint);
+    }
+
     /** Examples that do not satisfy the schema they sit beside. */
     public static function examples(ExampleReport $report): string
     {
@@ -198,6 +321,33 @@ final class ContractMessages
         }
 
         return self::withHint(implode("\n", $lines), $hint);
+    }
+
+    /**
+     * A pass that proved less than it looks like it did, as ONE line, or null where there is nothing to
+     * say.
+     *
+     * A check that could not read what the document published passes with a note rather than passing
+     * silently — a `text/csv` body, a header documented with no schema — and a note nobody is told is
+     * how a suite comes to believe it has contract coverage it does not have. One line rather than the
+     * block a failure gets, because this travels on a run's warning channel, where most runners show the
+     * first line and truncate: the subject frames it and the finding follows immediately.
+     *
+     * @param  list<string>  $notes
+     */
+    private static function unchecked(string $subject, array $notes): ?string
+    {
+        $kept = array_values(array_filter($notes, static fn (string $note): bool => trim($note) !== ''));
+
+        if ($kept === []) {
+            return null;
+        }
+
+        return sprintf(
+            '%s passed, but part of the contract was not checked: %s.',
+            PlainText::of($subject),
+            implode('; ', array_map(PlainText::of(...), $kept)),
+        );
     }
 
     /**

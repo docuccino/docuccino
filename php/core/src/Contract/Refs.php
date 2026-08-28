@@ -67,6 +67,27 @@ final class Refs
     }
 
     /**
+     * One member of an OAS object with its `$ref` chain followed, or null when the member is not there
+     * (or is not an object). The one reader for "the requestBody of this thing", whatever the thing is.
+     *
+     * @param  array<string, mixed>  $document
+     * @param  array<string, mixed>  $node
+     * @param  list<string>  $segments  pointer segments addressing $node
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null
+     */
+    public static function member(array $document, array $node, string $member, array $segments): ?array
+    {
+        $value = $node[$member] ?? null;
+
+        if (! is_array($value)) {
+            return null;
+        }
+
+        /** @var array<string, mixed> $value */
+        return self::follow($document, $value, [...$segments, $member]);
+    }
+
+    /**
      * The unescaped segments of a local pointer.
      *
      * @return list<string>
