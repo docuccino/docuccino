@@ -289,6 +289,9 @@ as its own losses. The first group below is what 3.1 already gives up; the rest 
 | A tag's `summary` | Dropped — tags fall back to their `name` for display |
 | A tag's `parent` | Dropped; the hierarchy survives as `x-tagGroups`, which a generated document carries |
 | A tag's `kind` | Dropped — consumers treat every tag the same |
+| Any other member 3.2 added — a media type's `description`, `itemSchema`, `prefixEncoding` and `itemEncoding`, an encoding's nested `encoding`, an example's `dataValue` and `serializedValue`, a response `summary`, a server `name`, a security scheme's `deprecated` and `oauth2MetadataUrl`, an OAuth `deviceAuthorization` flow, `components.mediaTypes` | Dropped where it stood, with the pointer in the diagnostic. A shared media type is inlined where a `$ref` named it, so no reference dangles |
+| An `in: querystring` parameter | Dropped — 3.1 has no way to say "the raw query string as one value", and a `query` parameter is a different contract. A shared one takes every `$ref` that named it with it |
+| A cookie parameter's `style: cookie` | Dropped — `form` is the only cookie style 3.1 spells, and its `explode` defaults to true where `cookie`'s defaults to false |
 
 | In 3.1 / 3.2 | In the 3.0 export |
 | --- | --- |
