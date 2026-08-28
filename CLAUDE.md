@@ -8,6 +8,7 @@ diffing and a bundled Scalar viewer.
 > Full references — read these before substantial work:
 > - [`docs/design/uir-and-extensions.md`](./docs/design/uir-and-extensions.md) — UIR spec detail, extension API, precedence, **placement rule**
 > - [`docs/design/inference-embedding.md`](./docs/design/inference-embedding.md) — PHPStan/Larastan engine design + spike-verified traps
+> - [`docs/design/defect-classes.md`](./docs/design/defect-classes.md) — patterns hit more than once, and the test that recognises each
 > - [`docs/testing.md`](./docs/testing.md) — coverage standards, how to run coverage, ratchet policy
 > - [`website/STYLE.md`](./website/STYLE.md) — binding style bar for the docs site (Laravel docs are the gold standard)
 > - [`RELEASING.md`](./RELEASING.md) — tagging, the subtree split, `SPLIT_TOKEN`
@@ -226,6 +227,12 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   when the list is short; an attribute has shipped uncatalogued with the whole suite green. And a
   scan that matches NOTHING must fail rather than pass: assert a plausible minimum beside the real
   assertion so a scanner that stopped seeing its shapes fails loudly instead of passing forever.
+  An invariant stated in prose owes a test that fails when it is broken: reversing a `sort()` whose
+  docblock said the answer must never depend on producer order passed all 8327 tests, and swapping a
+  merge order documented as append-only passed every test of the file that documents it. And a claimed
+  GUARD must be executed, never asserted — write the code the guard should refuse and confirm it does.
+  A docblock promising PHPStan would refuse a careless call shipped while the call analysed clean; a
+  claim that overstates its own guard is how the next reader skips writing one.
   Full statement in [`docs/testing.md`](./docs/testing.md) §Standards.
 - **Fixture honesty (binding)**: real-engine fixtures MUST use idiomatic target-package shapes
   (magic-attribute `@property` models, conditional/closure resource fields, `Rule::*` descriptors);
@@ -291,6 +298,20 @@ worth what the tree was during the run** — if anything else could have written
 means nothing and the run has to be repeated in a quiet tree. Never `git checkout <file>` to undo an
 experiment either; it silently discards a neighbour's uncommitted work, so copy the file aside
 instead.
+
+A worktree isolates FILES and nothing else. Sibling worktrees share one `TMPDIR` and one scratchpad,
+and two suites running at once delete each other's fragment cache mid-test — a reviewer reported 385
+spurious failures, an agent lost a failure it could never reproduce, one had its scratchpad file
+overwritten, and benchmarks read up to 10x their quiet-tree time. Give each run a private `TMPDIR`, or
+run the gates one at a time, and say which — "anything else could have written to it" includes the
+worktree next door.
+
+**Never branch from a branch you are about to dispatch work onto.** A stack based on another open
+branch inherits whatever that branch was when you cut it, and the ancestry check that would catch it
+reads the OLD hashes, so it reports nothing wrong. Re-chain and verify by CONTENT, not by SHA. Merging
+such a stack bottom-up is worse: squashing the base collapses every message above it, which is how one
+release shipped with eight of its thirteen entries missing from the changelog
+([`RELEASING.md`](./RELEASING.md)).
 
 The one honest pull toward sharing the main checkout is `tests/fixture-app/app`, which is gitignored
 and so absent from a fresh worktree. That does not license sharing: a task needing the fixture group
