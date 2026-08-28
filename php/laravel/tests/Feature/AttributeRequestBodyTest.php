@@ -565,3 +565,41 @@ it('leaves a recovered required list alone, at any depth, when a declaration say
         ->and($scoring['properties']['scores'])->toBe(['type' => 'object', 'additionalProperties' => []])
         ->and($diagnostics)->toBe([]);
 });
+
+it('stands the note down only where a body declaration can reach the field', function (string $verb, array $reported): void {
+    // `report()` runs ahead of the verb branch, and a read verb sends the recovered rules to QUERY
+    // parameters instead of a body ({@see RecoveredRequest}). A #[BodyParameter] reaches a request body
+    // and nothing else, so on a GET it settles nothing about the query parameter the rules produced —
+    // and standing the notice down for it would leave that parameter wider than the rules left it with
+    // nothing said, which is the exact case the consult exists to avoid.
+    $rules = new RuleSet([
+        'meta' => [ValidationRule::of('array')],
+        'other' => [ValidationRule::of('array')],
+    ]);
+
+    $context = new RouteContext(
+        route: new RouteDescriptor([strtoupper($verb)], 'api/things'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet([new BodyParameter(name: 'meta.scoring')]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+        extensions: new ResolvedExtensions,
+    );
+
+    RuleSetNormalizer::report((new RuleSetNormalizer)->normalize($rules), $context);
+
+    $fields = array_map(
+        static fn (Diagnostic $d): string => (string) preg_replace('/^Validation field "([^"]+)".*$/', '$1', $d->message),
+        $context->components->diagnostics(),
+    );
+
+    expect($fields)->toBe($reported);
+})->with([
+    // The verbs whose recovered rules become a body: the declaration reaches the field and settles it.
+    'post' => ['post', ['other']],
+    'put' => ['put', ['other']],
+    'patch' => ['patch', ['other']],
+    // …and the verbs whose rules become query parameters, where it reaches nothing.
+    'get' => ['get', ['meta', 'other']],
+    'head' => ['head', ['meta', 'other']],
+]);
