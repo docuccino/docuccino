@@ -116,10 +116,10 @@ final class ExampleAudit
      * as a {@see ContractParameter} carrying its `danglingRef`, and {@see ContractChecker} fails on it —
      * a second report of the same fact from the same document would read as two defects.
      *
-     * @param  list<ExampleFinding>  $broken  filled with the references that name nothing
+     * @param  list<ExampleFinding>  $unresolvedRefs  filled with the references that name nothing
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
-    private function sites(array &$broken): array
+    private function sites(array &$unresolvedRefs): array
     {
         $document = $this->index->document();
         $sites = [];
@@ -129,7 +129,7 @@ final class ExampleAudit
         // because there is nothing left to index. It comes first for the same reason.
         foreach (['paths' => $this->index->unresolvedPaths(), 'webhooks' => $this->index->unresolvedWebhooks()] as $member => $unresolved) {
             foreach ($unresolved as $key => $reference) {
-                $broken[] = self::brokenReference(
+                $unresolvedRefs[] = self::unresolvedReference(
                     $member === 'paths' ? (string) $key : 'webhooks.'.$key,
                     'the path item',
                     [$member, (string) $key],
@@ -142,12 +142,12 @@ final class ExampleAudit
             foreach ($operation->parameters as $parameter) {
                 $where = $operation->label().' → '.$parameter->label();
 
-                foreach ($this->beside($parameter->definition, $parameter->segments, $parameter->schemaSegments(), $where, $broken) as $site) {
+                foreach ($this->beside($parameter->definition, $parameter->segments, $parameter->schemaSegments(), $where, $unresolvedRefs) as $site) {
                     $sites[] = [$site[0], $site[1], $where];
                 }
             }
 
-            foreach ($this->inOperation($operation->label(), $operation->operation, $operation->segments, $operation->requestBody($document), $broken) as $site) {
+            foreach ($this->inOperation($operation->label(), $operation->operation, $operation->segments, $operation->requestBody($document), $unresolvedRefs) as $site) {
                 $sites[] = $site;
             }
         }
@@ -156,7 +156,7 @@ final class ExampleAudit
         // beside one is copied by exactly the same reader — the outbound half is not a different sort of
         // document, only a different half of the same one. It has no parameters: nothing routes to it.
         foreach ($this->index->webhooks() as $webhook) {
-            foreach ($this->inOperation($webhook->label(), $webhook->operation, $webhook->segments, $webhook->requestBody($document), $broken) as $site) {
+            foreach ($this->inOperation($webhook->label(), $webhook->operation, $webhook->segments, $webhook->requestBody($document), $unresolvedRefs) as $site) {
                 $sites[] = $site;
             }
         }
@@ -177,10 +177,10 @@ final class ExampleAudit
      * @param  array<string, mixed>  $operation
      * @param  list<string>  $segments  pointer segments addressing the operation
      * @param  array{0: array<string, mixed>, 1: list<string>, 2: string|null}|null  $body  its request body, `$ref` followed
-     * @param  list<ExampleFinding>  $broken
+     * @param  list<ExampleFinding>  $unresolvedRefs
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
-    private function inOperation(string $label, array $operation, array $segments, ?array $body, array &$broken): array
+    private function inOperation(string $label, array $operation, array $segments, ?array $body, array &$unresolvedRefs): array
     {
         $sites = [];
 
@@ -189,9 +189,9 @@ final class ExampleAudit
             // node it degrades to would find none, and the body's examples would simply stop being
             // audited — which is the one outcome a broken pointer must never buy.
             if ($body[2] !== null) {
-                $broken[] = self::brokenReference($label.' → request body', 'the request body', $body[1], $body[2]);
+                $unresolvedRefs[] = self::unresolvedReference($label.' → request body', 'the request body', $body[1], $body[2]);
             } else {
-                foreach ($this->inContent($body[0], $body[1], $label.' → request body ', $broken) as $site) {
+                foreach ($this->inContent($body[0], $body[1], $label.' → request body ', $unresolvedRefs) as $site) {
                     $sites[] = [$site[0], $site[1], $label.' → request body '.$site[2]];
                 }
             }
@@ -216,14 +216,14 @@ final class ExampleAudit
             [$response, $where, $dangling] = Refs::follow($this->index->document(), $raw, [...$segments, 'responses', $status]);
 
             if ($dangling !== null) {
-                $broken[] = self::brokenReference($label.' → '.$status, 'the response', $where, $dangling);
+                $unresolvedRefs[] = self::unresolvedReference($label.' → '.$status, 'the response', $where, $dangling);
 
                 continue;
             }
 
             $prefix = $label.' → '.$status.' ';
 
-            foreach ([...$this->inHeaders($response, $where, $prefix, $broken), ...$this->inContent($response, $where, $prefix, $broken)] as $site) {
+            foreach ([...$this->inHeaders($response, $where, $prefix, $unresolvedRefs), ...$this->inContent($response, $where, $prefix, $unresolvedRefs)] as $site) {
                 $sites[] = [$site[0], $site[1], $label.' → '.$status.' '.$site[2]];
             }
         }
@@ -238,13 +238,13 @@ final class ExampleAudit
      *
      * @param  list<string>  $segments  where the reference stands
      */
-    private static function brokenReference(string $label, string $location, array $segments, string $reference): ExampleFinding
+    private static function unresolvedReference(string $label, string $location, array $segments, string $reference): ExampleFinding
     {
         return new ExampleFinding(
             Pointer::of($segments),
             $label,
             [Violation::unresolvedRef($reference, $location)],
-            brokenRef: $reference,
+            unresolvedRef: $reference,
         );
     }
 
@@ -275,15 +275,15 @@ final class ExampleAudit
      * @param  array<string, mixed>  $node
      * @param  list<string>  $segments
      * @param  string  $prefix  how the caller will name a site found here, for a finding that has no site
-     * @param  list<ExampleFinding>  $broken
+     * @param  list<ExampleFinding>  $unresolvedRefs
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
-    private function inHeaders(array $node, array $segments, string $prefix, array &$broken): array
+    private function inHeaders(array $node, array $segments, string $prefix, array &$unresolvedRefs): array
     {
         $sites = [];
 
         foreach (ResponseHeaders::of($this->index->document(), $node, $segments) as $header) {
-            foreach ($this->beside($header->definition, $header->segments, $header->schemaSegments(), $prefix.'header '.$header->name, $broken) as $site) {
+            foreach ($this->beside($header->definition, $header->segments, $header->schemaSegments(), $prefix.'header '.$header->name, $unresolvedRefs) as $site) {
                 $sites[] = [$site[0], $site[1], 'header '.$header->name];
             }
 
@@ -301,10 +301,10 @@ final class ExampleAudit
      * @param  array<string, mixed>  $node
      * @param  list<string>  $segments
      * @param  string  $prefix  how the caller will name a site found here, for a finding that has no site
-     * @param  list<ExampleFinding>  $broken
+     * @param  list<ExampleFinding>  $unresolvedRefs
      * @return list<array{0: list<string>, 1: list<string>, 2: string}>
      */
-    private function inContent(array $node, array $segments, string $prefix, array &$broken): array
+    private function inContent(array $node, array $segments, string $prefix, array &$unresolvedRefs): array
     {
         $content = $node['content'] ?? null;
 
@@ -325,7 +325,7 @@ final class ExampleAudit
             /** @var array<string, mixed> $media */
             $mediaSegments = [...$segments, 'content', $mediaType];
 
-            foreach ($this->beside($media, $mediaSegments, [...$mediaSegments, 'schema'], $prefix.$mediaType, $broken) as $site) {
+            foreach ($this->beside($media, $mediaSegments, [...$mediaSegments, 'schema'], $prefix.$mediaType, $unresolvedRefs) as $site) {
                 $sites[] = [$site[0], $site[1], $mediaType];
             }
 
@@ -351,10 +351,10 @@ final class ExampleAudit
      * @param  list<string>  $segments
      * @param  list<string>  $schemaSegments
      * @param  string  $label  how a reader would name this position
-     * @param  list<ExampleFinding>  $broken
+     * @param  list<ExampleFinding>  $unresolvedRefs
      * @return list<array{0: list<string>, 1: list<string>}>
      */
-    private function beside(array $node, array $segments, array $schemaSegments, string $label, array &$broken): array
+    private function beside(array $node, array $segments, array $schemaSegments, string $label, array &$unresolvedRefs): array
     {
         $sites = [];
 
@@ -379,7 +379,7 @@ final class ExampleAudit
                 [$resolved, $where, $dangling] = Refs::follow($this->index->document(), $example, [...$segments, 'examples', $name]);
 
                 if ($dangling !== null) {
-                    $broken[] = self::brokenReference($label.' → example '.$name, 'the example', $where, $dangling);
+                    $unresolvedRefs[] = self::unresolvedReference($label.' → example '.$name, 'the example', $where, $dangling);
 
                     continue;
                 }

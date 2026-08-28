@@ -258,7 +258,7 @@ it('reports a reference the document does not define, wherever it stands', funct
 
     expect($findings)->toHaveCount(1)
         ->and($findings[0]->severity)->toBe(Severity::Warning)
-        ->and($findings[0]->code)->toBe('lint.broken-reference')
+        ->and($findings[0]->code)->toBe('lint.unresolved-reference')
         ->and($findings[0]->message)->toBe(sprintf('The node at %s is a `$ref` to `%s`, which the document does not define.', $pointer, $reference))
         ->and($findings[0]->help)->toContain('Define the component the pointer names');
 })->with([
@@ -318,5 +318,5 @@ it('does not let the example allow-list silence a broken reference', function ()
     );
 
     expect($findings)->toHaveCount(1)
-        ->and($findings[0]->code)->toBe('lint.broken-reference');
+        ->and($findings[0]->code)->toBe('lint.unresolved-reference');
 });

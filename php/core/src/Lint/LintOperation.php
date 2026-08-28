@@ -131,7 +131,7 @@ final readonly class LintOperation
             [$item, , $unresolved] = Refs::follow($document, $written, []);
 
             // A pointer that lands nowhere leaves no methods to read. There is nothing to lint and
-            // nothing to invent; the pointer itself is reported as `lint.broken-reference` by the example
+            // nothing to invent; the pointer itself is reported as `lint.unresolved-reference` by the example
             // audit, which reads the same fact off {@see \Docuccino\Core\Contract\ContractIndex}.
             if ($unresolved !== null) {
                 continue;

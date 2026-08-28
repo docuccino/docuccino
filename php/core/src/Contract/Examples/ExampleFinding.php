@@ -23,14 +23,14 @@ final readonly class ExampleFinding
      * @param  string  $pointer  where the example lives in the document, or where the reference stands
      * @param  string  $label  how a reader would name it: `GET /api/invoices → 200 application/json`
      * @param  list<Violation>  $violations
-     * @param  string|null  $brokenRef  the reference that resolved to nothing — then no example was ever
-     *                                  read here, and a renderer saying one failed its schema would be
-     *                                  describing something that does not exist
+     * @param  string|null  $unresolvedRef  the reference that resolved to nothing — then no example was
+     *                                      ever read here, and a renderer saying one failed its schema
+     *                                      would be describing something that does not exist
      */
     public function __construct(
         public string $pointer,
         public string $label,
         public array $violations,
-        public ?string $brokenRef = null,
+        public ?string $unresolvedRef = null,
     ) {}
 }

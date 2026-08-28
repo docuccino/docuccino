@@ -409,14 +409,14 @@ it('audits response header examples in name order rather than in the document’
 it('reports a reference the document does not define rather than skipping what is behind it', function (string $where, callable $break, string $label, string $pointer): void {
     $report = (new ExampleAudit(contractIndex($break)))->run();
 
-    $broken = array_values(array_filter($report->findings, static fn ($f): bool => $f->brokenRef !== null));
+    $unresolvedRefs = array_values(array_filter($report->findings, static fn ($f): bool => $f->unresolvedRef !== null));
 
     expect($report->ok())->toBeFalse()
-        ->and($broken)->toHaveCount(1)
-        ->and($broken[0]->brokenRef)->toBe('#/components/'.$where)
-        ->and($broken[0]->label)->toBe($label)
-        ->and($broken[0]->pointer)->toBe($pointer)
-        ->and($broken[0]->violations[0]->message)->toBe('is documented at #/components/'.$where.', which the contract does not define')
+        ->and($unresolvedRefs)->toHaveCount(1)
+        ->and($unresolvedRefs[0]->unresolvedRef)->toBe('#/components/'.$where)
+        ->and($unresolvedRefs[0]->label)->toBe($label)
+        ->and($unresolvedRefs[0]->pointer)->toBe($pointer)
+        ->and($unresolvedRefs[0]->violations[0]->message)->toBe('is documented at #/components/'.$where.', which the contract does not define')
         ->and($report->uncheckable)->toBe([]);
 })->with([
     'a request body' => [
@@ -471,7 +471,7 @@ it('keeps auditing every other example once one reference is broken', function (
     // The fixture's other examples still went through the validator: one broken pointer costs the
     // audit what is behind it and nothing else.
     expect($report->checked)->toBeGreaterThan(0)
-        ->and(array_filter($report->findings, static fn ($f): bool => $f->brokenRef === null))->toBe([]);
+        ->and(array_filter($report->findings, static fn ($f): bool => $f->unresolvedRef === null))->toBe([]);
 });
 
 it('counts a broken reference apart from an example that failed its schema', function (): void {
@@ -506,7 +506,7 @@ it('audits an example shared through components.examples', function (): void {
     expect($report->findings)->toHaveCount(1)
         ->and($report->findings[0]->pointer)->toBe('/components/examples/Wrong/value')
         ->and($report->findings[0]->label)->toBe('GET /api/invoices → 200 application/json')
-        ->and($report->findings[0]->brokenRef)->toBeNull();
+        ->and($report->findings[0]->unresolvedRef)->toBeNull();
 });
 
 it('checks a shared example exactly as many times as an inline one', function (): void {
@@ -544,10 +544,10 @@ it('reports an example reference the document does not define', function (): voi
         return $document;
     })))->run();
 
-    $broken = array_values(array_filter($report->findings, static fn ($f): bool => $f->brokenRef !== null));
+    $unresolvedRefs = array_values(array_filter($report->findings, static fn ($f): bool => $f->unresolvedRef !== null));
 
-    expect($broken)->toHaveCount(1)
-        ->and($broken[0]->brokenRef)->toBe('#/components/examples/Gone')
-        ->and($broken[0]->label)->toBe('GET /api/invoices → 200 application/json → example shared')
-        ->and($broken[0]->pointer)->toBe('/paths/~1api~1invoices/get/responses/200/content/application~1json/examples/shared');
+    expect($unresolvedRefs)->toHaveCount(1)
+        ->and($unresolvedRefs[0]->unresolvedRef)->toBe('#/components/examples/Gone')
+        ->and($unresolvedRefs[0]->label)->toBe('GET /api/invoices → 200 application/json → example shared')
+        ->and($unresolvedRefs[0]->pointer)->toBe('/paths/~1api~1invoices/get/responses/200/content/application~1json/examples/shared');
 });

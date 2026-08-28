@@ -35,7 +35,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
  * check nobody asked for. It names the schema, which is the half to go and look at.
  *
  * A response or body the audit could not reach at all, because the `$ref` standing there names nothing
- * the document defines, is `lint.broken-reference` — a defect in the document rather than in an
+ * the document defines, is `lint.unresolved-reference` — a defect in the document rather than in an
  * example, and the one the author must fix first, since everything under that node went unread.
  */
 #[ExtensionOrder(priority: Priorities::LAST)]
@@ -64,14 +64,14 @@ final class ExampleSchemaLint implements DocumentTransformer
             // allow-list is consulted — that list accepts an example a schema under-describes, and a
             // pointer at nothing is not an example anybody decided to keep. `diagnostics.accept` is
             // where a code nobody can act on goes.
-            if ($finding->brokenRef !== null) {
+            if ($finding->unresolvedRef !== null) {
                 $context->report(new Diagnostic(
                     severity: Severity::Warning,
-                    code: 'lint.broken-reference',
+                    code: 'lint.unresolved-reference',
                     message: sprintf(
                         'The node at %s is a `$ref` to `%s`, which the document does not define.',
                         $finding->pointer,
-                        $finding->brokenRef,
+                        $finding->unresolvedRef,
                     ),
                     help: 'Nothing can read what that node promises — not a client generator, not a '
                         .'viewer, not a contract test — so the schema and the examples under it went '

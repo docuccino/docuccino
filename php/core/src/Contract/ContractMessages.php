@@ -65,10 +65,10 @@ final class ContractMessages
      */
     public static function undocumented(Exchange $exchange, ContractIndex $index, ?string $hint = null): string
     {
-        $broken = self::unresolvedPathItem($exchange->path, $index->unresolvedPaths());
+        $unresolved = self::unresolvedPathItemFor($exchange->path, $index->unresolvedPaths());
 
-        if ($broken !== null) {
-            return self::withHint(self::brokenPathItem($exchange->label(), 'path', $broken[0], $broken[1]), $hint);
+        if ($unresolved !== null) {
+            return self::withHint(self::unresolvedPathItem($exchange->label(), 'path', $unresolved[0], $unresolved[1]), $hint);
         }
 
         $candidates = [];
@@ -154,14 +154,14 @@ final class ContractMessages
      */
     public static function undocumentedWebhook(string $name, ?string $method, ContractIndex $index, ?string $hint = null): string
     {
-        $broken = $index->unresolvedWebhooks()[$name] ?? null;
+        $unresolved = $index->unresolvedWebhooks()[$name] ?? null;
 
-        if ($broken !== null) {
-            return self::withHint(self::brokenPathItem(
+        if ($unresolved !== null) {
+            return self::withHint(self::unresolvedPathItem(
                 ($method === null ? '' : strtoupper($method).' ').'webhooks.'.$name,
                 'webhook',
                 $name,
-                $broken,
+                $unresolved,
             ), $hint);
         }
 
@@ -246,14 +246,14 @@ final class ContractMessages
      */
     public static function examples(ExampleReport $report): string
     {
-        $broken = array_values(array_filter(
+        $unresolved = array_values(array_filter(
             $report->findings,
-            static fn (ExampleFinding $finding): bool => $finding->brokenRef !== null,
+            static fn (ExampleFinding $finding): bool => $finding->unresolvedRef !== null,
         ));
 
         // Two different counts decide the grammar: the noun follows how many were checked, the verb
         // and the pronoun follow how many failed.
-        $failed = count($report->findings) - count($broken);
+        $failed = count($report->findings) - count($unresolved);
 
         $lines = [
             sprintf(
@@ -267,12 +267,12 @@ final class ContractMessages
             '',
         ];
 
-        if ($broken !== []) {
+        if ($unresolved !== []) {
             $lines[] = sprintf(
                 '%d reference%s the contract does not define, so nothing behind %s was read at all.',
-                count($broken),
-                count($broken) === 1 ? ' names something' : 's name something',
-                count($broken) === 1 ? 'it' : 'them',
+                count($unresolved),
+                count($unresolved) === 1 ? ' names something' : 's name something',
+                count($unresolved) === 1 ? 'it' : 'them',
             );
             $lines[] = '';
         }
@@ -482,7 +482,7 @@ final class ContractMessages
      * @param  array<string, string>  $unresolved  template => the reference
      * @return array{0: string, 1: string}|null
      */
-    private static function unresolvedPathItem(string $path, array $unresolved): ?array
+    private static function unresolvedPathItemFor(string $path, array $unresolved): ?array
     {
         $best = null;
         $bestMask = '';
@@ -509,7 +509,7 @@ final class ContractMessages
      * `$ref` naming nothing is the same broken document inbound and outbound, and the reader's next
      * move — define the component or fix the pointer — is the same too.
      */
-    private static function brokenPathItem(string $subject, string $kind, string $name, string $reference): string
+    private static function unresolvedPathItem(string $subject, string $kind, string $name, string $reference): string
     {
         return implode("\n", [
             sprintf('%s is documented behind a reference the contract does not define.', PlainText::of($subject)),
