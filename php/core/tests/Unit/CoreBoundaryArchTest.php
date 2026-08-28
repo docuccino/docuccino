@@ -85,7 +85,22 @@ it('never hands a public API consumer a type marked @internal', function (): voi
         'Docuccino\Core\Contract\Coverage\CoverageReport',
         'Docuccino\Core\Inference\ArgumentSlots',
         'Docuccino\Core\Inference\DType\DType',
-    )->and($surface)->not->toContain('Docuccino\Core\Contract\SchemaCheck', 'Docuccino\Core\Inference\LocalWrites');
+    );
+
+    // One expectation per name, because `not->toContain(a, b)` passes the moment ONE of them is
+    // absent — a list there is a guard that stops guarding as soon as its first entry is right.
+    //
+    // The two ParameterSchema types are here deliberately: they are how the CHECKER reads a
+    // parameter's declaration, nothing outside core names them, and a type that joins the frozen
+    // surface with no user freezes a shape nobody has had to live with yet.
+    foreach ([
+        'Docuccino\Core\Contract\SchemaCheck',
+        'Docuccino\Core\Contract\ParameterSchema',
+        'Docuccino\Core\Contract\ParameterSchemaKind',
+        'Docuccino\Core\Inference\LocalWrites',
+    ] as $marked) {
+        expect($surface)->not->toContain($marked);
+    }
 
     $leaks = [];
     foreach ($surface as $class) {
