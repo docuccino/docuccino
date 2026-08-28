@@ -118,6 +118,11 @@ final class SecurityAudit
      * The `scheme => scopes` pairs one `security` value lists, skipping anything that isn't shaped like
      * a Security Requirement Object — a malformed one is somebody else's report, not a missing scheme.
      *
+     * A Security Requirement Object keys by scheme NAME, so a positional key is not one: `[["bearer"]]`
+     * writes the scheme where the scopes go and states no name at all. Reading the position as a name
+     * invented the scheme "0" and failed the build over a typo nobody had made — while the shape itself
+     * is already an error the schema check reports, at the pointer that locates it.
+     *
      * @return list<array{0: string, 1: list<string>}>
      */
     private static function names(mixed $security): array
@@ -133,6 +138,10 @@ final class SecurityAudit
             }
 
             foreach ($requirement as $name => $scopes) {
+                if (! is_string($name)) {
+                    continue;
+                }
+
                 $named = [];
                 foreach (is_array($scopes) ? $scopes : [] as $scope) {
                     if (is_string($scope)) {
@@ -140,7 +149,7 @@ final class SecurityAudit
                     }
                 }
 
-                $pairs[] = [(string) $name, $named];
+                $pairs[] = [$name, $named];
             }
         }
 

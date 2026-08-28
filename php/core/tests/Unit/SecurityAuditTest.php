@@ -150,14 +150,29 @@ it('reports exactly the codes a document earns', function (array $document, arra
         ],
         [],
     ],
-    'scopes that are not a list of strings' => [
+    // A Security Requirement Object keys by scheme NAME, so a positional key states no name at all.
+    // Read as one it invented the scheme "0" and failed the build over a typo nobody had made; the
+    // shape itself is already a `document.schema-invalid` error at the pointer that locates it.
+    'a list-shaped requirement, whose entry is a scheme where the scopes go' => [
         [
-            'paths' => ['/invoices' => ['get' => ['security' => [['oauth2' => ['ok', 7, ['nested']]]]]]],
-            'components' => ['securitySchemes' => ['oauth2' => ['type' => 'oauth2', 'flows' => [
-                'implicit' => ['scopes' => ['ok' => 'Fine']],
-            ]]]],
+            'paths' => ['/invoices' => ['get' => ['security' => [['bearerAuth']]]]],
+            'components' => ['securitySchemes' => ['bearerAuth' => ['type' => 'http', 'scheme' => 'bearer']]],
         ],
         [],
+    ],
+    'a list-shaped requirement naming nothing the document defines' => [
+        [
+            'security' => [['bearerAuth']],
+        ],
+        [],
+    ],
+    // ...and the positional key is skipped rather than the requirement it sits in: the named half of a
+    // half-written requirement is still a claim the document makes.
+    'a positional entry beside a named one' => [
+        [
+            'paths' => ['/invoices' => ['get' => ['security' => [['bearerAuth', 'apiKey' => []]]]]],
+        ],
+        ['security.undefined-scheme/error'],
     ],
     'a securitySchemes bucket that is not a map' => [
         [

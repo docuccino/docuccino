@@ -109,6 +109,35 @@ it('reports a config default requirement naming a scheme the catalogue is short 
         ->and($reported[0]->help)->toContain('(bearer)');
 });
 
+/*
+ * The one malformed shape an author actually writes by hand: `security: [["bearer"]]` puts the scheme
+ * where the scopes go, so the entry states no scheme name at all. The audit says nothing about it — a
+ * positional key is not a scheme name, and reading it as one invented the scheme "0" and failed the
+ * build over a typo nobody had made. The mistake is still reported, once, by the check positioned to
+ * locate it: the schema validation, at the pointer.
+ */
+it('leaves a list-shaped requirement to the schema check rather than inventing a scheme from its position', function (): void {
+    // The workbench already routes an auth-guarded action, so `security.default` reaches an operation.
+    bindStubEngine();
+    $result = generateDocument(static function (array $raw): array {
+        $raw['security']['schemes'] = ['bearer' => ['type' => 'http', 'scheme' => 'bearer']];
+        // The list around the scheme name is the author error: OAS wants `[['bearer' => []]]`.
+        $raw['security']['default'] = [['bearer']];
+
+        return $raw;
+    });
+
+    $invalid = diagnosticsCoded($result->diagnostics, 'document.schema-invalid');
+
+    expect(diagnosticsCoded($result->diagnostics, 'security.undefined-scheme'))->toBe([])
+        ->and(diagnosticsCoded($result->diagnostics, 'security.undeclared-scope'))->toBe([])
+        // ...and the author is told, at error severity, exactly where the malformed entry sits.
+        ->and($invalid)->not->toBeEmpty()
+        ->and($invalid[0]->severity->value)->toBe('error')
+        ->and(implode("\n", array_map(static fn ($d): string => $d->message, $invalid)))
+        ->toContain('/get/security/0 The data (array) must match the type: object');
+});
+
 it('says nothing about the workbench document as it stands', function (): void {
     bindStubEngine();
     $result = generateDocument();
