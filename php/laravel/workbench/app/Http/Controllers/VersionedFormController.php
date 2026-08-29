@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Workbench\App\Http\Controllers;
+
+use Docuccino\Attributes\Group;
+use Docuccino\Attributes\Response;
+use Illuminate\Http\JsonResponse;
+use Workbench\App\Data\FormData;
+
+/**
+ * A forms list that really returns what it documents — `FormData` as the code publishes it today,
+ * `title` and all. {@see FormController::index()} deliberately disagrees with its own document (a test
+ * pins the disagreement), so it cannot stand in for a body anyone asserts against.
+ */
+final class VersionedFormController
+{
+    /**
+     * List published forms.
+     *
+     * Returns the published forms with their identifiers, titles and publication timestamps.
+     */
+    #[Group('Forms')]
+    #[Response(status: 200, type: 'list<FormData>', description: 'The published forms.')]
+    public function index(): JsonResponse
+    {
+        return response()->json([
+            new FormData(id: 1, title: 'Onboarding', publishedAt: '2026-08-01T09:00:00Z'),
+            new FormData(id: 2, title: 'Offboarding', publishedAt: null),
+        ]);
+    }
+}
