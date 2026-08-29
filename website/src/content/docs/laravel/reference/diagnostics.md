@@ -256,6 +256,9 @@ document is derived from the code you have today.
 | `versioning.change-invalid` | warning | A change can't be applied as it's written — no version on its `#[ApiVersionChange]`, an empty or self-referential rename, or a rename onto a field the schema already publishes | Fix the declaration: `to:` is the field name in the code today, `from:` the one older versions publish |
 | `versioning.change-target-missing` | warning | A change renames a field the schema no longer publishes, so that version is left saying what the code says | Update the change to the field name as it's spelled today, or retire it if the field is gone |
 | `versioning.schema-unresolved` | warning | A change names a class this document publishes no schema for, so it was skipped | Name the class whose shape the document actually publishes — a change can only rewrite a schema the document contains |
+| `versioning.version-unstated` | warning | A document declares `api_version` but its `info.version` is still the `1.0.0` placeholder, so it wasn't derived as a version | Set `info.version` to the version this document describes — that value **is** the API version |
+| `versioning.unordered` | warning | The versions in play are neither all dates nor all semver, so the changes couldn't be placed in order and none was applied | Write every version the same way, and set [`versioning`](/laravel/reference/configuration/#versioning) to `date` or `semver` |
+| `versioning.scope-matches-nothing` | warning | An `#[AppliesTo]` names no operation this document publishes that schema for, so that part of the change applies to nothing | Write the operation as the document names it — `GET /api/things`, an operationId, or either with a `*` |
 
 ## Narrative content
 

@@ -21,7 +21,7 @@ A version is a **named document**, and most of that already exists.
 | Piece | Where |
 | --- | --- |
 | Multiple named documents, each with its own `info.version`, routes, servers, overlays | `config/docuccino.php` → `documents` |
-| Contract assertions against a named document | `ApiContract::against()` |
+| Contract assertions against a named document | `ApiContract::forDocument()` |
 | Stable identities and lookup by node id | `x-docuccino.id`, `ContractIndex` |
 | Date version policy, and a differ that classifies breaking vs non-breaking | `DateVersionPolicy`, `DocumentDiffer` |
 | Reading a document as it was at any git ref | `docuccino:diff --against=<ref>` |
@@ -80,6 +80,54 @@ closed-set-owes-an-enum case.
 
 There is no OpenAPI convention for "this field exists from version X" — the registry carries only a
 boolean `deprecated`. Minting an extension for it is a decision to take deliberately and say out loud.
+
+`info.version` **is** the version, and `api_version` says only that the document is one. A second
+config key naming the version again would be two sources for one fact, and the only thing two sources
+ever do is disagree. A document left at the shipped `1.0.0` placeholder therefore states no version at
+all: it is not derived, and the build says so (`versioning.version-unstated`) rather than putting a
+version nobody serves into every operation's enum and making it the value a client falls back to.
+
+### Which of two versions is older is asked once
+
+Deriving an older document is a walk down an ordered change list, so ordering is load-bearing rather
+than incidental. It is the SAME question the diff policies ask when they gate a version bump, and it is
+answered in one place for both — `date` compares the `YYYY-MM-DD` prefix, `semver` compares three
+integers. `strcmp` is not that answer for either: bytewise, `1.10.0` comes before `1.9.0`, so a
+semver-versioned application's changes would apply backwards, deterministically and silently.
+
+The order comes from the document's `versioning` keyword, and where the keyword names none it is
+derived from the shape of the versions themselves — all dates, or all semver. That is a default rather
+than a knob: an application spelling its versions plainly never has to spell them out again in config.
+Versions that are neither, or a mixture, order under nothing and no change is applied.
+
+### Scope is a change's property, not a verb's
+
+A change applies wherever the schema it names appears, which is the common case and the only one that
+needs no fork. `#[AppliesTo]` narrows it, and sits beside `#[ApiVersionChange]` rather than being an
+argument of `#[RenamedResponseField]`: scope is a property of the change, so declaring it once covers
+however many fields the change renames and every verb added later inherits it for free.
+
+Its selectors are the vocabulary the lint safelists already use — an operation signature, an
+operationId, either with a `*` — read by the one reader that reads a safelist entry, so the product has
+one grammar for "this entry names that operation" rather than two that differ in a corner.
+
+**The fork rule.** A narrowed change means the operations in scope genuinely have a different type from
+the rest in that version's document.
+
+1. Compute the operations this document publishes the schema for, following `$ref`s.
+2. If the scope covers all of them, rename the shared component **in place**. No fork — otherwise
+   scoping to every operation would emit something different from scoping to none, which is the same
+   fact said twice in two shapes.
+3. Otherwise the operations in scope get the older shape **inlined**, and the rest keep the shared
+   component untouched.
+
+Inlining rather than minting `FormDataV2` is the point. A published component name becomes a type name
+in a generated client, and `ComponentNames`' invariant is that a name is a function of the things
+contesting it — a name appearing or vanishing with how many operations happened to share a body would
+be a function of the route table, so an unrelated new endpoint would rename somebody's type. An inline
+schema registers no name, so it cannot. The one shape this cannot produce is a schema containing
+itself: its private copy would point at the shared component one level down, so the operation is left
+at the shape the code publishes and the build says why.
 
 ## The correctness model
 

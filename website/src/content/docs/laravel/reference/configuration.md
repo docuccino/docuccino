@@ -58,7 +58,6 @@ say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 
 ```php
 // 'api_version' => [
-//     'version' => '2026-09-01',
 //     'changes' => ['dir' => 'app/Api/Versions'],
 //     'header' => 'X-Api-Version',
 // ],
@@ -67,8 +66,15 @@ say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 Declaring `api_version` makes the document an API **version** rather than a document that merely has
 one. Three things follow.
 
-`info.version` becomes the version you name here, so the date lives in one place and the document can
-never disagree with itself about which version it is.
+The version is [`info.version`](#info) — the one OAS already models. There is no second key naming it,
+because a second key could only ever disagree with the first. Leave `info.version` at the shipped
+`1.0.0` placeholder and the document is not derived as a version at all; the build says so with a
+`versioning.version-unstated` warning rather than publishing a version you do not serve.
+
+The order two versions are in is the one [`versioning`](#versioning) names — `date` or `semver`. Say
+nothing and Docuccino reads the order off the versions themselves, so an application writing plain
+dates or plain semver never has to write it down twice. Versions that are neither, or a mixture, cannot
+be ordered and the changes are not applied (`versioning.unordered`).
 
 Every operation gains the header a client pins a version with — `in: header`, optional, defaulting to
 this document's version and enumerating every version your `documents` map declares. Consumers read

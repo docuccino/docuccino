@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 33 attributes with signatures and examples.
+description: The docuccino/attributes package — all 34 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 33 attributes, grouped by what they do:
+All 34 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -69,6 +69,7 @@ All 33 attributes, grouped by what they do:
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
+| [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
 
@@ -1258,3 +1259,49 @@ final class InvoiceFieldsRenamed {}
 Every argument is a plain string or a `::class` constant, which is what makes a change readable without
 running any of your code. An argument Docuccino cannot read is reported as `attribute.unreadable` and
 the declaration is skipped rather than guessed at.
+
+### `#[AppliesTo]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $operation,
+)
+```
+
+Narrows a change to the operations you name. Leave it off and the change applies wherever the schema
+it names is published, which is what you want when a shape changed and it changed everywhere.
+
+Name an operation the way the document names it — the signature `GET /api/invoices`, or its
+`operationId` — or use `*` for any run of characters, which is the same wildcard
+[`routes.include`](/laravel/reference/configuration/#routes) uses. Repeat the attribute for more than
+one.
+
+```php
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\AppliesTo;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
+
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'The invoice list publishes `title` where it published `name`.',
+)]
+#[AppliesTo('GET /api/invoices')]
+#[AppliesTo('GET /api/customers/*/invoices')]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+final class InvoiceListTitleReplacesName {}
+```
+
+Scoping has a consequence worth knowing before you reach for it. If a schema is published as a shared
+component and your scope covers only some of the operations that publish it, those operations really do
+have a different type from the rest in that version's document — so the older shape is written **inline**
+at each of them and the shared component is left as your code has it. Nothing is renamed and no new
+component name appears, because a component name becomes a type name in a generated client and it must
+not depend on how many endpoints happened to share a body. Scope the change to every operation that
+publishes the schema and there is no fork at all: the component itself is renamed, exactly as if you had
+written no `#[AppliesTo]`.
+
+A selector that names no operation the document publishes that schema for is reported as
+`versioning.scope-matches-nothing`. It is worth reading: a route renamed long after the change was
+written is how a declared change quietly stops applying.

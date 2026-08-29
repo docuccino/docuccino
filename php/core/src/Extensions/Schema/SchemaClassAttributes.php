@@ -31,6 +31,7 @@ use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 use Docuccino\Core\Diagnostics\Diagnostic;
@@ -101,6 +102,7 @@ final class SchemaClassAttributes
     public const array ELSEWHERE = [
         Abilities::class => 'on the action',
         ApiVersionChange::class => 'on a version-change class',
+        AppliesTo::class => 'on a version-change class, to narrow it to some operations',
         CookieParameter::class => 'on the action',
         DeprecatedOperation::class => 'on the action',
         ErrorComponent::class => 'on the exception class whose body it names',
