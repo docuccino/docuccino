@@ -9,6 +9,7 @@ use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\DocumentGraph;
 use Docuccino\Core\Document\PathItem;
+use Docuccino\Core\Document\RenamedFieldExamples;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Contracts\DocumentTransformer;
@@ -128,21 +129,34 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     {
         $id = $this->identity->namedSchemaId(ltrim($rename->schema, '\\'));
 
+        // The examples first, guided by the schemas as the code publishes them: renaming the schema
+        // first would leave the walk looking for a property that has already moved.
+        [$rewritten, $dropped] = RenamedFieldExamples::inDocument($doc, $id, $rename->from, $rename->to);
+
         $outcome = 'unresolved';
         $cyclic = false;
 
         // From the members rather than the root: the root's own `x-docuccino` describes the document,
         // and no schema's identity can be there. Nothing reaches, so nothing expands: an unscoped rename
         // is the walk with its `$ref` half switched off.
-        foreach ($doc as $key => $value) {
+        foreach ($rewritten as $key => $value) {
             if (is_array($value)) {
-                $doc[$key] = $this->rewrite($value, $doc, $id, $rename, [], [], $outcome, $cyclic);
+                $rewritten[$key] = $this->rewrite($value, $rewritten, $id, $rename, [], [], $outcome, $cyclic);
             }
         }
 
         $this->reportOutcome($outcome, $rename, $change, $context, $said);
 
-        return $doc;
+        // A rename nothing could apply leaves every schema at the shape the code publishes, so its
+        // examples belong there too: dropping one for a change that moved nothing costs a reader an
+        // example and tells them nothing they were not already told above.
+        if ($outcome !== 'renamed') {
+            return $doc;
+        }
+
+        $this->reportDrops($dropped, $rename, $change, $context, $said);
+
+        return $rewritten;
     }
 
     /**
@@ -342,6 +356,10 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             return $doc;
         }
 
+        // As in {@see applyRename()}, and confined to this operation: the rest of the document goes on
+        // publishing the shape the code publishes, and so do the rest of its examples.
+        [$operation, $dropped] = RenamedFieldExamples::inOperation($operation, $doc, $id, $rename->from, $rename->to, $site['keys']);
+
         $outcome = 'unresolved';
         $cyclic = false;
         $forked = $this->rewrite($operation, $doc, $id, $rename, $reaches, [], $outcome, $cyclic);
@@ -364,6 +382,10 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
             return $doc;
         }
+
+        // Said only now: every refusal above leaves the document exactly as it was, examples included,
+        // and a report of a drop that never happened is a defect the reader would go looking for.
+        $this->reportDrops($dropped, $rename, $change, $context, $said);
 
         // Everything the fork pulled in from `components` is a second node with the component's id on
         // it, and the copy says something different the moment it is renamed. `ContractIndex` resolves
@@ -551,6 +573,37 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
                 help: 'Update the change to name the field as it is spelled today, or retire it if the field is gone.',
             )
             : self::schemaUnresolved($change, $rename), $said);
+    }
+
+    /**
+     * The examples this version could not be given, and where they stood. One per site rather than one
+     * per rename: each is a different example, at a different pointer, and a reader fixing one is not
+     * thereby told about the next.
+     *
+     * @param  list<string>  $dropped
+     * @param  array<string, true>  $said
+     */
+    private function reportDrops(array $dropped, RenamedResponseField $rename, VersionChange $change, DocumentContext $context, array &$said): void
+    {
+        foreach ($dropped as $pointer) {
+            self::reportOnce($context, new Diagnostic(
+                severity: Severity::Warning,
+                code: 'versioning.example-dropped',
+                message: sprintf(
+                    '%s renames "%s" on %s, and the example at %s could not be rewritten to the shape this version publishes, so it was dropped.',
+                    PlainText::of($change->class),
+                    PlainText::of($rename->to),
+                    PlainText::of($rename->schema),
+                    PlainText::of($pointer),
+                ),
+                help: 'A consumer copies an example and sends it back, so one this version\'s schema '
+                    .'rejects is worse than none. The rewrite stops where the schema does not settle on '
+                    .'one shape for the example — a oneOf/anyOf branch, a `$ref` that leads back to '
+                    .'itself, a value that is not the kind of thing the schema describes, or an example '
+                    .'already carrying both names. Pin an example that matches the schema beside it, or '
+                    .'narrow the schema so one shape governs it.',
+            ), $said);
+        }
     }
 
     /**
