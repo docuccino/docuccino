@@ -247,13 +247,14 @@ Webhooks are collected from `#[Webhook]` classes under the directory you configu
 
 Codes from the version changes a document declares under
 [`api_version`](/laravel/reference/configuration/#api_version). They fire while an older version's
-document is derived from the code you have today.
+document is derived from the code you have today — see
+[API versioning](/laravel/guides/api-versioning/).
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
 | `versioning.dir-missing` | warning | The configured version-changes directory doesn't exist, so no changes were read and every version publishes today's shape | Create it, or unset `api_version.changes.dir` |
 | `versioning.dir-escapes-base` | warning | The version-changes directory doesn't name a path inside your application and was ignored | Write it relative to the application root |
-| `versioning.change-invalid` | warning | A change can't be applied as it's written — no version on its `#[ApiVersionChange]`, an empty or self-referential rename, or a rename onto a field the schema already publishes | Fix the declaration: `to:` is the field name in the code today, `from:` the one older versions publish |
+| `versioning.change-invalid` | warning | A change can't be applied — no version on its `#[ApiVersionChange]`, an empty or self-referential rename, a rename onto a field the schema already publishes, or a scoped change over a schema that contains itself, which can't be given a private copy at one operation | Fix the declaration: `to:` is the field name in the code today, `from:` the one older versions publish. For the self-referential schema, drop the `#[AppliesTo]` so the component is renamed in place |
 | `versioning.change-target-missing` | warning | A change renames a field the schema no longer publishes, so that version is left saying what the code says | Update the change to the field name as it's spelled today, or retire it if the field is gone |
 | `versioning.schema-unresolved` | warning | A change names a class this document publishes no schema for, so it was skipped | Name the class whose shape the document actually publishes — a change can only rewrite a schema the document contains |
 | `versioning.version-unstated` | warning | A document declares `api_version` but its `info.version` is still the `1.0.0` placeholder, so it wasn't derived as a version | Set `info.version` to the version this document describes — that value **is** the API version |

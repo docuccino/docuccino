@@ -140,9 +140,10 @@ export default defineConfig({
 				},
 				{
 					// Ordered by when a reader needs them: fix the output, look at it, split it, add
-					// prose, hold it to your tests, ship it, make it fast, and — when it goes wrong —
-					// troubleshoot. Build speed follows production because its CI recipe extends the
-					// job that page builds.
+					// prose, hold it to your tests, version it, ship it, make it fast, and — when it
+					// goes wrong — troubleshoot. Versioning follows contract testing because the
+					// per-version check is built out of those assertions. Build speed follows
+					// production because its CI recipe extends the job that page builds.
 					label: 'Guides',
 					items: [
 						{ label: 'Customizing the output', slug: 'laravel/guides/customizing-output' },
@@ -150,6 +151,7 @@ export default defineConfig({
 						{ label: 'Multiple documents', slug: 'laravel/guides/multiple-documents' },
 						{ label: 'Adding your own pages', slug: 'laravel/guides/narrative-content' },
 						{ label: 'Contract testing', slug: 'laravel/guides/contract-testing' },
+						{ label: 'API versioning', slug: 'laravel/guides/api-versioning' },
 						{ label: 'Deploying to production', slug: 'laravel/guides/production' },
 						{ label: 'Speeding up builds', slug: 'laravel/guides/speeding-up-builds' },
 						{ label: 'Troubleshooting', slug: 'laravel/guides/troubleshooting' },

@@ -102,6 +102,9 @@ document.
 
 Migrating *stored records* to a new shape is a different problem, and API versioning does not solve it.
 
+The whole loop — declare a change, get a document per version, hold both to your test suite — is in
+the [API versioning guide](/laravel/guides/api-versioning/).
+
 ### `info`
 
 ```php
