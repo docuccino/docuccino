@@ -20,6 +20,11 @@ use Workbench\App\Http\Middleware\DowngradeToPinnedApiVersion;
  * Every request goes through `getJson()`, so the router and the application's middleware really run.
  * `contractResponse()` builds a response without ever touching the router, so it would prove nothing
  * about the wire.
+ *
+ * The wire is only half of what a version document promises, though. `assertValidExamples()` holds the
+ * other half — every example the document publishes, against the schema beside it — because an example
+ * is what a consumer copies and sends back, and a version rewriting a schema without its examples
+ * publishes a document that contradicts itself.
  */
 beforeEach(function (): void {
     app()->setBasePath(dirname(__DIR__, 3));
@@ -48,6 +53,7 @@ it('serves a response the head version documents when the head version is pinned
         ->assertOk();
 
     ApiContract::assertions()->assertValidResponse($response);
+    ApiContract::assertions()->assertValidExamples();
 
     expect($response->json())->toBe([
         ['id' => 1, 'title' => 'Onboarding', 'publishedAt' => '2026-08-01T09:00:00Z'],
@@ -65,6 +71,11 @@ it('serves a response the older version documents when the older version is pinn
     // The contract FIRST: it is the assertion that has to catch a runtime whose downgrade stopped
     // working, and a shape check standing in front of it would fail before the contract was consulted.
     ApiContract::assertions()->assertValidResponse($response);
+
+    // And the examples the older document publishes, which the rename has to have walked with the
+    // schema: one still carrying `title` beside a schema declaring `name` is a document that
+    // contradicts itself in the member a consumer copies.
+    ApiContract::assertions()->assertValidExamples();
 
     // And then what the wire actually carried — the old name, because the application's runtime put
     // it back.

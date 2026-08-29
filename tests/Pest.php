@@ -2043,6 +2043,26 @@ function versionHeaderComponent(array $document, string $name = 'XApiVersion'): 
 }
 
 /**
+ * The media type one versioned-forms operation publishes its 200 under — where an example a consumer
+ * would copy stands, beside the schema it has to satisfy.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, mixed>
+ */
+function versionedFormMedia(array $document, string $path = '/api/versioned-forms'): array
+{
+    $paths = $document['paths'] ?? [];
+    $item = is_array($paths) ? ($paths[$path] ?? []) : [];
+    $operation = is_array($item) ? ($item['get'] ?? []) : [];
+    $responses = is_array($operation) ? ($operation['responses'] ?? []) : [];
+    $response = is_array($responses) ? ($responses['200'] ?? []) : [];
+    $content = is_array($response) ? ($response['content'] ?? []) : [];
+    $media = is_array($content) ? ($content['application/json'] ?? []) : [];
+
+    return is_array($media) ? $media : [];
+}
+
+/**
  * The `$ref`s one operation's parameter list carries, in the order it states them.
  *
  * @param  array<string, mixed>  $document
