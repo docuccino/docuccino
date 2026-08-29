@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 34 attributes with signatures and examples.
+description: The docuccino/attributes package — all 37 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 34 attributes, grouped by what they do:
+All 37 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -69,6 +69,9 @@ All 34 attributes, grouped by what they do:
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
+| [`#[MadeResponseFieldRequired]`](#maderesponsefieldrequired) | Declare a response field that older versions did not promise to send. |
+| [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
+| [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
 | [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
@@ -1260,6 +1263,100 @@ final class InvoiceFieldsRenamed {}
 Every argument is a plain string or a `::class` constant, which is what makes a change readable without
 running any of your code. An argument Docuccino cannot read is reported as `attribute.unreadable` and
 the declaration is skipped rather than guessed at.
+
+### `#[MadeResponseFieldRequired]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $field,
+)
+```
+
+Declares that a response field became always-present in this change's version. The versions before it
+published the field without promising it, so their documents go on publishing the property and leave
+it out of `required`.
+
+`field` is the name your code spells today, the same way `#[RenamedResponseField]`'s `to:` is — every
+verb but the rename names its field in the present tense, because the rename is the only one that
+changes what a field is called.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Every invoice now carries `title`; before this it could be absent.',
+)]
+#[MadeResponseFieldRequired(schema: InvoiceResource::class, field: 'title')]
+final class InvoiceTitleAlwaysSent {}
+```
+
+Dropping a field from `required` only ever widens what the older document accepts, so a per-version
+contract test cannot fail on this one — it is safe by construction rather than by being checked. What
+*is* checked is the declaration against your code: if the schema does not mark the field required
+today, the change describes something that did not happen, and the build says so with
+`versioning.change-target-unchanged`.
+
+### `#[MadeResponseFieldOptional]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $field,
+)
+```
+
+Declares that a response field became sometimes-absent in this change's version. The versions before it
+always sent it, so their documents name it in `required`.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'An invoice omits `settledAt` until it settles; before this it was always present, as null.',
+)]
+#[MadeResponseFieldOptional(schema: InvoiceResource::class, field: 'settledAt')]
+final class InvoiceSettledAtBecameOptional {}
+```
+
+This is the one with a runtime half. The older document now promises the field is always there, and
+that promise is only true if your application really puts it back for a caller pinned that far. Pin the
+version in a contract test: a response that omits the field is refused against the older document, and
+the failure names the field.
+
+### `#[MadeRequestFieldOptional]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $field,
+)
+```
+
+Declares that a request field became optional in this change's version. The versions before it demanded
+it, so their documents name it in `required` and a request that leaves it out is refused at that
+version — correctly, because that version really did demand it.
+
+`schema` is the class your **request body** is recovered from — a form request, a Data class. That is a
+different shape from the response one even where one class produces both, and this verb reaches only
+the request half.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Creating an invoice no longer requires `currency`; it defaults to the account\'s.',
+)]
+#[MadeRequestFieldOptional(schema: StoreInvoiceRequest::class, field: 'currency')]
+final class InvoiceCurrencyBecameOptional {}
+```
+
+There is no matching `#[MadeRequestFieldRequired]`, and that is the asymmetry rather than an omission:
+`required` arriving narrows a request and moves nothing on a response, so the two sides of the wire do
+not take the same pair of verbs.
 
 ### `#[AppliesTo]`
 
