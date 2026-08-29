@@ -652,6 +652,26 @@ it('is insensitive to security scheme-map key order', function (): void {
     expect(diffOf($old, $new)->isEmpty())->toBeTrue();
 });
 
+it('tells two requirements apart when JSON cannot spell either of them', function (): void {
+    // A scope name that is not valid UTF-8 makes `json_encode()` answer false, and a fallback that
+    // gave every un-encodable requirement one key would read the dropped scope as still present.
+    $wide = ['oauth2' => ["read-\xB1"]];
+    $narrow = ['oauth2' => ["write-\xB1"]];
+
+    $old = diffBase();
+    $old['paths']['/api/v1/forms/{id}']['get']['security'] = [$wide, $narrow];
+    $new = diffBase();
+    $new['paths']['/api/v1/forms/{id}']['get']['security'] = [$wide];
+
+    $changes = changesByCode(diffOf($old, $new));
+
+    expect($changes)->toHaveKey('operation.security-removed')
+        ->and($changes['operation.security-removed']->fields[0]->old)->toBe($narrow)
+        ->and($changes)->not->toHaveKey('operation.security-added')
+        // …and the two are still ONE requirement each: neither side reports a change against itself.
+        ->and(diffOf($old, $old)->isEmpty())->toBeTrue();
+});
+
 it('classifies a property removed from a response schema as breaking', function (): void {
     $new = diffBase();
     unset($new['paths']['/api/v1/forms/{id}']['get']['responses']['200']['content']['application/json']['schema']['properties']['title']);

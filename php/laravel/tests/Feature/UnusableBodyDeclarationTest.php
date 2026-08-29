@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Tests\Fixtures\SchemaClass\PreferencesRouteController;
 use Docuccino\Laravel\Tests\Fixtures\SchemaClass\ReadOnlyFilterRequest;
 use Docuccino\Laravel\Tests\Fixtures\SchemaClass\SharedPreferencesRequest;
+use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Routing\Router;
 
@@ -159,26 +160,45 @@ it('reaches the verdict on a build that asked the engine nothing', function (): 
 });
 
 /**
- * And it stays document-wide across a warm hit: the read route comes back from the cache while the
- * write route is built fresh, and the observation the cached fragment carries is what stands the report
- * down. An observation that did not ride the fragment would report the shared type here.
+ * And it stays document-wide across a warm hit: both read routes come back from the cache while the
+ * write route is built fresh. The reportable observation then exists nowhere but a cached fragment, so
+ * a fragment that had lost it would go silent about a declaration that really does reach nothing — and
+ * the shared type's cached observation is still the one the fresh write route stands down.
  */
-it('lets a warm read route be stood down by a write route built beside it', function (): void {
+it('reports from a warm read route while a write route is built beside it', function (): void {
     $engine = preferenceRouteEngine();
     $dir = fragmentCacheDir('unusable-body-mixed');
+    $coldDir = null;
 
     try {
-        // Warm only the read route.
+        // Warm the read routes only — the write route below is the one thing built fresh.
         localityBuild(static function (Router $router): void {
             $router->get('api/preferences', [PreferencesRouteController::class, 'list']);
+            $router->get('api/preference-filters', [PreferencesRouteController::class, 'index']);
         }, $engine);
 
-        $mixed = localityBuild(sharedPreferenceRoutes(), $engine);
+        $mixed = localityBuild(sharedPreferenceRoutes(), $engine, $warmEngine);
 
-        expect(diagnosticsCoded($mixed->diagnostics, 'attribute.schema-class-unusable'))->toHaveCount(1)
-            ->and(preferenceReports($mixed->diagnostics))->not->toContain(SharedPreferencesRequest::class);
+        // The same route set with nothing cached, purely to say what "warm" was worth here.
+        $coldDir = fragmentCacheDir('unusable-body-mixed-cold');
+        localityBuild(sharedPreferenceRoutes(), $engine, $coldEngine);
+
+        $reported = diagnosticsCoded($mixed->diagnostics, 'attribute.schema-class-unusable');
+
+        expect($reported)->toHaveCount(1)
+            ->and($reported[0]->message)->toContain(ReadOnlyFilterRequest::class)
+            // …and the shared type stays silent, because the write route beside it was built fresh.
+            ->and(preferenceReports($mixed->diagnostics))->not->toContain(SharedPreferencesRequest::class)
+            // …and the read routes really did come back warm rather than being rebuilt into the report.
+            ->and($warmEngine)->toBeInstanceOf(CountingTypeEngine::class)
+            ->and($coldEngine)->toBeInstanceOf(CountingTypeEngine::class)
+            ->and($warmEngine->analyzeCount)->toBeLessThan($coldEngine->analyzeCount);
     } finally {
         removeFragmentCacheDir($dir);
+
+        if ($coldDir !== null) {
+            removeFragmentCacheDir($coldDir);
+        }
     }
 });
 
