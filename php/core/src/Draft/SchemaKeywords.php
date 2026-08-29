@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace Docuccino\Core\Draft;
 
 /**
- * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Five
+ * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Six
  * questions live here: the classification {@see SchemaDraft::declareShape()} reasons over — shape,
  * refinement or annotation — the subschema position {@see SUBSCHEMA_POSITIONS} a keyword's
  * value occupies, which is what tells a reader an array there is a JSON object rather than a list,
  * which keywords a semantic DIFF may treat as a non-event ({@see ANNOTATION_ONLY}, a narrower
  * question than the first), which say nothing about the INSTANCE, so a reader deciding whether one
- * value satisfies a schema may pass over them ({@see saysNothingAboutTheInstance()}), and what
- * `contains`' own bounds default to ({@see containsAsserts()}). Every keyword the document can carry
- * is answered once here, so no producer keeps its own copy.
+ * value satisfies a schema may pass over them ({@see saysNothingAboutTheInstance()}), which CONSTRAIN
+ * one ({@see isRefinement()}, the set a diff owes a direction for), and what `contains`' own bounds
+ * default to ({@see containsAsserts()}). Every keyword the document can carry is answered once here,
+ * so no producer keeps its own copy.
  *
  * A keyword this does not know is never superseded: we do not retract what we cannot read.
  *
@@ -223,6 +224,24 @@ final class SchemaKeywords
     public static function annotations(): array
     {
         return self::ANNOTATIONS;
+    }
+
+    /** Whether `$keyword` constrains values of a given instance type rather than shaping or describing them. */
+    public static function isRefinement(string $keyword): bool
+    {
+        return array_key_exists($keyword, self::REFINEMENTS);
+    }
+
+    /**
+     * Every refinement keyword, so a guard reads the set rather than a second copy of it. This is the
+     * set a semantic diff owes a DIRECTION for — one unread is a tightened bound passing a release gate
+     * as safe.
+     *
+     * @return list<string>
+     */
+    public static function refinements(): array
+    {
+        return array_keys(self::REFINEMENTS);
     }
 
     /**

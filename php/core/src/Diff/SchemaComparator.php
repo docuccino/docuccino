@@ -49,15 +49,22 @@ use Docuccino\Core\Support\Hydrate;
  * member there is a property a consumer reads, not a constraint), the `contains` bounds are compared
  * beside the keyword they bound, and everything else runs through {@see comparePositions()}.
  *
- * Three things that decision does NOT try to answer, recorded here because a silent limit reads as a
- * claim. A keyword's polarity is its own; where 2020-12 makes one keyword's outcome depend on a
- * SIBLING — `contains` and `then` marking items and properties evaluated, so an `unevaluatedItems:
- * false` beside them means something different — that interaction is unread, and both halves are
- * reported on their own terms. A `$ref` still compares opaquely, so a branch naming a component
- * carries whatever that component's own diff says. And the only REFINEMENT pair compared at all is
- * `contains`' own `minContains`/`maxContains`, because those two are what decides whether the keyword
- * beside them asserts anything: every other bound — `minItems`, `maxLength`, `minimum`, `multipleOf`,
- * `maxProperties` — is unread, so tightening one is reported nowhere.
+ * Every REFINEMENT keyword is read too, and the direction is again a recorded decision per keyword
+ * ({@see SchemaRefinement}) rather than one rule stretched over all of them, because `maximum` and
+ * `minimum` sit at the same position and point opposite ways. A bound tightened is breaking on both
+ * sides, one relaxed is the `schema.enum-value-added` argument on a response, and a change nothing can
+ * order — two `pattern`s, two dialects of `exclusiveMinimum` — is reported and classed breaking rather
+ * than waved through. `contains`' own `minContains`/`maxContains` keep the comparison beside the
+ * keyword they bound ({@see compareContainsBounds()}), because they are inert without it and because
+ * whether they assert anything is what decides what that keyword's presence is worth.
+ *
+ * Two things neither decision tries to answer, recorded here because a silent limit reads as a claim.
+ * A keyword's polarity is its own; where 2020-12 makes one keyword's outcome depend on a SIBLING —
+ * `contains` and `then` marking items and properties evaluated, so an `unevaluatedItems: false` beside
+ * them means something different, and draft-04's boolean `exclusiveMinimum` modifying the `minimum`
+ * beside it — that interaction is unread, and both halves are reported on their own terms. And a
+ * `$ref` still compares opaquely, so a branch naming a component carries whatever that component's own
+ * diff says.
  *
  * @phpstan-import-type Rule from SchemaPolarity
  */
@@ -89,6 +96,7 @@ final class SchemaComparator
         $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $request, $changes);
         $this->compareRequired($old, $new, $path, $id, $request, $changes);
+        $this->compareRefinements($old, $new, $path, $id, $request, $changes);
         $this->compareContainsBounds($old, $new, $path, $id, $changes);
         $this->comparePositions($old, $new, $path, $id, $request, $changes);
 
@@ -144,7 +152,7 @@ final class SchemaComparator
     }
 
     /**
-     * Every annotation-only keyword either side carries, compared by the fingerprint {@see valueKey()}
+     * Every annotation-only keyword either side carries, compared by the fingerprint {@see ValueKey}
      * rather than by `===`: two `stdClass` standing for one JSON object are never the identical one.
      * Non-breaking by construction, and the only place in this class where that is not a judgment about
      * the two values.
@@ -163,7 +171,7 @@ final class SchemaComparator
             $before = $old[$keyword] ?? null;
             $after = $new[$keyword] ?? null;
 
-            if (self::valueKey($before) === self::valueKey($after)) {
+            if (ValueKey::of($before) === ValueKey::of($after)) {
                 continue;
             }
 
@@ -542,6 +550,49 @@ final class SchemaComparator
     }
 
     /**
+     * Every refinement keyword either side carries, in one sorted pass so the answer never depends on
+     * which side declared what. Which way each moved is {@see SchemaRefinement}'s recorded decision; the
+     * VERDICT is this class's, and it is the one the enum comparison beside it already makes. A bound
+     * TIGHTENED is breaking on both sides — a request rejects a body a writer used to send, and a
+     * schema's `request` flag can under-state its audience — while one RELAXED is safe for a writer and
+     * hands a response reader a value it has no case for. A change nothing can order is breaking, for
+     * the reason every indeterminate answer here is: a false alarm costs the author one look.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareRefinements(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    {
+        foreach (Arr::sortedUnion(array_keys($old), array_keys($new)) as $keyword) {
+            $kind = SchemaRefinement::kindOf($keyword);
+
+            // Not a refinement, or one with a comparison of its own — `enum`, `format`, `contentSchema`
+            // and the two `contains` bounds, each named in the rule that sends it there.
+            if ($kind === null || $kind === RefinementKind::Elsewhere) {
+                continue;
+            }
+
+            $move = SchemaRefinement::move($keyword, $old, $new);
+
+            if ($move === RefinementMove::Unchanged) {
+                continue;
+            }
+
+            $changes[] = $this->change(
+                ChangeKind::Changed,
+                $id,
+                $path.'.'.$keyword,
+                $move !== RefinementMove::Widened || ! $request,
+                'schema.refinement-'.($move === RefinementMove::Incomparable ? 'changed' : $move->value),
+                $keyword,
+                $old[$keyword] ?? null,
+                $new[$keyword] ?? null,
+            );
+        }
+    }
+
+    /**
      * `minContains`/`maxContains`, the bounds on how many items `contains` has to match. Both are inert
      * with no `contains` beside them, so they are read only where both sides carry one; where `contains`
      * itself arrives or leaves, that is the whole change and {@see presence()} states it.
@@ -560,7 +611,7 @@ final class SchemaComparator
         $isAtLeast = SchemaKeywords::minContains($new);
 
         if ($wasAtLeast !== $isAtLeast) {
-            $changes[] = $this->bound($isAtLeast > $wasAtLeast, $path.'.minContains', $id, 'minContains', $wasAtLeast, $isAtLeast);
+            $changes[] = $this->containsBound($isAtLeast > $wasAtLeast, $path.'.minContains', $id, 'minContains', $wasAtLeast, $isAtLeast);
         }
 
         $wasCapped = SchemaKeywords::maxContains($old);
@@ -569,7 +620,7 @@ final class SchemaComparator
         if ($wasCapped !== $isCapped) {
             // No cap is no bound at all, so one arriving narrows however high it is set.
             $narrowed = $isCapped !== null && ($wasCapped === null || $isCapped < $wasCapped);
-            $changes[] = $this->bound($narrowed, $path.'.maxContains', $id, 'maxContains', $wasCapped, $isCapped);
+            $changes[] = $this->containsBound($narrowed, $path.'.maxContains', $id, 'maxContains', $wasCapped, $isCapped);
         }
     }
 
@@ -640,7 +691,8 @@ final class SchemaComparator
         return $out;
     }
 
-    private function bound(bool $narrowed, string $path, string $id, string $field, ?int $old, ?int $new): Change
+    /** One of `contains`' own bounds, which keep a code of their own because they bound a keyword rather than the value. */
+    private function containsBound(bool $narrowed, string $path, string $id, string $field, ?int $old, ?int $new): Change
     {
         return $this->change(
             ChangeKind::Changed,
@@ -687,7 +739,7 @@ final class SchemaComparator
     private static function pairBranches(array $old, array $new): array
     {
         /** @var list<callable(mixed): ?string> $rungs */
-        $rungs = [self::identityKey(...), self::refKey(...), self::valueKey(...)];
+        $rungs = [self::identityKey(...), self::refKey(...), ValueKey::of(...)];
 
         $pairs = [];
         $oldLeft = array_keys($old);
@@ -837,30 +889,16 @@ final class SchemaComparator
     {
         $againstKeys = [];
         foreach ($against as $value) {
-            $againstKeys[self::valueKey($value)] = true;
+            $againstKeys[ValueKey::of($value)] = true;
         }
 
         $out = [];
         foreach ($from as $value) {
-            if (! isset($againstKeys[self::valueKey($value)])) {
+            if (! isset($againstKeys[ValueKey::of($value)])) {
                 $out[] = $value;
             }
         }
 
         return $out;
-    }
-
-    /**
-     * A value's identity, as its JSON text — which is what makes `{}` and `[]` two values and two
-     * `stdClass` standing for one JSON object one. Where JSON cannot spell it at all (a string that is
-     * not valid UTF-8, an `INF`, a `NAN`) `serialize()` answers instead, faithfully: the fallback was
-     * `gettype()`, under which every un-encodable value shared one key, so a removed enum value read as
-     * still present and the breaking change went unreported. The prefixes keep the two spaces apart.
-     */
-    private static function valueKey(mixed $value): string
-    {
-        $encoded = json_encode($value);
-
-        return $encoded === false ? 'php:'.serialize($value) : 'json:'.$encoded;
     }
 }
