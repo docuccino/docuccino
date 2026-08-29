@@ -227,6 +227,14 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   when the list is short; an attribute has shipped uncatalogued with the whole suite green. And a
   scan that matches NOTHING must fail rather than pass: assert a plausible minimum beside the real
   assertion so a scanner that stopped seeing its shapes fails loudly instead of passing forever.
+  A guard derived from a SUBSET is silent outside it, and two of them side by side cover their two
+  subsets and nothing between — so where guards divide a domain, assert their UNION against the
+  domain itself, and let a member owing no answer carry a ROW saying so rather than falling in the
+  gap. **Covering is not agreeing**: a guard over what several tables READ proves nothing about
+  whether they answer alike, which is how a tightened `maxItems` failed a release gate on the same
+  day a tightened `maxContains` passed it. Where one fact is computed at more than one site, the
+  sites owe a guard that they agree — and it must state the rule independently, because a guard that
+  asks the code for its own rule agrees with whatever the code does.
   An invariant stated in prose owes a test that fails when it is broken: reversing a `sort()` whose
   docblock said the answer must never depend on producer order passed all 8327 tests, and swapping a
   merge order documented as append-only passed every test of the file that documents it. And a claimed

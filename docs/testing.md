@@ -127,6 +127,16 @@ coverage locally and the ratchet policy for the CI gate.
     mutation-freedom guard already relied on; `orderedMaps()` is its floor, because a map with fewer than
     two members has no order to get wrong.
 - **Negative paths, exit codes, and degradation branches are coverage**, not extras.
+- **A test may READ the host; it may not assert what the host decides.** `sys_get_temp_dir()` is
+  `/tmp` on a Linux runner and five segments deep on a mac, and depth is a thing this product's path
+  scrubber decides on — so a row asserting that the temp directory is redacted states the deep answer
+  on one machine and the shallow one on another, and agrees with whichever ran it. Using the temp
+  directory as a PLACE to write is fine; asserting on its shape is not. Make the machine fact an
+  INPUT and state every answer as a row, so the deep and shallow cases are both asserted everywhere.
+  The same goes for `getenv()`, `php_uname()` and `get_include_path()`. Where a guard is deliberately
+  environment-sensitive — the registered-stream-wrapper table is, and must be — it has to be
+  ONE-directional (a machine wider than the table is a defect; a table wider than the machine is
+  ordinary) and fail with an instruction naming the decision that is owed.
 - **Coverage gates protect the goldens' blind spots** — code paths the golden-file suite
   never traverses (emit branches, patch/precedence, cache read/validate, error/skeleton
   branches). A green golden diff does not imply those paths ran.
