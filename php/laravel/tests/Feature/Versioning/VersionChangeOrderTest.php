@@ -49,7 +49,7 @@ it('publishes the change prose against the version each one shipped in', functio
     versioningDiagnostics('tests/Fixtures/Versioning/Chained', '2026-06-01');
 
     $document = generateDocument(key: 'v')->document->toArray();
-    $schema = $document['paths']['/api/versioned-forms']['get']['parameters'][0]['schema'];
+    $schema = versionHeaderComponent($document)['schema'];
 
     // One document is configured here, so the enum is its own version alone — the set is read off the
     // documents, and the prose off the changes, which are two different sources on purpose.

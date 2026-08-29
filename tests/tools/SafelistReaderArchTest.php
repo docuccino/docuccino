@@ -73,9 +73,9 @@ function safelistExplainedRawSelectorReads(): array
 {
     return [
         // Whether the change is scoped at all, which chooses between two whole paths and matches nothing.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:92' => 'transform() → an unscoped change takes the other branch',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:108' => 'transform() → an unscoped change takes the other branch',
         // Hands each selector to the reader on its own, so the one that decided nothing can be named.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:173' => 'applyScopedRename() → iterates the selectors into namesAny()',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:189' => 'applyScopedRename() → iterates the selectors into namesAny()',
     ];
 }
 

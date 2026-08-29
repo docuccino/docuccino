@@ -71,6 +71,21 @@ final readonly class IdentityGenerator
     }
 
     /**
+     * The identity of a parameter published as a component of its own rather than on one operation:
+     * `$scope` is what the component belongs to — the DOCUMENT, for a parameter every operation shares.
+     *
+     * Deliberately not {@see publishedSchemaId()}'s bytes. That mint exists because two schemas with
+     * different content can be published beside each other and a differ pairing components by id would
+     * see only one of them; a document publishes at most one component per header and location, so
+     * nothing can be beside it to collide with. Keyed on the thing instead, an enum that gained a
+     * version stays a CHANGE to one node rather than one node replaced by another.
+     */
+    public function publishedParameterId(string $scope, string $in, string $name): string
+    {
+        return $this->id('par', ['published', $scope, $in, $name]);
+    }
+
+    /**
      * @param  list<string>  $typeArguments
      */
     public function namedSchemaId(string $fqcn, array $typeArguments = []): string

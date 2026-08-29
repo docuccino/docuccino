@@ -162,24 +162,44 @@ The property keeps its position and everything else it carried — its descripti
 `required` is rewritten along with it. A `required` still naming today's field would accept exactly the
 bodies the document says are invalid, which is the disagreement the contract test exists to catch.
 
-Every operation also gains the header a client pins a version with:
+Every operation also gains the header a client pins a version with. It is declared once, under
+`components.parameters`, and every operation points at it:
 
 ```json
 {
-  "name": "X-Api-Version",
-  "in": "header",
-  "required": false,
-  "description": "The API version this request is answered as. Omit it and the request is answered as the version this document describes.",
-  "schema": {
-    "type": "string",
-    "enum": ["2026-06-01", "2026-09-01"],
-    "default": "2026-06-01",
-    "x-enum-varnames": ["_20260601", "_20260901"],
-    "x-enumNames": ["_20260601", "_20260901"],
-    "x-enum-descriptions": ["", "Invoices publish `title` where they used to publish `name`."]
+  "components": {
+    "parameters": {
+      "XApiVersion": {
+        "name": "X-Api-Version",
+        "in": "header",
+        "required": false,
+        "description": "The API version this request is answered as. Omit it and the request is answered as the version this document describes.",
+        "schema": {
+          "type": "string",
+          "enum": ["2026-06-01", "2026-09-01"],
+          "default": "2026-06-01",
+          "x-enum-varnames": ["V2026_06_01", "V2026_09_01"],
+          "x-enumNames": ["V2026_06_01", "V2026_09_01"],
+          "x-enum-descriptions": ["", "Invoices publish `title` where they used to publish `name`."]
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/invoices": {
+      "get": {
+        "parameters": [{ "$ref": "#/components/parameters/XApiVersion" }]
+      }
+    }
   }
 }
 ```
+
+The component is named after the header, so renaming the header renames it and nothing else can move
+it. Restated on every operation it would be the largest repeated thing in the document — four arrays
+one member long per version, on every endpoint — and a 400-endpoint API at fifty versions would publish
+several megabytes of one sentence. Shared, the size of the declaration no longer depends on how many
+endpoints or how many versions you have.
 
 The `enum` is the closed set of versions your `documents` map declares, so a consumer reads the
 supported versions out of the document instead of out of your changelog, and a generated client gets a
