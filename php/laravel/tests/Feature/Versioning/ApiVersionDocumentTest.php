@@ -72,13 +72,13 @@ it('is the version its info.version says, with no second key to disagree with', 
 });
 
 /*
- * A version document left at the shipped `1.0.0` placeholder states no version at all. Publishing it
+ * A version document that writes no `info.version` states no version at all. Deriving one from nothing
  * would put a version the application does not serve into every operation's enum AND make it the value
  * a client falls back to, so the document is left underived and the build says why.
  */
-it('refuses to derive a version from the placeholder info.version, and says so', function (): void {
+it('refuses to derive a version from an info.version nobody wrote, and says so', function (): void {
     $result = generateDocument(static function (array $raw): array {
-        $raw['info']['version'] = '1.0.0';
+        unset($raw['info']['version']);
 
         return $raw;
     }, 'v2026-06-01');
@@ -87,10 +87,39 @@ it('refuses to derive a version from the placeholder info.version, and says so',
     $codes = array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $result->diagnostics);
 
     expect($codes)->toContain('versioning.version-unstated')
+        // The factory still publishes the shipped default, which is what a document with nothing to say
+        // has always published — but nothing was DERIVED from it.
         ->and($document['info']['version'])->toBe('1.0.0')
         ->and($document['paths']['/api/versioned-forms']['get'])->not->toHaveKey('parameters')
-        // And the shape is the code's, not an older version's: nothing was derived.
         ->and($document['components']['schemas']['FormData']['properties'])->toHaveKey('title');
+});
+
+/*
+ * And the counter-case Q2 was: `1.0.0` written on purpose is a version like any other. It is the shipped
+ * default too, and nothing can tell the two apart — so an API whose first published version really is
+ * `1.0.0`, the likeliest first semver version there is, must not be locked out of the feature.
+ */
+it('derives a version for a document whose version really is 1.0.0', function (): void {
+    config()->set('docuccino.documents', [
+        'v1' => [
+            'info' => ['title' => 'Forms API', 'version' => '1.0.0'],
+            'routes' => ['include' => ['api/versioned-forms']],
+            'error_responses' => 'none',
+            'versioning' => 'semver',
+            'api_version' => ['changes' => ['dir' => 'workbench/app/Api/Versions']],
+        ],
+    ]);
+
+    $result = generateDocument(key: 'v1');
+    $document = $result->document->toArray();
+    $codes = array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $result->diagnostics);
+
+    $header = $document['paths']['/api/versioned-forms']['get']['parameters'][0];
+
+    expect($codes)->not->toContain('versioning.version-unstated')
+        ->and($header['name'])->toBe('X-Api-Version')
+        ->and($header['schema']['enum'])->toBe(['1.0.0'])
+        ->and($header['schema']['default'])->toBe('1.0.0');
 });
 
 it('leaves a document that states a real version alone about it', function (): void {
@@ -117,15 +146,46 @@ it('declares the version header on every operation, enumerating every configured
         ->and($header['schema']['enum'])->toBe(['2026-06-01', '2026-09-01'])
         ->and($header['schema']['default'])->toBe($version)
         // A date is not an identifier, so the enum carries the member names that make it one — the same
-        // decoration every other published enum gets.
-        ->and($header['schema']['x-enum-varnames'])->toBe(['_20260601', '_20260901'])
-        ->and($header['schema']['x-enumNames'])->toBe(['_20260601', '_20260901'])
+        // decoration every other published enum gets, spelled for a VERSION rather than for a sort key.
+        ->and($header['schema']['x-enum-varnames'])->toBe(['V2026_06_01', 'V2026_09_01'])
+        ->and($header['schema']['x-enumNames'])->toBe(['V2026_06_01', 'V2026_09_01'])
         // And the change's own sentence, keyed to the version it shipped in.
         ->and($header['schema']['x-enum-descriptions'])->toBe(['', 'A form publishes `title` where it published `name`.']);
 })->with([
     'the head version' => ['v2026-09-01', '2026-09-01'],
     'the older version' => ['v2026-06-01', '2026-06-01'],
 ]);
+
+/*
+ * The enum a semver application publishes, which no date row could have caught: bytewise `1.10.0` sorts
+ * BEFORE `1.9.0`, so a byte-sorted enum publishes them backwards — the exact reading the whole of
+ * versioning exists to replace, shipped in the artifact a consumer reads. And a version is spelled `V…`
+ * rather than falling to the sort-key minting's digit-prefix last resort.
+ */
+it('orders and names a semver enum as versions rather than as bytes', function (): void {
+    config()->set('docuccino.documents', [
+        'v1_9' => [
+            'info' => ['title' => 'Forms API', 'version' => '1.9.0'],
+            'routes' => ['include' => ['api/versioned-forms']],
+            'error_responses' => 'none',
+            'versioning' => 'semver',
+            'api_version' => [],
+        ],
+        'v1_10' => [
+            'info' => ['title' => 'Forms API', 'version' => '1.10.0'],
+            'routes' => ['include' => ['api/versioned-forms']],
+            'error_responses' => 'none',
+            'versioning' => 'semver',
+            'api_version' => [],
+        ],
+    ]);
+
+    $schema = generateDocument(key: 'v1_9')->document->toArray()['paths']['/api/versioned-forms']['get']['parameters'][0]['schema'];
+
+    expect($schema['enum'])->toBe(['1.9.0', '1.10.0'])
+        ->and($schema['x-enum-varnames'])->toBe(['V1_9_0', 'V1_10_0'])
+        ->and($schema['x-enumNames'])->toBe(['V1_9_0', 'V1_10_0']);
+});
 
 it('never publishes an enum that leaves out the version the document defaults to', function (): void {
     // A build whose document is not in the `documents` bag — a programmatic one, a key mid-rename —

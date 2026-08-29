@@ -29,16 +29,27 @@ final readonly class UnfoldableChangeProbe
 
 /**
  * The vocabulary, read off the directory rather than listed here, so a verb added later is covered the
- * day it lands instead of the day someone remembers this file.
+ * day it lands instead of the day someone remembers this file. Read RECURSIVELY: a flat `*.php` is the
+ * pattern that goes silent the moment somebody groups the verbs into a subdirectory, and the sub-package
+ * name is what a class in one would be namespaced under.
  *
  * @return list<class-string>
  */
 function versionChangeVocabulary(): array
 {
+    $root = dirname(__DIR__, 2).'/src/Versioning';
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+
     $classes = [];
-    foreach (glob(dirname(__DIR__, 2).'/src/Versioning/*.php') ?: [] as $file) {
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = substr($file->getPathname(), strlen($root) + 1, -4);
+
         /** @var class-string $class */
-        $class = 'Docuccino\\Attributes\\Versioning\\'.basename($file, '.php');
+        $class = 'Docuccino\\Attributes\\Versioning\\'.str_replace('/', '\\', $relative);
         $classes[] = $class;
     }
     sort($classes);

@@ -23,16 +23,27 @@ it('is an API version whenever it declares one, whatever the bag holds', functio
     'a bag naming a changes directory' => [['changes' => ['dir' => 'app/Api/Versions']], true],
 ]);
 
-it('states no version until info.version says one that is not the placeholder', function (mixed $version): void {
+it('states no version until info.version writes one', function (mixed $version): void {
     expect(versionedConfig([], $version)->apiVersion())->toBeNull();
 })->with([
     'unset' => [null],
     'empty' => [''],
     'blank' => ['   '],
     'not a string' => [20260901],
-    // The shipped default is a placeholder, not a version anybody serves.
-    'the placeholder' => ['1.0.0'],
 ]);
+
+/*
+ * Written or not written is the whole test. `1.0.0` is the shipped default AND the likeliest first
+ * semver version an API ever publishes, and nothing here can tell the two apart — the shipped config
+ * writes the key, so after a publish the file says `1.0.0` for both reasons. Reading it as unstated
+ * left an application whose first version really is `1.0.0` unable to use the feature at all: no
+ * header, no enum, no change applied, and a warning it could do nothing about.
+ */
+it('takes 1.0.0 for the version it says it is, once a document opts into api_version', function (): void {
+    expect(versionedConfig([], '1.0.0')->apiVersion())->toBe('1.0.0')
+        // And the opt-in is what carries the intent: without an `api_version` bag it is still nothing.
+        ->and((new DocumentConfig(key: 'v', info: [], raw: ['info' => ['version' => '1.0.0']]))->apiVersion())->toBeNull();
+});
 
 it('reads the version off info.version, which is the only place it is written', function (): void {
     expect(versionedConfig([], '2026-09-01')->apiVersion())->toBe('2026-09-01')
@@ -64,14 +75,39 @@ it('reads the closed set of versions off the documents themselves, sorted', func
     config()->set('docuccino.documents', [
         'later' => ['api_version' => [], 'info' => ['version' => '2026-12-01']],
         'earlier' => ['api_version' => [], 'info' => ['version' => '2026-06-01']],
-        // A document that is not a version contributes nothing, and neither does one still at the
-        // placeholder — its own build says so rather than the enum publishing a version nobody serves.
+        // A document that is not a version contributes nothing, and neither does one that declares
+        // api_version and writes no version at all — its own build says so.
         'plain' => ['info' => ['version' => '2027-01-01']],
-        'placeholder' => ['api_version' => [], 'info' => ['version' => '1.0.0']],
+        'unstated' => ['api_version' => [], 'info' => []],
         'duplicate' => ['api_version' => [], 'info' => ['version' => '2026-06-01']],
     ]);
 
     expect((new ConfiguredDocuments)->apiVersions())->toBe(['2026-06-01', '2026-12-01']);
+});
+
+/*
+ * The row a date-only suite could not fail on: dates are fixed-width, so byte order happens to be right
+ * for them. Semver is where it is wrong — `1.10.0` sorts BEFORE `1.9.0` bytewise — and this is the set
+ * an operation's header enum publishes.
+ */
+it('orders the set as versions rather than as bytes', function (): void {
+    config()->set('docuccino.documents', [
+        'ten' => ['api_version' => [], 'info' => ['version' => '1.10.0']],
+        'nine' => ['api_version' => [], 'info' => ['version' => '1.9.0']],
+        'two' => ['api_version' => [], 'info' => ['version' => '1.2.0']],
+    ]);
+
+    expect((new ConfiguredDocuments)->apiVersions())->toBe(['1.2.0', '1.9.0', '1.10.0']);
+});
+
+it('falls back to byte order only for a set no version grammar reads', function (): void {
+    config()->set('docuccino.documents', [
+        'b' => ['api_version' => [], 'info' => ['version' => 'beta']],
+        'a' => ['api_version' => [], 'info' => ['version' => '2026-06-01']],
+    ]);
+
+    // Neither all dates nor all semver: nothing can order them, and byte order is at least deterministic.
+    expect((new ConfiguredDocuments)->apiVersions())->toBe(['2026-06-01', 'beta']);
 });
 
 it('enumerates nothing when the application configures no version', function (): void {

@@ -192,10 +192,11 @@ Docuccino leaves your wording alone — two parameters of one name in one place 
 can read.
 
 <Aside type="caution" title="`info.version` is the version">
-There is no second key naming it, because a second key could only ever disagree with the first. Leave
-`info.version` at the published `1.0.0` placeholder and the document isn't derived as a version at all;
-you get a `versioning.version-unstated` warning instead of a version you don't serve being published as
-the value every client falls back to.
+There is no second key naming it, because a second key could only ever disagree with the first. Write no
+`info.version` and there's nothing to derive a version from: you get a `versioning.version-unstated`
+warning instead of a version you don't serve being published as the value every client falls back to.
+Whatever you do write is taken at its word — `1.0.0` is a fine first version, and declaring `api_version`
+is what says this document is one.
 </Aside>
 
 ## Ordering: which version is older
@@ -333,8 +334,9 @@ that quietly stops applying is indistinguishable from one that was never written
 | `versioning.change-target-missing` | The field was renamed again, or removed, and the change still names the old spelling |
 | `versioning.schema-unresolved` | The class you named isn't published by this document at all |
 | `versioning.scope-matches-nothing` | A route was renamed after the change was written |
+| `versioning.scope-unforkable` | The scope matched an operation no private copy of the schema can be written for |
 | `versioning.unordered` | Your versions aren't all dates or all semver |
-| `versioning.version-unstated` | The document declares `api_version` but `info.version` is still `1.0.0` |
+| `versioning.version-unstated` | The document declares `api_version` but writes no `info.version` |
 
 The full list, with what to do about each, is in the
 [diagnostics reference](/laravel/reference/diagnostics/#api-versions).

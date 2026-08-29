@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Contract\ContractIndex;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Emit\UirEmitter;
 use Illuminate\Routing\Router;
@@ -93,6 +94,49 @@ it('mints no new component name for the operations it forks', function (): void 
     expect(array_keys($document['components']['schemas']))->toBe(['FormData']);
 });
 
+/*
+ * A fork is a SECOND node, and two nodes with different content cannot answer to one id. Left sharing
+ * the component's, the copy won it — `ContractIndex` resolves an id to the shallowest, first-sorted
+ * node carrying it, and `paths` sorts before `components` — so the component disappeared from the index
+ * and `provenanceOf()` answered about a node with different properties than the one asked about.
+ */
+it('gives the forked copy an identity of its own, so both nodes stay findable', function (): void {
+    config()->set('docuccino.documents', ['v' => scopedVersionDocument('tests/Fixtures/Versioning/Scoped')]);
+
+    $document = generateDocument(key: 'v')->document->toArray();
+
+    $component = $document['components']['schemas']['FormData'];
+    $forked = $document['paths']['/api/versioned-forms']['get']['responses']['200']['content']['application/json']['schema']['items'];
+
+    $identities = ContractIndex::fromArray($document)->identities();
+
+    expect($forked['x-docuccino']['id'])->not->toBe($component['x-docuccino']['id'])
+        ->and($forked['x-docuccino']['id'])->toStartWith('sch:v1:')
+        // Each id resolves to its OWN node rather than one of them shadowing the other.
+        ->and($identities[$component['x-docuccino']['id']])->toBe(['components', 'schemas', 'FormData'])
+        ->and($identities[$forked['x-docuccino']['id']])
+        ->toBe(['paths', '/api/versioned-forms', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'items']);
+});
+
+/*
+ * And the id is a function of the thing: the component it was copied from and the operation that got
+ * the copy. Adding an unrelated endpoint moves neither, which a first-come discriminator would not
+ * survive.
+ */
+it('mints the same forked identity from the same component and operation', function (): void {
+    config()->set('docuccino.documents', ['v' => scopedVersionDocument('tests/Fixtures/Versioning/Scoped')]);
+
+    $forked = static fn (): string => generateDocument(key: 'v')->document->toArray()['paths']['/api/versioned-forms']['get']['responses']['200']['content']['application/json']['schema']['items']['x-docuccino']['id'];
+
+    $first = $forked();
+
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/versioned-forms/drafts', [VersionedFormController::class, 'archived']);
+
+    expect($forked())->toBe($first);
+});
+
 it('emits a valid document once it has forked one', function (): void {
     config()->set('docuccino.documents', ['v' => scopedVersionDocument('tests/Fixtures/Versioning/Scoped')]);
 
@@ -143,6 +187,23 @@ it('reports a scope that names no operation publishing the schema, and applies n
 
     // And nothing was renamed: a scope that matched nothing must not quietly rename everything.
     expect(array_keys($document['components']['schemas']['FormData']['properties']))->toBe(['id', 'title', 'publishedAt']);
+});
+
+/*
+ * A change is walked once per rename, and the scope report says nothing about the field it was raised
+ * beside — so two renames over one schema produced two byte-identical warnings. The second told the
+ * reader nothing the first had not, and noise is what trains people to stop reading the channel.
+ */
+it('says a scope that names nothing once, however many renames it carries', function (): void {
+    config()->set('docuccino.documents', ['v' => scopedVersionDocument('tests/Fixtures/Versioning/ScopedNowhereTwice')]);
+
+    $versioning = array_values(array_filter(
+        generateDocument(key: 'v')->diagnostics,
+        static fn (Diagnostic $diagnostic): bool => str_starts_with($diagnostic->code, 'versioning.'),
+    ));
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $versioning))->toBe(['versioning.scope-matches-nothing'])
+        ->and($versioning[0]->message)->toContain('GET /api/forms-as-they-were-called-then');
 });
 
 it('names an operation by its operationId as readily as by its signature', function (): void {
