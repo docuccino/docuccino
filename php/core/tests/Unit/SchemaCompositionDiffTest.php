@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diff\DocumentDiffer;
+use Docuccino\Core\Diff\RefinementMove;
 use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Diff\SchemaMember;
 use Docuccino\Core\Diff\SchemaPolarity;
@@ -14,8 +15,8 @@ use Docuccino\Core\Draft\SchemaKeywords;
  * gate, and it read NONE of `allOf oneOf anyOf not if then else contains propertyNames prefixItems
  * patternProperties dependentSchemas dependentRequired unevaluated* $defs` — so the strictest
  * narrowing the language has, a subschema replaced by `false`, passed as safe under any of them, and
- * via the model's own hydration the same edit surfaced as `schema.type-removed`, which is classed
- * non-breaking. A gate that says "safe" is worse than no gate, because it is trusted.
+ * via the model's own hydration the same edit surfaced as `schema.type-removed`, which was classed
+ * non-breaking on both sides at the time. A gate that says "safe" is worse than no gate, because it is trusted.
  *
  * Each keyword's polarity is a recorded decision ({@see SchemaPolarity}) rather than one classification
  * stretched over all of them, so each is pinned here in BOTH directions. The keyword SET is read off
@@ -85,49 +86,12 @@ function compositionProbe(string $keyword, mixed $inner): array
     };
 }
 
-/**
- * Which keywords the two sides disagree about: the ones the draft model positions and nobody has
- * decided, and the ones a decision exists for that the draft model does not position. Both are a
- * decision nobody made — one silently unread, one silently unreachable.
- *
- * @param  list<string>  $positioned
- * @param  list<string>  $decided
- * @return array{list<string>, list<string>}
- */
-function compositionPolarityGaps(array $positioned, array $decided): array
-{
-    return [
-        array_values(array_diff($positioned, $decided)),
-        array_values(array_diff($decided, $positioned)),
-    ];
-}
-
-/**
- * Every change one comparison reports, as `code` plus `!` where it is breaking, sorted so the
- * assertion pins the finding rather than the order the arms happen to run in.
- *
- * @param  array<string, mixed>|bool  $old
- * @param  array<string, mixed>|bool  $new
- * @return list<string>
- */
-function compositionChanges(array|bool $old, array|bool $new, bool $request): array
-{
-    $codes = array_map(
-        static fn ($change): string => $change->code.($change->breaking ? '!' : ''),
-        (new SchemaComparator)->compare($old, $new, 'S', 'sch:v1:0000000000000000', $request),
-    );
-
-    sort($codes);
-
-    return $codes;
-}
-
 it('records a polarity decision for every keyword the draft model gives a subschema position', function (): void {
     // The guard the fix is owed: the comparator's keyword set is DERIVED from the draft model's own
     // table, so a keyword landing there is a keyword nobody has decided the polarity of until they do.
     $positioned = compositionKeywords();
 
-    [$undecided, $unreachable] = compositionPolarityGaps($positioned, SchemaPolarity::decided());
+    [$undecided, $unreachable] = decisionGaps($positioned, SchemaPolarity::decided());
 
     expect($undecided)->toBe([], 'no polarity decision recorded for: '.implode(', ', $undecided))
         ->and($unreachable)->toBe([], 'a polarity decision for a keyword the draft model does not position: '.implode(', ', $unreachable))
@@ -142,9 +106,9 @@ it('refuses a keyword nobody has decided the polarity of', function (): void {
     $positioned = compositionKeywords();
     $decided = SchemaPolarity::decided();
 
-    expect(compositionPolarityGaps([...$positioned, 'aKeywordNobodyDecided'], $decided))
+    expect(decisionGaps([...$positioned, 'aKeywordNobodyDecided'], $decided))
         ->toBe([['aKeywordNobodyDecided'], []])
-        ->and(compositionPolarityGaps($positioned, [...$decided, 'aDecisionForNoKeyword']))
+        ->and(decisionGaps($positioned, [...$decided, 'aDecisionForNoKeyword']))
         ->toBe([[], ['aDecisionForNoKeyword']]);
 });
 
@@ -173,8 +137,8 @@ it('reports a schema that admits nothing at every subschema position', function 
         ? [compositionProbe($keyword, []), compositionProbe($keyword, ['b'])]
         : [compositionProbe($keyword, ['type' => 'string']), compositionProbe($keyword, false)];
 
-    $onRequest = compositionChanges($old, $new, request: true);
-    $onResponse = compositionChanges($old, $new, request: false);
+    $onRequest = schemaDiffCodes($old, $new, request: true);
+    $onResponse = schemaDiffCodes($old, $new, request: false);
 
     expect($onRequest)->not->toBe([], $keyword.' reports nothing')
         ->and($onResponse)->not->toBe([], $keyword.' reports nothing on a response')
@@ -182,7 +146,7 @@ it('reports a schema that admits nothing at every subschema position', function 
         ->and(str_contains(implode(',', [...$onRequest, ...$onResponse]), '!'))
         ->toBeTrue($keyword.' is reported and never breaking')
         // And the probe is what caused it — a comparison of a document with itself says nothing.
-        ->and(compositionChanges($old, $old, request: true))->toBe([]);
+        ->and(schemaDiffCodes($old, $old, request: true))->toBe([]);
 })->with(compositionKeywordDataset());
 
 it('classifies each composition and conditional keyword in both directions', function (
@@ -191,8 +155,8 @@ it('classifies each composition and conditional keyword in both directions', fun
     array $onRequest,
     array $onResponse,
 ): void {
-    expect(compositionChanges($old, $new, request: true))->toBe($onRequest, 'request')
-        ->and(compositionChanges($old, $new, request: false))->toBe($onResponse, 'response');
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     // `allOf` is an intersection: a branch added narrows, one removed widens. It is the keyword an
     // overlay narrows with, so it is the highest-value half of the whole fix.
@@ -201,20 +165,26 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['allOf' => [['type' => 'string'], ['minLength' => 3]]],
         ['schema.all-of-branch-added!'], ['schema.all-of-branch-added!'],
     ],
+    // A branch removed WIDENS, and a widening is the asymmetric verdict: a writer stays valid while a
+    // response reader is handed a value the branch used to exclude and it has no case for. That is the
+    // `schema.enum-value-added` argument, and it is the same one `maxItems` raised already got.
     'allOf: branch removed' => [
         ['allOf' => [['type' => 'string'], ['minLength' => 3]]],
         ['allOf' => [['type' => 'string']]],
-        ['schema.all-of-branch-removed'], ['schema.all-of-branch-removed'],
+        ['schema.all-of-branch-removed'], ['schema.all-of-branch-removed!'],
     ],
     'allOf: branch narrowed' => [
         ['allOf' => [['type' => ['string', 'integer']]]],
         ['allOf' => [['type' => 'string']]],
         ['schema.type-narrowed!'], ['schema.type-narrowed!'],
     ],
+    // A DIRECT position carries the child's verdict up unchanged, so this row is the `type` comparison's
+    // own answer read through `allOf`: a type set that grew is safe for a writer and hands a response
+    // reader a value it has no case for.
     'allOf: branch widened' => [
         ['allOf' => [['type' => 'string']]],
         ['allOf' => [['type' => ['string', 'integer']]]],
-        ['schema.type-widened'], ['schema.type-widened'],
+        ['schema.type-widened'], ['schema.type-widened!'],
     ],
     // A union: a branch removed narrows either way, while one ADDED widens what a request accepts and
     // hands a response reader a shape it has no case for — the `schema.enum-value-added` argument.
@@ -255,12 +225,14 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['schema.any-of-branch-removed'], ['schema.any-of-branch-removed!'],
     ],
     // The starkest shape of the same defect: read branch-by-branch this was two non-breaking findings
-    // while every string over three characters had started being rejected.
+    // while every string over three characters had started being rejected. The `type` leaving the root
+    // is a widening of its own — nothing at the root states the instance type any more — so on a
+    // response it gates too, and on a request the union arriving is what carries the finding.
     'oneOf: keyword arrived over a plain type' => [
         ['type' => 'string'],
         ['oneOf' => [['type' => 'string', 'maxLength' => 3]]],
         ['schema.one-of-branch-added!', 'schema.type-removed'],
-        ['schema.one-of-branch-added!', 'schema.type-removed'],
+        ['schema.one-of-branch-added!', 'schema.type-removed!'],
     ],
     'oneOf: keyword left' => [
         ['oneOf' => [['$ref' => '#/components/schemas/A'], ['$ref' => '#/components/schemas/B']]],
@@ -276,10 +248,13 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['type' => 'object', 'allOf' => [['required' => ['a']], ['maxProperties' => 2]]],
         ['schema.all-of-branch-added!'], ['schema.all-of-branch-added!'],
     ],
+    // The whole intersection leaving widens exactly as one branch of it does, so it earns the widening
+    // verdict at the keyword too: safe for a writer, and a response reader loses every constraint the
+    // intersection was holding.
     'allOf: keyword left' => [
         ['type' => 'object', 'allOf' => [['required' => ['a']], ['maxProperties' => 2]]],
         ['type' => 'object'],
-        ['schema.all-of-branch-removed'], ['schema.all-of-branch-removed'],
+        ['schema.all-of-branch-removed'], ['schema.all-of-branch-removed!'],
     ],
     // `prefixItems` is the one list position where absence IS the empty schema — an unconstrained slot
     // constrains nothing — so the keyword arriving stays the slots arriving, index by index.
@@ -295,10 +270,12 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['type' => 'string', 'not' => ['const' => 'x']],
         ['schema.not-added!'], ['schema.not-added!'],
     ],
+    // `not` leaving widens: the value it rejected is admitted again. Safe for a writer, and a response
+    // reader typed against a set that excluded it can now be handed exactly that value.
     'not: removed' => [
         ['type' => 'string', 'not' => ['const' => 'x']],
         ['type' => 'string'],
-        ['schema.not-removed'], ['schema.not-removed'],
+        ['schema.not-removed'], ['schema.not-removed!'],
     ],
     'not: subschema widened' => [
         ['not' => ['type' => 'string']],
@@ -332,7 +309,7 @@ it('classifies each composition and conditional keyword in both directions', fun
     'then: widened' => [
         ['if' => ['required' => ['a']], 'then' => ['type' => 'string']],
         ['if' => ['required' => ['a']], 'then' => ['type' => ['string', 'integer']]],
-        ['schema.type-widened'], ['schema.type-widened'],
+        ['schema.type-widened'], ['schema.type-widened!'],
     ],
     'else: narrowed' => [
         ['if' => ['required' => ['a']], 'else' => ['type' => ['string', 'integer']]],
@@ -342,7 +319,7 @@ it('classifies each composition and conditional keyword in both directions', fun
     'else: widened' => [
         ['if' => ['required' => ['a']], 'else' => ['type' => 'string']],
         ['if' => ['required' => ['a']], 'else' => ['type' => ['string', 'integer']]],
-        ['schema.type-widened'], ['schema.type-widened'],
+        ['schema.type-widened'], ['schema.type-widened!'],
     ],
     // `contains` demands a match, so no `contains` and `contains: {}` say opposite things and presence
     // is a claim of its own.
@@ -351,10 +328,12 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['type' => 'array', 'contains' => ['type' => 'string']],
         ['schema.contains-added!'], ['schema.contains-added!'],
     ],
+    // …and one that WAS asserting something leaving is a widening like any other: the array need no
+    // longer hold a matching element, so a reader that typed against there being one may now get none.
     'contains: removed' => [
         ['type' => 'array', 'contains' => ['type' => 'string']],
         ['type' => 'array'],
-        ['schema.contains-removed'], ['schema.contains-removed'],
+        ['schema.contains-removed'], ['schema.contains-removed!'],
     ],
     // …but at `minContains: 0` it asserts nothing, so it can arrive without narrowing anything.
     'contains: added with minContains 0' => [
@@ -382,10 +361,13 @@ it('classifies each composition and conditional keyword in both directions', fun
         ['prefixItems' => [['type' => 'string'], ['type' => 'integer']]],
         ['schema.type-added!'], ['schema.type-added!'],
     ],
+    // A slot dropped leaves that tuple position unconstrained, which is the `type` constraint leaving —
+    // safe for a writer, and a response reader who typed the third element `integer` may now get
+    // anything at all.
     'prefixItems: slot removed' => [
         ['prefixItems' => [['type' => 'string'], ['type' => 'integer']]],
         ['prefixItems' => [['type' => 'string']]],
-        ['schema.type-removed'], ['schema.type-removed'],
+        ['schema.type-removed'], ['schema.type-removed!'],
     ],
     'prefixItems: reordered' => [
         ['prefixItems' => [['type' => 'string'], ['type' => 'integer']]],
@@ -402,7 +384,7 @@ it('classifies each composition and conditional keyword in both directions', fun
     'patternProperties: member removed' => [
         ['type' => 'object', 'patternProperties' => ['^x-' => ['type' => 'string']]],
         ['type' => 'object'],
-        ['schema.type-removed'], ['schema.type-removed'],
+        ['schema.type-removed'], ['schema.type-removed!'],
     ],
     'dependentSchemas: member added' => [
         ['type' => 'object'],
@@ -482,8 +464,8 @@ it('leaves an annotation edit under an indeterminate position alone', function (
     // and nothing about what it may be, so editing one gates nothing under any versioning policy — at
     // `not` and `$defs` as much as anywhere else. Without this a doc edit inside a `not` fails a
     // release gate, which is how a channel stops being read.
-    expect(compositionChanges($old, $new, request: true))->toBe(['schema.annotation-changed'])
-        ->and(compositionChanges($old, $new, request: false))->toBe(['schema.annotation-changed']);
+    expect(schemaDiffCodes($old, $new, request: true))->toBe(['schema.annotation-changed'])
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe(['schema.annotation-changed']);
 })->with([
     'under not' => [
         ['not' => ['type' => 'string', 'description' => 'was']],
@@ -508,15 +490,15 @@ it('pairs a list branch by what it is, never by where it sits', function (): voi
         $names,
     )];
 
-    expect(compositionChanges($refs('A', 'B', 'C'), $refs('C', 'A', 'B'), request: true))->toBe([])
-        ->and(compositionChanges($refs('A', 'B'), $refs('A', 'B'), request: false))->toBe([])
+    expect(schemaDiffCodes($refs('A', 'B', 'C'), $refs('C', 'A', 'B'), request: true))->toBe([])
+        ->and(schemaDiffCodes($refs('A', 'B'), $refs('A', 'B'), request: false))->toBe([])
         // A branch replaced is two branches, never one edited: pairing the leftovers would publish
         // `schema.ref-changed` — non-breaking — over a union branch no existing reader has a case for.
-        ->and(compositionChanges($refs('A', 'B'), $refs('A', 'C'), request: false))
+        ->and(schemaDiffCodes($refs('A', 'B'), $refs('A', 'C'), request: false))
         ->toBe(['schema.one-of-branch-added!', 'schema.one-of-branch-removed!'])
         // On a request the branch that WENT is still breaking — a writer's valid body is now refused —
         // and only the one that arrived stands down.
-        ->and(compositionChanges($refs('A', 'B'), $refs('A', 'C'), request: true))
+        ->and(schemaDiffCodes($refs('A', 'B'), $refs('A', 'C'), request: true))
         ->toBe(['schema.one-of-branch-added', 'schema.one-of-branch-removed!']);
 });
 
@@ -559,64 +541,68 @@ it('reads an inline branch edited in place as one branch changing', function ():
         ->toBe(['schema.property-added @S.allOf.1.properties.pointer']);
 });
 
-it('reads the contains bounds beside the contains they bound', function (array $old, array $new, array $expected): void {
-    expect(compositionChanges($old, $new, request: true))->toBe($expected)
-        // The bounds constrain the array either way it is read, so neither direction differs.
-        ->and(compositionChanges($old, $new, request: false))->toBe($expected);
+it('reads the contains bounds beside the contains they bound', function (array $old, array $new, array $onRequest, array $onResponse): void {
+    // A bound moved is a direction like any other, and it takes the verdict every direction takes: a
+    // bound TIGHTENED gates both sides, a bound RELAXED gates the response alone. The rows below used
+    // to assert the two sides were equal, on the claim that a bound constrains the array either way it
+    // is read — which is true of what the keyword MEANS and says nothing about who is broken by it, and
+    // is false two files away, where `maxItems` raised has always been breaking on a response.
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     'minContains raised' => [
         ['contains' => ['type' => 'string'], 'minContains' => 1],
         ['contains' => ['type' => 'string'], 'minContains' => 2],
-        ['schema.contains-bound-narrowed!'],
+        ['schema.contains-bound-narrowed!'], ['schema.contains-bound-narrowed!'],
     ],
     'minContains lowered' => [
         ['contains' => ['type' => 'string'], 'minContains' => 2],
         ['contains' => ['type' => 'string'], 'minContains' => 1],
-        ['schema.contains-bound-widened'],
+        ['schema.contains-bound-widened'], ['schema.contains-bound-widened!'],
     ],
     // Absent is 1 — the keyword's own default, which is what makes `minContains: 0` a real statement.
     'minContains dropped to zero' => [
         ['contains' => ['type' => 'string']],
         ['contains' => ['type' => 'string'], 'minContains' => 0],
-        ['schema.contains-bound-widened'],
+        ['schema.contains-bound-widened'], ['schema.contains-bound-widened!'],
     ],
     'minContains restated' => [
         ['contains' => ['type' => 'string']],
         ['contains' => ['type' => 'string'], 'minContains' => 1],
-        [],
+        [], [],
     ],
     // No cap is no bound at all, so one arriving narrows however high it is set.
     'maxContains capped' => [
         ['contains' => ['type' => 'string']],
         ['contains' => ['type' => 'string'], 'maxContains' => 9],
-        ['schema.contains-bound-narrowed!'],
+        ['schema.contains-bound-narrowed!'], ['schema.contains-bound-narrowed!'],
     ],
     'maxContains lowered' => [
         ['contains' => ['type' => 'string'], 'maxContains' => 9],
         ['contains' => ['type' => 'string'], 'maxContains' => 2],
-        ['schema.contains-bound-narrowed!'],
+        ['schema.contains-bound-narrowed!'], ['schema.contains-bound-narrowed!'],
     ],
     'maxContains raised' => [
         ['contains' => ['type' => 'string'], 'maxContains' => 2],
         ['contains' => ['type' => 'string'], 'maxContains' => 9],
-        ['schema.contains-bound-widened'],
+        ['schema.contains-bound-widened'], ['schema.contains-bound-widened!'],
     ],
     'maxContains uncapped' => [
         ['contains' => ['type' => 'string'], 'maxContains' => 2],
         ['contains' => ['type' => 'string']],
-        ['schema.contains-bound-widened'],
+        ['schema.contains-bound-widened'], ['schema.contains-bound-widened!'],
     ],
     // Both are inert with no `contains` beside them, and where `contains` itself moves, THAT is the
     // change: a bound reported next to it would be a second finding for one edit.
     'a bound with no contains at all' => [
         ['type' => 'array', 'minContains' => 1],
         ['type' => 'array', 'minContains' => 4],
-        [],
+        [], [],
     ],
     'a bound arriving with the contains it bounds' => [
         ['type' => 'array'],
         ['type' => 'array', 'contains' => ['type' => 'string'], 'minContains' => 4],
-        ['schema.contains-added!'],
+        ['schema.contains-added!'], ['schema.contains-added!'],
     ],
 ]);
 
@@ -660,10 +646,10 @@ it('reads a value that is no list as no branches at all', function (mixed $garba
     // A comparison runs on whatever an artifact holds, and an `allOf` that is not a list is not a schema
     // either — so it reads as absent, which is the widening the canonicalizer publishes for it. Reading
     // it as ONE branch would report a narrowing that is not in the document.
-    expect(compositionChanges(['allOf' => $garbage], ['allOf' => $garbage], request: true))->toBe([])
-        ->and(compositionChanges(['allOf' => [['type' => 'string']]], ['allOf' => $garbage], request: true))
+    expect(schemaDiffCodes(['allOf' => $garbage], ['allOf' => $garbage], request: true))->toBe([])
+        ->and(schemaDiffCodes(['allOf' => [['type' => 'string']]], ['allOf' => $garbage], request: true))
         ->toBe(['schema.all-of-branch-removed'])
-        ->and(compositionChanges(['allOf' => $garbage], ['allOf' => [['type' => 'string']]], request: true))
+        ->and(schemaDiffCodes(['allOf' => $garbage], ['allOf' => [['type' => 'string']]], request: true))
         ->toBe(['schema.all-of-branch-added!']);
 })->with([
     'an object' => [['not' => 'a list']],
@@ -675,10 +661,10 @@ it('reads a value that is no list as no branches at all', function (mixed $garba
 it('reads a map position that is no map as carrying no members', function (mixed $garbage): void {
     // The same for the map positions and for `dependentRequired`, whose members are string lists: a
     // member nothing can read is a member nobody wrote.
-    expect(compositionChanges(['patternProperties' => $garbage], ['patternProperties' => $garbage], request: true))->toBe([])
-        ->and(compositionChanges(['dependentRequired' => $garbage], ['dependentRequired' => $garbage], request: true))->toBe([])
+    expect(schemaDiffCodes(['patternProperties' => $garbage], ['patternProperties' => $garbage], request: true))->toBe([])
+        ->and(schemaDiffCodes(['dependentRequired' => $garbage], ['dependentRequired' => $garbage], request: true))->toBe([])
         // And a dependency list that is no list of strings leaves the property with no dependencies.
-        ->and(compositionChanges(['dependentRequired' => ['a' => $garbage]], ['dependentRequired' => ['a' => ['b']]], request: true))
+        ->and(schemaDiffCodes(['dependentRequired' => ['a' => $garbage]], ['dependentRequired' => ['a' => ['b']]], request: true))
         ->toBe(['schema.dependent-required-added!']);
 })->with([
     'a map of non-schemas' => [['x' => 7]],
@@ -731,54 +717,60 @@ it('states the one place an indeterminate position stands a change down, and why
     // position, so forcing it breaking would fail a gate over a rewritten description — which is how a
     // channel stops being read. And a `$defs` member ARRIVING is not an assertion arriving: nothing can
     // name a definition that did not also change, and whatever named it is reported where it changed.
-    expect(compositionChanges(
+    expect(schemaDiffCodes(
         ['$defs' => ['X' => ['type' => 'string', 'description' => 'was']]],
         ['$defs' => ['X' => ['type' => 'string', 'description' => 'now']]],
         request: true,
     ))->toBe(['schema.annotation-changed'])
-        ->and(compositionChanges(['type' => 'object'], ['type' => 'object', '$defs' => ['X' => ['type' => 'string']]], request: true))
+        ->and(schemaDiffCodes(['type' => 'object'], ['type' => 'object', '$defs' => ['X' => ['type' => 'string']]], request: true))
         ->toBe(['schema.definition-added'])
         // Leaving is the half that gates: a `$ref` naming the member is left pointing at nothing.
-        ->and(compositionChanges(['type' => 'object', '$defs' => ['X' => ['type' => 'string']]], ['type' => 'object'], request: true))
+        ->and(schemaDiffCodes(['type' => 'object', '$defs' => ['X' => ['type' => 'string']]], ['type' => 'object'], request: true))
         ->toBe(['schema.definition-removed!']);
 });
 
-it('answers the presence verdict for every member kind there is, at the keyword and at a member', function (): void {
+it('answers the presence direction for every member kind there is, at the keyword and at a member', function (): void {
     // The two lookup tables behind every `-added`/`-removed` code, over EVERY kind rather than a sample.
-    // They answer different questions and differ on the one that matters: a union KEYWORD arriving is
-    // the union constraint arriving where there was none, while a union BRANCH arriving widens a union
-    // that was already there. Each row is [arriving, leaving].
-    $keywordVerdicts = [
-        // A constraint arriving narrows whichever way the schema is read; going widens.
-        SchemaMember::Constraint->value => ['request' => [true, false], 'response' => [true, false]],
-        // `contains` arriving narrows only while it asserts something ($asserts, from its own bounds).
-        SchemaMember::Bounded->value => ['request' => [true, false], 'response' => [true, false]],
-        // The union arriving narrows both sides; it leaving mirrors `schema.enum-removed` exactly.
-        SchemaMember::Union->value => ['request' => [true, false], 'response' => [true, true]],
+    // They answer in DIRECTIONS rather than verdicts, because what a direction is worth is one rule the
+    // comparator applies to all three tables — so a kind here cannot quietly grow a verdict rule of its
+    // own, which is exactly how `not` leaving and a `maxContains` raised came to disagree.
+    //
+    // The two tables differ on the one kind that matters: a union KEYWORD arriving is the union
+    // constraint arriving where there was none, while a union BRANCH arriving widens a union that was
+    // already there. Each row is [arriving, leaving].
+    $keywordMoves = [
+        // A constraint or a union arriving narrows whichever way the schema is read; either leaving widens.
+        SchemaMember::Constraint->value => [RefinementMove::Narrowed, RefinementMove::Widened],
+        SchemaMember::Union->value => [RefinementMove::Narrowed, RefinementMove::Widened],
+        // `contains` moves only while it asserts something ($asserts, from its own bounds).
+        SchemaMember::Bounded->value => [RefinementMove::Narrowed, RefinementMove::Widened],
         // The kinds that report per member never reach this table, and a position nobody decided is the
-        // one that must not guess: breaking, both directions, both sides.
-        SchemaMember::Store->value => ['request' => [true, true], 'response' => [true, true]],
-        SchemaMember::Property->value => ['request' => [true, true], 'response' => [true, true]],
-        SchemaMember::Required->value => ['request' => [true, true], 'response' => [true, true]],
-        SchemaMember::EmptySchema->value => ['request' => [true, true], 'response' => [true, true]],
+        // one that must not guess: a direction nothing can compute, which gates both ways.
+        SchemaMember::Store->value => [RefinementMove::Incomparable, RefinementMove::Incomparable],
+        SchemaMember::Property->value => [RefinementMove::Incomparable, RefinementMove::Incomparable],
+        SchemaMember::Required->value => [RefinementMove::Incomparable, RefinementMove::Incomparable],
+        SchemaMember::EmptySchema->value => [RefinementMove::Incomparable, RefinementMove::Incomparable],
     ];
 
-    $memberVerdicts = [
+    $memberMoves = [
         // A branch of an intersection arriving narrows; going widens.
-        SchemaMember::Constraint->value => ['request' => [true, false], 'response' => [true, false]],
-        // A union branch going narrows either way; one arriving is safe for a writer and hands a reader
-        // a shape it has no case for.
-        SchemaMember::Union->value => ['request' => [false, true], 'response' => [true, true]],
-        // A definition arriving asserts nothing; one leaving may dangle a `$ref`.
-        SchemaMember::Store->value => ['request' => [false, true], 'response' => [false, true]],
-        // A `dependentRequired` entry narrows a request exactly as `required` does, and the response
-        // side is a report rather than a verdict.
-        SchemaMember::Required->value => ['request' => [true, false], 'response' => [false, false]],
+        SchemaMember::Constraint->value => ['request' => [RefinementMove::Narrowed, RefinementMove::Widened], 'response' => [RefinementMove::Narrowed, RefinementMove::Widened]],
+        // A union branch going narrows; one arriving widens, which is safe for a writer and hands a
+        // reader a shape it has no case for.
+        SchemaMember::Union->value => ['request' => [RefinementMove::Widened, RefinementMove::Narrowed], 'response' => [RefinementMove::Widened, RefinementMove::Narrowed]],
+        // A definition arriving moves nothing — nothing could name it — while one leaving may dangle a
+        // `$ref` this comparison does not resolve, which is a direction it cannot compute.
+        SchemaMember::Store->value => ['request' => [RefinementMove::Unchanged, RefinementMove::Incomparable], 'response' => [RefinementMove::Unchanged, RefinementMove::Incomparable]],
+        // The one audience-relative row: a `dependentRequired` entry is an obligation on a WRITER, so a
+        // request reads it as `required` does and a response — no writer, usage context unknown — reads
+        // it as moving nothing. That keeps the judgment call `schema.required-added` makes in ONE place
+        // instead of adding a second verdict rule beside the shared one.
+        SchemaMember::Required->value => ['request' => [RefinementMove::Narrowed, RefinementMove::Widened], 'response' => [RefinementMove::Unchanged, RefinementMove::Unchanged]],
         // `contains` holds one subschema and `properties` has a comparison of its own, so neither has
         // members reaching here; an EMPTY position's members fall out of the keyword comparison.
-        SchemaMember::Bounded->value => ['request' => [true, true], 'response' => [true, true]],
-        SchemaMember::Property->value => ['request' => [true, true], 'response' => [true, true]],
-        SchemaMember::EmptySchema->value => ['request' => [true, true], 'response' => [true, true]],
+        SchemaMember::Bounded->value => ['request' => [RefinementMove::Incomparable, RefinementMove::Incomparable], 'response' => [RefinementMove::Incomparable, RefinementMove::Incomparable]],
+        SchemaMember::Property->value => ['request' => [RefinementMove::Incomparable, RefinementMove::Incomparable], 'response' => [RefinementMove::Incomparable, RefinementMove::Incomparable]],
+        SchemaMember::EmptySchema->value => ['request' => [RefinementMove::Incomparable, RefinementMove::Incomparable], 'response' => [RefinementMove::Incomparable, RefinementMove::Incomparable]],
     ];
 
     // A dataset only proves the rows it lists, so the kinds come from the enum and this fails short.
@@ -786,8 +778,8 @@ it('answers the presence verdict for every member kind there is, at the keyword 
     $kinds = array_map(static fn (SchemaMember $kind): string => $kind->value, SchemaMember::cases());
     sort($kinds);
 
-    foreach (['keyword' => $keywordVerdicts, 'member' => $memberVerdicts] as $table => $verdicts) {
-        $listed = array_keys($verdicts);
+    foreach (['keyword' => $keywordMoves, 'member' => $memberMoves] as $table => $moves) {
+        $listed = array_keys($moves);
         sort($listed);
 
         expect($listed)->toBe($kinds, $table.' table')
@@ -795,25 +787,27 @@ it('answers the presence verdict for every member kind there is, at the keyword 
     }
 
     foreach (SchemaMember::cases() as $member) {
+        [$arriving, $leaving] = $keywordMoves[$member->value];
+
+        expect(SchemaPolarity::keywordPresence($member, arriving: true, asserts: true))
+            ->toBe($arriving, $member->value.' keyword arriving')
+            ->and(SchemaPolarity::keywordPresence($member, arriving: false, asserts: true))
+            ->toBe($leaving, $member->value.' keyword leaving');
+
         foreach (['request' => true, 'response' => false] as $side => $request) {
-            [$arriving, $leaving] = $keywordVerdicts[$member->value][$side];
+            [$arriving, $leaving] = $memberMoves[$member->value][$side];
 
-            expect(SchemaPolarity::keywordPresenceIsBreaking($member, arriving: true, request: $request, asserts: true))
-                ->toBe($arriving, $member->value.' keyword arriving on a '.$side)
-                ->and(SchemaPolarity::keywordPresenceIsBreaking($member, arriving: false, request: $request, asserts: true))
-                ->toBe($leaving, $member->value.' keyword leaving on a '.$side);
-
-            [$arriving, $leaving] = $memberVerdicts[$member->value][$side];
-
-            expect(SchemaPolarity::memberPresenceIsBreaking($member, arriving: true, request: $request))
+            expect(SchemaPolarity::memberPresence($member, arriving: true, request: $request))
                 ->toBe($arriving, $member->value.' member arriving on a '.$side)
-                ->and(SchemaPolarity::memberPresenceIsBreaking($member, arriving: false, request: $request))
+                ->and(SchemaPolarity::memberPresence($member, arriving: false, request: $request))
                 ->toBe($leaving, $member->value.' member leaving on a '.$side);
         }
     }
 
     // `contains` is the one row `$asserts` moves: with `minContains: 0` and no cap it arrives asserting
-    // nothing. A kind nobody has given a verdict cannot be spelled at all — the enum is closed and every
-    // match over it carries no default — so the unknown-entry contract is PHPStan's rather than a row.
-    expect(SchemaPolarity::keywordPresenceIsBreaking(SchemaMember::Bounded, arriving: true, request: true, asserts: false))->toBeFalse();
+    // nothing, so nothing moves in either direction. A kind nobody has given an answer cannot be spelled
+    // at all — the enum is closed and every match over it carries no default — so the unknown-entry
+    // contract is PHPStan's rather than a row.
+    expect(SchemaPolarity::keywordPresence(SchemaMember::Bounded, arriving: true, asserts: false))->toBe(RefinementMove::Unchanged)
+        ->and(SchemaPolarity::keywordPresence(SchemaMember::Bounded, arriving: false, asserts: false))->toBe(RefinementMove::Unchanged);
 });

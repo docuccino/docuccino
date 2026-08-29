@@ -315,11 +315,36 @@ value is omitted), `readOnly` (whether it may be sent), `writeOnly` (whether it 
 `deprecated` (whether it is being withdrawn). Being outside the set is not the same as being reported:
 the diff does not compare these four at all today, so changing one produces no entry in the changeset.
 
+**A schema's `type` is read as the SET of instance types it allows**, so `string` becoming
+`[string, integer]` is a direction rather than a rewrite. A type arriving where the value was untyped is
+`schema.type-added` and a set shrunk is `schema.type-narrowed`, both breaking on either side; a set grown
+is `schema.type-widened` and the constraint leaving is `schema.type-removed`, both safe on a request and
+breaking on a **response**; and two sets neither of which contains the other are `schema.type-changed`,
+breaking. The `null` member of a union is not read here at all — it is the same statement as
+`nullable: true` and is read once, below — so migrating a schema between the two spellings reports
+nothing rather than a phantom widening.
+
+**Every direction gets the same verdict, and an `enum` is the reading the rest are measured against.** A
+value leaving one (`schema.enum-value-removed`) or an `enum` arriving where nothing constrained the value
+(`schema.enum-added`) *narrows*, and a narrowing is breaking on both sides: a request starts rejecting a
+body a writer used to send, and a schema's request/response role can under-state its audience. A value
+joining one (`schema.enum-value-added`) or the constraint being dropped (`schema.enum-removed`) *widens*,
+and a widening is safe on a request — old writers stay valid — and breaking on a **response**, because a
+reader meets a value it has no case for and a strongly-typed generated client fails outright. A change
+nothing can order is breaking too, for the reason a false alarm costs you one look and a false "safe"
+costs your consumers a broken client. Everything below is that one rule applied to another keyword.
+
 **Composition and conditional keywords are read, each on its own terms**, because their direction is not
 the same. `allOf` is an intersection, so a branch added narrows the contract (`schema.all-of-branch-added`)
-and a branch removed widens it. `anyOf` and `oneOf` are unions, so a branch removed narrows either way,
-while a branch added is safe on a request and breaking on a response — a reader can now meet a shape it has
-no case for, exactly as it can when a value joins a response `enum`. That is a branch of a union that was
+and a branch removed widens it (`schema.all-of-branch-removed`) — safe on a request, breaking on a
+response. The whole `allOf` leaving reads the same way, as does a `not` leaving (`schema.not-removed`,
+the value it rejected is admitted again) and a `contains` that was asserting something leaving
+(`schema.contains-removed`, the array need no longer hold a matching element). Each arriving is the
+narrowing on the other side of the same coin — `schema.not-added`, `schema.contains-added` — and breaking
+on both. `anyOf` and `oneOf` are
+unions, so a branch removed narrows either way, while a branch added is safe on a request and breaking on
+a response — a reader can now meet a shape it has no case for, exactly as it can when a value joins a
+response `enum`. That is a branch of a union that was
 already there; the union *keyword* arriving is a different change, and breaking on both sides, because the
 schema it landed on was not an empty union but an unconstrained one. It leaving reads like
 `schema.enum-removed`: a request widens, while a response reader loses the closed set of shapes it typed
@@ -327,8 +352,10 @@ against. Branches are paired by what they *are* — a schema's identity, then th
 its content — never by where they sit, so reordering a `oneOf` is not a change, while swapping one branch
 for another is a removal plus an addition. `contains` demands a matching element, so it arriving narrows
 unless its own bounds say it asserts nothing — `minContains: 0` with no `maxContains` capping how many may
-match — and those two bounds keep a code of their own (`schema.contains-bound-narrowed`) because they
-bound a keyword rather than the value. `prefixItems` pairs by index, because index 2 constrains the third
+match — and those two bounds keep a code of their own (`schema.contains-bound-narrowed`,
+`schema.contains-bound-widened`) because they bound a keyword rather than the value. They take the same
+verdict everything else does: raising a `minContains` or lowering a `maxContains` is breaking on both
+sides, and relaxing either is breaking on a response, exactly as a relaxed `maxItems` is. `prefixItems` pairs by index, because index 2 constrains the third
 element and nothing else.
 
 **Refinement keywords are read too, each in its own value space.** Tightening a `maxLength`, raising a
@@ -375,15 +402,21 @@ object later is read the day it appears.
 sides: the server stops accepting a value your clients are still sending. Admitting one is
 `schema.nullable-widened`, safe on a request and breaking on a response, for the same reason a value
 joining a response `enum` is. Because OpenAPI 3.0's `nullable: true` and 3.1's `type: [string, null]` are
-one statement in two dialects, migrating between them reports no nullability change at all — the keyword
-is read together with the type union beside it, so switching spellings is not mistaken for a contract
-change. Writing `nullable: false` out where nothing was written reports nothing either, since that is what
-its absence already meant.
+one statement in two dialects, migrating between them reports nothing at all — the keyword is read
+together with the type union beside it, and the `type` comparison leaves the `null` member to it, so one
+edit is one finding and switching spellings is not mistaken for a contract change. Writing `nullable: false` out where nothing was written reports nothing either, since that is what
+its absence already meant. A `nullable` that is no boolean at all — the sort of thing a hand-written `old`
+artifact carries — is a change nothing can order: `schema.nullable-changed`, breaking on both sides.
 
 **`$id`, `$anchor` and `$schema` are read as what they are.** A `$ref` can name an `$id` or an `$anchor`,
 and the diff resolves no pointers, so a name changed or removed may leave one naming nothing:
-`schema.identity-changed`, breaking. A name *arriving* is the same code and not breaking — nothing could
-have pointed at it before. `$schema` names the dialect every keyword beside it is read in, so a comparison
+`schema.identity-changed`, breaking. An `$anchor` *arriving* is the same code and not breaking — nothing
+could have pointed at it before. An `$id` arriving is breaking, because an `$id` is not only a name: it is
+the base every `$ref` beneath it resolves against, so a pointer that resolved at the document root now
+resolves inside the new resource and every generated client's target moves. Nothing Docuccino generates
+mints an `$id`, so this reaches you only through a hand-written overlay or a third-party `old` artifact —
+where a false alarm costs one look and the alternative costs your consumers a silently repointed client.
+`$schema` names the dialect every keyword beside it is read in, so a comparison
 that spans a change to it has compared two languages; that is `schema.dialect-changed` and breaking,
 including when an explicit `$schema` arrives where there was none, because nothing in the diff can tell a
 restatement of the dialect already in force from a migration to another one.

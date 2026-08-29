@@ -15,19 +15,14 @@ use Docuccino\Core\Support\Hydrate;
  * is diffed by identity — so nothing double-counts and no ref resolution or cycle handling is
  * needed.
  *
- * Breaking: a type narrowed/changed or a constraint added; an enum value removed or an enum
- * introduced; an enum value added to, or the enum constraint dropped from, a *response* schema —
- * a reader (a generated client above all) meets a value it has no case for, or loses a closed set
- * it typed against; a required property added to a *request* schema; a property removed from a
- * *response* schema; a `format` added or changed on a *request* schema (stricter input).
- * Non-breaking: type widened, an enum value added to a request schema (old writers stay valid),
- * required removed, description edits, property added, a property removed from a request schema
- * (the client just stops sending it), a format removed or any format change on a response.
- * `required` on a response/component schema — usage context unknown — is reported but classed
- * non-breaking; that's a judgment call, not an oversight. An enum value removed, and an enum
- * introduced, stay breaking on BOTH sides: each is safe for a pure reader, but a schema's
- * `request` flag can under-state its audience (a shared component serves both directions), and a
- * downgrade there green-lights a change that rejects a writer's previously valid value.
+ * Every DIRECTION this class computes — a type, an enum, a constraint, a bound, a branch, a tag, a
+ * null — is turned into a verdict by one rule, stated in full at {@see verdict()} and nowhere else,
+ * because it was written out in nine places and five of them drifted. Two readings sit outside that
+ * rule and each says so where it is made: `required` added is breaking on a request and a report on a
+ * response — usage context unknown, a judgment call rather than an oversight — and `format` added or
+ * changed reads the same way, both being obligations on a WRITER. `properties` is the third, one level
+ * up: a member there is a field a consumer reads rather than a constraint on one, so a property added
+ * is safe and a property removed gates a response.
  *
  * An ANNOTATION keyword is the one class of edit that is never any of the above: it says what a value
  * means and nothing about what it may be, so a change to one is reported — a reviewer asking what moved
@@ -51,12 +46,11 @@ use Docuccino\Core\Support\Hydrate;
  *
  * Every REFINEMENT keyword is read too, and the direction is again a recorded decision per keyword
  * ({@see SchemaRefinement}) rather than one rule stretched over all of them, because `maximum` and
- * `minimum` sit at the same position and point opposite ways. A bound tightened is breaking on both
- * sides, one relaxed is the `schema.enum-value-added` argument on a response, and a change nothing can
- * order — two `pattern`s, two dialects of `exclusiveMinimum` — is reported and classed breaking rather
- * than waved through. `contains`' own `minContains`/`maxContains` keep the comparison beside the
- * keyword they bound ({@see compareContainsBounds()}), because they are inert without it and because
- * whether they assert anything is what decides what that keyword's presence is worth.
+ * `minimum` sit at the same position and point opposite ways. What each direction is worth is
+ * {@see verdict()}'s, the same answer the enum comparison beside it gets. `contains`' own
+ * `minContains`/`maxContains` keep the comparison beside the keyword they bound
+ * ({@see compareContainsBounds()}), because they are inert without it and because whether they assert
+ * anything is what decides what that keyword's presence is worth.
  *
  * Everything else a Schema Object may carry — no subschema, no refinement — is {@see SchemaReading}'s
  * recorded decision, the third of the three sets and the one two derived guards could not see between
@@ -103,13 +97,13 @@ final class SchemaComparator
 
         $this->compareRef($old, $new, $path, $id, $changes);
         $this->compareAnnotations($old, $new, $path, $id, $changes);
-        $this->compareType($old, $new, $path, $id, $changes);
+        $this->compareType($old, $new, $path, $id, $request, $changes);
         $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $request, $changes);
         $this->compareRequired($old, $new, $path, $id, $request, $changes);
         $this->compareReadings($old, $new, $path, $id, $request, $changes);
         $this->compareRefinements($old, $new, $path, $id, $request, $changes);
-        $this->compareContainsBounds($old, $new, $path, $id, $changes);
+        $this->compareContainsBounds($old, $new, $path, $id, $request, $changes);
         $this->comparePositions($old, $new, $path, $id, $request, $changes);
 
         return $changes;
@@ -192,11 +186,19 @@ final class SchemaComparator
     }
 
     /**
+     * The instance types a value may take, read as the SET they are — so `string` becoming
+     * `[string, integer]` is a direction and not a rewrite. Five codes name what moved and three
+     * directions decide what it is worth: a type set that grew, or left entirely, WIDENS, and takes the
+     * verdict every widening takes ({@see verdict()}). It did not always: `type` was classified before
+     * any keyword here read the audience, so a response whose type set grew passed `--enforce` as safe
+     * while the `enum` beside it — the same argument, a reader handed a value it has no case for — did
+     * not.
+     *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
      * @param  list<Change>  $changes
      */
-    private function compareType(array $old, array $new, string $path, string $id, array &$changes): void
+    private function compareType(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
         $oldSet = self::typeSet($old);
         $newSet = self::typeSet($new);
@@ -205,29 +207,43 @@ final class SchemaComparator
             return;
         }
 
-        $oldValue = $old['type'] ?? null;
-        $newValue = $new['type'] ?? null;
+        // `null` in a type union and `nullable: true` are one statement in two dialects, and
+        // {@see compareNullability()} is the one comparison that owns it. So where dropping `null` from
+        // both sides leaves them equal, the whole difference IS that statement: reporting it here as
+        // well would publish two findings for one edit, and — now that a widening gates a response — it
+        // would fail a release gate on a 3.0 → 3.1 migration that moves no contract at all. Both sides
+        // must still state a type besides `null`, or an untyped schema becoming `type: null` would
+        // vanish instead of reporting the narrowing it is.
+        $oldBare = $oldSet;
+        $newBare = $newSet;
+        unset($oldBare['null'], $newBare['null']);
 
-        if ($oldSet === []) {
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.type', true, 'schema.type-added', 'type', $oldValue, $newValue);
-
+        if ($oldBare === $newBare && $oldBare !== []) {
             return;
         }
 
-        if ($newSet === []) {
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.type', false, 'schema.type-removed', 'type', $oldValue, $newValue);
+        // A type arriving where the value was untyped narrows; the constraint leaving widens; and two
+        // sets neither of which contains the other are a change nothing can order.
+        [$code, $move] = match (true) {
+            $oldSet === [] => ['schema.type-added', RefinementMove::Narrowed],
+            $newSet === [] => ['schema.type-removed', RefinementMove::Widened],
+            self::isSuperset($newSet, $oldSet) => ['schema.type-widened', RefinementMove::Widened],
+            self::isSuperset($oldSet, $newSet) => ['schema.type-narrowed', RefinementMove::Narrowed],
+            default => ['schema.type-changed', RefinementMove::Incomparable],
+        };
 
-            return;
-        }
+        [$breaking] = self::verdict($move, $request);
 
-        if (self::isSuperset($newSet, $oldSet)) {
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.type', false, 'schema.type-widened', 'type', $oldValue, $newValue);
-
-            return;
-        }
-
-        $code = self::isSuperset($oldSet, $newSet) ? 'schema.type-narrowed' : 'schema.type-changed';
-        $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.type', true, $code, 'type', $oldValue, $newValue);
+        $changes[] = $this->change(
+            ChangeKind::Changed,
+            $id,
+            $path.'.type',
+            $breaking,
+            $code,
+            'type',
+            $old['type'] ?? null,
+            $new['type'] ?? null,
+        );
     }
 
     /**
@@ -277,7 +293,8 @@ final class SchemaComparator
         if (! $hasNew) {
             // Dropping the constraint widens what a request accepts; on a response it turns a
             // closed set a reader typed against into anything at all.
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.enum', ! $request, 'schema.enum-removed', 'enum', $oldEnum, null);
+            [$breaking] = self::verdict(RefinementMove::Widened, $request);
+            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.enum', $breaking, 'schema.enum-removed', 'enum', $oldEnum, null);
 
             return;
         }
@@ -292,9 +309,12 @@ final class SchemaComparator
         }
 
         if ($added !== []) {
-            // A new value widens what a request accepts; a response can now return something no
-            // existing reader has a case for, and a strongly-typed generated client fails outright.
-            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.enum', ! $request, 'schema.enum-value-added', 'enum', $oldEnum, $newEnum);
+            // The widening the whole verdict rule is named after, so it is the one place that argument
+            // is made rather than applied: a new value widens what a request accepts, while a response
+            // can now return something no existing reader has a case for and a strongly-typed generated
+            // client fails outright.
+            [$breaking] = self::verdict(RefinementMove::Widened, $request);
+            $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.enum', $breaking, 'schema.enum-value-added', 'enum', $oldEnum, $newEnum);
         }
     }
 
@@ -342,13 +362,18 @@ final class SchemaComparator
             $found = match ($kind) {
                 ReadingKind::Discriminator => $this->compareDiscriminator($old, $new, $path, $id, $request),
                 ReadingKind::Nullability => $this->compareNullability($old, $new, $path, $id, $request),
-                // `$id`/`$anchor`: a `$ref` may name either and this class resolves none, so a name
-                // CHANGED or gone may leave a pointer naming nothing — the reading a `$defs` member
-                // leaving already gets — while one arriving is safe, nothing having been able to point
-                // at it before. `$schema` names the dialect every keyword beside it is read in, so a
-                // comparison spanning a change to it compared two languages; that and a keyword nobody
-                // has decided are breaking for the same reason the indeterminate case always is.
+                // `$anchor`: a `$ref` may name it and this class resolves none, so a name CHANGED or gone
+                // may leave a pointer naming nothing — the reading a `$defs` member leaving already gets
+                // — while one arriving is safe, nothing having been able to point at it before.
                 ReadingKind::Identity => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.identity-changed', ($old[$keyword] ?? null) !== null),
+                // `$id` is that AND a base URI: one ARRIVING re-bases every `$ref` beneath it, so a
+                // pointer that resolved at the document root now resolves inside the new resource and
+                // every generated client's target moves. Nothing here resolves a `$ref`, so which
+                // pointers moved is what cannot be computed and both directions gate.
+                ReadingKind::Base => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.identity-changed', true),
+                // `$schema` names the dialect every keyword beside it is read in, so a comparison
+                // spanning a change to it compared two languages; that and a keyword nobody has decided
+                // are breaking for the same reason the indeterminate case always is.
                 ReadingKind::Dialect => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.dialect-changed', true),
                 ReadingKind::Undecided => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.keyword-changed', true),
                 // Read by a comparison of its own, reported as the non-event it is by the annotation
@@ -367,10 +392,9 @@ final class SchemaComparator
      * a client that could send any branch must now tag it — and it leaving widens the schema while taking
      * the tag a response reader was switching on with it, which is `schema.enum-removed`'s argument
      * exactly. What moved inside one both sides carry is {@see SchemaReading::discriminatorMoves()}'s
-     * answer, and the verdict is the one every direction here gets: narrowed is breaking on both sides,
-     * widened hands a response reader a branch it has no case for, and a change nothing can order — a
-     * `propertyName` rewritten, a mapping entry repointed — is breaking because the payload still
-     * validates and the client still compiles while the object it builds is the wrong type.
+     * answer, and what each direction is worth is {@see verdict()}'s. A `propertyName` rewritten and a
+     * mapping entry repointed are the changes nothing can order — the payload still validates and the
+     * client still compiles while the object it builds is the wrong type.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -383,11 +407,13 @@ final class SchemaComparator
         $has = array_key_exists('discriminator', $new);
 
         if ($had !== $has) {
+            [$breaking] = self::verdict($has ? RefinementMove::Narrowed : RefinementMove::Widened, $request);
+
             return [$this->change(
                 $has ? ChangeKind::Added : ChangeKind::Removed,
                 $id,
                 $child,
-                $has || ! $request,
+                $breaking,
                 'schema.discriminator-'.($has ? 'added' : 'removed'),
                 null,
                 null,
@@ -398,12 +424,14 @@ final class SchemaComparator
         $changes = [];
 
         foreach (SchemaReading::discriminatorMoves($old['discriminator'] ?? null, $new['discriminator'] ?? null) as $member => $move) {
+            [$breaking, $suffix] = self::verdict($move['move'], $request);
+
             $changes[] = $this->change(
                 ChangeKind::Changed,
                 $id,
                 $child.'.'.$member,
-                $move['move'] !== RefinementMove::Widened || ! $request,
-                'schema.discriminator-'.($move['move'] === RefinementMove::Incomparable ? 'changed' : $move['move']->value),
+                $breaking,
+                'schema.discriminator-'.$suffix,
                 $member,
                 $move['old'],
                 $move['new'],
@@ -415,9 +443,8 @@ final class SchemaComparator
 
     /**
      * `nullable`, read beside the type union it is the other dialect of, so migrating one spelling to the
-     * other reports nothing here ({@see SchemaReading::nullability()}). A null withdrawn narrows — the
-     * server stops accepting what a writer is still sending — and one admitted widens, handing a response
-     * reader a value it has no case for.
+     * other reports nothing here ({@see SchemaReading::nullability()}). A null withdrawn narrows and one
+     * admitted widens; the verdict each earns is {@see verdict()}'s.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -436,12 +463,14 @@ final class SchemaComparator
             return [];
         }
 
+        [$breaking, $suffix] = self::verdict($move, $request);
+
         return [$this->change(
             ChangeKind::Changed,
             $id,
             $path.'.nullable',
-            $move !== RefinementMove::Widened || ! $request,
-            'schema.nullable-'.($move === RefinementMove::Incomparable ? 'changed' : $move->value),
+            $breaking,
+            'schema.nullable-'.$suffix,
             'nullable',
             $old['nullable'] ?? null,
             $new['nullable'] ?? null,
@@ -570,7 +599,7 @@ final class SchemaComparator
         $has = array_key_exists($keyword, $new);
 
         if ($rule['member'] !== SchemaMember::EmptySchema && $had !== $has) {
-            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old, $request), $child, $id);
+            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old), $request, $child, $id);
 
             return;
         }
@@ -609,7 +638,7 @@ final class SchemaComparator
             $has = array_key_exists($name, $newMembers);
 
             if ($rule['member'] === SchemaMember::Store && $had !== $has) {
-                $changes[] = $this->presence($keyword, $rule, $has, SchemaPolarity::memberPresenceIsBreaking($rule['member'], $has, $request), $member, $id);
+                $changes[] = $this->presence($keyword, $rule, $has, SchemaPolarity::memberPresence($rule['member'], $has, $request), $request, $member, $id);
 
                 continue;
             }
@@ -645,7 +674,7 @@ final class SchemaComparator
         $has = array_key_exists($keyword, $new);
 
         if ($rule['member'] !== SchemaMember::EmptySchema && $had !== $has) {
-            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old, $request), $child, $id);
+            $changes[] = $this->presence($keyword, $rule, $has, self::keywordGates($rule, $has, $has ? $new : $old), $request, $child, $id);
 
             return;
         }
@@ -671,18 +700,19 @@ final class SchemaComparator
         }
 
         foreach ($gone as $i) {
-            $changes[] = $this->presence($keyword, $rule, false, SchemaPolarity::memberPresenceIsBreaking($rule['member'], false, $request), $child.'.'.$i, $id);
+            $changes[] = $this->presence($keyword, $rule, false, SchemaPolarity::memberPresence($rule['member'], false, $request), $request, $child.'.'.$i, $id);
         }
 
         foreach ($arrived as $j) {
-            $changes[] = $this->presence($keyword, $rule, true, SchemaPolarity::memberPresenceIsBreaking($rule['member'], true, $request), $child.'.'.$j, $id);
+            $changes[] = $this->presence($keyword, $rule, true, SchemaPolarity::memberPresence($rule['member'], true, $request), $request, $child.'.'.$j, $id);
         }
     }
 
     /**
      * `dependentRequired`: per property, the properties its presence makes required. A dependency
      * arriving or leaving is a presence question like any other, so the verdict is
-     * {@see SchemaPolarity::memberPresenceIsBreaking()}'s rather than one made here.
+     * {@see SchemaPolarity::memberPresence()}'s rather than one made here, under the verdict rule every
+     * direction in this class gets ({@see verdict()}).
      *
      * @param  Rule  $rule
      * @param  array<string, mixed>  $old
@@ -701,12 +731,12 @@ final class SchemaComparator
             $member = $path.'.'.$keyword.'.'.$name;
 
             if (array_diff($after, $before) !== []) {
-                $breaking = SchemaPolarity::memberPresenceIsBreaking($rule['member'], true, $request);
+                [$breaking] = self::verdict(SchemaPolarity::memberPresence($rule['member'], true, $request), $request);
                 $changes[] = $this->change(ChangeKind::Changed, $id, $member, $breaking, 'schema.'.$stem.'-added', $name, $before, $after);
             }
 
             if (array_diff($before, $after) !== []) {
-                $breaking = SchemaPolarity::memberPresenceIsBreaking($rule['member'], false, $request);
+                [$breaking] = self::verdict(SchemaPolarity::memberPresence($rule['member'], false, $request), $request);
                 $changes[] = $this->change(ChangeKind::Changed, $id, $member, $breaking, 'schema.'.$stem.'-removed', $name, $before, $after);
             }
         }
@@ -714,12 +744,9 @@ final class SchemaComparator
 
     /**
      * Every refinement keyword either side carries, in one sorted pass so the answer never depends on
-     * which side declared what. Which way each moved is {@see SchemaRefinement}'s recorded decision; the
-     * VERDICT is this class's, and it is the one the enum comparison beside it already makes. A bound
-     * TIGHTENED is breaking on both sides — a request rejects a body a writer used to send, and a
-     * schema's `request` flag can under-state its audience — while one RELAXED is safe for a writer and
-     * hands a response reader a value it has no case for. A change nothing can order is breaking, for
-     * the reason every indeterminate answer here is: a false alarm costs the author one look.
+     * which side declared what. Which way each moved is {@see SchemaRefinement}'s recorded decision;
+     * what that direction is worth is {@see verdict()}'s, the one rule the enum comparison beside it
+     * already gets.
      *
      * @param  array<string, mixed>  $old
      * @param  array<string, mixed>  $new
@@ -742,12 +769,14 @@ final class SchemaComparator
                 continue;
             }
 
+            [$breaking, $suffix] = self::verdict($move, $request);
+
             $changes[] = $this->change(
                 ChangeKind::Changed,
                 $id,
                 $path.'.'.$keyword,
-                $move !== RefinementMove::Widened || ! $request,
-                'schema.refinement-'.($move === RefinementMove::Incomparable ? 'changed' : $move->value),
+                $breaking,
+                'schema.refinement-'.$suffix,
                 $keyword,
                 $old[$keyword] ?? null,
                 $new[$keyword] ?? null,
@@ -764,7 +793,7 @@ final class SchemaComparator
      * @param  array<string, mixed>  $new
      * @param  list<Change>  $changes
      */
-    private function compareContainsBounds(array $old, array $new, string $path, string $id, array &$changes): void
+    private function compareContainsBounds(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
     {
         if (! array_key_exists('contains', $old) || ! array_key_exists('contains', $new)) {
             return;
@@ -774,7 +803,15 @@ final class SchemaComparator
         $isAtLeast = SchemaKeywords::minContains($new);
 
         if ($wasAtLeast !== $isAtLeast) {
-            $changes[] = $this->containsBound($isAtLeast > $wasAtLeast, $path.'.minContains', $id, 'minContains', $wasAtLeast, $isAtLeast);
+            $changes[] = $this->containsBound(
+                self::moved($isAtLeast > $wasAtLeast),
+                $request,
+                $path.'.minContains',
+                $id,
+                'minContains',
+                $wasAtLeast,
+                $isAtLeast,
+            );
         }
 
         $wasCapped = SchemaKeywords::maxContains($old);
@@ -783,8 +820,22 @@ final class SchemaComparator
         if ($wasCapped !== $isCapped) {
             // No cap is no bound at all, so one arriving narrows however high it is set.
             $narrowed = $isCapped !== null && ($wasCapped === null || $isCapped < $wasCapped);
-            $changes[] = $this->containsBound($narrowed, $path.'.maxContains', $id, 'maxContains', $wasCapped, $isCapped);
+            $changes[] = $this->containsBound(
+                self::moved($narrowed),
+                $request,
+                $path.'.maxContains',
+                $id,
+                'maxContains',
+                $wasCapped,
+                $isCapped,
+            );
         }
+    }
+
+    /** A bound that moved one way or the other — the two directions a numeric bound has between them. */
+    private static function moved(bool $narrowed): RefinementMove
+    {
+        return $narrowed ? RefinementMove::Narrowed : RefinementMove::Widened;
     }
 
     /**
@@ -796,25 +847,61 @@ final class SchemaComparator
      * @param  Rule  $rule
      * @param  array<string, mixed>  $carrier  the side that HAS the keyword
      */
-    private static function keywordGates(array $rule, bool $arriving, array $carrier, bool $request): bool
+    private static function keywordGates(array $rule, bool $arriving, array $carrier): RefinementMove
     {
-        return SchemaPolarity::keywordPresenceIsBreaking(
+        return SchemaPolarity::keywordPresence(
             $rule['member'],
             $arriving,
-            $request,
             SchemaKeywords::containsAsserts($carrier),
         );
     }
 
     /**
+     * What a direction is worth — the ONE rule this class applies wherever one has been computed, and
+     * the reason {@see SchemaPolarity}, {@see SchemaRefinement} and {@see SchemaReading} all answer in
+     * the same vocabulary. NARROWED is breaking on both sides: a request rejects a body a writer used
+     * to send, and a schema's `request` flag can under-state its audience, a shared component serving
+     * both directions. INCOMPARABLE is breaking for that reason and one more — a false alarm costs the
+     * author one look, while a false "safe" costs the consumer a broken client. WIDENED is the
+     * asymmetric one, and the argument `schema.enum-value-added` is named after: a writer stays valid,
+     * while a response reader meets a value, a branch, a shape or a tag it has no case for, which is
+     * where a strongly-typed generated client fails outright. UNCHANGED reaches here only from a
+     * presence question whose answer is that nothing moved at all.
+     *
+     * Three exceptions are deliberate and live elsewhere, each stated where it is made: `required` and
+     * `format` are obligations on a WRITER, so they gate a request and are a report on a response
+     * ({@see compareRequired()}, {@see compareFormat()}); a `properties` member is read as a field a
+     * consumer reads rather than as a constraint on one ({@see compareProperties()}); and a change
+     * under an INVERSE or CONDITIONAL position has no computable direction to hand here at all
+     * ({@see reclassified()}). `type` was a fourth and is not one any more: it was classified before
+     * any keyword read the audience, so its widenings were safe on both sides by omission rather than
+     * by argument ({@see compareType()}).
+     *
+     * @return array{bool, string} whether it gates, and the suffix its `-narrowed`/`-widened`/`-changed` code takes
+     */
+    private static function verdict(RefinementMove $move, bool $request): array
+    {
+        $breaking = match ($move) {
+            RefinementMove::Narrowed, RefinementMove::Incomparable => true,
+            RefinementMove::Widened => ! $request,
+            RefinementMove::Unchanged => false,
+        };
+
+        return [$breaking, $move->suffix()];
+    }
+
+    /**
      * A position, or one of its members, arriving or leaving — reported wherever that is not the same
-     * statement as the empty schema arriving. The verdict is {@see SchemaPolarity}'s recorded decision,
-     * settled by the caller because which of its two tables applies is the caller's question.
+     * statement as the empty schema arriving. Which way it moved is {@see SchemaPolarity}'s recorded
+     * decision, settled by the caller because which of its two tables applies is the caller's question;
+     * what that move is worth is {@see verdict()}'s, here as everywhere.
      *
      * @param  Rule  $rule
      */
-    private function presence(string $keyword, array $rule, bool $arriving, bool $breaking, string $path, string $id): Change
+    private function presence(string $keyword, array $rule, bool $arriving, RefinementMove $move, bool $request, string $path, string $id): Change
     {
+        [$breaking] = self::verdict($move, $request);
+
         return $this->change(
             $arriving ? ChangeKind::Added : ChangeKind::Removed,
             $id,
@@ -854,15 +941,22 @@ final class SchemaComparator
         return $out;
     }
 
-    /** One of `contains`' own bounds, which keep a code of their own because they bound a keyword rather than the value. */
-    private function containsBound(bool $narrowed, string $path, string $id, string $field, ?int $old, ?int $new): Change
+    /**
+     * One of `contains`' own bounds, which keep a code of their own because they bound a keyword rather
+     * than the value. The direction is the caller's — no cap is no bound, so one arriving narrows
+     * however high it is set — and the verdict is {@see verdict()}'s, the same rule `maxItems` gets one
+     * table over.
+     */
+    private function containsBound(RefinementMove $move, bool $request, string $path, string $id, string $field, ?int $old, ?int $new): Change
     {
+        [$breaking, $suffix] = self::verdict($move, $request);
+
         return $this->change(
             ChangeKind::Changed,
             $id,
             $path,
-            $narrowed,
-            'schema.contains-bound-'.($narrowed ? 'narrowed' : 'widened'),
+            $breaking,
+            'schema.contains-bound-'.$suffix,
             $field,
             $old,
             $new,

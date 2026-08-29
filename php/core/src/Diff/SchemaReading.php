@@ -41,8 +41,11 @@ final class SchemaReading
         // validates; `nullable` is 3.0's spelling of a type union's `null` branch.
         'discriminator' => ReadingKind::Discriminator,
         'nullable' => ReadingKind::Nullability,
-        // A name a `$ref` may resolve, and the dialect the keywords beside it are written in.
-        '$id' => ReadingKind::Identity,
+        // A name a `$ref` may resolve, and the dialect the keywords beside it are written in. `$id` gets
+        // a row of its own because it is not only a name: it re-bases every `$ref` BENEATH it, so the
+        // two members differ on what one ARRIVING is worth and one row answering for both was a sentence
+        // true of `$anchor` and false of `$id`.
+        '$id' => ReadingKind::Base,
         '$anchor' => ReadingKind::Identity,
         '$schema' => ReadingKind::Dialect,
         // Each already a member of the diff's own vocabulary, and each named where it is read:

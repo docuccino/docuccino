@@ -11,6 +11,7 @@ use Docuccino\Core\Contract\Exchange;
 use Docuccino\Core\Contract\Outcome;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\DiagnosticCollector;
+use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\SchemaDraft;
 use Docuccino\Core\Draft\SchemaKeywords;
@@ -2254,4 +2255,43 @@ function bootLaravelData(?string $wrap): void
     $defaults = require dirname(__DIR__).'/vendor/spatie/laravel-data/config/data.php';
 
     config()->set('data', [...$defaults, 'wrap' => $wrap]);
+}
+
+/**
+ * Every change one schema comparison reports, as `code` plus `!` where it is breaking, sorted so the
+ * assertion pins the finding rather than the order the comparator's arms happen to run in. Shared
+ * because the three decision tables are three halves of one comparison: a helper per table is three
+ * copies of one body, and the third to be written is the one that goes quietly out of step.
+ *
+ * @param  array<string, mixed>|bool  $old
+ * @param  array<string, mixed>|bool  $new
+ * @return list<string>
+ */
+function schemaDiffCodes(array|bool $old, array|bool $new, bool $request): array
+{
+    $codes = array_map(
+        static fn ($change): string => $change->code.($change->breaking ? '!' : ''),
+        (new SchemaComparator)->compare($old, $new, 'S', 'sch:v1:0000000000000000', $request),
+    );
+
+    sort($codes);
+
+    return $codes;
+}
+
+/**
+ * Which keywords two sides disagree about: the ones the source of truth knows and nobody decided, and
+ * the ones a decision exists for that it does not know. Both are a decision nobody made — one silently
+ * unread, one silently unreachable.
+ *
+ * @param  list<string>  $known
+ * @param  list<string>  $decided
+ * @return array{list<string>, list<string>}
+ */
+function decisionGaps(array $known, array $decided): array
+{
+    return [
+        array_values(array_diff($known, $decided)),
+        array_values(array_diff($decided, $known)),
+    ];
 }

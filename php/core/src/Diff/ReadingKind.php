@@ -21,8 +21,11 @@ enum ReadingKind: string
     /** `nullable` — OAS 3.0's spelling of the `null` branch of a type union. */
     case Nullability = 'nullability';
 
-    /** `$id`/`$anchor` — a name a `$ref` may resolve, and this comparison resolves none. */
+    /** `$anchor` — a name a `$ref` may resolve, and this comparison resolves none. */
     case Identity = 'identity';
+
+    /** `$id` — that, AND the base URI every `$ref` beneath it resolves against. */
+    case Base = 'base';
 
     /** `$schema` — the dialect every keyword beside it is read in. */
     case Dialect = 'dialect';

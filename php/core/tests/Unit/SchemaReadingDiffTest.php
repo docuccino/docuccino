@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Diff\ReadingKind;
+use Docuccino\Core\Diff\RefinementKind;
 use Docuccino\Core\Diff\RefinementMove;
 use Docuccino\Core\Diff\SchemaComparator;
 use Docuccino\Core\Diff\SchemaPolarity;
@@ -59,43 +60,6 @@ function readingDecidedEverywhere(): array
 }
 
 /**
- * Which keywords two sides disagree about: the ones nobody decided, and the ones a decision exists for
- * that the draft model does not know. Both are a decision nobody made — one silently unread, one
- * silently unreachable.
- *
- * @param  list<string>  $known
- * @param  list<string>  $decided
- * @return array{list<string>, list<string>}
- */
-function readingDecisionGaps(array $known, array $decided): array
-{
-    return [
-        array_values(array_diff($known, $decided)),
-        array_values(array_diff($decided, $known)),
-    ];
-}
-
-/**
- * Every change one comparison reports, as `code` plus `!` where it is breaking, sorted so the assertion
- * pins the finding rather than the order the arms happen to run in.
- *
- * @param  array<string, mixed>  $old
- * @param  array<string, mixed>  $new
- * @return list<string>
- */
-function readingChanges(array $old, array $new, bool $request): array
-{
-    $codes = array_map(
-        static fn ($change): string => $change->code.($change->breaking ? '!' : ''),
-        (new SchemaComparator)->compare($old, $new, 'S', 'sch:v1:0000000000000000', $request),
-    );
-
-    sort($codes);
-
-    return $codes;
-}
-
-/**
  * A schema carrying a Discriminator Object over a union — the shape a polymorphic relation publishes.
  *
  * @param  array<string, string>  $mapping
@@ -113,7 +77,7 @@ function readingDiscriminated(array $mapping, string $property = 'type', array $
 it('records a reading decision for every keyword neither sibling table decides', function (): void {
     $known = readingKeywords();
 
-    [$undecided, $unreachable] = readingDecisionGaps($known, SchemaReading::decided());
+    [$undecided, $unreachable] = decisionGaps($known, SchemaReading::decided());
 
     expect($undecided)->toBe([], 'no reading decision recorded for: '.implode(', ', $undecided))
         ->and($unreachable)->toBe([], 'a reading decision for a keyword no table owes one: '.implode(', ', $unreachable))
@@ -128,15 +92,30 @@ it('accounts for every keyword the draft model knows across all three decision t
     // answer for it or the suite fails.
     $known = readingKnownKeywords();
 
-    [$undecided, $unreachable] = readingDecisionGaps($known, readingDecidedEverywhere());
+    [$undecided, $unreachable] = decisionGaps($known, readingDecidedEverywhere());
+
+    // Every pair of the three, not one pair of the three: a keyword two tables both decide is a keyword
+    // two tables could disagree about, and asserting it for the third table alone left the one real
+    // overlap unguarded. It is sanctioned and pinned BY NAME rather than allowed as slack — `contentSchema`
+    // is a subschema position and a refinement both, and its refinement row defers to the position instead
+    // of reading it a second time — so a second keyword landing in two tables is a decision somebody takes
+    // here rather than an overlap nothing notices.
+    $overlap = static function (array $left, array $right): array {
+        $shared = array_values(array_intersect($left, $right));
+        sort($shared);
+
+        return $shared;
+    };
 
     expect($undecided)->toBe([], 'no table decides: '.implode(', ', $undecided))
         ->and($unreachable)->toBe([], 'decided by a table but unknown to the draft model: '.implode(', ', $unreachable))
         ->and(count($known))->toBeGreaterThanOrEqual(55)
-        // …and the three sets are a partition rather than three overlapping opinions: a keyword this table
-        // decides is one no sibling reads, so nothing is answered twice by tables that could disagree.
-        ->and(array_values(array_intersect(SchemaReading::decided(), [...SchemaPolarity::decided(), ...SchemaRefinement::decided()])))
-        ->toBe([]);
+        ->and($overlap(SchemaReading::decided(), SchemaPolarity::decided()))->toBe([], 'reading ∩ polarity')
+        ->and($overlap(SchemaReading::decided(), SchemaRefinement::decided()))->toBe([], 'reading ∩ refinement')
+        ->and($overlap(SchemaPolarity::decided(), SchemaRefinement::decided()))->toBe(['contentSchema'], 'polarity ∩ refinement')
+        // …and the deferral is what makes that overlap one answer rather than two.
+        ->and(SchemaRefinement::rule('contentSchema')['kind'])->toBe(RefinementKind::Elsewhere)
+        ->and(SchemaKeywords::positionOf('contentSchema'))->not->toBeNull();
 });
 
 it('knows exactly the keywords it classifies, so the union is held against the model itself', function (): void {
@@ -157,11 +136,11 @@ it('refuses a keyword nobody has decided, in either direction', function (): voi
     $known = readingKeywords();
     $decided = SchemaReading::decided();
 
-    expect(readingDecisionGaps([...$known, 'aKeywordNobodyDecided'], $decided))
+    expect(decisionGaps([...$known, 'aKeywordNobodyDecided'], $decided))
         ->toBe([['aKeywordNobodyDecided'], []])
-        ->and(readingDecisionGaps($known, [...$decided, 'aDecisionForNoKeyword']))
+        ->and(decisionGaps($known, [...$decided, 'aDecisionForNoKeyword']))
         ->toBe([[], ['aDecisionForNoKeyword']])
-        ->and(readingDecisionGaps([...readingKnownKeywords(), 'aKeywordNoTableDecides'], readingDecidedEverywhere()))
+        ->and(decisionGaps([...readingKnownKeywords(), 'aKeywordNoTableDecides'], readingDecidedEverywhere()))
         ->toBe([['aKeywordNoTableDecides'], []]);
 });
 
@@ -185,7 +164,7 @@ it('records the reading of every keyword it decides', function (): void {
     $rules = [
         'discriminator' => ReadingKind::Discriminator,
         'nullable' => ReadingKind::Nullability,
-        '$id' => ReadingKind::Identity,
+        '$id' => ReadingKind::Base,
         '$anchor' => ReadingKind::Identity,
         '$schema' => ReadingKind::Dialect,
         '$ref' => ReadingKind::Elsewhere,
@@ -230,8 +209,8 @@ it('calls a keyword an annotation exactly where the draft model does', function 
 });
 
 it('classifies every discriminator edit in both directions', function (array $old, array $new, array $onRequest, array $onResponse): void {
-    expect(readingChanges($old, $new, request: true))->toBe($onRequest, 'request')
-        ->and(readingChanges($old, $new, request: false))->toBe($onResponse, 'response');
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     // The edit the issue was opened on: the tag still validates, the client still compiles, and the
     // object it builds is the wrong type.
@@ -316,8 +295,8 @@ it('names the member of a discriminator that moved, and where', function (): voi
 });
 
 it('classifies every nullability edit in both directions', function (array $old, array $new, array $onRequest, array $onResponse): void {
-    expect(readingChanges($old, $new, request: true))->toBe($onRequest, 'request')
-        ->and(readingChanges($old, $new, request: false))->toBe($onResponse, 'response');
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     // The server stops accepting a null a writer is still sending.
     'a null withdrawn' => [
@@ -342,12 +321,15 @@ it('classifies every nullability edit in both directions', function (array $old,
         ['type' => 'string', 'nullable' => false],
         [], [],
     ],
-    // The 3.0 and 2020-12 spellings are one statement, so migrating between them is not a narrowing —
-    // which is what a reading of the keyword alone gets wrong, and it gets it wrong at the gate.
+    // The 3.0 and 2020-12 spellings are one statement, so migrating between them moves NOTHING — which
+    // is what a reading of either keyword alone gets wrong, and it gets it wrong at the gate. It used to
+    // report a `schema.type-widened` here: harmless while a widening was safe on both sides, and a
+    // release gate failing on a migration the moment one was not. `null` is the nullability
+    // comparison's to read, at both keywords, so one edit is one finding or none.
     'the same statement in the other dialect' => [
         ['type' => 'string', 'nullable' => true],
         ['type' => ['string', 'null']],
-        ['schema.type-widened'], ['schema.type-widened'],
+        [], [],
     ],
     'the same statement in the other dialect, written out' => [
         ['type' => ['string', 'null']],
@@ -368,8 +350,8 @@ it('classifies every nullability edit in both directions', function (array $old,
 ]);
 
 it('classifies an identity and a dialect edit in both directions', function (array $old, array $new, array $onRequest, array $onResponse): void {
-    expect(readingChanges($old, $new, request: true))->toBe($onRequest, 'request')
-        ->and(readingChanges($old, $new, request: false))->toBe($onResponse, 'response');
+    expect(schemaDiffCodes($old, $new, request: true))->toBe($onRequest, 'request')
+        ->and(schemaDiffCodes($old, $new, request: false))->toBe($onResponse, 'response');
 })->with([
     // A `$ref` may name either, and this comparison resolves none — so a name changed or gone may leave a
     // pointer naming nothing, the reading a `$defs` member leaving already gets.
@@ -383,11 +365,35 @@ it('classifies an identity and a dialect edit in both directions', function (arr
         ['type' => 'string'],
         ['schema.identity-changed!'], ['schema.identity-changed!'],
     ],
-    // Nothing could have pointed at a name that was not there.
+    // Nothing could have pointed at a name that was not there — which is the whole of what `$anchor` is.
     'an $anchor arriving' => [
         ['type' => 'string'],
         ['type' => 'string', '$anchor' => 'formA'],
         ['schema.identity-changed'], ['schema.identity-changed'],
+    ],
+    // `$id` is not only a name: it is the BASE every `$ref` beneath it resolves against, so one arriving
+    // re-points pointers that were already there — `#/components/schemas/X` under a fresh `$id` resolves
+    // inside the new resource instead of at the document root. The two members shared a row and the row's
+    // reason was a sentence true of `$anchor` and false of `$id`.
+    'an $id arriving over refs it re-bases' => [
+        ['type' => 'object', 'properties' => ['a' => ['$ref' => '#/components/schemas/A']]],
+        ['type' => 'object', '$id' => 'https://forms.test/schemas/a', 'properties' => ['a' => ['$ref' => '#/components/schemas/A']]],
+        ['schema.identity-changed!'], ['schema.identity-changed!'],
+    ],
+    // Arriving on a schema carrying no `$ref` at all is the same verdict, because establishing which
+    // pointers moved means resolving them and this comparison deliberately resolves none: a false alarm
+    // costs a hand-authoring author one look, the alternative costs a consumer a silently repointed client.
+    'an $id arriving where nothing points' => [
+        ['type' => 'string'],
+        ['type' => 'string', '$id' => 'https://forms.test/schemas/a'],
+        ['schema.identity-changed!'], ['schema.identity-changed!'],
+    ],
+    // The ordinary case, and the one the short-circuit above every comparison exists for: a name that did
+    // not move reports nothing. Without it a diff of a document nobody edited fails `--enforce`.
+    'an $id that did not move' => [
+        ['type' => 'string', '$id' => 'https://forms.test/schemas/a'],
+        ['type' => 'string', '$id' => 'https://forms.test/schemas/a'],
+        [], [],
     ],
     // The dialect every keyword beside it is read in: a comparison spanning a change to it compared two
     // languages, and which way that moved is exactly what cannot be computed.
@@ -401,18 +407,23 @@ it('classifies an identity and a dialect edit in both directions', function (arr
         ['type' => 'string', '$schema' => 'http://json-schema.org/draft-07/schema#'],
         ['schema.dialect-changed!'], ['schema.dialect-changed!'],
     ],
+    'a dialect that did not move' => [
+        ['type' => 'string', '$schema' => 'https://json-schema.org/draft/2020-12/schema'],
+        ['type' => 'string', '$schema' => 'https://json-schema.org/draft/2020-12/schema'],
+        [], [],
+    ],
 ]);
 
 it('leaves every keyword with a comparison of its own to that comparison, and reports nothing for the rest', function (): void {
     // The rows that are not this table's own comparison, executed. Three name where they are read — a
     // second reading beside the first would report one edit twice — and five are read by nothing, which
     // is a decision recorded here rather than the gap the five unread keywords used to be.
-    expect(readingChanges(['type' => 'string'], ['type' => 'integer'], request: true))->toBe(['schema.type-changed!'])
-        ->and(readingChanges(['$ref' => '#/components/schemas/A'], ['$ref' => '#/components/schemas/B'], request: true))
+    expect(schemaDiffCodes(['type' => 'string'], ['type' => 'integer'], request: true))->toBe(['schema.type-changed!'])
+        ->and(schemaDiffCodes(['$ref' => '#/components/schemas/A'], ['$ref' => '#/components/schemas/B'], request: true))
         ->toBe(['schema.ref-changed'])
-        ->and(readingChanges(['type' => 'object', 'required' => []], ['type' => 'object', 'required' => ['a']], request: true))
+        ->and(schemaDiffCodes(['type' => 'object', 'required' => []], ['type' => 'object', 'required' => ['a']], request: true))
         ->toBe(['schema.required-added!'])
-        ->and(readingChanges(['type' => 'string', 'title' => 'Was'], ['type' => 'string', 'title' => 'Now'], request: true))
+        ->and(schemaDiffCodes(['type' => 'string', 'title' => 'Was'], ['type' => 'string', 'title' => 'Now'], request: true))
         ->toBe(['schema.annotation-changed']);
 
     // `x-docuccino` carries the identity the diff pairs nodes BY; the other four say something about the
@@ -427,7 +438,7 @@ it('leaves every keyword with a comparison of its own to that comparison, and re
 
     foreach ($unread as $keyword => [$before, $after]) {
         expect(SchemaReading::rule($keyword))->toBe(ReadingKind::Unread, $keyword.' reading')
-            ->and(readingChanges(['type' => 'string', $keyword => $before], ['type' => 'string', $keyword => $after], request: true))
+            ->and(schemaDiffCodes(['type' => 'string', $keyword => $before], ['type' => 'string', $keyword => $after], request: true))
             ->toBe([], $keyword.' is recorded as read by nothing and reported something');
     }
 });
@@ -435,17 +446,17 @@ it('leaves every keyword with a comparison of its own to that comparison, and re
 it('carries a reading up from every subschema position it sits under', function (): void {
     // The keyword is read wherever a schema is, not only at the top of one — and under `not` the direction
     // inverts, so the child's verdict cannot carry up and the conservative one says so.
-    expect(readingChanges(
+    expect(schemaDiffCodes(
         ['type' => 'object', 'properties' => ['payload' => readingDiscriminated(['invoice' => '#/components/schemas/Invoice'])]],
         ['type' => 'object', 'properties' => ['payload' => readingDiscriminated(['invoice' => '#/components/schemas/Receipt'])]],
         request: true,
     ))->toBe(['schema.discriminator-changed!'])
-        ->and(readingChanges(
+        ->and(schemaDiffCodes(
             ['allOf' => [['type' => 'string', 'nullable' => true]]],
             ['allOf' => [['type' => 'string']]],
             request: true,
         ))->toBe(['schema.nullable-narrowed!'])
-        ->and(readingChanges(
+        ->and(schemaDiffCodes(
             ['not' => ['type' => 'string']],
             ['not' => ['type' => 'string', 'nullable' => true]],
             request: false,

@@ -27,4 +27,15 @@ enum RefinementMove: string
 
     /** The two values are not ordered by anything this comparison can read. */
     case Incomparable = 'incomparable';
+
+    /**
+     * The suffix a direction's code takes — `schema.refinement-widened`, `schema.nullable-changed`. It is
+     * the case name for three of the four; a direction nothing can order publishes as `changed`, because
+     * "incomparable" describes the comparison and a code describes the edit. `unchanged` never reaches a
+     * document: every caller returns before publishing one.
+     */
+    public function suffix(): string
+    {
+        return $this === self::Incomparable ? 'changed' : $this->value;
+    }
 }

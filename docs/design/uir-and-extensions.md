@@ -197,6 +197,29 @@ cannot: `items` and `not` sit at the same position and point opposite ways. So `
 records one decision per positioned keyword, on three axes, and `Diff\SchemaComparator` is its only
 reader.
 
+**The verdict rule, stated once.** Three tables answer here — `SchemaPolarity`, `SchemaRefinement`,
+`SchemaReading` — and all three answer in the same vocabulary: a `Diff\RefinementMove`, which is
+narrowed, widened, indeterminate or nothing moved. Turning one into `(breaking, code suffix)` is ONE
+function, `Diff\SchemaComparator::verdict()`, and every path in all three tables ends there.
+**NARROWED** gates both sides: a request rejects a body a writer used to send, and a schema's `request`
+flag can under-state its audience, a shared component serving both directions. **INDETERMINATE** gates
+for that reason and one more — a false alarm costs the author one look, a false "safe" costs the
+consumer a broken client. **WIDENED** is the asymmetric one: safe for a writer, breaking on a
+**response**, because a reader meets a value, a branch, a shape or a tag it has no case for and a
+strongly-typed generated client fails outright. That is the `schema.enum-value-added` argument, and
+everything below is it applied to another keyword.
+
+The rule was written out in eight places once, and four of them drifted — `maxItems: 2 → 9` failed
+`--enforce` on a response while `maxContains: 2 → 9` passed it. So it lives in one function now, the
+tables hand it directions rather than verdicts, and `SchemaVerdictDiffTest` drives every path that
+computes a direction through the real comparator and holds the published verdict to the rule. Four
+readings sit outside it deliberately, each stated where it is made: `required` and `format` are
+obligations on a writer, so they gate a request and report on a response; a `properties` member is a
+field a consumer reads rather than a constraint. `type` was a fourth until the sweep reached it: it was
+classified before any keyword here read the audience, so its widenings were safe on both sides by omission
+rather than by argument, and a response whose type set grew passed the gate while the `enum` beside it —
+the same argument, a reader handed a value it has no case for — did not.
+
 **Polarity** governs a change UNDER the position. `DIRECT` — narrowing the subschema narrows the parent,
 so the child's classification carries up unchanged; every position constraining the value's own members
 reads this way. `INVERSE` — narrowing the subschema WIDENS the parent, which is `not` and only `not`.
@@ -233,16 +256,19 @@ default and a kind added with no verdict is a PHPStan failure rather than a cons
   demand for a matching element, but a `maxContains` beside it still caps how many may match, so both
   bounds decide it (`Draft\SchemaKeywords::containsAsserts()`).
 - `Union` — the one kind whose two answers differ, and the reason the questions are asked apart. A BRANCH
-  of an existing `anyOf`/`oneOf` removed narrows the union and is breaking either way, while one added
-  widens what a request accepts and is safe there — a response can now carry a shape no existing reader
-  has a case for, the `schema.enum-value-added` argument exactly, so it is breaking on a response. The
-  KEYWORD arriving is not that: the old side was not an empty union, it was unconstrained, so the union
-  landing narrows both sides, and it leaving mirrors `schema.enum-removed` — a request widens while a
-  response reader loses the closed set of shapes it typed against.
-- `Store` — a `$defs` member. Arriving is nothing (nothing can name a definition that did not also change);
-  leaving may dangle a `$ref` the differ does not resolve, so it is breaking.
-- `Property` and `Required` — the two positions with a comparison of their own (`properties`, and
-  `dependentRequired`'s per-property lists, whose entries narrow a request exactly as `required` does).
+  of an existing `anyOf`/`oneOf` removed narrows the union, while one added widens it. The KEYWORD
+  arriving is not that: the old side was not an empty union, it was unconstrained, so the union landing
+  narrows, and it leaving widens. Both then take the verdict rule above, which is where a union branch
+  added comes to be safe on a request and breaking on a response.
+- `Store` — a `$defs` member. Arriving moves nothing (nothing can name a definition that did not also
+  change); leaving may dangle a `$ref` the differ does not resolve, which is a direction it cannot
+  compute rather than one it can.
+- `Property` and `Required` — the two positions with a comparison of their own. `properties` is outside
+  the verdict rule entirely (a member there is a field a consumer reads). `Required` is
+  `dependentRequired`'s per-property lists, and is the one row whose DIRECTION reads the audience: an
+  entry is an obligation on a writer, so a request reads it as `required` does and a response — no
+  writer, usage context unknown — reads it as moving nothing. That keeps the `required` judgment call in
+  one place instead of adding a second verdict rule beside the shared one.
 
 **Pairing** is how two sides' members are matched, and only one fact about it is a decision the keyword
 owns: `pairsByIndex`, true for `prefixItems` alone, because a tuple index IS the slot it constrains. A map
@@ -277,13 +303,12 @@ own VALUE space. `Diff\SchemaRefinement` records one decision per refinement key
 - `Undecided` — a refinement the draft model knows and nobody has decided, read as a change nothing can
   order rather than as silence.
 
-The verdict is the one the enum comparison beside it already makes. A bound TIGHTENED is breaking on both
-sides — a request rejects a body a writer used to send, and a schema's `request` flag can under-state its
-audience — while one RELAXED is safe for a writer and hands a response reader a value it has no case for,
-the `schema.enum-value-added` argument exactly. A change nothing can order is breaking for the reason
-every indeterminate answer here is. Three codes carry all of it — `schema.refinement-narrowed`,
-`-widened`, `-changed` — each naming the keyword in its `fields`, because a code per keyword per
-direction is forty-odd classifications where the keyword is already the field.
+The verdict is the shared rule above, unchanged and unrestated. Three codes carry all of it —
+`schema.refinement-narrowed`, `-widened`, `-changed` — each naming the keyword in its `fields`, because a
+code per keyword per direction is forty-odd classifications where the keyword is already the field.
+`contains`' own two bounds carry `schema.contains-bound-narrowed`/`-widened` for the same reasons and
+take the same verdict; they had a rule of their own once, and that is how `maxContains` came to disagree
+with `maxItems`.
 
 `exclusiveMinimum`/`exclusiveMaximum` changed MEANING between drafts, and a reader that assumes one
 dialect silently mis-answers the other — which is what a diff is handed whenever `old` is an artifact
@@ -305,21 +330,29 @@ remainder, not the five, because "read elsewhere" and "read by nothing, for this
 stop a sixth member hiding in the same gap — and `Diff\ReadingKind` is the closed set of readings:
 
 - `Discriminator` — the Discriminator Object. The KEYWORD arriving narrows (a client that could send any
-  branch must now tag it) and leaving is `schema.enum-removed`'s argument: the schema widens while a
-  response reader loses the tag it was switching on. Inside one both sides carry, a `mapping` entry
-  removed narrows, one added widens (a branch the client has no case for, so breaking on a response), and
-  one REPOINTED is neither — nor is a `propertyName` rewritten, which has no widening reading at all. A
-  `mapping` is a MAP, so its entries pair by key and a reordered mapping is not a change; every other
-  member compares as a value, so a member OpenAPI adds later is read the day it appears.
+  branch must now tag it) and leaving widens. Inside one both sides carry, a `mapping` entry removed
+  narrows, one added widens, and one REPOINTED is neither — nor is a `propertyName` rewritten, which has
+  no widening reading at all. A `mapping` is a MAP, so its entries pair by key and a reordered mapping is
+  not a change; every other member compares as a value, so a member OpenAPI adds later is read the day it
+  appears. Each direction then takes the verdict rule above.
 - `Nullability` — `nullable`, 3.0's spelling of a type union's `null` branch, read BESIDE that union
   because the two are one statement in two dialects: `{type: string, nullable: true}` becoming
   `{type: [string, null]}` moves no contract, and a reading of the keyword alone calls that migration a
-  narrowing and fails the gate on it. Absent is not nullable, so the keyword arriving with `true` widens
+  narrowing and fails the gate on it. The division is exclusive in both directions: the TYPE comparison
+  leaves the `null` member of a union to this reading wherever both sides still state a type besides it,
+  so one edit is one finding — without that, the migration published a `schema.type-widened` beside the
+  nothing this reports, which was harmless only while a widening was safe on both sides. Absent is not nullable, so the keyword arriving with `true` widens
   and a null withdrawn narrows. This is the `exclusiveMinimum` split answered the other way round: there
   the sibling keyword could not be folded, here it can and exactly.
-- `Identity` — `$id`/`$anchor`. A `$ref` may name either and the differ resolves none, so a name CHANGED
-  or gone may leave a pointer naming nothing, which is the reading a `$defs` member leaving already gets;
-  one arriving is safe, nothing having been able to point at it before.
+- `Identity` — `$anchor`. A `$ref` may name one and the differ resolves none, so a name CHANGED or gone
+  may leave a pointer naming nothing, which is the reading a `$defs` member leaving already gets; one
+  arriving is safe, nothing having been able to point at it before.
+- `Base` — `$id`, which is that AND the base URI every `$ref` beneath it resolves against. One ARRIVING
+  re-bases the subtree: a `#/components/schemas/X` written under a fresh `$id` resolves inside the new
+  resource rather than at the document root, so every generated client's target moves. The two shared a
+  row once and the row's stated reason — "nothing could have pointed at it before" — was true of
+  `$anchor` and false of `$id`. Establishing which pointers actually moved means resolving them, which
+  this comparison deliberately does not do, so both directions gate.
 - `Dialect` — `$schema`, which names the dialect every keyword beside it is read in. A comparison spanning
   a change to it compared two languages, so the direction is what cannot be computed: reported and
   breaking, an explicit dialect arriving included, because nothing here can tell one restating the dialect
