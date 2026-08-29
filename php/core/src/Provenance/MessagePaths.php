@@ -30,6 +30,9 @@ namespace Docuccino\Core\Provenance;
  *    character, and nothing a template is spelled with opens that way — a route signature, a path
  *    template and a JSON pointer all start at a `/` or a `#` — so a run that OPENS with one is a path
  *    even where it also carries a brace, and the braces are a shell glob rather than a placeholder.
+ *    What a wrapper proves stops at the first character of its tail, though — the compression
+ *    wrappers filter another STREAM, so `compress.zlib://http://…` names a host. {@see WRAPPERS}
+ *    holds that decision.
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
  *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
  *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
@@ -72,6 +75,14 @@ final readonly class MessagePaths
     private const BS = '\\\\';
 
     /**
+     * A URL scheme and its separator, as RFC 3986 spells the scheme. It is what tells a wrapper's
+     * tail apart from a path, and it is written ONCE because two readers need it: the pattern, which
+     * declines to open a run on a nested URL, and {@see wrapper()}, which decides whether an opened
+     * run is proof. A guard reading fewer shapes than the fold it protects is a hole.
+     */
+    private const NESTED_SCHEME = '[A-Za-z][A-Za-z0-9+.\\-]*://';
+
+    /**
      * Every stream wrapper a decision has been taken about, and whether it is proof: true says a run
      * bearing it can name nothing but a file on THIS machine, so the run is a path by proof rather
      * than by shape. False is the decision that it is not one, and it is the half that has to be
@@ -90,6 +101,19 @@ final readonly class MessagePaths
         'phar' => true,
         'zip' => true,
         'glob' => true,
+        // Proof of the LOCAL form only. These two filter another STREAM rather than naming a file,
+        // so where the four above take a path they take a URL: `compress.zlib://http://host/x.gz`
+        // reads a HOST, and reducing it would state an address the application never wrote. So proof
+        // stops at the first character of the tail — a tail that is itself a scheme
+        // ({@see NESTED_SCHEME}) is not a path, and the run is left whole, which is what a bare
+        // `http://` URL already gets. A nest is left whole for the same reason rather than unwrapped:
+        // it may still end at a host, and PHP opens no nest anyway (the inner stream must be castable
+        // to a descriptor). Every proof scheme reads the narrowing, because one rule is cheaper than
+        // an exception and the four above lose nothing by it.
+        //
+        // Demoting the pair to false is the alternative and is worse, not safer: the pattern would
+        // stop opening on them and the POSIX branch cannot pick the path up behind `zlib://`, whose
+        // `/` sits against another `/` — so `compress.zlib:///home/alice/cache.gz` would leak whole.
         'compress.zlib' => true,
         'compress.bzip2' => true,
         // A host, not a file: reducing one states an address the application never wrote.
@@ -178,8 +202,11 @@ final readonly class MessagePaths
      */
     private static function couldBeAPath(string $run): bool
     {
-        if (self::wrapper($run) !== null) {
-            return true;
+        if (self::opening($run) !== null) {
+            // Proof, or nothing: a run opening with a wrapper whose tail is another URL is a stream
+            // address rather than a path, and shape must not get a second go at it — its last segment
+            // names a file (`archive.gz`) exactly as a real path's does.
+            return self::wrapper($run) !== null;
         }
 
         if (str_contains($run, '{') || str_contains($run, '}')) {
@@ -213,8 +240,8 @@ final readonly class MessagePaths
         return array_keys(array_filter(self::WRAPPERS));
     }
 
-    /** The wrapper scheme a run carries, if it is one we can prove names a local file. */
-    private static function wrapper(string $run): ?string
+    /** The proof scheme a run opens with, whatever follows it. */
+    private static function opening(string $run): ?string
     {
         foreach (self::WRAPPERS as $scheme => $proof) {
             if ($proof && str_starts_with($run, $scheme.'://')) {
@@ -223,6 +250,18 @@ final readonly class MessagePaths
         }
 
         return null;
+    }
+
+    /** The wrapper scheme a run carries, if it is one we can prove names a local file. */
+    private static function wrapper(string $run): ?string
+    {
+        $scheme = self::opening($run);
+
+        if ($scheme === null || preg_match('%^'.self::NESTED_SCHEME.'%', substr($run, strlen($scheme) + 3)) === 1) {
+            return null;
+        }
+
+        return $scheme;
     }
 
     /** Whether the run's last segment names a file, which is the only thing left that says "path". */
@@ -405,8 +444,10 @@ final readonly class MessagePaths
         ));
 
         return '%'
-            // A local stream wrapper: proof, whatever follows it.
-            .'(?<![\\w:/])(?:'.$schemes.')://'.$segments
+            // A local stream wrapper: proof, unless what follows is itself a URL, which is the one
+            // thing a wrapper's tail can be besides a path. Declining to open there leaves a nested
+            // run whole and lets the rest of the message scrub as usual.
+            .'(?<![\\w:/])(?:'.$schemes.')://(?!'.self::NESTED_SCHEME.')'.$segments
             // A UNC share: two backslashes, a host and at least one more segment.
             .'|'.self::BS.self::BS.'[^\\s'.self::BS.'/]+'.self::BS.$windows
             // A Windows drive. The forward-slash form needs a boundary so `http://` cannot pose as

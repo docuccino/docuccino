@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Provenance\SourcePathResolver;
 
 /**
  * The scrubber that lets a thrown message become a published diagnostic. The path ladder itself is
@@ -194,10 +195,14 @@ it('leaves alone every run that a machine did not put there', function (string $
     ['a host and a port', 'Could not reach cache at redis:6379'],
 ]);
 
-it('takes every local stream wrapper as proof, and no other scheme', function (string $prefix, bool $reduced): void {
+it('takes every local stream wrapper as proof of a local tail, and no other scheme', function (string $prefix, bool $reduced): void {
     // The whole table, both halves, plus a scheme it has never decided about. A wrapper is the one
     // positive proof a run is a path, so a scheme missing from the table leaks and a scheme wrongly in
     // it reduces something that was never a file.
+    //
+    // Every row here spells a LOCAL tail, which is the half a flat `scheme => bool` can still state:
+    // proof stops at the first character of what follows the scheme, so the other half — a tail that
+    // is itself a URL — is a dataset of its own below, derived from the same table.
     $message = 'Could not open '.$prefix.'/app/root/app/Support/Inline.php';
 
     expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
@@ -260,7 +265,7 @@ it('has a decision about every stream wrapper the running PHP has registered', f
     // defect.
     expect(stream_get_wrappers())->toContain('file', 'php', 'http')
         ->and(count($decided))->toBeGreaterThanOrEqual(8)
-        ->and(array_keys(array_filter($decided)))->toContain('file', 'phar', 'glob');
+        ->and(array_keys(array_filter($decided)))->toContain('file', 'phar', 'glob', 'compress.zlib', 'compress.bzip2');
 
     // The guard executed. A wrapper registered under a scheme the table cannot know is exactly the
     // case it exists to refuse, and refusing it is not something a comment may claim.
@@ -274,6 +279,94 @@ it('has a decision about every stream wrapper the running PHP has registered', f
 
     expect($undecided())->toBe('');
 });
+
+it('takes no wrapper as proof once its tail is itself a URL', function (string $scheme): void {
+    // The half `true` never covered. The compression wrappers filter another STREAM rather than
+    // naming a file, so where `file://` takes a path they take a URL — `compress.zlib://http://…`
+    // reads a HOST, and proof reduces it to a basename, which is the product stating an address the
+    // application never wrote. Every proof scheme is a row because every one reads the narrowing: what
+    // follows `file://` is a path by definition, so a `file://http://…` never named a local file
+    // either, and one rule is cheaper than an exception.
+    //
+    // The local path in the same sentence still goes, which is what says the refusal belongs to the
+    // RUN and not to the message: declining to open on a nested URL leaves the rest of it to scrub.
+    $paths = new MessagePaths(new RootRelativeSourcePathResolver('/app/root'));
+
+    expect($paths->relative('Could not open '.$scheme.'://http://example.com/archive.gz beside /app/root/app/X.php'))
+        ->toBe('Could not open '.$scheme.'://http://example.com/archive.gz beside app/X.php')
+        // A `php://filter` tail is the leak the narrowing closes, and it is a leak in every one of
+        // these schemes rather than in the two that prompted the change. Proof took the whole run to
+        // the ladder, the ladder had nothing ABSOLUTE to answer — `php://…` is not — and the machine
+        // path behind `resource=` was published verbatim. Declining to open there hands it back to
+        // shape, which reaches it exactly as it reaches a bare `php://filter`.
+        ->and($paths->relative('Could not open '.$scheme.'://php://filter/read=zlib.inflate/resource=/app/root/app/X.php'))
+        ->toBe('Could not open '.$scheme.'://php://filter/read=zlib.inflate/resource=app/X.php');
+})->with(function (): array {
+    /** @var array<string, bool> $wrappers */
+    $wrappers = (new ReflectionClass(MessagePaths::class))->getReflectionConstant('WRAPPERS')?->getValue();
+
+    $rows = [];
+
+    foreach (array_keys(array_filter($wrappers)) as $scheme) {
+        $rows[$scheme.'://'] = [$scheme];
+    }
+
+    return $rows;
+});
+
+it('keeps the host of a remote-targeted compression run whatever the ladder would answer', function (): void {
+    // The guard executed rather than asserted, and the reason the rows above are not enough on their
+    // own. `RootRelativeSourcePathResolver` hands a non-absolute run straight back, and every
+    // `scheme://host/…` tail is non-absolute — so the shipped pair would keep the host even with the
+    // narrowing removed, and would prove nothing about it. The ladder is an interface any adapter may
+    // implement, so this asks with one that answers a basename for anything: the remote form must
+    // still keep its host, and the local form must still reduce.
+    $eager = new class implements SourcePathResolver
+    {
+        public function relative(string $file): string
+        {
+            return basename($file);
+        }
+    };
+
+    expect((new MessagePaths($eager))->relative('Could not open compress.zlib://http://example.com/archive.gz'))
+        ->toBe('Could not open compress.zlib://http://example.com/archive.gz')
+        ->and((new MessagePaths($eager))->relative('Could not open compress.bzip2://http://example.com/a.bz2'))
+        ->toBe('Could not open compress.bzip2://http://example.com/a.bz2')
+        // Unnarrowed, both of those answered `compress.zlib://archive.gz` — a file this machine was
+        // said to hold, for a run that named somebody else's host.
+        ->and((new MessagePaths($eager))->relative('Could not open compress.zlib:///home/alice/cache.gz'))
+        ->toBe('Could not open compress.zlib://cache.gz');
+});
+
+it('leaves a nest of wrappers whole, and reaches a filter resource by shape as before', function (string $case, string $message, string $expected): void {
+    // The two shapes that make a naive "is the next thing a scheme" test wrong, decided rather than
+    // stumbled into. A nest of proof schemes is left WHOLE rather than unwrapped a level at a time:
+    // the innermost tail may still be a host, PHP will not open a nest anyway (the inner stream has to
+    // be castable to a descriptor), and the traded leak is the direction that may be traded — the
+    // second row would otherwise publish `x.bz2` for a run that named a host.
+    //
+    // `php://filter` is not proof at all — `php` is false — so its `resource=` is reached by shape
+    // exactly as it was, and the narrowing does not touch it.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($expected);
+})->with([
+    [
+        'a nest ending at a local file, left standing',
+        'Could not open compress.zlib://compress.bzip2:///home/alice/x.bz2',
+        'Could not open compress.zlib://compress.bzip2:///home/alice/x.bz2',
+    ],
+    [
+        'a nest ending at a host',
+        'Could not open compress.zlib://compress.bzip2://http://example.com/x.bz2',
+        'Could not open compress.zlib://compress.bzip2://http://example.com/x.bz2',
+    ],
+    [
+        'a filter naming a local resource',
+        'Could not open php://filter/read=zlib.inflate/resource=/app/root/app/X.php',
+        'Could not open php://filter/read=zlib.inflate/resource=app/X.php',
+    ],
+]);
 
 it('reads the wrapper table the same way once a brace is in the run', function (string $scheme, bool $proof): void {
     // A brace says URI template, but only where the run does not already open with proof. Nothing a
