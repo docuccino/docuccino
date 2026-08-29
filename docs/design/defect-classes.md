@@ -90,3 +90,53 @@ everything. Each passes forever while the gap between them grows.
 decision tables against `SchemaKeywords::knows()`, in both directions, with an anti-vacuity floor and a
 partition check so nothing is answered twice. A member that owes no comparison still owes a ROW saying so,
 because "read elsewhere" and "deliberately unread" are decisions a guard can see and a gap is not.
+
+## A partition that covers everything and agrees on nothing
+
+Proving that several tables COVER a domain says nothing about whether they AGREE within it. Coverage
+and agreement are different properties, and a guard over the inputs proves only the first.
+
+*Instances.* The schema diff's three decision tables partition every keyword the draft model knows —
+asserted in both directions, with an anti-vacuity floor and a check that nothing is answered twice.
+Beneath that guard, the same three-valued direction (narrowed / widened / indeterminate) was turned
+into a verdict at eight separate sites, and four of them disagreed: a widening on a RESPONSE was
+breaking where `enum`, the union keywords and the refinements decided it, and safe where `allOf`
+leaving, `not` leaving and the `contains` bounds decided it. So `maxItems: 2 → 9` failed `--enforce`
+while `maxContains: 2 → 9` passed it — same document, same gate, same day. Three of the four wrong
+sites were pinned by tests whose comments asserted the behaviour was deliberate.
+
+*The tell.* One fact computed independently at more than one site, where the only guard holding the
+sites together reads their INPUTS. A second tell is prose: this rule was stated in five places, and
+three of those paragraphs certified behaviour the code did not have.
+
+*The fix that worked.* One function from the direction to the verdict, owned by the single reader of
+all three tables — and the tables return the DIRECTION rather than a pre-collapsed boolean, because a
+`…IsBreaking()` that answers a move is a lie about what it knows. Then a guard derived from the tables
+that drives every path through the real comparator and holds each published verdict against the rule
+stated INDEPENDENTLY in the test: a guard that asks the code for its own rule agrees with whatever the
+code does. Beside it, a discrimination check — two deliberately wrong rules must each disagree with
+the corpus on at least one row, or the corpus is not proving anything. See also
+[Two derived guards, each keyed to its own subset](#two-derived-guards-each-keyed-to-its-own-subset),
+which is the same shape one layer up; closing that one is what made this one visible.
+
+## A test that agrees with the host it ran on
+
+A test that reads the machine and asserts an answer the machine's own shape decides passes for
+whatever the developer happens to be running, and states nothing.
+
+*Instances.* `MessagePathsTest` asserted that `sys_get_temp_dir()` is redacted out of a diagnostic.
+That is five segments deep on a mac and `/tmp` on a Linux runner — and one segment is a depth
+`machineRoots()` deliberately REFUSES, so that `Route /tmp/upload is documented` survives in prose. The
+row therefore asserted the redacted answer where the host was deep and the untouched one where it was
+shallow. It passed locally and failed on CI. The same file had already met this once: a row reading the
+machine's own `include_path` proved something about a two-segment prefix on one install and a
+three-segment one on another, and was rewritten to take the prefix as input, with a comment saying why.
+The braced row reintroduced it a few tests later.
+
+*The tell.* A test calling `sys_get_temp_dir()`, `getenv()`, `php_uname()` or `get_include_path()` and
+asserting on what comes back. Using the temp directory as a PLACE to write is fine; asserting that its
+DEPTH produces a particular answer is not.
+
+*The fix that worked.* Make the machine fact an input and state every answer as a row, so the deep and
+the shallow case are both asserted on every machine. The shallow row is the valuable one — it pins the
+behaviour CI observed as a positive claim rather than leaving it to be discovered as a failure.
