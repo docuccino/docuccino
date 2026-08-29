@@ -243,6 +243,20 @@ Webhooks are collected from `#[Webhook]` classes under the directory you configu
 | `webhook.payload-unresolved` | warning | A webhook's payload type resolves to no shape, so its body is an unconstrained object | Name a class or array shape the payload is built from, or drop the payload argument to document the annotated class itself — see [Annotate the payload](/laravel/documenting/webhooks/#annotate-the-payload). `payload: 'object'` resolves: in an attribute that word is the JSON one, and it documents a free-form map |
 | `webhook.build-failed` | error | Documenting one webhook threw, so it isn't in the document | The message quotes the failure and names the webhook |
 
+## API versions
+
+Codes from the version changes a document declares under
+[`api_version`](/laravel/reference/configuration/#api_version). They fire while an older version's
+document is derived from the code you have today.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `versioning.dir-missing` | warning | The configured version-changes directory doesn't exist, so no changes were read and every version publishes today's shape | Create it, or unset `api_version.changes.dir` |
+| `versioning.dir-escapes-base` | warning | The version-changes directory doesn't name a path inside your application and was ignored | Write it relative to the application root |
+| `versioning.change-invalid` | warning | A change can't be applied as it's written — no version on its `#[ApiVersionChange]`, an empty or self-referential rename, or a rename onto a field the schema already publishes | Fix the declaration: `to:` is the field name in the code today, `from:` the one older versions publish |
+| `versioning.change-target-missing` | warning | A change renames a field the schema no longer publishes, so that version is left saying what the code says | Update the change to the field name as it's spelled today, or retire it if the field is gone |
+| `versioning.schema-unresolved` | warning | A change names a class this document publishes no schema for, so it was skipped | Name the class whose shape the document actually publishes — a change can only rewrite a schema the document contains |
+
 ## Narrative content
 
 Codes from the Markdown pages you fold into the document. See

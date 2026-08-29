@@ -19,6 +19,7 @@ use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\PlainText;
 use Docuccino\Core\TypeGrammar\DocBlockReader;
 use Docuccino\Laravel\Routing\AttributeCollector;
+use Docuccino\Laravel\Support\DeclaredClasses;
 use Docuccino\Laravel\Support\UnknownDocumentPins;
 use ReflectionClass;
 
@@ -96,7 +97,7 @@ final readonly class WebhookCollector
         // however many webhook classes carry it ({@see UnknownDocumentPins}).
         $pins = new UnknownDocumentPins;
 
-        foreach (WebhookClasses::in($dir) as $class) {
+        foreach (DeclaredClasses::in($dir) as $class) {
             $declaration = $this->declare($class, $document, $diagnostics, $pins);
             if ($declaration !== null) {
                 $declarations[] = $declaration;

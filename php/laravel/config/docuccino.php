@@ -31,6 +31,18 @@ return [
 
         'default' => [
 
+            // Declares that this document IS an API version. `info.version` becomes the version below,
+            // every operation publishes the header a client pins a version with, and every change
+            // declared under `changes.dir` that shipped AFTER this version is applied in reverse to
+            // derive the older shape. Absent means the document is not a version at all.
+            // 'api_version' => [
+            //     'version' => '2026-09-01',
+            //     // Where the #[ApiVersionChange] classes live, relative to the base path.
+            //     'changes' => ['dir' => 'app/Api/Versions'],
+            //     // The request header the version enum is published on.
+            //     'header' => 'X-Api-Version',
+            // ],
+
             // The OpenAPI `info` object. Any other OAS info field (contact, license…) passes through.
             'info' => [
                 'title' => 'API Documentation',

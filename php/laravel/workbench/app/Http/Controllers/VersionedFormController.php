@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Workbench\App\Http\Controllers;
 
 use Docuccino\Attributes\Group;
+use Docuccino\Attributes\HeaderParameter;
 use Docuccino\Attributes\Response;
 use Illuminate\Http\JsonResponse;
 use Workbench\App\Data\FormData;
@@ -29,5 +30,19 @@ final class VersionedFormController
             new FormData(id: 1, title: 'Onboarding', publishedAt: '2026-08-01T09:00:00Z'),
             new FormData(id: 2, title: 'Offboarding', publishedAt: null),
         ]);
+    }
+
+    /**
+     * List published forms, with the version header documented by hand.
+     *
+     * Returns the published forms exactly as {@see index()} does; the difference is the declaration
+     * above it, which an application that wants its own wording for the version header would write.
+     */
+    #[Group('Forms')]
+    #[HeaderParameter('X-Api-Version', description: 'Pin the API version, or take the current one.')]
+    #[Response(status: 200, type: 'list<FormData>', description: 'The published forms.')]
+    public function documented(): JsonResponse
+    {
+        return $this->index();
     }
 }
