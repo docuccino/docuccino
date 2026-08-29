@@ -1192,7 +1192,8 @@ Every other attribute on this page describes the shape your code has now. These 
 it used to have. An older API version publishes a field your code no longer contains, so there is
 nothing left to read it off — you declare the change once, on a class of its own, and the older
 document is derived by applying that change backwards. The classes live in
-`Docuccino\Attributes\Versioning`.
+`Docuccino\Attributes\Versioning`; the [API versioning guide](/laravel/guides/api-versioning/) walks
+the whole loop.
 
 ### `#[ApiVersionChange]`
 

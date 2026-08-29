@@ -550,6 +550,10 @@ ApiContract::using('docs/api.uir.json');    // or name the artifact yourself
 `ApiContract::assertions()` hands you the same assertions as an object, for a test case you cannot add
 the trait to.
 
+Moving between documents mid-suite is what a per-version check is made of: pin an API version on the
+request, point the assertions at that version's document, and require the response to validate against
+it. See [API versioning](/laravel/guides/api-versioning/).
+
 ## Watch every exchange
 
 Every assertion hands the request, the response and the matched operation to any observer you register

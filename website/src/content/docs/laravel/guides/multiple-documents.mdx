@@ -35,8 +35,12 @@ many as you need. Each is a full, self-contained pipeline:
 ```
 
 Here the two documents split by route glob, expose their viewers on different routes (the admin one
-gated), and export to different files. The same pattern covers API versioning — a `v1` and a `v2`
-document over `api/v1/*` and `api/v2/*`, each with its own `info.version`.
+gated), and export to different files. The same pattern covers a `v1` and a `v2` you serve on separate
+route prefixes — one document each, over `api/v1/*` and `api/v2/*`, with its own `info.version`.
+
+If instead your versions share one set of routes and differ only in the shape of what they return,
+[API versioning](/laravel/guides/api-versioning/) derives each version's document from the changes you
+declare, so you write the difference down once rather than maintaining a document per version by hand.
 
 <Aside type="caution" title="Documents don't inherit from each other">
 Every entry is read on its own: an omitted key falls back to Docuccino's built-in default, **never**

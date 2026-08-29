@@ -1,0 +1,347 @@
+---
+title: API versioning
+description: Publish a document per API version from the code you have today, by declaring each breaking change once — and prove your runtime and your documentation agree.
+---
+
+import { Steps, Aside, Tabs, TabItem, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Your API changed shape, and the integrations built against last year's version still expect the old
+one. Docuccino publishes a document for every version you still serve — each a complete, standalone
+OpenAPI document, generated from the code you have today.
+
+You declare each breaking change once, as a small class. Nothing is duplicated, nothing is branched,
+and no old shape has to be kept compiling.
+
+<Aside type="tip" title="Docuccino executes nothing">
+Serving an older shape at runtime is your application's job — a middleware, a transformer, a
+versioning package, whatever you already have. Docuccino never reads or runs that code. What it does
+is **describe** every version accurately and then **prove** that your runtime and your documents
+agree, which is the check that nothing else in the ecosystem gives you.
+</Aside>
+
+## Your code is the newest version
+
+This is the one rule to get straight, because everything else follows from it and getting it backwards
+is the classic bug.
+
+A version change describes a shape that is **no longer in your code**. Your working tree is always the
+newest version; older versions' documents are derived from it by applying each later change **in
+reverse**. So:
+
+- Nothing is deleted, and nothing is enacted. You make the change in your code the way you always
+  would, and then write down what the API did before it.
+- The newest version's document is the plain build, untouched.
+- `to:` is the field name in your code **today**. `from:` is the name **older versions** publish.
+
+Write that pair the other way round and you rename the wrong end: the older document then describes a
+shape nobody ever served, and every generated client for it is wrong.
+
+## The whole loop
+
+Say invoices used to publish `name`, and on `2026-09-01` that field became `title`. You are still
+serving `2026-06-01` for callers who haven't moved.
+
+<Steps>
+
+1. **Declare the change.** One class, no body, in a directory of its own:
+
+   ```php
+   // app/Api/Versions/InvoiceTitleReplacesName.php
+   namespace App\Api\Versions;
+
+   use App\Http\Resources\InvoiceResource;
+   use Docuccino\Attributes\Versioning\ApiVersionChange;
+   use Docuccino\Attributes\Versioning\RenamedResponseField;
+
+   #[ApiVersionChange(
+       since: '2026-09-01',
+       description: 'Invoices publish `title` where they used to publish `name`.',
+   )]
+   #[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+   final class InvoiceTitleReplacesName {}
+   ```
+
+   `since` is the first version whose document carries the **new** shape. `description` is written for
+   a consumer deciding whether the upgrade touches them, so it goes in the document — say what changed,
+   not which attribute you used.
+
+   The class body is never read and never executed. Every argument is a plain string or a `::class`
+   constant, which is exactly what lets Docuccino compile the declaration without running your app.
+
+2. **Configure a document per version.** Each one is an ordinary document with an `api_version` block:
+
+   ```php
+   // config/docuccino.php
+   'documents' => [
+       'v2026-09-01' => [
+           'info'       => ['title' => 'Billing API', 'version' => '2026-09-01'],
+           'routes'     => ['include' => ['api/*']],
+           'versioning' => 'date',
+           'api_version' => ['changes' => ['dir' => 'app/Api/Versions']],
+           'export'      => ['path' => 'docs/2026-09-01.openapi.json'],
+       ],
+       'v2026-06-01' => [
+           'info'       => ['title' => 'Billing API', 'version' => '2026-06-01'],
+           'routes'     => ['include' => ['api/*']],
+           'versioning' => 'date',
+           'api_version' => ['changes' => ['dir' => 'app/Api/Versions']],
+           'export'      => ['path' => 'docs/2026-06-01.openapi.json'],
+       ],
+   ],
+   ```
+
+   Both documents read the same directory of changes. What separates them is `info.version`: each
+   document applies the changes that shipped **after** its own version, so the newer one applies none
+   and the older one applies the rename.
+
+3. **Export.** Two commands' worth of nothing new — every command already takes a document key, and
+   omitting it runs all of them:
+
+   ```bash
+   php artisan docuccino:export
+   ```
+
+4. **Assert the wire against each version.** Pin a version, replay a request, and require the response
+   to validate against *that* version's document:
+
+   ```php
+   use Docuccino\Laravel\Testing\ApiContract;
+
+   it('serves the 2026-06-01 shape when 2026-06-01 is pinned', function (): void {
+       ApiContract::forDocument('v2026-06-01');
+
+       $response = $this->withHeader('X-Api-Version', '2026-06-01')
+           ->getJson('api/invoices')
+           ->assertOk();
+
+       $this->assertValidResponse($response);
+   });
+   ```
+
+   Go through the HTTP kernel — `getJson()`, not a hand-built response — so your router and your
+   middleware really run. That is the entire point of the check.
+
+</Steps>
+
+## What comes out
+
+The two documents differ in the field name, in `info.version`, and in nothing else you didn't ask for:
+
+<Tabs>
+	<TabItem label="2026-09-01">
+	```json
+	// components.schemas.Invoice — the shape your code publishes today
+	{
+	  "type": "object",
+	  "properties": {
+	    "id":    { "type": "integer" },
+	    "title": { "type": "string" },
+	    "total": { "type": "integer" }
+	  },
+	  "required": ["id", "title"]
+	}
+	```
+	</TabItem>
+	<TabItem label="2026-06-01">
+	```json
+	// components.schemas.Invoice — derived by undoing the rename
+	{
+	  "type": "object",
+	  "properties": {
+	    "id":    { "type": "integer" },
+	    "name":  { "type": "string" },
+	    "total": { "type": "integer" }
+	  },
+	  "required": ["id", "name"]
+	}
+	```
+	</TabItem>
+</Tabs>
+
+The property keeps its position and everything else it carried — its description, its example — and
+`required` is rewritten along with it. A `required` still naming today's field would accept exactly the
+bodies the document says are invalid, which is the disagreement the contract test exists to catch.
+
+Every operation also gains the header a client pins a version with:
+
+```json
+{
+  "name": "X-Api-Version",
+  "in": "header",
+  "required": false,
+  "description": "The API version this request is answered as. Omit it and the request is answered as the version this document describes.",
+  "schema": {
+    "type": "string",
+    "enum": ["2026-06-01", "2026-09-01"],
+    "default": "2026-06-01",
+    "x-enum-varnames": ["_20260601", "_20260901"],
+    "x-enumNames": ["_20260601", "_20260901"],
+    "x-enum-descriptions": ["", "Invoices publish `title` where they used to publish `name`."]
+  }
+}
+```
+
+The `enum` is the closed set of versions your `documents` map declares, so a consumer reads the
+supported versions out of the document instead of out of your changelog, and a generated client gets a
+named constant per version — a date is not an identifier, so the names that make it one travel beside
+it. Each change's own `description` becomes that version's entry.
+
+Rename the header with `api_version.header` if yours is called something else. Document the header
+yourself with [`#[HeaderParameter]`](/laravel/reference/attributes/#headerparameter) on an operation and
+Docuccino leaves your wording alone — two parameters of one name in one place is a document no client
+can read.
+
+<Aside type="caution" title="`info.version` is the version">
+There is no second key naming it, because a second key could only ever disagree with the first. Leave
+`info.version` at the published `1.0.0` placeholder and the document isn't derived as a version at all;
+you get a `versioning.version-unstated` warning instead of a version you don't serve being published as
+the value every client falls back to.
+</Aside>
+
+## Ordering: which version is older
+
+Deriving a document is a walk down an ordered list of changes, so the order is load-bearing rather than
+incidental. [`versioning`](/laravel/reference/configuration/#versioning) says which grammar your
+versions are written in — `date` for `2026-09-01`, `semver` for `1.4.0` — and it is the same key that
+tells `docuccino:diff --enforce` what a breaking change requires.
+
+Say nothing and Docuccino reads the grammar off the versions themselves, so an application writing
+plain dates or plain semver never writes it down twice. Versions that are neither, or a mixture of
+both, can't be ordered: no change is applied and the build tells you so with `versioning.unordered`.
+
+Ordering is never string comparison. Byte for byte `1.10.0` sorts *before* `1.9.0`, which would apply a
+semver application's changes backwards — deterministically, and silently.
+
+## Serving the older shape
+
+Docuccino describes the versions. Your application serves them. In its simplest form that is a
+middleware that reads the pinned version off the header and walks the response body back through every
+change that shipped after it, newest first:
+
+```php
+final class DowngradeToPinnedApiVersion
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        $response = $next($request);
+        $pinned = $request->header('X-Api-Version');
+
+        if (! is_string($pinned) || ! $response instanceof JsonResponse) {
+            return $response;
+        }
+
+        // An error envelope is not the resource's shape, and a 204 has no body to rewrite.
+        if ($response->getStatusCode() >= 400 || $response->getStatusCode() === 204) {
+            return $response;
+        }
+
+        foreach ($this->changes as $change) {
+            // Strictly newer than the pin: a caller pinned to the version a change shipped in is
+            // asking for that change, so it must not fire.
+            if ($change->since() > $pinned) {
+                $response->setData($change->downgrade($response->getData(true)));
+            }
+        }
+
+        return $response;
+    }
+}
+```
+
+Two of those guards are production failure modes people hit for real — a migration applied to an error
+response, and a migration applied to a `204 No Content`. Two more worth knowing about: migrations
+bleeding into webhook payloads, and a migration that silently stops applying when a route is renamed.
+
+Whatever shape your runtime takes, the declarative half above and the imperative half here are two
+descriptions of one change, and **they can drift apart without anything failing**. Which is why the
+last step of the loop isn't optional.
+
+## What the contract test proves, and what it doesn't
+
+Pin a version, replay your suite, and every response must validate against that version's document.
+That's it — and it is the check the whole approach rests on. Without it you have a document claiming one
+thing and a runtime doing another, with nothing in between.
+
+It has to be able to fail, so make sure it does: send a response at today's shape and assert it against
+the older version's document. The assertion should refuse it and name the missing field. A per-version
+check that cannot fail is decoration.
+
+<Aside type="caution" title="Two things this does not buy you">
+**Don't golden-freeze a past version's document.** Live versions legitimately change — a non-breaking
+correction gets backported to every version you still serve, so a byte-lock would fail on every honest
+fix. Gate the difference instead: regenerate and require every change to be non-breaking, which is what
+[`docuccino:diff --enforce`](/laravel/reference/commands/#docuccinodiff) already does.
+
+**Round-tripping isn't a property you have.** `forward(backward($x)) === $x` does not hold, and no
+design makes it hold: a downgrade is deliberately lossy, and a list that collapses to a single value
+cannot come back. The honest property is one-sided — a downgraded response validates against the older
+version's schema, and an upgraded request validates against the current one.
+</Aside>
+
+## Scoping a change to some operations
+
+By default a change applies wherever the schema it names is published, which is what you want when a
+shape changed and it changed everywhere. [`#[AppliesTo]`](/laravel/reference/attributes/#appliesto)
+narrows it:
+
+```php
+#[ApiVersionChange(since: '2026-09-01', description: 'The invoice list publishes `title`.')]
+#[AppliesTo('GET /api/invoices')]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+final class InvoiceListTitleReplacesName {}
+```
+
+Name an operation as the document names it — a signature, an `operationId`, or either with a `*`.
+
+If that schema is published as a shared component and your scope covers only some of the operations
+that publish it, then in that version those operations genuinely have a different type from the rest.
+The older shape is written **inline** at each of them and the shared component is left as your code has
+it. No new component name appears: a component name becomes a type name in somebody's generated client,
+and it must never depend on how many endpoints happened to share a body. The cost is that each of those
+operations carries its own copy of the shape, so a client gets an anonymous type per operation rather
+than one it can name.
+
+Scope the change to *every* operation that publishes the schema and there's no fork at all — the
+component is renamed in place, byte for byte what writing no `#[AppliesTo]` produces.
+
+One shape can't be forked: a schema that contains itself. Its private copy would still point at the
+shared component one level down, so the operation would publish the old name at the top and today's name
+inside it. That operation is left at the shape your code publishes, and the build says so.
+
+## What versioning doesn't cover
+
+**Migrating stored records is a different problem, and API versioning does not solve it.** If a column
+changed meaning rather than name, or a value was split in two, no amount of describing your API will
+reconcile the rows already in your database. Everything on this page is about the shape on the wire.
+
+Two more limits worth knowing before you plan around them:
+
+- **There is no removal verb.** Declaring that an older version *also* published a field means
+  declaring that field's type, and the type is precisely what is no longer in your code to read. If you
+  need it, say so — it is deliberately not guessed at.
+- **A change that alters behavior rather than shape** — different defaults, a different sort order —
+  has no declarative form. Document it in prose and put the sentence in the change's `description`,
+  where the consumer will actually read it.
+
+## When something doesn't apply
+
+Every way a declared change can fail to land is a warning rather than a silent no-op, because a change
+that quietly stops applying is indistinguishable from one that was never written. The ones you'll meet:
+
+| Code | Usually means |
+| --- | --- |
+| `versioning.change-target-missing` | The field was renamed again, or removed, and the change still names the old spelling |
+| `versioning.schema-unresolved` | The class you named isn't published by this document at all |
+| `versioning.scope-matches-nothing` | A route was renamed after the change was written |
+| `versioning.unordered` | Your versions aren't all dates or all semver |
+| `versioning.version-unstated` | The document declares `api_version` but `info.version` is still `1.0.0` |
+
+The full list, with what to do about each, is in the
+[diagnostics reference](/laravel/reference/diagnostics/#api-versions).
+
+<CardGrid>
+	<LinkCard title="Contract testing" href="/laravel/guides/contract-testing/" description="The assertions the per-version check is built on, and how to point them at a document." />
+	<LinkCard title="Multiple documents" href="/laravel/guides/multiple-documents/" description="Everything a document can carry — routes, security, viewer, export target — set per version." />
+	<LinkCard title="Versioning attributes" href="/laravel/reference/attributes/#versioning" description="Signatures and examples for the three attributes a change is written with." />
+	<LinkCard title="api_version config" href="/laravel/reference/configuration/#api_version" description="Every key, and what declaring a document to be a version changes." />
+</CardGrid>
