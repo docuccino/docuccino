@@ -37,6 +37,7 @@ use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
@@ -103,6 +104,7 @@ function attributeCatalogue(): array
         'Versioning\\MadeRequestFieldOptional' => [MadeRequestFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeResponseFieldOptional' => [MadeResponseFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeResponseFieldRequired' => [MadeResponseFieldRequired::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\RemovedResponseField' => [RemovedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedResponseField' => [RenamedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
     ];
 }
@@ -161,6 +163,7 @@ function defaultArgs(string $class): array
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
         AppliesTo::class => ['GET /api/invoices'],
         RenamedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
+        RemovedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'subtotal'],
         MadeResponseFieldRequired::class, MadeResponseFieldOptional::class,
         MadeRequestFieldOptional::class => ['App\\Http\\Resources\\InvoiceResource', 'title'],
         default => [],
@@ -253,10 +256,29 @@ it('keeps a written optionality distinguishable from an unwritten one', function
     'ResponseHeader' => [ResponseHeader::class, 'Retry-After'],
 ]);
 
+/**
+ * The `required` parameters that are two-valued on purpose, each with why. An entry is a claim that
+ * NOTHING else in the build has an opinion about that field's required-ness — which is what makes a
+ * third state meaningless rather than merely unspelled.
+ *
+ * @return array<class-string, string>
+ */
+function twoValuedRequiredAttributes(): array
+{
+    return [
+        RemovedResponseField::class => 'the field is not in the code, so no recovery can have proved it required and there is nothing for a third state to mean; the version vocabulary also refuses a nullable argument outright, since a null says nothing a build could fold',
+    ];
+}
+
 // The dataset above proves the rows it lists; this reads the constructors instead, so an attribute that
-// grows a `required` tomorrow arrives here rather than shipping two-valued unnoticed.
+// grows a `required` tomorrow arrives here rather than shipping two-valued unnoticed. Every `required`
+// the package ships is judged, and one that is deliberately two-valued pays for it with a reason above
+// rather than by being left out of the scan.
 it('keeps every patched `required` three-valued', function (): void {
+    $exempt = twoValuedRequiredAttributes();
     $found = [];
+    $wrong = [];
+
     foreach (attributeCatalogue() as [$class]) {
         foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
             if ($parameter->getName() !== 'required') {
@@ -264,12 +286,27 @@ it('keeps every patched `required` three-valued', function (): void {
             }
 
             $found[] = $class;
+            $type = (string) $parameter->getType();
 
-            expect((string) $parameter->getType())->toBe('?bool')
-                ->and($parameter->getDefaultValue())->toBeNull();
+            if (isset($exempt[$class])) {
+                // Exempt from the third state, not from being read: two-valued means a non-nullable
+                // bool with a stated default, and anything else is a shape nobody decided on.
+                if ($type !== 'bool' || $parameter->getDefaultValue() !== false) {
+                    $wrong[] = $class.': excused as two-valued, and declares '.$type;
+                }
+
+                continue;
+            }
+
+            if ($type !== '?bool' || $parameter->getDefaultValue() !== null) {
+                $wrong[] = $class.': '.$type.', which cannot tell "the author said optional" from "the author said nothing"';
+            }
         }
     }
 
-    // A scan that stopped seeing its shapes must fail rather than pass forever.
-    expect(count($found))->toBeGreaterThanOrEqual(5);
+    // An excuse cannot outlive the parameter it excuses, and a scan that stopped seeing its shapes must
+    // fail rather than pass forever.
+    expect(array_values(array_diff(array_keys($exempt), $found)))->toBe([])
+        ->and($wrong)->toBe([])
+        ->and(count($found))->toBeGreaterThanOrEqual(6);
 });
