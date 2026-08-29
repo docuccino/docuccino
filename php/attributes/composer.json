@@ -1,13 +1,15 @@
 {
     "name": "docuccino/attributes",
-    "description": "Dependency-free PHP attribute classes for Docuccino.",
+    "description": "Dependency-free PHP attributes for documenting an HTTP API with Docuccino.",
     "type": "library",
     "keywords": [
         "openapi",
         "api-documentation",
-        "uir",
+        "annotations",
         "attributes",
         "php-attributes",
+        "uir",
+        "swagger",
         "scramble-alternative"
     ],
     "homepage": "https://docuccino.app",
