@@ -2026,6 +2026,28 @@ function versionedFormDocuments(): array
 }
 
 /**
+ * Two documents over the one versioned ENTRIES route, the same way {@see versionedFormDocuments()} is
+ * two over the forms one: the version the code is, and the version before `submittedAt` stopped being
+ * guaranteed. A history of its own, over its own shape, so the rename suite's assertions stay about
+ * the rename.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function versionedEntryDocuments(): array
+{
+    $shared = [
+        'routes' => ['include' => ['api/versioned-entries']],
+        'error_responses' => 'none',
+        'api_version' => ['changes' => ['dir' => 'workbench/app/Api/EntryVersions']],
+    ];
+
+    return [
+        'e2026-09-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-09-01']],
+        'e2026-06-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-06-01']],
+    ];
+}
+
+/**
  * The one version-header declaration a versioned document publishes, read where the document publishes
  * it: `components.parameters`, which every operation `$ref`s. Shared so a suite asserting on the header
  * cannot quietly go on reading an inline copy that is no longer there.
@@ -2092,14 +2114,17 @@ function parameterRefs(array $document, string $path = '/api/versioned-forms', s
  * `attribute.unreadable` the vocabulary shares with every other attribute. Declares the document bag it
  * needs, so a case is one directory and one version rather than a config block copied per test.
  *
+ * `$route` is the one route the document covers. It is a parameter rather than a constant because a
+ * verb naming a REQUEST body needs a route that has one, and the versioned-forms list does not.
+ *
  * @return list<Diagnostic>
  */
-function versioningDiagnostics(?string $dir, string $version = '2026-06-01'): array
+function versioningDiagnostics(?string $dir, string $version = '2026-06-01', string $route = 'api/versioned-forms'): array
 {
     config()->set('docuccino.documents', [
         'v' => [
             'info' => ['title' => 'Forms API', 'version' => $version],
-            'routes' => ['include' => ['api/versioned-forms']],
+            'routes' => ['include' => [$route]],
             'error_responses' => 'none',
             'api_version' => $dir === null ? [] : ['changes' => ['dir' => $dir]],
         ],
