@@ -190,6 +190,72 @@ the canonicalizer, one in the structural hash. `DeclaredShapeTest` therefore fai
 anywhere in the packages naming three or more positioned keywords unless it is one of the four
 sanctioned lists, each stated for a reason that is not "which keywords carry subschemas".
 
+### Diff polarity: what a change under a subschema position is worth
+
+The position table says where a subschema hangs. It does not say what an edit down there means, and it
+cannot: `items` and `not` sit at the same position and point opposite ways. So `Diff\SchemaPolarity`
+records one decision per positioned keyword, on three axes, and `Diff\SchemaComparator` is its only
+reader.
+
+**Polarity** governs a change UNDER the position. `DIRECT` — narrowing the subschema narrows the parent,
+so the child's classification carries up unchanged; every position constraining the value's own members
+reads this way. `INVERSE` — narrowing the subschema WIDENS the parent, which is `not` and only `not`.
+`CONDITIONAL` — no polarity can be computed: `if` moves instances between the `then` and `else` branches,
+so narrowing it widens where there is no `else` and is indeterminate where there is, while
+`$defs`/`definitions` are a STORE rather than an assertion, so a member's polarity is whatever the `$ref`s
+naming it are worth, which the differ does not resolve.
+
+`then` and `else` are DIRECT rather than conditional, which is a correction to the obvious reading:
+`{if: A, then: B}` accepts `(A ∧ B) ∨ ¬A` and `{if: A, else: C}` accepts `A ∨ (¬A ∧ C)`, and narrowing B
+or C narrows either set. Only `if` itself is non-monotone.
+
+The direction an INVERSE or CONDITIONAL child moves the parent in is exactly what cannot be computed, so
+nothing tries: the child's own code and path are published unchanged — each a true statement about the
+subschema the path names — and the VERDICT is forced to breaking. For a release gate a false alarm costs
+the author one look and a false "safe" costs the consumer a broken client, so the indeterminate case is
+breaking by decision rather than by accident. An annotation-only edit is the one exception, because it
+moves no contract at any position.
+
+**Member** is what PRESENCE means at the position, which is a separate question from polarity because at
+most positions an absent subschema and the empty schema mean the same thing and at four they do not. It
+is asked twice, and the two questions have different answers: the KEYWORD arriving or leaving, where the
+side without it carried no constraint of that kind at all, and ONE MEMBER of a position both sides
+carried. `Diff\SchemaMember` is the closed set of kinds — an enum rather than string constants, because a
+kind is minted in the differ and never read off a document, so every `match` over it is exhaustive with no
+default and a kind added with no verdict is a PHPStan failure rather than a conservative runtime guess.
+
+- `EmptySchema` — absent IS the empty schema (no `items` constrains no element), so a member arriving or
+  leaving falls out of the ordinary keyword comparison and needs no code of its own.
+- `Constraint` — absent is not the empty schema, and arriving narrows: `not: {}` rejects every value while
+  no `not` rejects none. `allOf` reads the same way at both questions, an intersection arriving being an
+  intersection's branch arriving writ large.
+- `Bounded` — `contains`, whose arrival narrows only while it asserts anything: `minContains: 0` drops the
+  demand for a matching element, but a `maxContains` beside it still caps how many may match, so both
+  bounds decide it (`Draft\SchemaKeywords::containsAsserts()`).
+- `Union` — the one kind whose two answers differ, and the reason the questions are asked apart. A BRANCH
+  of an existing `anyOf`/`oneOf` removed narrows the union and is breaking either way, while one added
+  widens what a request accepts and is safe there — a response can now carry a shape no existing reader
+  has a case for, the `schema.enum-value-added` argument exactly, so it is breaking on a response. The
+  KEYWORD arriving is not that: the old side was not an empty union, it was unconstrained, so the union
+  landing narrows both sides, and it leaving mirrors `schema.enum-removed` — a request widens while a
+  response reader loses the closed set of shapes it typed against.
+- `Store` — a `$defs` member. Arriving is nothing (nothing can name a definition that did not also change);
+  leaving may dangle a `$ref` the differ does not resolve, so it is breaking.
+- `Property` and `Required` — the two positions with a comparison of their own (`properties`, and
+  `dependentRequired`'s per-property lists, whose entries narrow a request exactly as `required` does).
+
+**Pairing** is how two sides' members are matched, and only one fact about it is a decision the keyword
+owns: `pairsByIndex`, true for `prefixItems` alone, because a tuple index IS the slot it constrains. A map
+pairs by key and a composition list pairs by what a member IS — identity, then the component it names, then
+its content, never its position, `ComponentNames`' rule applied to branches — and the position already says
+which of those two applies.
+
+Every keyword the draft model gives a subschema position needs a row, and a keyword with no row is read
+CONDITIONALLY rather than skipped: a keyword the model learns before anyone decides its polarity is
+reported conservatively instead of passing as safe. That is a degradation and not a plan —
+`SchemaCompositionDiffTest` derives the set from `Draft\SchemaKeywords` and fails, in both directions,
+until the row is written.
+
 ## 2. Identity model
 
 Every operation, parameter, named schema, response, security scheme carries
