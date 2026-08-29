@@ -423,7 +423,7 @@ final readonly class DocumentConfig
      *
      * @param  array<string, mixed>  $raw
      */
-    public static function declaresVersion(array $raw): bool
+    private static function declaresVersion(array $raw): bool
     {
         return is_array($raw['api_version'] ?? null);
     }

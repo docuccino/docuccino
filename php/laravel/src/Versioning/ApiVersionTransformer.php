@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Versioning;
 
 use Docuccino\Attributes\Versioning\RenamedResponseField;
-use Docuccino\Core\Contract\Refs;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Document\DocumentGraph;
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Extensions\Context\DocumentContext;
 use Docuccino\Core\Extensions\Context\RepresentationPolicy;
@@ -18,7 +18,6 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\EnumDecoration;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\Glob;
-use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\PlainText;
 use Docuccino\Core\Versioning\VersionOrder;
 use Docuccino\Laravel\Config\ConfiguredDocuments;
@@ -27,41 +26,19 @@ use Docuccino\Laravel\Support\ListValueNames;
 /**
  * Turns the document a build just assembled into the document for the API version it declares: every
  * declared change that shipped AFTER this version is applied in REVERSE, and every operation declares
- * the header a client pins a version with.
+ * the header a client pins a version with. A document with no `api_version` is not an API version, and
+ * this moves not a byte of it.
  *
- * A document with no `api_version` is not an API version, and this moves not a byte of it.
+ * The one thing to know before reading it is the fork rule a scoped change follows, which
+ * `docs/design/api-versioning.md` states and justifies.
  *
- * This is not the "patch a canonical document" the design refuses. That refusal is about emitting N
- * patched copies of ONE build, and about Overlay's merge semantics being able only to widen. Here each
- * version is its own `DocumentGenerator::generate()` run — a pure function of (code, version) — and
- * this runs inside that run, before content, the final component ordering and the content hash. What it
- * writes is canonicalised, linted and hashed exactly like anything a producer wrote.
- *
- * ## Why a scoped change INLINES rather than mints a name
- *
- * A change scoped with `#[AppliesTo]` to some of the operations that publish a schema means those
- * operations genuinely have a different type from the others, so the shared component has to fork. The
- * fork is an INLINE schema at the operation, never a second component called `FormDataV2`. A published
- * component name becomes a type name in somebody's generated client, and `ComponentNames`' invariant is
- * that a name is a function of the things contesting it — a name that appeared or vanished depending on
- * how many operations happened to share a body would be a function of the route table instead, so an
- * unrelated new endpoint would rename a type. An inline schema registers no name, so it cannot.
- *
- * And when the scope covers EVERY operation that publishes the schema there is no fork at all: the
- * component is renamed in place, byte for byte what an unscoped change produces. Without that, scoping
- * to all of them would emit something different from scoping to none of them, which is the same fact
- * said twice in two shapes.
- *
- * @phpstan-type OperationSite array{keys: list<string>, signature: string|null, operationId: string|null}
+ * @phpstan-import-type OperationSite from DocumentGraph
  *
  * @internal
  */
 #[ExtensionOrder(priority: Priorities::LATE)]
 final readonly class ApiVersionTransformer implements DocumentTransformer
 {
-    /** The one document member a rename has to keep in step with `properties`. */
-    private const REQUIRED = 'required';
-
     public function __construct(
         private VersionChangeCollector $changes,
         private ConfiguredDocuments $documents = new ConfiguredDocuments,
@@ -136,12 +113,14 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         $id = $this->identity->namedSchemaId(ltrim($rename->schema, '\\'));
 
         $outcome = 'unresolved';
+        $cyclic = false;
 
         // From the members rather than the root: the root's own `x-docuccino` describes the document,
-        // and no schema's identity can be there.
+        // and no schema's identity can be there. Nothing reaches, so nothing expands: an unscoped rename
+        // is the walk with its `$ref` half switched off.
         foreach ($doc as $key => $value) {
             if (is_array($value)) {
-                $doc[$key] = $this->rewrite($value, $id, $rename, $outcome);
+                $doc[$key] = $this->rewrite($value, $doc, $id, $rename, [], [], $outcome, $cyclic);
             }
         }
 
@@ -151,14 +130,9 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Applies a change that `#[AppliesTo]` narrows to some operations. The fork rule, in order:
-     *
-     *  1. the operations this document publishes the schema for are computed, following `$ref`s;
-     *  2. a scope reaching none of them is REFUSED — see below;
-     *  3. a selector that names none of them is reported and decides nothing;
-     *  4. a scope covering all of them renames the shared component in place — no fork;
-     *  5. otherwise the matched operations get the older shape inlined, and the rest keep the shared
-     *     component exactly as the head document has it.
+     * Applies a change that `#[AppliesTo]` narrows to some operations, under the fork rule
+     * `docs/design/api-versioning.md` states. What the design doc does not cover is what happens when
+     * the scope decides nothing — each refusal below says why it is a refusal rather than a widening.
      *
      * @param  array<string, mixed>  $doc
      * @param  array<string, true>  $said
@@ -167,12 +141,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     private function applyScopedRename(array $doc, RenamedResponseField $rename, VersionChange $change, DocumentContext $context, array &$said): array
     {
         $id = $this->identity->namedSchemaId(ltrim($rename->schema, '\\'));
-        $reaches = self::componentsReaching($doc, $id);
+        $reaches = DocumentGraph::componentsReaching($doc, $id);
 
         $reaching = [];
-        foreach (self::operationSites($doc) as $index => $site) {
-            $operation = self::at($doc, $site['keys']);
-            if (is_array($operation) && self::nodeReaches($operation, $id, $reaches)) {
+        foreach (DocumentGraph::operationSites($doc) as $index => $site) {
+            $operation = DocumentGraph::at($doc, $site['keys']);
+            if (is_array($operation) && DocumentGraph::nodeReaches($operation, $id, $reaches)) {
                 $reaching[$index] = $site;
             }
         }
@@ -182,7 +156,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // WIDE — for every operation `#[AppliesTo]` was written to exclude. A scope silently doing
             // the opposite of narrowing is not an acceptable degradation, so the document is left as
             // the code publishes it and the build says which of the two things is wrong.
-            self::reportOnce($context, self::carries($doc, $id)
+            self::reportOnce($context, DocumentGraph::carries($doc, $id)
                 ? self::publishedForNoOperation($change, $rename)
                 : self::schemaUnresolved($change, $rename), $said);
 
@@ -316,28 +290,6 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Whether the document carries the schema at all, anywhere. What tells "the change names a class
-     * this document publishes nothing for" from "it publishes it, but for no operation".
-     *
-     * @param  array<array-key, mixed>  $node
-     */
-    private static function carries(array $node, string $id): bool
-    {
-        $docuccino = $node['x-docuccino'] ?? null;
-        if (is_array($docuccino) && ($docuccino['id'] ?? null) === $id) {
-            return true;
-        }
-
-        foreach ($node as $value) {
-            if (is_array($value) && self::carries($value, $id)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * Says one thing once. A change is walked per rename, so a report about the CHANGE rather than about
      * the field comes out byte-identical every time; the second copy is noise, and noise is what trains
      * a reader to stop reading the channel.
@@ -369,14 +321,14 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
      */
     private function fork(array $doc, array $site, string $id, RenamedResponseField $rename, array $reaches, VersionChange $change, DocumentContext $context, array &$said): array
     {
-        $operation = self::at($doc, $site['keys']);
+        $operation = DocumentGraph::at($doc, $site['keys']);
         if (! is_array($operation)) {
             return $doc;
         }
 
         $outcome = 'unresolved';
         $cyclic = false;
-        $forked = $this->inline($operation, $doc, $id, $rename, $reaches, [], $outcome, $cyclic);
+        $forked = $this->rewrite($operation, $doc, $id, $rename, $reaches, [], $outcome, $cyclic);
 
         if ($cyclic) {
             // A schema that refers to itself cannot be given a private copy: the copy would contain the
@@ -401,7 +353,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         // it, and the copy says something different the moment it is renamed. `ContractIndex` resolves
         // an id to the shallowest, first-sorted node carrying it — `paths` before `components` — so the
         // copy would win the id and the component would vanish from the index it is still published in.
-        return self::with($doc, $site['keys'], $this->reidentify($forked, self::identitiesIn($operation), self::forkScope($operation, $site)));
+        return DocumentGraph::with($doc, $site['keys'], $this->reidentify($forked, DocumentGraph::identitiesIn($operation), self::forkScope($operation, $site)));
     }
 
     /**
@@ -436,28 +388,6 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Every identity written anywhere in a node, as a set.
-     *
-     * @param  array<array-key, mixed>  $node
-     * @return array<string, true>
-     */
-    private static function identitiesIn(array $node): array
-    {
-        $docuccino = $node['x-docuccino'] ?? null;
-        $id = is_array($docuccino) ? $docuccino['id'] ?? null : null;
-
-        $found = is_string($id) ? [$id => true] : [];
-
-        foreach ($node as $key => $value) {
-            if ($key !== 'x-docuccino' && is_array($value)) {
-                $found += self::identitiesIn($value);
-            }
-        }
-
-        return $found;
-    }
-
-    /**
      * What the copy belongs to, which is what keeps its id a function of the thing: the operation's own
      * identity where it has one, and the position it is published at where it does not.
      *
@@ -473,15 +403,25 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
+     * Walks every node, rewriting the ones carrying `$id`, and expanding on the way any `$ref` to a
+     * component `$reaches` says leads to one — which is what gives a forked operation a private copy
+     * instead of another pointer at the shared component. An EMPTY `$reaches` expands nothing, and that
+     * is the whole of what an unscoped rename is: the same walk, in place.
+     *
+     * `$outcome` is the strongest thing seen: `renamed` beats `taken` beats `absent` beats `unresolved`,
+     * so several copies of one schema report one answer and a document that publishes it nowhere reports
+     * that instead. `$cyclic` says the expansion met a component that contains itself, which is a copy
+     * that cannot be written; it can only be set where something expands.
+     *
      * @param  array<array-key, mixed>  $node
      * @param  array<string, mixed>  $doc
      * @param  array<string, bool>  $reaches
      * @param  list<string>  $visited
      * @return array<array-key, mixed>
      */
-    private function inline(array $node, array $doc, string $id, RenamedResponseField $rename, array $reaches, array $visited, string &$outcome, bool &$cyclic): array
+    private function rewrite(array $node, array $doc, string $id, RenamedResponseField $rename, array $reaches, array $visited, string &$outcome, bool &$cyclic): array
     {
-        $ref = self::componentRef($node);
+        $ref = DocumentGraph::componentRef($node);
         if ($ref !== null && ($reaches[$ref] ?? false)) {
             if (in_array($ref, $visited, true)) {
                 $cyclic = true;
@@ -489,12 +429,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
                 return $node;
             }
 
-            $body = self::componentBody($doc, $ref);
+            $body = DocumentGraph::componentBody($doc, $ref);
             if ($body === null) {
                 return $node;
             }
 
-            $expanded = $this->inline($body, $doc, $id, $rename, $reaches, [...$visited, $ref], $outcome, $cyclic);
+            $expanded = $this->rewrite($body, $doc, $id, $rename, $reaches, [...$visited, $ref], $outcome, $cyclic);
 
             // OAS 3.1 lets a `$ref` carry siblings, and they annotate what they point at, so they win
             // over the body they are written beside.
@@ -510,31 +450,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         foreach ($node as $key => $value) {
             if (is_array($value)) {
-                $node[$key] = $this->inline($value, $doc, $id, $rename, $reaches, $visited, $outcome, $cyclic);
-            }
-        }
-
-        return $node;
-    }
-
-    /**
-     * Walks every node, rewriting the ones carrying `$id`. `$outcome` is the strongest thing seen:
-     * `renamed` beats `taken` beats `absent` beats `unresolved`, so several copies of one schema report
-     * one answer and a document that publishes it nowhere reports that instead.
-     *
-     * @param  array<array-key, mixed>  $node
-     * @return array<array-key, mixed>
-     */
-    private function rewrite(array $node, string $id, RenamedResponseField $rename, string &$outcome): array
-    {
-        $docuccino = $node['x-docuccino'] ?? null;
-        if (is_array($docuccino) && ($docuccino['id'] ?? null) === $id) {
-            $node = $this->rewriteSchema($node, $rename, $outcome);
-        }
-
-        foreach ($node as $key => $value) {
-            if (is_array($value)) {
-                $node[$key] = $this->rewrite($value, $id, $rename, $outcome);
+                $node[$key] = $this->rewrite($value, $doc, $id, $rename, $reaches, $visited, $outcome, $cyclic);
             }
         }
 
@@ -571,9 +487,9 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         // Load-bearing: a required list still naming today's field would mark a body carrying the OLD
         // name invalid, and a body carrying the new one valid — the exact disagreement a per-version
         // contract test exists to catch.
-        $required = $schema[self::REQUIRED] ?? null;
+        $required = $schema['required'] ?? null;
         if (is_array($required)) {
-            $schema[self::REQUIRED] = array_values(array_map(
+            $schema['required'] = array_values(array_map(
                 static fn (mixed $name): mixed => $name === $rename->to ? $rename->from : $name,
                 $required,
             ));
@@ -697,227 +613,6 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Every operation this document publishes, with the names a selector may call it by. A webhook is
-     * indexed too — a schema it carries is a place the shape appears, so a scope that leaves it out has
-     * to fork — but it has no signature: a webhook is a request the SERVER makes, and no client pins it.
-     *
-     * A path item may be written as a `$ref` into `components.pathItems`, and an overlay can introduce
-     * one after this build assembled the document. Read as written it states no method at all, so its
-     * operations would be invisible here while {@see componentsReaching()} happily followed the same
-     * pointer — and a scope that reaches nothing is what decides whether a change narrows or rewrites
-     * the whole document. So the pointer is followed, through the same {@see Refs} every other reader
-     * in the product uses. `keys` address the node a reader would go and edit; the SIGNATURE stays the
-     * use site's, which is what a request binds against and what a selector spells.
-     *
-     * @param  array<string, mixed>  $doc
-     * @return list<OperationSite>
-     */
-    private static function operationSites(array $doc): array
-    {
-        $sites = [];
-
-        foreach (['paths', 'webhooks'] as $section) {
-            $items = $doc[$section] ?? null;
-            if (! is_array($items)) {
-                continue;
-            }
-
-            foreach ($items as $name => $item) {
-                if (! is_array($item)) {
-                    continue;
-                }
-
-                /** @var array<string, mixed> $item */
-                [$resolved, $at] = Refs::follow($doc, $item, [$section, (string) $name]);
-
-                foreach (PathItem::METHODS as $method) {
-                    $operation = $resolved[$method] ?? null;
-                    if (! is_array($operation)) {
-                        continue;
-                    }
-
-                    $operationId = $operation['operationId'] ?? null;
-
-                    $sites[] = [
-                        'keys' => [...$at, $method],
-                        'signature' => $section === 'paths' ? strtoupper($method).' '.$name : null,
-                        'operationId' => is_string($operationId) ? $operationId : null,
-                    ];
-                }
-            }
-        }
-
-        return $sites;
-    }
-
-    /**
-     * Which components carry the schema, following component-to-component `$ref`s to a fixpoint. Read
-     * once per rename rather than walked per operation, and to a fixpoint rather than recursively,
-     * because a schema that refers to itself is a legal document and an unbounded walk of one is not.
-     *
-     * @param  array<string, mixed>  $doc
-     * @return array<string, bool>
-     */
-    private static function componentsReaching(array $doc, string $id): array
-    {
-        $components = $doc['components'] ?? null;
-        if (! is_array($components)) {
-            return [];
-        }
-
-        $reaches = [];
-        $refs = [];
-        foreach ($components as $section => $members) {
-            if (! is_array($members)) {
-                continue;
-            }
-
-            foreach ($members as $name => $body) {
-                $pointer = '#/components/'.$section.'/'.$name;
-                $reaches[$pointer] = is_array($body) && self::nodeReaches($body, $id, []);
-                $refs[$pointer] = is_array($body) ? self::refsIn($body) : [];
-            }
-        }
-
-        do {
-            $changed = false;
-            foreach ($refs as $pointer => $targets) {
-                if ($reaches[$pointer]) {
-                    continue;
-                }
-
-                foreach ($targets as $target) {
-                    if ($reaches[$target] ?? false) {
-                        $reaches[$pointer] = true;
-                        $changed = true;
-
-                        break;
-                    }
-                }
-            }
-        } while ($changed);
-
-        return $reaches;
-    }
-
-    /**
-     * Whether a node carries the schema itself, or a `$ref` to a component that does.
-     *
-     * @param  array<array-key, mixed>  $node
-     * @param  array<string, bool>  $reaches
-     */
-    private static function nodeReaches(array $node, string $id, array $reaches): bool
-    {
-        $docuccino = $node['x-docuccino'] ?? null;
-        if (is_array($docuccino) && ($docuccino['id'] ?? null) === $id) {
-            return true;
-        }
-
-        $ref = self::componentRef($node);
-        if ($ref !== null && ($reaches[$ref] ?? false)) {
-            return true;
-        }
-
-        foreach ($node as $value) {
-            if (is_array($value) && self::nodeReaches($value, $id, $reaches)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Every `#/components/…` pointer a node names, at any depth.
-     *
-     * @param  array<array-key, mixed>  $node
-     * @return list<string>
-     */
-    private static function refsIn(array $node): array
-    {
-        $refs = [];
-
-        $ref = self::componentRef($node);
-        if ($ref !== null) {
-            $refs[] = $ref;
-        }
-
-        foreach ($node as $value) {
-            if (is_array($value)) {
-                $refs = [...$refs, ...self::refsIn($value)];
-            }
-        }
-
-        return $refs;
-    }
-
-    /**
-     * The component this node is a `$ref` to, or null when it is not one. Only an in-document
-     * `#/components/<section>/<name>` counts: an external `$ref` names a file this build never read.
-     *
-     * @param  array<array-key, mixed>  $node
-     */
-    private static function componentRef(array $node): ?string
-    {
-        $ref = $node['$ref'] ?? null;
-
-        return is_string($ref) && preg_match('#^\#/components/[^/]+/[^/]+$#', $ref) === 1 ? $ref : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $doc
-     * @return array<array-key, mixed>|null
-     */
-    private static function componentBody(array $doc, string $pointer): ?array
-    {
-        $parts = explode('/', substr($pointer, 2));
-        $body = self::at($doc, $parts);
-
-        return is_array($body) ? $body : null;
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $node
-     * @param  list<string>  $keys
-     */
-    private static function at(array $node, array $keys): mixed
-    {
-        foreach ($keys as $key) {
-            $next = $node[$key] ?? null;
-            if (! is_array($next)) {
-                return $next;
-            }
-
-            $node = $next;
-        }
-
-        return $node;
-    }
-
-    /**
-     * @param  array<string, mixed>  $node
-     * @param  list<string>  $keys
-     * @return array<string, mixed>
-     */
-    private static function with(array $node, array $keys, mixed $value): array
-    {
-        $key = array_shift($keys);
-        if ($key === null) {
-            return $node;
-        }
-
-        if ($keys === []) {
-            $node[$key] = $value;
-
-            return $node;
-        }
-
-        $node[$key] = self::with(Hydrate::map($node[$key] ?? null), $keys, $value);
-
-        return $node;
-    }
-
-    /**
      * Declares the version header on every operation the document publishes: `in: header`, optional,
      * defaulting to this document's version and enumerating every version the application configures.
      *
@@ -973,11 +668,15 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         $parameters = is_array($parameters) ? array_values($parameters) : [];
 
         foreach ($parameters as $parameter) {
-            $declared = is_array($parameter) ? $parameter['name'] ?? null : null;
+            if (! is_array($parameter) || ($parameter['in'] ?? null) !== 'header') {
+                continue;
+            }
+
+            $declared = $parameter['name'] ?? null;
 
             // An application that documents the header itself keeps its own wording; two parameters of
             // one name in one location is a document no client can read.
-            if (is_array($parameter) && ($parameter['in'] ?? null) === 'header' && is_string($declared) && strcasecmp($declared, $name) === 0) {
+            if (is_string($declared) && strcasecmp($declared, $name) === 0) {
                 return $operation;
             }
         }

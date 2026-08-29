@@ -19,10 +19,9 @@ final class Glob
 {
     public static function matches(string $pattern, string $subject): bool
     {
-        // A pattern with no wildcard is its own subject, which is also why an exact-match reader and this
-        // one answer the same thing everywhere a `*` is absent.
-        // `*` and an exact spelling are settled before the expression, so a subject the `u` modifier
-        // would refuse — a name carrying invalid UTF-8 — still matches what it plainly matches.
+        // Settled before the expression, so a subject the `u` modifier would refuse — a name carrying
+        // invalid UTF-8 — still matches what it plainly matches. It is also why this reader and an
+        // exact-match one answer the same thing everywhere a `*` is absent.
         if ($pattern === '*' || $pattern === $subject) {
             return true;
         }

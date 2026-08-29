@@ -12,14 +12,10 @@ use Docuccino\Laravel\Versioning\VersionChangeCollector;
 use Workbench\App\Data\FormTreeData;
 
 /**
- * What a scoped change REFUSES to do, and the documents that make it refuse.
- *
- * A scoped change gives the operations in scope a private copy of the schema, and there are shapes no
- * copy can be written for: a schema that contains itself (the copy still points at the shared component
- * one level down, so the operation would publish the older name at the top and today's name inside it),
- * and a scope that reaches no operation at all (renaming anyway would rewrite the schema for every
- * operation `#[AppliesTo]` was written to exclude). Both leave the document at the shape the code
- * publishes and say why.
+ * What a scoped change REFUSES to do, and the documents that make it refuse — a schema that contains
+ * itself, and a scope that reaches no operation at all. `docs/design/api-versioning.md` says why each
+ * is a refusal; this proves the document comes out at the shape the code publishes, with the diagnostic
+ * that says so.
  *
  * Built by hand rather than through a build: the document is the input, and the recovery chain publishes
  * neither a self-referential component off a plain data class nor a path item written as a `$ref`, so a
