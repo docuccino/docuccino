@@ -1876,7 +1876,7 @@ Extensions/Integrations line and an extension may not import an integration.
 
 Unit = OperationFragment (operation + registered components + diagnostics + document-level notes +
 provenance, serialized as UIR JSON fragments). Key = sha256(tool ver ‖ spec ver ‖ identity-algo ver ‖
-doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
+document id ‖ doc configHash ‖ environment digest ‖ build fingerprint ‖ resolved extension list (FQCNs +
 package versions) ‖ route cache-signature ‖ sha256 of each file in
 `ActionAnalysis::$dependencyFiles`). Assembly → canonicalize → validate always run fresh.
 Watch mode later = loop incremental build + SSE push.
@@ -1891,7 +1891,12 @@ and the app's `composer.lock` hash — installing the engine or upgrading the an
 inference recovers without touching one analysed file. Tool ver additionally carries this package's
 own installed source reference where Composer can answer for it, so a `path`/dev checkout edited in
 place — the maintainer's loop, invisible to the app's lock file — doesn't share fragments with the
-release it was checked out from. The store itself is emptied by `docuccino:clear --fragments`.
+release it was checked out from. The document id is keyed separately from the configHash because a fragment carries ids MINTED from it
+(§2) while the configHash deliberately excludes `export` — so the same shaping config written twice
+under two export destinations, or two API versions that have not yet stated an `info.version`, hash
+alike, and without the id the second document would be served the first's identity tree. Widening the
+configHash instead is not the fix: it is the document's published fingerprint, so it would move emitted
+bytes over a filename. The store itself is emptied by `docuccino:clear --fragments`.
 
 Two consequences of the cache being the fast path. A build resolves its `TypeEngine` before it
 starts, but a fully warm one asks it nothing, so the adapter hands out an `Engine\LazyTypeEngine`
