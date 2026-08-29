@@ -82,6 +82,11 @@ this document's version and enumerating every version your `documents` map decla
 the set of supported versions out of the document itself, and a generated client gets a named constant
 for each one.
 
+That enum is every configured version, not every *public* one, and a published document is a committed
+artifact — so an internal, staging or not-yet-announced version configured as a document is named in
+the public one. It has to be: an enum narrower than what the server accepts marks a working request
+invalid. Keep a version out of the enum by keeping it out of the `documents` map.
+
 Every change declared under `changes.dir` that shipped **after** this version is applied in reverse, so
 an older version's document describes the shape that version published. Your code is always the newest
 version; a change class says what the API did before it:
@@ -564,6 +569,12 @@ those apps — drop `web`, or register your domain — for example:
 The policy `docuccino:diff --enforce` applies to this document. `semver` requires a major version
 bump for breaking changes; `date` requires a new date version; `none` never fails on versioning. See
 [`docuccino:diff`](/laravel/reference/commands/#docuccinodiff).
+
+It has a second job on a document that declares [`api_version`](#api_version): it names the order two
+versions are in, which is the order a change list applies in. A value that cannot read your versions —
+`semver` over dates, say — leaves them unordered, so **no** changes are applied and the version
+document comes out saying what the code says (`versioning.unordered`). Say nothing and Docuccino reads
+the order off the versions themselves, which is the safer default of the two.
 
 ## Extensions
 

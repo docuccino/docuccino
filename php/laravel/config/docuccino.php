@@ -158,7 +158,8 @@ return [
                 // ],
             ],
 
-            // The policy `docuccino:diff --enforce` holds a changeset to.
+            // The policy `docuccino:diff --enforce` holds a changeset to. It also names the order two
+            // versions are in, which is the order an `api_version` document applies its changes in.
             'versioning' => 'none', // none | semver | date
 
             // Per-integration switches and knobs. Every integration is on as soon as its package is

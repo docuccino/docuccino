@@ -37,6 +37,7 @@ use Docuccino\Attributes\Webhook;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Provenance\ClassNames;
+use Docuccino\Core\Support\Fqcn;
 use ReflectionClass;
 
 /**
@@ -163,7 +164,7 @@ final class SchemaClassAttributes
             }
 
             $seen[$name] = true;
-            $short = self::shortName($name);
+            $short = Fqcn::short($name);
 
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
@@ -185,24 +186,12 @@ final class SchemaClassAttributes
         return $diagnostics;
     }
 
-    /**
-     * The name the AUTHOR wrote, which is the last segment: an attribute in a sub-namespace is imported
-     * and then written short, so a diagnostic spelling the namespace back at them names nothing in their
-     * file.
-     */
-    private static function shortName(string $attribute): string
-    {
-        $separator = strrpos($attribute, '\\');
-
-        return $separator === false ? $attribute : substr($attribute, $separator + 1);
-    }
-
     /** The honoured attributes as the help names them: `#[A]`, `#[B]` and `#[C]`. */
     private static function honouredList(): string
     {
         $names = [];
         foreach (array_keys(self::HONOURED) as $attribute) {
-            $names[] = '#['.self::shortName($attribute).']';
+            $names[] = '#['.Fqcn::short($attribute).']';
         }
 
         $last = array_pop($names);

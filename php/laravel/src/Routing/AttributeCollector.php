@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Provenance\ClassNames;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Support\Fqcn;
 use ReflectionClass;
 use ReflectionFunctionAbstract;
 use Throwable;
@@ -106,11 +107,8 @@ final class AttributeCollector
             severity: Severity::Warning,
             code: 'attribute.unreadable',
             message: sprintf(
-                // The last segment, which is the name the author wrote: an attribute in a sub-namespace is
-                // imported and then written short, so spelling the namespace back at them names nothing in
-                // their file.
                 'The #[%s] on %s could not be instantiated and was ignored.',
-                substr($attribute, (int) strrpos($attribute, '\\') + 1),
+                Fqcn::short($attribute),
                 $this->messagePaths->relative($site),
             ),
             routeSignature: $routeSignature,

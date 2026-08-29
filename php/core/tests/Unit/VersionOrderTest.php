@@ -92,7 +92,7 @@ it('reads the order off the versions themselves when nothing names one', functio
 it('prefers the date reading where a set could plausibly be either', function (): void {
     expect(VersionOrder::detect(['2026-09-01'])?->name())->toBe('date')
         ->and(VersionOrder::semverParts('2026-09-01'))->toBeNull()
-        ->and(VersionOrder::dateKey('1.0.0'))->toBeNull();
+        ->and(VersionOrder::date()->reads('1.0.0'))->toBeFalse();
 });
 
 /*

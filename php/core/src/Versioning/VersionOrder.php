@@ -138,7 +138,7 @@ final readonly class VersionOrder
      * The comparable `YYYY-MM-DD` prefix, or null when the string does not begin with one. A trailing
      * suffix like `-preview` is ignored, so `2026-08-01` and `2026-08-01-rc1` compare equal.
      */
-    public static function dateKey(string $version): ?string
+    private static function dateKey(string $version): ?string
     {
         return preg_match('/^(\d{4})-(\d{2})-(\d{2})/', trim($version), $m) === 1
             ? $m[1].'-'.$m[2].'-'.$m[3]
@@ -148,6 +148,9 @@ final readonly class VersionOrder
     /**
      * Major, minor and patch as integers, or null when the string is not semver. A pre-release or build
      * suffix is ignored: it never changes which release the version belongs to.
+     *
+     * Public where {@see dateKey()} is not, because `SemverPolicy` reads the three numbers themselves to
+     * say which of them a change is allowed to move; nothing outside needs a date's key.
      *
      * @return array{0: int, 1: int, 2: int}|null
      */
