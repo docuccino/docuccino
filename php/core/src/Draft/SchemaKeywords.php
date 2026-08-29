@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Docuccino\Core\Draft;
 
 /**
- * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Three
+ * What the JSON Schema keywords MEAN, in the one place anything that reads a schema asks. Five
  * questions live here: the classification {@see SchemaDraft::declareShape()} reasons over — shape,
  * refinement or annotation — the subschema position {@see SUBSCHEMA_POSITIONS} a keyword's
  * value occupies, which is what tells a reader an array there is a JSON object rather than a list,
- * and which keywords a semantic DIFF may treat as a non-event ({@see ANNOTATION_ONLY}, a narrower
- * question than the first). Every keyword the document can carry is answered once here, so no
- * producer keeps its own copy.
+ * which keywords a semantic DIFF may treat as a non-event ({@see ANNOTATION_ONLY}, a narrower
+ * question than the first), which say nothing about the INSTANCE, so a reader deciding whether one
+ * value satisfies a schema may pass over them ({@see saysNothingAboutTheInstance()}), and what
+ * `contains`' own bounds default to ({@see containsAsserts()}). Every keyword the document can carry
+ * is answered once here, so no producer keeps its own copy.
  *
  * A keyword this does not know is never superseded: we do not retract what we cannot read.
  *
@@ -221,6 +223,65 @@ final class SchemaKeywords
     public static function annotations(): array
     {
         return self::ANNOTATIONS;
+    }
+
+    /**
+     * Whether `$keyword` says nothing about the INSTANCE — so a reader deciding whether one value
+     * satisfies a schema may pass over it rather than answer "cannot tell". `SchemaExampleFactory` is
+     * that reader.
+     *
+     * {@see ANNOTATIONS} backs this today and the two questions are still not the same one: that set
+     * answers SUPERSESSION, which standing keywords a declared shape retracts, and a keyword joining it
+     * for a supersession reason while still constraining an instance would have to be answered here on
+     * its own terms.
+     */
+    public static function saysNothingAboutTheInstance(string $keyword): bool
+    {
+        return in_array($keyword, self::ANNOTATIONS, true);
+    }
+
+    /**
+     * How many items `contains` has to match. Absent is 1 — the keyword's own default, and what makes
+     * `minContains: 0` a statement rather than a restatement.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    public static function minContains(array $schema): int
+    {
+        $bound = $schema['minContains'] ?? null;
+
+        return is_int($bound) ? $bound : 1;
+    }
+
+    /**
+     * The cap on how many items `contains` may match, or null where nothing caps it — which is a
+     * different statement from a cap set high, and the reason this is not defaulted the way the floor is.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    public static function maxContains(array $schema): ?int
+    {
+        $cap = $schema['maxContains'] ?? null;
+
+        return is_int($cap) ? $cap : null;
+    }
+
+    /**
+     * Whether a `contains` in `$schema` asserts anything about the arrays it describes. Absent, it says
+     * nothing; present, `minContains: 0` is the one spelling that drops the demand for a matching
+     * element — but a `maxContains` beside it still bounds how many may match, which is an assertion in
+     * its own right.
+     *
+     * Both readers of the keyword ask here rather than spelling the default out again: the example
+     * factory, deciding what array it may publish, and the diff, deciding whether a `contains` arriving
+     * narrows anything.
+     *
+     * @param  array<string, mixed>  $schema
+     */
+    public static function containsAsserts(array $schema): bool
+    {
+        return array_key_exists('contains', $schema)
+            && (self::minContains($schema) >= 1 || self::maxContains($schema) !== null);
     }
 
     /**
