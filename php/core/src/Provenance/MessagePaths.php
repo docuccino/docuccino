@@ -25,7 +25,9 @@ namespace Docuccino\Core\Provenance;
  * 1. **Exclusions.** A run behind a `#` is a URI fragment, a `/` behind a `\` is an escape, a POSIX
  *    run carrying a backslash is a regex or a JSON string, a run carrying a brace is a URI template.
  *    None of those reaches the ladder at all, unless proof opened the run or a root already accounts
- *    for the text in front of the character objected to.
+ *    for the text in front of the character objected to. What they refuse is the PATH RUN and not
+ *    the sentence it sits in: a match crosses an interior space, so one routinely spans a template
+ *    AND the file named after it, and refusing all of it published the file ({@see rewrite()}).
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
  *    anything but a filesystem path, so those are always reduced. All three are proof from the first
  *    character, and nothing a template is spelled with opens that way — a route signature, a path
@@ -85,9 +87,13 @@ final readonly class MessagePaths
 
     /**
      * A URL scheme and its separator, as RFC 3986 spells the scheme. It is what tells a wrapper's
-     * tail apart from a path, and it is written ONCE because two readers need it: the pattern, which
-     * declines to open a run on a nested URL, and {@see wrapper()}, which decides whether an opened
-     * run is proof. A guard reading fewer shapes than the fold it protects is a hole.
+     * tail apart from a path, and two readers spell it the same way. The PATTERN is the one that
+     * decides: declining to open a run on a nested URL is what leaves `compress.zlib://http://…`
+     * whole, so no run the matcher produces reaches {@see couldBeAPath()} carrying one. {@see
+     * wrapper()} asks again anyway, because it is the fold's own reader and is called on strings the
+     * matcher never produced — a candidate cut at a space, a run handed straight to {@see resolve()}
+     * — and a second reader that read fewer shapes than the pattern would be a hole rather than a
+     * conservative default.
      */
     private const NESTED_SCHEME = '[A-Za-z][A-Za-z0-9+.\\-]*://';
 
@@ -163,17 +169,19 @@ final readonly class MessagePaths
 
     public function relative(string $message): string
     {
-        return $this->redact($this->scrub($this->classNames->inText($message)));
+        // Bounded again after the class-name pass, which is the one thing here that can make the text
+        // longer than it arrived: what the run pass reads is what {@see PublishableText} allows.
+        return $this->redact($this->scrub(PublishableText::bounded($this->classNames->inText($message))));
     }
 
     /** The run pass. Recurses on the tail of a match, which is always strictly shorter. */
     private function scrub(string $text): string
     {
-        return preg_replace_callback(
+        return PublishableText::orRefused(preg_replace_callback(
             $this->run,
             fn (array $match): string => $this->rewrite($match[0]),
             $text,
-        ) ?? $text;
+        ));
     }
 
     private function rewrite(string $match): string
@@ -182,7 +190,12 @@ final readonly class MessagePaths
         $trailing = substr($match, strlen($run));
 
         if (! $this->couldBeAPath($run)) {
-            return $match;
+            // An exclusion refuses a PATH RUN, not the sentence around it. {@see pathRun()} is where
+            // one ends, so the refused text keeps every character and what follows goes back through
+            // the same pass — and since that answer is never empty, the recursion still shortens.
+            $refused = self::pathRun($run);
+
+            return $refused.$this->scrub(substr($run, strlen($refused)).$trailing);
         }
 
         foreach (self::candidates($run) as $candidate) {
@@ -252,15 +265,10 @@ final readonly class MessagePaths
 
     /**
      * Whether the ladder recognised a root for this path AND the root is deep enough to be a machine
-     * word. Both halves are the same question — is this prefix something only a machine would be
-     * spelling — and this is the one place it is answered, because reason 3 and the exclusions in
-     * front of it must not disagree about which roots count.
-     *
-     * A one-segment root does not, which is the whole reason the depth is measured. `/app` is a
-     * container's checkout and equally a prefix an application mounts routes under, so trusting it
-     * turned `Unknown route /app/users/profile` into `Unknown route users/profile` — a route nobody
-     * wrote, in a diagnostic somebody will act on. Two segments is the line, the one {@see redact()}
-     * draws for the same reason.
+     * word ({@see deepEnoughForAMachine()}). Both halves are the same question — is this prefix
+     * something only a machine would be spelling — and this is the one place it is asked of the
+     * ladder, because reason 3 and the exclusions in front of it must not disagree about which roots
+     * count.
      *
      * What a shallow root loses is only reason 3: the run carries on to reason 4, so a path that
      * names a file still relativises through the same ladder and `/app/src/Foo.php` is unchanged.
@@ -276,23 +284,36 @@ final readonly class MessagePaths
             return false;
         }
 
-        $root = rtrim(substr($path, 0, strlen($path) - strlen($under)), '/');
+        return self::deepEnoughForAMachine(rtrim(substr($path, 0, strlen($path) - strlen($under)), '/'));
+    }
 
+    /**
+     * Whether a prefix is deep enough that only a machine could be spelling it. A one-segment prefix
+     * is not: `/app` is a container's checkout and equally a prefix an application mounts routes
+     * under, so trusting it turned `Unknown route /app/users/profile` into `Unknown route
+     * users/profile` — a route nobody wrote, in a diagnostic somebody will act on — and `/tmp` is a
+     * word our own sentences spell, which is why {@see machineRoots()} will not redact it literally
+     * either. Two segments is the line, and it is drawn once so the ladder's roots and this process's
+     * own cannot come to disagree about it.
+     */
+    private static function deepEnoughForAMachine(string $root): bool
+    {
         return substr_count($root, '/') >= 2;
     }
 
     /** A wrapper scheme, a Windows drive or a UNC share — shapes nothing but a path has. */
     private static function proven(string $run): bool
     {
-        if (str_starts_with($run, '\\\\')) {
-            return true;
-        }
+        return self::windowsRooted($run) || self::wrapper($run) !== null;
+    }
 
-        if (preg_match('#^[A-Za-z]:[\\\\/]#', $run) === 1) {
-            return true;
-        }
-
-        return self::wrapper($run) !== null;
+    /**
+     * A Windows drive or a UNC share: the two shapes that spell a separator with a backslash, and so
+     * the only two whose backslashes {@see stripped()} may rewrite.
+     */
+    private static function windowsRooted(string $run): bool
+    {
+        return str_starts_with($run, '\\\\') || preg_match('#^[A-Za-z]:[\\\\/]#', $run) === 1;
     }
 
     /**
@@ -420,18 +441,35 @@ final readonly class MessagePaths
         return $this->stripped($path) ?? $this->paths->relative($path);
     }
 
-    /** The path under the root the ladder recognised, or null where it recognised none. */
+    /**
+     * The path under the root the ladder recognised, or null where it recognised none.
+     *
+     * The ladder is asked in one spelling — a backslash is a separator to it — but what comes back is
+     * PUBLISHED, and only a Windows run may keep that spelling: there the two ways of writing one path
+     * have to emit the same bytes, and everywhere else a backslash is a character the application
+     * wrote, in a filename or in a regex it quoted. Normalisation is 1:1 in length, so the same count
+     * of characters off the end of the ORIGINAL is the strip, said in the author's own hand.
+     */
     private function stripped(string $path): ?string
     {
-        $answer = $this->paths->relative(rtrim(str_replace('\\', '/', $path), '/').'/'.self::PROBE);
+        $normalised = rtrim(str_replace('\\', '/', $path), '/');
+        $answer = $this->paths->relative($normalised.'/'.self::PROBE);
 
         if ($answer === self::PROBE) {
             return '';
         }
 
-        return str_ends_with($answer, '/'.self::PROBE)
-            ? substr($answer, 0, -strlen('/'.self::PROBE))
-            : null;
+        if (! str_ends_with($answer, '/'.self::PROBE)) {
+            return null;
+        }
+
+        $under = substr($answer, 0, -strlen('/'.self::PROBE));
+
+        // A ladder that answered something other than the run's own tail has invented text, so there
+        // is nothing to take the original's spelling from: publish what it said and nothing more.
+        return $under === '' || self::windowsRooted($path) || ! str_ends_with($normalised, $under)
+            ? $under
+            : substr(substr($path, 0, strlen($normalised)), -strlen($under));
     }
 
     /** Where the archive ends and the path inside it begins, or null when the run names no archive. */
@@ -459,16 +497,10 @@ final readonly class MessagePaths
     private function redact(string $message): string
     {
         foreach ($this->machineRoots as $root) {
-            $message = str_replace($root.'/', '', $message);
-
-            // A bare root, not a prefix of anything: only where it is deep enough that no sentence of
-            // ours could be spelling it, so `/tmp` in prose survives and an install prefix does not.
-            // TWO segments is that line, not three: PHP's failed-include tail names every entry BARE,
-            // so a three-segment threshold published a two-segment prefix (`/opt/php`) whole while
-            // hiding a deeper one — the same code emitting different bytes for the machine it ran on.
-            if (substr_count($root, '/') >= 2) {
-                $message = str_replace($root, '', $message);
-            }
+            // Both forms: PHP's failed-include tail names every entry BARE as well as using it as a
+            // prefix. Which prefixes may go at all is decided in {@see machineRoots()}, by the same
+            // depth the ladder's roots answer to.
+            $message = str_replace([$root.'/', $root], '', $message);
         }
 
         return $message;
@@ -488,7 +520,9 @@ final readonly class MessagePaths
         foreach ($roots as $root) {
             $root = rtrim(str_replace('\\', '/', trim($root)), '/');
 
-            if ($root !== '' && str_starts_with($root, '/') && str_contains(substr($root, 1), '/')) {
+            // Redaction is a literal replace with nothing to tell a machine word from a sentence of
+            // ours, so only a prefix deep enough to be one gets in at all.
+            if (str_starts_with($root, '/') && self::deepEnoughForAMachine($root)) {
                 $absolute[$root] = strlen($root);
             }
         }

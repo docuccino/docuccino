@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Provenance\MessagePaths;
+use Docuccino\Core\Provenance\PublishableText;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 use Docuccino\Core\Provenance\SourcePathResolver;
 
@@ -792,3 +793,166 @@ it('scrubs the file a callable label names and leaves the rest of the label alon
     ['a label already relative', 'bootstrap/app.php::closure@42', 'bootstrap/app.php::closure@42'],
     ['a label naming one segment', 'app.php::closure@42', 'app.php::closure@42'],
 ]);
+
+it('keeps a backslash the application wrote, and rewrites only the one Windows spells a separator with', function (string $case, string $message, string $expected): void {
+    // The ladder is asked in one spelling, and the answer is PUBLISHED. A Windows run has to keep the
+    // rewrite — the two ways of writing one path must emit the same bytes, which is the whole promise
+    // at the top of this file — while a POSIX run's backslash is a character somebody typed: a
+    // filename, a regex the message quoted, a class name against the path. Stripping the prefix and
+    // restating the rest in a spelling nobody used is the over-scrub direction, quietly.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($expected);
+})->with([
+    ['a backslash in a file name', 'Could not open /app/root/app/Rules\\Regex.php', 'Could not open app/Rules\\Regex.php'],
+    ['a regex under the root', 'Refused /app/root/x\\d+/y', 'Refused x\\d+/y'],
+    ['a brace and a backslash together', 'Read /app/root/a{b}\\c/X.php', 'Read a{b}\\c/X.php'],
+    // The root itself keeps nothing, so there is no tail to spell either way.
+    ['nothing left under the root', 'mkdir(/app/root): Permission denied', 'mkdir(): Permission denied'],
+]);
+
+it('emits the same bytes for a Windows checkout and a POSIX one, with a backslash inside the path', function (): void {
+    // The pair the row above cannot state on its own: the separator rewrite is what makes these two
+    // agree, so a fix that stopped rewriting everywhere would pass every row above and break this.
+    $thrown = static fn (string $root, string $separator): string => sprintf(
+        'Failed in %s',
+        $root.$separator.implode($separator, ['app', 'Http', 'X.php']),
+    );
+
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/home/alice/checkout')))->relative($thrown('/home/alice/checkout', '/')))
+        ->toBe((new MessagePaths(new RootRelativeSourcePathResolver('C:\\Users\\bob\\dev\\checkout')))->relative($thrown('C:\\Users\\bob\\dev\\checkout', '\\')))
+        ->toBe('Failed in app/Http/X.php');
+});
+
+it('refuses the path run an exclusion objects to, and not the sentence carrying on after it', function (string $case, string $message, string $expected): void {
+    // A match crosses an interior space, so one routinely spans a template AND the file named after
+    // it — and refusing the whole match published the file, on every build where a third-party
+    // message names a URI template or carries a backslash before naming a path. What the exclusion
+    // objects to is the path run; the rest of the sentence goes back through the same pass.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a template, then the file it was declared in',
+        'Route /api/users/{user} declared in /app/root/routes/api.php',
+        'Route /api/users/{user} declared in routes/api.php',
+    ],
+    [
+        'a backslash in the prose, then a file',
+        'Bad /x\\y in /app/root/app/Secret.php',
+        'Bad /x\\y in app/Secret.php',
+    ],
+    [
+        'a brace and a backslash before the file',
+        'Refused /api/{a} and /some\\where before /app/root/app/X.php',
+        'Refused /api/{a} and /some\\where before app/X.php',
+    ],
+    // The control: two ordinary paths in one sentence were never the shape at issue.
+    ['two ordinary paths', 'Copy /app/root/a.php to /app/root/b.php', 'Copy a.php to b.php'],
+]);
+
+it('consumes at least one character of every run it refuses, so the pass terminates', function (): void {
+    // The termination argument executed rather than asserted. `rewrite()` re-enters the pass on what
+    // is left of a refused run, so a refusal that consumed nothing would recurse forever; what makes
+    // that impossible is that `pathRun()` never answers with the empty string, whatever it is given.
+    $pathRun = new ReflectionMethod(MessagePaths::class, 'pathRun');
+
+    foreach (['/', '/ x/y', '/a', '/api/{a}/b and /c/d.php', '/x\\y in /app/root/x.php', '/a b c'] as $run) {
+        expect($pathRun->invoke(null, $run))->not->toBe('')
+            ->and($run)->toStartWith((string) $pathRun->invoke(null, $run));
+    }
+
+    // And the whole thing under a message that refuses over and over: fifty templates in one sentence
+    // is fifty refusals, each shortening what is left, and the file at the end still arrives.
+    $message = 'Unknown routes '.implode(' and ', array_fill(0, 50, '/api/x/{a}')).' plus /app/root/app/X.php';
+
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toEndWith('plus app/X.php')
+        ->toContain('/api/x/{a} and /api/x/{a}');
+});
+
+it('gives up a message it could not check rather than publishing it unchecked', function (): void {
+    // The guard executed. `preg_replace_callback` answers null on a PCRE resource limit rather than
+    // throwing, and handing the ORIGINAL back there publishes every machine path in it — a
+    // determinism defect produced by the one pass that exists to prevent one, and reachable on
+    // ordinary path-shaped text well under any size a reader would call unusual. So the refusal is
+    // total: a fixed sentence, identical on every machine.
+    $restore = (string) ini_get('pcre.backtrack_limit');
+
+    try {
+        ini_set('pcre.backtrack_limit', '1');
+        $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))
+            ->relative('Could not open /app/root/app/Secret.php');
+    } finally {
+        ini_set('pcre.backtrack_limit', $restore);
+    }
+
+    expect($scrubbed)->not->toContain('/app/root/app/Secret.php')
+        ->and($scrubbed)->toBe(PublishableText::REFUSED);
+});
+
+it('reads only as much of a message as it can check, and says where it stopped', function (): void {
+    // The bound, and why it is not decoration: one over-long run used to poison the WHOLE message,
+    // so every other path in it was published raw too. A message this long is past anything the
+    // product has ever been handed, and past what the reduction can answer in a sensible time.
+    $paths = new MessagePaths(new RootRelativeSourcePathResolver('/app/root'));
+    $long = 'in /'.str_repeat('seg/', 2048).'file.php and /app/root/app/Secret.php';
+    $scrubbed = $paths->relative($long);
+
+    expect(strlen($long))->toBeGreaterThan(PublishableText::MAX_BYTES)
+        ->and($scrubbed)->not->toContain('/app/root/app/Secret.php')
+        ->and($scrubbed)->toEndWith('…')
+        ->and(strlen($scrubbed))->toBeLessThanOrEqual(PublishableText::MAX_BYTES + 3)
+        // And a message of the size that actually arrives is untouched by the bound.
+        ->and($paths->relative('Could not open /app/root/app/X.php'))->toBe('Could not open app/X.php');
+});
+
+it('reads a nested scheme the same way wherever the run came from', function (string $case, string $run, ?string $scheme): void {
+    // `wrapper()` is the fold's own reader of `NESTED_SCHEME`, and the pattern already declines to
+    // open a run on a nested URL — so no run the matcher produces can hand it one, and a mutation
+    // that gutted the check passed the whole suite. Asked directly, it must still agree with the
+    // pattern about what a nested scheme is: a reader that saw fewer shapes than the fold it
+    // protects would be a hole.
+    $wrapper = new ReflectionMethod(MessagePaths::class, 'wrapper');
+
+    expect($wrapper->invoke(null, $run))->toBe($scheme);
+})->with([
+    ['a local tail', 'phar:///app/root/x.php', 'phar'],
+    ['a tail that is itself a URL', 'phar://http://example.com/a.gz', null],
+    ['a tail that is another wrapper', 'compress.zlib://compress.bzip2:///home/alice/x.bz2', null],
+    ['a scheme with a dot and a digit', 'zip://s3v4://bucket/x.zip', null],
+    ['a scheme the table calls no proof', 'http:///app/root/x.php', null],
+]);
+
+it('draws the two-segment line once, for the ladder\'s roots and for its own', function (): void {
+    // One predicate, two populations: a root the ladder answered with and a prefix this process can
+    // name for itself. They must not come to disagree — `/app` is a checkout and equally a route
+    // prefix, `/tmp` is a word our own sentences spell — so the depth is measured in one place and
+    // both read it. The literal redaction reaches nothing shallower, so it needs no second test of
+    // its own.
+    $deepEnough = new ReflectionMethod(MessagePaths::class, 'deepEnoughForAMachine');
+    $machineRoots = new ReflectionMethod(MessagePaths::class, 'machineRoots');
+
+    expect($deepEnough->invoke(null, '/app'))->toBeFalse()
+        ->and($deepEnough->invoke(null, '/app/root'))->toBeTrue()
+        ->and($deepEnough->invoke(null, 'C:/Users/bob'))->toBeTrue();
+
+    $restore = (string) ini_get('include_path');
+
+    try {
+        ini_set('include_path', '/tmp'.PATH_SEPARATOR.'/opt/php'.PATH_SEPARATOR.'/x');
+        /** @var list<string> $roots */
+        $roots = $machineRoots->invoke(null);
+    } finally {
+        ini_set('include_path', $restore);
+    }
+
+    expect($roots)->toContain('/opt/php')
+        ->and($roots)->not->toContain('/tmp')
+        ->and($roots)->not->toContain('/x');
+
+    foreach ($roots as $root) {
+        expect($deepEnough->invoke(null, $root))->toBeTrue();
+    }
+});
