@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 31 attributes with signatures and examples.
+description: The docuccino/attributes package — all 33 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 31 attributes, grouped by what they do:
+All 33 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -67,6 +67,8 @@ All 31 attributes, grouped by what they do:
 | [`#[CaseDescription]`](#casedescription) | Describe an enum case (`x-enumDescriptions`). |
 | [`#[Mock]`](#mock) | Hint how a mock server should fake a property. |
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
+| [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
+| [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
 
 ## Responses
 
@@ -1182,3 +1184,77 @@ The class docblock becomes the summary and description, and `#[Group]`, `#[Respo
 they read on a controller. Classes are discovered from
 [`webhooks.dir`](/laravel/reference/configuration/#webhooks); see
 [Documenting webhooks](/laravel/documenting/webhooks/) for the whole picture.
+
+## Versioning
+
+Every other attribute on this page describes the shape your code has now. These two describe the shape
+it used to have. An older API version publishes a field your code no longer contains, so there is
+nothing left to read it off — you declare the change once, on a class of its own, and the older
+document is derived by applying that change backwards. The classes live in
+`Docuccino\Attributes\Versioning`.
+
+### `#[ApiVersionChange]`
+
+Targets `CLASS`.
+
+```php
+public function __construct(
+    public string $since,
+    public string $description,
+)
+```
+
+Marks a class as one registered API version change. `since` is the version the change shipped in — the
+first version whose document carries the new shape — and `description` is the sentence a consumer reads
+when they are working out whether the upgrade touches them, so write it for someone who cannot see your
+code.
+
+Your code is always the newest version, so a change describes what the API did **before** `since`.
+Documents older than that are derived by applying the change in reverse; nothing is applied to the
+current one.
+
+```php
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
+
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices publish `title` where they used to publish `name`.',
+)]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+final class InvoiceTitleReplacesName {}
+```
+
+### `#[RenamedResponseField]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $from,
+    public string $to,
+)
+```
+
+Declares that one field of `schema` goes by another name in the versions before the change. `to` is the
+name in your code today; `from` is the name the older document publishes. Keep them in that order —
+`from` the past, `to` the present — because the pair written the other way round renames the wrong end,
+and the older document then ships a field nobody ever had.
+
+`schema` is the class the response shape comes from — a resource, a Data class, a plain DTO — written as
+`InvoiceResource::class`. Repeat the attribute once per field the change renames.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices publish `title` and `amount_in_cents`.',
+)]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'total', to: 'amount_in_cents')]
+final class InvoiceFieldsRenamed {}
+```
+
+Every argument is a plain string or a `::class` constant, which is what makes a change readable without
+running any of your code. An argument Docuccino cannot read is reported as `attribute.unreadable` and
+the declaration is skipped rather than guessed at.

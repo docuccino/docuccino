@@ -30,6 +30,8 @@ use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
@@ -98,6 +100,7 @@ final class SchemaClassAttributes
      */
     public const array ELSEWHERE = [
         Abilities::class => 'on the action',
+        ApiVersionChange::class => 'on a version-change class',
         CookieParameter::class => 'on the action',
         DeprecatedOperation::class => 'on the action',
         ErrorComponent::class => 'on the exception class whose body it names',
@@ -111,6 +114,7 @@ final class SchemaClassAttributes
         OptionallyAuthenticated::class => 'on the action',
         PathParameter::class => 'on the action',
         QueryParameter::class => 'on the action, or on a custom filter class',
+        RenamedResponseField::class => 'on a version-change class, beside its #[ApiVersionChange]',
         Response::class => 'on the action',
         ResponseHeader::class => 'on the action',
         RuleSchema::class => 'on the custom rule object it describes',
@@ -157,7 +161,7 @@ final class SchemaClassAttributes
             }
 
             $seen[$name] = true;
-            $short = substr($name, strlen(self::PREFIX));
+            $short = self::shortName($name);
 
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Warning,
@@ -179,12 +183,24 @@ final class SchemaClassAttributes
         return $diagnostics;
     }
 
+    /**
+     * The name the AUTHOR wrote, which is the last segment: an attribute in a sub-namespace is imported
+     * and then written short, so a diagnostic spelling the namespace back at them names nothing in their
+     * file.
+     */
+    private static function shortName(string $attribute): string
+    {
+        $separator = strrpos($attribute, '\\');
+
+        return $separator === false ? $attribute : substr($attribute, $separator + 1);
+    }
+
     /** The honoured attributes as the help names them: `#[A]`, `#[B]` and `#[C]`. */
     private static function honouredList(): string
     {
         $names = [];
         foreach (array_keys(self::HONOURED) as $attribute) {
-            $names[] = '#['.substr($attribute, strlen(self::PREFIX)).']';
+            $names[] = '#['.self::shortName($attribute).']';
         }
 
         $last = array_pop($names);

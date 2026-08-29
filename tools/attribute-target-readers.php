@@ -158,7 +158,9 @@ function attribute_reader_files(array $directories): array
 
 /**
  * The Docuccino attributes a file can name, as `symbol => ShortName` — imports (aliases included) plus
- * whatever it writes out in full.
+ * whatever it writes out in full. Sub-namespaces are read too: an attribute under
+ * `Docuccino\Attributes\Versioning\` is imported and then written short, so a pattern stopping at one
+ * segment would credit its readers to nothing at all.
  *
  * @return array<string, string>
  */
@@ -166,17 +168,31 @@ function attribute_reader_names(string $source): array
 {
     $names = [];
 
-    preg_match_all('/^use\s+Docuccino\\\\Attributes\\\\(\w+)(?:\s+as\s+(\w+))?\s*;/m', $source, $imports, PREG_SET_ORDER);
+    preg_match_all('/^use\s+Docuccino\\\\Attributes\\\\((?:\w+\\\\)*\w+)(?:\s+as\s+(\w+))?\s*;/m', $source, $imports, PREG_SET_ORDER);
     foreach ($imports as $import) {
-        $names[($import[2] ?? '') !== '' ? $import[2] : $import[1]] = $import[1];
+        $short = attribute_reader_short_name($import[1]);
+        $names[($import[2] ?? '') !== '' ? $import[2] : $short] = $short;
     }
 
-    preg_match_all('/\\\\?Docuccino\\\\+Attributes\\\\+(\w+)::class/', $source, $qualified);
+    preg_match_all('/\\\\?Docuccino\\\\+Attributes\\\\+((?:\w+\\\\+)*\w+)::class/', $source, $qualified);
     foreach ($qualified[1] as $name) {
-        $names[$name] = $name;
+        $short = attribute_reader_short_name($name);
+        $names[$short] = $short;
     }
 
     return $names;
+}
+
+/**
+ * The name a reader writes, which is the last segment — the tables this feeds are keyed the same way,
+ * and so is the reference page.
+ */
+function attribute_reader_short_name(string $name): string
+{
+    $name = str_replace('\\\\', '\\', $name);
+    $separator = strrpos($name, '\\');
+
+    return $separator === false ? $name : substr($name, $separator + 1);
 }
 
 /**
