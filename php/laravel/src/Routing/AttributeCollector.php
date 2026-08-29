@@ -106,8 +106,11 @@ final class AttributeCollector
             severity: Severity::Warning,
             code: 'attribute.unreadable',
             message: sprintf(
+                // The last segment, which is the name the author wrote: an attribute in a sub-namespace is
+                // imported and then written short, so spelling the namespace back at them names nothing in
+                // their file.
                 'The #[%s] on %s could not be instantiated and was ignored.',
-                substr($attribute, strlen(self::NAMESPACE_PREFIX)),
+                substr($attribute, (int) strrpos($attribute, '\\') + 1),
                 $this->messagePaths->relative($site),
             ),
             routeSignature: $routeSignature,

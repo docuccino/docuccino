@@ -8,16 +8,47 @@ declare(strict_types=1);
  * the number that goes stale is always the one you didn't edit. This reads the shipped package
  * instead, so adding or removing an attribute fails here until both halves of the page agree.
  */
+/**
+ * Every attribute the package ships, `ShortName => class-string`. The walk RECURSES: a flat glob over
+ * `src/` sees nothing declared in a sub-namespace, so an attribute could ship uncatalogued with this
+ * whole file green — the same silence `#[Webhook]` shipped through, one directory deeper. The key is
+ * the short name because that is what the page writes and what a reader types after a `use`; two
+ * attributes sharing one would make the page ambiguous, so that throws rather than quietly
+ * overwriting.
+ *
+ * @return array<string, class-string>
+ */
+function shippedAttributeClasses(): array
+{
+    $root = dirname(__DIR__, 2).'/php/attributes/src';
+
+    $classes = [];
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || ! $file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = substr($file->getPathname(), strlen($root) + 1, -strlen('.php'));
+        /** @var class-string $class */
+        $class = 'Docuccino\\Attributes\\'.str_replace(DIRECTORY_SEPARATOR, '\\', $relative);
+        $short = $file->getBasename('.php');
+
+        if (isset($classes[$short])) {
+            throw new RuntimeException('Two attributes ship as #['.$short.']; the reference page keys on the short name.');
+        }
+
+        $classes[$short] = $class;
+    }
+    ksort($classes);
+
+    return $classes;
+}
+
 /** @return list<string> */
 function shippedAttributeNames(): array
 {
-    $names = [];
-    foreach (glob(dirname(__DIR__, 2).'/php/attributes/src/*.php') ?: [] as $file) {
-        $names[] = basename($file, '.php');
-    }
-    sort($names);
-
-    return $names;
+    return array_keys(shippedAttributeClasses());
 }
 
 function attributesReferencePage(): string
@@ -44,7 +75,9 @@ function referencedAttributeNames(string $page): array
 }
 
 it('lists every attribute the package ships, and nothing it does not', function (): void {
-    expect(referencedAttributeNames(attributesReferencePage()))->toBe(shippedAttributeNames());
+    // A walk that stopped seeing the package must fail rather than agree with an empty page.
+    expect(count(shippedAttributeNames()))->toBeGreaterThanOrEqual(30)
+        ->and(referencedAttributeNames(attributesReferencePage()))->toBe(shippedAttributeNames());
 });
 
 it('states the count the package actually ships, everywhere it states one', function (): void {
@@ -66,8 +99,7 @@ it('documents every constructor parameter every attribute takes', function (): v
     $missing = [];
     $counted = 0;
     foreach (shippedAttributeNames() as $name) {
-        /** @var class-string $class */
-        $class = 'Docuccino\\Attributes\\'.$name;
+        $class = shippedAttributeClasses()[$name];
         $section = attributeReferenceSection($page, $name);
 
         foreach ((new ReflectionClass($class))->getConstructor()?->getParameters() ?? [] as $parameter) {
@@ -202,8 +234,7 @@ it('states the targets and repeatability every attribute really declares', funct
     $wrong = [];
     $seen = 0;
     foreach (shippedAttributeNames() as $name) {
-        /** @var class-string $class */
-        $class = 'Docuccino\\Attributes\\'.$name;
+        $class = shippedAttributeClasses()[$name];
         $declared = attributeFlagsOf($class);
         $documented = referencedAttributeFlags($page, $name);
 
@@ -313,8 +344,7 @@ it('reads every target every attribute declares, or says in public that it does 
     $pairs = 0;
     $surfaces = [];
     foreach (shippedAttributeNames() as $name) {
-        /** @var class-string $class */
-        $class = 'Docuccino\\Attributes\\'.$name;
+        $class = shippedAttributeClasses()[$name];
         $read = $readers[$name] ?? [];
         $section = attributeReferenceSection($page, $name);
 
@@ -355,8 +385,7 @@ it('reads every target every attribute declares, or says in public that it does 
     // An exception has to be a target something really declares, so one cannot outlive the surface it
     // excuses.
     foreach ($exceptions as $name => $targets) {
-        /** @var class-string $class */
-        $class = 'Docuccino\\Attributes\\'.$name;
+        $class = shippedAttributeClasses()[$name];
         $declared = explode(' | ', attributeFlagNames(attributeFlagsOf($class)));
         foreach (array_keys($targets) as $target) {
             if (! in_array($target, $declared, true)) {

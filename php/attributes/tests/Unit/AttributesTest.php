@@ -32,6 +32,8 @@ use Docuccino\Attributes\SchemaName;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
 /**
@@ -52,7 +54,7 @@ final class AttributesFixture
 }
 
 /**
- * The full v1 attribute set with its expected `#[Attribute]` flag bitmask.
+ * The full attribute set with its expected `#[Attribute]` flag bitmask.
  *
  * @return array<string, array{class-string, int}>
  */
@@ -92,6 +94,8 @@ function attributeCatalogue(): array
         'ErrorComponent' => [ErrorComponent::class, Attribute::TARGET_CLASS | Attribute::TARGET_METHOD],
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
         'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
+        'Versioning\\ApiVersionChange' => [ApiVersionChange::class, Attribute::TARGET_CLASS],
+        'Versioning\\RenamedResponseField' => [RenamedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
     ];
 }
 
@@ -146,6 +150,8 @@ function defaultArgs(string $class): array
         CaseDescription::class => ['a description'],
         IgnoreResponse::class => [200],
         Summary::class => ['Create an invoice'],
+        ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
+        RenamedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
         default => [],
     };
 }
@@ -180,11 +186,19 @@ it('legally stacks repeatable attributes on one symbol', function (): void {
 // The catalogue above calls itself the full attribute set, which is only true while someone keeps it
 // that way. `#[Webhook]` shipped without an entry and the dataset still passed, because a dataset
 // only ever proves the rows it lists. This reads the directory instead, so a new attribute fails
-// here until it is catalogued.
+// here until it is catalogued. It walks the tree rather than the top level, because a flat glob
+// goes silent the moment an attribute is declared in a sub-namespace.
 it('catalogues every attribute the package ships', function (): void {
     $shipped = [];
-    foreach (glob(__DIR__.'/../../src/*.php') ?: [] as $file) {
-        $shipped[] = 'Docuccino\\Attributes\\'.basename($file, '.php');
+    $root = dirname(__DIR__, 2).'/src';
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || ! $file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = substr($file->getPathname(), strlen($root) + 1, -strlen('.php'));
+        $shipped[] = 'Docuccino\\Attributes\\'.str_replace(DIRECTORY_SEPARATOR, '\\', $relative);
     }
     sort($shipped);
 
@@ -194,7 +208,8 @@ it('catalogues every attribute the package ships', function (): void {
     );
     sort($catalogued);
 
-    expect($shipped)->not->toBeEmpty()
+    // A walk that stopped seeing the package must fail rather than pass on an empty set.
+    expect(count($shipped))->toBeGreaterThanOrEqual(30)
         ->and($catalogued)->toBe($shipped);
 });
 

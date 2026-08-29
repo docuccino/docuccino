@@ -25,6 +25,8 @@ use Docuccino\Attributes\RuleSchema;
 use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
 /**
@@ -37,6 +39,7 @@ use Docuccino\Attributes\Webhook;
  */
 #[Description(text: 'A node whose author put an operation\'s declarations on the type.')]
 #[Abilities]
+#[ApiVersionChange]
 #[CookieParameter]
 #[DeprecatedOperation]
 #[ErrorComponent]
@@ -51,6 +54,7 @@ use Docuccino\Attributes\Webhook;
 #[PathParameter]
 #[QueryParameter]
 #[QueryParameter]
+#[RenamedResponseField]
 #[Response]
 #[ResponseHeader]
 #[RuleSchema]
