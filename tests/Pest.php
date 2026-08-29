@@ -49,6 +49,7 @@ use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Extensions\AttributeParametersExtension;
@@ -969,6 +970,44 @@ function ensureFixtureAvailable(bool $available): void
     }
 
     test()->markTestSkipped('fixture app absent — recreate per tests/fixture-app/setup.md');
+}
+
+/**
+ * Makes the fixture app's own version-change classes loadable in THIS process.
+ *
+ * A version change is discovered by scanning a directory and then asked for its attributes by
+ * reflection, so the class has to load — which in a real application is composer's `App\` autoloader
+ * doing what it does for every other class under `app/`. The fixture app's autoloader cannot be
+ * registered here (its Laravel and this process's clash), and nothing else about the change classes
+ * needs it: their attribute arguments are constant expressions the compiler already settled, and a
+ * `::class` naming an analysis-only class is a string rather than a load.
+ *
+ * Registered once per process and idempotent, because a Pest worker runs many tests.
+ */
+function loadFixtureAppVersionChanges(): void
+{
+    static $registered = false;
+
+    if ($registered) {
+        return;
+    }
+
+    $registered = true;
+    $root = FixtureRunner::appRoot().'/app/Versioning/';
+
+    spl_autoload_register(static function (string $class) use ($root): void {
+        $prefix = 'App\\Versioning\\';
+
+        if (! str_starts_with($class, $prefix)) {
+            return;
+        }
+
+        $file = $root.str_replace('\\', '/', substr($class, strlen($prefix))).'.php';
+
+        if (is_file($file)) {
+            require_once $file;
+        }
+    });
 }
 
 /**
