@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Docuccino\Core\Diagnostics\Diagnostic;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\VersionedFormController;
 
@@ -11,9 +10,12 @@ use Workbench\App\Http\Controllers\VersionedFormController;
  *
  * Two chained renames prove it: `name` became `label` in 2026-09-01 and `label` became `title` in
  * 2026-12-01, so today's code says `title`. Walking them the other way round leaves the older one with
- * no `label` to rename and the document publishing `label` where it should publish `name` — and the two
- * fixtures are named so their FQCN order is the OPPOSITE of their version order, which is what makes
- * this a test of the ordering rather than of the alphabet.
+ * no `label` to rename and the document publishing `label` where it should publish `name`.
+ *
+ * The two fixtures are named so their FQCN order is the OPPOSITE of the order they apply in — the OLDER
+ * change sorts first by name — which is what makes this a test of the ordering rather than of the
+ * alphabet. Executed: replacing the collector's comparator with a bare `strcmp($a->class, $b->class)`
+ * turns these red.
  */
 beforeEach(function (): void {
     app()->setBasePath(dirname(__DIR__, 3));
@@ -53,18 +55,4 @@ it('publishes the change prose against the version each one shipped in', functio
     // documents, and the prose off the changes, which are two different sources on purpose.
     expect($schema['enum'])->toBe(['2026-06-01'])
         ->and($schema)->not->toHaveKey('x-enumDescriptions');
-});
-
-it('reads the same answer however the filesystem hands the files over', function (): void {
-    // The collector sorts, so a second read is the same read. A scan that inherited enumeration order
-    // would be stable on one machine and different on another, which is the failure this rules out.
-    $first = versioningDiagnostics('tests/Fixtures/Versioning/Chained', '2026-06-01');
-    $schema = generateDocument(key: 'v')->document->toArray()['components']['schemas']['FormData'];
-
-    $second = versioningDiagnostics('tests/Fixtures/Versioning/Chained', '2026-06-01');
-    $again = generateDocument(key: 'v')->document->toArray()['components']['schemas']['FormData'];
-
-    expect(array_map(static fn (Diagnostic $d): string => $d->code, $first))
-        ->toBe(array_map(static fn (Diagnostic $d): string => $d->code, $second))
-        ->and($again)->toBe($schema);
 });

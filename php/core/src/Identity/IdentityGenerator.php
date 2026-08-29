@@ -105,6 +105,28 @@ final readonly class IdentityGenerator
         return $this->id('sch', [$scope, Json::stable($schema)]);
     }
 
+    /**
+     * The identity of a node COPIED out of `components` into one operation. An API version change
+     * scoped to some of the operations that publish a schema forks the shared component, and the copy
+     * says something different from the component the moment it is renamed — two nodes with different
+     * content answering to one id is a document where `provenanceOf()` answers about the wrong one.
+     *
+     * Derived from the id it was copied from and the operation that got the copy, so it stays a
+     * function of the thing rather than of encounter order. The kind carries over, because a copy of a
+     * schema is still a schema; an id whose kind this does not recognise is left alone rather than
+     * rewritten into something the UIR schema would refuse.
+     */
+    public function forkedId(string $id, string $scope): ?string
+    {
+        $kind = strstr($id, ':', true);
+
+        if (! in_array($kind, ['op', 'par', 'sch', 'res'], true)) {
+            return null;
+        }
+
+        return $this->id($kind, ['fork', $id, $scope]);
+    }
+
     public function responseId(string $operationId, string $status, string $mediaType): string
     {
         return $this->id('res', [$operationId, $status, $mediaType]);

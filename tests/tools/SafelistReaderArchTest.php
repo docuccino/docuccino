@@ -19,7 +19,25 @@ declare(strict_types=1);
  * same reason. It is the identical shape of problem: entries the author writes, subjects the build
  * knows by more than one name, and a wildcard. A matcher of its own would have been a second grammar
  * before it was a second bug.
+ *
+ * Its reader is a different one: `Docuccino\Core\Support\Glob`, which is the product's one wildcard
+ * grammar. The safelists deliberately do NOT go through it — they are controls rather than
+ * conveniences, and an entry there matches exactly what it spells — so each property names the reader
+ * that owns it and the scan asks for that one.
  */
+
+/**
+ * The reader each scanned property must go through, as `property => [class, method]`.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function safelistReaders(): array
+{
+    return [
+        'allow' => ['LintSafelist', 'matches'],
+        'selectors' => ['Glob', 'matchesAny'],
+    ];
+}
 
 /**
  * The reads that compare no subject, each with what makes that true. A new entry is a claim about what
@@ -55,9 +73,9 @@ function safelistExplainedRawSelectorReads(): array
 {
     return [
         // Whether the change is scoped at all, which chooses between two whole paths and matches nothing.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:110' => 'transform() → an unscoped change takes the other branch',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:115' => 'transform() → an unscoped change takes the other branch',
         // Hands each selector to the reader on its own, so the one that decided nothing can be named.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:189' => 'applyScopedRename() → iterates the selectors into namesAny()',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:199' => 'applyScopedRename() → iterates the selectors into namesAny()',
     ];
 }
 
@@ -145,6 +163,7 @@ function safelistSourcesIn(string $package): array
 function safelistAllowReadLines(string $source, string $property = 'allow'): array
 {
     $tokens = safelistSignificantTokens($source);
+    [$readerClass, $readerMethod] = safelistReaders()[$property];
     $lines = ['directed' => [], 'raw' => []];
 
     foreach ($tokens as $i => $token) {
@@ -161,28 +180,28 @@ function safelistAllowReadLines(string $source, string $property = 'allow'): arr
             continue;
         }
 
-        $lines[safelistStatementNamesReader($tokens, $i) ? 'directed' : 'raw'][] = $token->line;
+        $lines[safelistStatementNamesReader($tokens, $i, $readerClass, $readerMethod) ? 'directed' : 'raw'][] = $token->line;
     }
 
     return $lines;
 }
 
 /**
- * Whether a `LintSafelist::matches(` opens the statement the read at $index sits in. A leading `\` and a
+ * Whether a `<Reader>::<method>(` opens the statement the read at $index sits in. A leading `\` and a
  * fully-qualified name are inert to PHP, so both are inert here.
  *
  * @param  list<PhpToken>  $tokens
  */
-function safelistStatementNamesReader(array $tokens, int $index): bool
+function safelistStatementNamesReader(array $tokens, int $index, string $class = 'LintSafelist', string $method = 'matches'): bool
 {
     for ($i = $index - 1; $i >= 0; $i--) {
         if (in_array($tokens[$i]->text, [';', '{', '}'], true)) {
             return false;
         }
 
-        if ($tokens[$i]->id === T_STRING && $tokens[$i]->text === 'matches'
+        if ($tokens[$i]->id === T_STRING && $tokens[$i]->text === $method
             && ($tokens[$i - 1]->id ?? null) === T_DOUBLE_COLON
-            && str_ends_with($tokens[$i - 2]->text ?? '', 'LintSafelist')) {
+            && str_ends_with($tokens[$i - 2]->text ?? '', $class)) {
             return true;
         }
     }
@@ -297,74 +316,89 @@ it('is scanning something', function (): void {
         ->and(count(safelistPackageAllowReads('selectors')['raw']))->toBeGreaterThanOrEqual(2)
         ->and(safelistExplainedRawSelectorReads())->not->toBeEmpty()
         ->and(file_get_contents($safelist))->toContain("str_starts_with(\$subject, '#/')")
-        // And the reader really is the one grammar: the wildcard comes from Glob, not from a second
-        // expression written here.
-        ->and(file_get_contents($safelist))->toContain('Glob::matchesAny(');
+        // And the safelist reader really is EXACT. Its two callers are controls — one silences a
+        // leakage finding, the other un-redacts a value credential matching flagged — so a wildcard
+        // reader here would widen what an already-written config entry accepts. The wildcard grammar
+        // belongs to the readers that document one, which is what the `selectors` half scans for.
+        ->and(file_get_contents($safelist))->toContain('in_array(self::canonical($subject), $entries, true)')
+        ->and(file_get_contents($safelist))->not->toContain('Glob::');
 });
 
 /**
- * The scanner's own proof. Both spellings that reach the reader, and the shapes a `->allow` grep would
- * get wrong in either direction: a read written in a comment, a method sharing the name, a local
- * variable sharing it, and a call to the reader spread over more than one line.
+ * The scanner's own proof, and the guard EXECUTED rather than claimed. Both spellings that reach a
+ * reader, and the shapes a `->allow` grep would get wrong in either direction: a read written in a
+ * comment, a method sharing the name, a local variable sharing it, and a call spread over more than one
+ * line. Then the bespoke matcher each property's scan must refuse — including, for `selectors`, the
+ * OTHER property's reader, which is the mistake a shared scan would let through.
  */
 it('sees a read the reader owns apart from one deciding for itself', function (): void {
-    $source = <<<'PHP'
+    $source = static fn (string $reader, string $qualified, string $method): string => <<<PHP
         <?php
 
         final readonly class Options
         {
             public function __construct(
-                public array $allow = [],
-                private array $patterns = [],
+                public array \$allow = [],
+                private array \$patterns = [],
             ) {}
 
-            public function silences(string $subject): bool
+            public function silences(string \$subject): bool
             {
-                return LintSafelist::matches($this->allow, $subject);
+                return {$reader}::{$method}(\$this->allow, \$subject);
             }
 
-            public function alsoSilences(string $subject): bool
+            public function alsoSilences(string \$subject): bool
             {
-                return \Docuccino\Core\Lint\LintSafelist::matches(
-                    $this->allow,
-                    $subject,
+                return {$qualified}::{$method}(
+                    \$this->allow,
+                    \$subject,
                 );
             }
 
-            public function decidesAlone(string $subject): bool
+            public function decidesAlone(string \$subject): bool
             {
-                // LintSafelist::matches($this->allow, $subject) in a comment is not a call.
-                return in_array($subject, $this->allow, true);
+                // {$reader}::{$method}(\$this->allow, \$subject) in a comment is not a call.
+                return in_array(\$subject, \$this->allow, true);
             }
 
             public function names(): array
             {
-                return $this->allow;
+                return \$this->allow;
             }
 
             public function allow(): array
             {
-                $allow = $this->patterns;
+                \$allow = \$this->patterns;
 
-                return $allow;
+                return \$allow;
             }
 
             public function copy(): array
             {
-                return $this->allow();
+                return \$this->allow();
             }
         }
         PHP;
 
-    // And the same scan under another property name, because the guard now covers two: the parameter is
-    // what makes one scan two, so a change that quietly hard-coded `allow` again would show up here.
-    expect(safelistAllowReadLines(str_replace('allow', 'selectors', $source), 'selectors'))
-        ->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
-        ->and(safelistAllowReadLines($source, 'selectors'))->toBe(['directed' => [], 'raw' => []]);
+    $lint = $source('LintSafelist', '\Docuccino\Core\Lint\LintSafelist', 'matches');
+    $glob = str_replace('allow', 'selectors', $source('Glob', '\Docuccino\Core\Support\Glob', 'matchesAny'));
 
-    expect(safelistAllowReadLines($source))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
+    expect(safelistAllowReadLines($lint))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
         // A promoted property is a declaration; the local `$allow` on line 36 is not — a visibility
         // keyword is what makes one, which is also why the counter-source below declares nothing.
-        ->and(safelistDeclaresAllowList($source))->toBeTrue()
+        ->and(safelistDeclaresAllowList($lint))->toBeTrue()
         ->and(safelistDeclaresAllowList("<?php\n\$allow = [];\n"))->toBeFalse();
+
+    // The same scan under the other property name and the other reader. The parameter is what makes one
+    // scan two, so a change that quietly hard-coded either name again shows up here.
+    expect(safelistAllowReadLines($glob, 'selectors'))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
+        ->and(safelistAllowReadLines($lint, 'selectors'))->toBe(['directed' => [], 'raw' => []])
+        ->and(safelistAllowReadLines($glob))->toBe(['directed' => [], 'raw' => []]);
+
+    // And the refusal, written out: each property's reader is its OWN. A selector read through
+    // `LintSafelist::matches` — the call this stack shipped, and the one that widened a redaction
+    // control to accept `*` — is raw here, not directed, so the guard would name it.
+    $crossed = str_replace('allow', 'selectors', $lint);
+
+    expect(safelistAllowReadLines($crossed, 'selectors'))->toBe(['directed' => [], 'raw' => [12, 18, 26, 31]]);
 });

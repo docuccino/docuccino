@@ -4,21 +4,17 @@ declare(strict_types=1);
 
 namespace Docuccino\Core\Lint;
 
-use Docuccino\Core\Support\Glob;
-
 /**
- * The one reading of an entry that names a subject, shared by everything that consults one — every
- * lint, the recorder's redaction, and the scope an API version change declares. A pointer reaches a
- * safelist spelled either bare (`/components/…`, the form a message prints) or as the URI fragment a
- * `$ref` uses (`#/components/…`), so the leading `#` comes off both the entry and the subject and all
- * four combinations land.
+ * The one reading of an `allow` entry, shared by everything that consults one — every lint, and the
+ * recorder's redaction. A pointer reaches a safelist spelled either bare (`/components/…`, the form a
+ * message prints) or as the URI fragment a `$ref` uses (`#/components/…`), so the leading `#` comes
+ * off both the entry and the subject and all four combinations land.
  *
- * An entry is a {@see Glob} pattern, which is the product's one wildcard grammar rather than a second
- * one: an entry with no `*` in it matches exactly what it spells, so this is what an exact-match reader
- * always was plus the wildcard a reader would otherwise write beside it. That beside-it reader is the
- * defect this class exists to prevent — the lint honoured the `#/…` fragment form while the recorder's
- * redaction did not, so one config entry silenced a warning and still refused to publish the value it
- * was written for.
+ * An entry matches EXACTLY what it spells, and deliberately so: both callers are controls rather than
+ * conveniences — one silences a leakage finding, the other un-redacts a recorded value that credential
+ * matching flagged — and a control that quietly accepted a `*` would widen what an existing config
+ * entry silences without anybody having written a wildcard. {@see Docuccino\Core\Support\Glob} is the
+ * product's wildcard grammar, for the readers that document one.
  *
  * @internal
  */
@@ -34,7 +30,7 @@ final class LintSafelist
         $entries = array_map(self::canonical(...), $allow);
 
         foreach ($subjects as $subject) {
-            if ($subject !== null && Glob::matchesAny($entries, self::canonical($subject))) {
+            if ($subject !== null && in_array(self::canonical($subject), $entries, true)) {
                 return true;
             }
         }

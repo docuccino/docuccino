@@ -94,3 +94,29 @@ it('prefers the date reading where a set could plausibly be either', function ()
         ->and(VersionOrder::semverParts('2026-09-01'))->toBeNull()
         ->and(VersionOrder::dateKey('1.0.0'))->toBeNull();
 });
+
+/*
+ * The one sorting of a version set. `strcmp` is the reading this class exists to replace, and a set
+ * published in that order is the defect shipped in an artifact rather than in a change list.
+ */
+it('sorts a set oldest first under the order it is given', function (?string $keyword, array $versions, array $sorted): void {
+    expect(VersionOrder::sorted($versions, $keyword === null ? null : VersionOrder::for($keyword)))->toBe($sorted);
+})->with([
+    'semver, stated' => ['semver', ['1.10.0', '1.9.0', '1.2.0'], ['1.2.0', '1.9.0', '1.10.0']],
+    'semver, detected' => [null, ['1.10.0', '1.9.0', '1.2.0'], ['1.2.0', '1.9.0', '1.10.0']],
+    'dates, stated' => ['date', ['2026-12-01', '2026-06-01'], ['2026-06-01', '2026-12-01']],
+    'dates, detected' => [null, ['2026-12-01', '2026-06-01'], ['2026-06-01', '2026-12-01']],
+    // Nothing reads the set whole, so byte order — deterministic, and the only thing left.
+    'a mixture' => [null, ['1.10.0', '2026-06-01', '1.9.0'], ['1.10.0', '1.9.0', '2026-06-01']],
+    // A stated order that cannot read every member is no order for this set either.
+    'stated but unreadable' => ['date', ['1.10.0', '1.9.0'], ['1.10.0', '1.9.0']],
+    'nothing to sort' => [null, [], []],
+]);
+
+it('breaks a tie bytewise, so the answer never depends on the order the set arrived in', function (): void {
+    // As dates these two are the same day, so the comparison alone would leave them where they were.
+    expect(VersionOrder::sorted(['2026-06-01-rc2', '2026-06-01-rc1'], VersionOrder::date()))
+        ->toBe(['2026-06-01-rc1', '2026-06-01-rc2'])
+        ->and(VersionOrder::sorted(['2026-06-01-rc1', '2026-06-01-rc2'], VersionOrder::date()))
+        ->toBe(['2026-06-01-rc1', '2026-06-01-rc2']);
+});

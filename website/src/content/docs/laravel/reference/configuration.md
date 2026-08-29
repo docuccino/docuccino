@@ -67,9 +67,10 @@ Declaring `api_version` makes the document an API **version** rather than a docu
 one. Three things follow.
 
 The version is [`info.version`](#info) — the one OAS already models. There is no second key naming it,
-because a second key could only ever disagree with the first. Leave `info.version` at the shipped
-`1.0.0` placeholder and the document is not derived as a version at all; the build says so with a
-`versioning.version-unstated` warning rather than publishing a version you do not serve.
+because a second key could only ever disagree with the first. Write no `info.version` at all and there
+is nothing to derive a version from; the build says so with a `versioning.version-unstated` warning
+rather than inventing a version you do not serve. Any value you do write is taken at its word, `1.0.0`
+included — declaring `api_version` is the statement that this document is a version.
 
 The order two versions are in is the one [`versioning`](#versioning) names — `date` or `semver`. Say
 nothing and Docuccino reads the order off the versions themselves, so an application writing plain

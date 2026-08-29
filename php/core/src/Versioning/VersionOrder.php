@@ -72,6 +72,44 @@ final readonly class VersionOrder
         return null;
     }
 
+    /**
+     * The versions in order, oldest first. The one sorting of a version set in this product: a published
+     * enum listing `1.10.0` before `1.9.0` is the exact reading this class exists to replace, said in the
+     * document a consumer reads rather than in the change list.
+     *
+     * `$order` is the order the document resolved, where it has one; otherwise the versions themselves
+     * say which grammar they are written in. Byte order is the fallback and only the fallback — for a
+     * set no grammar reads whole, where it is at least deterministic. Ties break bytewise so the answer
+     * never depends on the order the set was handed over.
+     *
+     * @param  list<string>  $versions
+     * @return list<string>
+     */
+    public static function sorted(array $versions, ?self $order = null): array
+    {
+        $sorted = $versions;
+        $order ??= self::detect($versions);
+
+        foreach ($versions as $version) {
+            if ($order !== null && ! $order->reads($version)) {
+                $order = null;
+
+                break;
+            }
+        }
+
+        if ($order === null) {
+            sort($sorted, SORT_STRING);
+
+            return $sorted;
+        }
+
+        $reading = $order;
+        usort($sorted, static fn (string $a, string $b): int => ($reading->compare($a, $b) ?? 0) ?: strcmp($a, $b));
+
+        return $sorted;
+    }
+
     /** `date` or `semver`, as the `versioning` keyword spells it. */
     public function name(): string
     {

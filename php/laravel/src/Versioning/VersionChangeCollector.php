@@ -61,7 +61,7 @@ final readonly class VersionChangeCollector
             return new VersionChangeSet([], null, [new Diagnostic(
                 severity: Severity::Warning,
                 code: 'versioning.dir-missing',
-                message: sprintf('The configured version-changes directory "%s" does not exist.', $configured),
+                message: sprintf('The configured version-changes directory "%s" does not exist.', PlainText::of($configured)),
                 help: 'Create it or unset documents.*.api_version.changes.dir.',
             )]);
         }
@@ -133,7 +133,7 @@ final readonly class VersionChangeCollector
                 'its version "%s" is not a %s version, so nothing can tell whether it shipped before or after this document\'s',
                 PlainText::of($change->since),
                 $order->name(),
-            ));
+            ), 'Write the version the way this document writes its own — `2026-09-01` for a date order, `1.2.0` for semver.');
         }
 
         usort($placed, static fn (VersionChange $a, VersionChange $b): int => ($order->compare($b->since, $a->since) ?? 0) ?: strcmp($a->class, $b->class));
@@ -202,14 +202,18 @@ final readonly class VersionChangeCollector
         );
     }
 
-    /** The one mint for "this declaration cannot be applied as it is written". */
-    public static function unapplicable(string $class, string $problem): Diagnostic
+    /**
+     * The one mint for "this declaration cannot be applied as it is written". `$help` overrides the
+     * default remedy where the problem is not about how the rename is spelled — a diagnostic sending the
+     * reader to a line that is already right is worse than none.
+     */
+    public static function unapplicable(string $class, string $problem, ?string $help = null): Diagnostic
     {
         return new Diagnostic(
             severity: Severity::Warning,
             code: 'versioning.change-invalid',
-            message: sprintf('%s was skipped: %s.', $class, $problem),
-            help: 'A change declares what the API did BEFORE its version: `to:` is the field name in the code today, `from:` the one older versions publish.',
+            message: sprintf('%s was skipped: %s.', PlainText::of($class), $problem),
+            help: $help ?? 'A change declares what the API did BEFORE its version: `to:` is the field name in the code today, `from:` the one older versions publish.',
         );
     }
 

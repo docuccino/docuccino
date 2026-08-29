@@ -409,9 +409,9 @@ final readonly class DocumentConfig
     }
 
     /**
-     * The API version this document IS, or null when it declares none — or declares one and leaves
-     * `info.version` at the shipped `1.0.0` default, which states nothing an application actually
-     * serves. The build says so with a diagnostic rather than publishing the placeholder.
+     * The API version this document IS, or null when it declares none, or declares one and states no
+     * `info.version` at all. The build says so with a diagnostic rather than deriving a version from
+     * nothing.
      */
     public function apiVersion(): ?string
     {
@@ -433,6 +433,11 @@ final readonly class DocumentConfig
      * because the adapter reads the same fact off every configured document to enumerate the closed
      * set of versions, and one rule about what counts as stated must answer both.
      *
+     * Written or not written is the whole test, {@see DEFAULT_VERSION} included: an API whose first
+     * published version really is `1.0.0` is the likeliest first semver version there is, and a rule
+     * that read it as unstated would leave that application unable to use the feature at all. The
+     * shipped `api_version` block is commented out, so a document carrying one has said what it is.
+     *
      * @param  array<string, mixed>  $raw
      */
     public static function statedVersion(array $raw): ?string
@@ -444,7 +449,7 @@ final readonly class DocumentConfig
         $version = Hydrate::map($raw['info'] ?? null)['version'] ?? null;
         $version = is_string($version) ? trim($version) : '';
 
-        return $version === '' || $version === self::DEFAULT_VERSION ? null : $version;
+        return $version === '' ? null : $version;
     }
 
     /**
