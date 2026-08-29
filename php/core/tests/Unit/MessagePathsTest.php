@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Document\PathItem;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
 
@@ -194,7 +195,7 @@ it('leaves alone every run that a machine did not put there', function (string $
 ]);
 
 it('takes every local stream wrapper as proof, and no other scheme', function (string $prefix, bool $reduced): void {
-    // The whole table, plus the schemes that name a host or nothing on disk. A wrapper is the one
+    // The whole table, both halves, plus a scheme it has never decided about. A wrapper is the one
     // positive proof a run is a path, so a scheme missing from the table leaks and a scheme wrongly in
     // it reduces something that was never a file.
     $message = 'Could not open '.$prefix.'/app/root/app/Support/Inline.php';
@@ -206,22 +207,174 @@ it('takes every local stream wrapper as proof, and no other scheme', function (s
     ['file://', true],
     ['phar://', true],
     ['zip://', true],
+    ['glob://', true],
     ['compress.zlib://', true],
     ['compress.bzip2://', true],
-    // Not in the table: a URL names a host, and neither of these names a file this machine holds.
+    // The other half of the table: a URL names a host, and none of the last three names a file this
+    // machine holds.
+    ['http://', false],
     ['https://', false],
+    ['ftp://', false],
+    ['ftps://', false],
+    ['php://', false],
     ['data://', false],
+    ['sqlsrv://', false],
+    // A scheme the table has decided nothing about — an object store a package registers, say. Proof
+    // is what the table grants, so an undecided scheme falls through to shape, which this run has
+    // none of: the degradation is the safe direction, and the guard below is what makes it a decision
+    // somebody takes rather than one nobody notices.
+    ['s3://', false],
 ]);
 
+/*
+ * The dataset above proves the rows it lists, and the rows are the table read back. This reads the
+ * source of truth for what the running PHP has REGISTERED, so a wrapper the reduction would meet and
+ * has no decision about fails here rather than shipping — a leak in one direction or an over-scrub in
+ * the other, both silent.
+ */
+it('has a decision about every stream wrapper the running PHP has registered', function (): void {
+    /** @var array<string, bool> $decided */
+    $decided = (new ReflectionClass(MessagePaths::class))->getReflectionConstant('WRAPPERS')?->getValue();
+
+    // The guard itself, so the refusal below executes it rather than restating it. It answers with the
+    // decision each unaccounted scheme is owed, because the population is a fact about the machine:
+    // an extension loaded on a developer's box and absent from CI arrives here first, and the reader
+    // has to be told what to do about it rather than left with a bare scheme name.
+    $undecided = static fn (): string => implode('; ', array_map(
+        static fn (string $scheme): string => sprintf(
+            '%s:// is registered on this machine and decided nowhere: add it to MessagePaths::WRAPPERS as '
+            .'true where it can name nothing but a file on this machine, false where it names a host or '
+            .'names no file at all. An extension present here and absent in CI reaches this too, and the '
+            .'decision is owed either way.',
+            $scheme,
+        ),
+        array_diff(stream_get_wrappers(), array_keys($decided)),
+    ));
+
+    expect($undecided())->toBe('');
+
+    // Anti-vacuity, both ends: a `stream_get_wrappers()` that stopped answering and a table gutted to
+    // nothing agree with each other on an empty diff, forever.
+    // The comparison is one-directional on purpose: a PHP built without openssl registers no `https`,
+    // so a table wider than the machine is ordinary, and only a machine wider than the table is a
+    // defect.
+    expect(stream_get_wrappers())->toContain('file', 'php', 'http')
+        ->and(count($decided))->toBeGreaterThanOrEqual(8)
+        ->and(array_keys(array_filter($decided)))->toContain('file', 'phar', 'glob');
+
+    // The guard executed. A wrapper registered under a scheme the table cannot know is exactly the
+    // case it exists to refuse, and refusing it is not something a comment may claim.
+    expect(stream_wrapper_register('docuccino.probe', stdClass::class))->toBeTrue();
+
+    try {
+        expect($undecided())->toContain('docuccino.probe://')->toContain('MessagePaths::WRAPPERS');
+    } finally {
+        stream_wrapper_unregister('docuccino.probe');
+    }
+
+    expect($undecided())->toBe('');
+});
+
+it('reads the wrapper table the same way once a brace is in the run', function (string $scheme, bool $proof): void {
+    // A brace says URI template, but only where the run does not already open with proof. Nothing a
+    // template is spelled with opens `<scheme>://`: a route signature, a path template and a JSON
+    // pointer all start at a `/` or a `#`, and a wrapper scheme is proof from the FIRST character. So
+    // the brace exclusion may yield to it without ever admitting a template, and `{Support,Http}` in a
+    // glob is read as the shell glob it is instead of keeping the absolute prefix in front of it — the
+    // brace pattern being the most ordinary thing a `glob://` run is spelled with.
+    //
+    // The false half gains nothing: those name a host or no file at all, so a braced one is left
+    // exactly as it arrived. Derived from the table rather than spelled again, so a scheme added to
+    // either half is answered here too; the anti-vacuity assertions in the guard above are what keep
+    // the derivation from emptying out and passing forever.
+    $message = 'Could not open '.$scheme.':///app/root/app/{Support,Http}/*.php';
+
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($proof ? 'Could not open '.$scheme.'://app/{Support,Http}/*.php' : $message);
+})->with(function (): array {
+    /** @var array<string, bool> $wrappers */
+    $wrappers = (new ReflectionClass(MessagePaths::class))->getReflectionConstant('WRAPPERS')?->getValue();
+
+    $rows = [];
+
+    foreach ($wrappers as $scheme => $proof) {
+        $rows[$scheme.'://'] = [$scheme, $proof];
+    }
+
+    return $rows;
+});
+
+it('leaves a braced run alone where nothing but the brace opens it', function (string $case, string $message): void {
+    // The other side of the same flip, and the one that must be impossible to get wrong. Each row is a
+    // template an author wrote or a tool quoted back, and none of them opens with a scheme the table
+    // calls proof — so the brace is all there is to go on, and it still refuses the whole run.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
+        ->toBe($message);
+})->with([
+    ['a bare path template', 'Unknown route /api/users/{user}'],
+    ['a path template naming a file', 'Unknown route /api/users/{user}/avatar.png'],
+    ['a route signature a parser quoted', 'Malformed inline YAML at line 3 (near "GET /api/forms/{form}").'],
+    ['a JSON pointer at a placeholder', 'Unresolved reference: #/components/schemas/User/properties/{name}'],
+    ['a URL whose path is templated', 'GET http://api.example.com/{region}/forms returned 500'],
+    ['a server URL whose host is templated', 'GET https://{region}.api.example.com/v1/forms returned 500'],
+    ['an array shape quoted in a message', 'Expected array{id: int, name: string}'],
+]);
+
+it('reduces the machine half of a braced wrapper run and leaves the braces where they stood', function (string $case, string $message, string $expected): void {
+    // The brace can sit anywhere in the run, including inside the part that survives the strip. What a
+    // recognised root buys is a prefix strip, which cannot invent text — so a templated directory under
+    // the root keeps every character it had while the machine word in front of it goes.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a brace in the surviving half',
+        'Could not open file:///app/root/{tenant}/routes.php',
+        'Could not open file://{tenant}/routes.php',
+    ],
+    [
+        'a brace inside an archive',
+        'Internal error in phar:///app/root/vendor/acme/acme.phar/{a,b}/X.php',
+        'Internal error in phar://vendor/acme/acme.phar/{a,b}/X.php',
+    ],
+    [
+        'a glob under the root',
+        'Could not open glob:///app/root/app/{Support,Http}/*.php',
+        'Could not open glob://app/{Support,Http}/*.php',
+    ],
+]);
+
+it('scrubs a braced wrapper run that no root accounts for', function (): void {
+    // The degradation, reached through a brace: outside every root there is no prefix to strip, so the
+    // basename is all that may survive — and the machine's own user is what a `glob://` pattern under a
+    // `$HOME` would otherwise have published.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/Users/ca rol/checkout')))
+        ->relative('Could not open glob:///Users/ca rol/secret/{Support,Http}/*.php');
+
+    expect($scrubbed)->toBe('Could not open glob://{Support,Http}/*.php')
+        ->and($scrubbed)->not->toContain('ca rol');
+});
+
 it('reads a route signature after every method a route can carry', function (string $method): void {
-    // The whole table. A signature is quoted back by a YAML parser verbatim, so the method in front of
-    // it is what says "this is a route" — and the format suffix is what would otherwise make it look
-    // like a file.
+    // The whole table, read from the methods the DOCUMENT carries rather than spelled again here: a
+    // method the scrubber's own list is short of reduces a signature to its last segment, which is the
+    // over-scrub direction. A signature is quoted back by a YAML parser verbatim, so the method in
+    // front of it is what says "this is a route" — and the format suffix is what would otherwise make
+    // it look like a file.
     $message = sprintf('Unknown route %s /api/users.json', $method);
 
     expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
         ->toBe($message);
-})->with(['GET', 'PUT', 'HEAD', 'POST', 'PATCH', 'TRACE', 'QUERY', 'DELETE', 'OPTIONS']);
+})->with(array_map('strtoupper', PathItem::METHODS));
+
+it('has a route method to read a signature after', function (): void {
+    // Anti-vacuity for the dataset above, now that it is derived: a `PathItem::METHODS` that stopped
+    // answering would leave it with no rows at all and pass forever.
+    expect(PathItem::METHODS)->toContain('get', 'post', 'delete')
+        ->and(count(PathItem::METHODS))->toBeGreaterThanOrEqual(7);
+});
 
 it('redacts the install prefix PHP appends to a failed include', function (): void {
     // The tail PHP puts on every failed include is a colon-separated list of directories, which no

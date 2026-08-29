@@ -24,9 +24,12 @@ namespace Docuccino\Core\Provenance;
  *
  * 1. **Exclusions.** A run behind a `#` is a URI fragment, a `/` behind a `\` is an escape, a POSIX
  *    run carrying a backslash is a regex or a JSON string, a run carrying a brace is a URI template.
- *    None of those reaches the ladder at all.
+ *    None of those reaches the ladder at all, unless proof already opened the run.
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
- *    anything but a filesystem path, so those are always reduced.
+ *    anything but a filesystem path, so those are always reduced. A wrapper is proof from the first
+ *    character, and nothing a template is spelled with opens that way — a route signature, a path
+ *    template and a JSON pointer all start at a `/` or a `#` — so a run that OPENS with one is a path
+ *    even where it also carries a brace, and the braces are a shell glob rather than a placeholder.
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
  *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
  *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
@@ -69,16 +72,44 @@ final readonly class MessagePaths
     private const BS = '\\\\';
 
     /**
-     * Stream wrappers that name a file on THIS machine, so a run bearing one is a path by proof
-     * rather than by shape. A URL scheme names a host instead and is not here; `php://` and `data://`
-     * name no file at all.
+     * Every stream wrapper a decision has been taken about, and whether it is proof: true says a run
+     * bearing it can name nothing but a file on THIS machine, so the run is a path by proof rather
+     * than by shape. False is the decision that it is not one, and it is the half that has to be
+     * taken by hand — an over-scrub is the direction that must be impossible — so what the reduction
+     * reads is this table and never what the machine happens to have loaded. `stream_get_wrappers()`
+     * is the source of truth for what is REGISTERED, and it is read by the guard in the tests, which
+     * fails when a registered scheme is decided in neither direction.
+     *
+     * @var array<string, bool>
      */
-    private const LOCAL_WRAPPERS = ['file', 'phar', 'zip', 'compress.zlib', 'compress.bzip2'];
+    private const array WRAPPERS = [
+        // Proof: nothing but a file on this machine. A glob names a filesystem pattern and nothing
+        // else, so the absolute prefix in front of its wildcard is the machine word every other path
+        // here carries.
+        'file' => true,
+        'phar' => true,
+        'zip' => true,
+        'glob' => true,
+        'compress.zlib' => true,
+        'compress.bzip2' => true,
+        // A host, not a file: reducing one states an address the application never wrote.
+        'http' => false,
+        'https' => false,
+        'ftp' => false,
+        'ftps' => false,
+        // No file at all — a stream of the process's own, a message's own bytes, and a field on an
+        // open database connection.
+        'php' => false,
+        'data' => false,
+        'sqlsrv' => false,
+    ];
 
     /**
      * What introduces a route signature rather than a file. `/api/forms` is already left alone for
      * having no filename, but `/api/users.json` has one, and a format suffix is an ordinary way to
-     * spell a route.
+     * spell a route. The methods the document itself carries are the source of truth, so the test
+     * derives its rows from there rather than spelling them again: a method missing here reduces a
+     * signature to its last segment, which is the direction that must be impossible.
      */
     private const METHODS = ['GET ', 'PUT ', 'HEAD ', 'POST ', 'PATCH ', 'TRACE ', 'QUERY ', 'DELETE ', 'OPTIONS '];
 
@@ -138,12 +169,19 @@ final readonly class MessagePaths
     }
 
     /**
-     * The exclusions. A brace makes a run a URI template rather than a file anyone named, and a
-     * backslash inside a POSIX run makes it an escaped string — a `regex:` rule, a JSON pointer in a
-     * quoted message — not a path with a separator.
+     * The exclusions, and the one thing that opens ahead of them. A brace makes a run a URI template
+     * rather than a file anyone named, and a backslash inside a POSIX run makes it an escaped string —
+     * a `regex:` rule, a JSON pointer in a quoted message — not a path with a separator. Both give way
+     * to a run OPENING with a local wrapper scheme, which no template can (see reason 2): the braces in
+     * `glob://…/{Support,Http}/*.php` are a shell glob, and refusing the run over them keeps the
+     * absolute prefix in front of them.
      */
     private static function couldBeAPath(string $run): bool
     {
+        if (self::wrapper($run) !== null) {
+            return true;
+        }
+
         if (str_contains($run, '{') || str_contains($run, '}')) {
             return false;
         }
@@ -165,11 +203,21 @@ final readonly class MessagePaths
         return self::wrapper($run) !== null;
     }
 
+    /**
+     * The schemes {@see WRAPPERS} decided are proof, in the order it spells them.
+     *
+     * @return list<string>
+     */
+    private static function localWrappers(): array
+    {
+        return array_keys(array_filter(self::WRAPPERS));
+    }
+
     /** The wrapper scheme a run carries, if it is one we can prove names a local file. */
     private static function wrapper(string $run): ?string
     {
-        foreach (self::LOCAL_WRAPPERS as $scheme) {
-            if (str_starts_with($run, $scheme.'://')) {
+        foreach (self::WRAPPERS as $scheme => $proof) {
+            if ($proof && str_starts_with($run, $scheme.'://')) {
                 return $scheme;
             }
         }
@@ -352,8 +400,8 @@ final readonly class MessagePaths
         $segments = '(?:'.$body.'*/)*'.$body.'*';
         $windows = '(?:'.$body.'*[/'.self::BS.'])*'.$body.'*';
         $schemes = implode('|', array_map(
-            static fn (string $scheme): string => str_replace('.', '\\.', $scheme),
-            self::LOCAL_WRAPPERS,
+            static fn (string $scheme): string => preg_quote($scheme, '%'),
+            self::localWrappers(),
         ));
 
         return '%'
