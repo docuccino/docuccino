@@ -433,6 +433,89 @@ it('will not let a one-segment root overrule a brace, because a route prefix spe
     ['a real path under the same root', 'Could not open /app/config/{a,b}/*.php'],
 ]);
 
+it('will not let a one-segment root strip its own word out of a route signature', function (string $case, string $base, string $message): void {
+    // The same limit, now asked of reason 3 itself rather than of the exclusions in front of it. A
+    // container puts the checkout at `/app` and an application mounts a route group at `/app`, and
+    // attribution trusted the configured root whatever its depth — so `Unknown route
+    // /app/users/profile` was published as `users/profile`, a route nobody wrote, in a diagnostic
+    // somebody will act on. Nothing here carries a brace or a wrapper: the root alone was the whole
+    // mechanism.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver($base)))->relative($message))
+        ->toBe($message);
+})->with([
+    ['a route the checkout root is a prefix of', '/app', 'Unknown route /app/users/profile'],
+    ['a route whose last segment could be a directory', '/app', 'Unknown route /app/v1/users'],
+    // A root spelled like the mount it collides with, which is the shape the collision is likeliest in.
+    ['a route under a one-segment API root', '/api', 'Unknown route /api/forms'],
+    // The pinned template, asked under the root that would have to strip it. It is the existing proof
+    // that a route CAN look like a file, so a rule that rewrote it here would be disqualified.
+    ['a template naming a file, under the root it sits below', '/api', 'Unknown route /api/users/{user}/avatar.png'],
+]);
+
+it('still reduces a file under a one-segment root, and leaks a directory under one', function (string $case, string $message, string $expected): void {
+    // Both halves of the trade, on the population the fix is sized for: Docker's `WORKDIR /app` is
+    // the ordinary one-segment root, so refusing to attribute under one has to cost those projects
+    // as little as possible. It costs them reason 3 and nothing else — the run carries on to reason
+    // 4, which sends a path that names a file back to the same ladder, so a file keeps its strip.
+    //
+    // The last three rows are what it does cost, recorded rather than left to be discovered: a
+    // directory names no file, nothing tells it from a route, and so its machine word stands. That
+    // is a leak, and a leak is the direction that may be traded — the rows above it are the ones
+    // that must never move.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app')))->relative($message))
+        ->toBe($expected);
+})->with([
+    ['a file under the root', 'Could not open /app/src/Foo.php', 'Could not open src/Foo.php'],
+    ['a file with a sentence after it', 'Failed in /app/app/Http/X.php on line 3', 'Failed in app/Http/X.php on line 3'],
+    // The candidates loop cuts a run at each interior space and takes the first piece a root accounts
+    // for, so a route and a file in ONE sentence must not let the file admit the route: the piece
+    // being rewritten is the piece that has to name a file.
+    [
+        'a route and a file in one sentence',
+        'Unknown route /app/users/profile and open /app/src/X.php',
+        'Unknown route /app/users/profile and open src/X.php',
+    ],
+    ['a directory the build could not read', 'mkdir(/app/storage): Permission denied', 'mkdir(/app/storage): Permission denied'],
+    ['a cache directory two segments down', 'scandir(/app/bootstrap/cache) failed', 'scandir(/app/bootstrap/cache) failed'],
+    ['a file with no extension', 'require(/app/artisan) failed', 'require(/app/artisan) failed'],
+]);
+
+it('keeps proof reducing under a one-segment root, having never needed the root at all', function (string $case, string $message, string $expected): void {
+    // What the change must not weaken. Proof is proof from the first character whatever the root's
+    // depth, and it reaches the ladder by shape rather than by attribution — so a wrapper run under
+    // `/app` answers exactly what it answered before, including the two rows attribution used to
+    // reach first.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain(':///app');
+})->with([
+    ['a wrapper naming a directory', 'Could not open file:///app/storage', 'Could not open file://storage'],
+    ['a glob whose braces are all it has', 'Could not open glob:///app/{a,b}/data', 'Could not open glob://{a,b}/data'],
+    ['a glob under the root', 'Could not open glob:///app/app/{Support,Http}/*.php', 'Could not open glob://app/{Support,Http}/*.php'],
+]);
+
+it('measures the depth of the root the ladder answered, not of the base path it was handed', function (): void {
+    // The guard executed against the rung the rows above cannot reach. `/app/composer.json` recognises
+    // the same one-segment root through the composer-ancestor walk rather than the base path, and
+    // `RootRelativeSourcePathResolver` can only produce that on a machine whose checkout really is at
+    // `/app`. The ladder is an interface any adapter may implement, so this asks with one that answers
+    // exactly that: the depth is read off what was STRIPPED, so a shallow root is refused however it
+    // came to be recognised — and a file under it still reduces.
+    $ancestor = new class implements SourcePathResolver
+    {
+        public function relative(string $file): string
+        {
+            return str_starts_with($file, '/app/') ? substr($file, strlen('/app/')) : basename($file);
+        }
+    };
+
+    expect((new MessagePaths($ancestor))->relative('Unknown route /app/users/profile'))
+        ->toBe('Unknown route /app/users/profile')
+        ->and((new MessagePaths($ancestor))->relative('Could not open /app/src/Foo.php'))
+        ->toBe('Could not open src/Foo.php');
+});
+
 it('reduces a braced run a recognised root accounts for, with no wrapper in front of it', function (string $case, string $message, string $expected): void {
     // The half a scheme cannot answer: a BARE absolute path carrying a brace, which used to be
     // published whole because the brace refused it before anything else was asked. What admits it is

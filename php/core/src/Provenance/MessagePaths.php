@@ -37,16 +37,19 @@ namespace Docuccino\Core\Provenance;
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
  *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
  *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
- *    leaves the same bare name a root it never found leaves. Asked one segment EARLY, of the text an
- *    exclusion objects to, it is also the only thing that admits a run no proof opened
- *    ({@see anchored()}) — all a bare `/Users/…/{a,b}/*.php` has to be reduced by.
+ *    leaves the same bare name a root it never found leaves. The root also has to be deep enough to
+ *    be a machine word ({@see deeplyRooted()}), which is the same question asked one segment EARLY,
+ *    of the text an exclusion objects to, where it is the only thing that admits a run no proof
+ *    opened ({@see anchored()}) — all a bare `/Users/…/{a,b}/*.php` has to be reduced by.
  * 4. **File shape.** A run the ladder could not attribute is reduced only when its last segment
  *    names a file (`Reader.php`). `/api/forms` and `/docs/reference/configuration` keep every
  *    character they had, because nothing here established they were ever paths. How far such a run
  *    reaches through a space is {@see pathRun()}. A braced run reaches this rung only behind proof:
  *    shape cannot tell `/api/users/{user}.json` from a file, so a braced POSIX run no root accounted
  *    for is published whole — a leak, taken knowingly, because the other direction is the one that
- *    must be impossible.
+ *    must be impossible. A run under a root too shallow for reason 3 arrives here too, and so keeps
+ *    its strip wherever shape says it was a path at all: {@see relativise()} goes back to the same
+ *    ladder, so the second signal costs a shallow-rooted file nothing.
  *
  * Machine words that no path grammar reaches — the `include_path='…'` tail PHP appends to a failed
  * include, a temp directory — are redacted literally afterwards, by the prefixes this process can
@@ -241,26 +244,39 @@ final readonly class MessagePaths
      * this machine was configured from, so the text in front of the brace or the backslash is a
      * machine word whatever the rest of the run turns out to be, and removing it is a strip of text
      * the ladder matched rather than a guess at where a path ends.
-     *
-     * A one-segment root does not count, which is the whole reason the depth is measured. A template
-     * is anchored only where the root IS a route prefix, and `/app` — a container's checkout — is
-     * exactly the shape an application also mounts routes under; two segments is the line, the one
-     * {@see redact()} draws for the same reason. That costs a real path under a one-segment root its
-     * strip, which is the direction that may be traded.
-     *
-     * Reason 4 is deliberately not extended the same way. Shape cannot tell `/api/users/{user}.json`
-     * from a file, so a braced run no root accounts for keeps every character it has.
      */
     private function anchored(string $run, string $objection): bool
     {
-        $prefix = rtrim(str_replace('\\', '/', substr($run, 0, strcspn($run, $objection))), '/');
-        $under = $this->stripped($prefix);
+        return $this->deeplyRooted(substr($run, 0, strcspn($run, $objection)));
+    }
+
+    /**
+     * Whether the ladder recognised a root for this path AND the root is deep enough to be a machine
+     * word. Both halves are the same question — is this prefix something only a machine would be
+     * spelling — and this is the one place it is answered, because reason 3 and the exclusions in
+     * front of it must not disagree about which roots count.
+     *
+     * A one-segment root does not, which is the whole reason the depth is measured. `/app` is a
+     * container's checkout and equally a prefix an application mounts routes under, so trusting it
+     * turned `Unknown route /app/users/profile` into `Unknown route users/profile` — a route nobody
+     * wrote, in a diagnostic somebody will act on. Two segments is the line, the one {@see redact()}
+     * draws for the same reason.
+     *
+     * What a shallow root loses is only reason 3: the run carries on to reason 4, so a path that
+     * names a file still relativises through the same ladder and `/app/src/Foo.php` is unchanged.
+     * A path that names none (`/app/storage`) keeps its machine word, and that is the trade —
+     * knowingly a leak, and a leak is the direction that may be traded.
+     */
+    private function deeplyRooted(string $path): bool
+    {
+        $path = rtrim(str_replace('\\', '/', $path), '/');
+        $under = $this->stripped($path);
 
         if ($under === null) {
             return false;
         }
 
-        $root = rtrim(substr($prefix, 0, strlen($prefix) - strlen($under)), '/');
+        $root = rtrim(substr($path, 0, strlen($path) - strlen($under)), '/');
 
         return substr_count($root, '/') >= 2;
     }
@@ -364,10 +380,10 @@ final readonly class MessagePaths
         return $run;
     }
 
-    /** The relative form, but only where the ladder recognised a root. */
+    /** The relative form, but only where the ladder recognised a root {@see deeplyRooted()} counts. */
     private function attributed(string $run): ?string
     {
-        return $this->stripped(self::pathPart($run)) === null ? null : $this->resolve($run);
+        return $this->deeplyRooted(self::pathPart($run)) ? $this->resolve($run) : null;
     }
 
     /**
