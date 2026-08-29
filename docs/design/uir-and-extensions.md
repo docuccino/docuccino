@@ -1900,8 +1900,10 @@ nothing adds to the total, and the document says less than a cold one's for the 
 — plus the gated `RouteNoteCollector` chain, which owns the aggregate. `DocumentGenerator::collectNotes()`
 drains each fragment's notes into the matching collector for a fragment it just built and for one that came
 back warm ALIKE, so there is one path into an aggregate rather than two that can drift, and the summary a
-`DocumentTransformer` publishes is the same either way. `RouteNotes::all()` is sorted throughout and the
-drain runs in route order, so the aggregate is a function of the route set. `forget()` runs before the
+`DocumentTransformer` publishes is the same either way. Every fragment goes through it — a webhook's as
+well as a route's — because a loop that reads one member of a fragment and not another is where the next
+producer's finding goes missing with nothing failing. `RouteNotes::all()` is sorted throughout and the
+drain runs in fragment order, so the aggregate is a function of the fragment set. `forget()` runs before the
 first route of each document, because a container-`scoped` collector outlives a build and an export of
 several documents must not report the first document's findings against the second's.
 
