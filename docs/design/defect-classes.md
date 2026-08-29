@@ -71,3 +71,22 @@ class-level list came to be forgotten in the first place.
 *Where it hides.* A golden pins what it contains. Removing the framework-property filter left 112
 golden tests passing, because the workbench engine never reported them — that half needed a
 fixture-group pin against the real analyser.
+
+## Two derived guards, each keyed to its own subset
+
+A guard that reads the source of truth is only as wide as the SUBSET it derives from, and two of them
+side by side cover their two subsets and nothing between.
+
+*Instances.* The schema diff's composition guard derives its keyword set from the subschema positions, so
+sixteen refinements sat unread and no test failed — a tightened `maxLength` passed `--enforce` as safe.
+The refinement guard closed that and derived from the refinements, after which five keywords in NEITHER
+subset — `discriminator`, `nullable`, `$id`, `$anchor`, `$schema` — were still read by nothing, and a
+repointed `discriminator` mapping broke every polymorphic client while the gate reported no changes.
+
+*The tell.* Two guards whose sets are both derived and both partial, with no assertion that the union is
+everything. Each passes forever while the gap between them grows.
+
+*The fix that worked.* Assert the UNION against the model itself — `SchemaReadingDiffTest` holds all three
+decision tables against `SchemaKeywords::knows()`, in both directions, with an anti-vacuity floor and a
+partition check so nothing is answered twice. A member that owes no comparison still owes a ROW saying so,
+because "read elsewhere" and "deliberately unread" are decisions a guard can see and a gap is not.

@@ -2922,9 +2922,11 @@ function contractBearingKeywordEdits(): array
         // member's polarity is whatever the refs naming it are worth ({@see SchemaPolarity}).
         '$defs' => ['$defs', ['Inner' => ['type' => 'string']], ['Inner' => ['type' => 'integer']], ['schema.type-changed']],
         'definitions' => ['definitions', ['Inner' => ['type' => 'string']], ['Inner' => ['type' => 'integer']], ['schema.type-changed']],
-        '$id' => ['$id', 'https://forms.test/schemas/a', 'https://forms.test/schemas/b', []],
-        '$anchor' => ['$anchor', 'formA', 'formB', []],
-        '$schema' => ['$schema', 'https://json-schema.org/draft/2020-12/schema', 'http://json-schema.org/draft-07/schema#', []],
+        // A name a `$ref` may resolve, and the dialect the keywords beside it are written in — read by
+        // {@see SchemaReading}, which is where their reasons are stated.
+        '$id' => ['$id', 'https://forms.test/schemas/a', 'https://forms.test/schemas/b', ['schema.identity-changed']],
+        '$anchor' => ['$anchor', 'formA', 'formB', ['schema.identity-changed']],
+        '$schema' => ['$schema', 'https://json-schema.org/draft/2020-12/schema', 'http://json-schema.org/draft-07/schema#', ['schema.dialect-changed']],
         'x-docuccino' => ['x-docuccino', ['id' => 'sch:v1:aaaaaaaaaaaaaaaa'], ['id' => 'sch:v1:bbbbbbbbbbbbbbbb'], []],
     ];
 }

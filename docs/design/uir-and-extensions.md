@@ -294,6 +294,47 @@ boolean against a NUMBER is the one case nothing here can order, because telling
 from `exclusiveMinimum: 5` means folding the sibling keyword this comparison does not read — so it is
 reported and classed breaking rather than guessed at.
 
+**Reading** is the third set, and the one the two guards above could not see between them: a keyword that
+carries no subschema and refines no value is invisible to a scan keyed to the positions AND to one keyed
+to the refinements. Five sat in that gap and were read by nothing — `discriminator`, `nullable`, `$id`,
+`$anchor`, `$schema` — so a `discriminator` whose `mapping` was repointed passed `--enforce` as safe while
+every generated client's polymorphic deserialisation broke. That failure is silent on both sides: the
+payload still validates, the client still compiles, and it fails at run time in the consumer's application
+as a mis-typed object. `Diff\SchemaReading` records one decision per keyword in that remainder — the whole
+remainder, not the five, because "read elsewhere" and "read by nothing, for this reason" are the rows that
+stop a sixth member hiding in the same gap — and `Diff\ReadingKind` is the closed set of readings:
+
+- `Discriminator` — the Discriminator Object. The KEYWORD arriving narrows (a client that could send any
+  branch must now tag it) and leaving is `schema.enum-removed`'s argument: the schema widens while a
+  response reader loses the tag it was switching on. Inside one both sides carry, a `mapping` entry
+  removed narrows, one added widens (a branch the client has no case for, so breaking on a response), and
+  one REPOINTED is neither — nor is a `propertyName` rewritten, which has no widening reading at all. A
+  `mapping` is a MAP, so its entries pair by key and a reordered mapping is not a change; every other
+  member compares as a value, so a member OpenAPI adds later is read the day it appears.
+- `Nullability` — `nullable`, 3.0's spelling of a type union's `null` branch, read BESIDE that union
+  because the two are one statement in two dialects: `{type: string, nullable: true}` becoming
+  `{type: [string, null]}` moves no contract, and a reading of the keyword alone calls that migration a
+  narrowing and fails the gate on it. Absent is not nullable, so the keyword arriving with `true` widens
+  and a null withdrawn narrows. This is the `exclusiveMinimum` split answered the other way round: there
+  the sibling keyword could not be folded, here it can and exactly.
+- `Identity` — `$id`/`$anchor`. A `$ref` may name either and the differ resolves none, so a name CHANGED
+  or gone may leave a pointer naming nothing, which is the reading a `$defs` member leaving already gets;
+  one arriving is safe, nothing having been able to point at it before.
+- `Dialect` — `$schema`, which names the dialect every keyword beside it is read in. A comparison spanning
+  a change to it compared two languages, so the direction is what cannot be computed: reported and
+  breaking, an explicit dialect arriving included, because nothing here can tell one restating the dialect
+  already in force from a migration to another.
+- `Elsewhere` — `type`, `$ref` and `required`, each already a member of the diff's own vocabulary and each
+  naming where it is read, so no edit is reported twice.
+- `Annotation` — the annotation-only keywords, read as the non-events they are. Held against
+  `SchemaKeywords::annotationOnly()` itself rather than listed twice.
+- `Unread` — read by nothing, deliberately. `x-docuccino` carries the identity the diff pairs nodes BY, so
+  comparing it would report the pairing rather than the contract; `default`, `readOnly`, `writeOnly` and
+  `deprecated` are contract claims this diff does not read yet, recorded as the gap they are rather than
+  left where no guard can see them.
+- `Undecided` — a keyword the draft model knows and nobody has decided, reported under
+  `schema.keyword-changed` and classed breaking rather than passing as safe.
+
 Every keyword the draft model gives a subschema position needs a row, and a keyword with no row is read
 CONDITIONALLY rather than skipped: a keyword the model learns before anyone decides its polarity is
 reported conservatively instead of passing as safe. That is a degradation and not a plan —
@@ -302,6 +343,16 @@ until the row is written. Every refinement owes a row on exactly the same terms,
 a refinement occupies no position, so the composition guard is blind to it by construction and nothing in
 the suite failed while sixteen keywords stayed unread. `SchemaRefinementDiffTest` derives that set from
 `Draft\SchemaKeywords::refinements()` instead.
+
+Two derived guards did not add up to coverage, though, because each was keyed to its own subset — which is
+the lesson the five unread keywords taught and the reason there is now a third assertion above the three.
+`SchemaReadingDiffTest` holds the UNION of all three tables against every keyword the draft model
+classifies (`SchemaKeywords::knows()`), in both directions and with an anti-vacuity floor: a keyword the
+model learns that no table decides fails the suite by name, and a decision for a keyword the model does not
+know fails it as the dead row it is. The three sets are also asserted to be a partition, so nothing is
+answered twice by tables that could disagree about it. The model is in turn held against the canonicaliser's
+own member order (`DeclaredShapeTest`), so the chain runs whole: a keyword the document can carry is ordered,
+a keyword that is ordered is classified, and a keyword that is classified is decided.
 
 ## 2. Identity model
 

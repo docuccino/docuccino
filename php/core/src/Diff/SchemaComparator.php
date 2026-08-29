@@ -58,13 +58,24 @@ use Docuccino\Core\Support\Hydrate;
  * keyword they bound ({@see compareContainsBounds()}), because they are inert without it and because
  * whether they assert anything is what decides what that keyword's presence is worth.
  *
- * Two things neither decision tries to answer, recorded here because a silent limit reads as a claim.
+ * Everything else a Schema Object may carry — no subschema, no refinement — is {@see SchemaReading}'s
+ * recorded decision, the third of the three sets and the one two derived guards could not see between
+ * them: `discriminator`, `nullable`, `$id`, `$anchor` and `$schema` occupy no position and constrain no
+ * instance type, so both scans walked past all five. A `discriminator` is the sharp one, because it
+ * names the property a client switches on and the subschema each tag deserialises as: repoint a mapping
+ * entry and the payload still validates, the client still compiles, and it fails in the consumer's
+ * application as a mis-typed object. That table also records where a keyword IS read — `type`, `$ref`,
+ * `required` and the annotations — and which are read by nothing, because a decision nobody wrote down
+ * is how the first five went missing.
+ *
+ * Two things no decision here tries to answer, recorded because a silent limit reads as a claim.
  * A keyword's polarity is its own; where 2020-12 makes one keyword's outcome depend on a SIBLING —
  * `contains` and `then` marking items and properties evaluated, so an `unevaluatedItems: false` beside
  * them means something different, and draft-04's boolean `exclusiveMinimum` modifying the `minimum`
- * beside it — that interaction is unread, and both halves are reported on their own terms. And a
- * `$ref` still compares opaquely, so a branch naming a component carries whatever that component's own
- * diff says.
+ * beside it — that interaction is unread, and both halves are reported on their own terms. `nullable`
+ * is the one exception, read beside the type union it is the other dialect of, because there the two
+ * spell one statement. And a `$ref` still compares opaquely, so a branch naming a component carries
+ * whatever that component's own diff says.
  *
  * @phpstan-import-type Rule from SchemaPolarity
  */
@@ -96,6 +107,7 @@ final class SchemaComparator
         $this->compareFormat($old, $new, $path, $id, $request, $changes);
         $this->compareEnum($old, $new, $path, $id, $request, $changes);
         $this->compareRequired($old, $new, $path, $id, $request, $changes);
+        $this->compareReadings($old, $new, $path, $id, $request, $changes);
         $this->compareRefinements($old, $new, $path, $id, $request, $changes);
         $this->compareContainsBounds($old, $new, $path, $id, $changes);
         $this->comparePositions($old, $new, $path, $id, $request, $changes);
@@ -306,6 +318,157 @@ final class SchemaComparator
         if ($removed !== []) {
             $changes[] = $this->change(ChangeKind::Changed, $id, $path.'.required', false, 'schema.required-removed', 'required', $oldRequired, $newRequired);
         }
+    }
+
+    /**
+     * Every keyword that carries no subschema and refines no value, in one sorted pass so the answer
+     * never depends on which side declared what. What each is worth is {@see SchemaReading}'s recorded
+     * decision — including the rows that say a keyword is read elsewhere, or read by nothing, because
+     * those are what hold the three sets together against every keyword the draft model knows.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @param  list<Change>  $changes
+     */
+    private function compareReadings(array $old, array $new, string $path, string $id, bool $request, array &$changes): void
+    {
+        foreach (Arr::sortedUnion(array_keys($old), array_keys($new)) as $keyword) {
+            $kind = SchemaReading::kindOf($keyword);
+
+            if ($kind === null) {
+                continue;
+            }
+
+            $found = match ($kind) {
+                ReadingKind::Discriminator => $this->compareDiscriminator($old, $new, $path, $id, $request),
+                ReadingKind::Nullability => $this->compareNullability($old, $new, $path, $id, $request),
+                // `$id`/`$anchor`: a `$ref` may name either and this class resolves none, so a name
+                // CHANGED or gone may leave a pointer naming nothing — the reading a `$defs` member
+                // leaving already gets — while one arriving is safe, nothing having been able to point
+                // at it before. `$schema` names the dialect every keyword beside it is read in, so a
+                // comparison spanning a change to it compared two languages; that and a keyword nobody
+                // has decided are breaking for the same reason the indeterminate case always is.
+                ReadingKind::Identity => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.identity-changed', ($old[$keyword] ?? null) !== null),
+                ReadingKind::Dialect => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.dialect-changed', true),
+                ReadingKind::Undecided => $this->compareMember($keyword, $old, $new, $path, $id, 'schema.keyword-changed', true),
+                // Read by a comparison of its own, reported as the non-event it is by the annotation
+                // comparison, or read by nothing — each named in the row that says so.
+                ReadingKind::Elsewhere, ReadingKind::Annotation, ReadingKind::Unread => [],
+            };
+
+            foreach ($found as $change) {
+                $changes[] = $change;
+            }
+        }
+    }
+
+    /**
+     * The Discriminator Object: which subschema a payload deserialises as. The keyword ARRIVING narrows —
+     * a client that could send any branch must now tag it — and it leaving widens the schema while taking
+     * the tag a response reader was switching on with it, which is `schema.enum-removed`'s argument
+     * exactly. What moved inside one both sides carry is {@see SchemaReading::discriminatorMoves()}'s
+     * answer, and the verdict is the one every direction here gets: narrowed is breaking on both sides,
+     * widened hands a response reader a branch it has no case for, and a change nothing can order — a
+     * `propertyName` rewritten, a mapping entry repointed — is breaking because the payload still
+     * validates and the client still compiles while the object it builds is the wrong type.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @return list<Change>
+     */
+    private function compareDiscriminator(array $old, array $new, string $path, string $id, bool $request): array
+    {
+        $child = $path.'.discriminator';
+        $had = array_key_exists('discriminator', $old);
+        $has = array_key_exists('discriminator', $new);
+
+        if ($had !== $has) {
+            return [$this->change(
+                $has ? ChangeKind::Added : ChangeKind::Removed,
+                $id,
+                $child,
+                $has || ! $request,
+                'schema.discriminator-'.($has ? 'added' : 'removed'),
+                null,
+                null,
+                null,
+            )];
+        }
+
+        $changes = [];
+
+        foreach (SchemaReading::discriminatorMoves($old['discriminator'] ?? null, $new['discriminator'] ?? null) as $member => $move) {
+            $changes[] = $this->change(
+                ChangeKind::Changed,
+                $id,
+                $child.'.'.$member,
+                $move['move'] !== RefinementMove::Widened || ! $request,
+                'schema.discriminator-'.($move['move'] === RefinementMove::Incomparable ? 'changed' : $move['move']->value),
+                $member,
+                $move['old'],
+                $move['new'],
+            );
+        }
+
+        return $changes;
+    }
+
+    /**
+     * `nullable`, read beside the type union it is the other dialect of, so migrating one spelling to the
+     * other reports nothing here ({@see SchemaReading::nullability()}). A null withdrawn narrows — the
+     * server stops accepting what a writer is still sending — and one admitted widens, handing a response
+     * reader a value it has no case for.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @return list<Change>
+     */
+    private function compareNullability(array $old, array $new, string $path, string $id, bool $request): array
+    {
+        $move = SchemaReading::nullability(
+            $old,
+            $new,
+            isset(self::typeSet($old)['null']),
+            isset(self::typeSet($new)['null']),
+        );
+
+        if ($move === RefinementMove::Unchanged) {
+            return [];
+        }
+
+        return [$this->change(
+            ChangeKind::Changed,
+            $id,
+            $path.'.nullable',
+            $move !== RefinementMove::Widened || ! $request,
+            'schema.nullable-'.($move === RefinementMove::Incomparable ? 'changed' : $move->value),
+            'nullable',
+            $old['nullable'] ?? null,
+            $new['nullable'] ?? null,
+        )];
+    }
+
+    /**
+     * One member compared as a value, under the code and verdict its reading carries — the three readings
+     * whose whole question is "did this change", each stated at the arm that names it. A keyword nobody
+     * has decided lands here too, reported rather than passing as safe while its decision is owed: a
+     * degradation and not a plan, since `SchemaReadingDiffTest` names the keyword until somebody writes
+     * its row.
+     *
+     * @param  array<string, mixed>  $old
+     * @param  array<string, mixed>  $new
+     * @return list<Change>
+     */
+    private function compareMember(string $keyword, array $old, array $new, string $path, string $id, string $code, bool $breaking): array
+    {
+        $before = $old[$keyword] ?? null;
+        $after = $new[$keyword] ?? null;
+
+        if (ValueKey::of($before) === ValueKey::of($after)) {
+            return [];
+        }
+
+        return [$this->change(ChangeKind::Changed, $id, $path.'.'.$keyword, $breaking, $code, $keyword, $before, $after)];
     }
 
     /**
