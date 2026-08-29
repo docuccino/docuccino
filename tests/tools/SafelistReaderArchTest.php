@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * One reader decides whether an `allow` entry matches.
+ * One reader decides whether a config entry names a subject.
  *
  * A pointer reaches a safelist spelled either bare or as a `#/…` URI fragment, and
  * `Docuccino\Core\Lint\LintSafelist` is the single place that reads both. A raw `in_array($subject,
@@ -14,6 +14,11 @@ declare(strict_types=1);
  *
  * So it is a thing to check rather than a thing to remember: every read of an `allow` list under a
  * package's `src/` either goes through that reader, or is named below with the reason it decides nothing.
+ *
+ * `selectors` — the operations an `#[AppliesTo]` declares — is scanned the same way and for the
+ * same reason. It is the identical shape of problem: entries the author writes, subjects the build
+ * knows by more than one name, and a wildcard. A matcher of its own would have been a second grammar
+ * before it was a second bug.
  */
 
 /**
@@ -42,18 +47,33 @@ function safelistScannedPackages(): array
 }
 
 /**
+ * The reads of an `#[AppliesTo]` selector list that compare no subject. Same rule, same kind of sentence.
+ *
+ * @return array<string, string>
+ */
+function safelistExplainedRawSelectorReads(): array
+{
+    return [
+        // Whether the change is scoped at all, which chooses between two whole paths and matches nothing.
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:110' => 'transform() → an unscoped change takes the other branch',
+        // Hands each selector to the reader on its own, so the one that decided nothing can be named.
+        'php/laravel/src/Versioning/ApiVersionTransformer.php:189' => 'applyScopedRename() → iterates the selectors into namesAny()',
+    ];
+}
+
+/**
  * Every `->allow` property read under the packages' sources, as `relative/path.php:LINE`, split by
  * whether `LintSafelist::matches()` owns the statement it sits in.
  *
  * @return array{directed: list<string>, raw: list<string>}
  */
-function safelistPackageAllowReads(): array
+function safelistPackageAllowReads(string $property = 'allow'): array
 {
     $reads = ['directed' => [], 'raw' => []];
 
     foreach (safelistScannedPackages() as $package) {
         foreach (safelistSourcesIn($package) as $relative => $source) {
-            foreach (safelistAllowReadLines($source) as $kind => $lines) {
+            foreach (safelistAllowReadLines($source, $property) as $kind => $lines) {
                 foreach ($lines as $line) {
                     $reads[$kind][] = $relative.':'.$line;
                 }
@@ -122,13 +142,13 @@ function safelistSourcesIn(string $package): array
  *
  * @return array{directed: list<int>, raw: list<int>}
  */
-function safelistAllowReadLines(string $source): array
+function safelistAllowReadLines(string $source, string $property = 'allow'): array
 {
     $tokens = safelistSignificantTokens($source);
     $lines = ['directed' => [], 'raw' => []];
 
     foreach ($tokens as $i => $token) {
-        if ($token->id !== T_STRING || $token->text !== 'allow') {
+        if ($token->id !== T_STRING || $token->text !== $property) {
             continue;
         }
 
@@ -204,27 +224,33 @@ function safelistSignificantTokens(string $source): array
     ));
 }
 
-it('lets nothing but LintSafelist decide whether an allow entry matches', function (): void {
+it('lets nothing but LintSafelist decide whether an entry matches', function (string $property, array $explained): void {
     $unexplained = array_values(array_diff(
-        safelistPackageAllowReads()['raw'],
-        array_keys(safelistExplainedRawReads()),
+        safelistPackageAllowReads($property)['raw'],
+        array_keys($explained),
     ));
 
     expect($unexplained)->toBe([]);
-});
+})->with([
+    'a lint allow list' => ['allow', safelistExplainedRawReads()],
+    'a version change scope' => ['selectors', safelistExplainedRawSelectorReads()],
+]);
 
 /**
  * An explained read that has moved, or has been routed through the reader since, is a line that no longer
  * guards anything — and the next reader takes it for a statement about code that is still there.
  */
-it('names no explained raw read that is not there any more', function (): void {
+it('names no explained raw read that is not there any more', function (string $property, array $explained): void {
     $stale = array_values(array_diff(
-        array_keys(safelistExplainedRawReads()),
-        safelistPackageAllowReads()['raw'],
+        array_keys($explained),
+        safelistPackageAllowReads($property)['raw'],
     ));
 
     expect($stale)->toBe([]);
-});
+})->with([
+    'a lint allow list' => ['allow', safelistExplainedRawReads()],
+    'a version change scope' => ['selectors', safelistExplainedRawSelectorReads()],
+]);
 
 /**
  * The half a per-read scan cannot see: a list nothing reads through the reader at all. Every options
@@ -265,7 +291,15 @@ it('is scanning something', function (): void {
         ->toContain('SensitiveFieldLintOptions')
         ->and(count(safelistPackageAllowReads()['directed']))->toBeGreaterThanOrEqual(3)
         ->and(safelistExplainedRawReads())->not->toBeEmpty()
-        ->and(file_get_contents($safelist))->toContain("str_starts_with(\$subject, '#/')");
+        // The scope half: a selector still reaches the reader, and the raw reads beside it are still
+        // there to be explained. Zero of either would pass its own assertion forever.
+        ->and(count(safelistPackageAllowReads('selectors')['directed']))->toBeGreaterThanOrEqual(1)
+        ->and(count(safelistPackageAllowReads('selectors')['raw']))->toBeGreaterThanOrEqual(2)
+        ->and(safelistExplainedRawSelectorReads())->not->toBeEmpty()
+        ->and(file_get_contents($safelist))->toContain("str_starts_with(\$subject, '#/')")
+        // And the reader really is the one grammar: the wildcard comes from Glob, not from a second
+        // expression written here.
+        ->and(file_get_contents($safelist))->toContain('Glob::matchesAny(');
 });
 
 /**
@@ -321,6 +355,12 @@ it('sees a read the reader owns apart from one deciding for itself', function ()
             }
         }
         PHP;
+
+    // And the same scan under another property name, because the guard now covers two: the parameter is
+    // what makes one scan two, so a change that quietly hard-coded `allow` again would show up here.
+    expect(safelistAllowReadLines(str_replace('allow', 'selectors', $source), 'selectors'))
+        ->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
+        ->and(safelistAllowReadLines($source, 'selectors'))->toBe(['directed' => [], 'raw' => []]);
 
     expect(safelistAllowReadLines($source))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
         // A promoted property is a declaration; the local `$allow` on line 36 is not — a visibility

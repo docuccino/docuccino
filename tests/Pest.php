@@ -2007,8 +2007,7 @@ function checkDelivery(string $name, string $payload, ?callable $mutate = null):
  * exactly the same pair — a contract test asserting against a bag the document test never built would
  * prove nothing about the documents anyone ships.
  *
- * `info.version` is deliberately something else in both: the version is stated once, under
- * `api_version`, and the document derives the rest from it.
+ * The version is `info.version` and nothing else: `api_version` declares only that the document IS one.
  *
  * @return array<string, array<string, mixed>>
  */
@@ -2017,19 +2016,12 @@ function versionedFormDocuments(): array
     $shared = [
         'routes' => ['include' => ['api/versioned-forms']],
         'error_responses' => 'none',
+        'api_version' => ['changes' => ['dir' => 'workbench/app/Api/Versions']],
     ];
 
     return [
-        'v2026-09-01' => [
-            ...$shared,
-            'info' => ['title' => 'Forms API', 'version' => 'set from api_version'],
-            'api_version' => ['version' => '2026-09-01', 'changes' => ['dir' => 'workbench/app/Api/Versions']],
-        ],
-        'v2026-06-01' => [
-            ...$shared,
-            'info' => ['title' => 'Forms API', 'version' => 'set from api_version'],
-            'api_version' => ['version' => '2026-06-01', 'changes' => ['dir' => 'workbench/app/Api/Versions']],
-        ],
+        'v2026-09-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-09-01']],
+        'v2026-06-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-06-01']],
     ];
 }
 
@@ -2044,10 +2036,10 @@ function versioningDiagnostics(?string $dir, string $version = '2026-06-01'): ar
 {
     config()->set('docuccino.documents', [
         'v' => [
-            'info' => ['title' => 'Forms API', 'version' => '1.0.0'],
+            'info' => ['title' => 'Forms API', 'version' => $version],
             'routes' => ['include' => ['api/versioned-forms']],
             'error_responses' => 'none',
-            'api_version' => ['version' => $version] + ($dir === null ? [] : ['changes' => ['dir' => $dir]]),
+            'api_version' => $dir === null ? [] : ['changes' => ['dir' => $dir]],
         ],
     ]);
 

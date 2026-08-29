@@ -6,6 +6,7 @@ namespace Workbench\App\Http\Controllers;
 
 use Docuccino\Attributes\Group;
 use Docuccino\Attributes\HeaderParameter;
+use Docuccino\Attributes\OperationId;
 use Docuccino\Attributes\Response;
 use Illuminate\Http\JsonResponse;
 use Workbench\App\Data\FormData;
@@ -29,6 +30,22 @@ final class VersionedFormController
         return response()->json([
             new FormData(id: 1, title: 'Onboarding', publishedAt: '2026-08-01T09:00:00Z'),
             new FormData(id: 2, title: 'Offboarding', publishedAt: null),
+        ]);
+    }
+
+    /**
+     * List archived forms.
+     *
+     * Returns the forms that are no longer published, in the same shape as the published ones — a
+     * second operation over one shared component, which is what a scoped version change has to fork.
+     */
+    #[Group('Forms')]
+    #[OperationId('listArchivedForms')]
+    #[Response(status: 200, type: 'list<FormData>', description: 'The archived forms.')]
+    public function archived(): JsonResponse
+    {
+        return response()->json([
+            new FormData(id: 3, title: 'Contractor onboarding', publishedAt: null),
         ]);
     }
 

@@ -33,6 +33,7 @@ use Docuccino\Attributes\Security;
 use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
@@ -95,6 +96,7 @@ function attributeCatalogue(): array
         'Webhook' => [Webhook::class, Attribute::TARGET_CLASS],
         'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
         'Versioning\\ApiVersionChange' => [ApiVersionChange::class, Attribute::TARGET_CLASS],
+        'Versioning\\AppliesTo' => [AppliesTo::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedResponseField' => [RenamedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
     ];
 }
@@ -151,6 +153,7 @@ function defaultArgs(string $class): array
         IgnoreResponse::class => [200],
         Summary::class => ['Create an invoice'],
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
+        AppliesTo::class => ['GET /api/invoices'],
         RenamedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
         default => [],
     };

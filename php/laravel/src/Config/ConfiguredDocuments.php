@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Config;
 
+use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Support\Hydrate;
 
 /**
@@ -47,7 +48,8 @@ final class ConfiguredDocuments
 
     /**
      * Every version the application configures, sorted — the closed set a version header enumerates, read
-     * off the documents themselves so there is no second list to keep in step with them.
+     * off the documents themselves so there is no second list to keep in step with them. A document that
+     * declares `api_version` and states no version of its own contributes nothing: its own build says so.
      *
      * @return list<string>
      */
@@ -55,10 +57,11 @@ final class ConfiguredDocuments
     {
         $versions = [];
         foreach ($this->all() as $entry) {
-            $apiVersion = is_array($entry) ? ($entry['api_version'] ?? null) : null;
-            $version = is_array($apiVersion) ? ($apiVersion['version'] ?? null) : null;
+            // What makes a document a version, and what its version IS, are DocumentConfig's rules; asking
+            // it is what keeps the enum and the document that publishes it saying the same thing.
+            $version = DocumentConfig::statedVersion(Hydrate::map($entry));
 
-            if (is_string($version) && $version !== '') {
+            if ($version !== null) {
                 $versions[$version] = true;
             }
         }

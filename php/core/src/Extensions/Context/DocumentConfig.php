@@ -18,6 +18,9 @@ use Docuccino\Core\Support\Json;
  */
 final readonly class DocumentConfig
 {
+    /** The `info.version` a document that names none falls back to — a placeholder, never a real one. */
+    public const string DEFAULT_VERSION = '1.0.0';
+
     /**
      * @param  array<string, mixed>  $info  OAS info object (title, version, description …)
      * @param  list<array<string, mixed>>  $servers
@@ -396,15 +399,52 @@ final readonly class DocumentConfig
     }
 
     /**
-     * The API version this document IS, from `api_version.version`, or null when the document is not
-     * an API version at all. It is the single statement of the fact: `info.version` is derived from it
-     * rather than written a second time, so the two can never disagree.
+     * Whether this document declares itself an API VERSION, by carrying an `api_version` bag at all.
+     * Which version it is, is {@see apiVersion()} — `info.version`, because a document's version is
+     * the one OAS already models and a second key naming it again could only ever disagree with it.
+     */
+    public function declaresApiVersion(): bool
+    {
+        return self::declaresVersion($this->raw);
+    }
+
+    /**
+     * The API version this document IS, or null when it declares none — or declares one and leaves
+     * `info.version` at the shipped `1.0.0` default, which states nothing an application actually
+     * serves. The build says so with a diagnostic rather than publishing the placeholder.
      */
     public function apiVersion(): ?string
     {
-        $version = $this->apiVersionConfig()['version'] ?? null;
+        return self::statedVersion($this->raw);
+    }
 
-        return is_string($version) && $version !== '' ? $version : null;
+    /**
+     * Whether a document's raw config declares itself an API version.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public static function declaresVersion(array $raw): bool
+    {
+        return is_array($raw['api_version'] ?? null);
+    }
+
+    /**
+     * The API version a document's raw config states, read off `info.version`. Static and public
+     * because the adapter reads the same fact off every configured document to enumerate the closed
+     * set of versions, and one rule about what counts as stated must answer both.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    public static function statedVersion(array $raw): ?string
+    {
+        if (! self::declaresVersion($raw)) {
+            return null;
+        }
+
+        $version = Hydrate::map($raw['info'] ?? null)['version'] ?? null;
+        $version = is_string($version) ? trim($version) : '';
+
+        return $version === '' || $version === self::DEFAULT_VERSION ? null : $version;
     }
 
     /**

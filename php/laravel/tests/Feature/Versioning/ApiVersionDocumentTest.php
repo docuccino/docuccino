@@ -60,14 +60,46 @@ it('rewrites the required list with the properties it names', function (): void 
         ->and($schema['required'])->not->toContain('title');
 });
 
-it('derives info.version from the version the document declares, whatever info says', function (): void {
-    // Both documents configure `info.version` as something else on purpose: the version is stated once,
-    // under `api_version`, so the two halves of the document cannot drift apart.
+it('is the version its info.version says, with no second key to disagree with', function (): void {
+    // `api_version` declares only THAT the document is a version. Which one it is, is `info.version` —
+    // the field OAS already models, so there is nowhere for a second answer to live.
     $head = generateDocument(key: 'v2026-09-01')->document->toArray();
     $older = generateDocument(key: 'v2026-06-01')->document->toArray();
 
     expect($head['info']['version'])->toBe('2026-09-01')
-        ->and($older['info']['version'])->toBe('2026-06-01');
+        ->and($older['info']['version'])->toBe('2026-06-01')
+        ->and(versionedFormDocuments()['v2026-09-01']['api_version'])->not->toHaveKey('version');
+});
+
+/*
+ * A version document left at the shipped `1.0.0` placeholder states no version at all. Publishing it
+ * would put a version the application does not serve into every operation's enum AND make it the value
+ * a client falls back to, so the document is left underived and the build says why.
+ */
+it('refuses to derive a version from the placeholder info.version, and says so', function (): void {
+    $result = generateDocument(static function (array $raw): array {
+        $raw['info']['version'] = '1.0.0';
+
+        return $raw;
+    }, 'v2026-06-01');
+
+    $document = $result->document->toArray();
+    $codes = array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $result->diagnostics);
+
+    expect($codes)->toContain('versioning.version-unstated')
+        ->and($document['info']['version'])->toBe('1.0.0')
+        ->and($document['paths']['/api/versioned-forms']['get'])->not->toHaveKey('parameters')
+        // And the shape is the code's, not an older version's: nothing was derived.
+        ->and($document['components']['schemas']['FormData']['properties'])->toHaveKey('title');
+});
+
+it('leaves a document that states a real version alone about it', function (): void {
+    $codes = array_map(
+        static fn (Diagnostic $diagnostic): string => $diagnostic->code,
+        generateDocument(key: 'v2026-06-01')->diagnostics,
+    );
+
+    expect($codes)->not->toContain('versioning.version-unstated');
 });
 
 it('declares the version header on every operation, enumerating every configured version', function (string $key, string $version): void {
@@ -101,7 +133,7 @@ it('never publishes an enum that leaves out the version the document defaults to
     config()->set('docuccino.documents', ['v2026-09-01' => versionedFormDocuments()['v2026-09-01']]);
 
     $document = generateDocument(static function (array $raw): array {
-        $raw['api_version']['version'] = '2027-03-01';
+        $raw['info']['version'] = '2027-03-01';
 
         return $raw;
     }, 'v2026-09-01')->document->toArray();
@@ -163,12 +195,11 @@ it('leaves a document that declares no version untouched', function (): void {
     $versioned = generateDocument(key: 'v2026-09-01')->document->toArray();
     $plain = generateDocument(static function (array $raw): array {
         unset($raw['api_version']);
-        $raw['info']['version'] = '1.0.0';
 
         return $raw;
     }, 'v2026-09-01')->document->toArray();
 
-    expect($plain['info']['version'])->toBe('1.0.0')
+    expect($plain['info']['version'])->toBe('2026-09-01')
         ->and($plain['paths']['/api/versioned-forms']['get'])->not->toHaveKey('parameters')
         ->and($plain['components']['schemas']['FormData']['properties'])->toHaveKey('title')
         // And the versioned one really did move: a no-op comparison against a no-op proves nothing.
