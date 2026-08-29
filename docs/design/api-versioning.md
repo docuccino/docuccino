@@ -1,9 +1,10 @@
 # Date-based API versioning
 
-> **Status: design. Nothing here is built.** The evidence behind these decisions — Stripe, Cadwyn,
-> Intercom, Airflow, and the Laravel ecosystem survey — is in the research issue
-> [#316](https://github.com/docuccino/docuccino/issues/316). This document records what was decided
-> and what a first slice looks like; it is not a roadmap and carries no dates.
+> **Status: phase 1 is built. Phases 2 and 3 are design.** The evidence behind these decisions —
+> Stripe, Cadwyn, Intercom, Airflow, and the Laravel ecosystem survey — is in the research issue
+> [#316](https://github.com/docuccino/docuccino/issues/316). This document records what was decided,
+> what building the first slice established, and what the later slices look like; it is not a roadmap
+> and carries no dates.
 
 ## The frame
 
@@ -28,6 +29,27 @@ A version is a **named document**, and most of that already exists.
 | Byte-determinism, per-node provenance, per-operation coverage | pipeline-wide |
 
 ## Decisions
+
+### The code is the newest version; older documents are derived backwards
+
+This is the direction the whole model runs in, and it is worth getting straight before anything else.
+
+A version change declares a shape that is **no longer in the code**. So the head of the repository is
+always the newest version, and an older version's document is the head document with every later change
+undone, newest first, each handing the shape of the version below it to the next. Nothing is enacted,
+nothing is deleted, and no branch has to keep an old shape alive: a change class describes the past, and
+the build reads the present.
+
+The obvious-looking alternative — enact the breaking change in the codebase and have the tooling recover
+what used to be there — is not merely unnecessary, it is harmful. It makes the newest document, the one
+thing the build can read directly, into a derived artifact; it forces an application to keep N shapes
+compiling to document N versions; and for the versions that matter it is impossible anyway, since the
+whole premise is that the old shape is gone.
+
+The cost is a vocabulary that reads backwards at the point of writing, and that is the one mistake it
+invites: `to:` is the field name in the code today, `from:` is the name older versions publish. The pair
+written the other way round renames the wrong end and produces a version document describing a shape
+nobody ever served.
 
 ### Re-derive each version; do not patch a canonical document
 
@@ -140,7 +162,7 @@ runtime:
    from the published one to be non-breaking, **or** attributable to a declared version change.
 3. **Coverage per version** — which operations of version X the suite never exercised.
 
-**Check 1 is load-bearing and ships first.** Separating the declarative half (ours) from the
+**Check 1 is load-bearing, and it is what shipped first.** Separating the declarative half (ours) from the
 imperative half (the application's runtime) re-creates exactly the split Stripe eliminated. The
 difference is that Stripe had no oracle for the drift and this product would: check 1 *is* that
 oracle. Without it, the separation is the anti-pattern and nothing else here rescues it.
@@ -162,14 +184,32 @@ appear on the wire."* A per-version document is a lie unless something forces th
 
 ## Phases
 
-### Phase 1 — a walking skeleton, end to end
+### Phase 1 — a walking skeleton, end to end — built
 
 One real version change, in the vocabulary, producing two documents, with a contract test that passes
-for both **and fails when the transformation is wrong**. Deliberately thin and deliberately vertical:
-it proves the claim before any layer is built out.
+for both **and fails when the transformation is wrong**. Deliberately thin and deliberately vertical: it
+proves the claim before any layer is built out. What it came to:
 
-The vocabulary is designed here, once, for both readers — statically foldable for Docuccino,
-ergonomic for the runtime package that will emit it in phase 2.
+- **Two attributes and one modifier.** `#[ApiVersionChange]` carries the version and the sentence a
+  consumer reads; `#[RenamedResponseField]` is the first verb; `#[AppliesTo]` is the modifier, written
+  beside the change rather than inside the verb. Every argument is a string or a `::class` constant and
+  every one is read by reflection, so nothing parses, folds or executes a line of the application — a
+  change class's body is never read at all.
+- **A document per version.** `api_version` says the document IS a version, `info.version` says which
+  one, and every declared change that shipped after it is applied in reverse. A document declaring no
+  `api_version` is not a version, and not a byte of it moves.
+- **The version header, with its enum.** Every operation publishes the header a client pins with:
+  optional, defaulting to this document's version, enumerating every version the application configures,
+  and decorated with SDK member names and each version's own sentence — a date is not an identifier. An
+  application that documents the header itself keeps its own wording.
+- **Scoping, and the fork rule** above.
+- **The per-version contract test.** Replay a real request with a version pinned and require the
+  response to validate against *that* version's document — including the half that has to be able to
+  fail, where a head-shaped response is checked against the older document and refused, naming the
+  field.
+
+The vocabulary is designed here, once, for both readers — statically foldable for Docuccino, ergonomic
+for the runtime package that will emit it in phase 2.
 
 ### Phase 2 — the production package
 
@@ -208,26 +248,52 @@ Two shapes:
   authority, a second deploy target beside the existing website workflow, and a hop for the reader who
   wants both.
 
-A hybrid is available and probably right: **its own landing page for discovery, its reference on the
-main site**, so the two audiences each get a front door while the reference — where a reader moves
-between versioning and the rest of Docuccino constantly — stays in one place and one search.
+**Settled: the hybrid.** Its own landing page for discovery, with its own comparison pages against the
+existing Laravel packages, and its reference on the main site — so the two audiences each get a front
+door while the reference, where a reader moves between versioning and the rest of Docuccino constantly,
+stays in one place and one search index.
 
-Whichever is chosen, the linking runs both ways or neither: the Docuccino documentation has to name
-versioning where a reader would look for it, and the package's own pages have to say what generating a
-document buys, or the tight integration is invisible to exactly the people it is for.
+The linking runs both ways or neither: the Docuccino documentation has to name versioning where a reader
+would look for it, and the package's own pages have to say what generating a document buys, or the tight
+integration is invisible to exactly the people it is for.
 
 Naming follows the existing rule: a split repository whose name would be language-generic carries a
 language prefix, and one already naming its framework does not.
 
-This is phase 2 work — a production package ships with documentation or it does not ship — but the
-sidebar and domain decision is worth settling in phase 1, because it is cheap to decide now and
-expensive to move once pages exist and are indexed.
+Writing the pages is phase 2 work — a production package ships with documentation or it does not ship —
+but settling the shape early is what makes the phase-1 material free of it. That material is the
+generator's own feature rather than the package's runtime, so it sits with the rest of the generator's
+guides and never has to move; the package's reference becomes a new top-level sidebar group when the
+package ships.
 
 ## Out of scope
 
 **Data versioning** — migrating stored records to a new shape. Cadwyn is unambiguous that this is not
 an API-versioning problem and cannot be solved by one; its worked example ends in four social remedies
 rather than a technical one. Anything shipped here should say the same rather than imply otherwise.
+
+## Limits the first slice found
+
+Consequences of the decisions above, each one a diagnostic rather than a silent degradation.
+
+- **A schema that contains itself cannot be forked under a partial scope.** The fork gives the
+  operations in scope a private copy, and a copy of a self-referential schema still points at the shared
+  component one level down — so the operation would publish the older name at the top and today's name
+  one level in. The operation is left at the shape the code publishes and the build says why. An
+  unscoped change has no such limit: it renames the component in place, and the self-reference goes on
+  pointing at it.
+- **An inlined fork repeats a body rather than minting a name.** Under a partial scope each matched
+  operation carries its own copy of the older shape, so a generated client gets an anonymous type per
+  operation instead of one it can name. That is the price of the naming invariant, and it is worth
+  paying: `FormDataV2` would be a name that appeared, vanished and moved with how many operations
+  happened to share a body — a function of the route table rather than of the schema, so an unrelated
+  new endpoint would rename somebody's type. Scoping to *every* operation that publishes the schema
+  costs nothing, because that is the branch with no fork in it.
+- **There is no removal verb, and not building one was deliberate.** "This version also published
+  `subtotal`" has to declare the removed field's TYPE, because the type is exactly what is no longer in
+  the code to read — so the verb carries a schema, and a schema written as an attribute argument is a
+  second type grammar beside the one the rest of the product recovers out of PHP. Worth building when an
+  application asks for it, and worth not guessing at before then.
 
 ## Limits inherited with the model
 
@@ -247,12 +313,16 @@ and to `204 No Content`, and a migration silently ceasing to apply when a route 
 
 ## Open questions
 
-- Header or URL path for the version, and whether an unknown version waterfalls to the closest earlier
-  one.
+- Whether the version can also travel in the URL path. A header is what is built, following Intercom,
+  Stripe and GitHub; path versioning is not refused, only not built.
+- What an application does with a pin it does not recognise. Whether an unknown version waterfalls to
+  the closest earlier one is a runtime decision the application owns — Docuccino describes the versions
+  that exist and holds no opinion about the rest, and neither the document nor the generator is where
+  that answer could live.
 - Whether to follow Stripe's move from monthly dates to named release trains, which caps breaking
   versions at roughly two a year and is the single biggest lever on the cost of everything above.
 - Whether N documents × M operations is affordable in one build, and whether the fact that most
   versions touch a handful of operations can be exploited.
-- Whether a failed per-version assertion is a build diagnostic or a test failure.
-- Whether the package documents on `docs.docuccino.app`, on its own site, or splits landing page from
-  reference — settle in phase 1, since moving indexed pages later is the expensive half.
+- Whether a failed per-version assertion is a build diagnostic or a test failure. Building check 1
+  answered it for check 1 — a test failure, because the check is only worth anything if the real router
+  and the application's own middleware ran to produce the response. Checks 2 and 3 are still open.
