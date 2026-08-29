@@ -52,7 +52,7 @@ final readonly class RequiredEdit implements VersionVerb
         return $this->facet->identityOf($this->schema, $identity);
     }
 
-    public function apply(array $schema, VerbOutcome &$outcome): array
+    public function apply(array $schema, PublishedSchemas $published, VerbOutcome &$outcome): array
     {
         $properties = $schema['properties'] ?? null;
         if (! is_array($properties) || ! array_key_exists($this->field, $properties)) {
@@ -74,7 +74,7 @@ final readonly class RequiredEdit implements VersionVerb
         }
 
         $required = $this->requiredBefore
-            ? self::inserted($required, $properties, $this->field)
+            ? MemberOrder::intoRequired($required, $properties, $this->field)
             : array_values(array_filter($required, fn (mixed $name): bool => $name !== $this->field));
 
         // Absence rather than `[]`: an empty `required` is a keyword saying nothing, and the
@@ -100,7 +100,7 @@ final readonly class RequiredEdit implements VersionVerb
         return [$operation, []];
     }
 
-    public function diagnose(VerbOutcome $outcome, VersionChange $change): ?Diagnostic
+    public function diagnose(VerbOutcome $outcome, VersionChange $change, PublishedSchemas $published): ?Diagnostic
     {
         return match ($outcome) {
             VerbOutcome::Applied => null,
@@ -108,42 +108,6 @@ final readonly class RequiredEdit implements VersionVerb
             VerbOutcome::Absent => $this->missing($change),
             VerbOutcome::Unresolved => VerbDiagnostics::schemaUnresolved($change, $this),
         };
-    }
-
-    /**
-     * `$field` put where the SCHEMA says it goes rather than where this edit happened to run: at the
-     * index equal to the number of entries already standing that `properties` puts before it.
-     *
-     * Appending would make the list a function of the order the verbs were written on the change
-     * class, so two documents derived from one codebase could disagree about the order of a member
-     * neither of them disagrees about the content of. Counting instead is commutative — two verbs
-     * adding two fields land the same way round whichever ran first — and it needs no entry already
-     * standing to move.
-     *
-     * @param  list<mixed>  $required
-     * @param  array<array-key, mixed>  $properties
-     * @return list<mixed>
-     */
-    private static function inserted(array $required, array $properties, string $field): array
-    {
-        $positions = [];
-        foreach (array_keys($properties) as $position => $name) {
-            $positions[(string) $name] = $position;
-        }
-
-        $at = $positions[$field] ?? count($positions);
-
-        $index = 0;
-        foreach ($required as $name) {
-            // A name `properties` does not carry sorts after everything it does, so it neither moves
-            // nor is moved past — a `required` naming something under `additionalProperties` keeps its
-            // place either way.
-            if (($positions[is_string($name) ? $name : ''] ?? count($positions)) < $at) {
-                $index++;
-            }
-        }
-
-        return [...array_slice($required, 0, $index), $field, ...array_slice($required, $index)];
     }
 
     /** What the change says the version DID, and what the versions before it said instead. */

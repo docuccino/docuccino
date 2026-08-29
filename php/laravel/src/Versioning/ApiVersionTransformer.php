@@ -134,17 +134,18 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         $outcome = VerbOutcome::Unresolved;
         $cyclic = false;
+        $published = new PublishedSchemas($rewritten, $this->identity);
 
         // From the members rather than the root: the root's own `x-docuccino` describes the document,
         // and no schema's identity can be there. Nothing reaches, so nothing expands: an unscoped verb
         // is the walk with its `$ref` half switched off.
         foreach ($rewritten as $key => $value) {
             if (is_array($value)) {
-                $rewritten[$key] = $this->rewrite($value, $rewritten, $id, $verb, [], [], $outcome, $cyclic);
+                $rewritten[$key] = $this->rewrite($value, $published, $id, $verb, [], [], $outcome, $cyclic);
             }
         }
 
-        $this->reportOutcome($outcome, $verb, $change, $context, $said);
+        $this->reportOutcome($outcome, $verb, $change, $published, $context, $said);
 
         // A verb nothing could apply leaves every schema at the shape the code publishes, so its
         // examples belong there too: dropping one for a change that moved nothing costs a reader an
@@ -361,14 +362,18 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         $outcome = VerbOutcome::Unresolved;
         $cyclic = false;
-        $forked = $this->rewrite($operation, $doc, $id, $verb, $reaches, [], $outcome, $cyclic);
+        $published = new PublishedSchemas($doc, $this->identity);
+        $forked = $this->rewrite($operation, $published, $id, $verb, $reaches, [], $outcome, $cyclic);
 
         if ($cyclic) {
-            // A schema that refers to itself cannot be given a private copy: the copy would contain the
-            // shared component again, and the operation would publish the old name at one depth and the
-            // new one at the next. The head shape is at least a shape that exists.
+            // A schema that leads back to itself cannot be given a private copy: the copy would contain
+            // the shared component again, and the operation would publish the older shape at one depth
+            // and today's at the next. The head shape is at least a shape that exists. A schema written
+            // that way is one route in; the other is a verb that PUTS a member back pointing at
+            // something that leads here, which the expansion below meets on its way through the copy
+            // and reports the same way, because it is the same fact.
             self::reportOnce($context, self::unforkable($change, sprintf(
-                'the schema for %s refers to itself, so the operation "%s" cannot be given a copy of it and was left at the shape the code publishes',
+                'a copy of the schema for %s would point back at the shared component, so the operation "%s" cannot be given one and was left at the shape the code publishes',
                 PlainText::of($verb->schema()),
                 PlainText::of($site['signature'] ?? implode('/', $site['keys'])),
             )), $said);
@@ -377,7 +382,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         }
 
         if ($outcome !== VerbOutcome::Applied) {
-            $this->reportOutcome($outcome, $verb, $change, $context, $said);
+            $this->reportOutcome($outcome, $verb, $change, $published, $context, $said);
 
             return $doc;
         }
@@ -385,6 +390,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         // Said only now: every refusal above leaves the document exactly as it was, examples included,
         // and a report of a drop that never happened is a defect the reader would go looking for.
         self::reportAll($context, $dropped, $said);
+        $this->reportOutcome($outcome, $verb, $change, $published, $context, $said);
 
         // Everything the fork pulled in from `components` is a second node with the component's id on
         // it, and the copy says something different the moment it is renamed. `ContractIndex` resolves
@@ -451,12 +457,11 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
      * only be set where something expands.
      *
      * @param  array<array-key, mixed>  $node
-     * @param  array<string, mixed>  $doc
      * @param  array<string, bool>  $reaches
      * @param  list<string>  $visited
      * @return array<array-key, mixed>
      */
-    private function rewrite(array $node, array $doc, string $id, VersionVerb $verb, array $reaches, array $visited, VerbOutcome &$outcome, bool &$cyclic): array
+    private function rewrite(array $node, PublishedSchemas $published, string $id, VersionVerb $verb, array $reaches, array $visited, VerbOutcome &$outcome, bool &$cyclic): array
     {
         $ref = DocumentGraph::componentRef($node);
         if ($ref !== null && ($reaches[$ref] ?? false)) {
@@ -466,12 +471,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
                 return $node;
             }
 
-            $body = DocumentGraph::componentBody($doc, $ref);
+            $body = $published->body($ref);
             if ($body === null) {
                 return $node;
             }
 
-            $expanded = $this->rewrite($body, $doc, $id, $verb, $reaches, [...$visited, $ref], $outcome, $cyclic);
+            $expanded = $this->rewrite($body, $published, $id, $verb, $reaches, [...$visited, $ref], $outcome, $cyclic);
 
             // OAS 3.1 lets a `$ref` carry siblings, and they annotate what they point at, so they win
             // over the body they are written beside.
@@ -482,12 +487,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         $docuccino = $node['x-docuccino'] ?? null;
         if (is_array($docuccino) && ($docuccino['id'] ?? null) === $id) {
-            $node = $verb->apply($node, $outcome);
+            $node = $verb->apply($node, $published, $outcome);
         }
 
         foreach ($node as $key => $value) {
             if (is_array($value)) {
-                $node[$key] = $this->rewrite($value, $doc, $id, $verb, $reaches, $visited, $outcome, $cyclic);
+                $node[$key] = $this->rewrite($value, $published, $id, $verb, $reaches, $visited, $outcome, $cyclic);
             }
         }
 
@@ -499,9 +504,9 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
      *
      * @param  array<string, true>  $said
      */
-    private function reportOutcome(VerbOutcome $outcome, VersionVerb $verb, VersionChange $change, DocumentContext $context, array &$said): void
+    private function reportOutcome(VerbOutcome $outcome, VersionVerb $verb, VersionChange $change, PublishedSchemas $published, DocumentContext $context, array &$said): void
     {
-        $diagnostic = $verb->diagnose($outcome, $change);
+        $diagnostic = $verb->diagnose($outcome, $change, $published);
 
         if ($diagnostic !== null) {
             self::reportOnce($context, $diagnostic, $said);

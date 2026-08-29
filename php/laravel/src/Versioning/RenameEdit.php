@@ -6,7 +6,7 @@ namespace Docuccino\Laravel\Versioning;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
-use Docuccino\Core\Document\RenamedFieldExamples;
+use Docuccino\Core\Document\ChangedFieldExamples;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\PlainText;
 
@@ -39,7 +39,7 @@ final readonly class RenameEdit implements VersionVerb
         return $this->facet()->identityOf($this->schema, $identity);
     }
 
-    public function apply(array $schema, VerbOutcome &$outcome): array
+    public function apply(array $schema, PublishedSchemas $published, VerbOutcome &$outcome): array
     {
         $properties = $schema['properties'] ?? null;
         if (! is_array($properties) || ! array_key_exists($this->to, $properties)) {
@@ -80,19 +80,19 @@ final readonly class RenameEdit implements VersionVerb
 
     public function rewriteDocumentExamples(array $doc, string $id, VersionChange $change): array
     {
-        [$doc, $dropped] = RenamedFieldExamples::inDocument($doc, $id, $this->from, $this->to);
+        [$doc, $dropped] = ChangedFieldExamples::inDocument($doc, $id, $this->from, $this->to);
 
         return [$doc, $this->drops($dropped, $change)];
     }
 
     public function rewriteOperationExamples(array $operation, array $doc, string $id, array $keys, VersionChange $change): array
     {
-        [$operation, $dropped] = RenamedFieldExamples::inOperation($operation, $doc, $id, $this->from, $this->to, $keys);
+        [$operation, $dropped] = ChangedFieldExamples::inOperation($operation, $doc, $id, $this->from, $this->to, $keys);
 
         return [$operation, $this->drops($dropped, $change)];
     }
 
-    public function diagnose(VerbOutcome $outcome, VersionChange $change): ?Diagnostic
+    public function diagnose(VerbOutcome $outcome, VersionChange $change, PublishedSchemas $published): ?Diagnostic
     {
         return match ($outcome) {
             VerbOutcome::Applied => null,

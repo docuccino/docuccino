@@ -7,6 +7,7 @@ namespace Docuccino\Laravel\Versioning;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\AttributeSet;
@@ -27,11 +28,18 @@ use Docuccino\Core\Support\PlainText;
  * last and every other verb sees the spelling it was written against, and the rename re-spells
  * `properties` and `required` together at the end.
  *
+ * A removal is the one verb that names a field the code does NOT spell, so that sentence does not
+ * cover it — and it still goes before the rename, for the other half of the same reason. A removal
+ * PUTS a member back, and where it lands is counted against the names already standing
+ * ({@see MemberOrder}); run the rename first and that count is taken against names this change itself
+ * invented, so the position of a re-added field would be a function of another of the change's own
+ * verbs. Run it before, and every insertion is counted against the schema the CODE publishes.
+ *
  * Within one type the author's order stands: a change renaming two fields renames them as written.
- * Between the three required-ness verbs the order is not observable — each names one field of one
- * shape, and a change declaring two contradictory things about one field is a change to fix rather
- * than a precedence to define — but it is fixed here anyway, because "not observable today" is not a
- * property to leave to whichever call site is read first.
+ * Between the required-ness verbs and the removal the order is not observable — each names one field
+ * of one shape, and a change declaring two contradictory things about one field is a change to fix
+ * rather than a precedence to define — but it is fixed here anyway, because "not observable today" is
+ * not a property to leave to whichever call site is read first.
  *
  * `VersionChangeOrderTest` is the executed guard: swap the two halves of `read()` and it goes red.
  *
@@ -63,6 +71,10 @@ final class VerbOrder
             $verbs[] = self::required($declaration->schema, $declaration->field, SchemaFacet::Response, true, '#[MadeResponseFieldOptional]', $class, $diagnostics);
         }
 
+        foreach ($attributes->all(RemovedResponseField::class) as $declaration) {
+            $verbs[] = self::removal($declaration, $class, $diagnostics);
+        }
+
         foreach ($attributes->all(RenamedResponseField::class) as $declaration) {
             $verbs[] = self::rename($declaration, $class, $diagnostics);
         }
@@ -86,6 +98,30 @@ final class VerbOrder
         }
 
         return new RequiredEdit($schema, $field, $facet, $requiredBefore, $declaration);
+    }
+
+    /**
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private static function removal(RemovedResponseField $removal, string $class, array &$diagnostics): ?RemovedEdit
+    {
+        if (trim($removal->field) === '' || trim($removal->schema) === '') {
+            $diagnostics[] = VersionChangeCollector::unapplicable(
+                $class,
+                'one of its #[RemovedResponseField] declarations leaves `schema:` or `field:` empty',
+                'A change declares what the API did BEFORE its version, and a removal names the field as the versions before it published it.',
+            );
+
+            return null;
+        }
+
+        return new RemovedEdit(
+            $removal->schema,
+            trim($removal->field),
+            $removal->type,
+            $removal->required,
+            $removal->description,
+        );
     }
 
     /**
