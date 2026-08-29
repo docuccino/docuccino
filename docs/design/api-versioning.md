@@ -129,9 +129,10 @@ needs no fork. `#[AppliesTo]` narrows it, and sits beside `#[ApiVersionChange]` 
 argument of `#[RenamedResponseField]`: scope is a property of the change, so declaring it once covers
 however many fields the change renames and every verb added later inherits it for free.
 
-Its selectors are the vocabulary the lint safelists already use — an operation signature, an
-operationId, either with a `*` — read by the one reader that reads a safelist entry, so the product has
-one grammar for "this entry names that operation" rather than two that differ in a corner.
+Its selectors are the vocabulary a config entry naming an operation already uses — an operation
+signature, an operationId, either with a `*` — read through `Glob`, the product's one wildcard grammar
+and the one `routes.include`/`routes.exclude` speak, so a `*` never means one thing to the author and
+another to the build.
 
 **The fork rule.** A narrowed change means the operations in scope genuinely have a different type from
 the rest in that version's document.
@@ -289,6 +290,12 @@ Consequences of the decisions above, each one a diagnostic rather than a silent 
   happened to share a body — a function of the route table rather than of the schema, so an unrelated
   new endpoint would rename somebody's type. Scoping to *every* operation that publishes the schema
   costs nothing, because that is the branch with no fork in it.
+
+  The names on the way DOWN go the same way, and that half is easy to miss: the copy is made by
+  expanding every `$ref` between the operation and the schema, so an operation whose body was
+  `Envelope` → `Page` → `FormData` publishes one anonymous object where a client would have had three
+  named types. It is the same price for the same reason — a `$ref` left in the copy would point back at
+  the shared component — and only the operations in scope pay it.
 - **There is no removal verb, and not building one was deliberate.** "This version also published
   `subtotal`" has to declare the removed field's TYPE, because the type is exactly what is no longer in
   the code to read — so the verb carries a schema, and a schema written as an attribute argument is a

@@ -15,6 +15,10 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Docuccino executes nothing of the application, so it neither reads nor runs this. It stands in for the
  * runtime an application owns; only the declarative half is ever compiled into a document.
+ *
+ * Both orderings below are `strcmp`, and that is safe HERE only because these versions are fixed-width
+ * dates. Byte order reads `1.10.0` as older than `1.9.0`, so an API on semver copying this shape would
+ * apply its changes in the wrong order and silently serve the wrong shape — compare the three numbers.
  */
 final class DowngradeToPinnedApiVersion
 {
