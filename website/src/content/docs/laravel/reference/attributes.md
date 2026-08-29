@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 37 attributes with signatures and examples.
+description: The docuccino/attributes package — all 38 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 37 attributes, grouped by what they do:
+All 38 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -72,6 +72,7 @@ All 37 attributes, grouped by what they do:
 | [`#[MadeResponseFieldRequired]`](#maderesponsefieldrequired) | Declare a response field that older versions did not promise to send. |
 | [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
 | [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
+| [`#[RemovedResponseField]`](#removedresponsefield) | Declare a response field older versions published that your code no longer has. |
 | [`#[AppliesTo]`](#appliesto) | Narrow a version change to the operations it names. |
 
 ## Responses
@@ -1191,8 +1192,8 @@ they read on a controller. Classes are discovered from
 
 ## Versioning
 
-Every other attribute on this page describes the shape your code has now. These two describe the shape
-it used to have. An older API version publishes a field your code no longer contains, so there is
+Every other attribute on this page describes the shape your code has now. These describe the shape it
+used to have. An older API version publishes a field your code no longer contains, so there is
 nothing left to read it off — you declare the change once, on a class of its own, and the older
 document is derived by applying that change backwards. The classes live in
 `Docuccino\Attributes\Versioning`; the [API versioning guide](/laravel/guides/api-versioning/) walks
@@ -1357,6 +1358,72 @@ final class InvoiceCurrencyBecameOptional {}
 There is no matching `#[MadeRequestFieldRequired]`, and that is the asymmetry rather than an omission:
 `required` arriving narrows a request and moves nothing on a response, so the two sides of the wire do
 not take the same pair of verbs.
+
+### `#[RemovedResponseField]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $field,
+    public string $type = '',
+    public bool $required = false,
+    public string $description = '',
+)
+```
+
+Declares that a response field was **removed** in this change's version, so the versions before it
+published the field and their documents put it back.
+
+This is the one verb whose fact is genuinely gone. Every other verb names a field your code still has
+and moves what the document says about it; here there is nothing left to read a deleted field's type
+off, which is why you declare it. It is also the reason `field` runs the other way from the rest of the
+vocabulary: it is the name the **older** versions published, because your code has no name for it at
+all.
+
+`type` is read three ways, in this order:
+
+1. **A class this document already publishes a response schema for** — `type: AuthorResource::class`
+   becomes a `$ref` to that component. Nothing about the shape is written down twice, and it composes:
+   deriving a version rewrites the whole document, so the component the pointer names carries *that*
+   version's shape rather than today's.
+2. **One of OpenAPI's own type names** — `string`, `integer`, `number`, `boolean`, `object` or `array`,
+   each optionally suffixed `[]` for a list of them and `?` for one that may be null. `string[]?` is a
+   list of strings that may itself be null; `string?[]` is a list whose members may be.
+3. **Anything else** — the field is published with no constraints at all and the build tells you with
+   `versioning.type-unresolved`. A valid vague schema costs a consumer some type safety; a precise
+   false one costs them a runtime failure.
+
+Leave `type` out entirely and you get the same unconstrained field with nothing said about it, which is
+how to spell "it was there, and nobody now knows what it held".
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices no longer publish `subtotal`; add the line items yourself.',
+)]
+#[RemovedResponseField(
+    schema: InvoiceResource::class,
+    field: 'subtotal',
+    type: 'integer',
+    required: true,
+    description: 'The invoice total before tax, in cents.',
+)]
+final class InvoiceSubtotalRemoved {}
+```
+
+`required: true` says those versions always sent it, which makes their document **stricter** than
+today's — and that is the half a per-version contract test can refuse. Pin the version, replay your
+suite, and the assertion says whether your application really still sends the field to a caller pinned
+that far back. It also means any example published beside that schema is now a body the schema itself
+rejects, so an example that cannot carry the field is dropped and reported as
+`versioning.example-dropped`. Leave `required` off and every example stands: an absent optional member
+is valid.
+
+Where the field lands in `properties` is counted from the names already there rather than from the
+order you wrote the attributes in, so two removals on one schema come out the same way round either
+way.
 
 ### `#[AppliesTo]`
 
