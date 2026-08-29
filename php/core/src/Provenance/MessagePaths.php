@@ -24,9 +24,10 @@ namespace Docuccino\Core\Provenance;
  *
  * 1. **Exclusions.** A run behind a `#` is a URI fragment, a `/` behind a `\` is an escape, a POSIX
  *    run carrying a backslash is a regex or a JSON string, a run carrying a brace is a URI template.
- *    None of those reaches the ladder at all, unless proof already opened the run.
+ *    None of those reaches the ladder at all, unless proof opened the run or a root already accounts
+ *    for the text in front of the character objected to.
  * 2. **Proof.** A local stream wrapper (`phar://`), a Windows drive and a UNC share cannot be
- *    anything but a filesystem path, so those are always reduced. A wrapper is proof from the first
+ *    anything but a filesystem path, so those are always reduced. All three are proof from the first
  *    character, and nothing a template is spelled with opens that way — a route signature, a path
  *    template and a JSON pointer all start at a `/` or a `#` — so a run that OPENS with one is a path
  *    even where it also carries a brace, and the braces are a shell glob rather than a placeholder.
@@ -36,11 +37,16 @@ namespace Docuccino\Core\Provenance;
  * 3. **Attribution.** Where the ladder recognised a root — the base path, or a `composer.json`
  *    ancestor — the answer is a prefix strip, and a prefix strip cannot invent text. Asking whether
  *    it recognised one takes {@see PROBE}: the answer alone cannot say, since a root one segment up
- *    leaves the same bare name a root it never found leaves.
+ *    leaves the same bare name a root it never found leaves. Asked one segment EARLY, of the text an
+ *    exclusion objects to, it is also the only thing that admits a run no proof opened
+ *    ({@see anchored()}) — all a bare `/Users/…/{a,b}/*.php` has to be reduced by.
  * 4. **File shape.** A run the ladder could not attribute is reduced only when its last segment
  *    names a file (`Reader.php`). `/api/forms` and `/docs/reference/configuration` keep every
  *    character they had, because nothing here established they were ever paths. How far such a run
- *    reaches through a space is {@see pathRun()}.
+ *    reaches through a space is {@see pathRun()}. A braced run reaches this rung only behind proof:
+ *    shape cannot tell `/api/users/{user}.json` from a file, so a braced POSIX run no root accounted
+ *    for is published whole — a leak, taken knowingly, because the other direction is the one that
+ *    must be impossible.
  *
  * Machine words that no path grammar reaches — the `include_path='…'` tail PHP appends to a failed
  * include, a temp directory — are redacted literally afterwards, by the prefixes this process can
@@ -172,7 +178,7 @@ final readonly class MessagePaths
         $run = rtrim($match);
         $trailing = substr($match, strlen($run));
 
-        if (! self::couldBeAPath($run)) {
+        if (! $this->couldBeAPath($run)) {
             return $match;
         }
 
@@ -193,14 +199,22 @@ final readonly class MessagePaths
     }
 
     /**
-     * The exclusions, and the one thing that opens ahead of them. A brace makes a run a URI template
+     * The exclusions, and the two things that open ahead of them. A brace makes a run a URI template
      * rather than a file anyone named, and a backslash inside a POSIX run makes it an escaped string —
-     * a `regex:` rule, a JSON pointer in a quoted message — not a path with a separator. Both give way
-     * to a run OPENING with a local wrapper scheme, which no template can (see reason 2): the braces in
-     * `glob://…/{Support,Http}/*.php` are a shell glob, and refusing the run over them keeps the
-     * absolute prefix in front of them.
+     * a `regex:` rule, a JSON pointer in a quoted message — not a path with a separator.
+     *
+     * Proof outranks both, whichever shape carries it (reason 2): a wrapper scheme, a Windows drive
+     * and a UNC share are each proof from the first character, and nothing a template is spelled with
+     * opens that way — a route signature, a path template and a JSON pointer all start at a `/` or a
+     * `#`. So the braces in `glob://…/{Support,Http}/*.php` and in `C:\checkout\{a,b}\x.php` are a
+     * shell glob, and refusing those runs over them keeps the machine word in front of them.
+     *
+     * A bare POSIX run has no such proof, so both exclusions still refuse it — unless a root the
+     * ladder recognised already accounts for the text in FRONT of the character they object to
+     * ({@see anchored()}), which is reason 3 asked one segment early. A run has to clear every
+     * exclusion it trips, so carrying both takes an anchor in front of both.
      */
-    private static function couldBeAPath(string $run): bool
+    private function couldBeAPath(string $run): bool
     {
         if (self::opening($run) !== null) {
             // Proof, or nothing: a run opening with a wrapper whose tail is another URL is a stream
@@ -209,11 +223,46 @@ final readonly class MessagePaths
             return self::wrapper($run) !== null;
         }
 
-        if (str_contains($run, '{') || str_contains($run, '}')) {
+        if (self::proven($run)) {
+            return true;
+        }
+
+        if ((str_contains($run, '{') || str_contains($run, '}')) && ! $this->anchored($run, '{}')) {
             return false;
         }
 
-        return self::proven($run) || ! str_contains($run, '\\');
+        return ! str_contains($run, '\\') || $this->anchored($run, '\\');
+    }
+
+    /**
+     * Whether a root the ladder recognised accounts for the run in front of the character an
+     * exclusion objects to. That is reason 3's question asked before the rewrite rather than during
+     * it, and it is the only thing a bare POSIX run has instead of proof: the prefix is a directory
+     * this machine was configured from, so the text in front of the brace or the backslash is a
+     * machine word whatever the rest of the run turns out to be, and removing it is a strip of text
+     * the ladder matched rather than a guess at where a path ends.
+     *
+     * A one-segment root does not count, which is the whole reason the depth is measured. A template
+     * is anchored only where the root IS a route prefix, and `/app` — a container's checkout — is
+     * exactly the shape an application also mounts routes under; two segments is the line, the one
+     * {@see redact()} draws for the same reason. That costs a real path under a one-segment root its
+     * strip, which is the direction that may be traded.
+     *
+     * Reason 4 is deliberately not extended the same way. Shape cannot tell `/api/users/{user}.json`
+     * from a file, so a braced run no root accounts for keeps every character it has.
+     */
+    private function anchored(string $run, string $objection): bool
+    {
+        $prefix = rtrim(str_replace('\\', '/', substr($run, 0, strcspn($run, $objection))), '/');
+        $under = $this->stripped($prefix);
+
+        if ($under === null) {
+            return false;
+        }
+
+        $root = rtrim(substr($prefix, 0, strlen($prefix) - strlen($under)), '/');
+
+        return substr_count($root, '/') >= 2;
     }
 
     /** A wrapper scheme, a Windows drive or a UNC share — shapes nothing but a path has. */

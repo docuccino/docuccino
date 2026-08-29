@@ -399,8 +399,9 @@ it('reads the wrapper table the same way once a brace is in the run', function (
 
 it('leaves a braced run alone where nothing but the brace opens it', function (string $case, string $message): void {
     // The other side of the same flip, and the one that must be impossible to get wrong. Each row is a
-    // template an author wrote or a tool quoted back, and none of them opens with a scheme the table
-    // calls proof — so the brace is all there is to go on, and it still refuses the whole run.
+    // template an author wrote or a tool quoted back: none opens with a shape the class calls proof,
+    // and no root the ladder recognises accounts for the text in front of the brace — so there are two
+    // ways in and the brace refuses both, which is the whole reason these keep every character.
     expect((new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message))
         ->toBe($message);
 })->with([
@@ -411,6 +412,169 @@ it('leaves a braced run alone where nothing but the brace opens it', function (s
     ['a URL whose path is templated', 'GET http://api.example.com/{region}/forms returned 500'],
     ['a server URL whose host is templated', 'GET https://{region}.api.example.com/v1/forms returned 500'],
     ['an array shape quoted in a message', 'Expected array{id: int, name: string}'],
+    // Two rows for the anchor specifically: a root is a PREFIX, not a substring, and the run has to
+    // be under it rather than beside it.
+    ['a sibling of the root, one character out', 'Could not open /app/rooted/{a,b}/*.php'],
+    ['a directory named like the root', 'Could not open /app/root.bak/{a,b}/*.php'],
+]);
+
+it('will not let a one-segment root overrule a brace, because a route prefix spells one', function (string $case, string $message): void {
+    // The anchor's own limit, and the reason it is not simply "the ladder recognised a root". A
+    // container puts the checkout at `/app`, and `/app` is equally a route prefix an application
+    // mounts — so under a one-segment root a template IS anchored, and reducing it would state a route
+    // the application never wrote. Two segments is the line, the one `redact()` already draws for the
+    // same reason. What that costs is the row below it: a real path under such a root keeps its
+    // machine word, which is the direction that may be traded.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/app')))->relative($message))
+        ->toBe($message);
+})->with([
+    ['a template the root is a prefix of', 'Unknown route /app/users/{user}'],
+    ['a template with a format suffix', 'Unknown route /app/users/{user}.json'],
+    ['a real path under the same root', 'Could not open /app/config/{a,b}/*.php'],
+]);
+
+it('reduces a braced run a recognised root accounts for, with no wrapper in front of it', function (string $case, string $message, string $expected): void {
+    // The half a scheme cannot answer: a BARE absolute path carrying a brace, which used to be
+    // published whole because the brace refused it before anything else was asked. What admits it is
+    // not the brace's shape but the text in FRONT of it — a root the ladder recognised, so the prefix
+    // being removed is a directory this machine was configured from and the strip cannot invent text.
+    // The braces themselves survive wherever they stood, exactly as they do behind a wrapper.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a brace expansion under the root',
+        'Could not open /app/root/app/{Support,Http}/*.php',
+        'Could not open app/{Support,Http}/*.php',
+    ],
+    [
+        'a brace in the first surviving segment',
+        'Could not open /app/root/{tenant}/routes.php',
+        'Could not open {tenant}/routes.php',
+    ],
+    [
+        'a path the root IS, less its braced tail',
+        'Failed to read /app/root/{a,b}',
+        'Failed to read {a,b}',
+    ],
+]);
+
+it('reduces a braced run proof opened, with no root to account for it', function (string $case, string $base, string $message, string $expected): void {
+    // Proof outranks the brace whichever shape carries it, and a drive and a UNC share are proof from
+    // the first character exactly as a wrapper is: no route signature, path template or JSON pointer
+    // is spelled `C:\` or `\\host\`. So these reach the ladder even where no root accounts for them,
+    // and the degradation takes the machine's user with it — which is the answer a bare POSIX run of
+    // the same shape cannot have, having nothing but the brace to go on.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver($base)))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('bob');
+})->with([
+    [
+        'a drive under the checkout',
+        'C:\\Users\\bob\\dev\\checkout',
+        'Could not open C:\\Users\\bob\\dev\\checkout\\app\\{a,b}\\X.php',
+        'Could not open app/{a,b}\\X.php',
+    ],
+    [
+        'a drive outside every root',
+        'C:\\Users\\bob\\dev\\checkout',
+        'Could not open C:\\Users\\bob\\secret\\{a,b}\\X.php',
+        'Could not open {a,b}\\X.php',
+    ],
+    [
+        'a UNC share',
+        '/app/root',
+        'Could not open \\\\build01\\share\\{a,b}\\X.php',
+        'Could not open {a,b}\\X.php',
+    ],
+]);
+
+it('publishes a braced run whole where no root and no proof reach it, and that is the trade', function (): void {
+    // The leak that is left, recorded rather than discovered: outside every root a bare POSIX run has
+    // nothing but its shape, and shape is what cannot tell `/api/users/{user}/avatar.png` from a file.
+    // Degrading this one to its basename would degrade that one too, so the machine word stays. The
+    // second expectation is the row that would have to change first, and it is the one that must not.
+    $carol = new MessagePaths(new RootRelativeSourcePathResolver('/Users/ca rol/checkout'));
+
+    expect($carol->relative('Could not open /Users/ca rol/secret/{Support,Http}/*.php'))
+        ->toBe('Could not open /Users/ca rol/secret/{Support,Http}/*.php')
+        ->and($carol->relative('Unknown route /api/users/{user}/avatar.png'))
+        ->toBe('Unknown route /api/users/{user}/avatar.png')
+        // The same run without the brace does degrade, which is what the brace is costing here.
+        ->and($carol->relative('Could not open /Users/ca rol/secret/Support/x.php'))
+        ->toBe('Could not open x.php');
+});
+
+it('reduces a run a root accounts for where the backslash is in the sentence, not the path', function (string $case, string $message, string $expected): void {
+    // The brace's sibling, and the same defect: an exclusion reads the WHOLE space-crossing run, so a
+    // backslash anywhere past the path refused the path too. A thrown message naming a file and a
+    // namespaced class in one sentence is the most ordinary shape PHP produces, and every one of them
+    // published the checkout whole. The anchor answers it the same way — the text in front of the
+    // backslash is under a root the ladder recognised, so the strip is the ladder's, not a guess.
+    $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))->relative($message);
+
+    expect($scrubbed)->toBe($expected)
+        ->and($scrubbed)->not->toContain('/app/root');
+})->with([
+    [
+        'a class after the file and the line',
+        'Failed in /app/root/app/X.php on line 3 for App\\Foo',
+        'Failed in app/X.php on line 3 for App\\Foo',
+    ],
+    [
+        'a class against the file',
+        'Could not open /app/root/app/X.php App\\Foo',
+        'Could not open app/X.php App\\Foo',
+    ],
+    [
+        'a brace and a backslash in one run',
+        'Failed in /app/root/app/{a,b}/X.php for App\\Foo',
+        'Failed in app/{a,b}/X.php for App\\Foo',
+    ],
+]);
+
+it('still refuses a backslash run no root accounts for', function (string $case, string $message): void {
+    // The exclusion is not weakened, only anchored: with no root in front of it a backslash still says
+    // regex or JSON string, and those rows are the ones that must never be rewritten. The third is the
+    // leak that buys it — the same trade the braced run makes, in the same direction.
+    expect((new MessagePaths(new RootRelativeSourcePathResolver('/Users/ca rol/checkout')))->relative($message))
+        ->toBe($message);
+})->with([
+    ['a rule whose regex holds a separator', 'Rule "regex:/^\\d+\\/\\d+$/" could not be read'],
+    ['a pattern rooted nowhere', 'Refused /some/where/\\d+/x.php as a pattern'],
+    ['a path outside every root, followed by a class', 'Failed in /Users/ca rol/secret/X.php for App\\Foo'],
+]);
+
+it('redacts a machine root out of a braced run without needing the anchor at all', function (string $case, string $configured, string $expected): void {
+    // Why the anchor is asked of the ladder's roots and not of `machineRoots()`: the temp directory and
+    // the include path are redacted LITERALLY, after the run pass, so a brace never protected them.
+    // Adding them to the anchor would be a second way to say what this already says.
+    //
+    // The prefix is an INPUT for the reason the depth row above states. `sys_get_temp_dir()` is `/tmp` on
+    // a Linux runner and five segments deep on a mac, and a one-segment root is one `machineRoots()`
+    // REFUSES — so reading it would assert the deep answer on one machine and the shallow one on
+    // another, which is a test that agrees with whatever the host happens to be.
+    $restore = (string) ini_get('include_path');
+
+    try {
+        ini_set('include_path', '.'.PATH_SEPARATOR.$configured);
+        $scrubbed = (new MessagePaths(new RootRelativeSourcePathResolver('/app/root')))
+            ->relative(sprintf('Could not open %s/build/{a,b}/x.php', $configured));
+    } finally {
+        ini_set('include_path', $restore);
+    }
+
+    expect($scrubbed)->toBe($expected);
+})->with([
+    ['a two-segment root', '/opt/php', 'Could not open build/{a,b}/x.php'],
+    ['a root as deep as a mac temp dir', '/var/folders/ab/cd/T', 'Could not open build/{a,b}/x.php'],
+    // The other half, and the reason the depth line exists: one segment is not a machine word, so the
+    // run keeps it. That is the decision that leaves `Route /tmp/upload is documented` alone, read here
+    // through a brace instead of through prose.
+    ['a one-segment root', '/tmp', 'Could not open /tmp/build/{a,b}/x.php'],
 ]);
 
 it('reduces the machine half of a braced wrapper run and leaves the braces where they stood', function (string $case, string $message, string $expected): void {
