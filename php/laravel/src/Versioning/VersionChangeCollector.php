@@ -101,29 +101,24 @@ final readonly class VersionChangeCollector
         // application spelling its versions plainly never has to spell them out again in config.
         $order = VersionOrder::for($document->versioning) ?? VersionOrder::detect($versions);
 
-        $unreadable = $order !== null && $stated !== null && ! $order->reads($stated);
+        // Two ways a change list cannot be placed: no grammar reads the set whole, or one does and this
+        // document's own version is not written in it. Two guards rather than one flag, so that what
+        // makes `$stated` a string in the second message is the `if` above it rather than a fact an
+        // analyser has to carry through a boolean.
+        if ($order === null) {
+            return $this->unordered(sprintf(
+                'The versions this document declares are neither all dates nor all semver, so %d declared change(s) could not be placed in order and none was applied.',
+                count($changes),
+            ), $changes, $diagnostics);
+        }
 
-        if ($order === null || $unreadable) {
-            if ($changes !== []) {
-                $diagnostics[] = new Diagnostic(
-                    severity: Severity::Warning,
-                    code: 'versioning.unordered',
-                    message: $order === null
-                        ? sprintf(
-                            'The versions this document declares are neither all dates nor all semver, so %d declared change(s) could not be placed in order and none was applied.',
-                            count($changes),
-                        )
-                        : sprintf(
-                            'This document\'s version "%s" is not a %s version, so %d declared change(s) could not be placed in order and none was applied.',
-                            PlainText::of($stated),
-                            $order->name(),
-                            count($changes),
-                        ),
-                    help: 'Write every version the same way — `2026-09-01` or `1.2.0` — and set documents.*.versioning to `date` or `semver` to say which.',
-                );
-            }
-
-            return new VersionChangeSet([], null, $diagnostics);
+        if ($stated !== null && ! $order->reads($stated)) {
+            return $this->unordered(sprintf(
+                'This document\'s version "%s" is not a %s version, so %d declared change(s) could not be placed in order and none was applied.',
+                PlainText::of($stated),
+                $order->name(),
+                count($changes),
+            ), $changes, $diagnostics);
         }
 
         $placed = [];
@@ -231,5 +226,26 @@ final readonly class VersionChangeCollector
                 $diagnostics[] = $diagnostic;
             },
         );
+    }
+
+    /**
+     * A change list nothing can order: the diagnostic, and the empty set that leaves every operation at
+     * the head shape. Silent when no change was declared — there is nothing to fail to apply.
+     *
+     * @param  list<VersionChange>  $changes
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private function unordered(string $message, array $changes, array $diagnostics): VersionChangeSet
+    {
+        if ($changes !== []) {
+            $diagnostics[] = new Diagnostic(
+                severity: Severity::Warning,
+                code: 'versioning.unordered',
+                message: $message,
+                help: 'Write every version the same way — `2026-09-01` or `1.2.0` — and set documents.*.versioning to `date` or `semver` to say which.',
+            );
+        }
+
+        return new VersionChangeSet([], null, $diagnostics);
     }
 }
