@@ -100,6 +100,20 @@ version and declares the version header parameter on every operation, with `defa
 version and `enum` = every supported version. No extension minted, and the enum is the
 closed-set-owes-an-enum case.
 
+The parameter is declared ONCE, in `components.parameters`, and every operation `$ref`s it. Inline it
+is the document's largest repetition by a distance — four parallel arrays one member long per version
+plus a fixed sentence, on every operation — so the document grows by operations × versions where
+nothing about the declaration varies with either: measured, a 400-operation API publishes 435 KB at one
+version and 3.8 MB at fifty, against a flat 254–263 KB shared. The component is named for the HEADER,
+never for the route table, which is why it may be named at all where a scoped change's fork may not
+(§"the fork rule"). Each use site keeps its own parameter id beside the `$ref`, the way a hoisted error
+response keeps its use site's, so `ContractIndex`, per-operation coverage and provenance address the
+same nodes they did inline; `x-docuccino` never survives an OpenAPI emit, so the artifact a consumer
+reads is a bare pointer either way. No `representation` keyword switches it off: unlike the three that
+do, this parameter is minted whole from document config rather than recovered from application code, it
+is byte-identical on every operation by construction, and the inline form has no property the shared
+one lacks.
+
 There is no OpenAPI convention for "this field exists from version X" — the registry carries only a
 boolean `deprecated`. Minting an extension for it is a decision to take deliberately and say out loud.
 
@@ -201,7 +215,8 @@ proves the claim before any layer is built out. What it came to:
   `api_version` is not a version, and not a byte of it moves.
 - **The version header, with its enum.** Every operation publishes the header a client pins with:
   optional, defaulting to this document's version, enumerating every version the application configures,
-  and decorated with SDK member names and each version's own sentence — a date is not an identifier. An
+  and decorated with SDK member names and each version's own sentence — a date is not an identifier. One
+  declaration in `components.parameters` that every operation `$ref`s, named for the header. An
   application that documents the header itself keeps its own wording.
 - **Scoping, and the fork rule** above.
 - **The per-version contract test.** Replay a real request with a version pinned and require the

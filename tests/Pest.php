@@ -2026,6 +2026,48 @@ function versionedFormDocuments(): array
 }
 
 /**
+ * The one version-header declaration a versioned document publishes, read where the document publishes
+ * it: `components.parameters`, which every operation `$ref`s. Shared so a suite asserting on the header
+ * cannot quietly go on reading an inline copy that is no longer there.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, mixed>
+ */
+function versionHeaderComponent(array $document, string $name = 'XApiVersion'): array
+{
+    $components = $document['components'] ?? [];
+    $parameters = is_array($components) ? ($components['parameters'] ?? []) : [];
+    $declaration = is_array($parameters) ? ($parameters[$name] ?? []) : [];
+
+    return is_array($declaration) ? $declaration : [];
+}
+
+/**
+ * The `$ref`s one operation's parameter list carries, in the order it states them.
+ *
+ * @param  array<string, mixed>  $document
+ * @return list<string>
+ */
+function parameterRefs(array $document, string $path = '/api/versioned-forms', string $method = 'get'): array
+{
+    $paths = $document['paths'] ?? [];
+    $item = is_array($paths) ? ($paths[$path] ?? []) : [];
+    $operation = is_array($item) ? ($item[$method] ?? []) : [];
+    $parameters = is_array($operation) ? ($operation['parameters'] ?? []) : [];
+
+    $refs = [];
+    foreach (is_array($parameters) ? $parameters : [] as $parameter) {
+        $ref = is_array($parameter) ? ($parameter['$ref'] ?? null) : null;
+
+        if (is_string($ref)) {
+            $refs[] = $ref;
+        }
+    }
+
+    return $refs;
+}
+
+/**
  * The versioning diagnostics one document raises with its changes read out of `$dir`, plus the
  * `attribute.unreadable` the vocabulary shares with every other attribute. Declares the document bag it
  * needs, so a case is one directory and one version rather than a config block copied per test.

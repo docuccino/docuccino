@@ -114,9 +114,10 @@ it('derives a version for a document whose version really is 1.0.0', function ()
     $document = $result->document->toArray();
     $codes = array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $result->diagnostics);
 
-    $header = $document['paths']['/api/versioned-forms']['get']['parameters'][0];
+    $header = versionHeaderComponent($document);
 
     expect($codes)->not->toContain('versioning.version-unstated')
+        ->and(parameterRefs($document))->toBe(['#/components/parameters/XApiVersion'])
         ->and($header['name'])->toBe('X-Api-Version')
         ->and($header['schema']['enum'])->toBe(['1.0.0'])
         ->and($header['schema']['default'])->toBe('1.0.0');
@@ -133,14 +134,10 @@ it('leaves a document that states a real version alone about it', function (): v
 
 it('declares the version header on every operation, enumerating every configured version', function (string $key, string $version): void {
     $document = generateDocument(key: $key)->document->toArray();
-    $parameters = $document['paths']['/api/versioned-forms']['get']['parameters'];
+    $header = versionHeaderComponent($document);
 
-    $header = array_values(array_filter(
-        $parameters,
-        static fn (array $parameter): bool => $parameter['name'] === 'X-Api-Version',
-    ))[0] ?? null;
-
-    expect($header)->not->toBeNull()
+    expect(parameterRefs($document))->toBe(['#/components/parameters/XApiVersion'])
+        ->and($header['name'])->toBe('X-Api-Version')
         ->and($header['in'])->toBe('header')
         ->and($header['required'])->toBeFalse()
         ->and($header['schema']['enum'])->toBe(['2026-06-01', '2026-09-01'])
@@ -180,7 +177,7 @@ it('orders and names a semver enum as versions rather than as bytes', function (
         ],
     ]);
 
-    $schema = generateDocument(key: 'v1_9')->document->toArray()['paths']['/api/versioned-forms']['get']['parameters'][0]['schema'];
+    $schema = versionHeaderComponent(generateDocument(key: 'v1_9')->document->toArray())['schema'];
 
     expect($schema['enum'])->toBe(['1.9.0', '1.10.0'])
         ->and($schema['x-enum-varnames'])->toBe(['V1_9_0', 'V1_10_0'])
@@ -198,7 +195,7 @@ it('never publishes an enum that leaves out the version the document defaults to
         return $raw;
     }, 'v2026-09-01')->document->toArray();
 
-    $schema = $document['paths']['/api/versioned-forms']['get']['parameters'][0]['schema'];
+    $schema = versionHeaderComponent($document)['schema'];
 
     expect($schema['enum'])->toBe(['2026-09-01', '2027-03-01'])
         ->and($schema['enum'])->toContain($schema['default']);
@@ -222,12 +219,9 @@ it('names the header the document configures', function (): void {
         return $raw;
     }, 'v2026-06-01')->document->toArray();
 
-    $names = array_map(
-        static fn (array $parameter): string => $parameter['name'],
-        $document['paths']['/api/versioned-forms']['get']['parameters'],
-    );
-
-    expect($names)->toContain('Api-Version')->and($names)->not->toContain('X-Api-Version');
+    expect(versionHeaderComponent($document, 'ApiVersion')['name'])->toBe('Api-Version')
+        ->and(parameterRefs($document))->toBe(['#/components/parameters/ApiVersion'])
+        ->and($document['components']['parameters'])->not->toHaveKey('XApiVersion');
 });
 
 it('leaves an application that documents the header itself to say it its own way', function (): void {
