@@ -94,21 +94,22 @@ function bindStubEngine(): void
 }
 
 /**
- * Build the `default` workbench document, optionally mutating its raw config first. The one shared
- * build helper the Laravel feature tests use, so none of them re-rolls the config → generator wiring
- * or reaches for a peer test's file-level function.
+ * Build one workbench document, optionally mutating its raw config first. The one shared build helper
+ * the Laravel feature tests use, so none of them re-rolls the config → generator wiring or reaches for
+ * a peer test's file-level function. `$key` names the document; a suite declaring its own `documents`
+ * bag — several versions of one API, an admin document beside the default — passes the one it wants.
  *
  * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutateConfig
  */
-function generateDocument(?callable $mutateConfig = null): GenerationResult
+function generateDocument(?callable $mutateConfig = null, string $key = 'default'): GenerationResult
 {
     /** @var array<string, mixed> $raw */
-    $raw = config('docuccino.documents.default');
+    $raw = config('docuccino.documents.'.$key);
     if ($mutateConfig !== null) {
         $raw = $mutateConfig($raw);
     }
 
-    $config = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+    $config = app(DocumentConfigFactory::class)->make($key, $raw, 'skeleton');
 
     return app(DocumentGenerator::class)->generate($config, app(TypeEngine::class));
 }
@@ -2001,18 +2002,89 @@ function checkDelivery(string $name, string $payload, ?callable $mutate = null):
 }
 
 /**
- * Emit the workbench `default` document as UIR into a temp file and point the contract assertions at
- * it. The one place the Laravel-side contract tests get a real artifact: a real build of the real
- * workbench through the real emitter, not a document written by hand to suit the assertion.
+ * Two documents over the one versioned workbench route: the version the code IS, and the version before
+ * the rename shipped. Shared because the document suite and the contract suite have to be looking at
+ * exactly the same pair — a contract test asserting against a bag the document test never built would
+ * prove nothing about the documents anyone ships.
+ *
+ * `info.version` is deliberately something else in both: the version is stated once, under
+ * `api_version`, and the document derives the rest from it.
+ *
+ * @return array<string, array<string, mixed>>
  */
-function workbenchContract(?callable $mutateConfig = null): string
+function versionedFormDocuments(): array
+{
+    $shared = [
+        'routes' => ['include' => ['api/versioned-forms']],
+        'error_responses' => 'none',
+    ];
+
+    return [
+        'v2026-09-01' => [
+            ...$shared,
+            'info' => ['title' => 'Forms API', 'version' => 'set from api_version'],
+            'api_version' => ['version' => '2026-09-01', 'changes' => ['dir' => 'workbench/app/Api/Versions']],
+        ],
+        'v2026-06-01' => [
+            ...$shared,
+            'info' => ['title' => 'Forms API', 'version' => 'set from api_version'],
+            'api_version' => ['version' => '2026-06-01', 'changes' => ['dir' => 'workbench/app/Api/Versions']],
+        ],
+    ];
+}
+
+/**
+ * The versioning diagnostics one document raises with its changes read out of `$dir`, plus the
+ * `attribute.unreadable` the vocabulary shares with every other attribute. Declares the document bag it
+ * needs, so a case is one directory and one version rather than a config block copied per test.
+ *
+ * @return list<Diagnostic>
+ */
+function versioningDiagnostics(?string $dir, string $version = '2026-06-01'): array
+{
+    config()->set('docuccino.documents', [
+        'v' => [
+            'info' => ['title' => 'Forms API', 'version' => '1.0.0'],
+            'routes' => ['include' => ['api/versioned-forms']],
+            'error_responses' => 'none',
+            'api_version' => ['version' => $version] + ($dir === null ? [] : ['changes' => ['dir' => $dir]]),
+        ],
+    ]);
+
+    return array_values(array_filter(
+        generateDocument(key: 'v')->diagnostics,
+        static fn (Diagnostic $diagnostic): bool => str_starts_with($diagnostic->code, 'versioning.')
+            || $diagnostic->code === 'attribute.unreadable',
+    ));
+}
+
+/**
+ * Where {@see workbenchContract()} writes one document's artifact. Named for the document as well as the
+ * process, so a suite holding two at once — two API versions of one route set — does not have the second
+ * overwrite the first. Stated once because the tests that corrupt or delete an artifact need the same
+ * answer the writer used.
+ */
+function workbenchContractPath(string $key = 'default'): string
+{
+    return sys_get_temp_dir().'/docuccino-contract-'.$key.'-'.getmypid().'.uir.json';
+}
+
+/**
+ * Emit one workbench document as UIR into a temp file and point the contract assertions at it. The one
+ * place the Laravel-side contract tests get a real artifact: a real build of the real workbench through
+ * the real emitter, not a document written by hand to suit the assertion.
+ *
+ * The artifact lands at {@see workbenchContractPath()}.
+ */
+function workbenchContract(?callable $mutateConfig = null, string $key = 'default'): string
 {
     bindStubEngine();
 
-    $path = sys_get_temp_dir().'/docuccino-contract-'.getmypid().'.uir.json';
-    file_put_contents($path, (new UirEmitter)->emit(generateDocument($mutateConfig)->document));
+    $path = workbenchContractPath($key);
+    file_put_contents($path, (new UirEmitter)->emit(generateDocument($mutateConfig, $key)->document));
 
     ApiContract::using($path);
+    ApiContract::forDocument($key);
 
     return $path;
 }

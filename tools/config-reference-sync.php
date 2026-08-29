@@ -29,6 +29,7 @@ declare(strict_types=1);
  */
 const CONFIG_REFERENCE_SECTIONS = [
     '## Top level' => '',
+    '### `api_version`' => 'documents.*.api_version',
     '### `info`' => 'documents.*.info',
     '### `servers`' => 'documents.*.servers',
     '### `routes`' => 'documents.*.routes',

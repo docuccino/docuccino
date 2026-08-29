@@ -43,7 +43,7 @@ in-process. The published config ships one document, `default`.
 
 :::note[Paths are stored relative to your application]
 Every path in a document — `info.description.file`, `content.dir`, `webhooks.dir`, `overlays`,
-`examples.recordings`, `export.path` — may be
+`examples.recordings`, `api_version.changes.dir`, `export.path` — may be
 written relative to your application root or as an absolute path; both resolve to the same file. Write
 them however you like: a path inside your application is **stored relative to the application root**,
 so the generated document is identical on your laptop, in CI, and in a container, wherever the app is
@@ -53,6 +53,48 @@ A path pointing *outside* your application is kept exactly as you wrote it — i
 could not be read — which makes the generated document specific to machines that have that path. Builds
 say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 :::
+
+### `api_version`
+
+```php
+// 'api_version' => [
+//     'version' => '2026-09-01',
+//     'changes' => ['dir' => 'app/Api/Versions'],
+//     'header' => 'X-Api-Version',
+// ],
+```
+
+Declaring `api_version` makes the document an API **version** rather than a document that merely has
+one. Three things follow.
+
+`info.version` becomes the version you name here, so the date lives in one place and the document can
+never disagree with itself about which version it is.
+
+Every operation gains the header a client pins a version with — `in: header`, optional, defaulting to
+this document's version and enumerating every version your `documents` map declares. Consumers read
+the set of supported versions out of the document itself, and a generated client gets a named constant
+for each one.
+
+Every change declared under `changes.dir` that shipped **after** this version is applied in reverse, so
+an older version's document describes the shape that version published. Your code is always the newest
+version; a change class says what the API did before it:
+
+```php
+use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\RenamedResponseField;
+
+#[ApiVersionChange(since: '2026-09-01', description: 'An invoice publishes `total` where it published `amount`.')]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'amount', to: 'total')]
+final class InvoiceTotalReplacesAmount {}
+```
+
+Nothing in that class is executed, and its body is never read — Docuccino compiles the declaration and
+stops there. Serving an older shape at runtime is your application's job, and a
+[per-version contract test](/laravel/guides/contract-testing/) is what holds the two halves together:
+replay your suite with a version pinned, and every response must validate against that version's
+document.
+
+Migrating *stored records* to a new shape is a different problem, and API versioning does not solve it.
 
 ### `info`
 

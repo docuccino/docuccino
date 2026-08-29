@@ -396,6 +396,50 @@ final readonly class DocumentConfig
     }
 
     /**
+     * The API version this document IS, from `api_version.version`, or null when the document is not
+     * an API version at all. It is the single statement of the fact: `info.version` is derived from it
+     * rather than written a second time, so the two can never disagree.
+     */
+    public function apiVersion(): ?string
+    {
+        $version = $this->apiVersionConfig()['version'] ?? null;
+
+        return is_string($version) && $version !== '' ? $version : null;
+    }
+
+    /**
+     * The directory the API version-change classes are discovered under, from
+     * `api_version.changes.dir`, or null when the document names none — in which case the version
+     * publishes the head shape. Confined against the app base path by the adapter, the same as
+     * {@see webhooksDir()}.
+     */
+    public function apiVersionChangesDir(): ?string
+    {
+        $changes = Hydrate::map($this->apiVersionConfig()['changes'] ?? null);
+
+        return self::configuredPath($changes['dir'] ?? null);
+    }
+
+    /**
+     * The request header a client pins a version with, from `api_version.header`. Defaults to
+     * `X-Api-Version`, which is what the document publishes on every operation.
+     */
+    public function apiVersionHeader(): string
+    {
+        $header = $this->apiVersionConfig()['header'] ?? null;
+
+        return is_string($header) && trim($header) !== '' ? trim($header) : 'X-Api-Version';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function apiVersionConfig(): array
+    {
+        return Hydrate::map($this->raw['api_version'] ?? null);
+    }
+
+    /**
      * The directory of committed response recordings, from `examples.recordings`, or null when the
      * document publishes none. May be relative; the adapter confines it against the app base path the
      * same as {@see contentDir()}.

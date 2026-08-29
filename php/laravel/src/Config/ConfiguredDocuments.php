@@ -45,6 +45,30 @@ final class ConfiguredDocuments
         );
     }
 
+    /**
+     * Every version the application configures, sorted — the closed set a version header enumerates, read
+     * off the documents themselves so there is no second list to keep in step with them.
+     *
+     * @return list<string>
+     */
+    public function apiVersions(): array
+    {
+        $versions = [];
+        foreach ($this->all() as $entry) {
+            $apiVersion = is_array($entry) ? ($entry['api_version'] ?? null) : null;
+            $version = is_array($apiVersion) ? ($apiVersion['version'] ?? null) : null;
+
+            if (is_string($version) && $version !== '') {
+                $versions[$version] = true;
+            }
+        }
+
+        $sorted = array_keys($versions);
+        sort($sorted, SORT_STRING);
+
+        return $sorted;
+    }
+
     /** Whether `$key` names a configured document. */
     public function has(string $key): bool
     {
