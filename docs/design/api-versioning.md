@@ -274,6 +274,66 @@ The second slice: `#[MadeResponseFieldRequired]`, `#[MadeResponseFieldOptional]`
   that trains a reader to stop reading the channel, and the fork's cost is already reported where it
   actually fails (`versioning.scope-unforkable`).
 
+### The removal verb, and the three readings of a declared type — built
+
+The third slice: `#[RemovedResponseField]`, the one verb whose fact is genuinely gone.
+
+- **It runs the other way round, and that is forced.** Every other verb names its field the way the
+  code spells it today; a removal names the field the versions BEFORE it published, because the code
+  has no name for it at all. The reference page and the guide say so in as many words rather than
+  leaving it to be inferred from the one verb that breaks the pattern.
+- **Three readings of `type:`, and none of them a converter.** A class the document already publishes
+  a response schema for becomes a `$ref` at that component; one of OpenAPI's own type names — six
+  names, plus `[]` for a list and `?` for a nullable, nesting — becomes that `type`; anything else
+  publishes the empty schema with `versioning.type-unresolved` beside it. `DocumentContext` has no
+  converter and no component registry, and the first two readings are chosen precisely so it needs
+  neither: one is a pointer at something already there, the other is the document's own `type` keyword
+  spelled out.
+- **The `$ref` reading composes, and it is tested rather than argued.** Deriving a version rewrites the
+  WHOLE document, so the component a re-added field points at is itself downgraded by every other
+  change — a field re-added as an `Author` in the 2026-06-01 document holds the 2026-06-01 author. That
+  is what makes the reading worth having over an inline copy, and it is also what keeps a NAME in the
+  document for a generated client.
+- **An unstated type is silent; a stated one that could not be read is not.** Both publish the empty
+  schema. The difference is that an author who wrote nothing asked for the unconstrained shape on
+  purpose, and one who wrote `App\Support\Money` asked for something and did not get it. A warning on
+  the first would fire where nothing can be done, which is the noise that trains a reader to stop
+  reading the channel.
+- **`required: true` is allowed, and refusing it would have been a guess.** The suggestion was to
+  refuse a declaration whose field the server cannot produce. Nothing static can know whether a runtime
+  produces a value — the whole point of the split is that the imperative half is the application's —
+  and `required: true` makes the older document STRICTER, which is exactly the case the per-version
+  contract test can refuse out loud. Refusing a declaration this cannot evaluate would trade an oracle
+  for a guess, in the one product whose differentiator is the oracle.
+- **A required re-added field costs the examples.** No example carries a field the code does not have,
+  so an example standing where that schema governs now fails its own schema. The rename's example walk
+  is the same walk with a different question — is the member THERE, rather than what is it called — so
+  it grew a second mode rather than a sibling, and the class is named for the family
+  (`ChangedFieldExamples`) rather than for the rename. Dropped, not rewritten: inventing a value for
+  the field is the declared-default trap under another name.
+- **Where a re-added member lands is a function of the schema.** `required` counts positions in
+  `properties`; `properties` has no such fact to count — the field's old position was deleted with it —
+  so the names themselves are the order. Both are the same rule and live in one class
+  (`MemberOrder`): the index is the number of members already standing that sort before it, which is
+  commutative, so two removals land the same way round whichever was written first.
+- **The verb order is "renames last" for a second reason.** A removal names a field the code does not
+  spell, so the rule the required-ness verbs are ordered by does not reach it. What does is that a
+  removal INSERTS, counting against the names already standing — and a rename run first would have it
+  counting against names the same change invented.
+- **The fork needs nothing new, and the guard that looked necessary was dead.** A re-added `$ref` is
+  written INTO the copy, after everything on the way down has been expanded, and the walk descends into
+  it exactly as into any other member: a pointer that leads back to the schema being copied expands,
+  meets the component again and trips the existing cycle guard. A pointer at anything else is left
+  alone — which is what the fork already does for every `$ref` a schema merely HOLDS, and which keeps a
+  name a generated client can use. A separate "does the copy point back" check was written, found to
+  have zero reachable firings, and removed.
+- **Versioning got its first real-engine coverage.** Everything before this was the workbench through a
+  stub, or a document array written by hand. `RealEngineVersioningTest` derives a version from
+  `App\Data\SnapshotData` as Larastan recovered it — members from `@var`, `@phpstan-var` and a
+  constructor `@param` block, an enum reached through a native backed enum two files away — with the
+  change classes under the fixture app's own `app/Versioning/`, discovered by scanning the directory
+  the document configures.
+
 ### Phase 2 — the production package
 
 A Laravel package owning the imperative half, with change objects that co-locate description, target
@@ -364,11 +424,11 @@ Consequences of the decisions above, each one a diagnostic rather than a silent 
   `Envelope` → `Page` → `FormData` publishes one anonymous object where a client would have had three
   named types. It is the same price for the same reason — a `$ref` left in the copy would point back at
   the shared component — and only the operations in scope pay it.
-- **There is no removal verb, and not building one was deliberate.** "This version also published
-  `subtotal`" has to declare the removed field's TYPE, because the type is exactly what is no longer in
-  the code to read — so the verb carries a schema, and a schema written as an attribute argument is a
-  second type grammar beside the one the rest of the product recovers out of PHP. Worth building when an
-  application asks for it, and worth not guessing at before then.
+- **A removal verb's `type:` is not a second type grammar, and reading it as one is what delayed it.**
+  The recorded objection was that "this version also published `subtotal`" has to declare the removed
+  field's TYPE — which is exactly what is no longer in the code to read — so the verb carries a schema,
+  and a schema in an attribute argument is a grammar beside the one the chain recovers out of PHP. That
+  is narrower than it looked, and the slice below says what it actually came to.
 
 ## Limits inherited with the model
 
