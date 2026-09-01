@@ -143,6 +143,45 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 10: a domain exception that IS an HTTP status, pinned in its own
+     * parent::__construct() through a private constructor's default — the
+     * static-factory idiom, where the default is the only value any instance
+     * can carry.
+     */
+    public function pinnedHttpStatus(): void
+    {
+        throw \App\Exceptions\ExportRejectedException::forColumns(['sku']);
+    }
+
+    /**
+     * Case 10b: the same pin written as a literal, two classes up, through an
+     * abstract base that adds no constructor of its own.
+     */
+    public function inheritedHttpStatus(): void
+    {
+        throw new \App\Exceptions\PortalUnavailableException;
+    }
+
+    /**
+     * Case 10c: a subclass that adds no constructor, so the framework's own runs
+     * and the status is the argument this throw writes.
+     */
+    public function httpStatusAtThrowSite(): void
+    {
+        throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.');
+    }
+
+    /**
+     * Case 10d: the same defaulted status behind a PUBLIC constructor. Any caller
+     * may pass another, so the default is a guess and the status stays unread —
+     * the degraded answer plus its diagnostic.
+     */
+    public function unreadHttpStatus(): void
+    {
+        throw new \App\Exceptions\ExportBlockedException;
+    }
+
+    /**
      * Case 9: the app's OWN validate(), which the KnownThrowers registry keys
      * ValidationException/422 on by bare method name. The callee is project code
      * the engine can read, so what it actually throws (OutOfStockException) has

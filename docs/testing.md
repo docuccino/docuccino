@@ -242,7 +242,7 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.51%** | 97    | fully in-process-measurable                      |
 | `laravel`           | **96.00%** | 95    | 96 would leave 0.0035pp — four tenths of a statement |
-| `inference-phpstan` | **44.98%** | 44    | real path is subprocess-only → `fixture`-proven  |
+| `inference-phpstan` | **46.25%** | 46    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
 | Overall             | 92.41%     | —     | informational only; no longer a gate             |
 
@@ -269,7 +269,14 @@ well-covered statements out of the numerator and left a remainder proven out-of-
 (43.73%) became 538/1557 (34.55%) without losing a proof. Core rose in the same change, the result
 model's serialization contract going from an incidental proof to a direct one.
 
-Two moves are worth keeping as precedent because the denominator went the *other* way and the answer
+A third precedent, for the same reason and with the answer taken BEFORE the gate went red: the
+HttpException status read is reflection over a class hierarchy plus a parse of one constructor, and written
+straight onto PHPStan's `ReflectionProvider` and `FileAnalyzer` it was 86 statements at 0%, which took the
+package from 44.20% to 43.25%. Behind a `ConstructorSource` seam — bodies and the constant fold, the only
+two answers that need anything analysed — the same logic is native reflection over real probe exceptions and
+measures in process, and the package rose to 46.25%.
+
+Two more moves are worth keeping as precedent because the denominator went the *other* way and the answer
 was NOT to lower a floor. When the response refiner gained a 61-statement, Scope-driven construction-site
 descent that pcov cannot observe, the package fell to 36.68% — and the fix was closing a real gap the
 standards already required, giving `NativeTypeMapper` (a lookup table with zero in-process coverage) its
@@ -288,7 +295,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **95**, `inference-phpstan` **44**.
+  an aspiration. Current floors: `core` **97**, `laravel` **95**, `inference-phpstan` **46**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine
