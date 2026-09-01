@@ -43,7 +43,8 @@ the same class already returned a list.
 ## A test that proves less than it claims
 
 Four instances, from four different agents, in one stack — which is what makes it a class rather than
-carelessness.
+carelessness. The fifth arrived later, out of a shipped regression, and is the shape the tell below
+does not catch.
 
 - **Structurally incapable of failing.** `expect($surface)->not->toContain($a, $b)` inverts the whole
   call, so it passes as soon as ONE name is absent. The two names in it were covering for each other.
@@ -53,10 +54,16 @@ carelessness.
   reverting the other six passed the whole suite.
 - **An invariant stated only in prose.** Reversing a `sort()` whose docblock forbade order-dependence
   passed all 8327 tests.
+- **Aimed at the wrong answer.** A test written in the same change as the behaviour it asserts. A
+  tier that had folded a body and a media type from the app's own handler declined on an unfoldable
+  status, and the same change added a passing test named for that decline. It could fail, and it
+  asserted something — the wrong thing — and three reviewers read it as a correct guard.
 
 *The tell.* Ask what would have to break for this test to fail, then break it. If the suite stays
 green, the test is decoration. A dataset proves the rows it lists, so a hand-maintained list owes a
-separate guard that reads the source of truth.
+separate guard that reads the source of truth. That question misses the fifth, which breaks fine and
+is merely pointed at the wrong invariant: for a test added alongside a behaviour change, ask
+separately whether the answer it asserts is right, not merely whether it can fail.
 
 ## A key the document publishes that the runtime would not return
 
