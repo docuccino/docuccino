@@ -2,18 +2,16 @@
 
 declare(strict_types=1);
 
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeBranching;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeConstantPinned;
+use Docuccino\Inference\PhpStan\Support\ProjectFilter;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeConstructedDefault;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeInherited;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeInheritsPin;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeNoConstructor;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeNoParentCall;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeOverridingFactory;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeOutOfRangeDefault;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePinned;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePlain;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePublicDefault;
-use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeTraitFactory;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeSideEffect;
+use Docuccino\Inference\PhpStan\Tests\Support\HttpProbeRows;
 use Docuccino\Inference\PhpStan\Tests\Support\ParsedBodies;
 use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
@@ -22,55 +20,60 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * The status read over REAL exception classes — the hierarchy, the visibility and the defaults are all
- * reflection over the probes, and only the bodies and the fold come from a source. That the analyser hands
- * over the same bodies and folds the same constants is the fixture group's job ({@see ThrowCasesTest});
+ * The status read over REAL exception classes — the hierarchy, the visibility and the parse are all real,
+ * and only the bodies, the fold and the parameter defaults come from a source. That the analyser hands over
+ * the same bodies and folds the same constants is the fixture group's job ({@see ThrowCasesTest});
  * everything the read DECIDES is decided here.
  */
-function httpStatuses(): HttpExceptionStatus
+function httpStatuses(bool $projectSeesTheFile = true): HttpExceptionStatus
 {
-    return new HttpExceptionStatus(new ParsedBodies);
+    return new HttpExceptionStatus(new ParsedBodies, httpProjectFilter($projectSeesTheFile));
 }
 
-it('reads the status a class states for every one of its instances', function (string $fqcn, ?int $status): void {
-    expect(httpStatuses()->pinned($fqcn))->toBe($status);
+function httpProjectFilter(bool $sees): ProjectFilter
+{
+    return new ProjectFilter($sees ? ['/'] : [], static fn (string $file): string => $file);
+}
+
+it('reads what a class states about its status', function (string $fqcn, ?int $pinned, ?int $parameter): void {
+    // One row per class, both answers on it: they divide the same domain, and two datasets covered their
+    // own halves and left seven probes with nothing saying which slot they forward.
+    $statuses = httpStatuses();
+
+    expect($statuses->pinned($fqcn))->toBe($pinned)
+        ->and($statuses->statusParameter($fqcn))->toBe($parameter);
 })->with([
-    'a literal reaching the parent' => [ProbePinned::class, 422],
-    // Folding is the source's, never hand-rolled here — a class constant reads like the literal beside it.
-    'a class constant reaching the parent' => [ProbeConstantPinned::class, 409],
-    'a literal two classes up, through a base that adds nothing' => [ProbeInherited::class, 503],
-    // A base that pins leaves a subclass only the message to choose, so the pin is the subclass's too.
-    'a pin inherited from a base that states it' => [ProbeInheritsPin::class, 410],
-    // Symfony's own subclasses are written this way, and used to resolve to 500 like everything else.
-    'a vendor subclass pinning its own' => [NotFoundHttpException::class, 404],
-    // A private constructor with no factory writing the slot: the default is what every instance carries.
-    'a private constructor default' => [ProbeFactory::class, 422],
-    // …and every negative, each of which would be a status the code does not state.
-    'a factory that writes the slot itself' => [ProbeOverridingFactory::class, null],
-    'a PUBLIC constructor default' => [ProbePublicDefault::class, null],
-    'factories in a trait, written in another file' => [ProbeTraitFactory::class, null],
-    'a constructor choosing its status by branch' => [ProbeBranching::class, null],
-    'a constructor that never reaches its parent' => [ProbeNoParentCall::class, null],
-    'no constructor at all — the status is an argument' => [ProbeNoConstructor::class, null],
-    'HttpException itself' => [HttpException::class, null],
-    'a class that is not an HttpException' => [ProbePlain::class, null],
-    'a name no class answers to' => ['App\\Nope\\NoSuchException', null],
+    ...HttpProbeRows::statuses(),
+    // No class below `HttpException` adds a constructor, so its own runs and argument 0 IS the status.
+    'HttpException itself' => [HttpException::class, null, 0],
+    // Symfony's own subclasses pin like an application's — but only where the file is one the build reads;
+    // "will not read a class outside the project" below is the same class behind the gate the engine
+    // really applies, and that gate is why this answer never reaches a real document.
+    'a vendor subclass pinning its own' => [NotFoundHttpException::class, 404, null],
+    'a name no class answers to' => ['App\\Nope\\NoSuchException', null, null],
 ]);
 
-it('names the slot a class forwards its status through, where it forwards one', function (string $fqcn, ?int $slot): void {
-    expect(httpStatuses()->statusParameter($fqcn))->toBe($slot);
-})->with([
-    // No class below HttpException adds a constructor, so its own runs and argument 0 IS the status.
-    'no constructor at all' => [ProbeNoConstructor::class, 0],
-    'HttpException itself' => [HttpException::class, 0],
-    // The forwarded parameter, named so a `throw new X(…, 409)` can still be folded at its site.
-    'a public constructor forwarding its only parameter' => [ProbePublicDefault::class, 0],
-    'a factory class forwarding a later parameter' => [ProbeFactory::class, 1],
-    // Nothing to forward: the status is pinned, or nothing reached the parent at all.
-    'a class that pins a literal' => [ProbePinned::class, null],
-    'a constructor choosing by branch' => [ProbeBranching::class, null],
-    'a class that is not an HttpException' => [ProbePlain::class, null],
-]);
+it('has a row for every probe the fixtures directory ships', function (): void {
+    // A dataset only proves the rows it lists, and this directory is a hand-maintained full set: a probe
+    // added and named nowhere would leave the whole suite green while proving nothing about it.
+    $probes = HttpProbeRows::probeClasses();
+
+    expect($probes)->toHaveCount(count(array_unique($probes)))
+        ->and(count($probes))->toBeGreaterThanOrEqual(20)
+        ->and(array_values(array_diff($probes, HttpProbeRows::coveredClasses())))->toBe([]);
+});
+
+it('will not read a class outside the project', function (): void {
+    // The gate, and nothing else, is what changes the answer. It is not a policy: PHPStan strips an
+    // unprimed file's bodies, so the analyser reads exactly nothing out of a vendor exception while paying
+    // to prime it — the fixture group measures that, and this pins the decision the gate encodes.
+    $gated = httpStatuses(false);
+
+    expect($gated->pinned(NotFoundHttpException::class))->toBeNull()
+        ->and($gated->pinned(ProbePinned::class))->toBeNull()
+        // The hierarchy is still reflection, so a class adding no constructor still names its slot.
+        ->and($gated->statusParameter(ProbeNoConstructor::class))->toBe(0);
+});
 
 it('reports the constructor slot a construction would fill, and the default it would take', function (string $fqcn, int $slot, array $names, ?int $default): void {
     expect(httpStatuses()->constructorSlot($fqcn, $slot))->toBe(['names' => $names, 'default' => $default]);
@@ -82,9 +85,24 @@ it('reports the constructor slot a construction would fill, and the default it w
     'the inherited constructor' => [ProbeNoConstructor::class, 0, ['statusCode', 'message', 'previous', 'headers', 'code'], null],
     // A default that is not an integer is not a status, however present it is.
     'a slot defaulting to a string' => [ProbeNoConstructor::class, 1, ['statusCode', 'message', 'previous', 'headers', 'code'], null],
+    // Nor is one outside the range a response key can take.
+    'a default outside the range a status can take' => [ProbeOutOfRangeDefault::class, 0, ['statusCode'], null],
     'a slot past the end of the signature' => [ProbePinned::class, 4, [], null],
     'a name no class answers to' => ['App\\Nope\\NoSuchException', 0, [], null],
 ]);
+
+it('never executes the code it is reading', function (): void {
+    // `ReflectionParameter::getDefaultValue()` EVALUATES the initialiser, and PHP has allowed `new` in one
+    // since 8.1 — so asking reflection for a default runs an analysed application's constructor inside the
+    // generator. The count is the guard: reading this class's defaults may not move it.
+    $before = ProbeSideEffect::$constructed;
+    $statuses = httpStatuses();
+
+    expect($statuses->constructorSlot(ProbeConstructedDefault::class, 0))
+        ->toBe(['names' => ['marker', 'statusCode'], 'default' => null])
+        ->and($statuses->pinned(ProbeConstructedDefault::class))->toBe(422)
+        ->and(ProbeSideEffect::$constructed)->toBe($before);
+});
 
 it('records every file in the hierarchy, not only the one that declares the constructor today', function (): void {
     // Fragment-cache soundness: adding a constructor to the base changes the answer, so the base's file has
@@ -109,13 +127,18 @@ it('states nothing about a class whose body it cannot read', function (): void {
             return [];
         }
 
-        public function foldInt(string $file, string $class, string $method, Node\Expr $expr): ?int
+        public function foldInt(string $file, Node\Expr $expr, Node\Expr\New_|Node\Expr\StaticCall $at): ?int
+        {
+            return null;
+        }
+
+        public function intDefault(string $file, string $class, string $method, int $index): ?int
         {
             return null;
         }
     };
 
-    $statuses = new HttpExceptionStatus($blind);
+    $statuses = new HttpExceptionStatus($blind, httpProjectFilter(true));
 
     expect($statuses->pinned(ProbePinned::class))->toBeNull()
         ->and($statuses->pinned(ProbeFactory::class))->toBeNull()

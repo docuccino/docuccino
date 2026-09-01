@@ -8,9 +8,9 @@ use PhpParser\ParserFactory;
 
 /**
  * The parse half of the HttpException status read: which `parent::__construct()` a body makes, what it puts
- * in one slot of it, and whether the class ever builds itself writing that same slot. No types are resolved
- * here, so these run in process; that a real constructor's statements arrive looking like this is the
- * fixture group's job ({@see ThrowCasesTest}).
+ * in one slot of it, whether the body writes the variable it forwards, and whether the class ever builds
+ * itself writing that same slot. No types are resolved here, so these run in process; that a real
+ * constructor's statements arrive looking like this is the fixture group's job ({@see ThrowCasesTest}).
  *
  * @return array<array-key, Node\Stmt>
  */
@@ -31,6 +31,39 @@ it('reads the one parent constructor call a body makes', function (string $code,
     'a first-class callable' => ['$c = parent::__construct(...);', false],
     'another class\'s constructor' => ["Other::__construct(422, 'no');", false],
     'another parent method' => ['parent::configure(422);', false],
+]);
+
+it('refuses the default of a parameter the constructor writes', function (string $code, bool $reassigns): void {
+    // The guard on reading a parameter's default as the value the parent received. Every row states the
+    // rule from the language rather than from the code: any write to `$statusCode`, in any of the forms a
+    // local can be written, means the value forwarded is not the one the default names.
+    expect(StatusForwarding::reassigns(forwardingStmts($code), 'statusCode'))->toBe($reassigns);
+})->with([
+    'nothing but the forwarding' => ['parent::__construct($statusCode, \'no\');', false],
+    'another local written' => ['$message = 409;', false],
+    'the parameter merely read' => ['$this->code = $statusCode + 1;', false],
+    // The write the report was about: a constructor normalising its own status before forwarding it.
+    'a conditional reassignment' => ['if ($x) { $statusCode = 400; }', true],
+    // …and after the forwarding, which cannot have changed what was forwarded. Refused anyway: position is
+    // not read, and refusing costs a pin the class did state where trusting one publishes a false status.
+    'a reassignment after the call' => ['parent::__construct($statusCode, \'no\'); $statusCode = 503;', true],
+    'a plain reassignment' => ['$statusCode = 400;', true],
+    'a compound assignment' => ['$statusCode += 1;', true],
+    'an increment' => ['$statusCode++;', true],
+    'a reference binding' => ['$other = &$statusCode;', true],
+    'a destructuring target' => ['[$a, $statusCode] = $pair;', true],
+    'a keyed destructuring target' => ['[\'s\' => $statusCode] = $data;', true],
+    'a foreach value' => ['foreach ($codes as $statusCode) { }', true],
+    'a foreach key' => ['foreach ($codes as $statusCode => $label) { }', true],
+    'an unset' => ['unset($statusCode);', true],
+    'a static declaration' => ['static $statusCode = 1;', true],
+    'a global declaration' => ['global $statusCode;', true],
+    'a catch binding' => ['try { f(); } catch (Throwable $statusCode) { }', true],
+    // A write naming no single local may well have landed on this one.
+    'a variable variable' => ['$$name = 400;', true],
+    'an extract()' => ['extract($data);', true],
+    // Nested where a whole-body scan has to reach it.
+    'inside a closure the constructor carries' => ['$f = function () use (&$statusCode) { $statusCode = 400; };', true],
 ]);
 
 it('finds the argument a call puts in a slot, however it was written', function (string $code, int $slot, array $names, ?string $expected): void {

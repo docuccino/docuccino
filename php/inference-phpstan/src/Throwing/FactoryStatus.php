@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
-use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use PhpParser\Node;
 use ReflectionClass;
@@ -20,7 +19,7 @@ use ReflectionMethod;
  *
  * Every way the read could publish a status the code does not pass is a decline: a factory whose file is not
  * the project's, a body that builds the class more than once and folds to two different statuses, a slot
- * nothing can be said about ({@see ArgumentSlots::knows()}), and a factory some other class declares, where
+ * nothing can be said about ({@see ConstructionStatus}), and a factory some other class declares, where
  * `self` names that class and its constructor slots need not be this one's.
  *
  * @phpstan-type FactoryRead array{status: int|null, files: list<string>}
@@ -30,8 +29,9 @@ use ReflectionMethod;
 final class FactoryStatus
 {
     /**
-     * Reads by `Class::factory`, seeded before the work so nothing re-enters, and kept for the whole build
-     * so one factory thrown by forty routes is read once.
+     * Reads by `Class::factory`, kept for the whole build so one factory thrown by forty routes is read
+     * once — and written before each early return as well as after the work, so a factory that answers
+     * nothing is memoised as a decline rather than re-read per route.
      *
      * @var array<string, FactoryRead>
      */
@@ -58,16 +58,23 @@ final class FactoryStatus
 
         $this->cache[$key] = ['status' => null, 'files' => []];
 
-        // The slot the class forwards its status through. Null where the class pins one — which no factory
-        // can move, so the factory is never read — or where nothing of its reaches `HttpException` at all.
+        // The slot the class forwards its status through. Null where nothing of the class's reaches
+        // `HttpException` at all, and null where its own `parent::__construct()` pins a LITERAL — which no
+        // factory can move, so there is nothing here to read. A pin that came from a private constructor's
+        // DEFAULT still names its slot, so this read does run for one, and agrees with it: a factory that
+        // leaves the slot empty passes that same default.
         $slot = $this->statuses->statusParameter($fqcn);
         if ($slot === null) {
             return $this->cache[$key];
         }
 
         $factory = self::factory($fqcn, $method);
-        $file = $factory?->getFileName();
-        if ($factory === null || $file === false || $file === null) {
+        if ($factory === null) {
+            return $this->cache[$key];
+        }
+
+        $file = $factory->getFileName();
+        if ($file === false) {
             return $this->cache[$key];
         }
 
@@ -76,7 +83,7 @@ final class FactoryStatus
             : null;
 
         return $this->cache[$key] = [
-            'status' => $body === null ? null : $this->fromBody($fqcn, $method, $file, $body, $slot),
+            'status' => $body === null ? null : $this->fromBody($fqcn, $file, $body, $slot),
             'files' => [$file],
         ];
     }
@@ -87,7 +94,7 @@ final class FactoryStatus
      *
      * @param  array<array-key, Node\Stmt>  $body
      */
-    private function fromBody(string $fqcn, string $method, string $file, array $body, int $slot): ?int
+    private function fromBody(string $fqcn, string $file, array $body, int $slot): ?int
     {
         $constructions = StatusForwarding::constructionsOf($body, $fqcn);
         if ($constructions === []) {
@@ -98,7 +105,15 @@ final class FactoryStatus
 
         $status = null;
         foreach ($constructions as $construction) {
-            $one = $this->fromConstruction($construction, $fqcn, $method, $file, $slot, $constructor);
+            // The same rule the throw site reads a `throw new X(…)` by, so one hop apart cannot mean two
+            // answers.
+            $one = ConstructionStatus::inSlot(
+                $construction,
+                $slot,
+                $constructor,
+                fn (Node\Expr $argument): ?int => $this->bodies->foldInt($file, $argument, $construction),
+            );
+
             if ($one === null || ($status !== null && $one !== $status)) {
                 return null;
             }
@@ -107,36 +122,6 @@ final class FactoryStatus
         }
 
         return $status;
-    }
-
-    /**
-     * @param  array{names: list<string>, default: int|null}  $constructor
-     */
-    private function fromConstruction(
-        Node\Expr\New_ $construction,
-        string $fqcn,
-        string $method,
-        string $file,
-        int $slot,
-        array $constructor,
-    ): ?int {
-        if ($construction->isFirstClassCallable()) {
-            return null; // a callable, whose arguments are supplied somewhere this read cannot see
-        }
-
-        $slots = ArgumentSlots::of($construction->getArgs(), $constructor['names']);
-
-        // "Absent" and "past an unreadable spread" both read as no argument, and only the first of them
-        // means the parameter's default is what was passed.
-        if (! $slots->knows($slot)) {
-            return null;
-        }
-
-        $argument = $slots->at($slot);
-
-        return $argument === null
-            ? $constructor['default']
-            : $this->bodies->foldInt($file, $fqcn, $method, $argument);
     }
 
     /**

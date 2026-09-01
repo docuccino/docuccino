@@ -639,7 +639,7 @@ final class PhpStanTypeEngine implements TypeEngine
     private function makeThrowAnalyzer(): ThrowAnalyzer
     {
         $bodies = $this->classBodies ??= new AnalyzedBodies($this->fileAnalyzer);
-        $statuses = $this->httpExceptionStatus ??= new HttpExceptionStatus($bodies);
+        $statuses = $this->httpExceptionStatus ??= new HttpExceptionStatus($bodies, $this->projectFilter);
 
         return new ThrowAnalyzer(
             $this->adapter->reflectionProvider(),

@@ -8,6 +8,7 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
+use Illuminate\Auth\SessionGuard;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -172,13 +173,81 @@ class ThrowsController extends Controller
     }
 
     /**
-     * Case 10d: the same defaulted status behind a PUBLIC constructor. Any caller
-     * may pass another, so the default is a guess and the status stays unread —
-     * the degraded answer plus its diagnostic.
+     * Case 10d: the same defaulted status behind a PUBLIC constructor. The class
+     * pins nothing — any caller may pass another — but THIS construction leaves
+     * the slot empty, so PHP passes the default and the response really is a 409.
      */
-    public function unreadHttpStatus(): void
+    public function defaultedHttpStatusAtThrowSite(): void
     {
         throw new \App\Exceptions\ExportBlockedException;
+    }
+
+    /**
+     * Case 10d': the same construction one hop away, inside the factory the throw
+     * names. Identical code, so it owes the identical status.
+     */
+    public function defaultedHttpStatusInFactory(): void
+    {
+        throw \App\Exceptions\ExportBlockedException::blocked();
+    }
+
+    /**
+     * Case 10c': the status written at the throw with its argument NAMED rather
+     * than counted, which a position-only reader sees no status in at all.
+     */
+    public function namedHttpStatusAtThrowSite(): void
+    {
+        throw new \App\Exceptions\ExportLockedException(statusCode: 423, message: 'The export is locked.');
+    }
+
+    /**
+     * Case 10h: a constructor that normalises the status it was handed, so the
+     * default is not what every instance carries and neither is what a caller
+     * puts in the slot. The degraded answer is no status at all.
+     */
+    public function movedHttpStatus(): void
+    {
+        throw \App\Exceptions\ExportPartialException::none();
+    }
+
+    /**
+     * Case 10h': the same class of defect one statement later — the constructor
+     * reuses the status parameter after forwarding it, so the body's end scope
+     * names a value the parent never received.
+     */
+    public function supersededHttpStatus(): void
+    {
+        throw \App\Exceptions\ExportSupersededException::superseded();
+    }
+
+    /**
+     * Case 10i: a class whose factory builds it two ways, so neither the class nor
+     * the factory names one status. Nothing states which this is — the population
+     * the unread-status notice exists for.
+     */
+    public function unreadHttpStatus(bool $retryable): void
+    {
+        throw \App\Exceptions\ExportConflictException::whenRetryable($retryable);
+    }
+
+    /**
+     * Case 10j: a vendor exception thrown deliberately. It is an API error the
+     * application raises, so it stands — but its status is written in a file the
+     * analysis does not read, and the author cannot be told to go and change it.
+     */
+    public function vendorHttpStatusAtThrowSite(): void
+    {
+        throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException('The export is already running.');
+    }
+
+    /**
+     * Case 10k: a vendor method DECLARING it throws a vendor HttpException
+     * subclass. Nothing here is the application's — not the throw, not the class,
+     * not the status — so it is plumbing, and silent.
+     */
+    public function vendorDeclaredHttpStatus(SessionGuard $guard): void
+    {
+        $guard->basic();
     }
 
     /**
