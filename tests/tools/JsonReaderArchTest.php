@@ -28,8 +28,10 @@ function allowedAssociativeJsonDecodes(): array
         // Reads a package manifest for its `name`. Never a document.
         'php/core/src/Extensions/ResolvedExtensions.php:278' => 'composer.json → package name',
 
-        // Reads the application's composer.json for `autoload.psr-4` directories. Never a document.
-        'php/laravel/src/Engine/TypeEngineFactory.php:186' => 'composer.json → autoload paths',
+        // Reads the application's composer.json for its `autoload.psr-4` map — namespace prefixes and
+        // directories. Never a document. The one reader of it: the engine asks which source roots keep
+        // their bodies, the scaffold command asks what namespace a generated class carries.
+        'php/laravel/src/Support/Psr4Namespaces.php:100' => 'composer.json → autoload psr-4 map',
 
         // Pulls `dependencies[].file` PATH STRINGS out of stored fragments for `docuccino:watch`. The
         // fragment BODY is read by `FragmentCache`, which goes through JsonValue; nothing here reaches it.

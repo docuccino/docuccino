@@ -123,6 +123,41 @@ serving `2026-06-01` for callers who haven't moved.
 
 </Steps>
 
+## Let the diff write the first draft
+
+You do not have to write step 1 by hand. Commit the artifact for a version when you release it — the
+document is byte-deterministic precisely so that it can be committed and diffed — and when you cut the
+next one, scaffold the classes from the difference:
+
+```bash
+php artisan docuccino:version-changes docs/2026-06-01.uir.json v2026-09-01 --since=2026-09-01
+```
+
+It reads the committed document, builds the current one, diffs the two over the same stable identities
+[`docuccino:diff`](/laravel/reference/commands/#docuccinodiff) uses, and writes a class for every
+difference the vocabulary expresses — the target, the shape and the required-ness all filled in, and
+the `description` already carrying the factual sentence:
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: '`InvoiceResource` publishes `title` where it published `name`.',
+)]
+#[RenamedResponseField(schema: InvoiceResource::class, from: 'name', to: 'title')]
+final class InvoiceResourceTitleReplacesName {}
+```
+
+What is left is the half only you know: **why** it changed, and whom it affects. That is the sentence a
+consumer reads when they are deciding whether the upgrade touches them, so it is worth the minute.
+
+Two things it will not do. It never touches a class that already exists — the sentence you wrote in one
+is the whole value of it. And it writes nothing for a difference no verb expresses; those are printed
+instead, so an incomplete version is one you can see rather than one you find out about later.
+`--against=<git-ref>` reads the old artifact straight out of git if you would rather not check one out,
+and `--dry-run` prints the plan without writing. Full flags, and how to
+[customise the generated class](/laravel/reference/commands/#customising-the-generated-class), are in
+the [commands reference](/laravel/reference/commands/#docuccinoversion-changes).
+
 ## What comes out
 
 The two documents differ in the field name, in `info.version`, and in nothing else you didn't ask for:
@@ -468,4 +503,5 @@ The full list, with what to do about each, is in the
 	<LinkCard title="Multiple documents" href="/laravel/guides/multiple-documents/" description="Everything a document can carry — routes, security, viewer, export target — set per version." />
 	<LinkCard title="Versioning attributes" href="/laravel/reference/attributes/#versioning" description="Signatures and examples for every attribute a change is written with." />
 	<LinkCard title="api_version config" href="/laravel/reference/configuration/#api_version" description="Every key, and what declaring a document to be a version changes." />
+	<LinkCard title="docuccino:version-changes" href="/laravel/reference/commands/#docuccinoversion-changes" description="Scaffold the declarations from a diff, and customise the class it writes." />
 </CardGrid>
