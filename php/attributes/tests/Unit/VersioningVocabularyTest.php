@@ -6,6 +6,7 @@ use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
+use Docuccino\Attributes\Versioning\RemovedResponseField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 
 /*
@@ -100,8 +101,8 @@ function changeVocabularyParameterCount(): int
 
 it('keeps every version-change declaration readable without running the application', function (): void {
     // A scan that stopped seeing the vocabulary must fail rather than pass forever on an empty set.
-    expect(count(versionChangeVocabulary()))->toBeGreaterThanOrEqual(5)
-        ->and(changeVocabularyParameterCount())->toBeGreaterThanOrEqual(11)
+    expect(count(versionChangeVocabulary()))->toBeGreaterThanOrEqual(6)
+        ->and(changeVocabularyParameterCount())->toBeGreaterThanOrEqual(16)
         ->and(unfoldableChangeParameters(versionChangeVocabulary()))->toBe([]);
 });
 
@@ -169,8 +170,41 @@ it('spells no verb for the combination the wire has no honest sentence for', fun
             MadeRequestFieldOptional::class,
             MadeResponseFieldOptional::class,
             MadeResponseFieldRequired::class,
+            RemovedResponseField::class,
             RenamedResponseField::class,
         ]);
+});
+
+/*
+ * The one verb whose fact is gone from the code, so the one that declares a shape. Everything it
+ * carries is a non-nullable scalar — the foldability guard above is what makes that a rule rather than
+ * a habit — and `field:` is the name the versions BEFORE the change published, which is the opposite
+ * direction from every other verb because there is no name in the code today to run in the other one.
+ */
+it('names the field a version deleted, and the shape nothing in the code can still describe', function (): void {
+    $removed = new RemovedResponseField(
+        schema: 'App\\Http\\Resources\\InvoiceResource',
+        field: 'subtotal',
+        type: 'integer',
+        required: true,
+        description: 'The invoice total before tax, in cents.',
+    );
+
+    expect($removed->schema)->toBe('App\\Http\\Resources\\InvoiceResource')
+        ->and($removed->field)->toBe('subtotal')
+        ->and($removed->type)->toBe('integer')
+        ->and($removed->required)->toBeTrue()
+        ->and($removed->description)->toBe('The invoice total before tax, in cents.');
+});
+
+it('lets a removal state nothing but the field it took away', function (): void {
+    // Every argument but the pair has a default, so the shortest honest form is "it was there, and
+    // nobody now knows what it held" — which publishes an unconstrained field rather than a guess.
+    $removed = new RemovedResponseField(schema: 'App\\Http\\Resources\\InvoiceResource', field: 'subtotal');
+
+    expect($removed->type)->toBe('')
+        ->and($removed->required)->toBeFalse()
+        ->and($removed->description)->toBe('');
 });
 
 it('stacks a change and its renames on one class', function (): void {

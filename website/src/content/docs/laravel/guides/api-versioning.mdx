@@ -221,7 +221,7 @@ is what says this document is one.
 
 ## The verbs a change can declare
 
-A change carries one or more verbs, each naming a class and a field. There are four:
+A change carries one or more verbs, each naming a class and a field. There are five:
 
 | Verb | Says | The older document |
 | --- | --- | --- |
@@ -229,9 +229,14 @@ A change carries one or more verbs, each naming a class and a field. There are f
 | [`#[MadeResponseFieldRequired]`](/laravel/reference/attributes/#maderesponsefieldrequired) | this response field is now always sent | leaves it out of `required` |
 | [`#[MadeResponseFieldOptional]`](/laravel/reference/attributes/#maderesponsefieldoptional) | this response field can now be absent | names it in `required` |
 | [`#[MadeRequestFieldOptional]`](/laravel/reference/attributes/#maderequestfieldoptional) | this request field is now optional | names it in `required`, and refuses a body without it |
+| [`#[RemovedResponseField]`](/laravel/reference/attributes/#removedresponsefield) | this response field is gone | publishes it again, with the shape you declare |
 
-Every one of them names its field the way your code spells it **today** — including the rename's `to:`.
+The first four name their field the way your code spells it **today** — including the rename's `to:`.
 That is the direction the whole vocabulary runs in, and it is the one thing to keep straight.
+
+The removal is the exception, and it has to be: the field is not in your code, so there is no present
+tense to name it in. `field:` is what the older versions published, and `type:` is its shape — the one
+fact no amount of reading your code can recover, because it was deleted along with the field.
 
 Required-ness is two verbs per side of the wire rather than one with a flag, and the missing fourth
 combination is deliberate: a `required` entry arriving *narrows* a request and moves nothing on a
@@ -240,7 +245,8 @@ travels. There is no `#[MadeRequestFieldRequired]`.
 
 You can stack verbs of different kinds on one change, and they apply in a fixed order — everything
 else first, renames last, so a verb naming `title` still finds `title` rather than the name the rename
-just put back.
+just put back, and a field a removal puts back lands where the schema your code publishes says rather
+than among names the rename invented.
 
 ```php
 #[ApiVersionChange(
@@ -256,7 +262,7 @@ A request verb names the class your **request body** is recovered from, and reac
 Where one class produces both — a Data class used on the way in and on the way out — the document
 publishes two schemas for it, and the request verbs and the response verbs address them separately.
 
-Two of the four have a runtime half you must write, and two do not:
+Most of them have a runtime half you must write, and one does not:
 
 - `#[MadeResponseFieldOptional]` and `#[RenamedResponseField]` make the older document say something
   *stricter* or *different*, so your runtime has to serve it — and the contract test below will fail
@@ -266,6 +272,41 @@ Two of the four have a runtime half you must write, and two do not:
   it: it is safe by construction rather than by being checked.
 - `#[MadeRequestFieldOptional]` makes the older document *demand* a field. That one is falsifiable
   from the other end: a request replayed at that version without the field is refused, correctly.
+- `#[RemovedResponseField]` puts a field back. Declared `required: true` it is falsifiable the same
+  way `#[MadeResponseFieldOptional]` is — replay the suite pinned to that version and the assertion
+  says whether your runtime really still sends the field. Declared without it, the older document is
+  looser than the wire and nothing can refuse it.
+
+### Putting a field back
+
+A removal is the only verb that declares a shape, so `type:` is worth a paragraph. It is read three
+ways, in this order:
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Invoices no longer publish `reviewer` or `subtotal`.',
+)]
+// 1. A class this document already publishes: the older field points at that component.
+#[RemovedResponseField(schema: InvoiceResource::class, field: 'reviewer', type: UserResource::class)]
+// 2. One of OpenAPI's own type names, optionally `[]` for a list and `?` for nullable.
+#[RemovedResponseField(schema: InvoiceResource::class, field: 'subtotal', type: 'integer', required: true)]
+final class InvoiceFieldsRemoved {}
+```
+
+The first reading is the one to reach for. Deriving a version rewrites the *whole* document, so the
+component the pointer names carries that version's shape rather than today's — a field re-added as a
+`UserResource` in the 2026-01-01 document holds the 2026-01-01 user. It also keeps a name a generated
+client can use, which an inline shape cannot.
+
+Anything `type:` names that is neither of those publishes the field with no constraints and reports
+`versioning.type-unresolved`. That is the degraded answer rather than a refusal — a vague schema is
+still true — and leaving `type:` out asks for the same shape deliberately, with nothing said about it.
+
+One consequence of `required: true` is worth expecting: no example in your document carries a field
+your code does not have, so an example standing where that schema governs now fails its own schema and
+is dropped, with `versioning.example-dropped` naming where it stood. A consumer copies an example and
+sends it back, so publishing none beats publishing one the document itself refuses.
 
 ## Ordering: which version is older
 
@@ -379,9 +420,12 @@ inlined copy of the shape — plus an inlined copy of everything between the ope
 every `$ref` on the way down is expanded too. If the field's promise really did move everywhere, drop
 the `#[AppliesTo]` and take the no-fork branch.
 
-One shape can't be forked: a schema that contains itself. Its private copy would still point at the
-shared component one level down, so the operation would publish the old name at the top and today's name
-inside it. That operation is left at the shape your code publishes, and the build says so.
+One shape can't be forked: a schema that leads back to itself. Its private copy would still point at the
+shared component one level down, so the operation would publish the older shape at the top and today's
+inside it. That operation is left at the shape your code publishes, and the build says so. A
+`#[RemovedResponseField]` can reach the same wall from the other direction, by putting back a field
+typed as the schema it is editing; a pointer at anything else stays a pointer, and stays a name the
+client can use.
 
 ## What versioning doesn't cover
 
@@ -391,9 +435,10 @@ reconcile the rows already in your database. Everything on this page is about th
 
 Two more limits worth knowing before you plan around them:
 
-- **There is no removal verb.** Declaring that an older version *also* published a field means
-  declaring that field's type, and the type is precisely what is no longer in your code to read. If you
-  need it, say so — it is deliberately not guessed at.
+- **There is no removal verb for an operation.** Putting a whole endpoint back means declaring its
+  parameters, bodies, responses and security, and an operation with no documented responses is not
+  vague — it is broken. A field is different, which is why `#[RemovedResponseField]` exists: one type,
+  and a vague-but-true fallback when it can't be read.
 - **A change that alters behavior rather than shape** — different defaults, a different sort order —
   has no declarative form. Document it in prose and put the sentence in the change's `description`,
   where the consumer will actually read it.
@@ -406,7 +451,9 @@ that quietly stops applying is indistinguishable from one that was never written
 | Code | Usually means |
 | --- | --- |
 | `versioning.change-target-missing` | The field was renamed again, or removed, and the change still names the old spelling |
-| `versioning.change-target-unchanged` | A required-ness change says a field's promise moved, and your code already says what the older version would — usually the direction read backwards |
+| `versioning.change-target-unchanged` | A required-ness change says a field's promise moved, or a removal names a field your code still publishes, and your code already says what the older version would — usually the direction read backwards |
+| `versioning.type-unresolved` | A removal's `type:` is neither a class this document publishes nor an OpenAPI type name, so the field went back unconstrained |
+| `versioning.example-dropped` | An example beside that schema couldn't be given the shape this version publishes |
 | `versioning.schema-unresolved` | The class you named isn't published by this document at all |
 | `versioning.scope-matches-nothing` | A route was renamed after the change was written |
 | `versioning.scope-unforkable` | The scope matched an operation no private copy of the schema can be written for |
@@ -419,6 +466,6 @@ The full list, with what to do about each, is in the
 <CardGrid>
 	<LinkCard title="Contract testing" href="/laravel/guides/contract-testing/" description="The assertions the per-version check is built on, and how to point them at a document." />
 	<LinkCard title="Multiple documents" href="/laravel/guides/multiple-documents/" description="Everything a document can carry — routes, security, viewer, export target — set per version." />
-	<LinkCard title="Versioning attributes" href="/laravel/reference/attributes/#versioning" description="Signatures and examples for the three attributes a change is written with." />
+	<LinkCard title="Versioning attributes" href="/laravel/reference/attributes/#versioning" description="Signatures and examples for every attribute a change is written with." />
 	<LinkCard title="api_version config" href="/laravel/reference/configuration/#api_version" description="Every key, and what declaring a document to be a version changes." />
 </CardGrid>

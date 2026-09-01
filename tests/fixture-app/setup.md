@@ -409,3 +409,20 @@ importantly, NOT followed where the key only chose between sizes.
   `app/Http/Requests/StorePaymentRequest.php` — a custom rule class carrying `#[RuleSchema]`, an
   unannotated sibling, and a FormRequest validating with `new` instances of both: the real fold proves an
   annotated rule OBJECT documents from its class attribute while the unannotated one stays diagnosed.
+
+### API version changes
+
+- `app/Versioning/SnapshotsRenamedTheirCandidate.php` and
+  `app/Versioning/SnapshotsStoppedPublishingTheirLegacyForm.php` — two `#[ApiVersionChange]` classes
+  where a real application keeps them: under `app/`, discovered by scanning the directory the document
+  names in `api_version.changes.dir`. They declare a rename, a required-ness change and a removal over
+  `App\Data\SnapshotData`, whose members the analyser recovers out of `@var`, `@phpstan-var` and a
+  constructor `@param` block — so `RealEngineVersioningTest` derives a version from what the engine
+  really found rather than from a schema written to suit the assertion. The removal's `type:` names
+  `App\Data\SnapshotFormData`, which is a component only because the chain hoisted it, so the
+  re-added field's `$ref` is a pointer at the real document's own naming.
+
+  Nothing dispatches them and nothing loads the fixture app's autoloader in the Pest process; the
+  suite registers a two-line PSR-4 loader for `App\Versioning\` alone (`loadFixtureAppVersionChanges()`
+  in `tests/Pest.php`), because a version change is read by reflection and so has to be loadable, while
+  every `::class` in its arguments is a compile-time string that never is.

@@ -33,10 +33,14 @@ interface VersionVerb
      * The edit, on a node carrying {@see identity()}. `$outcome` accumulates the strongest thing seen
      * across every node the walk reaches, so an implementation only ever raises it.
      *
+     * `$published` is the document around the node, for the one verb that has to publish a shape it
+     * cannot write out of the node alone — a re-introduced field pointing at a component. A verb that
+     * only moves what is already there ignores it.
+     *
      * @param  array<array-key, mixed>  $schema
      * @return array<array-key, mixed>
      */
-    public function apply(array $schema, VerbOutcome &$outcome): array;
+    public function apply(array $schema, PublishedSchemas $published, VerbOutcome &$outcome): array;
 
     /**
      * The examples the whole document publishes, walked with the schema, and the reports owed for the
@@ -59,6 +63,10 @@ interface VersionVerb
      */
     public function rewriteOperationExamples(array $operation, array $doc, string $id, array $keys, VersionChange $change): array;
 
-    /** What an outcome has to say for itself. An applied verb says nothing. */
-    public function diagnose(VerbOutcome $outcome, VersionChange $change): ?Diagnostic;
+    /**
+     * What an outcome has to say for itself. An applied verb usually says nothing — the exception is a
+     * verb that applied and still could not honour part of what was declared, which is why this is
+     * asked on every outcome and handed the same document {@see apply()} was.
+     */
+    public function diagnose(VerbOutcome $outcome, VersionChange $change, PublishedSchemas $published): ?Diagnostic;
 }
