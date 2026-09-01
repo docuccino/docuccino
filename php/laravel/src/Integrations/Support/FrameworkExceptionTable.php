@@ -88,6 +88,20 @@ final class FrameworkExceptionTable
         return null;
     }
 
+    /**
+     * The status an error is published under when nothing in the code stated one: the exception's own
+     * framework classification where this table knows it, and {@see UNPLACED_STATUS} otherwise. It is a
+     * classification and not a reading — the build never saw a number — which is why every tier that has
+     * to key such a response asks here rather than picking its own: two tiers keying one error differently
+     * publish two responses where the server sends one.
+     */
+    public static function classification(string $fqcn): string
+    {
+        $facts = self::match($fqcn);
+
+        return $facts === null ? self::UNPLACED_STATUS : $facts['status'];
+    }
+
     /** The reason phrase for a status, or a generic `Error` when unlisted. */
     public static function reason(string $status): string
     {

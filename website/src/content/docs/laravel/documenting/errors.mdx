@@ -89,6 +89,12 @@ the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Un
 so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
 handler is too dynamic to read statically, Docuccino records a diagnostic and moves on to the next tier.
 
+The two halves are read separately. A handler whose **body** reads but whose status does not — a status
+off `$e->getCode()`, an enum method, or an `HttpException` subclass that sets its own — still publishes
+that body, under the status the framework classifies the exception as. Documenting the shape your server
+actually sends matters more than the number it is filed under, and the number is the one every other tier
+would have used anyway.
+
 ### Responses built through a helper
 
 Real apps rarely build the response inline — a renderer usually branches on the exception type and
@@ -419,6 +425,13 @@ descriptions. Matching is subtype-aware, so your own subclass of any of these in
 Anything outside that table still gets documented if its status is known: the final fallback tier emits
 `{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
 `error_responses` to `none` to emit no error responses at all.
+
+Both of those bodies are the **framework's**, so neither is published over a handler of yours that
+replaces it. Where Docuccino can see that your handler renders an exception and cannot read what it
+renders it to, the response keeps its status and its description and carries no body at all — a shape
+your server does not send would leave every generated client with the wrong type for that error. The
+diagnostic names the callback to fix; the [Problem Details preset](#the-problem-details-preset-opt-in) is not
+affected, since a document that opted into it has declared that shape itself.
 
 ## Implicit responses (middleware, bindings & validation)
 

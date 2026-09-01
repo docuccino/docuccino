@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\DType\StatusMarkerT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\FrameworkClasses;
@@ -31,8 +32,17 @@ use Docuccino\Laravel\Support\FrameworkClasses;
  * Required members that didn't fold are filled with type-derived placeholders (and the real status) so the
  * example is a valid instance of the schema beside it — see {@see example()} for why that fill is confined
  * to examples and nothing else. A status that didn't fold falls back to the one the body itself states, and
- * only then to the exception's own status hint; with none of the three, the tier declines rather than write
- * a number nothing stated ({@see foldStatus()}).
+ * only then to the exception's own status hint ({@see foldStatus()}).
+ *
+ * With none of the three, a BODY the render path folded is still a proven fact and the only thing missing
+ * is the key to file it under, so the response is filed under the exception's framework classification
+ * ({@see FrameworkExceptionTable::classification()}) — the same question the framework-defaults tier and
+ * the fallback answer, so the error is published once rather than by two tiers under two keys. That key is
+ * a classification and not a reading, which the analyser already says out loud with its
+ * `inference.http-exception-status-unread` notice; throwing the body away to avoid stating it would leave
+ * the response to a tier that asserts a different media type, and a confident wrong shape costs the
+ * consumer more than an approximate status. With no body either there is nothing to keep, and the tier
+ * declines ({@see build()}).
  *
  * A payload that didn't fold ({@see UnknownT}, or no shape recovered at all) has no body to document, and
  * an error response with no `content` states that the error returns nothing — so the tier answers only
@@ -60,7 +70,7 @@ final class HandlerResponseBuilder
         ActionAnalysis $analysis,
         RouteContext $context,
         Contribution $contribution,
-        ?int $statusHint = null,
+        ThrownException $exception,
     ): ?ResponseDraft {
         foreach ($analysis->returns as $return) {
             $type = $return->type;
@@ -72,9 +82,18 @@ final class HandlerResponseBuilder
             $members = self::suppliedMembers($type->typeArgs[3] ?? null);
             $statusArg = $type->typeArgs[1] ?? null;
 
-            $status = self::foldStatus($statusArg, $payload, $members, $statusHint);
+            $status = self::foldStatus($statusArg, $payload, $members, $exception->httpStatusHint);
             if ($status === null) {
-                return null;
+                // Nothing anywhere stated a status. A body the render path FOLDED is still two proven
+                // facts — the shape and the media type it is sent as — and the only thing missing is the
+                // key to file them under, so they are filed under the exception's classification rather
+                // than dropped onto a tier that would assert a different media type over them. With no
+                // body either, there is nothing to keep and the decline below is the whole answer.
+                if (! self::statesBody($payload)) {
+                    return null;
+                }
+
+                $status = FrameworkExceptionTable::classification($exception->exceptionFqcn);
             }
 
             $draft = new ResponseDraft($status);
@@ -86,11 +105,10 @@ final class HandlerResponseBuilder
             // own contract says it does for a body too dynamic to fold, and the deferral log turns it into
             // one `inferred-handler.too-dynamic` diagnostic naming the callback.
             //
-            // The same reasoning is why {@see foldStatus()} declines above rather than answering: with no
-            // status folded on either side and none on the throw — an HttpException subclass whose own is
-            // unreadable arrives exactly so — the only number left to write is 200, which would file an
-            // ERROR under success. A later tier still knows the exception's classification, and no status
-            // at all beats the wrong one.
+            // Which is also why the branch above declines when {@see foldStatus()} came back empty and no
+            // body folded either: with no status on either side and none on the throw — an HttpException
+            // subclass whose own is unreadable arrives exactly so — a tier with nothing to say would be
+            // writing a number nothing stated onto a response with no content.
             //
             // A status HTTP forbids a body on is no failure — there, no content is the truth. Neither is a
             // status this tier FOLDED itself: that is a fact no later tier has (they classify the exception
@@ -177,8 +195,9 @@ final class HandlerResponseBuilder
     }
 
     /**
-     * The status this response is documented under, or null when nothing states one — neither side of the
-     * render path folded, and the throw arrived without a classification of its own.
+     * The status this response is READ to be, or null when nothing states one — neither side of the render
+     * path folded, and the throw arrived without a status of its own. Only a reading comes back here; what
+     * {@see build()} does with the null is where a classification may stand in for one.
      *
      * @param  array<string, DType>  $members
      */
@@ -198,8 +217,8 @@ final class HandlerResponseBuilder
             return (string) $stated;
         }
 
-        // Nothing folded either side — the exception's own classification is all that is left, and where
-        // the throw carried none there is no honest number to write ({@see build()}).
+        // Nothing folded either side — the status the throw arrived with is the last reading available,
+        // and where it carried none nothing read one at all ({@see build()}).
         return $statusHint === null ? null : (string) $statusHint;
     }
 

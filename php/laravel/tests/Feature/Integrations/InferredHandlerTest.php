@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Tests\Fixtures\InferredHandler\ProbeRejection;
 use Docuccino\Laravel\Tests\Support\InvokableRenderer;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -101,10 +102,12 @@ it('defers to the framework tier + records a diagnostic when the body is too dyn
     $result = generateDocument();
     $responses = $result->document->toArray()['paths']['/api/forms/{form}']['get']['responses'];
 
-    // Deferred: the framework-default 404 fills in instead.
+    // Deferred: the framework-default tier takes the 404 — and, seeing a renderer it could not read,
+    // publishes the status it classifies without a body it would be inventing.
     expect($responses)->toHaveKey('404');
     $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
-    expect($producers)->toContain('integration:framework-errors');
+    expect($producers)->toContain('integration:framework-errors')
+        ->and(resolveResponse($result->document->toArray(), $responses['404']))->not->toHaveKey('content');
 
     $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
     expect($codes)->toContain('inferred-handler.too-dynamic');
@@ -391,6 +394,11 @@ it('defers SILENTLY (no too-dynamic diagnostic) when an arm delegates to the fra
 
     $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
     expect($producers)->toContain('integration:framework-errors');
+
+    // And the framework's own body is published in full: a renderer that hands the throwable back has
+    // refuted nothing, so nothing stands the framework tier down.
+    $schema = errorSchemaOf($result->document->toArray(), '404', 'application/json');
+    expect($schema['properties'] ?? null)->toBe(['message' => ['type' => 'string']]);
 });
 
 it('reports render-callback-skipped (never silently) for an unanalysable render callback', function (): void {
@@ -406,11 +414,12 @@ it('reports render-callback-skipped (never silently) for an unanalysable render 
     expect($codes)->toContain('inferred-handler.render-callback-skipped');
 });
 
-it('joins the shared error body when the handler’s response came back with nothing in it', function (): void {
+it('leaves the body unsaid where a renderer it could not read has already replaced the framework’s', function (): void {
     // The shape a real renderer reaches whenever the analysis loses the body: `$r = Problem::make(…);
-    // …; return $r;` used to hand the adapter a bare `JsonResponse` with no type args at all. Answering
-    // that with a description and no `content` publishes "this error returns nothing" — a claim, and a
-    // false one — and, being an answer, stops the chain before a tier that CAN state a body is asked.
+    // …; return $r;` hands the adapter a bare `JsonResponse` with no type args at all. The renderer still
+    // demonstrably answers for this exception, so the framework's `{message}` is a shape the server does
+    // not send — publishing it puts a second error vocabulary in the document and a wrong type in every
+    // generated client. The status is classification the framework does own, so it stands.
     $symbol = registerRenderCallback(
         static fn (ModelNotFoundException $e) => response()->json(['dynamic' => true], 404),
         MODEL_NOT_FOUND,
@@ -426,17 +435,18 @@ it('joins the shared error body when the handler’s response came back with not
 
     $result = generateDocument();
     $document = $result->document->toArray();
-    $response = $document['paths']['/api/forms/{form}']['get']['responses']['404'];
+    $response = resolveResponse($document, $document['paths']['/api/forms/{form}']['get']['responses']['404']);
 
-    // The 404 the two form routes share now REFERENCES the shared component rather than sitting inline
-    // with a description and nothing else — the same body every other 404 in the document publishes.
-    expect($response['$ref'] ?? null)->toBe('#/components/responses/NotFound');
+    expect($response['description'] ?? null)->toBe('Not Found')
+        ->and($response)->not->toHaveKey('content')
+        // …and nothing was minted for a body nobody published: no `NotFound` schema, no shared response.
+        ->and($document['components']['schemas'] ?? [])->not->toHaveKey('NotFound')
+        ->and($document['components']['responses'] ?? [])->not->toHaveKey('NotFound');
 
-    $schema = errorSchemaOf($document, '404', 'application/json');
-    expect($schema['properties'] ?? null)->toBe(['message' => ['type' => 'string']])
-        ->and($schema['required'] ?? null)->toBe(['message']);
+    $producers = array_map(static fn (array $r): string => $r['producer'], $document['paths']['/api/forms/{form}']['get']['responses']['404']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:framework-errors');
 
-    // Deferring is not going quiet: the author is told which callback lost the shape.
+    // Standing aside is not going quiet: the author is told which callback lost the shape.
     $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
     expect($codes)->toContain('inferred-handler.too-dynamic');
 });
@@ -447,7 +457,9 @@ it('joins the shared error body when the handler’s response came back with not
  * nothing, since a bodyless error response is a false claim and an answer that ends the chain.
  *
  * `$typeArgs` is what the engine recovered; `$status` is where the response lands and `$producer` which
- * tier owns it. The 404 is the hint the thrown `ModelNotFoundException` arrives with.
+ * tier owns it. The 404 is the hint the thrown `ModelNotFoundException` arrives with. `$body` is what the
+ * document ends up carrying rather than what this tier wrote: where it declines, the framework tier has
+ * already seen a renderer it could not read and states the status without a body.
  */
 it('answers only with what the tiers behind it do not have', function (array $typeArgs, string $status, string $producer, bool $body): void {
     $symbol = registerRenderCallback(
@@ -472,14 +484,15 @@ it('answers only with what the tiers behind it do not have', function (array $ty
     expect($producers)->toContain($producer)
         ->and(isset(resolveResponse($document, $responses[$status])['content']))->toBe($body);
 })->with([
-    // Nothing recovered at all — the refiner declined, so there is no shape and no status of its own.
-    'a bare JsonResponse' => [[], '404', 'integration:framework-errors', true],
+    // Nothing recovered at all — the refiner declined, so there is no shape and no status of its own. The
+    // framework tier takes the 404 and, seeing a renderer it could not read, says only that much.
+    'a bare JsonResponse' => [[], '404', 'integration:framework-errors', false],
     // A payload that did not fold, and a status borrowed from the throw: still nothing the fallback lacks.
     'an unfolded payload under the hint' => [
         [new UnknownT('payload not folded'), new UnknownT('status not folded')],
         '404',
         'integration:framework-errors',
-        true,
+        false,
     ],
     // A status the render path folded is a fact no later tier has — they classify the exception type
     // without reading the renderer — so the response keeps it and says only what it knows.
@@ -505,49 +518,76 @@ it('answers only with what the tiers behind it do not have', function (array $ty
     ],
 ]);
 
-it('declines rather than filing an ERROR under 200 when nothing anywhere states a status', function (): void {
-    // The exception arrives with no classification of its own — an HttpException subclass whose status the
-    // engine could not read comes in exactly like this — and the render path folded no status either. The
-    // only number left is the 200 default, which would file an error response under success and, on a route
-    // whose success IS a 200, merge an error body into it. So the tier declines and the chain fills in, the
-    // same way it does for a body too dynamic to fold.
+/**
+ * A renderer whose body folded under a status nothing could read, for a throw that carried none either —
+ * an `HttpException` subclass whose own status the analyser cannot read arrives exactly so, and so does a
+ * `$e->getCode()` status on a plain exception. `$errorResponses` is the document's preset, because the
+ * regression this pins was on the DEFAULT one.
+ *
+ * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+ */
+function unreadStatusBuild(string $errorResponses): array
+{
     $symbol = registerRenderCallback(
-        static fn (RuntimeException $e) => response()->json(['title' => 'Nope'], $e->getCode()),
-        RuntimeException::class,
+        static fn (ProbeRejection $e) => response()->json(['type' => 'about:blank', 'title' => 'Nope'], $e->getCode(), ['Content-Type' => 'application/problem+json']),
+        ProbeRejection::class,
     );
 
     $engine = WorkbenchEngine::make(
         [$symbol => new ActionAnalysis(returns: [new ReturnSite(
             new ClassT('Illuminate\\Http\\JsonResponse', [
-                new ArrayShapeT([new ArrayShapeField('title', ScalarT::string())]),
+                new ArrayShapeT([
+                    new ArrayShapeField('type', new LiteralT('about:blank')),
+                    new ArrayShapeField('title', ScalarT::string()),
+                ]),
                 new UnknownT('status not folded'),
+                new LiteralT('application/problem+json'),
             ]),
             new SourceLocation(''),
         )])],
         analysisOverrides: [
             'Workbench\\App\\Http\\Controllers\\FormController::show' => new ActionAnalysis(
                 returns: [new ReturnSite(new ClassT('Workbench\\App\\Data\\FormData'), new SourceLocation(''))],
-                throws: [new ThrownException(RuntimeException::class, null, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
+                throws: [new ThrownException(ProbeRejection::class, null, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
             ),
         ],
     );
     app()->instance(TypeEngine::class, $engine);
+    config()->set('docuccino.documents.default.error_responses', $errorResponses);
 
     $result = generateDocument();
     $document = $result->document->toArray();
-    $responses = $document['paths']['/api/forms/{form}']['get']['responses'];
 
-    $producers = static fn (string $status): array => array_map(
-        static fn (array $r): string => $r['producer'],
-        $responses[$status]['x-docuccino']['provenance'] ?? [],
-    );
+    return [$document, ['responses' => $document['paths']['/api/forms/{form}']['get']['responses'], 'diagnostics' => $result->diagnostics]];
+}
 
-    // The success response is the action's own and nothing else's, and the error is documented by a later
-    // tier under the status that tier classifies it as.
-    expect($producers('200'))->not->toContain('integration:inferred-handler')
-        ->and($responses)->toHaveKey('500')
-        ->and($producers('500'))->not->toContain('integration:inferred-handler');
+it('keeps the body it folded, under the classification, when nothing read a status', function (string $errorResponses): void {
+    // The regression: only the STATUS was unreadable, and declining threw away two proven facts — the
+    // shape and the media type the renderer sends them as — to avoid stating one unproven number. The
+    // response then fell to a tier that asserts `application/json` `{message}`, so one application
+    // published two error vocabularies and every generated client got the wrong type for this error.
+    [$document, $build] = unreadStatusBuild($errorResponses);
+    $responses = $build['responses'];
 
-    $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
-    expect($codes)->toContain('inferred-handler.too-dynamic');
-});
+    // Filed under the exception's framework classification — the same key the tiers behind it would have
+    // used, so the error is published once — and never under 200, which would merge it into the success.
+    expect($responses)->toHaveKey('500');
+    $producers = array_map(static fn (array $r): string => $r['producer'], $responses['500']['x-docuccino']['provenance'] ?? []);
+    expect($producers)->toContain('integration:inferred-handler')
+        ->and(array_map(static fn (array $r): string => $r['producer'], $responses['200']['x-docuccino']['provenance'] ?? []))
+        ->not->toContain('integration:inferred-handler');
+
+    $response = resolveResponse($document, $responses['500']);
+    $content = $response['content'] ?? [];
+
+    // The media type the renderer set, and the shape it folded — not `application/json` `{message}`.
+    expect($content)->toHaveKey('application/problem+json')
+        ->and($content)->not->toHaveKey('application/json');
+
+    $schema = resolveSchema($document, $content['application/problem+json']['schema'] ?? []);
+    expect($schema['properties'] ?? [])->toHaveKeys(['type', 'title']);
+
+    // The body folded, so nothing was too dynamic. The unread status is the analyser's own notice to make.
+    $codes = array_map(static fn ($d): string => $d->code, $build['diagnostics']);
+    expect($codes)->not->toContain('inferred-handler.too-dynamic');
+})->with(['default', 'problem-details']);

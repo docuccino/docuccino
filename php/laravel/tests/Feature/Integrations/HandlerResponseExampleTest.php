@@ -26,6 +26,9 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
+use Docuccino\Core\Inference\ThrowConfidence;
+use Docuccino\Core\Inference\ThrowDisposition;
+use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
@@ -43,6 +46,16 @@ use Docuccino\Laravel\Integrations\InferredHandler\HandlerResponseBuilder;
  * unsupplied beats required (this branch didn't, so it doesn't). An argument that renders the key only on
  * some responses decides nothing, and the schema answers for it.
  */
+/**
+ * The throw the tier is answering for. Only its status hint and its FQCN reach the builder: the hint is
+ * the last reading available when neither side of the render path folded one, and the FQCN is what the
+ * builder classifies with when there is no reading at all.
+ */
+function handlerThrow(?int $hint, string $fqcn = 'App\\Exceptions\\ProbeFailure'): ThrownException
+{
+    return new ThrownException($fqcn, $hint, [], ThrowConfidence::Certain, ThrowDisposition::Signal);
+}
+
 function handlerContext(?TypeEngine $engine = null): RouteContext
 {
     return new RouteContext(
@@ -128,6 +141,7 @@ it('completes an example whose required members did not all fold', function (): 
         handlerAnalysis($payload, 422),
         handlerContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -155,6 +169,7 @@ it('keeps an example whose literals cover every required member', function (): v
         handlerAnalysis($payload, 404),
         handlerContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -173,6 +188,7 @@ it('keeps an example when the shape requires nothing at all', function (): void 
         handlerAnalysis($payload, 503),
         handlerContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -187,6 +203,7 @@ function objectExample(array $members, int $status = 422): array
         handlerAnalysis(new ClassT('App\\Data\\ProblemDocument'), $status, suppliedMembers($members)),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -233,6 +250,7 @@ it('leaves out a member the branch renders only sometimes', function (): void {
         ),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -258,6 +276,7 @@ it('still shows a sometimes-rendered member the schema requires of every respons
         ),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -307,7 +326,7 @@ it('documents an object body under the status its own construction folded', func
         ),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
-        statusHint: 500,
+        handlerThrow(500),
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -327,7 +346,7 @@ it('keeps the hint when nothing in the body states a status either', function ()
         ),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
-        statusHint: 500,
+        handlerThrow(500),
     );
 
     expect($draft?->status)->toBe('500');
@@ -360,6 +379,7 @@ it('fills a member from the value its own schema states, not from its type', fun
         handlerAnalysis(new ClassT('App\\Data\\StatedProblem'), 422),
         $context,
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -388,6 +408,7 @@ it('still pins a status member to the response status over a stated default', fu
         handlerAnalysis(new ClassT('App\\Data\\DefaultedStatus'), 404),
         $context,
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)
@@ -409,6 +430,7 @@ it('leaves out a supplied member the schema declares no type for', function (): 
         handlerAnalysis(new ClassT('App\\Data\\OpaqueProblem'), 422, suppliedMembers(['title' => null, 'errors' => null])),
         $context,
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $content = $draft?->freeze()->toArray()['content']['application/problem+json'] ?? [];
@@ -436,6 +458,7 @@ it('illustrates a nullable member through its non-null branch', function (): voi
         handlerAnalysis(new ClassT('App\\Data\\NullableProblem'), 422, suppliedMembers(['hint' => null, 'codes' => null])),
         $context,
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $example = $draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null;
@@ -451,6 +474,7 @@ it('falls back to the required members when no construction was seen at all', fu
         handlerAnalysis(new ClassT('App\\Data\\ProblemDocument'), 422),
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
+        handlerThrow(422),
     );
 
     $content = $draft?->freeze()->toArray()['content']['application/problem+json'] ?? [];
