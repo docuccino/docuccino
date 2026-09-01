@@ -286,27 +286,14 @@ from Spatie's own `ResponsableData` default; any other verb documents `200`. A c
 status falls back to `200` with a `spatie-data.response-status-unresolved` info diagnostic rather than
 guessing.
 
-When that conditional is a decision the **route** already settles, each endpoint documents only the
-status it can actually answer with:
+When that conditional is a decision the **route** already settles (`return $request->routeIs('*invoices.store') ? 201 : 200;`),
+each endpoint documents only the status it can actually answer with, so a `GET` never carries a `201` the
+server can't send. Every other condition keeps each folded status documented, because on that endpoint
+each of them really can happen.
 
-```php
-protected function calculateResponseStatus(Request $request): int
-{
-    return $request->routeIs('*invoices.store')
-        ? Response::HTTP_CREATED
-        : Response::HTTP_OK;
-}
-```
-
-`POST /invoices` (named `invoices.store`) documents `201`, and every other endpoint returning the class —
-`GET /invoices/{invoice}` included — documents `200` alone, instead of carrying a `201` it can never send.
-Patterns match exactly as they do at runtime, wildcards and all, and a route with no name matches nothing.
-`$request->route()->named(...)` is the same call written out and reads the same way. Any other condition —
-the HTTP method, the URI, anything known only when the request arrives — keeps every folded status
-documented, because on that endpoint each of them really can happen.
-
-The `201` is new in **v0.2**: earlier releases read only the override. See the
-[upgrade note](/laravel/packages/spatie-data/#success-statuses).
+The `201` is new in **v0.2**: earlier releases read only the override.
+[Spatie Data → Success statuses](/laravel/packages/spatie-data/#success-statuses) has the upgrade note,
+the full example and the shapes that narrow.
 
 ## Empty responses
 

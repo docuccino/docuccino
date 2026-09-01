@@ -280,19 +280,50 @@ the response body.
 
 When the conditional turns on the **route name**, only the status that route takes is documented:
 
-```php
-protected function calculateResponseStatus(Request $request): int
-{
-    return $request->routeIs('*invoices.store')
-        ? Response::HTTP_CREATED
-        : Response::HTTP_OK;
-}
-```
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	protected function calculateResponseStatus(Request $request): int
+	{
+	    return $request->routeIs('*invoices.store')
+	        ? Response::HTTP_CREATED
+	        : Response::HTTP_OK;
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"/invoices": {
+	  "post": {
+	    "responses": {
+	      "201": {
+	        "description": "Created",
+	        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvoiceData" } } }
+	      }
+	    }
+	  }
+	},
+	"/invoices/{invoice}": {
+	  "get": {
+	    "responses": {
+	      "200": {
+	        "description": "OK",
+	        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvoiceData" } } }
+	      }
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
 
-The create route documents `201`; a read route returning the same class documents `200` alone, rather
+The create route documents `201`; the read route returning the same class documents `200` alone, rather
 than a `201` it can never send. Patterns match as they do at runtime — wildcards included, and an unnamed
-route matches nothing — and `$request->route()->named(...)` reads identically. A condition on anything
-else, the HTTP method and the URI included, keeps every folded status.
+route matches nothing — and `$request->route()->named(...)` reads identically.
+
+Only a single `return` of that ternary narrows. Write the same decision as a guard clause, or leave a
+second `return` anywhere in the method, and every folded status stays documented — as it does for a
+condition on anything else, the HTTP method and the URI included.
 
 A **union of Data classes** (`AuthSuccessData|MfaChallengeData`) resolves each member's
 status separately. A computed status falls back to `200` with a

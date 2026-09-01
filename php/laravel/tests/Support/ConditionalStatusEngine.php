@@ -55,12 +55,8 @@ final class ConditionalStatusEngine
         );
     }
 
-    /**
-     * The workbench engine with the fixture's three actions and its override scripted over the defaults.
-     *
-     * @param  array<string, callable(TraceVisitor): void>  $traceOverrides  replaces the override's walk
-     */
-    public static function make(array $traceOverrides = []): StubTypeEngine
+    /** The workbench engine with the fixture's three actions and its override scripted over the defaults. */
+    public static function make(): StubTypeEngine
     {
         $returnsData = new ActionAnalysis(
             returns: [new ReturnSite(new ClassT(RouteStatusData::class), new SourceLocation(''))],
@@ -73,7 +69,7 @@ final class ConditionalStatusEngine
                 RouteStatusController::class.'::show' => $returnsData,
                 self::SYMBOL => self::folds(201, 200),
             ],
-            traceOverrides: $traceOverrides === [] ? [self::SYMBOL => self::trace()] : $traceOverrides,
+            traceOverrides: [self::SYMBOL => self::trace()],
         );
     }
 
