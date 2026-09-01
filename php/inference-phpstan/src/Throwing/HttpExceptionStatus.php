@@ -67,6 +67,14 @@ final class HttpExceptionStatus
      */
     private array $cache = [];
 
+    /**
+     * {@see agreed()} by FQCN, kept for the same reason and holding its nulls, so a class that agrees on
+     * nothing is memoised as a decline rather than re-read per route.
+     *
+     * @var array<string, int|null>
+     */
+    private array $agreed = [];
+
     public function __construct(
         private readonly ClassBodies $bodies,
         private readonly ProjectFilter $projectFilter,
@@ -91,6 +99,51 @@ final class HttpExceptionStatus
     public function statusParameter(string $fqcn): ?int
     {
         return $this->resolve($fqcn)['parameter'];
+    }
+
+    /**
+     * The one status every construction the class makes of ITSELF agrees on — a weaker claim than
+     * {@see pinned()}, and the only one left where a throw point carries no construction to read: a throw
+     * inside a closure the callee runs, one written in a trait and surfacing as a `@throws`, a rethrow.
+     * A class with a single factory says its status exactly once, in that factory, and nothing at the
+     * throw repeats it.
+     *
+     * Weaker because a constructor the class does not keep to itself can be called from anywhere, so the
+     * constructions here are a subset of the application's rather than all of them — which is why
+     * {@see ThrowAnalyzer} asks this only where the throw site itself said nothing, never over a
+     * construction it could read. Everything that would make the answer a guess rather than the class's
+     * own statement still declines: a class using a trait, whose factories are written in a file this
+     * read never sees; a constructor that writes the status it forwards, which names no slot to fold
+     * into; a class outside the project, whose bodies PHPStan strips; and constructions that disagree,
+     * where the class genuinely has several.
+     */
+    public function agreed(string $fqcn): ?int
+    {
+        if (array_key_exists($fqcn, $this->agreed)) {
+            return $this->agreed[$fqcn];
+        }
+
+        $this->agreed[$fqcn] = null;
+
+        // A slot is only ever answered for a class; the `class_exists()` is spelled out beside it for the
+        // same reason {@see resolve()} spells one out — it is what makes the name one reflection may take.
+        $slot = $this->statusParameter($fqcn);
+        if ($slot === null || ! class_exists($fqcn)) {
+            return null;
+        }
+
+        $class = new ReflectionClass($fqcn);
+        $file = $class->getFileName();
+        if ($file === false || $class->getTraitNames() !== [] || ! $this->projectFilter->isProjectFile($file)) {
+            return null;
+        }
+
+        return $this->agreed[$fqcn] = $this->agreedOver(
+            $this->constructionsIn($class->getName(), $file),
+            $class->getName(),
+            $slot,
+            $file,
+        );
     }
 
     /**
@@ -250,13 +303,14 @@ final class HttpExceptionStatus
     }
 
     /**
-     * The default of a forwarded status parameter, where that default is the only value any instance can
-     * have been built with: a private constructor — so every construction is in this class — with no
-     * `new self(...)` writing the slot. That the constructor forwards the parameter untouched is already
-     * settled by the caller, which declines outright for a body that writes it.
+     * The status a class with a PRIVATE constructor states for every one of its instances: every
+     * construction is written in this class, so the one they agree on is the one the class has. A slot they
+     * all leave empty takes the constructor's default, one they write takes its own folded literal, and
+     * either way it is the same value every time or the class states none.
      *
-     * A class that uses a trait declines for the same reason at one remove: a trait's methods are written in
-     * another file, so a `new self(...)` there is one this read never sees.
+     * That the constructor forwards the parameter untouched is already settled by the caller, which
+     * declines outright for a body that writes it. A class that uses a trait declines at one remove: a
+     * trait's methods are written in another file, so a `new self(...)` there is one this read never sees.
      *
      * @param  ReflectionClass<object>  $class
      */
@@ -270,21 +324,40 @@ final class HttpExceptionStatus
             return null;
         }
 
-        $default = $this->constantDefault($constructor, $index);
-        if ($default === null) {
-            return null;
-        }
+        return $this->agreedOver($this->constructionsIn($class->getName(), $file), $class->getName(), $index, $file);
+    }
 
-        // Every method of the class, its constructor included — a private constructor is reachable from all
-        // of them and from nowhere else.
-        $names = self::parameterNames($constructor);
-        foreach ($this->bodies->methods($file, $class->getName()) as $statements) {
-            if (StatusForwarding::writesSlot($statements, $class->getName(), $index, $names)) {
-                return null;
+    /**
+     * The one status a set of the class's own constructions folds to, each in the scope it is written.
+     *
+     * @param  list<Node\Expr\New_>  $constructions
+     */
+    private function agreedOver(array $constructions, string $class, int $slot, string $file): ?int
+    {
+        return ConstructionStatus::agreedIn(
+            $constructions,
+            $slot,
+            $this->constructorSlot($class, $slot),
+            fn (Node\Expr $argument, Node\Expr\New_ $at): ?int => $this->bodies->foldInt($file, $argument, $at),
+        );
+    }
+
+    /**
+     * Every `new` the class writes of itself, across every method it declares — its constructor included,
+     * which a private constructor is reachable from and from nowhere else.
+     *
+     * @return list<Node\Expr\New_>
+     */
+    private function constructionsIn(string $class, string $file): array
+    {
+        $constructions = [];
+        foreach ($this->bodies->methods($file, $class) as $statements) {
+            foreach (StatusForwarding::constructionsOf($statements, $class) as $construction) {
+                $constructions[] = $construction;
             }
         }
 
-        return $default;
+        return $constructions;
     }
 
     /**

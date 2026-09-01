@@ -60,6 +60,52 @@ it('reads the status one call passes in a slot', function (string $code, int $sl
     'a plain function call with no signature in play' => ['abort(404);', 0, [], null, 404],
 ]);
 
+/**
+ * Every `new X(...)` in a snippet, which is what the class read and the factory read each hand the fold.
+ *
+ * @return list<Node\Expr\New_>
+ */
+function constructionSet(string $code): array
+{
+    $parsed = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php '.$code) ?? [];
+
+    /** @var list<Node\Expr\New_> $found */
+    $found = (new NodeFinder)->findInstanceOf($parsed, Node\Expr\New_::class);
+
+    return $found;
+}
+
+it('reads the one status a set of constructions agrees on', function (string $code, ?int $expected): void {
+    // The rule a class and a factory both answer by: a set of constructions states a status only where
+    // every one of them states the same one. Written from what the code does rather than from either
+    // reader — two `new`s at two statuses really are two responses, and one nobody can read leaves the
+    // rest unable to speak for it.
+    $status = ConstructionStatus::agreedIn(
+        constructionSet($code),
+        1,
+        ['names' => ['fields', 'statusCode'], 'default' => 422],
+        static fn (Node\Expr $argument): ?int => $argument instanceof Node\Scalar\Int_ ? $argument->value : null,
+    );
+
+    expect($status)->toBe($expected);
+})->with([
+    'one construction' => ['new X([], 409);', 409],
+    'two agreeing' => ['new X([], 409); new X([\'a\'], 409);', 409],
+    // The row the class read used to decline outright: one construction takes the default and the other
+    // writes the same value, so the class really does have one status.
+    'one taking the default and one writing it' => ['new X([]); new X([], 422);', 422],
+    'two disagreeing' => ['new X([], 409); new X([], 403);', null],
+    // One nobody can read takes the whole answer with it: the others cannot speak for a construction
+    // whose status may be anything.
+    'one that folds and one that does not' => ['new X([], 409); new X([], $chosen);', null],
+    'one behind an unreadable spread' => ['new X([], 409); new X(...$args);', null],
+    'one as a first-class callable' => ['new X([], 409); $make = new X(...);', null],
+    // Nothing to agree on is not agreement: a class that builds itself nowhere states nothing here, and
+    // whether its constructor's default may speak instead is the caller's question, not this one's.
+    'no constructions at all' => ['return $this->fields;', null],
+    'agreeing on a number that is no status' => ['new X([], 0); new X([], 0);', null],
+]);
+
 it('admits exactly the integers a response can be keyed by', function (?int $value, ?int $expected): void {
     // Stated from the format rather than from the code: OpenAPI keys a response by `1xx`–`5xx`, so anything
     // else is a key no consumer can read — and IANA's assigned set is NOT the rule, because an application
