@@ -271,11 +271,30 @@ and a removed response is breaking under every policy.
 | Takes Spatie's concern, `POST` route | `201` |
 | Takes Spatie's concern, any other verb | `200` |
 | Overrides `calculateResponseStatus()` | Whatever that returns — an override answering `200` on a `POST` documents `200` |
+| Overrides it with a decision on the route name | The one status that route takes — `201` on `invoices.store`, `200` on the endpoints the pattern doesn't name |
 | Satisfies the response contract by hand | `200`; there's no vendor default to inherit, and assuming one would invent a status |
 
 An override folds a single constant (`return 201;`, `Response::HTTP_CREATED`, an enum constant) and a
 conditional whose arms are *all* constants — `$recent ? 201 : 200` documents both statuses, each carrying
-the response body. A **union of Data classes** (`AuthSuccessData|MfaChallengeData`) resolves each member's
+the response body.
+
+When the conditional turns on the **route name**, only the status that route takes is documented:
+
+```php
+protected function calculateResponseStatus(Request $request): int
+{
+    return $request->routeIs('*invoices.store')
+        ? Response::HTTP_CREATED
+        : Response::HTTP_OK;
+}
+```
+
+The create route documents `201`; a read route returning the same class documents `200` alone, rather
+than a `201` it can never send. Patterns match as they do at runtime — wildcards included, and an unnamed
+route matches nothing — and `$request->route()->named(...)` reads identically. A condition on anything
+else, the HTTP method and the URI included, keeps every folded status.
+
+A **union of Data classes** (`AuthSuccessData|MfaChallengeData`) resolves each member's
 status separately. A computed status falls back to `200` with a
 `spatie-data.response-status-unresolved` info diagnostic — see
 [Responses](/laravel/documenting/responses/#spatie-data-success-status).
@@ -555,7 +574,7 @@ JSON your app actually produces and accepts:
 | `defaultWrap()` / `data.wrap` | Nests the top-level response under the wrap key (`{ "data": … }`). |
 | `$this->withoutWrapping()` / `WrapExecutionType::Disabled` | Documents this class's response root **unwrapped**, whatever `data.wrap` says. |
 | A constructor `@param` / a property `@var` | Supplies the element type PHP can't declare (`list<T>`), wherever the native type is vague. |
-| `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it. |
+| `calculateResponseStatus()`, or Spatie's inherited default | Documents the success status: `201` on `POST`, `200` otherwise, unless the class overrides it — and an override deciding on the route name documents the one status each route takes. |
 | An overridden `toResponse()` / `transform()` | Docuccino reads your own construction instead — its status, headers and media type win. |
 | `#[WithCast(DateTimeInterfaceCast::class, format: 'U')]` | Documents the property as an integer Unix timestamp. |
 | `rules()` | Overrides the inferred request rules per field. |

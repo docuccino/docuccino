@@ -57,6 +57,27 @@ it('recovers a constant status from a Data calculateResponseStatus() override', 
         ->and($type->value)->toBe(201);
 })->group('fixture');
 
+it('narrows a route-name conditional status override to the status each route takes', function (): void {
+    // The whole fold on the real engine: PHPStan folds the override's return type to `200|201` and the
+    // trace reads the ternary off the AST, so the create route publishes 201 and every other route
+    // publishes 200 — where before, all of them published both and a GET carried a 201 the server can
+    // never send.
+    $result = FixtureRunner::dataResponseStatuses('app/Data/ConditionalThingData.php', 'App\\Data\\ConditionalThingData');
+    $statuses = $result['statuses'];
+
+    expect($statuses['things.store'])->toBe([201])
+        ->and($statuses['things.publish'])->toBe([200])
+        ->and($statuses['things.show'])->toBe([200])
+        // Route::named() answers false before it looks at a pattern when the route has no name.
+        ->and($statuses['unnamed'])->toBe([200])
+        // A narrowed status is not a degradation, so nothing is reported.
+        ->and($result['diagnostics'])->toBe([]);
+
+    // Cache soundness: the class the answer was read out of is a recorded dependency of every route.
+    expect($statuses['things.store.files'])->toContain('ConditionalThingData.php')
+        ->and($statuses['things.show.files'])->toContain('ConditionalThingData.php');
+})->group('fixture');
+
 it('recovers an API resource toArray shape as a constant array shape', function (): void {
     // UserResource::toArray (@mixin User) → array{id, name, email, role, badge}; the last two are
     // conditional fields.
