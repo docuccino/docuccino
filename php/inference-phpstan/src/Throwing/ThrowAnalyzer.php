@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
@@ -33,6 +35,11 @@ use PHPStan\Type\Type;
  *   3. Bounded descent (depth 3) into project callees with no `@throws`, cycle-guarded. The vendor-file
  *      gate, not depth, does the real containment.
  *
+ * A status comes from {@see KnownThrowers} where a name-keyed entry has one, and otherwise from what an
+ * `HttpException` subclass sets on itself ({@see HttpExceptionStatus}). Only when neither speaks is the
+ * answer the 500 that means "not an HTTP error at all" — which is the fallback {@see ThrowSignal} reads to
+ * tell an API error from vendor plumbing.
+ *
  * Result identity is `(fqcn, httpStatusHint)` — two aborts (403/404) are two responses, so never dedupe by
  * FQCN alone. Vendor-declared 500-class exceptions are demoted to `internal`; dropped bare-`Throwable`
  * noise is discarded silently — how much of it there was says nothing about the API, and nothing the
@@ -45,12 +52,16 @@ final class ThrowAnalyzer
     /** @var array<string, true> */
     private array $visitedFiles = [];
 
+    /** @var array<string, true> HttpException subclasses whose status did not fold, by FQCN */
+    private array $unreadStatuses = [];
+
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
         private readonly ProjectFilter $projectFilter,
         private readonly FileAnalyzer $fileAnalyzer,
         private readonly KnownThrowers $knownThrowers,
         private readonly CalleeResolver $calleeResolver,
+        private readonly HttpExceptionStatus $httpExceptionStatus,
         private readonly int $maxDepth = 3,
     ) {}
 
@@ -60,6 +71,7 @@ final class ThrowAnalyzer
     public function analyze(MethodReturnStatementsNode $node, string $selfLabel): array
     {
         $this->visitedFiles = [];
+        $this->unreadStatuses = [];
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
@@ -72,6 +84,32 @@ final class ThrowAnalyzer
     public function visitedFiles(): array
     {
         return array_keys($this->visitedFiles);
+    }
+
+    /**
+     * One notice per exception CLASS whose HTTP status this build could not read — not one per throw site,
+     * which would say the same thing about the same class several times over. They ride the analysis, so
+     * a warm build reports what a cold one did.
+     *
+     * @return list<Diagnostic>
+     */
+    public function diagnostics(): array
+    {
+        $classes = array_keys($this->unreadStatuses);
+        sort($classes);
+
+        return array_map(
+            static fn (string $fqcn): Diagnostic => new Diagnostic(
+                severity: Severity::Info,
+                code: 'inference.http-exception-status-unread',
+                message: sprintf(
+                    '%s extends HttpException, but the status it sets could not be read; the error is documented without a status of its own.',
+                    $fqcn,
+                ),
+                help: 'Pass a constant to `parent::__construct()` — a literal or a class constant both fold. Where the status is a constructor parameter with a default, make the constructor `private` and build the exception through static factories, so the default is the only value it can take. Where it is passed in at the `throw`, write it there as a constant.',
+            ),
+            $classes,
+        );
     }
 
     /**
@@ -107,7 +145,7 @@ final class ThrowAnalyzer
 
             // Layer 1: explicit concrete type (literal throw, @throws, stub).
             if ($explicit && ! $this->isBareThrowable($type)) {
-                foreach ($this->applyExplicit($callee, $node, $type, $priorChain, $frame) as $result) {
+                foreach ($this->applyExplicit($callee, $node, $scope, $type, $priorChain, $frame) as $result) {
                     $results[] = $result;
                 }
 
@@ -202,6 +240,7 @@ final class ThrowAnalyzer
     private function applyExplicit(
         ?Callee $callee,
         Node $node,
+        Scope $scope,
         Type $type,
         array $priorChain,
         Frame $frame,
@@ -215,14 +254,13 @@ final class ThrowAnalyzer
 
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
-            $status = $this->statusForType($class);
-            $kept = $isLiteral || $calleeIsProject || $status !== 500;
+            $resolution = $this->statusForType($class, $node, $scope);
             $results[] = new ThrownException(
                 $class,
-                $status,
+                $resolution['status'],
                 [...$priorChain, $frame],
                 $isLiteral ? ThrowConfidence::Certain : ThrowConfidence::Declared,
-                $kept ? ThrowDisposition::Signal : ThrowDisposition::Internal,
+                ThrowSignal::disposition($isLiteral, $calleeIsProject, $resolution['fellBack']),
             );
         }
 
@@ -339,23 +377,78 @@ final class ThrowAnalyzer
         return $this->concreteClasses($type) === [];
     }
 
-    private function statusForType(string $fqcn): int
+    /**
+     * The status a thrown type carries, and whether that answer is the FALLBACK rather than something the
+     * code states. The two are separate because 500 is a real status a class may pin, and because "an HTTP
+     * error whose status did not fold" is a third answer again — null, which is not the same claim as "no
+     * HTTP status at all".
+     *
+     * @return array{status: int|null, fellBack: bool}
+     */
+    private function statusForType(string $fqcn, Node $node, Scope $scope): array
     {
         // KnownThrowers is the single source: exact FQCN wins, else a subclass inherits its parent's status.
         $exact = $this->knownThrowers->statusForExceptionFqcn($fqcn);
         if ($exact !== null) {
-            return $exact;
+            return ['status' => $exact, 'fellBack' => false];
         }
 
         if ($this->reflectionProvider->hasClass($fqcn)) {
             $reflection = $this->reflectionProvider->getClass($fqcn);
             foreach ($this->knownThrowers->knownStatuses() as $known => $status) {
                 if ($reflection->is($known)) {
-                    return $status;
+                    return ['status' => $status, 'fellBack' => false];
                 }
             }
         }
 
-        return 500; // internal / unhandled
+        if ($this->httpExceptionStatus->isHttpException($fqcn)) {
+            return ['status' => $this->httpStatus($fqcn, $node, $scope), 'fellBack' => false];
+        }
+
+        return ['status' => 500, 'fellBack' => true]; // internal / unhandled
+    }
+
+    /**
+     * What an `HttpException` subclass's status is here: the one the class pins on every instance, else the
+     * one written at THIS `throw new X(...)` for a class that takes its status as an argument. Null when
+     * neither reads, which earns the class one diagnostic ({@see diagnostics()}).
+     */
+    private function httpStatus(string $fqcn, Node $node, Scope $scope): ?int
+    {
+        // The class's own file now decides what this route publishes, so it joins the dependency set.
+        foreach ($this->httpExceptionStatus->filesFor($fqcn) as $file) {
+            $this->visitedFiles[$file] = true;
+        }
+
+        $construction = $this->construction($node, $fqcn, $scope);
+        $status = $this->httpExceptionStatus->pinned($fqcn) ?? ($construction === null
+            ? null
+            : $this->foldStatusArg($construction, $scope, $this->httpExceptionStatus->statusParameter($fqcn)));
+
+        if ($status === null) {
+            $this->unreadStatuses[$fqcn] = true;
+        }
+
+        return $status;
+    }
+
+    /**
+     * The `new X(...)` a literal `throw` builds, where X is the exception the status is wanted for. Only
+     * there is an argument at the throw site the status of THIS throw — a call that merely declares the
+     * exception says nothing about what it was constructed with.
+     */
+    private function construction(Node $node, string $fqcn, Scope $scope): ?Node\Expr\New_
+    {
+        if (! $node instanceof Node\Expr\Throw_) {
+            return null;
+        }
+
+        $new = $node->expr;
+        if (! $new instanceof Node\Expr\New_ || ! $new->class instanceof Node\Name) {
+            return null;
+        }
+
+        return $scope->resolveName($new->class) === $fqcn ? $new : null;
     }
 }

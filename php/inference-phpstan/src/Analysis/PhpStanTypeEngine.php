@@ -28,6 +28,8 @@ use Docuccino\Inference\PhpStan\Runtime\FileWalks;
 use Docuccino\Inference\PhpStan\Runtime\RuntimeAdapter;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Support\SourceOrder;
+use Docuccino\Inference\PhpStan\Throwing\AnalyzedConstructors;
+use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
 use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
 use Docuccino\Inference\PhpStan\Trace\ReturnValueFolder;
@@ -68,6 +70,12 @@ final class PhpStanTypeEngine implements TypeEngine
 
     /** Reads the `#[ErrorComponent]` an analysed callable declares for the body it answers with. */
     private ?ComponentDeclarations $declarations = null;
+
+    /**
+     * Built once per engine, so an exception class thrown by forty routes is read once. Its answer is a
+     * function of that class alone, which is what makes the memo sound across routes.
+     */
+    private ?HttpExceptionStatus $httpExceptionStatus = null;
 
     public function __construct(
         private readonly RuntimeAdapter $adapter,
@@ -129,11 +137,12 @@ final class PhpStanTypeEngine implements TypeEngine
         $throws = $throwAnalyzer->analyze($node, $this->selfLabel($action));
 
         $truncation = $this->refinerTruncation($action->symbol());
+        $diagnostics = $throwAnalyzer->diagnostics();
 
         return new ActionAnalysis(
             returns: $returns,
             throws: $throws,
-            diagnostics: $truncation === null ? [] : [$truncation],
+            diagnostics: $truncation === null ? $diagnostics : [...$diagnostics, $truncation],
             dependencyFiles: [$action->file, ...$throwAnalyzer->visitedFiles(), ...$this->drainRefinerFiles()],
         );
     }
@@ -628,6 +637,7 @@ final class PhpStanTypeEngine implements TypeEngine
             $this->fileAnalyzer,
             $this->config->knownThrowers,
             new CalleeResolver($this->adapter->reflectionProvider()),
+            $this->httpExceptionStatus ??= new HttpExceptionStatus(new AnalyzedConstructors($this->fileAnalyzer)),
             $this->config->throwDepth,
         );
     }
