@@ -1109,6 +1109,55 @@ function phpSourcesIn(string $directory, ?string $relativeTo = null): array
  * @param  callable(string): list<int>  $lines
  * @return list<string>
  */
+/**
+ * The function a token sits in — what a scan's findings are keyed on, so an allow-list entry survives
+ * an edit anywhere above it.
+ *
+ * A line number does not: it moves whenever anything above it does, and an entry that fails for having
+ * drifted teaches the next reader to bump a number rather than ask why the entry is there. A closure is
+ * transparent — a read belongs to the method that wrote it, not to the callback.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function enclosingFunction(array $tokens, int $index): string
+{
+    for ($i = $index; $i >= 0; $i--) {
+        if (! $tokens[$i]->is(T_FUNCTION)) {
+            continue;
+        }
+
+        // An anonymous function names nothing, so keep walking: the read is the enclosing method's.
+        $name = $tokens[$i + 1] ?? null;
+        if ($name !== null && $name->is(T_STRING)) {
+            return $name->text;
+        }
+    }
+
+    return '{file}';
+}
+
+/**
+ * As {@see sourceLinesIn}, but each finding is keyed `relative/path.php::function` — stable against an
+ * edit above it, which is what an allow-list of explained findings needs.
+ *
+ * @param  callable(string): list<string>  $sites
+ * @return list<string>
+ */
+function sourceSitesIn(string $directory, callable $sites, ?string $relativeTo = null): array
+{
+    $found = [];
+
+    foreach (phpSourcesIn($directory, $relativeTo) as $relative => $path) {
+        foreach ($sites((string) file_get_contents($path)) as $site) {
+            $found[] = $relative.'::'.$site;
+        }
+    }
+
+    sort($found);
+
+    return $found;
+}
+
 function sourceLinesIn(string $directory, callable $lines, ?string $relativeTo = null): array
 {
     $found = [];
@@ -1157,7 +1206,7 @@ function referencesIn(string $directory, string $pattern): array
 }
 
 /**
- * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php:LINE`
+ * Every ASSOCIATIVE `json_decode` a directory of PHP sources performs, as sorted `relative/path.php::function`
  * strings — the scan behind the one-reader rule ({@see JsonValue}).
  *
  * Associative means any spelling that asks for arrays rather than objects, because a guard must read the
@@ -1173,19 +1222,21 @@ function referencesIn(string $directory, string $pattern): array
  */
 function associativeJsonDecodesIn(string $directory): array
 {
-    return sourceLinesIn($directory, associativeJsonDecodeLines(...), dirname($directory, 3));
+    return sourceSitesIn($directory, associativeJsonDecodeSites(...), dirname($directory, 3));
 }
 
 /**
- * The line of every associative `json_decode` call in one source. {@see associativeJsonDecodesIn}.
+ * Every associative `json_decode` call in one source, as the line it opens on and the function it sits
+ * in. One scan with two projections below, rather than two scans that would have to agree — the line is
+ * what the scanner's own counter-proof pins, the function is what an allow-list is keyed on.
  *
- * @return list<int>
+ * @return list<array{line: int, site: string}>
  */
-function associativeJsonDecodeLines(string $source): array
+function associativeJsonDecodes(string $source): array
 {
     $tokens = significantTokens($source);
 
-    $lines = [];
+    $found = [];
 
     foreach ($tokens as $index => $token) {
         // A method or constant of the same name is somebody else's function, not this one.
@@ -1203,11 +1254,31 @@ function associativeJsonDecodeLines(string $source): array
         }
 
         if (jsonDecodeAsksForArrays(array_slice($tokens, $index + 2))) {
-            $lines[] = $token->line;
+            $found[] = ['line' => $token->line, 'site' => enclosingFunction($tokens, $index)];
         }
     }
 
-    return $lines;
+    return $found;
+}
+
+/**
+ * The line each associative `json_decode` opens on. {@see associativeJsonDecodes}.
+ *
+ * @return list<int>
+ */
+function associativeJsonDecodeLines(string $source): array
+{
+    return array_column(associativeJsonDecodes($source), 'line');
+}
+
+/**
+ * The function each associative `json_decode` sits in. {@see associativeJsonDecodes}.
+ *
+ * @return list<string>
+ */
+function associativeJsonDecodeSites(string $source): array
+{
+    return array_column(associativeJsonDecodes($source), 'site');
 }
 
 /**
