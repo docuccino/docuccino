@@ -143,6 +143,7 @@ it('keys an error nothing could read a status off the same way in every tier tha
         problemContext(),
         Contribution::integration('inferred-handler'),
         $throw,
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($preset?->status)->toBe('500')

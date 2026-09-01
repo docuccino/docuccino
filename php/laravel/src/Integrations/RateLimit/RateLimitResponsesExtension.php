@@ -91,6 +91,11 @@ final class RateLimitResponsesExtension implements OperationExtension
         $content = $this->body($context) ?? $built['content'];
         if (is_array($content)) {
             foreach ($content as $mediaType => $media) {
+                // Registered first, for the reason core's response-draft merge states: a chain answer that
+                // names a media type and constrains nothing under it is a representation this 429 really
+                // has, and a copy driven by the keyword loop alone would drop it.
+                $response->content((string) $mediaType);
+
                 $schema = is_array($media) && is_array($media['schema'] ?? null) ? $media['schema'] : [];
                 foreach ($schema as $keyword => $value) {
                     if ($keyword === 'x-docuccino') {

@@ -321,6 +321,19 @@ it('keeps the stock {message} body when the document documents no errors', funct
         ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
 });
 
+it('keeps a chain answer that names a media type and constrains nothing under it', function (): void {
+    // The chain can answer with the media type alone — a handler whose body the build could not read but
+    // whose content type it could. Copying it keyword by keyword finds no keyword, and the 429 would come
+    // back stating `application/json` `{message}`: the framework shape over a document that just refuted
+    // it. The representation is the fact, so it survives with an empty schema under it.
+    $result = rateLimited429('problem-details', [chainAnswering(static function (ResponseDraft $draft): void {
+        $draft->content('application/problem+json');
+    })]);
+
+    expect(array_keys($result['content']))->toBe(['application/problem+json'])
+        ->and($result['content']['application/problem+json'])->toBe(['schema' => []]);
+});
+
 it('uses a chain answer that carries inline content verbatim', function (): void {
     $result = rateLimited429('problem-details', [chainAnswering(static function (ResponseDraft $draft): void {
         $draft->content('application/vnd.acme+json')->set('type', 'object', Contribution::integration('test-chain'));

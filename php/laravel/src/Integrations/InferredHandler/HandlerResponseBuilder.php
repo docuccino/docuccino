@@ -34,20 +34,38 @@ use Docuccino\Laravel\Support\FrameworkClasses;
  * to examples and nothing else. A status that didn't fold falls back to the one the body itself states, and
  * only then to the exception's own status hint ({@see foldStatus()}).
  *
- * With none of the three, a BODY the render path folded is still a proven fact and the only thing missing
- * is the key to file it under, so the response is filed under the exception's framework classification
+ * With none of the three, what the render path DID fold — a body, or failing that the media type it is
+ * sent as — is still a proven fact, and the only thing missing is the key to file it under, so the
+ * response is filed under the exception's framework classification
  * ({@see FrameworkExceptionTable::classification()}) — the same question the framework-defaults tier and
  * the fallback answer, so the error is published once rather than by two tiers under two keys. That key is
  * a classification and not a reading, which the analyser already says out loud with its
- * `inference.http-exception-status-unread` notice; throwing the body away to avoid stating it would leave
- * the response to a tier that asserts a different media type, and a confident wrong shape costs the
- * consumer more than an approximate status. With no body either there is nothing to keep, and the tier
- * declines ({@see build()}).
+ * `inference.http-exception-status-unread` notice; throwing the reading away to avoid stating it would
+ * leave the response to a tier that asserts a different media type, and a confident wrong shape costs the
+ * consumer more than an approximate status. With neither there is nothing to keep, and the tier declines
+ * ({@see build()}).
  *
  * A payload that didn't fold ({@see UnknownT}, or no shape recovered at all) has no body to document, and
  * an error response with no `content` states that the error returns nothing — so the tier answers only
- * when it has something the chain's later tiers do not: the body, a status it folded itself, or a status
- * HTTP forbids a body on. Otherwise it declines and they fill in ({@see build()}).
+ * when it has something the chain's later tiers do not: the body, the MEDIA TYPE the body is sent as, a
+ * status it folded itself, or a status HTTP forbids a body on. Otherwise it declines and they fill in
+ * ({@see build()}).
+ *
+ * The MEDIA TYPE is one of those four because no later tier reads the renderer — they assert
+ * `application/json`, or the active preset's own type, off a classification of the exception CLASS. Where
+ * the render path folded the type and not the payload, the true statement is "a body of this media type,
+ * shape unknown", and the response carries that type under an EMPTY schema, which is what a media type
+ * with no keyword written into it freezes to. Of the three shapes available it is the only honest one:
+ * `{type: object}` claims a JSON object the build never saw (the payload may be a list or a scalar), and
+ * omitting `schema` leaves a generator choosing between "any body" and "no body", which is the ambiguity
+ * this answers. An empty schema also hoists nowhere, so no component is minted for a shape nobody read.
+ * The cost is type safety and never truth, which is the trade the degraded-answer rule asks for — and it
+ * is paid twice where a preset is active, since the shape that preset would have published at the same
+ * media type is lost with it. A preset declares what a document's errors look like and this tier reports
+ * what one renderer does, which is why it is ordered ahead of it. Provenance is no weaker than a folded
+ * body's — the same producer read the same render path — so the write is the same contribution, and the
+ * half that did NOT fold is said where an author acts on it: the `inferred-handler.too-dynamic` summary
+ * still names the callback ({@see HandlerDeferralLog}).
  *
  * When the body is an object the engine watched being constructed, the fourth type arg names the arguments
  * it was built with, and those decide the example's membership rather than the schema's `required` list: an
@@ -66,11 +84,15 @@ final class HandlerResponseBuilder
     /** How far a placeholder follows nested schemas before flattening — a self-referential one never ends. */
     private const PLACEHOLDER_DEPTH = 4;
 
+    /** What a `JsonResponse` is sent as when the render path stated no content type of its own. */
+    private const DEFAULT_MEDIA_TYPE = 'application/json';
+
     public static function build(
         ActionAnalysis $analysis,
         RouteContext $context,
         Contribution $contribution,
         ThrownException $exception,
+        string $renderer,
     ): ?ResponseDraft {
         foreach ($analysis->returns as $return) {
             $type = $return->type;
@@ -81,15 +103,16 @@ final class HandlerResponseBuilder
             $payload = $type->typeArgs[0] ?? null;
             $members = self::suppliedMembers($type->typeArgs[3] ?? null);
             $statusArg = $type->typeArgs[1] ?? null;
+            $mediaType = self::statedContentType($type->typeArgs[2] ?? null);
 
             $status = self::foldStatus($statusArg, $payload, $members, $exception->httpStatusHint);
             if ($status === null) {
-                // Nothing anywhere stated a status. A body the render path FOLDED is still two proven
-                // facts — the shape and the media type it is sent as — and the only thing missing is the
-                // key to file them under, so they are filed under the exception's classification rather
-                // than dropped onto a tier that would assert a different media type over them. With no
-                // body either, there is nothing to keep and the decline below is the whole answer.
-                if (! self::statesBody($payload)) {
+                // Nothing anywhere stated a status. What the render path FOLDED is still proven — the
+                // shape, or at least the media type it is sent as — and the only thing missing is the key
+                // to file it under, so it is filed under the exception's classification rather than
+                // dropped onto a tier that would assert a different media type over it. With neither,
+                // there is nothing to keep and the decline below is the whole answer.
+                if (! self::statesBody($payload) && $mediaType === null) {
                     return null;
                 }
 
@@ -111,9 +134,10 @@ final class HandlerResponseBuilder
             // writing a number nothing stated onto a response with no content.
             //
             // A status HTTP forbids a body on is no failure — there, no content is the truth. Neither is a
-            // status this tier FOLDED itself: that is a fact no later tier has (they classify the exception
-            // type without reading the renderer), so the response keeps it and states only what it knows.
-            if (! self::statesBody($payload) && ! $draft->isBodyless() && ! self::statesStatus($statusArg, $payload, $members)) {
+            // status this tier FOLDED itself, nor a MEDIA TYPE it folded: each is a fact no later tier has
+            // (they classify the exception type without reading the renderer), so the response keeps it and
+            // states only what it knows.
+            if (! self::statesBody($payload) && $mediaType === null && ! $draft->isBodyless() && ! self::statesStatus($statusArg, $payload, $members)) {
                 return null;
             }
 
@@ -129,16 +153,24 @@ final class HandlerResponseBuilder
             $draft->claimComponentName($return->component?->name, $contribution);
 
             if (! $draft->isBodyless() && self::statesBody($payload)) {
-                $mediaType = self::contentType($type->typeArgs[2] ?? null);
+                $media = $mediaType ?? self::DEFAULT_MEDIA_TYPE;
                 $payload = self::resolveStatusMarkers($payload, (int) $status);
                 $schema = $context->converter()->toSchema($payload)->schema;
                 foreach ($schema as $keyword => $value) {
-                    $draft->content($mediaType)->set($keyword, $value, $contribution);
+                    $draft->content($media)->set($keyword, $value, $contribution);
                 }
                 $example = self::example($payload, $schema, (int) $status, $context, $members);
                 if ($example !== [] && self::satisfies($example, self::resolveSchema($schema, $context))) {
-                    $draft->setExample($mediaType, $example);
+                    $draft->setExample($media, $example);
                 }
+            } elseif (! $draft->isBodyless() && $mediaType !== null) {
+                // The widened answer: the representation is read off the render path, the shape is not.
+                // Registering the media type and writing no keyword into it is what publishes an empty
+                // schema — see the class docblock for why that beats both `{type: object}` and no schema
+                // at all. The author is told the shape was lost, since a partial recovery that says
+                // nothing is a silent degradation.
+                $draft->content($mediaType);
+                HandlerDeferralLog::record($context, $renderer, $exception->exceptionFqcn);
             }
 
             return $draft;
@@ -256,11 +288,16 @@ final class HandlerResponseBuilder
         return null;
     }
 
-    private static function contentType(mixed $contentTypeArg): string
+    /**
+     * The media type the render path FOLDED, or null when it did not — the helper's own default is not
+     * one, since the whole point of asking is to tell a type this build read off the renderer from a type
+     * every later tier would have assumed anyway ({@see build()}).
+     */
+    private static function statedContentType(mixed $contentTypeArg): ?string
     {
         return $contentTypeArg instanceof LiteralT && is_string($contentTypeArg->value)
             ? $contentTypeArg->value
-            : 'application/json';
+            : null;
     }
 
     /**

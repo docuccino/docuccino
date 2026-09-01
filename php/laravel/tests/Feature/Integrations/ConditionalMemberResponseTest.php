@@ -85,6 +85,7 @@ function conditionalMemberBody(string $method): array
         $context,
         Contribution::integration('inferred-handler'),
         new ThrownException('App\\Exceptions\\ProbeFailure', 422, [], ThrowConfidence::Certain, ThrowDisposition::Signal),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
