@@ -53,7 +53,7 @@ it('fills every placeholder the packaged stub carries', function (): void {
     // Read off the stub rather than listed here: a placeholder the renderer does not know would ship as
     // literal `{{ … }}` in somebody's class, and a hand-kept list is exactly what would not notice.
     $rendered = (new ChangeStub(base_path()))->render(
-        new ScaffoldedChange('FormDataLostSubtotal', '2026-09-01', 'Gone.', "#[RemovedResponseField(schema: FormData::class, field: 'subtotal')]", [RemovedResponseField::class, FormData::class]),
+        new ScaffoldedChange('FormDataLostSubtotal', FormData::class, '2026-09-01', 'Gone.', "#[RemovedResponseField(schema: FormData::class, field: 'subtotal')]", [RemovedResponseField::class, FormData::class]),
         'App\\Api\\Versions',
     );
 
@@ -69,7 +69,7 @@ it('escapes a value that would otherwise close the string it is written into', f
     // Field names and descriptions come off an artifact nobody validated. A stray quote is a syntax
     // error in the written file, and a class that does not compile is a change nothing ever applies.
     $rendered = (new ChangeStub(base_path()))->render(
-        new ScaffoldedChange('FormDataLostIt', '2026-09-01', "It's a \\ mess.", '#[X]', []),
+        new ScaffoldedChange('FormDataLostIt', FormData::class, '2026-09-01', "It's a \\ mess.", '#[X]', []),
         'App\\Api\\Versions',
     );
 
