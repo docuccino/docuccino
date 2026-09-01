@@ -24,8 +24,9 @@ use ReflectionParameter;
  * only where the class controls every construction — a PRIVATE constructor, no trait that could construct
  * out of sight, and no in-class `new self(...)` writing that slot — because a caller free to pass another
  * value makes the default a guess rather than a fact. Where the class pins nothing but forwards a
- * parameter, {@see statusParameter()} names the slot so a visible `throw new X(423, …)` can still be
- * folded at its site.
+ * parameter, {@see statusParameter()} names the slot so a construction the build can see — a
+ * `throw new X(423, …)`, or the `new self(…)` inside the factory a `throw` names ({@see FactoryStatus}) —
+ * can still be folded at its own site.
  *
  * Anything else answers null, which means "this class knows a status this build does not" — a different
  * claim from the 500 that means "no HTTP status at all", and the reason the two are not one return value.
@@ -36,6 +37,7 @@ use ReflectionParameter;
  * of its constructor IS the status.
  *
  * @phpstan-type StatusPin array{status: int|null, parameter: int|null, files: list<string>}
+ * @phpstan-type ConstructorSlot array{names: list<string>, default: int|null}
  *
  * @internal
  */
@@ -53,7 +55,7 @@ final class HttpExceptionStatus
      */
     private array $cache = [];
 
-    public function __construct(private readonly ConstructorSource $constructors) {}
+    public function __construct(private readonly ClassBodies $bodies) {}
 
     public function isHttpException(string $fqcn): bool
     {
@@ -74,6 +76,21 @@ final class HttpExceptionStatus
     public function statusParameter(string $fqcn): ?int
     {
         return $this->resolve($fqcn)['parameter'];
+    }
+
+    /**
+     * The two facts a reader of ONE construction needs about the constructor a `new $fqcn(...)` binds to:
+     * its parameter names, so an argument written by name lands in the position it fills, and the constant
+     * default of `$slot`, which is the value a construction that leaves that slot empty passes. The default
+     * is read here rather than restated elsewhere, so one rule says what counts as one.
+     *
+     * @return ConstructorSlot
+     */
+    public function constructorSlot(string $fqcn, int $slot): array
+    {
+        $constructor = class_exists($fqcn) ? (new ReflectionClass($fqcn))->getConstructor() : null;
+
+        return ['names' => self::parameterNames($constructor), 'default' => self::constantDefault($constructor, $slot)];
     }
 
     /**
@@ -163,7 +180,7 @@ final class HttpExceptionStatus
             return $none;
         }
 
-        $body = $this->constructors->methods($file, $class->getName())['__construct'] ?? null;
+        $body = $this->bodies->methods($file, $class->getName())['__construct'] ?? null;
         if ($body === null) {
             return $none;
         }
@@ -189,7 +206,7 @@ final class HttpExceptionStatus
             return $none;
         }
 
-        $folded = $this->constructors->foldInt($file, $class->getName(), $argument);
+        $folded = $this->bodies->foldInt($file, $class->getName(), '__construct', $argument);
         if ($folded !== null) {
             return ['status' => $folded, 'parameter' => null, 'files' => $files];
         }
@@ -227,22 +244,30 @@ final class HttpExceptionStatus
             return null;
         }
 
-        $parameter = $constructor->getParameters()[$index] ?? null;
-        $default = $parameter?->isDefaultValueAvailable() === true ? $parameter->getDefaultValue() : null;
-        if (! is_int($default)) {
+        $default = self::constantDefault($constructor, $index);
+        if ($default === null) {
             return null;
         }
 
         // Every method of the class, its constructor included — a private constructor is reachable from all
         // of them and from nowhere else.
         $names = self::parameterNames($constructor);
-        foreach ($this->constructors->methods($file, $class->getName()) as $statements) {
+        foreach ($this->bodies->methods($file, $class->getName()) as $statements) {
             if (StatusForwarding::writesSlot($statements, $class->getName(), $index, $names)) {
                 return null;
             }
         }
 
         return $default;
+    }
+
+    /** The constant integer default of one parameter, which is what a call leaving that slot empty passes. */
+    private static function constantDefault(?ReflectionMethod $method, int $index): ?int
+    {
+        $parameter = $method?->getParameters()[$index] ?? null;
+        $default = $parameter?->isDefaultValueAvailable() === true ? $parameter->getDefaultValue() : null;
+
+        return is_int($default) ? $default : null;
     }
 
     /**

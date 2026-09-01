@@ -77,6 +77,13 @@ dataset('throw cases', [
     // The same default behind a PUBLIC constructor is a guess: the degraded answer is no status at all,
     // which is a different claim from 500 and is what the diagnostic below is raised for.
     'a public constructor default is not a pin' => ['unreadHttpStatus', ['ExportBlockedException@null']],
+    // A class that pins nothing because its FACTORIES choose. The throw names one, and the class constant
+    // it builds with folds through the factory's own scope like the literal beside it would.
+    'a status the factory named at the throw builds with' => ['factoryHttpStatus', ['ExportUnsupportedException@422']],
+    // The pair that makes the point: one class, two factories, two statuses, on two operations. A reader of
+    // the class alone can only answer null for both, and answering 500 would invent a failure twice over.
+    'one factory of a two-status class' => ['factoryDefaultedStatus', ['ExportConflictException@409']],
+    'its sibling, the same class at another status' => ['factoryOverriddenStatus', ['ExportConflictException@403']],
 ]);
 
 it('surfaces exactly the expected API errors', function (string $method, array $expected): void {
@@ -116,6 +123,9 @@ it('says nothing where the status read', function (string $method): void {
     'pinnedHttpStatus',
     'inheritedHttpStatus',
     'httpStatusAtThrowSite',
+    'factoryHttpStatus',
+    'factoryDefaultedStatus',
+    'factoryOverriddenStatus',
     // And nothing for a plain domain exception either: it is not an HttpException, so there is no status
     // on it to have failed to read.
     'deepUndeclared',
@@ -131,4 +141,14 @@ it('depends on the file the status was written in', function (): void {
 
     expect($names)->toContain('PortalUnavailableException.php')
         ->and($names)->toContain('PortalException.php');
+})->group('fixture');
+
+it('depends on the file the factory was written in', function (): void {
+    // The same soundness one hop on: the status this route publishes is now a fact of a factory body, so
+    // that file has to be able to invalidate the route as well.
+    /** @var list<string> $files */
+    $files = throwsAnalysis('factoryOverriddenStatus')['dependencyFiles'];
+    $names = array_map(static fn (string $file): string => basename($file), $files);
+
+    expect($names)->toContain('ExportConflictException.php');
 })->group('fixture');

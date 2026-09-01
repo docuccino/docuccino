@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Support;
 
-use Docuccino\Inference\PhpStan\Throwing\ConstructorSource;
+use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use PhpParser\ConstExprEvaluationException;
 use PhpParser\ConstExprEvaluator;
 use PhpParser\Node;
@@ -14,7 +14,7 @@ use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
 
 /**
- * A container-free {@see ConstructorSource}: bodies off a plain parse, statuses off php-parser's own
+ * A container-free {@see ClassBodies}: bodies off a plain parse, statuses off php-parser's own
  * constant evaluator with `constant()` behind it, so a class constant folds the way the analyser folds it.
  * Names are resolved as PHPStan resolves them, which is what the class-name comparisons downstream expect.
  *
@@ -22,7 +22,7 @@ use PhpParser\ParserFactory;
  * under the TRAIT here and under the using class there, and a class that uses a trait declines before
  * either is read.
  */
-final class ParsedConstructors implements ConstructorSource
+final class ParsedBodies implements ClassBodies
 {
     /** @var array<string, array<string, array<string, array<array-key, Node\Stmt>>>> file → class → method → body */
     private array $cache = [];
@@ -32,7 +32,7 @@ final class ParsedConstructors implements ConstructorSource
         return $this->parse($file)[$class] ?? [];
     }
 
-    public function foldInt(string $file, string $class, Node\Expr $expr): ?int
+    public function foldInt(string $file, string $class, string $method, Node\Expr $expr): ?int
     {
         $evaluator = new ConstExprEvaluator(static function (Node\Expr $expr): mixed {
             $name = match (true) {

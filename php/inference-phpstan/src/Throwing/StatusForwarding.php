@@ -69,13 +69,7 @@ final class StatusForwarding
      */
     public static function writesSlot(array $statements, string $class, int $slot, array $paramNames): bool
     {
-        /** @var list<Node\Expr\New_> $constructions */
-        $constructions = (new NodeFinder)->find(
-            $statements,
-            static fn (Node $node): bool => $node instanceof Node\Expr\New_ && self::constructs($node, $class),
-        );
-
-        foreach ($constructions as $construction) {
+        foreach (self::constructionsOf($statements, $class) as $construction) {
             if ($construction->isFirstClassCallable()) {
                 return true;
             }
@@ -87,6 +81,23 @@ final class StatusForwarding
         }
 
         return false;
+    }
+
+    /**
+     * Every `new` in a body that builds `$class` — a factory's own, and one nested in a closure it carries.
+     *
+     * @param  array<array-key, Node\Stmt>  $statements
+     * @return list<Node\Expr\New_>
+     */
+    public static function constructionsOf(array $statements, string $class): array
+    {
+        /** @var list<Node\Expr\New_> $constructions */
+        $constructions = (new NodeFinder)->find(
+            $statements,
+            static fn (Node $node): bool => $node instanceof Node\Expr\New_ && self::constructs($node, $class),
+        );
+
+        return $constructions;
     }
 
     /** Whether a `new` builds `$class` — by name, or through the `self`/`static` that mean it here. */
