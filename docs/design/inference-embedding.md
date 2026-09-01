@@ -519,6 +519,46 @@ effort); the `$casts` property form is recovered today.
    analysed set on BOTH parser+resolver BEFORE first parse**, or CachedParser caches a
    body-stripped copy and descent silently reads zero throw points.
 
+### The status an `HttpException` subclass carries
+
+A subclass that IS a status states it in its own `parent::__construct()`, which no name-keyed table can
+see, so three reads sit under layer 1 and answer in this order:
+
+- **What the class pins on every instance** (`HttpExceptionStatus`) — a constant reaching the parent call,
+  or a constructor parameter with a constant default that only this class can fill (private constructor, no
+  trait, no in-class `new self(...)` writing the slot, no write to the parameter before it is forwarded).
+- **What THIS construction passes** — the argument a `throw new X(…)` writes into the slot the class
+  forwards, the constructor default where it writes none.
+- **What the factory the throw names builds with** (`FactoryStatus`) — one hop, no further.
+
+The second and third are one rule (`ConstructionStatus`), because they are the same construction one hop
+apart: a `throw new X` and a `throw X::make()` whose factory is `return new self` must publish the same
+status, and they once did not. Every fold happens in the scope at the CALL, never a body's end scope — a
+constructor that reassigns its status parameter after forwarding it makes the two disagree, and the end
+scope names a value the callee never received.
+
+Only PROJECT files are read. PHPStan strips an unprimed file's bodies, so a vendor subclass's
+`parent::__construct(409, …)` arrives as an empty statement list and the read declines anyway — measured
+against Symfony's own `ConflictHttpException`, whose harvested `__construct` has zero statements — while
+asking for it primes that file, grows the analysed set and discards every walk the replay layer had
+recorded. A folded value outside `100..599` is refused for the same reason a missing one is
+(`HttpStatusCode`): it would become a response key no consumer can read.
+
+Where nothing folds, the status is null — "an HTTP error whose status did not fold", which is neither the
+500 that means "not an HTTP error at all" nor evidence of one. A class the build could not read is
+therefore not automatically a Signal: `ThrowSignal` demotes a foreign declaration whose status nothing
+could read, HttpException subclass or otherwise.
+
+**The `inference.http-exception-status-unread` notice.** Where it fires is what earns it its place. The
+firing population was measured against one real application's 47 `HttpException` subclasses: reading only
+what a class pins on ITSELF left 10 unread, and 9 of those were the static-factory idiom — correct
+idiomatic code with nothing for the author to change, which is the shape that trains a reader to ignore the
+channel. That is the population the factory hop is written for. The construction read removes another part
+of it, the class that defaults its status and is built with the argument left off. What remains is the part
+an author CAN act on: a status chosen at run time, a construction behind an unreadable spread, a factory
+that builds the class two ways. The notice is gated on the exception class being the project's, because the
+remedy it names is an edit to the class — advice nobody can take for a class they do not own.
+
 Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
 confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
 vendor-declared 500-class exceptions are demoted to `internal`, project-declared kept.

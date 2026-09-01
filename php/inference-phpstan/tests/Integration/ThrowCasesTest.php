@@ -74,9 +74,27 @@ dataset('throw cases', [
     'a status pinned through a private constructor default' => ['pinnedHttpStatus', ['ExportRejectedException@422']],
     'a status pinned as a literal two classes up' => ['inheritedHttpStatus', ['PortalUnavailableException@503']],
     'a status written at the throw, no constructor of its own' => ['httpStatusAtThrowSite', ['ExportLockedException@423']],
-    // The same default behind a PUBLIC constructor is a guess: the degraded answer is no status at all,
-    // which is a different claim from 500 and is what the diagnostic below is raised for.
-    'a public constructor default is not a pin' => ['unreadHttpStatus', ['ExportBlockedException@null']],
+    'a status written at the throw, its argument NAMED' => ['namedHttpStatusAtThrowSite', ['ExportLockedException@423']],
+    // The same default behind a PUBLIC constructor is no pin for the CLASS — any caller may pass another —
+    // and it is still what THIS construction passes, because it left the slot empty. The pair below is the
+    // point: the same `new`, one hop apart, and a document that answered them differently.
+    'a public constructor default, at the throw' => ['defaultedHttpStatusAtThrowSite', ['ExportBlockedException@409']],
+    'the same construction inside the factory the throw names' => ['defaultedHttpStatusInFactory', ['ExportBlockedException@409']],
+    // A constructor that normalises the status it was handed: `none()` really builds a 400, so the 422 the
+    // default names is a status the code does not state and no status at all is the honest answer.
+    'a constructor that moves the status it was handed' => ['movedHttpStatus', ['ExportPartialException@null']],
+    // …and the same defect one statement later, which is the row the FOLD SCOPE decides: folding the
+    // forwarded argument in the body's end scope answers the 500 assigned after the parent call, a status
+    // nothing was ever built with. Folding it at the call, where it is written, answers nothing at all.
+    'a constructor that reuses the status after forwarding it' => ['supersededHttpStatus', ['ExportSupersededException@null']],
+    // Nothing folds, which is what the diagnostic below is raised for.
+    'a factory that builds the class two ways' => ['unreadHttpStatus', ['ExportConflictException@null']],
+    // A vendor exception the application throws itself is still the application's error; its status is
+    // written where PHPStan strips the body, so it is documented without one rather than at a made-up 500.
+    'a vendor exception thrown deliberately' => ['vendorHttpStatusAtThrowSite', ['ConflictHttpException@null']],
+    // …and one only DECLARED by a vendor method is plumbing: being an HttpException subclass is not itself
+    // a status, so nothing here is promoted to an API error.
+    'a vendor @throws of a vendor HttpException subclass' => ['vendorDeclaredHttpStatus', []],
     // A class that pins nothing because its FACTORIES choose. The throw names one, and the class constant
     // it builds with folds through the factory's own scope like the literal beside it would.
     'a status the factory named at the throw builds with' => ['factoryHttpStatus', ['ExportUnsupportedException@422']],
@@ -110,26 +128,47 @@ function unreadStatusDiagnostics(string $method): array
     return $out;
 }
 
-it('names the class whose HTTP status it could not read', function (): void {
-    $reported = unreadStatusDiagnostics('unreadHttpStatus');
+it('names the class whose HTTP status it could not read', function (string $method, string $fqcn): void {
+    $reported = unreadStatusDiagnostics($method);
 
     expect($reported)->toHaveCount(1)
-        ->and($reported[0])->toContain('App\\Exceptions\\ExportBlockedException');
-})->group('fixture');
+        ->and($reported[0])->toContain($fqcn);
+})->with([
+    'a factory that builds the class two ways' => ['unreadHttpStatus', 'App\\Exceptions\\ExportConflictException'],
+    'a constructor that moves the status it was handed' => ['movedHttpStatus', 'App\\Exceptions\\ExportPartialException'],
+    'a constructor that reuses the status after forwarding it' => ['supersededHttpStatus', 'App\\Exceptions\\ExportSupersededException'],
+])->group('fixture');
 
-it('says nothing where the status read', function (string $method): void {
+it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
     expect(unreadStatusDiagnostics($method))->toBe([]);
 })->with([
     'pinnedHttpStatus',
     'inheritedHttpStatus',
     'httpStatusAtThrowSite',
+    'namedHttpStatusAtThrowSite',
+    'defaultedHttpStatusAtThrowSite',
+    'defaultedHttpStatusInFactory',
     'factoryHttpStatus',
     'factoryDefaultedStatus',
     'factoryOverriddenStatus',
+    // The two vendor shapes: the status is unread in both, and the remedy the notice names is an edit to
+    // `vendor/` — the non-actionable firing that trains a reader to ignore the channel.
+    'vendorHttpStatusAtThrowSite',
+    'vendorDeclaredHttpStatus',
     // And nothing for a plain domain exception either: it is not an HttpException, so there is no status
     // on it to have failed to read.
     'deepUndeclared',
 ])->group('fixture');
+
+it('answers the same status whether the construction is at the throw or one hop inside a factory', function (): void {
+    // "Covering is not agreeing": the two spellings each had a row, and what neither asked was whether they
+    // agree — they did not, by 409 against nothing at all. The rule is stated here rather than asked of the
+    // code: `new ExportBlockedException` leaves the status slot empty, PHP fills it with the 409 written on
+    // the constructor, and where the same `new` sits is not a fact about the response.
+    expect(signalThrows('defaultedHttpStatusAtThrowSite'))
+        ->toBe(signalThrows('defaultedHttpStatusInFactory'))
+        ->and(signalThrows('defaultedHttpStatusAtThrowSite'))->toBe(['ExportBlockedException@409']);
+})->group('fixture');
 
 it('depends on the file the status was written in', function (): void {
     // Fragment-cache soundness: the status now comes out of the exception class, so editing it has to

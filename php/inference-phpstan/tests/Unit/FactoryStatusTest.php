@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeBranchingFactory;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeIndirectFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeInheritsFactory;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeMovedStatus;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeNamedFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeOverridingFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePinsWithFactory;
@@ -28,7 +30,9 @@ function factoryStatuses(bool $projectSeesTheFile = true): FactoryStatus
 {
     $bodies = new ParsedBodies;
 
-    return new FactoryStatus(new HttpExceptionStatus($bodies), $bodies, factoryProjectFilter($projectSeesTheFile));
+    $filter = factoryProjectFilter($projectSeesTheFile);
+
+    return new FactoryStatus(new HttpExceptionStatus($bodies, $filter), $bodies, $filter);
 }
 
 function factoryProjectFilter(bool $sees): ProjectFilter
@@ -50,6 +54,9 @@ it('reads the status the factory named at the throw builds with', function (stri
     'a factory that builds the class two ways' => [ProbeBranchingFactory::class, 'forRetry', null],
     'a factory spreading arguments nothing can read' => [ProbeSpreadFactory::class, 'replaying', null],
     'a factory that builds through another' => [ProbeIndirectFactory::class, 'locked', null],
+    // The constructor moves the status it was handed, so what the factory puts in the slot is not what the
+    // response is — and reading the default it left empty would publish a 422 for a 400.
+    'a factory of a class whose constructor moves the status' => [ProbeMovedStatus::class, 'none', null],
     'a factory the class inherits rather than declares' => [ProbeInheritsFactory::class, 'unavailable', null],
     'a factory a trait writes, in another file' => [ProbeTraitFactory::class, 'conflicting', null],
     'an instance method, which no factory throw names' => [ProbeScanFactory::class, 'detail', null],
@@ -73,21 +80,34 @@ it('records the factory file, read or refused', function (bool $projectSeesTheFi
         ->toBe(['ProbeScanFactory.php']);
 })->with([true, false]);
 
-it('never reads the factory of a class that pins its own status', function (): void {
+it('never reads the factory of a class that pins a LITERAL', function (): void {
     $bodies = new RecordingBodies(new ParsedBodies);
-    $factories = new FactoryStatus(new HttpExceptionStatus($bodies), $bodies, factoryProjectFilter(true));
+    $filter = factoryProjectFilter(true);
+    $factories = new FactoryStatus(new HttpExceptionStatus($bodies, $filter), $bodies, $filter);
 
-    // `new self(409)` is the same construction the row above folds to 409 on a class that pins nothing. Here
-    // the class pins 410, so it forwards no slot at all: no file is recorded and no body of the factory is
-    // ever folded, which is the guard rather than a claim about it.
+    // `new self(409)` is the same construction the rows above fold to 409 on a class that pins nothing. Here
+    // the class pins 410 with a literal, so it forwards no slot at all: no file is recorded and no
+    // construction is ever folded, which is the guard rather than a claim about it.
     expect($factories->forFactory(ProbePinsWithFactory::class, 'gone'))->toBe(['status' => null, 'files' => []])
-        ->and($bodies->folded)->not->toContain('gone')
-        ->and($bodies->folded)->toContain('__construct');
+        ->and($bodies->folded)->not->toContain('construction')
+        ->and($bodies->folded)->toContain('parent-call');
+});
+
+it('DOES read the factory of a class pinned by its constructor default, and agrees with it', function (): void {
+    // The other pin spelling, which the guard above says nothing about: a private constructor's default
+    // pins 422 AND still names slot 1, so this read runs. The file is recorded — the observable that it ran
+    // at all — and the answer is the same 422, because a factory leaving the slot empty passes that default.
+    $read = factoryStatuses()->forFactory(ProbeFactory::class, 'none');
+
+    expect($read['status'])->toBe(422)
+        ->and(array_map(static fn (string $file): string => basename($file), $read['files']))
+        ->toBe(['ProbeFactory.php']);
 });
 
 it('reads one factory once, however many routes throw it', function (): void {
     $bodies = new RecordingBodies(new ParsedBodies);
-    $factories = new FactoryStatus(new HttpExceptionStatus($bodies), $bodies, factoryProjectFilter(true));
+    $filter = factoryProjectFilter(true);
+    $factories = new FactoryStatus(new HttpExceptionStatus($bodies, $filter), $bodies, $filter);
 
     $first = $factories->forFactory(ProbeScanFactory::class, 'detected');
     $folds = count($bodies->folded);

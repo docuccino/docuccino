@@ -6,7 +6,6 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Diagnostics\Severity;
-use Docuccino\Core\Inference\ArgumentSlots;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
@@ -90,18 +89,10 @@ final class ThrowAnalyzer
     }
 
     /**
-     * One notice per exception CLASS whose HTTP status this build could not read — not one per throw site,
-     * which would say the same thing about the same class several times over. They ride the analysis, so
-     * a warm build reports what a cold one did.
-     *
-     * Where it fires is what earns it its place, and the firing population was measured against one real
-     * application's 47 `HttpException` subclasses. Reading only what a class pins on ITSELF left 10 of them
-     * unread — and 9 of those were the static-factory idiom, correct idiomatic code with nothing for the
-     * author to change, which is the shape that trains a reader to ignore the channel. That is the
-     * population {@see FactoryStatus} is written for, and what remains is the one the author CAN act on: a
-     * status defaulted on a constructor anyone may pass another value to, built with the argument left off,
-     * where the code really does not say which status it means. So the notice stands, and its help names
-     * that remedy rather than listing every shape that now folds without one.
+     * One notice per PROJECT exception class whose HTTP status this build could not read — not one per
+     * throw site, and never for a class the author does not own. They ride the analysis, so a warm build
+     * reports what a cold one did. Where it fires, and the measurement that sized its population, are in
+     * docs/design/inference-embedding.md §6.
      *
      * @return list<Diagnostic>
      */
@@ -118,7 +109,7 @@ final class ThrowAnalyzer
                     '%s extends HttpException, but the status it sets could not be read; the error is documented without a status of its own.',
                     $fqcn,
                 ),
-                help: 'Say the status where the exception is built, as a constant — a literal or a class constant both fold. A status defaulted on the constructor is not one: a caller may pass another, and this one did not pass any. Pin it in the class with `parent::__construct(409, …)` if every instance is that status, and otherwise write it at the `throw`, or in the static factory the `throw` names.',
+                help: 'Say the status where the exception is built, as a constant — a literal or a class constant both fold, and so does the constructor default a construction leaves the slot empty for. A status chosen at run time is not one: this build cannot tell which of them the response is. Pin it in the class with `parent::__construct(409, …)` if every instance is that status, and otherwise write it at the `throw`, or in the static factory the `throw` names.',
             ),
             $classes,
         );
@@ -351,24 +342,36 @@ final class ThrowAnalyzer
         return new Frame($selfLabel, new SourceLocation($scope->getFile(), $node->getStartLine()));
     }
 
-    private function foldStatusArg(Node $node, Scope $scope, ?int $argIndex): ?int
-    {
-        // A first-class callable holds a placeholder where its arguments go, and `getArgs()` only ASSERTS
-        // that — with `zend.assertions=-1` the placeholder would reach the scope below as an expression.
-        if ($argIndex === null || ! $node instanceof Node\Expr\CallLike || $node->isFirstClassCallable()) {
+    /**
+     * The status one call passes in `$argIndex`, folded in the scope AT the call.
+     *
+     * `$constructor` is the callee's signature where the caller knows it — a `throw new X(…)`, whose
+     * constructor names its parameters and defaults the status slot. The registry path passes none: PHPStan
+     * hands a function throw point the NORMALIZED call, so its named arguments already sit in the positions
+     * the registry indexes, and `abort()` defaults no status to fall back on.
+     *
+     * @param  array{names: list<string>, default: int|null}  $constructor
+     */
+    private function foldStatusArg(
+        Node $node,
+        Scope $scope,
+        ?int $argIndex,
+        array $constructor = ['names' => [], 'default' => null],
+    ): ?int {
+        if ($argIndex === null || ! $node instanceof Node\Expr\CallLike) {
             return null;
         }
 
-        // Slots, not written arguments: a status inside a spread nobody can read is unknown, and reading
-        // the position it looks absent from would publish the exception's default for a status the code
-        // states itself.
-        $arg = ArgumentSlots::of($node->getArgs())->at($argIndex);
-        if ($arg === null) {
-            return null;
-        }
-        $argType = $scope->getType($arg);
+        return ConstructionStatus::inSlot(
+            $node,
+            $argIndex,
+            $constructor,
+            static function (Node\Expr $argument) use ($scope): ?int {
+                $type = $scope->getType($argument);
 
-        return $argType instanceof ConstantIntegerType ? $argType->getValue() : null;
+                return $type instanceof ConstantIntegerType ? $type->getValue() : null;
+            },
+        );
     }
 
     /**
@@ -415,7 +418,13 @@ final class ThrowAnalyzer
         }
 
         if ($this->httpExceptionStatus->isHttpException($fqcn)) {
-            return ['status' => $this->httpStatus($fqcn, $node, $scope), 'fellBack' => false];
+            // `fellBack` states the rule {@see ThrowSignal} is written to, which is "no status anyone could
+            // read" — not "the answer was the 500". Being an HttpException subclass is not itself a status:
+            // a vendor `@throws` of one this build cannot read says no more about the API than any other
+            // vendor plumbing, and calling it read would promote it to a Signal with nothing behind it.
+            $status = $this->httpStatus($fqcn, $node, $scope);
+
+            return ['status' => $status, 'fellBack' => $status === null];
         }
 
         return ['status' => 500, 'fellBack' => true]; // internal / unhandled
@@ -435,11 +444,21 @@ final class ThrowAnalyzer
 
         $status = $this->httpExceptionStatus->pinned($fqcn) ?? $this->atThrowSite($fqcn, $node, $scope);
 
-        if ($status === null) {
+        // Only where the author can act. A vendor exception's status is unreadable for a reason no one
+        // reading the notice owns, and the remedy it names is an edit to `vendor/` — the non-actionable
+        // firing that trains people to ignore the channel and takes the useful notices with it.
+        if ($status === null && $this->declaredInProject($fqcn)) {
             $this->unreadStatuses[$fqcn] = true;
         }
 
         return $status;
+    }
+
+    /** Whether the exception class itself is the application's, which is who a diagnostic can address. */
+    private function declaredInProject(string $fqcn): bool
+    {
+        return $this->reflectionProvider->hasClass($fqcn)
+            && $this->projectFilter->isProjectFile($this->reflectionProvider->getClass($fqcn)->getFileName());
     }
 
     /**
@@ -453,9 +472,15 @@ final class ThrowAnalyzer
             return null;
         }
 
+        $slot = $this->httpExceptionStatus->statusParameter($fqcn);
         $construction = $this->construction($node->expr, $fqcn, $scope);
         if ($construction !== null) {
-            return $this->foldStatusArg($construction, $scope, $this->httpExceptionStatus->statusParameter($fqcn));
+            return $slot === null ? null : $this->foldStatusArg(
+                $construction,
+                $scope,
+                $slot,
+                $this->httpExceptionStatus->constructorSlot($fqcn, $slot),
+            );
         }
 
         $factory = $this->factoryName($node->expr, $fqcn, $scope);

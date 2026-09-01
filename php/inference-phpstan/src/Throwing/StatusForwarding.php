@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Throwing;
 
 use Docuccino\Core\Inference\ArgumentSlots;
+use Docuccino\Core\Inference\LocalWrites;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 
 /**
  * The statements half of {@see HttpExceptionStatus}: what a constructor hands its parent in one argument
- * slot, and whether the class ever builds itself writing that same slot. Nothing here resolves a type, so
- * it answers off the parse alone.
+ * slot, whether the constructor moves that value before handing it over, and whether the class ever builds
+ * itself writing that same slot. Nothing here resolves a type, so it answers off the parse alone.
  *
  * @internal
  */
@@ -41,17 +42,51 @@ final class StatusForwarding
     }
 
     /**
-     * The expression a call puts in one slot of the callee's signature. The parameter names are passed so
-     * an argument written by NAME is found in the position it fills rather than missed by a reader that
-     * only counts.
+     * The expression a `parent::__construct()` puts in one slot of the parent's signature. The parameter
+     * names are passed so an argument written by NAME is found in the position it fills rather than missed
+     * by a reader that only counts.
+     *
+     * Typed to the one call {@see parentCall()} answers with, whose finder has already refused a
+     * first-class callable — a wider parameter here would only invite a caller the placeholder guard is
+     * missing from.
      *
      * @param  list<string>  $paramNames  the callee's parameters in declaration order
      */
-    public static function argumentAt(Node\Expr\CallLike $call, int $slot, array $paramNames): ?Node\Expr
+    public static function argumentAt(Node\Expr\StaticCall $call, int $slot, array $paramNames): ?Node\Expr
     {
-        return $call->isFirstClassCallable()
-            ? null
-            : ArgumentSlots::of($call->getArgs(), $paramNames)->at($slot);
+        return ArgumentSlots::of($call->getArgs(), $paramNames)->at($slot);
+    }
+
+    /**
+     * Whether a body writes the local `$variable` anywhere in it — the guard on reading a parameter's
+     * DEFAULT as the value its `parent::__construct()` received. A constructor that normalises its status
+     * before forwarding it (`if ($errors === []) { $statusCode = 400; }`) hands the parent something the
+     * default does not name, and publishing the default there is a precise false status rather than a
+     * vague one.
+     *
+     * Position is deliberately not read: a write AFTER the forwarding cannot have changed what was
+     * forwarded, so refusing on one costs a pin the class really did state — the safe direction, and it
+     * keeps this reading the same whole-body grammar {@see LocalWrites} states once for the engine. The one
+     * write that grammar cannot see is a callee assigning through a by-reference parameter, which needs
+     * reflection on that callee; no application in the corpus writes an exception's status that way, and a
+     * syntactic over-approximation of it would refuse ordinary constructors that merely pass their status
+     * to a helper.
+     *
+     * @param  array<array-key, Node\Stmt>  $statements
+     */
+    public static function reassigns(array $statements, string $variable): bool
+    {
+        return (new NodeFinder)->findFirst(
+            $statements,
+            static function (Node $node) use ($variable): bool {
+                $assignment = LocalWrites::assignment($node);
+
+                return ($assignment !== null && $assignment[0] === $variable)
+                    || in_array($variable, LocalWrites::retires($node), true)
+                    // A write naming no single local (`$$name = …`, `extract()`) may have landed on this one.
+                    || LocalWrites::retiresEveryLocal($node);
+            },
+        ) !== null;
     }
 
     /**

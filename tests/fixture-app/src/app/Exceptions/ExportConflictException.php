@@ -8,7 +8,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * One class with a status per factory: a duplicate is a 409 and an export nobody may start is a 403. The
- * class states neither — only the factory each `throw` names does.
+ * class states neither — only the factory each `throw` names does, and one of them chooses by argument, so
+ * it names no single status either.
  */
 final class ExportConflictException extends HttpException
 {
@@ -28,6 +29,11 @@ final class ExportConflictException extends HttpException
     public static function notPermitted(): self
     {
         return new self([], 403);
+    }
+
+    public static function whenRetryable(bool $retryable): self
+    {
+        return $retryable ? new self([], 423) : new self([]);
     }
 
     /**

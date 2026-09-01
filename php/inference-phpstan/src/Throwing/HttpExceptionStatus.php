@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Throwing;
 
+use Docuccino\Inference\PhpStan\Support\ProjectFilter;
 use PhpParser\Node;
 use ReflectionClass;
 use ReflectionMethod;
@@ -28,6 +29,11 @@ use ReflectionParameter;
  * `throw new X(423, …)`, or the `new self(…)` inside the factory a `throw` names ({@see FactoryStatus}) —
  * can still be folded at its own site.
  *
+ * A class only FORWARDS a parameter it hands over untouched. A constructor that writes the variable
+ * anywhere in its body (`if ($errors === []) { $statusCode = 400; }`) gives the parent a value neither the
+ * caller nor the default names, so it names no slot and pins nothing: what a construction filling that slot
+ * would say is not what the response is.
+ *
  * Anything else answers null, which means "this class knows a status this build does not" — a different
  * claim from the 500 that means "no HTTP status at all", and the reason the two are not one return value.
  *
@@ -35,6 +41,12 @@ use ReflectionParameter;
  * literal the parent pins is the subclass's status too, and the slot the parent forwards is the slot the
  * subclass's own `parent::__construct()` writes into. `HttpException` itself is the base case — argument 0
  * of its constructor IS the status.
+ *
+ * Only a PROJECT class's constructor is read. Not as a policy but as a measurement: PHPStan hands back an
+ * unprimed file with its bodies stripped, so a vendor subclass's `parent::__construct(409, …)` arrives as
+ * an empty statement list and the read declines anyway — while asking for it primes that file, growing the
+ * analysed set and discarding every recorded walk the replay layer holds. The gate turns a cost with no
+ * answer behind it into neither, and it is the same gate {@see FactoryStatus} applies one hop on.
  *
  * @phpstan-type StatusPin array{status: int|null, parameter: int|null, files: list<string>}
  * @phpstan-type ConstructorSlot array{names: list<string>, default: int|null}
@@ -55,7 +67,10 @@ final class HttpExceptionStatus
      */
     private array $cache = [];
 
-    public function __construct(private readonly ClassBodies $bodies) {}
+    public function __construct(
+        private readonly ClassBodies $bodies,
+        private readonly ProjectFilter $projectFilter,
+    ) {}
 
     public function isHttpException(string $fqcn): bool
     {
@@ -90,7 +105,7 @@ final class HttpExceptionStatus
     {
         $constructor = class_exists($fqcn) ? (new ReflectionClass($fqcn))->getConstructor() : null;
 
-        return ['names' => self::parameterNames($constructor), 'default' => self::constantDefault($constructor, $slot)];
+        return ['names' => self::parameterNames($constructor), 'default' => $this->constantDefault($constructor, $slot)];
     }
 
     /**
@@ -176,7 +191,7 @@ final class HttpExceptionStatus
         $none = ['status' => null, 'parameter' => null, 'files' => $files];
 
         $file = $class->getFileName();
-        if ($file === false) {
+        if ($file === false || ! $this->projectFilter->isProjectFile($file)) {
             return $none;
         }
 
@@ -206,12 +221,19 @@ final class HttpExceptionStatus
             return $none;
         }
 
-        $folded = $this->bodies->foldInt($file, $class->getName(), '__construct', $argument);
+        $folded = HttpStatusCode::folded($this->bodies->foldInt($file, $argument, $call));
         if ($folded !== null) {
             return ['status' => $folded, 'parameter' => null, 'files' => $files];
         }
 
         if (! $argument instanceof Node\Expr\Variable || ! is_string($argument->name)) {
+            return $none;
+        }
+
+        // A body that WRITES the variable it forwards hands the parent a value neither the caller nor the
+        // default names — `if ($errors === []) { $statusCode = 400; }` really builds a 400 — so this class
+        // forwards no slot at all, and a `throw new X(409, …)` cannot be read off one either.
+        if (StatusForwarding::reassigns($body, $argument->name)) {
             return $none;
         }
 
@@ -230,21 +252,25 @@ final class HttpExceptionStatus
     /**
      * The default of a forwarded status parameter, where that default is the only value any instance can
      * have been built with: a private constructor — so every construction is in this class — with no
-     * `new self(...)` writing the slot. A public or protected one leaves callers this build cannot see, and
-     * publishing the default for them would state a status the code does not.
+     * `new self(...)` writing the slot. That the constructor forwards the parameter untouched is already
+     * settled by the caller, which declines outright for a body that writes it.
      *
      * A class that uses a trait declines for the same reason at one remove: a trait's methods are written in
      * another file, so a `new self(...)` there is one this read never sees.
      *
      * @param  ReflectionClass<object>  $class
      */
-    private function forwardedDefault(ReflectionClass $class, ReflectionMethod $constructor, int $index, string $file): ?int
-    {
+    private function forwardedDefault(
+        ReflectionClass $class,
+        ReflectionMethod $constructor,
+        int $index,
+        string $file,
+    ): ?int {
         if (! $constructor->isPrivate() || $class->getTraitNames() !== []) {
             return null;
         }
 
-        $default = self::constantDefault($constructor, $index);
+        $default = $this->constantDefault($constructor, $index);
         if ($default === null) {
             return null;
         }
@@ -261,13 +287,25 @@ final class HttpExceptionStatus
         return $default;
     }
 
-    /** The constant integer default of one parameter, which is what a call leaving that slot empty passes. */
-    private static function constantDefault(?ReflectionMethod $method, int $index): ?int
+    /**
+     * The constant integer default of one parameter, which is what a call leaving that slot empty passes.
+     * Asked of the declaration through {@see ClassBodies::intDefault()} rather than of reflection, which
+     * would EXECUTE the initialiser — PHP has allowed `new` in one since 8.1.
+     *
+     * Project files only, for the reason the class docblock gives: reading a vendor declaration costs the
+     * file's analysis, and `HttpException` and every subclass of it Symfony ships take their status with no
+     * default at all, so there is nothing behind the cost.
+     */
+    private function constantDefault(?ReflectionMethod $method, int $index): ?int
     {
-        $parameter = $method?->getParameters()[$index] ?? null;
-        $default = $parameter?->isDefaultValueAvailable() === true ? $parameter->getDefaultValue() : null;
+        $file = $method?->getFileName();
+        if ($method === null || $file === false || $file === null || ! $this->projectFilter->isProjectFile($file)) {
+            return null;
+        }
 
-        return is_int($default) ? $default : null;
+        return HttpStatusCode::folded(
+            $this->bodies->intDefault($file, $method->getDeclaringClass()->getName(), $method->getName(), $index),
+        );
     }
 
     /**
