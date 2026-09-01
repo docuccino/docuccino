@@ -989,6 +989,16 @@ deciding whether the upgrade touches them needs that sentence, and a placeholder
 it cannot know is *why* the change was made and whom it affects, so the command says so and leaves that
 half to you.
 
+**`#[AppliesTo]` is emitted only when the change really is partial.** A shared component has one
+shape, so a component that changed changed for *every* operation still publishing it — scoping such a
+change would fork the ones it named and leave the rest at today's shape, which is the document-wide
+rewrite a scope exists to prevent, in reverse. So the scope is written only where **your application**
+forked the shape: an operation that already published today's shape in the older version, because it
+pointed somewhere else then. Operations are named one at a time, never collapsed into a `*` — a selector
+matching one operation more than intended widens the change silently. Where one of them cannot be named
+safely, nothing is written for that schema and the reason is printed: an incomplete version you can see
+costs you less than a complete one that lies.
+
 **It writes only what it can say truthfully.** Five differences have verbs — a renamed, removed or
 newly-required response field, and a response or request field that became optional — and everything
 else is printed under `Not declared` with nothing written for it. A field a version *added* needs no
@@ -1006,6 +1016,7 @@ written into the directory whose module holds the class its verb names:
 Written
   InvoiceResourceTitleReplacesName — `InvoiceResource` publishes `title` where it published `name`.
     into modules/Billing/Api/Versions — beside modules/Billing, which owns Billing\Data\InvoiceResource.
+    #[AppliesTo(operation: 'GET /api/invoices')]
 ```
 
 The destination and the reason are printed for **every** class, whether a module was found or not. The
@@ -1042,7 +1053,7 @@ These placeholders are filled in; both spellings work, as in Laravel's own stubs
 | `{{ since }}` | The version from `--since`, escaped for a single-quoted PHP string |
 | `{{ description }}` | The factual sentence, escaped for a single-quoted PHP string |
 | `{{ imports }}` | The `use` lines, one per line: `#[ApiVersionChange]`, the verb, and the classes the verb names |
-| `{{ verbs }}` | The verb attribute, written with named arguments |
+| `{{ verbs }}` | The attributes the change declares, one per line: any `#[AppliesTo]` scope, then the verb — all with named arguments |
 
 The namespace is derived rather than asked for, and a directory no PSR-4 prefix covers is refused: a
 change class is found by scanning source and then loading it, so one your autoloader cannot map would

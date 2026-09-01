@@ -234,6 +234,13 @@ final class VersionChangesCommand extends Command
                 $this->line(sprintf('  %s — %s', TerminalText::of($change->class), TerminalText::of($change->description)));
                 $this->line(sprintf('    <fg=gray>%s</>', TerminalText::of($this->where($entry['destination']))));
 
+                // A narrowed change is the one thing a reader would not expect, printed as it was
+                // written: the operations it names are the operations it will rewrite, and the ones it
+                // does not name keep the shape the code publishes.
+                foreach ($change->scope as $applies) {
+                    $this->line(sprintf('    <fg=gray>%s</>', TerminalText::of($applies)));
+                }
+
                 if ($change->note !== null) {
                     $this->line(sprintf('    <fg=yellow>%s</>', TerminalText::of($change->note)));
                 }

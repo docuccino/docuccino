@@ -150,6 +150,12 @@ final class InvoiceResourceTitleReplacesName {}
 What is left is the half only you know: **why** it changed, and whom it affects. That is the sentence a
 consumer reads when they are deciding whether the upgrade touches them, so it is worth the minute.
 
+It scopes a change with [`#[AppliesTo]`](#scoping-a-change-to-some-operations) only when the change
+really is partial — when one of the operations publishing the schema already published today's shape in
+the older version, because your code pointed it somewhere else then. A component that simply changed
+changed for every operation referencing it, and a scope there would fork the ones it named and leave the
+rest alone, which is the opposite of what it says.
+
 Each class is written **beside the module that owns it**. If your `changes` entry contains a glob, the
 wildcard is where you declared your boundary — `modules/*/Api/Versions` says a module is the unit — so a
 change to a Billing resource lands in Billing:
@@ -461,7 +467,10 @@ operations carries its own copy of the shape, so a client gets an anonymous type
 than one it can name.
 
 Scope the change to *every* operation that publishes the schema and there's no fork at all — the
-component is renamed in place, byte for byte what writing no `#[AppliesTo]` produces.
+component is renamed in place, byte for byte what writing no `#[AppliesTo]` produces. Which is why
+[`docuccino:version-changes`](/laravel/reference/commands/#docuccinoversion-changes) writes one only
+where your application forked the shape: anywhere else the scope is either the same fact said twice, or
+a fork nothing asked for.
 
 That trade is worth weighing twice for a required-ness change, where the fork buys the least: the two
 schemas differ by one entry in one list, and each scoped operation pays for the difference with a whole

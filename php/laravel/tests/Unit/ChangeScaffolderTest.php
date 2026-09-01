@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Document\UirDocument;
@@ -208,3 +209,85 @@ it('leaves a required entry that came or went with its property to the removal v
     expect(scaffoldClasses($plan))->toBe(['FormDataLostGone'])
         ->and($plan->changes[0]->verb)->toContain('required: true');
 });
+
+/**
+ * A document publishing `FormData` for the operations `$paths` and `$webhooks` describe, each mapped to
+ * the schema its response carries — `scaffoldRef()` for the shared component, an array for a copy of its
+ * own.
+ *
+ * @param  array<string, mixed>  $properties
+ * @param  array<string, array<string, mixed>>  $paths  path => the schema its GET publishes
+ * @param  array<string, array<string, mixed>>  $webhooks  name => the schema its POST publishes
+ */
+function scaffoldOperationDocument(array $properties, array $paths, array $webhooks = []): UirDocument
+{
+    $operation = static fn (string $method, array $schema): array => [$method => [
+        'responses' => ['200' => ['content' => ['application/json' => ['schema' => $schema]]]],
+    ]];
+
+    return UirDocument::fromArray([
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Forms API', 'version' => '2026-09-01'],
+        'paths' => array_map(static fn (array $schema): array => $operation('get', $schema), $paths),
+        'webhooks' => array_map(static fn (array $schema): array => $operation('post', $schema), $webhooks),
+        'components' => ['schemas' => ['FormData' => [
+            'x-docuccino' => ['id' => scaffoldSchemaId()],
+            'type' => 'object',
+            'properties' => $properties,
+        ]]],
+    ]);
+}
+
+/** @return array<string, mixed> */
+function scaffoldRef(): array
+{
+    return ['$ref' => '#/components/schemas/FormData'];
+}
+
+/**
+ * The copy an operation had of its own: today's shape, under no identity the head document minted. This
+ * is the application having forked, and the only thing that owes an `#[AppliesTo]` at all.
+ *
+ * @return array<string, mixed>
+ */
+function scaffoldOwnCopy(): array
+{
+    return ['type' => 'object', 'properties' => ['id' => ['type' => 'integer'], 'title' => ['type' => 'string']]];
+}
+
+it('narrows a change to the operations that changed when the rest had a copy of their own', function (): void {
+    // The one case a scope is owed: `/b` published today's shape in the older version already, because
+    // it pointed at something else then, so only `/a` must be given the older one.
+    $plan = scaffoldPlan(
+        scaffoldOperationDocument(['id' => ['type' => 'integer'], 'name' => ['type' => 'string']], ['/a' => scaffoldRef(), '/b' => scaffoldOwnCopy()]),
+        scaffoldOperationDocument(['id' => ['type' => 'integer'], 'title' => ['type' => 'string']], ['/a' => scaffoldRef(), '/b' => scaffoldRef()]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe(['FormDataTitleReplacesName'])
+        ->and($plan->changes[0]->scope)->toBe(["#[AppliesTo(operation: 'GET /a')]"])
+        ->and($plan->changes[0]->imports)->toContain(AppliesTo::class);
+});
+
+it('writes nothing rather than a scope that would match more operations than it means', function (array $paths, array $webhooks, string $gap): void {
+    // An unscoped change here would rewrite operations the application never changed, so the refusal is
+    // the honest answer: an incomplete version the author is TOLD about costs them less than a complete
+    // one that lies.
+    $plan = scaffoldPlan(
+        scaffoldOperationDocument(['id' => ['type' => 'integer'], 'name' => ['type' => 'string']], $paths[0], $webhooks[0]),
+        scaffoldOperationDocument(['id' => ['type' => 'integer'], 'title' => ['type' => 'string']], $paths[1], $webhooks[1]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe([])->and($plan->gaps)->toContain($gap);
+})->with([
+    'a path a wildcard lives inside' => [
+        [['/a*' => scaffoldRef(), '/b' => scaffoldOwnCopy()], ['/a*' => scaffoldRef(), '/b' => scaffoldRef()]],
+        [[], []],
+        '`FormData` changed for some of the operations that publish it and not others, and "GET /a*" cannot be spelled as a selector without matching more than itself, so nothing was written for it.',
+    ],
+    'a webhook that goes by no name at all' => [
+        [['/b' => scaffoldOwnCopy()], ['/b' => scaffoldRef()]],
+        [['formSaved' => scaffoldRef()], ['formSaved' => scaffoldRef()]],
+        '`FormData` changed for some of the operations that publish it and not others, and one of them goes by no name a scope can spell, so nothing was written for it.',
+    ],
+]);
