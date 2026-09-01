@@ -210,6 +210,38 @@ about five seconds. Any other command that forks under an extension like this ow
 `config.process-timeout` is raised to 1800 in the root `composer.json` as headroom for slow first
 runs after a clean checkout; it was never what rescued a hang, since the hang had no timeout.
 
+### The cache `ParseError`, and why the retry is serial
+
+The other cold-path failure is a `ParseError` inside `.temp/v3.php`, reported at the line where one
+entry stops and another begins:
+
+```
+syntax error, unexpected token ",", expecting end of file
+  ➜  12▕ );,
+     13▕   '458eea…' =>
+```
+
+`Cache::put()` writes under `Cache::withinLock()`, which polls `flock(LOCK_EX | LOCK_NB)` a hundred
+times at 1ms — and then, having failed, **runs the write anyway with no lock held**. Two
+`file_put_contents` calls therefore interleave: both truncate, the shorter finishes first, and the
+longer one's tail survives past its end. The file is valid PHP up to the short write's `);` and
+garbage after it. Nothing about it is our code, and it can only ever cause a false FAILURE — a
+corrupt cache is never read as coverage the source does not have.
+
+It needs ~100ms of contention to happen at all, which is why it shows on a loaded CI runner and not
+on a fast laptop, and why it is load-dependent rather than tied to any particular file set. Only the
+COLD path forks (see above), so only cold can contend.
+
+That is what makes the retry subtle: clearing the cache *forces* the cold path, so a plain re-run is
+the same dice again — one CI job cleared and retried and hit the corruption both times, at different
+truncation points. The retry is therefore serialised, by setting `FORK_MEM_PER_PROC` above total RAM
+so pokio's `intdiv($totalMemory, $perProcessMemory)` is zero and its `max(1, …)` clamp leaves exactly
+one process. One writer cannot race itself.
+
+Measured on this repo: serial costs nothing warm (6.7s vs 7.3s — the parallelism only ever helped
+cold) and about 32s cold (40s vs 7.3s), and that cost is only paid after the fast path has already
+failed. A genuine coverage shortfall still fails both attempts.
+
 ### Why the coverage job excludes the `fixture` group
 
 The inference engine's real analysis (`PhpStanTypeEngine`, `ThrowAnalyzer`, the

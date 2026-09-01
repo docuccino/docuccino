@@ -72,8 +72,10 @@ it prevents.
   `composer test:types` therefore runs pest under `-d grpc.enable_fork_support=1`, which is inert
   where grpc is absent and turns "never finishes" into ~5s (mechanism and repro in
   [`docs/testing.md`](./docs/testing.md)). Clear the cache for one reason only — a `ParseError`
-  inside that `.temp/`, which the plugin causes by writing the file non-atomically and is never
-  your code — then re-run. CI does the same: run, and only on failure clear and retry once.
+  inside that `.temp/`, which the plugin causes by writing the file unlocked and is never your
+  code — then re-run SERIALLY (`FORK_MEM_PER_PROC=999999999999`), because clearing forces the cold
+  path and the cold path is the only one that forks: a plain retry re-rolls the same dice and has
+  already failed twice in one job. CI does the same.
   **Local green is not CI green**: `composer analyse` runs the PHPStan the lockfile resolves, and
   the quality matrix also runs a leg pinned to an older PHPStan minor plus a `--prefer-lowest` leg
   (both named in `.github/workflows/ci.yml`), which are stricter in places. The one that bites is an

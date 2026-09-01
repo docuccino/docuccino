@@ -183,14 +183,22 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress
 
-      # The plugin writes its cache non-atomically and re-reads it, so a run can die parsing a file
-      # it truncated itself. Clear it only on failure — clearing first forces the cold path, which
-      # is the slow one. A genuine shortfall fails both attempts; only the parse error survives one.
+      # The plugin's cache writer gives up on its own lock. `Cache::withinLock()` polls
+      # `flock(LOCK_EX|LOCK_NB)` 100 times at 1ms and then runs the write ANYWAY, unlocked, so under
+      # enough contention two `file_put_contents` calls interleave and one leaves its tail past the
+      # other's shorter content — a `ParseError` in `.temp/v3.php` that is never our code.
+      #
+      # Only the COLD path forks, so only it can contend. That makes the retry the subtle part:
+      # clearing the cache forces cold, so retrying the same way re-rolls the same dice, and it has
+      # already failed twice in one job. The retry therefore runs SERIALLY — `FORK_MEM_PER_PROC`
+      # over total RAM drives pokio's `maxByMemory` to zero, which it clamps to one process, and one
+      # writer cannot race itself. Measured: serial costs nothing warm (6.7s vs 7.3s) and ~32s cold,
+      # paid only when the fast path has already failed. A genuine shortfall still fails both.
       - name: Pest type coverage
         run: |
           composer test:types || {
             rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
-            composer test:types
+            FORK_MEM_PER_PROC=999999999999 composer test:types
           }
 
   fixture:
