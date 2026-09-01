@@ -7,6 +7,12 @@ User-facing changes to `docuccino/attributes` — features, fixes, performance w
 taken from the commit messages scoped `attributes`. Entries begin after v0.1.2; older history is in
 the [repository](https://github.com/docuccino/docuccino) git log.
 
+## v0.13.1
+
+### Features
+
+- declare the API version-change vocabulary ([#318](https://github.com/docuccino/docuccino/pull/318))
+
 ## v0.12.0
 
 ### Breaking changes
