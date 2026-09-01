@@ -26,7 +26,7 @@ declare(strict_types=1);
  *   php engine-runner.php trace-json-api-paginate   <controllerFile> <class> <method>
  *   php engine-runner.php trace-pagination-terminal <controllerFile> <class> <method>
  *   php engine-runner.php trace-created-resource    <controllerFile> <class> <method>
- *   php engine-runner.php data-response-status      <dataFile>       <class> <ignored>
+ *   php engine-runner.php data-response-status      <dataFile>       <class[,class…]> <ignored>
  *   php engine-runner.php trace-file-responses      <controllerFile> <class> <method>
  *   php engine-runner.php trace-closure             <file> <ignored> <ignored> <line>
  *
@@ -447,10 +447,11 @@ $result = match ($mode) {
         return ['created' => $visitor->created];
     })(),
     'data-response-status' => (static function () use ($engine, $class): array {
-        // The whole adapter-side resolver over the real engine, once per route: a name-conditional
-        // calculateResponseStatus() override folds to `200|201` from the return type, and the route's own
-        // name settles which of the two THIS operation publishes. Without that, every one of them
-        // publishes both.
+        // The whole adapter-side resolver over the real engine, once per route and per Data class: a
+        // name-conditional calculateResponseStatus() override folds to `200|201` from the return type, and
+        // the route's own name settles which of the two THIS operation publishes. Without that, every one
+        // of them publishes both. Several classes in one invocation because a PHPStan container costs
+        // more to boot than every analysis behind it.
         $resolver = new DataResponseStatus;
 
         $routes = [
@@ -462,23 +463,28 @@ $result = match ($mode) {
 
         $statuses = [];
         $diagnostics = [];
-        foreach ($routes as $key => $descriptor) {
-            $context = new RouteContext(
-                route: $descriptor,
-                actionRef: new ActionRef('', 'App\\Http\\Controllers\\ThingController', 'show'),
-                attributes: new AttributeSet,
-                engine: $engine,
-                document: new DocumentConfig('default', []),
-            );
+        foreach (explode(',', $class) as $fqcn) {
+            $statuses[$fqcn] = [];
+            $diagnostics[$fqcn] = [];
 
-            $statuses[$key] = $resolver->resolveStatuses($context, $class);
-            $diagnostics = [...$diagnostics, ...array_map(
-                static fn ($diagnostic): string => $diagnostic->code,
-                $context->components->diagnostics(),
-            )];
-            // The fold's cache input: the file the override was READ from has to be a dependency, or a
-            // warm build serves a status the edited class no longer answers.
-            $statuses[$key.'.files'] = array_map('basename', $context->dependencyFiles());
+            foreach ($routes as $key => $descriptor) {
+                $context = new RouteContext(
+                    route: $descriptor,
+                    actionRef: new ActionRef('', 'App\\Http\\Controllers\\ThingController', 'show'),
+                    attributes: new AttributeSet,
+                    engine: $engine,
+                    document: new DocumentConfig('default', []),
+                );
+
+                $statuses[$fqcn][$key] = $resolver->resolveStatuses($context, $fqcn);
+                $diagnostics[$fqcn] = [...$diagnostics[$fqcn], ...array_map(
+                    static fn ($diagnostic): string => $diagnostic->code,
+                    $context->components->diagnostics(),
+                )];
+                // The fold's cache input: the file the override was READ from has to be a dependency, or a
+                // warm build serves a status the edited class no longer answers.
+                $statuses[$fqcn][$key.'.files'] = array_map('basename', $context->dependencyFiles());
+            }
         }
 
         return ['statuses' => $statuses, 'diagnostics' => $diagnostics];

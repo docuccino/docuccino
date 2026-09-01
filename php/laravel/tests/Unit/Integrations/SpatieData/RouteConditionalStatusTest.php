@@ -94,6 +94,16 @@ it('matches any of several patterns in one call', function (string $name, int $e
     'neither' => ['things.show', 200],
 ]);
 
+it('reads a spread the call site wrote out as the positions it really takes', function (): void {
+    // Placement is FoldedArguments': a list literal spread IS its items, so the patterns are as readable
+    // as if they had been written one per argument. The unreadable spread stays refused, below.
+    $visitor = walkStatusBody("return \$request->routeIs(...['*things.store', '*things.publish']) ? 201 : 200;");
+
+    expect($visitor->statusFor('things.store'))->toBe(201)
+        ->and($visitor->statusFor('things.publish'))->toBe(201)
+        ->and($visitor->statusFor('things.show'))->toBe(200);
+});
+
 it("matches a glob through Laravel's own Str::is, wildcard included", function (string $name, int $expected): void {
     expect(walkStatusBody(routeIsBody("'things.*'"))->statusFor($name))->toBe($expected);
 })->with([
@@ -124,6 +134,9 @@ it('leaves the union alone for every shape it does not recognise', function (str
     'a non-constant pattern' => ['return $request->routeIs($pattern) ? 201 : 200;'],
     'one constant pattern beside a non-constant one' => ["return \$request->routeIs('*things.store', \$pattern) ? 201 : 200;"],
     'a spread of patterns' => ['return $request->routeIs(...$patterns) ? 201 : 200;'],
+    // A first-class callable passes no arguments at all; as a condition it is a truthy Closure, and a
+    // pattern list read off it would be empty.
+    'a first-class callable' => ['return $request->routeIs(...) ? 201 : 200;'],
     'a named argument' => ["return \$request->routeIs(patterns: '*things.store') ? 201 : 200;"],
     'no pattern at all' => ['return $request->routeIs() ? 201 : 200;'],
 

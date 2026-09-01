@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Integrations\SpatieData;
 
-use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeScope;
+use Docuccino\Laravel\Integrations\Support\FoldedArguments;
+use Docuccino\Laravel\Support\FrameworkClasses;
 use Illuminate\Support\Str;
 use PhpParser\Node;
 
@@ -33,8 +34,6 @@ use PhpParser\Node;
  */
 final class RouteConditionalStatus implements TraceVisitor
 {
-    private const REQUEST = 'Illuminate\\Http\\Request';
-
     /**
      * Every `return` in the method, keyed by where it sits — the walk may hand one node over more than
      * once, and two DIFFERENT returns are what disqualifies the whole shape.
@@ -96,8 +95,9 @@ final class RouteConditionalStatus implements TraceVisitor
         }
 
         $condition = $ternary->cond;
-        $negated = $condition instanceof Node\Expr\BooleanNot;
+        $negated = false;
         if ($condition instanceof Node\Expr\BooleanNot) {
+            $negated = true;
             $condition = $condition->expr;
         }
 
@@ -116,28 +116,17 @@ final class RouteConditionalStatus implements TraceVisitor
      */
     private function patternsOf(Node\Expr $expr, TypeScope $scope): ?array
     {
-        if (! $expr instanceof Node\Expr\MethodCall
-            || ! $expr->name instanceof Node\Identifier
-            || $expr->isFirstClassCallable()
-        ) {
+        if (! $expr instanceof Node\Expr\MethodCall || ! $expr->name instanceof Node\Identifier) {
             return null;
         }
 
         $recognised = match ($expr->name->toString()) {
-            'routeIs' => $this->isRequest($expr->var, $scope),
+            'routeIs' => FrameworkClasses::isRequest($expr->var, $scope),
             'named' => $this->isRouteOfRequest($expr->var, $scope),
             default => false,
         };
 
-        return $recognised ? $this->constantStrings($expr->getArgs(), $scope) : null;
-    }
-
-    /** Whether an expression is the request itself — the receiver both spellings are anchored on. */
-    private function isRequest(Node\Expr $expr, TypeScope $scope): bool
-    {
-        $type = $scope->typeOf($expr);
-
-        return $type instanceof ClassT && is_a($type->fqcn, self::REQUEST, true);
+        return $recognised ? $this->constantStrings($expr, $scope) : null;
     }
 
     /** Whether an expression is `<request>->route()` — the argument-less accessor, not a parameter read. */
@@ -148,35 +137,31 @@ final class RouteConditionalStatus implements TraceVisitor
             && $expr->name->toString() === 'route'
             && ! $expr->isFirstClassCallable()
             && $expr->getArgs() === []
-            && $this->isRequest($expr->var, $scope);
+            && FrameworkClasses::isRequest($expr->var, $scope);
     }
 
     /**
-     * Every argument as a constant string, or null if any of them isn't one. A spread or a named
-     * argument disqualifies the call outright: neither can be placed, and a pattern list read short is
-     * a narrowing to a status the server may not send.
+     * The call's arguments as a plain list of constant strings, or null for anything else. Placement is
+     * {@see FoldedArguments}: a named argument lands under its name and a spread the call site did not
+     * write out makes the whole call unreadable, and neither is a list — which is the answer this needs,
+     * because a pattern list read short narrows to a status the server may well still send.
      *
-     * @param  array<Node\Arg>  $args
      * @return list<string>|null
      */
-    private function constantStrings(array $args, TypeScope $scope): ?array
+    private function constantStrings(Node\Expr\MethodCall $call, TypeScope $scope): ?array
     {
-        if ($args === []) {
+        $args = FoldedArguments::of($call, $scope);
+        if ($args === null || $args === [] || ! array_is_list($args)) {
             return null;
         }
 
         $patterns = [];
-        foreach ($args as $arg) {
-            if ($arg->unpack || $arg->name !== null) {
+        foreach ($args as $value) {
+            if (! is_string($value)) {
                 return null;
             }
 
-            $value = $scope->constantValueOf($arg->value);
-            if ($value === null || ! $value->isScalar() || ! is_string($value->scalar)) {
-                return null;
-            }
-
-            $patterns[] = $value->scalar;
+            $patterns[] = $value;
         }
 
         return $patterns;

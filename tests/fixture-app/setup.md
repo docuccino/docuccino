@@ -172,13 +172,35 @@ own (seeded from the action's parameter type):
 
 ### Exception-flow analysis
 
-- `app/Http/Controllers/ThrowsController.php` — ten actions covering abort/abort_if (with the
-  status written positionally and, separately, named), authorize, findOrFail, inline `validate()`,
-  a 2-deep service call with and without `@throws`, a vendor any-throwable call, and a try/catch.
+- `app/Http/Controllers/ThrowsController.php` — the actions the exception-flow layer is measured against,
+  in two families. How a throw is REACHED: abort/abort_if (with the status written positionally and,
+  separately, named), authorize, findOrFail, inline `validate()`, a 2-deep service call with and without
+  `@throws`, a vendor any-throwable call, and a try/catch. And where an `HttpException` subclass's STATUS
+  is written: pinned in the class, inherited from a base that adds no constructor, written at the `throw`
+  positionally and named, taken from a constructor default the construction leaves empty, that same
+  construction one hop away inside the factory the `throw` names, and chosen per factory — plus the
+  degradations, where a constructor normalises what it was handed, reuses the parameter after forwarding
+  it, or a factory builds two ways, and the two vendor cases nothing is said about.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
   throw chain descended by the exception-flow layer.
 - `app/Exceptions/OutOfStockException.php` — a custom domain exception (also reused by the
   inferred-handler sources below).
+- `app/Exceptions/ExportRejectedException.php` — the static-factory idiom: a private constructor with the
+  status defaulted and no factory writing the slot, so the default is what EVERY instance carries.
+- `app/Exceptions/ExportBlockedException.php` — the same default behind a PUBLIC constructor, which pins
+  nothing for the class. Both spellings of a construction that leaves the slot empty are thrown — a bare
+  `new`, and a factory doing the same — so the two cannot be answered differently.
+- `app/Exceptions/ExportLockedException.php` — no constructor of its own, so the framework's runs and the
+  status is the argument each `throw` writes, positionally in one action and named in another.
+- `app/Exceptions/ExportUnsupportedException.php` — the factory idiom with no constructor of its own: the
+  named factory builds with its status before decorating the exception with what the caller passed.
+- `app/Exceptions/ExportConflictException.php` — a status PER factory (the constructor default, one
+  factory overriding it, and one choosing by argument), so neither the class nor every factory names one.
+- `app/Exceptions/ExportPartialException.php` — a constructor that NORMALISES the status it was handed, so
+  neither the default nor what a caller puts in the slot is what the instance carries; the honest answer
+  is no status at all.
+- `app/Exceptions/ExportSupersededException.php` — the status parameter reused after it was forwarded, so
+  a read taken in the body's END scope would answer a status nothing was ever built with.
 
 ### Data + Eloquent model reflection
 
@@ -232,6 +254,10 @@ own (seeded from the action's parameter type):
   constants on `$request->routeIs(...)`. The engine folds the return type to `200|201`; the adapter's
   resolver then reads the ternary off the AST and narrows it to the one status each route takes, which is
   what stops a GET being documented with a 201 the server can never send.
+- `app/Data/GuardedThingData.php` + `app/Data/FlaggedThingData.php` — the same decision carrying a SECOND
+  `return`: a guard clause, and an unreachable branch above the ternary. Both keep the whole union on
+  every route, which is what pins the narrowing's return count against the analyser's own walk rather
+  than against a plain parse of the file — a `return` PHPStan omitted would narrow a body it must not.
 - `app/Data/MergedRulesData.php` — the class-level `#[MergeValidationRules]`, which flips spatie's
   resolver from `add` (replace at the key) to `merge` (append), so the property's own `#[Max(255)]` keeps
   applying alongside the override.
