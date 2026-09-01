@@ -160,31 +160,6 @@ function safelistSourcesIn(string $package): array
  *
  * @return array{directed: list<int>, raw: list<int>}
  */
-/**
- * The function a read sits in, which is what an explained read is keyed on. A line number is not: it
- * moves whenever anything above it does, and an allow-list entry that fails for having drifted trains
- * the next reader to bump a number rather than ask why the entry is there. A closure is transparent —
- * the read belongs to the method that wrote it, not to the callback.
- *
- * @param  list<PhpToken>  $tokens
- */
-function safelistEnclosingFunction(array $tokens, int $index): string
-{
-    for ($i = $index; $i >= 0; $i--) {
-        if ($tokens[$i]->id !== T_FUNCTION) {
-            continue;
-        }
-
-        // An anonymous function names nothing, so keep walking: the read is the enclosing method's.
-        $name = $tokens[$i + 1] ?? null;
-        if ($name !== null && $name->id === T_STRING) {
-            return $name->text;
-        }
-    }
-
-    return '{file}';
-}
-
 function safelistAllowReadSites(string $source, string $property = 'allow'): array
 {
     $tokens = safelistSignificantTokens($source);
@@ -205,7 +180,7 @@ function safelistAllowReadSites(string $source, string $property = 'allow'): arr
             continue;
         }
 
-        $sites[safelistStatementNamesReader($tokens, $i, $readerClass, $readerMethod) ? 'directed' : 'raw'][] = safelistEnclosingFunction($tokens, $i);
+        $sites[safelistStatementNamesReader($tokens, $i, $readerClass, $readerMethod) ? 'directed' : 'raw'][] = enclosingFunction($tokens, $i);
     }
 
     return $sites;

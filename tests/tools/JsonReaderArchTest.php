@@ -26,39 +26,39 @@ function allowedAssociativeJsonDecodes(): array
 {
     return [
         // Reads a package manifest for its `name`. Never a document.
-        'php/core/src/Extensions/ResolvedExtensions.php:278' => 'composer.json → package name',
+        'php/core/src/Extensions/ResolvedExtensions.php::composerNameFor' => 'composer.json → package name',
 
         // Reads the application's composer.json for its `autoload.psr-4` map — namespace prefixes and
         // directories. Never a document. The one reader of it: the engine asks which source roots keep
         // their bodies, the scaffold command asks what namespace a generated class carries.
-        'php/laravel/src/Support/Psr4Namespaces.php:100' => 'composer.json → autoload psr-4 map',
+        'php/laravel/src/Support/Psr4Namespaces.php::roots' => 'composer.json → autoload psr-4 map',
 
         // Pulls `dependencies[].file` PATH STRINGS out of stored fragments for `docuccino:watch`. The
         // fragment BODY is read by `FragmentCache`, which goes through JsonValue; nothing here reaches it.
-        'php/laravel/src/Pipeline/FragmentStore.php:46' => 'fragment manifest → dependency paths',
+        'php/laravel/src/Pipeline/FragmentStore.php::dependencyFiles' => 'fragment manifest → dependency paths',
 
         // A `{format, payload}` envelope where the payload is the emitted document as a STRING, handed
         // to the response untouched. The bytes are never decoded here, so there is nothing to flatten.
-        'php/laravel/src/Runtime/DocumentCache.php:48' => 'cache envelope → format + string payload',
+        'php/laravel/src/Runtime/DocumentCache.php::get' => 'cache envelope → format + string payload',
 
         // The contract index keeps the original JSON text and re-decodes it as an OBJECT graph
         // (`ContractIndex::graph()`) wherever `{}` versus `[]` decides an answer — schema validation,
         // and the typed model the semantic diff reads (`ContractIndex::comparable()`). The associative
         // copy is only ever walked to LOCATE a node — operation ids, paths, methods, pointer segments —
         // and is never re-emitted or compared.
-        'php/core/src/Contract/ContractIndex.php:69' => 'contract lookup index; validation reads graph()',
+        'php/core/src/Contract/ContractIndex.php::fromJson' => 'contract lookup index; validation reads graph()',
 
         // The decoded value lands on `additionalProperties` — a SCHEMA, and every position inside a
         // schema that a PHP array cannot spell is one canonicalisation restores from the keyword's own
         // contract. Measured against the recorded goldens: 41 such schemas, none carrying an `example`,
         // which is the only free-form position that would survive to the document. It also cannot use
         // JsonValue — an integration may import only the public core surface (`IntegrationsArchTest`).
-        'php/laravel/src/Integrations/Validation/Transformers/AdditionalPropertiesRuleTransformer.php:57' => 'rule parameter → additionalProperties schema',
+        'php/laravel/src/Integrations/Validation/Transformers/AdditionalPropertiesRuleTransformer.php::apply' => 'rule parameter → additionalProperties schema',
 
         // Asks the same carrier for its value schema's `type` WORD and nothing else, to tell whether a
         // map's values are objects. The decoded value is discarded on the next line; the schema that
         // reaches the document is the carrier's own JSON, decoded by the transformer above.
-        'php/laravel/src/Integrations/SpatieData/DataValidationRules.php:231' => 'rule parameter → value container word',
+        'php/laravel/src/Integrations/SpatieData/DataValidationRules.php::hasObjectValues' => 'rule parameter → value container word',
     ];
 }
 
@@ -109,8 +109,18 @@ it('is scanning something', function (): void {
     expect(packageSourceAssociativeJsonDecodes())->not->toBeEmpty()
         ->and(allowedAssociativeJsonDecodes())->not->toBeEmpty()
         // JsonValue itself decodes to OBJECTS, so it must never appear in the scan's own results.
-        ->and(associativeJsonDecodesIn(dirname($jsonValue)))->not->toContain('php/core/src/Support/JsonValue.php:39')
+        ->and(associativeJsonDecodesIn(dirname($jsonValue)))->not->toContain('php/core/src/Support/JsonValue.php::decode')
         ->and(file_get_contents($jsonValue))->toContain('json_decode($json, false');
+});
+
+/**
+ * Keying an explained decode on its function rather than its line is what stops the list rotting on
+ * drift — but it means a SECOND associative decode in an already-explained function collides with the
+ * entry standing for the first, and the per-key diff above cannot see it. So the counts are held to
+ * each other as well: one explained entry accounts for exactly one decode.
+ */
+it('explains one decode per entry, so a second in the same function cannot hide behind it', function (): void {
+    expect(count(packageSourceAssociativeJsonDecodes()))->toBe(count(allowedAssociativeJsonDecodes()));
 });
 
 /**
