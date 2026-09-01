@@ -43,7 +43,7 @@ in-process. The published config ships one document, `default`.
 
 :::note[Paths are stored relative to your application]
 Every path in a document — `info.description.file`, `content.dir`, `webhooks.dir`, `overlays`,
-`examples.recordings`, `api_version.changes.dir`, `export.path` — may be
+`examples.recordings`, `api_version.changes`, `export.path` — may be
 written relative to your application root or as an absolute path; both resolve to the same file. Write
 them however you like: a path inside your application is **stored relative to the application root**,
 so the generated document is identical on your laptop, in CI, and in a container, wherever the app is
@@ -58,10 +58,15 @@ say so, once per key, with a `config.machine-dependent-path` info diagnostic.
 
 ```php
 // 'api_version' => [
-//     'changes' => ['dir' => 'app/Api/Versions'],
+//     'changes' => ['app/Api/Versions'],
 //     'header' => 'X-Api-Version',
 // ],
 ```
+
+| Key | Values / default | Effect |
+| --- | --- | --- |
+| `changes` | list of directories / `[]` | Where the `#[ApiVersionChange]` classes live. Each entry may be a glob, so a modular application writes `'modules/*/Api/Versions'` once instead of listing its modules — and an entry matching a path outside the application is refused, wildcard or not. Every directory is read, and the changes are ordered by version then class name however they were spelled, so which entry a class came out of never decides when it applies. |
+| `header` | header name / `X-Api-Version` | The request header the version enum is published on. |
 
 Declaring `api_version` makes the document an API **version** rather than a document that merely has
 one. Three things follow.

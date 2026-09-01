@@ -2055,7 +2055,7 @@ function versionedFormDocuments(): array
     $shared = [
         'routes' => ['include' => ['api/versioned-forms']],
         'error_responses' => 'none',
-        'api_version' => ['changes' => ['dir' => 'workbench/app/Api/Versions']],
+        'api_version' => ['changes' => ['workbench/app/Api/Versions']],
     ];
 
     return [
@@ -2077,7 +2077,7 @@ function versionedEntryDocuments(): array
     $shared = [
         'routes' => ['include' => ['api/versioned-entries']],
         'error_responses' => 'none',
-        'api_version' => ['changes' => ['dir' => 'workbench/app/Api/EntryVersions']],
+        'api_version' => ['changes' => ['workbench/app/Api/EntryVersions']],
     ];
 
     return [
@@ -2165,7 +2165,7 @@ function versioningDiagnostics(?string $dir, string $version = '2026-06-01', str
             'info' => ['title' => 'Forms API', 'version' => $version],
             'routes' => ['include' => [$route]],
             'error_responses' => 'none',
-            'api_version' => $dir === null ? [] : ['changes' => ['dir' => $dir]],
+            'api_version' => $dir === null ? [] : ['changes' => [$dir]],
         ],
     ]);
 
