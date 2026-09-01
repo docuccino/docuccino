@@ -1714,7 +1714,7 @@ interface FoldsCallReturns  { public function deferReturnFold(Node\Expr $c, call
 (`$this->termFilter()`, `ListFilters::status()`, `...$this->allowedFilters()`) rather than in the
 arguments at the call site: a DEFERRED fold of a single unconditional `return`, answered after the walk.
 Opt-in because `constantValueOf` is shared and a fabricated descriptor is worse than an unrecovered one —
-mechanics, limits and the FiberScope reason for deferring are in the inference doc §4.
+mechanics, limits and the callback-scope reason for deferring are in the inference doc §4.
 
 `DType` closed set: `ScalarT, LiteralT, ArrayShapeT, ListT/MapT, UnionT, IntersectionT,
 ClassT(fqcn, typeArgs), EnumT(cases), CallableT, NullT/VoidT/NeverT, StatusMarkerT, UnknownT(reason)`.
