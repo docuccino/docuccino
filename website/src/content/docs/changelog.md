@@ -13,6 +13,38 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.13.1
+
+### Features
+
+- **laravel**: scope a scaffolded change only where the application forked the shape ([#346](https://github.com/docuccino/docuccino/pull/346))
+- **laravel**: write a version change beside the module that owns the shape ([#345](https://github.com/docuccino/docuccino/pull/345))
+- **laravel**: scaffold version-change classes from the diff the product can already compute ([#342](https://github.com/docuccino/docuccino/pull/342))
+- **laravel**: read version changes from every directory a modular app keeps them in ([#341](https://github.com/docuccino/docuccino/pull/341))
+- **laravel**: put a response field a version removed back into the older document ([#336](https://github.com/docuccino/docuccino/pull/336))
+- **laravel**: declare when a field became required, and in which direction ([#334](https://github.com/docuccino/docuccino/pull/334))
+- **laravel**: scope a version change to chosen operations ([#321](https://github.com/docuccino/docuccino/pull/321))
+- **laravel**: derive a document per API version from declared changes ([#320](https://github.com/docuccino/docuccino/pull/320))
+- **attributes**: declare the API version-change vocabulary ([#318](https://github.com/docuccino/docuccino/pull/318))
+
+### Bug fixes
+
+- **ci**: retry the type-coverage gate serially, where its cache cannot race itself ([#353](https://github.com/docuccino/docuccino/pull/353))
+- **laravel**: publish one error contract for an HTTP error whose status could not be read ([#351](https://github.com/docuccino/docuccino/pull/351))
+- **inference-phpstan**: read a construction's status by one rule, in the scope it is written ([#350](https://github.com/docuccino/docuccino/pull/350))
+- **laravel**: document the one status a route-name conditional takes on that route ([#349](https://github.com/docuccino/docuccino/pull/349))
+- **inference-phpstan**: read the status from the factory a throw names ([#348](https://github.com/docuccino/docuccino/pull/348))
+- **inference-phpstan**: read the status an HttpException subclass sets on itself ([#347](https://github.com/docuccino/docuccino/pull/347))
+- **core**: mint a class schema identity in one place, facet and all ([#333](https://github.com/docuccino/docuccino/pull/333))
+- **inference-phpstan**: stabilise a walk scope through the interface that promises the call ([#339](https://github.com/docuccino/docuccino/pull/339))
+- **laravel**: rewrite an example with the schema a version renames ([#328](https://github.com/docuccino/docuccino/pull/328))
+- **core**: key a cached fragment on the document whose identities it carries ([#326](https://github.com/docuccino/docuccino/pull/326))
+- **laravel**: refuse to widen a version-change scope, and read a version set as versions ([#323](https://github.com/docuccino/docuccino/pull/323))
+
+### Performance
+
+- **laravel**: declare the API version header once and point every operation at it ([#327](https://github.com/docuccino/docuccino/pull/327))
+
 ## v0.13.0
 
 ### Breaking changes
