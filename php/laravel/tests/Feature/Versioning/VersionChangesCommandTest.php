@@ -151,7 +151,8 @@ it('scaffolds one class per difference the vocabulary expresses, and names where
     $old = publishedArtifact();
 
     $this->artisan('docuccino:version-changes', ['old' => $old, 'document' => 'v'])
-        ->expectsOutputToContain('"v" at 2026-09-01, into changes, from the packaged stub.')
+        ->expectsOutputToContain('"v" at 2026-09-01, from the packaged stub.')
+        ->expectsOutputToContain('into changes — the only configured change directory.')
         ->expectsOutputToContain('FormDataIdBecameRequired')
         ->expectsOutputToContain('FormDataLostSubtotal')
         ->expectsOutputToContain('FormDataTitleReplacesName')
@@ -338,6 +339,26 @@ it('reports the differences no verb declares rather than writing something wrong
     @unlink($old);
 });
 
+it('reports the destination it chose and why, for every class it writes', function (): void {
+    // A module inferred silently is the failure worth designing against: the class is discovered
+    // wherever it lands, so a wrong module costs nothing until somebody extracts one — and by then the
+    // history has gone with the other half. `FormData` lives in the workbench rather than in either
+    // configured module, so this is the fallback saying so out loud.
+    $old = publishedArtifact();
+    mkdir($this->root.'/modules/Billing/Versions', 0755, true);
+
+    config()->set('docuccino.documents.v.api_version.changes', ['changes', 'modules/*/Versions']);
+
+    $this->artisan('docuccino:version-changes', ['old' => $old, 'document' => 'v'])
+        ->expectsOutputToContain('into changes — the first configured change directory; no configured module holds Workbench\\App\\Data\\FormData.')
+        ->assertSuccessful();
+
+    expect(scaffoldedFiles($this->changes))->toContain('FormDataTitleReplacesName.php')
+        ->and(scaffoldedFiles($this->root.'/modules/Billing/Versions'))->toBe([]);
+
+    @unlink($old);
+});
+
 it('writes into the directory --in names, and refuses one that is not configured', function (): void {
     $old = publishedArtifact();
     mkdir($this->root.'/modules/Billing/Versions', 0755, true);
@@ -352,7 +373,7 @@ it('writes into the directory --in names, and refuses one that is not configured
     );
 
     $this->artisan('docuccino:version-changes', ['old' => $old, 'document' => 'v', '--in' => 'modules/Billing/Versions'])
-        ->expectsOutputToContain('into modules/Billing/Versions')
+        ->expectsOutputToContain('into modules/Billing/Versions — you named it with --in.')
         ->assertSuccessful();
 
     expect(scaffoldedFiles($this->root.'/modules/Billing/Versions'))->toContain('FormDataTitleReplacesName.php')

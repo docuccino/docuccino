@@ -31,17 +31,18 @@ function changeDirectoriesTree(): string
 
 /**
  * @param  list<string>  $changes
- * @return array{0: list<string>, 1: list<string>} directories, diagnostic codes
+ * @return array{0: list<string>, 1: list<string>, 2: array<string, string>} directories, diagnostic
+ *                                                                           codes, module roots
  */
 function resolvedChangeDirectories(string $base, array $changes): array
 {
-    [$directories, $diagnostics] = ChangeDirectories::resolve($base, new DocumentConfig(
+    [$directories, $diagnostics, $modules] = ChangeDirectories::resolve($base, new DocumentConfig(
         key: 'v',
         info: [],
         raw: ['api_version' => ['changes' => $changes]],
     ));
 
-    return [$directories, array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $diagnostics)];
+    return [$directories, array_map(static fn (Diagnostic $diagnostic): string => $diagnostic->code, $diagnostics), $modules];
 }
 
 it('expands a glob to every module it matches, sorted, and keeps the entries in configured order', function (): void {
@@ -118,4 +119,56 @@ it('names one directory once, however many entries reach it', function (): void 
         $base.'/modules/Alpha/Api/Versions',
         $base.'/modules/Zebra/Api/Versions',
     ]);
+});
+
+/*
+ * The module root behind a match — the third answer, and the one the scaffolder places a change with.
+ * Read here rather than derived from a resolved directory, because a wildcard is the only thing that
+ * says where an author's boundary is and this is where the wildcard was expanded.
+ */
+it('names the module root a globbed entry declares, and none for a literal one', function (): void {
+    $base = changeDirectoriesTree();
+
+    [, $codes, $modules] = resolvedChangeDirectories($base, ['app/Api/Versions', 'modules/*/Api/Versions']);
+
+    expect($codes)->toBe([])->and($modules)->toBe([
+        // The wildcard's own segment, not the whole match and not the prefix before it: `modules/` on
+        // its own holds every module and so tells one from another about as well as `.` does.
+        $base.'/modules/Alpha/Api/Versions' => $base.'/modules/Alpha',
+        $base.'/modules/Zebra/Api/Versions' => $base.'/modules/Zebra',
+    ]);
+});
+
+it('reads the boundary off the entry as written, wherever the wildcard sits', function (string $entry, string $root): void {
+    $base = changeDirectoriesTree();
+
+    [, , $modules] = resolvedChangeDirectories($base, [$entry]);
+
+    expect($modules[$base.'/modules/Alpha/Api/Versions'] ?? null)->toBe($root === '' ? null : $base.'/'.$root);
+})->with([
+    'a wildcard naming the module' => ['modules/*/Api/Versions', 'modules/Alpha'],
+    'a wildcard at the top' => ['*/Alpha/Api/Versions', 'modules'],
+    'the FIRST of two wildcards' => ['modules/*/*/Versions', 'modules/Alpha'],
+    'a wildcard below the module' => ['modules/Alpha/*/Versions', 'modules/Alpha/Api'],
+]);
+
+it('names a module root for an absolute entry too, since the match is absolute either way', function (): void {
+    $base = changeDirectoriesTree();
+
+    [, , $modules] = resolvedChangeDirectories($base, [$base.'/modules/*/Api/Versions']);
+
+    expect($modules)->toBe([
+        $base.'/modules/Alpha/Api/Versions' => $base.'/modules/Alpha',
+        $base.'/modules/Zebra/Api/Versions' => $base.'/modules/Zebra',
+    ]);
+});
+
+it('lets the first entry to claim a directory keep its module root', function (): void {
+    // Two patterns reaching one tree answer in CONFIGURED order rather than in whichever expanded last,
+    // so the destination a change gets cannot move when an entry is appended.
+    $base = changeDirectoriesTree();
+
+    [, , $modules] = resolvedChangeDirectories($base, ['modules/Alpha/*/Versions', 'modules/*/Api/Versions']);
+
+    expect($modules[$base.'/modules/Alpha/Api/Versions'])->toBe($base.'/modules/Alpha/Api');
 });

@@ -216,6 +216,7 @@ final readonly class ChangeScaffolder
 
         return new ScaffoldedChange(
             class: $short.self::studly($to).'Replaces'.self::studly($from),
+            schema: $fqcn,
             since: $since,
             description: sprintf('`%s` publishes `%s` where it published `%s`.', $short, $to, $from),
             verb: self::attribute(RenamedResponseField::class, [
@@ -268,6 +269,7 @@ final readonly class ChangeScaffolder
 
         return new ScaffoldedChange(
             class: $short.'Lost'.self::studly($field),
+            schema: $fqcn,
             since: $since,
             description: sprintf('`%s` no longer includes `%s`.', $short, $field),
             verb: self::attribute(RemovedResponseField::class, $arguments),
@@ -295,6 +297,7 @@ final readonly class ChangeScaffolder
 
         return new ScaffoldedChange(
             class: $short.self::studly($field).'BecameRequired',
+            schema: $fqcn,
             since: $since,
             description: sprintf('`%s` now always includes `%s`.', $short, $field),
             verb: self::attribute(MadeResponseFieldRequired::class, [
@@ -313,6 +316,7 @@ final readonly class ChangeScaffolder
 
         return new ScaffoldedChange(
             class: $short.self::studly($field).($request ? 'NoLongerRequired' : 'BecameOptional'),
+            schema: $fqcn,
             since: $since,
             description: $request
                 ? sprintf('`%s` no longer requires `%s`.', $short, $field)

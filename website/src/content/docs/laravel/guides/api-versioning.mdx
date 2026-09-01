@@ -150,6 +150,20 @@ final class InvoiceResourceTitleReplacesName {}
 What is left is the half only you know: **why** it changed, and whom it affects. That is the sentence a
 consumer reads when they are deciding whether the upgrade touches them, so it is worth the minute.
 
+Each class is written **beside the module that owns it**. If your `changes` entry contains a glob, the
+wildcard is where you declared your boundary — `modules/*/Api/Versions` says a module is the unit — so a
+change to a Billing resource lands in Billing:
+
+```
+Written
+  InvoiceResourceTitleReplacesName — `InvoiceResource` publishes `title` where it published `name`.
+    into modules/Billing/Api/Versions — beside modules/Billing, which owns Billing\Data\InvoiceResource.
+```
+
+The destination and the reason are printed for every class, found module or not, and `--in` overrides
+the lot. Nothing is guessed: with a single literal directory configured there is no boundary to read and
+everything goes there, exactly as before.
+
 Two things it will not do. It never touches a class that already exists — the sentence you wrote in one
 is the whole value of it. And it writes nothing for a difference no verb expresses; those are printed
 instead, so an incomplete version is one you can see rather than one you find out about later.

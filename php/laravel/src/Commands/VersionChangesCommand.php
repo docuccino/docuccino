@@ -14,6 +14,8 @@ use Docuccino\Laravel\Support\Paths;
 use Docuccino\Laravel\Support\Psr4Namespaces;
 use Docuccino\Laravel\Support\TerminalText;
 use Docuccino\Laravel\Versioning\ChangeDirectories;
+use Docuccino\Laravel\Versioning\Scaffold\ChangeDestination;
+use Docuccino\Laravel\Versioning\Scaffold\ChangePlacement;
 use Docuccino\Laravel\Versioning\Scaffold\ChangeScaffolder;
 use Docuccino\Laravel\Versioning\Scaffold\ChangeStub;
 use Docuccino\Laravel\Versioning\Scaffold\ScaffoldedChange;
@@ -33,10 +35,13 @@ use Illuminate\Console\Command;
  * Its own command rather than a step of `docuccino:install`: `install` runs once and idempotently,
  * while scaffolding a version is recurring work done when one is cut.
  *
- * Where it writes, when several directories are configured, is the FIRST of them unless `--in` says
- * otherwise — and it always reports which. Inferring the module from the changed class's own location
- * would be a guess about somebody's layout, and a guess that puts a file in the wrong module is worse
- * than a flag.
+ * Where each change is written is {@see ChangePlacement}'s answer — the module that owns the class the
+ * verb names, where a configured entry's wildcard declared one — and it is REPORTED for every change,
+ * with the reason, whether a module was found or not. A destination chosen quietly is the failure mode
+ * worth designing against: the class is discovered wherever it lands, so a wrong module costs nothing
+ * until somebody extracts one and its history goes with the other half.
+ *
+ * @phpstan-type PlacedChange array{change: ScaffoldedChange, destination: ChangeDestination, namespace: string}
  */
 final class VersionChangesCommand extends Command
 {
@@ -50,7 +55,7 @@ final class VersionChangesCommand extends Command
         {document? : The configured document key to build as the new side (defaults to "default")}
         {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
         {--since= : The version the scaffolded changes shipped in (defaults to the document\'s info.version)}
-        {--in= : Which configured api_version.changes directory to write into (defaults to the first)}
+        {--in= : Write every class into this configured api_version.changes directory, whatever owns it}
         {--dry-run : Report what would be written, and write nothing}
         {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}';
 
@@ -92,25 +97,25 @@ final class VersionChangesCommand extends Command
             return self::FAILURE;
         }
 
-        [$directories] = ChangeDirectories::resolve(base_path(), $config);
-        $directory = $this->target($directories, $key);
-        if ($directory === null) {
-            return self::FAILURE;
-        }
+        [$directories, , $modules] = ChangeDirectories::resolve(base_path(), $config);
 
-        $namespace = Psr4Namespaces::for(base_path(), $directory);
-        if ($namespace === null) {
+        if ($directories === []) {
             $this->error(sprintf(
-                'No PSR-4 prefix in composer.json covers %s, so a class written there would never be autoloaded — and a change nothing loads is a change nothing applies. Map the directory and run this again.',
-                TerminalText::of($this->readable($directory)),
+                'The "%s" document configures no api_version.changes directory, so there is nowhere to write a change class.',
+                TerminalText::of($key),
             ));
 
             return self::FAILURE;
         }
 
+        $forced = $this->forced($directories);
+        if ($forced === false) {
+            return self::FAILURE;
+        }
+
         $new = $builder->build($key, $engine);
 
-        return $this->scaffold($old, $new, $since, $directory, $namespace, $key);
+        return $this->scaffold($old, $new, $since, new ChangePlacement(base_path(), $directories, $modules, $forced), $key);
     }
 
     /**
@@ -118,7 +123,7 @@ final class VersionChangesCommand extends Command
      * are: a difference the vocabulary cannot express is only useful to the author if it is printed
      * beside the ones that were.
      */
-    private function scaffold(UirDocument $old, GenerationResult $new, string $since, string $directory, string $namespace, string $key): int
+    private function scaffold(UirDocument $old, GenerationResult $new, string $since, ChangePlacement $placement, string $key): int
     {
         try {
             $changeset = $this->differ->diff($old, $new->document);
@@ -132,10 +137,9 @@ final class VersionChangesCommand extends Command
         $stub = new ChangeStub(base_path());
 
         $this->section('Scaffold', sprintf(
-            '"%s" at %s, into %s, from the %s stub.',
+            '"%s" at %s, from the %s stub.',
             $key,
             $since,
-            $this->readable($directory),
             $stub->published() ? 'published' : 'packaged',
         ));
 
@@ -143,25 +147,30 @@ final class VersionChangesCommand extends Command
             $this->line('Nothing the version-change vocabulary expresses.');
         }
 
+        $placed = $this->placed($plan->changes, $placement);
+        if ($placed === null) {
+            return self::FAILURE;
+        }
+
         $written = [];
         $skipped = [];
 
-        foreach ($plan->changes as $change) {
-            $file = $change->file($directory);
+        foreach ($placed as $entry) {
+            $file = $entry['change']->file($entry['destination']->directory);
 
             // Never overwritten, and never merged into either: the file is the author's the moment it
             // exists, and the sentence they wrote in it is the whole value of the thing.
             if (is_file($file)) {
-                $skipped[] = $change;
+                $skipped[] = $entry;
 
                 continue;
             }
 
-            if (! $this->option('dry-run') && ! $this->write($file, $stub->render($change, $namespace))) {
+            if (! $this->option('dry-run') && ! $this->write($file, $stub->render($entry['change'], $entry['namespace']))) {
                 return self::FAILURE;
             }
 
-            $written[] = $change;
+            $written[] = $entry;
         }
 
         $this->report($written, $skipped, $plan->gaps);
@@ -170,8 +179,48 @@ final class VersionChangesCommand extends Command
     }
 
     /**
-     * @param  list<ScaffoldedChange>  $written
-     * @param  list<ScaffoldedChange>  $skipped
+     * Every change against where it goes and the namespace it carries there, or null when a destination
+     * is one no PSR-4 prefix covers — which fails the whole run before a single file is written. A
+     * change class is found by scanning source and then loading it, so one the autoloader cannot map is
+     * a change nothing applies, silently; and half a version declared is worse than none, because the
+     * half that is missing looks like a version where nothing else changed.
+     *
+     * @param  list<ScaffoldedChange>  $changes
+     * @return list<PlacedChange>|null
+     */
+    private function placed(array $changes, ChangePlacement $placement): ?array
+    {
+        $placed = [];
+        $unmapped = [];
+
+        foreach ($changes as $change) {
+            $destination = $placement->for($change->schema);
+            $namespace = Psr4Namespaces::for(base_path(), $destination->directory);
+
+            if ($namespace === null) {
+                $unmapped[$this->readable($destination->directory)] = true;
+
+                continue;
+            }
+
+            $placed[] = ['change' => $change, 'destination' => $destination, 'namespace' => $namespace];
+        }
+
+        if ($unmapped !== []) {
+            $this->error(sprintf(
+                'No PSR-4 prefix in composer.json covers %s, so a class written there would never be autoloaded — and a change nothing loads is a change nothing applies. Map the directory and run this again.',
+                TerminalText::of(implode(', ', array_keys($unmapped))),
+            ));
+
+            return null;
+        }
+
+        return $placed;
+    }
+
+    /**
+     * @param  list<PlacedChange>  $written
+     * @param  list<PlacedChange>  $skipped
      * @param  list<string>  $gaps
      */
     private function report(array $written, array $skipped, array $gaps): void
@@ -179,8 +228,11 @@ final class VersionChangesCommand extends Command
         if ($written !== []) {
             $this->section($this->option('dry-run') ? 'Would write' : 'Written');
 
-            foreach ($written as $change) {
+            foreach ($written as $entry) {
+                $change = $entry['change'];
+
                 $this->line(sprintf('  %s — %s', TerminalText::of($change->class), TerminalText::of($change->description)));
+                $this->line(sprintf('    <fg=gray>%s</>', TerminalText::of($this->where($entry['destination']))));
 
                 if ($change->note !== null) {
                     $this->line(sprintf('    <fg=yellow>%s</>', TerminalText::of($change->note)));
@@ -195,8 +247,9 @@ final class VersionChangesCommand extends Command
         if ($skipped !== []) {
             $this->section('Left alone', 'A class of that name is already there, and it is yours.');
 
-            foreach ($skipped as $change) {
-                $this->line(sprintf('  %s', TerminalText::of($change->class)));
+            foreach ($skipped as $entry) {
+                $this->line(sprintf('  %s', TerminalText::of($entry['change']->class)));
+                $this->line(sprintf('    <fg=gray>%s</>', TerminalText::of($this->where($entry['destination']))));
             }
         }
 
@@ -233,26 +286,24 @@ final class VersionChangesCommand extends Command
         return true;
     }
 
+    /** One destination as the report prints it: where, and why there. */
+    private function where(ChangeDestination $destination): string
+    {
+        return sprintf('into %s — %s.', $this->readable($destination->directory), $destination->reason);
+    }
+
     /**
-     * The directory to write into: the one `--in` names, else the first configured. Reported by the
-     * caller either way, because "the first" is only obvious to whoever wrote the config.
+     * The directory `--in` names, null when it named none, or false when what it named is not one of
+     * this document's — which is a refusal rather than a nearest match, since the flag exists to
+     * override a placement and a typo would silently override it somewhere else.
      *
      * @param  list<string>  $directories
      */
-    private function target(array $directories, string $key): ?string
+    private function forced(array $directories): string|false|null
     {
-        if ($directories === []) {
-            $this->error(sprintf(
-                'The "%s" document configures no api_version.changes directory, so there is nowhere to write a change class.',
-                TerminalText::of($key),
-            ));
-
-            return null;
-        }
-
         $wanted = $this->stringOption('in');
         if ($wanted === null) {
-            return $directories[0];
+            return null;
         }
 
         foreach ($directories as $directory) {
@@ -267,7 +318,7 @@ final class VersionChangesCommand extends Command
             TerminalText::of(implode(', ', array_map($this->readable(...), $directories))),
         ));
 
-        return null;
+        return false;
     }
 
     /** A path as the author wrote it: relative to the application, since that is what config holds. */

@@ -20,6 +20,8 @@ use Docuccino\Attributes\Versioning\ApiVersionChange;
 final readonly class ScaffoldedChange
 {
     /**
+     * @param  string  $schema  the class the verb names, which is also the class whose module the change
+     *                          is written beside ({@see ChangePlacement})
      * @param  list<string>  $imports  FQCNs the file imports, {@see ApiVersionChange} excluded — the stub
      *                                 imports that one itself
      * @param  ?string  $note  what the author still has to supply, for the command to report; null when
@@ -27,6 +29,7 @@ final readonly class ScaffoldedChange
      */
     public function __construct(
         public string $class,
+        public string $schema,
         public string $since,
         public string $description,
         public string $verb,

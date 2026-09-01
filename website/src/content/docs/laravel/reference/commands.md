@@ -964,7 +964,7 @@ docuccino:version-changes
     {document? : The configured document key to build as the new side (defaults to "default")}
     {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
     {--since= : The version the scaffolded changes shipped in (defaults to the document's info.version)}
-    {--in= : Which configured api_version.changes directory to write into (defaults to the first)}
+    {--in= : Write every class into this configured api_version.changes directory, whatever owns it}
     {--dry-run : Report what would be written, and write nothing}
     {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
 ```
@@ -973,7 +973,7 @@ docuccino:version-changes
 | --- | --- | --- |
 | `--against` | git ref / unset | Reads `old` with `git show <ref>:<old>` instead of off disk, so the path must be repo-relative. Same reader as [`docuccino:diff`](#docuccinodiff). |
 | `--since` | a version / the document's `info.version` | The version the scaffolded changes shipped in. The code is always the newest version, so this is the version you are cutting. |
-| `--in` | one of the configured directories / the first | Where the classes are written when [`api_version.changes`](/laravel/reference/configuration/#api_version) names several. Given as you wrote it in config, or absolutely. |
+| `--in` | one of the configured directories / unset | Writes every class into this one directory, overriding the module each would otherwise go beside. Given as you wrote it in config, or absolutely. |
 | `--dry-run` | flag / off | Prints the same report and writes nothing. |
 | `--memory-limit` | php.ini value, e.g. `2G` / unset | See the shared-behavior note above. |
 
@@ -996,6 +996,24 @@ declaration (older documents simply don't publish it); a renamed request field, 
 became *required*, and a type change have no honest verb; and a schema no class produces cannot be named
 by one. A wrong declaration would put a shape nobody served into every older document, which is worse
 than a gap you can see.
+
+**Each class is written beside the module that owns it.** When
+[`api_version.changes`](/laravel/reference/configuration/#api_version) contains a glob, the wildcard is
+where you declared your boundary — `modules/*/Api/Versions` says a module is the unit — so a change is
+written into the directory whose module holds the class its verb names:
+
+```
+Written
+  InvoiceResourceTitleReplacesName — `InvoiceResource` publishes `title` where it published `name`.
+    into modules/Billing/Api/Versions — beside modules/Billing, which owns Billing\Data\InvoiceResource.
+```
+
+The destination and the reason are printed for **every** class, whether a module was found or not. The
+rules, in order: `--in` overrides everything; otherwise the longest declared module root holding the
+class's own file wins; two roots holding it equally name no single module, so the change falls back and
+says so; and a class no module holds — or a configuration with no glob in it at all — goes to the first
+configured directory. A diff spanning two modules writes each change beside its own module, because a
+change names exactly one class.
 
 **An existing class is never touched.** A file of that name is yours the moment it exists, and the
 command reports what it left alone rather than merging into it.
