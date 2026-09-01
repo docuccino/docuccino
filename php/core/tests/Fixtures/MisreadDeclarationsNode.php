@@ -27,6 +27,9 @@ use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\AppliesTo;
+use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
+use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
+use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
@@ -52,6 +55,9 @@ use Docuccino\Attributes\Webhook;
 #[IgnoreResponse]
 #[InDocs]
 #[Internal]
+#[MadeRequestFieldOptional]
+#[MadeResponseFieldOptional]
+#[MadeResponseFieldRequired]
 #[OptionallyAuthenticated]
 #[PathParameter]
 #[QueryParameter]

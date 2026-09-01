@@ -34,6 +34,9 @@ use Docuccino\Attributes\Summary;
 use Docuccino\Attributes\Unauthenticated;
 use Docuccino\Attributes\Versioning\ApiVersionChange;
 use Docuccino\Attributes\Versioning\AppliesTo;
+use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
+use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
+use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
@@ -97,6 +100,9 @@ function attributeCatalogue(): array
         'Mock' => [Mock::class, Attribute::TARGET_CLASS | Attribute::TARGET_PROPERTY | Attribute::IS_REPEATABLE],
         'Versioning\\ApiVersionChange' => [ApiVersionChange::class, Attribute::TARGET_CLASS],
         'Versioning\\AppliesTo' => [AppliesTo::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\MadeRequestFieldOptional' => [MadeRequestFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\MadeResponseFieldOptional' => [MadeResponseFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\MadeResponseFieldRequired' => [MadeResponseFieldRequired::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedResponseField' => [RenamedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
     ];
 }
@@ -155,6 +161,8 @@ function defaultArgs(string $class): array
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
         AppliesTo::class => ['GET /api/invoices'],
         RenamedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
+        MadeResponseFieldRequired::class, MadeResponseFieldOptional::class,
+        MadeRequestFieldOptional::class => ['App\\Http\\Resources\\InvoiceResource', 'title'],
         default => [],
     };
 }

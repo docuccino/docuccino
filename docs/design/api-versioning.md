@@ -227,6 +227,53 @@ proves the claim before any layer is built out. What it came to:
 The vocabulary is designed here, once, for both readers — statically foldable for Docuccino, ergonomic
 for the runtime package that will emit it in phase 2.
 
+### The required-ness verbs, and the order verbs apply in — built
+
+The second slice: `#[MadeResponseFieldRequired]`, `#[MadeResponseFieldOptional]` and
+`#[MadeRequestFieldOptional]`, plus the ordering rule a change carrying two kinds of verb needs.
+
+- **Required-ness is modelled directly.** JSON Schema's `required` is a first-class array, so the
+  vocabulary moves it rather than importing Pydantic's conflation of required-ness with a missing
+  default. `properties` is never touched by any of the three.
+- **Three verbs rather than two with a flag, and no fourth.** `SchemaPolarity::memberPresence()`
+  already records the asymmetry: a `required` entry arriving NARROWS a request and moves nothing on a
+  response. So "made required" on the way in and on the way out are different sentences to a consumer,
+  and `#[MadeRequestFieldRequired]` is the combination there is no honest verb for.
+- **Two of the three are falsifiable and one is not, and that is said out loud.** Dropping a
+  `required` entry widens what the older document accepts, and a widening of a true statement is
+  true — so the per-version contract test cannot fail on `#[MadeResponseFieldRequired]`. It is safe by
+  construction, not by being checked, and the reference page says so rather than implying an oracle it
+  does not have. The two `Optional` verbs make the older document stricter, and the contract test can
+  and does refuse a runtime that does not keep the promise.
+- **The verb order: renames last.** `AttributeSet::all()` answers per attribute type, so once a change
+  carries two kinds of verb the author's written order is gone and something has to decide. Every verb
+  but the rename names its field the way the code spells it TODAY, and a rename is the one verb that
+  changes what a field is called — so a rename run first leaves every other verb looking for a
+  property that has already moved, editing nothing and reporting a correct declaration as rotted.
+  `VerbOrder` states it once; `VersionChangeOrderTest` is the executed guard.
+- **`required` order is a function of the schema.** An added entry goes in at the index equal to the
+  number of entries already standing that `properties` puts before it. Appending would make the list
+  depend on the order the verbs were written in; counting is commutative, so two verbs adding two
+  fields land the same way round whichever ran first, and no entry already standing has to move.
+- **One identity mint for both facets.** A class's request shape and its response shape are different
+  nodes, and `SchemaIdentity::publishedId()` is now the single place the qualifier is spelled — read
+  by the recovery chain that writes the ids and by the verbs that resolve them. Before it, the rename
+  verb minted from the raw FQCN and so could not reach a class that pinned its own identity with
+  `#[SchemaId]`: the change was skipped with `versioning.schema-unresolved`, of a schema the document
+  was plainly publishing.
+- **A weaker diagnostic, stated as weaker.** A rename has a distinguishable before and after, so it
+  can tell `renamed` from `taken` from `absent`. "Remove from `required`" applied twice is a no-op, so
+  nothing can report that the edit already ran. What can be reported is the code disagreeing with the
+  declaration — the change says a promise moved and the schema already says what the older version
+  would — which is `versioning.change-target-unchanged`, and it fires only on declarations that are
+  wrong.
+- **No diagnostic for a required-only change under a partial scope.** Such a change inlines a whole
+  schema, and everything between the operation and it, to publish a one-entry difference — a real cost,
+  and it is recorded under "Limits the first slice found" below. It is not a diagnostic: nothing in the
+  corpus has fired one, an info-severity note about a trade the author made deliberately is the noise
+  that trains a reader to stop reading the channel, and the fork's cost is already reported where it
+  actually fails (`versioning.scope-unforkable`).
+
 ### Phase 2 — the production package
 
 A Laravel package owning the imperative half, with change objects that co-locate description, target
@@ -298,6 +345,12 @@ Consequences of the decisions above, each one a diagnostic rather than a silent 
   one level in. The operation is left at the shape the code publishes and the build says why. An
   unscoped change has no such limit: it renames the component in place, and the self-reference goes on
   pointing at it.
+- **A required-only change under a partial scope buys the least of any verb.** The fork gives each
+  matched operation a private copy of the schema — and of everything between the operation and it,
+  since every `$ref` on the way down is expanded — to publish two schemas differing by one entry in one
+  list. The trade is the same one every scoped change makes and the arithmetic is much worse, so the
+  guide says to widen the scope and take the no-fork branch where the promise really did move
+  everywhere.
 - **An inlined fork repeats a body rather than minting a name.** Under a partial scope each matched
   operation carries its own copy of the older shape, so a generated client gets an anonymous type per
   operation instead of one it can name. That is the price of the naming invariant, and it is worth
