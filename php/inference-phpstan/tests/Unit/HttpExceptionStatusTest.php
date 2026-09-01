@@ -14,8 +14,8 @@ use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePinned;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePlain;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePublicDefault;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeTraitFactory;
-use Docuccino\Inference\PhpStan\Tests\Support\ParsedConstructors;
-use Docuccino\Inference\PhpStan\Throwing\ConstructorSource;
+use Docuccino\Inference\PhpStan\Tests\Support\ParsedBodies;
+use Docuccino\Inference\PhpStan\Throwing\ClassBodies;
 use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
 use PhpParser\Node;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -29,7 +29,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 function httpStatuses(): HttpExceptionStatus
 {
-    return new HttpExceptionStatus(new ParsedConstructors);
+    return new HttpExceptionStatus(new ParsedBodies);
 }
 
 it('reads the status a class states for every one of its instances', function (string $fqcn, ?int $status): void {
@@ -72,6 +72,20 @@ it('names the slot a class forwards its status through, where it forwards one', 
     'a class that is not an HttpException' => [ProbePlain::class, null],
 ]);
 
+it('reports the constructor slot a construction would fill, and the default it would take', function (string $fqcn, int $slot, array $names, ?int $default): void {
+    expect(httpStatuses()->constructorSlot($fqcn, $slot))->toBe(['names' => $names, 'default' => $default]);
+})->with([
+    // A class of its own: the slot the factories leave empty carries the value they all take.
+    'a defaulted slot' => [ProbeFactory::class, 1, ['fields', 'statusCode'], 422],
+    'the slot before it, which has no default' => [ProbeFactory::class, 0, ['fields', 'statusCode'], null],
+    // No constructor of its own, so the framework's is what a `new` binds to — status first, no default.
+    'the inherited constructor' => [ProbeNoConstructor::class, 0, ['statusCode', 'message', 'previous', 'headers', 'code'], null],
+    // A default that is not an integer is not a status, however present it is.
+    'a slot defaulting to a string' => [ProbeNoConstructor::class, 1, ['statusCode', 'message', 'previous', 'headers', 'code'], null],
+    'a slot past the end of the signature' => [ProbePinned::class, 4, [], null],
+    'a name no class answers to' => ['App\\Nope\\NoSuchException', 0, [], null],
+]);
+
 it('records every file in the hierarchy, not only the one that declares the constructor today', function (): void {
     // Fragment-cache soundness: adding a constructor to the base changes the answer, so the base's file has
     // to be able to invalidate the routes that throw the subclass.
@@ -88,14 +102,14 @@ it('states nothing about a class whose body it cannot read', function (): void {
     // A source with no bodies is what an unparsable or stripped file looks like from here. The class still
     // reflects — it is an HttpException, and it declares a constructor — so this is the branch where the
     // answer has to be "unknown" rather than the default the constructor happens to carry.
-    $blind = new class implements ConstructorSource
+    $blind = new class implements ClassBodies
     {
         public function methods(string $file, string $class): array
         {
             return [];
         }
 
-        public function foldInt(string $file, string $class, Node\Expr $expr): ?int
+        public function foldInt(string $file, string $class, string $method, Node\Expr $expr): ?int
         {
             return null;
         }

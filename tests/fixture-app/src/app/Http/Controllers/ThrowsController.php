@@ -182,6 +182,34 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 10e: a class that states no status of its own — the framework's
+     * constructor runs — thrown through the static factory that builds it. The
+     * status is one hop away, in the factory the throw names.
+     */
+    public function factoryHttpStatus(): void
+    {
+        throw \App\Exceptions\ExportUnsupportedException::forFormat('tsv');
+    }
+
+    /**
+     * Case 10f: one factory of a class with a status PER factory, taking the
+     * constructor default the sibling below overrides.
+     */
+    public function factoryDefaultedStatus(): void
+    {
+        throw \App\Exceptions\ExportConflictException::duplicateName('quarterly');
+    }
+
+    /**
+     * Case 10g: its sibling, which passes its own — the same class documenting a
+     * different status on a different operation.
+     */
+    public function factoryOverriddenStatus(): void
+    {
+        throw \App\Exceptions\ExportConflictException::notPermitted();
+    }
+
+    /**
      * Case 9: the app's OWN validate(), which the KnownThrowers registry keys
      * ValidationException/422 on by bare method name. The callee is project code
      * the engine can read, so what it actually throws (OutOfStockException) has

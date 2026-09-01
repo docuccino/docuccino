@@ -272,9 +272,10 @@ model's serialization contract going from an incidental proof to a direct one.
 A third precedent, for the same reason and with the answer taken BEFORE the gate went red: the
 HttpException status read is reflection over a class hierarchy plus a parse of one constructor, and written
 straight onto PHPStan's `ReflectionProvider` and `FileAnalyzer` it was 86 statements at 0%, which took the
-package from 44.20% to 43.25%. Behind a `ConstructorSource` seam — bodies and the constant fold, the only
+package from 44.20% to 43.25%. Behind a `ClassBodies` seam — bodies and the constant fold, the only
 two answers that need anything analysed — the same logic is native reflection over real probe exceptions and
-measures in process, and the package rose to 46.25%.
+measures in process, and the package rose to 46.25%. Reading the status out of the static factory a `throw`
+names went through the same seam and stayed in the measurable half, taking the package to 47.07%.
 
 Two more moves are worth keeping as precedent because the denominator went the *other* way and the answer
 was NOT to lower a floor. When the response refiner gained a 61-statement, Scope-driven construction-site

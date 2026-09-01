@@ -9,14 +9,14 @@ use PhpParser\Node;
 use PHPStan\Type\Constant\ConstantIntegerType;
 
 /**
- * The analyser's answer to {@see ConstructorSource}: bodies off the file harvest, and folding through the
- * constructor's own scope, so a class constant (`Response::HTTP_CONFLICT`) reads the same as the literal
- * beside it. The scope is the constructor's end scope — a constant's value does not depend on where in the
- * body it is asked for.
+ * The analyser's answer to {@see ClassBodies}: bodies off the file harvest, and folding through the scope of
+ * the body the expression was written in, so a class constant (`Response::HTTP_CONFLICT`) reads the same as
+ * the literal beside it. The scope is that method's end scope — a constant's value does not depend on where
+ * in the body it is asked for.
  *
  * @internal
  */
-final class AnalyzedConstructors implements ConstructorSource
+final class AnalyzedBodies implements ClassBodies
 {
     public function __construct(private readonly FileAnalyzer $fileAnalyzer) {}
 
@@ -34,9 +34,9 @@ final class AnalyzedConstructors implements ConstructorSource
         return $methods;
     }
 
-    public function foldInt(string $file, string $class, Node\Expr $expr): ?int
+    public function foldInt(string $file, string $class, string $method, Node\Expr $expr): ?int
     {
-        $body = $this->fileAnalyzer->method($file, $class, '__construct');
+        $body = $this->fileAnalyzer->method($file, $class, $method);
         if ($body === null) {
             return null;
         }
