@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Versioning\Scaffold;
 
 use Docuccino\Attributes\Versioning\ApiVersionChange;
+use Docuccino\Attributes\Versioning\AppliesTo;
 
 /**
  * One change class the scaffolder would write: its name, the version it shipped in, the sentence a
@@ -26,6 +27,8 @@ final readonly class ScaffoldedChange
      *                                 imports that one itself
      * @param  ?string  $note  what the author still has to supply, for the command to report; null when
      *                         the scaffold said everything it could
+     * @param  list<string>  $scope  the `#[AppliesTo]` attributes it declares, already written out;
+     *                               empty for a change that applies wherever its schema appears
      */
     public function __construct(
         public string $class,
@@ -35,7 +38,29 @@ final readonly class ScaffoldedChange
         public string $verb,
         public array $imports,
         public ?string $note = null,
+        public array $scope = [],
     ) {}
+
+    /**
+     * The same change, narrowed to the operations `#[AppliesTo]` names. Handed the attributes already
+     * written out, because {@see ChangeScaffolder} owns how one is spelled and one speller of that is
+     * enough; what belongs here is the import the scope drags in with it.
+     *
+     * @param  list<string>  $scope
+     */
+    public function scopedTo(array $scope): self
+    {
+        return $scope === [] ? $this : new self(
+            class: $this->class,
+            schema: $this->schema,
+            since: $this->since,
+            description: $this->description,
+            verb: $this->verb,
+            imports: [...$this->imports, AppliesTo::class],
+            note: $this->note,
+            scope: $scope,
+        );
+    }
 
     /** The file this change is written to, under `$directory`. */
     public function file(string $directory): string

@@ -71,7 +71,7 @@ final readonly class ChangeStub
             'since' => self::escaped($change->since),
             'description' => self::escaped($change->description),
             'imports' => $this->imports($change),
-            'verbs' => $change->verb,
+            'verbs' => implode("\n", [...$change->scope, $change->verb]),
         ]);
     }
 

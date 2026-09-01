@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Versioning\Scaffold;
 
+use Docuccino\Attributes\Versioning\AppliesTo;
 use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
@@ -12,6 +13,7 @@ use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Core\Diff\Change;
 use Docuccino\Core\Diff\Changeset;
 use Docuccino\Core\Diff\Pairing;
+use Docuccino\Core\Document\DocumentGraph;
 use Docuccino\Core\Document\UirDocument;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Core\Support\Hydrate;
@@ -33,6 +35,8 @@ use Docuccino\Laravel\Versioning\SchemaFacet;
  * it; a first draft the author improves is what makes declaring nearly free.
  *
  * @phpstan-type SchemaEntry array{name: string, body: array<string, mixed>}
+ *
+ * @phpstan-import-type OperationSite from DocumentGraph
  *
  * @internal
  */
@@ -61,8 +65,11 @@ final readonly class ChangeScaffolder
             return new ScaffoldPlan([], [self::NO_IDENTITIES]);
         }
 
-        $oldById = self::componentsById($old);
-        $newById = self::componentsById($new);
+        $oldDoc = $old->toArray();
+        $newDoc = $new->toArray();
+
+        $oldById = self::componentsById($oldDoc);
+        $newById = self::componentsById($newDoc);
         $classesByRef = self::classesByRef($oldById, $schemaSources);
 
         /** @var array<string, list<Change>> $grouped */
@@ -90,7 +97,13 @@ final readonly class ChangeScaffolder
         $changes = [];
 
         foreach ($grouped as $id => $group) {
-            foreach ($this->forSchema($group, $schemaSources[$id], $oldById[$id], $newById[$id], $classesByRef, $since, $gaps) as $change) {
+            $scope = self::scope($oldDoc, $newDoc, (string) $id, $newById[$id], $gaps);
+
+            if ($scope === null) {
+                continue;
+            }
+
+            foreach ($this->forSchema($group, $schemaSources[$id], $oldById[$id], $newById[$id], $classesByRef, $since, $gaps, $scope) as $change) {
                 $changes[] = $change;
             }
         }
@@ -109,9 +122,10 @@ final readonly class ChangeScaffolder
      * @param  SchemaEntry  $new
      * @param  array<string, string>  $classesByRef
      * @param  array<string, int>  $gaps
+     * @param  list<string>  $scope  the operations every change here is narrowed to, from {@see scope()}
      * @return list<ScaffoldedChange>
      */
-    private function forSchema(array $group, string $publishedId, array $old, array $new, array $classesByRef, string $since, array &$gaps): array
+    private function forSchema(array $group, string $publishedId, array $old, array $new, array $classesByRef, string $since, array &$gaps, array $scope = []): array
     {
         [$fqcn, $facet] = self::facetOf($publishedId);
 
@@ -197,7 +211,15 @@ final readonly class ChangeScaffolder
             $changes[] = $this->becameOptional($fqcn, $short, $facet, $field, $since);
         }
 
-        return array_values(array_filter($changes));
+        $applies = array_map(
+            static fn (string $operation): string => self::attribute(AppliesTo::class, ['operation' => self::literal($operation)]),
+            $scope,
+        );
+
+        return array_values(array_map(
+            static fn (ScaffoldedChange $change): ScaffoldedChange => $change->scopedTo($applies),
+            array_filter($changes),
+        ));
     }
 
     /**
@@ -415,6 +437,206 @@ final readonly class ChangeScaffolder
     }
 
     /**
+     * The operations a change has to be narrowed to, `[]` for one that applies wherever its schema
+     * appears, or null for one that cannot be declared at all.
+     *
+     * Get the direction right or the document lies. A shared component has ONE shape, so if the
+     * component changed, every operation still publishing it changed BY CONSTRUCTION — and an
+     * `#[AppliesTo]` there would fork the ones it named and leave the rest at today's shape, which is
+     * the document-wide rewrite the scope was written to prevent, in reverse. So the default is no
+     * scope, and a scope is emitted only where the application itself forked the shape: an operation
+     * the head publishes the schema for whose OLD document already published today's shape, because it
+     * pointed somewhere else then.
+     *
+     * The narrowing therefore happens on positive evidence only. An operation the old document has
+     * nothing to say about — a route added since — widens rather than narrows: it published no shape
+     * to preserve, and an inlined fork of one is a cost paid for nothing.
+     *
+     * @param  array<string, mixed>  $oldDoc
+     * @param  array<string, mixed>  $newDoc
+     * @param  SchemaEntry  $new
+     * @param  array<string, int>  $gaps
+     * @return list<string>|null
+     */
+    private static function scope(array $oldDoc, array $newDoc, string $id, array $new, array &$gaps): ?array
+    {
+        $after = self::publishing($newDoc, $id);
+
+        if ($after === []) {
+            return [];
+        }
+
+        $before = self::publishing($oldDoc, $id);
+        $was = self::sites($oldDoc);
+        $shape = Json::stable(self::withoutIdentities($new['body']));
+
+        $stale = [];
+        foreach ($after as $key => $site) {
+            if (isset($before[$key]) || ! self::published($oldDoc, $was[$key] ?? null, $shape)) {
+                $stale[$key] = $site;
+            }
+        }
+
+        if ($stale === [] || count($stale) === count($after)) {
+            return [];
+        }
+
+        return self::selectors($stale, $new['name'], $gaps);
+    }
+
+    /**
+     * Every operation a document publishes, keyed by the name a selector calls it by — which is also the
+     * key the two documents' operations correspond under. A webhook goes by its operationId, and one
+     * with neither name keys on its own position so it still has an entry to be refused over.
+     *
+     * @param  array<string, mixed>  $doc
+     * @return array<string, OperationSite>
+     */
+    private static function sites(array $doc): array
+    {
+        $sites = [];
+
+        foreach (DocumentGraph::operationSites($doc) as $site) {
+            $sites[$site['signature'] ?? $site['operationId'] ?? implode('/', $site['keys'])] = $site;
+        }
+
+        return $sites;
+    }
+
+    /**
+     * The operations of `$doc` that publish the identity, keyed the same way.
+     *
+     * {@see DocumentGraph::componentsReaching()} is the reachability the fork rule itself runs on, read
+     * once per document: a second walk here would be a second answer to "which operations publish this",
+     * and the two would disagree about exactly the `$ref` chain that made the scope necessary.
+     *
+     * @param  array<string, mixed>  $doc
+     * @return array<string, OperationSite>
+     */
+    private static function publishing(array $doc, string $id): array
+    {
+        $reaches = DocumentGraph::componentsReaching($doc, $id);
+
+        return array_filter(self::sites($doc), static function (array $site) use ($doc, $id, $reaches): bool {
+            $operation = DocumentGraph::at($doc, $site['keys']);
+
+            return is_array($operation) && DocumentGraph::nodeReaches($operation, $id, $reaches);
+        });
+    }
+
+    /**
+     * Whether the OLD document already published `$shape` at `$site` — the evidence that this
+     * operation's type did not move, whatever happened to the component the head reaches from it.
+     * `$ref`s are followed, so a shape reached through a component of its own counts; identities are not
+     * compared, because a forked node and a component of another name are the two ways an application
+     * says "this operation has its own copy".
+     *
+     * @param  array<string, mixed>  $doc
+     * @param  OperationSite|null  $site  null for an operation the old document does not publish at all
+     */
+    private static function published(array $doc, ?array $site, string $shape): bool
+    {
+        $operation = $site === null ? null : DocumentGraph::at($doc, $site['keys']);
+        $seen = [];
+
+        return is_array($operation) && self::carriesShape($doc, $operation, $shape, $seen);
+    }
+
+    /**
+     * Whether `$shape` is published anywhere under this node, component `$ref`s followed once each.
+     *
+     * @param  array<string, mixed>  $doc
+     * @param  array<array-key, mixed>  $node
+     * @param  array<string, true>  $seen
+     */
+    private static function carriesShape(array $doc, array $node, string $shape, array &$seen): bool
+    {
+        if (Json::stable(self::withoutIdentities($node)) === $shape) {
+            return true;
+        }
+
+        $ref = DocumentGraph::componentRef($node);
+        if ($ref !== null && ! isset($seen[$ref])) {
+            $seen[$ref] = true;
+            $body = DocumentGraph::componentBody($doc, $ref);
+
+            if ($body !== null && self::carriesShape($doc, $body, $shape, $seen)) {
+                return true;
+            }
+        }
+
+        foreach ($node as $value) {
+            if (is_array($value) && self::carriesShape($doc, $value, $shape, $seen)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The scope written out, or null when one of the operations cannot be spelled safely.
+     *
+     * Spelled ONE OPERATION AT A TIME, never collapsed into a wildcard: a selector matching one
+     * operation more than intended widens the change silently, and widening is the failure this whole
+     * computation exists to avoid. So a name a `*` lives inside is refused too — the build's own
+     * wildcard grammar would read it as a pattern — and a webhook that goes by no name at all is
+     * refused with it. Refused rather
+     * than written unscoped: an unscoped change here would rewrite operations the application never
+     * changed, and an incomplete version the author is TOLD about costs them less than a complete one
+     * that lies.
+     *
+     * @param  array<string, OperationSite>  $stale
+     * @param  array<string, int>  $gaps
+     * @return list<string>|null
+     */
+    private static function selectors(array $stale, string $name, array &$gaps): ?array
+    {
+        $selectors = [];
+
+        foreach ($stale as $key => $site) {
+            if ($site['signature'] === null && $site['operationId'] === null) {
+                self::note($gaps, sprintf('`%s` changed for some of the operations that publish it and not others, and one of them goes by no name a scope can spell, so nothing was written for it.', $name));
+
+                return null;
+            }
+
+            if (str_contains($key, '*')) {
+                self::note($gaps, sprintf('`%s` changed for some of the operations that publish it and not others, and "%s" cannot be spelled as a selector without matching more than itself, so nothing was written for it.', $name, $key));
+
+                return null;
+            }
+
+            $selectors[] = $key;
+        }
+
+        sort($selectors, SORT_STRING);
+
+        return $selectors;
+    }
+
+    /**
+     * A node with every `x-docuccino` member dropped, at any depth: two documents agree on a published
+     * shape or they do not, and an identity is a fact about where a node came from rather than about
+     * what it promises.
+     *
+     * @param  array<array-key, mixed>  $node
+     * @return array<array-key, mixed>
+     */
+    private static function withoutIdentities(array $node): array
+    {
+        unset($node['x-docuccino']);
+
+        foreach ($node as $key => $value) {
+            if (is_array($value)) {
+                $node[$key] = self::withoutIdentities($value);
+            }
+        }
+
+        return $node;
+    }
+
+    /**
      * The class a `publishedId` names and which of its shapes, or nulls where it names neither — a
      * pinned `#[SchemaId]`, or a facet no verb reaches ({@see SchemaFacet} has two).
      *
@@ -440,11 +662,12 @@ final readonly class ChangeScaffolder
     /**
      * Every component schema a document publishes, keyed by the node id the diff pairs on.
      *
+     * @param  array<string, mixed>  $document
      * @return array<string, SchemaEntry>
      */
-    private static function componentsById(UirDocument $document): array
+    private static function componentsById(array $document): array
     {
-        $components = Hydrate::map($document->toArray()['components'] ?? null);
+        $components = Hydrate::map($document['components'] ?? null);
         $schemas = Hydrate::map($components['schemas'] ?? null);
 
         $out = [];
