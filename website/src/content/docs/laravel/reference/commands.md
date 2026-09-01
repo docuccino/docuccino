@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch, coverage and explain — with every flag, default and exit code.
+description: The docuccino artisan commands — install, export, validate, diff, cache, clear, watch, coverage, explain and version-changes — with every flag, default and exit code.
 ---
 
 
@@ -953,6 +953,83 @@ A shadowed contribution is also recorded by producer alone: `overrode` keeps the
 lost and the producer that wrote it, and has nowhere to record the file it came from. The report says
 so once at the bottom rather than leaving an empty column on every `✗` row.
 
+## `docuccino:version-changes`
+
+Scaffold the version-change classes for the differences between a published version and the current
+build.
+
+```
+docuccino:version-changes
+    {old : Path to the committed UIR artifact of the version this one diverges from}
+    {document? : The configured document key to build as the new side (defaults to "default")}
+    {--against= : Read `old` from this git ref (git show <ref>:<old>) instead of the working tree}
+    {--since= : The version the scaffolded changes shipped in (defaults to the document's info.version)}
+    {--in= : Which configured api_version.changes directory to write into (defaults to the first)}
+    {--dry-run : Report what would be written, and write nothing}
+    {--memory-limit= : Raise the PHP memory limit for inference (e.g. 2G)}
+```
+
+| Flag | Values / default | Effect |
+| --- | --- | --- |
+| `--against` | git ref / unset | Reads `old` with `git show <ref>:<old>` instead of off disk, so the path must be repo-relative. Same reader as [`docuccino:diff`](#docuccinodiff). |
+| `--since` | a version / the document's `info.version` | The version the scaffolded changes shipped in. The code is always the newest version, so this is the version you are cutting. |
+| `--in` | one of the configured directories / the first | Where the classes are written when [`api_version.changes`](/laravel/reference/configuration/#api_version) names several. Given as you wrote it in config, or absolutely. |
+| `--dry-run` | flag / off | Prints the same report and writes nothing. |
+| `--memory-limit` | php.ini value, e.g. `2G` / unset | See the shared-behavior note above. |
+
+Reads the document the previous version published, builds the current one, diffs the two over stable
+identities — the same read and the same differ [`docuccino:diff`](#docuccinodiff) uses — and writes a
+[version-change class](/laravel/guides/api-versioning/) for each difference the vocabulary expresses.
+That is what makes declaring a version nearly free: the target and the mechanics come off the diff, and
+what you write is the sentence.
+
+**The `description` is a first draft, not a `TODO`.** Each scaffolded class carries the diff's own
+factual sentence — "`FormData` publishes `title` where it published `name`." — because a consumer
+deciding whether the upgrade touches them needs that sentence, and a placeholder would ship as one. What
+it cannot know is *why* the change was made and whom it affects, so the command says so and leaves that
+half to you.
+
+**It writes only what it can say truthfully.** Five differences have verbs — a renamed, removed or
+newly-required response field, and a response or request field that became optional — and everything
+else is printed under `Not declared` with nothing written for it. A field a version *added* needs no
+declaration (older documents simply don't publish it); a renamed request field, a request field that
+became *required*, and a type change have no honest verb; and a schema no class produces cannot be named
+by one. A wrong declaration would put a shape nobody served into every older document, which is worse
+than a gap you can see.
+
+**An existing class is never touched.** A file of that name is yours the moment it exists, and the
+command reports what it left alone rather than merging into it.
+
+**Determinism.** Same two documents in, same bytes out: no timestamps, no absolute paths, class names
+derived from the schema and the field rather than from a counter, and the classes written in name order.
+
+### Customising the generated class
+
+The template is a stub, published the way every other publishable file is:
+
+```bash
+php artisan vendor:publish --tag=docuccino-stubs
+```
+
+That writes `stubs/docuccino/version-change.stub`, which the command prefers whenever it is there — and
+deleting it puts the packaged one back. There is no config key for it: the file being present *is* the
+statement that you want yours. The report says which stub it used.
+
+These placeholders are filled in; both spellings work, as in Laravel's own stubs:
+
+| Placeholder | Filled with |
+| --- | --- |
+| `{{ namespace }}` | The namespace for the directory being written to, derived from your `composer.json` PSR-4 map |
+| `{{ class }}` | The class name, derived from the schema, the field and what happened to it |
+| `{{ since }}` | The version from `--since`, escaped for a single-quoted PHP string |
+| `{{ description }}` | The factual sentence, escaped for a single-quoted PHP string |
+| `{{ imports }}` | The `use` lines, one per line: `#[ApiVersionChange]`, the verb, and the classes the verb names |
+| `{{ verbs }}` | The verb attribute, written with named arguments |
+
+The namespace is derived rather than asked for, and a directory no PSR-4 prefix covers is refused: a
+change class is found by scanning source and then loading it, so one your autoloader cannot map would
+never be applied — silently. Map the directory in `composer.json` and run the command again.
+
 ## Exit codes
 
 Every command returns `0` on success and `1` on failure, and `docuccino:explain` also returns `2`.
@@ -969,3 +1046,4 @@ What counts as failure:
 | `watch` | disabled; unknown document key; `--interval` that isn't a positive number; no documents configured. A failing rebuild does **not** stop the session — it prints and waits for the next change |
 | `coverage` | disabled; unknown document key; `--min` outside `0`–`100`; a merge that is incomplete (a directory missing, one holding no log, or a log that isn't one); no artifact to measure against, or one that isn't JSON; coverage below `--min` |
 | `explain` | disabled; unknown document key; unknown `--method` value; no operation matches the query; no field matches `--field`. Exits **`2`** — not `1` — when several operations or several fields match, so a script can tell "not found" from "be more specific" |
+| `version-changes` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; the two documents are incomparable; no version to scaffold against; the document configures no change directory; `--in` names none of them; no PSR-4 prefix covers the target directory; the stub could not be read, or a class could not be written |

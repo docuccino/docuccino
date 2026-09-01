@@ -1,10 +1,10 @@
 # Date-based API versioning
 
-> **Status: phase 1 is built. Phases 2 and 3 are design.** The evidence behind these decisions —
-> Stripe, Cadwyn, Intercom, Airflow, and the Laravel ecosystem survey — is in the research issue
-> [#316](https://github.com/docuccino/docuccino/issues/316). This document records what was decided,
-> what building the first slice established, and what the later slices look like; it is not a roadmap
-> and carries no dates.
+> **Status: phase 1 and the diff scaffold are built. Phases 2 and 3 are design.** The evidence behind
+> these decisions — Stripe, Cadwyn, Intercom, Airflow, and the Laravel ecosystem survey — is in the
+> research issue [#316](https://github.com/docuccino/docuccino/issues/316). This document records what
+> was decided, what building the first slice established, and what the later slices look like; it is not
+> a roadmap and carries no dates.
 
 ## The frame
 
@@ -333,6 +333,50 @@ The third slice: `#[RemovedResponseField]`, the one verb whose fact is genuinely
   constructor `@param` block, an enum reached through a native backed enum two files away — with the
   change classes under the fixture app's own `app/Versioning/`, discovered by scanning the directory
   the document configures.
+
+### Scaffolding the declaration from the diff — built
+
+The machinery was already there and needed no runtime package: the exported document is
+byte-deterministic *specifically* so that it can be committed and diffed, `docuccino:diff --against`
+already reads one at any git ref, and `DocumentDiffer` already classifies the difference over stable
+identities. So the delta between a released version's committed artifact and the current build is a
+draft changeset, and `docuccino:version-changes` writes it out as change classes.
+
+Research issue #316 dismissed pure diff-inference because it yields no `description` and no per-field
+cause. As a SCAFFOLD that objection inverts: the diff fills in the target and the mechanics, and the
+author writes the one thing only they know. So the drafted `description` is the diff's own factual
+sentence — "`FormData` publishes `title` where it published `name`." — and never a `TODO`: a
+placeholder would ship as one, and the sentence is the half a consumer actually reads. What the command
+says out loud is that the WHY is still owed.
+
+Four decisions worth keeping:
+
+- **Only what a verb expresses, and everything else said out loud.** Five differences become classes;
+  every other one is printed with nothing written for it, counted by kind so a real release's diff stays
+  readable. A wrong declaration puts a shape nobody served into every older document, and silence reads
+  as "nothing changed there" — which is the failure the whole feature exists to prevent.
+- **A rename is only a rename when the evidence is unique.** A diff sees a removal and an addition; the
+  published shape is the only evidence that they are one field. Where two candidates wear one shape the
+  command declines and names the fields, because a guess renames the wrong end in every derived
+  document.
+- **The class a verb names comes off the build, not off the artifact.** A published component carries a
+  node id and nothing else, and no class name can be read back out of one, so `AssemblyResult` now
+  carries the map the registry already held: node id → the `SchemaIdentity::publishedId()` it was
+  published for. Warm and cold agree by construction, because a restored fragment re-registers its
+  components under the identities it was cached with. An artifact with no identities scaffolds nothing
+  and says why.
+- **Where it writes is declared, never inferred.** The first configured `api_version.changes` directory
+  unless `--in` says otherwise, and always reported. Inferring the module from the changed class's own
+  location is a guess about somebody's layout; an explicit flag plus a clear report is better than a
+  clever wrong default. The namespace is NOT a flag: it is derived from the application's PSR-4 map and
+  a directory no prefix covers is refused, because a class the autoloader cannot find is a change that
+  never applies and nothing would say so.
+
+The template is a stub, published with `vendor:publish --tag=docuccino-stubs` — the framework's own
+repeatable publishing act, and the same one the config file uses. Not a step of `docuccino:install`,
+whose contract is "run me once, idempotently", and not a config key either: a stub is a file an author
+edits, so the file being there IS the statement that they want theirs, and deleting it puts the packaged
+one back. Nothing about it reaches a `configHash`.
 
 ### Phase 2 — the production package
 

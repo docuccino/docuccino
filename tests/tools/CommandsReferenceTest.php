@@ -111,7 +111,9 @@ it('gives every registered command a section on the reference page', function ()
 });
 
 it('gives the reference page no section for a command nothing registers', function (): void {
-    preg_match_all('/^## `(docuccino:\w+)`$/m', commandsReferencePage(), $matches);
+    // `[\w-]`, not `\w`: a hyphenated name is idiomatic in Laravel's own command set and `\w` alone read
+    // one as no heading at all, which would have reported a documented command as undocumented.
+    preg_match_all('/^## `(docuccino:[\w-]+)`$/m', commandsReferencePage(), $matches);
 
     $documented = $matches[1];
     sort($documented);
@@ -157,7 +159,7 @@ it('names every registered command in the reference page front matter', function
  */
 function commandSignatureBlocks(): array
 {
-    preg_match_all('/^```\n(docuccino:\w+)\n(.*?)^```$/ms', commandsReferencePage(), $matches, PREG_SET_ORDER);
+    preg_match_all('/^```\n(docuccino:[\w-]+)\n(.*?)^```$/ms', commandsReferencePage(), $matches, PREG_SET_ORDER);
 
     $blocks = [];
     foreach ($matches as $match) {
