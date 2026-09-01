@@ -632,6 +632,41 @@ illustration is now offered on every operation sharing the contract, including o
 nothing. That is the honest reading of responses the document already stated identically, and it is the
 price of one type instead of one per arm.
 
+**An arm that FILLED a member in is not a second illustration.** An error example is assembled from
+what the render path folded, and a member nothing folded is filled from its declared type so the example
+is a valid instance of the schema beside it (`HandlerResponseBuilder::example()`). Two arms of one
+contract therefore routinely differ at exactly the members one of them could not read: a problem `type`
+written out on one arm and computed on the other, a `detail` that is a runtime translation. Merging by
+content alone published both, and the filled one is the worse of the two in a way its sibling is not —
+`"string"` is not a value any server sends, so the document offered a consumer two body shapes where the
+build had proved one, under two content-hash keys. In one 221-operation application six shared error
+responses carried two or three such entries each, `Error500` three.
+
+So an unnamed illustration is dropped where another **strictly subsumes** it: the same members, agreement
+on every member it did not fill, and a value the other side READ at every member the two disagree on.
+Then the survivor states everything the dropped one stated and more, and nothing the build proved is
+lost. Deliberately not "keep the most complete", which agrees with this on today's documents and deletes
+a true illustration the moment two arms fold two different real values at one member — one arm that read
+`type` and `detail` and one that read a different `type` and filled `detail` are two variants, and a
+score picks the first. Subsumption is not transitive, so a body is only ever dropped against one that
+SURVIVES; dropping it against a body that is itself dropped would lose whatever only it had read.
+
+Which members were filled cannot be worked out from the finished document — a filled `"string"` and a
+returned `"string"` are the same bytes, and `0` is both an integer's placeholder and an ordinary value —
+so the producer records it: `ResponseDraft::setExample()` takes the set and freezes it as
+`x-docuccino.facts.examplePlaceholders`, per media type, on the response that published it. Same
+argument as `facts.component` one section down: the hoist runs over the finished document, so a fact
+living anywhere else would be lost on a warm fragment-cache hit and a warm build would collapse
+differently from a cold one. Anything that copies a frozen body into another response carries the set
+with it (`ResponseDraftApplier`, the rate-limit 429), or the hop would publish a filled example claiming
+every member of it was proven. The OAS emitters drop `x-docuccino` entirely, so this reaches no consumer.
+
+The record is also the whole of the exemption. An author's own example and a recorded body arrive with
+nothing recorded as filled, so the first member such an illustration disagrees on is one it cannot show
+it filled, and it stays — no name-shape or value-shape heuristic anywhere. A record belongs to the body
+that PUBLISHES, too: where a declaration displaces the illustration a producer built, the set goes with
+the body nobody published, or an author's words would be droppable on the strength of it.
+
 **Example keys are minted by `ComponentNames`, from the example's own content.** A key is
 `example_<hash>` — or plainly `example` where it is the only one asking, or `<name>_<hash>` where it is
 one of the two examples an author gave one name — opaque on purpose. For a COMPONENT name opacity is a

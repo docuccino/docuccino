@@ -156,9 +156,9 @@ final class HandlerResponseBuilder
                 foreach ($schema as $keyword => $value) {
                     $draft->content($media)->set($keyword, $value, $contribution);
                 }
-                $example = self::example($payload, $schema, (int) $status, $context, $members);
+                [$example, $placeholders] = self::example($payload, $schema, (int) $status, $context, $members);
                 if ($example !== [] && self::satisfies($example, self::resolveSchema($schema, $context))) {
-                    $draft->setExample($media, $example);
+                    $draft->setExample($media, $example, $placeholders);
                 }
             } elseif (! $draft->isBodyless() && $mediaType !== null) {
                 // The widened answer: the representation is read off the render path, the shape is not.
@@ -333,9 +333,15 @@ final class HandlerResponseBuilder
      * this response is documented under (RFC 9457's own convention, and most of what makes a rendered
      * example worth reading), so it gets the real number.
      *
+     * Which members were filled from the DECLARED TYPE alone travels back with the example, because
+     * nothing downstream can work it out again: `"string"` filled for an unread member and `"string"`
+     * returned by the code are the same bytes, and only the build that filled one knows which it is
+     * ({@see ResponseDraft::setExample()} for where the answer goes and what reads it).
+     *
      * @param  array<string, mixed>  $schema  the converted body schema, possibly a bare `$ref`
      * @param  array<string, DType>  $members  supplied constructor argument → its folded literal or {@see UnknownT}
-     * @return array<string, mixed>
+     * @return array{array<string, mixed>, list<string>} the example, and the members nothing but their
+     *                                                   declared type answered for, in name order
      */
     private static function example(DType $payload, array $schema, int $status, RouteContext $context, array $members): array
     {
@@ -344,12 +350,13 @@ final class HandlerResponseBuilder
 
         $properties = $resolved['properties'] ?? null;
         if (! is_array($properties) || $properties === []) {
-            return $folded;
+            return [$folded, []];
         }
 
         $required = is_array($resolved['required'] ?? null) ? $resolved['required'] : [];
 
         $example = [];
+        $derived = [];
         foreach ($properties as $name => $spec) {
             $name = (string) $name;
             $spec = is_array($spec) ? $spec : [];
@@ -376,11 +383,16 @@ final class HandlerResponseBuilder
             // what may well be a list would state something the code never said. A REQUIRED one is filled
             // anyway, since the alternative is dropping an example that would otherwise be complete.
             if ($isRequired || self::illustratable($spec, $context)) {
-                $example[$name] = self::placeholder($name, $spec, $status, $context);
+                [$example[$name], $typeDerived] = self::placeholder($name, $spec, $status, $context);
+                if ($typeDerived) {
+                    $derived[] = $name;
+                }
             }
         }
 
-        return $example;
+        sort($derived, SORT_STRING);
+
+        return [$example, $derived];
     }
 
     /**
@@ -421,16 +433,21 @@ final class HandlerResponseBuilder
      * A stand-in for one member: the `const` the schema pins, the real status for an integer `status`, else
      * a value that reads unmistakably as a placeholder for its declared type.
      *
+     * Each answer says whether it came from the TYPE alone. The first two did not — a `const` is what the
+     * schema pins and the status is what this response really answers with — so only the third is a member
+     * about which nothing was read.
+     *
      * @param  array<array-key, mixed>  $spec
+     * @return array{mixed, bool}
      */
-    private static function placeholder(string $name, array $spec, int $status, RouteContext $context): mixed
+    private static function placeholder(string $name, array $spec, int $status, RouteContext $context): array
     {
         if (array_key_exists('const', $spec)) {
-            return $spec['const'];
+            return [$spec['const'], false];
         }
 
         if ($name === 'status' && self::isType($spec['type'] ?? null, 'integer')) {
-            return $status;
+            return [$status, false];
         }
 
         return self::typePlaceholder($spec, $context, 0);
@@ -447,19 +464,25 @@ final class HandlerResponseBuilder
      * spatie property's `@example` or its PHP default reaches the component schema, and either is the app's
      * own word for what this member looks like — which `"string"` is not.
      *
+     * The second half of the answer is whether the value came from the type rather than from something
+     * the schema STATED, which is the whole question {@see placeholder()} passes on. It is answered here
+     * so there is one reading of it: a guard deciding it in a branch structure of its own would be a
+     * second grammar to keep in step with this one.
+     *
      * @param  array<array-key, mixed>  $spec
+     * @return array{mixed, bool}
      */
-    private static function typePlaceholder(array $spec, RouteContext $context, int $depth): mixed
+    private static function typePlaceholder(array $spec, RouteContext $context, int $depth): array
     {
         $spec = self::effectiveSpec($spec, $context);
 
         if (array_key_exists('const', $spec)) {
-            return $spec['const'];
+            return [$spec['const'], false];
         }
 
         $stated = self::statedValue($spec);
         if ($stated !== null) {
-            return $stated;
+            return [$stated, false];
         }
 
         $type = $spec['type'] ?? null;
@@ -468,20 +491,20 @@ final class HandlerResponseBuilder
         if (self::isType($type, 'array')) {
             $items = $spec['items'] ?? null;
 
-            return is_array($items) && $deeper < self::PLACEHOLDER_DEPTH
-                ? [self::typePlaceholder($items, $context, $deeper)]
-                : [];
+            return [is_array($items) && $deeper < self::PLACEHOLDER_DEPTH
+                ? [self::typePlaceholder($items, $context, $deeper)[0]]
+                : [], true];
         }
 
         if (self::isType($type, 'object')) {
-            return $deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : [];
+            return [$deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : [], true];
         }
 
-        return match (true) {
+        return [match (true) {
             self::isType($type, 'integer'), self::isType($type, 'number') => 0,
             self::isType($type, 'boolean') => false,
             default => 'string',
-        };
+        }, true];
     }
 
     /**
@@ -504,7 +527,7 @@ final class HandlerResponseBuilder
         foreach ($properties as $name => $property) {
             $name = (string) $name;
             if (in_array($name, $required, true)) {
-                $example[$name] = self::typePlaceholder(is_array($property) ? $property : [], $context, $depth);
+                $example[$name] = self::typePlaceholder(is_array($property) ? $property : [], $context, $depth)[0];
             }
         }
 
