@@ -228,6 +228,10 @@ own (seeded from the action's parameter type):
   block already recovered (a map, a nullable map alongside a size-only custom rule, and a list). `array`
   is the one word the vocabulary has for every array shape, so restating it must not collapse a recovered
   map to `{"type": "array"}` — a schema the JSON object the API accepts would fail.
+- `app/Data/ConditionalThingData.php` — a `calculateResponseStatus()` override choosing between two class
+  constants on `$request->routeIs(...)`. The engine folds the return type to `200|201`; the adapter's
+  resolver then reads the ternary off the AST and narrows it to the one status each route takes, which is
+  what stops a GET being documented with a 201 the server can never send.
 - `app/Data/MergedRulesData.php` — the class-level `#[MergeValidationRules]`, which flips spatie's
   resolver from `add` (replace at the key) to `merge` (append), so the property's own `#[Max(255)]` keeps
   applying alongside the override.

@@ -232,6 +232,18 @@ final class FixtureRunner
     }
 
     /**
+     * Resolve a Data class's success status with the real adapter resolver, once per route, against the
+     * real engine. Returns `statuses` — keyed by route, each the resolved status list plus a `.files`
+     * entry naming the dependency files the fold recorded — and every diagnostic code raised.
+     *
+     * @return array<string, mixed>
+     */
+    public static function dataResponseStatuses(string $relPath, string $class): array
+    {
+        return self::invoke('data-response-status', self::path($relPath), $class, '');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function invoke(string $mode, string $file, string $class, string $method, string ...$extra): array
