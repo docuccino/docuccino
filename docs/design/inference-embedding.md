@@ -61,8 +61,9 @@ scope near-free (+4.6% on a pass, against +14% undeduped). Stabilisation is UNIF
 recording, replay, and the plain live pass a declined recording falls back to. Which of the three answered a
 question therefore cannot move a byte, and a build stays deterministic whatever the recorder decides to keep.
 
-Uniform is not identical to the RAW fiber scope, and the gap was measured rather than assumed: 1 divergence in
-2945 fixture-app queries — `AllowedFilter::callback('tag', $this->tagFilter(...))` in
+Uniform is not identical to the RAW callback scope, and the gap was measured rather than assumed (on a
+fiber-era 2.2.x): 1 divergence in 2945 fixture-app queries —
+`AllowedFilter::callback('tag', $this->tagFilter(...))` in
 `modules/Billing/ChargeListQuery.php`, where the raw scope types the first-class callable `Closure(...)` and
 the stabilised one `mixed`. Benign (no golden moved: a callback filter's column is recovered from the callee's
 AST, not from that argument's type) and narrow — the class is "a first-class-callable argument widens". The
@@ -230,16 +231,18 @@ contract.
     half is the per-file analysis `FileAnalyzer` already memoizes.
   - Why DEFERRED, not answered in place: the fold has to analyse ANOTHER file, and doing that inside the
     live `processFile` callback would nest `processNodes` (the trap below — "collect then recurse; never
-    nest `processNodes`", `Trace\Tracer`). Since 2.2 the callback scope is also a `FiberScope` that
-    resolves by suspending its fiber, so it answers only while that fiber is alive — `stableScope()` →
+    nest `processNodes`", `Trace\Tracer`). The callback scope is the walk's own, and in PHPStan 2.2.0–2.2.9
+    it resolves by suspending a fiber, so it answers only while that fiber is alive — `stableScope()` →
     `toMutatingScope()` in the V2_2 `RuntimeAdapter`, or a retained scope throws "Cannot suspend outside
-    of a fiber". So `Tracer::queueFold()` folds the call-site arguments THERE, on the live scope, retains
-    nothing of PHPStan's, and `foldPending()` answers every request after the walk returns — inside a
-    `finally`, because a visitor that reserved a slot for the answer is owed one. Contract: `false` =
-    nothing queued (vendor / unresolvable / over budget), degrade now; `true` = EXACTLY ONE `$onFolded`
-    call before the trace returns, possibly with nulls. The returned EXPRESSION handed back belongs to
-    the callee's file: AST-readable only (a closure's `where()` column), never typed against the
-    requesting scope.
+    of a fiber". 2.2.10 dropped fibers for a callback scope that answers a retained ask itself, where the
+    same call is the identity; the adapter's docblock owns which era needs what, and `AnalyserDriftTest`
+    fails when the analyser is neither. So `Tracer::queueFold()` folds the call-site arguments THERE, on
+    the live scope, retains nothing of PHPStan's, and `foldPending()` answers every request after the
+    walk returns — inside a `finally`, because a visitor that reserved a slot for the answer is owed one.
+    Contract: `false` = nothing queued (vendor / unresolvable / over budget), degrade now; `true` =
+    EXACTLY ONE `$onFolded` call before the trace returns, possibly with nulls. The returned EXPRESSION
+    handed back belongs to the callee's file: AST-readable only (a closure's `where()` column), never
+    typed against the requesting scope.
   - Why OPT-IN per visitor: `constantValueOf` is shared. A visitor documenting rule names or rate limits
     wants `['name' => $this->nameRules()]` to stay honestly unrecovered rather than become a fabricated
     descriptor, so only a visitor that asks gets an answer.
@@ -399,8 +402,8 @@ Two honesty rules ride on top:
 
 **Closure harvesting (verified PHPStan behaviour).** When a closure is harvested by line — the
 `RateLimiter::for` limiters — the visitor must be driven INSIDE the `processNodes` pass, on the live
-scope. An arrow function's RAW scope is a lazy fiber scope that cannot type expressions once the pass has
-ended, so nothing may be deferred until after the walk.
+scope. An arrow function's RAW scope is lazy — a fiber scope on 2.2.0–2.2.9 — and cannot type expressions
+once the pass has ended, so nothing may be deferred until after the walk.
 `ClosureReturnStatementsNode::getStatementResult()->isAlwaysTerminating()` distinguishes a conditional
 (fall-through) closure body from an unconditional one; a limiter that does not always return is left
 unrecovered rather than half-folded.

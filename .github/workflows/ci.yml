@@ -37,6 +37,17 @@ jobs:
           - { php: '8.4', deps: 'locked', phpstan: '2.2.0' }
           # Laravel axis: `docuccino/laravel` allows `illuminate/*: ^12.0 || ^13.0`,
           # so both majors must run. testbench ^10 is Laravel 12, ^11 is Laravel 13.
+          #
+          # This leg names Laravel and also earns its place twice over: `--with
+          # orchestra/testbench` resolves everything ELSE freely, so it is the only place
+          # `composer analyse` runs against a newer-than-lock PHPStan. That is load-bearing,
+          # because the engine names PHPStan symbols that carry no `@api` and a patch release
+          # has already deleted one (2.2.10 dropped `Analyser\Fiber\`). The fixture job's
+          # `phpstan: '*'` legs do NOT cover it: they install into the fixture app's own
+          # vendor and exercise the engine at RUNTIME, where `instanceof` on an absent class
+          # is harmlessly false, so that break passed straight through them. Do not pin
+          # phpstan here for stability's sake — the early warning IS the stability, and
+          # AnalyserDriftTest is what makes its failure name the symbol rather than the leg.
           - { php: '8.4', deps: 'locked', testbench: '^11.0' }
 
     steps:
