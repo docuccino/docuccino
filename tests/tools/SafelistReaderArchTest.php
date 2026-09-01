@@ -50,7 +50,7 @@ function safelistExplainedRawReads(): array
     return [
         // Carries the list across to a copy with extra heuristics merged in. Nothing is matched here,
         // and the copy's own reads are covered like any other.
-        'php/core/src/Lint/SensitiveFieldLintOptions.php:57' => 'withPatterns() → copy forwarded to a new instance',
+        'php/core/src/Lint/SensitiveFieldLintOptions.php::withPatterns' => 'copy forwarded to a new instance',
     ];
 }
 
@@ -73,9 +73,9 @@ function safelistExplainedRawSelectorReads(): array
 {
     return [
         // Whether the change is scoped at all, which chooses between two whole paths and matches nothing.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:109' => 'transform() → an unscoped change takes the other branch',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php::transform' => 'an unscoped change takes the other branch',
         // Hands each selector to the reader on its own, so the one that decided nothing can be named.
-        'php/laravel/src/Versioning/ApiVersionTransformer.php:203' => 'applyScoped() → iterates the selectors into namesAny()',
+        'php/laravel/src/Versioning/ApiVersionTransformer.php::applyScoped' => 'iterates the selectors into namesAny()',
     ];
 }
 
@@ -91,9 +91,9 @@ function safelistPackageAllowReads(string $property = 'allow'): array
 
     foreach (safelistScannedPackages() as $package) {
         foreach (safelistSourcesIn($package) as $relative => $source) {
-            foreach (safelistAllowReadLines($source, $property) as $kind => $lines) {
-                foreach ($lines as $line) {
-                    $reads[$kind][] = $relative.':'.$line;
+            foreach (safelistAllowReadSites($source, $property) as $kind => $sites) {
+                foreach ($sites as $site) {
+                    $reads[$kind][] = $relative.'::'.$site;
                 }
             }
         }
@@ -160,11 +160,36 @@ function safelistSourcesIn(string $package): array
  *
  * @return array{directed: list<int>, raw: list<int>}
  */
-function safelistAllowReadLines(string $source, string $property = 'allow'): array
+/**
+ * The function a read sits in, which is what an explained read is keyed on. A line number is not: it
+ * moves whenever anything above it does, and an allow-list entry that fails for having drifted trains
+ * the next reader to bump a number rather than ask why the entry is there. A closure is transparent —
+ * the read belongs to the method that wrote it, not to the callback.
+ *
+ * @param  list<PhpToken>  $tokens
+ */
+function safelistEnclosingFunction(array $tokens, int $index): string
+{
+    for ($i = $index; $i >= 0; $i--) {
+        if ($tokens[$i]->id !== T_FUNCTION) {
+            continue;
+        }
+
+        // An anonymous function names nothing, so keep walking: the read is the enclosing method's.
+        $name = $tokens[$i + 1] ?? null;
+        if ($name !== null && $name->id === T_STRING) {
+            return $name->text;
+        }
+    }
+
+    return '{file}';
+}
+
+function safelistAllowReadSites(string $source, string $property = 'allow'): array
 {
     $tokens = safelistSignificantTokens($source);
     [$readerClass, $readerMethod] = safelistReaders()[$property];
-    $lines = ['directed' => [], 'raw' => []];
+    $sites = ['directed' => [], 'raw' => []];
 
     foreach ($tokens as $i => $token) {
         if ($token->id !== T_STRING || $token->text !== $property) {
@@ -180,10 +205,10 @@ function safelistAllowReadLines(string $source, string $property = 'allow'): arr
             continue;
         }
 
-        $lines[safelistStatementNamesReader($tokens, $i, $readerClass, $readerMethod) ? 'directed' : 'raw'][] = $token->line;
+        $sites[safelistStatementNamesReader($tokens, $i, $readerClass, $readerMethod) ? 'directed' : 'raw'][] = safelistEnclosingFunction($tokens, $i);
     }
 
-    return $lines;
+    return $sites;
 }
 
 /**
@@ -266,6 +291,19 @@ it('names no explained raw read that is not there any more', function (string $p
     ));
 
     expect($stale)->toBe([]);
+})->with([
+    'a lint allow list' => ['allow', safelistExplainedRawReads()],
+    'a version change scope' => ['selectors', safelistExplainedRawSelectorReads()],
+]);
+
+/**
+ * Keying an explained read on its function rather than its line is what stops the list rotting on
+ * drift — but it means a SECOND raw read in an already-explained function collides with the entry
+ * standing for the first, and the per-key diff above cannot see it. So the counts are held to each
+ * other as well: one explained entry accounts for exactly one raw read.
+ */
+it('explains one raw read per entry, so a second in the same function cannot hide behind it', function (string $property, array $explained): void {
+    expect(count(safelistPackageAllowReads($property)['raw']))->toBe(count($explained));
 })->with([
     'a lint allow list' => ['allow', safelistExplainedRawReads()],
     'a version change scope' => ['selectors', safelistExplainedRawSelectorReads()],
@@ -383,22 +421,22 @@ it('sees a read the reader owns apart from one deciding for itself', function ()
     $lint = $source('LintSafelist', '\Docuccino\Core\Lint\LintSafelist', 'matches');
     $glob = str_replace('allow', 'selectors', $source('Glob', '\Docuccino\Core\Support\Glob', 'matchesAny'));
 
-    expect(safelistAllowReadLines($lint))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
-        // A promoted property is a declaration; the local `$allow` on line 36 is not — a visibility
+    expect(safelistAllowReadSites($lint))->toBe(['directed' => ['silences', 'alsoSilences'], 'raw' => ['decidesAlone', 'names']])
+        // A promoted property is a declaration; the local `$allow` inside allow() is not — a visibility
         // keyword is what makes one, which is also why the counter-source below declares nothing.
         ->and(safelistDeclaresAllowList($lint))->toBeTrue()
         ->and(safelistDeclaresAllowList("<?php\n\$allow = [];\n"))->toBeFalse();
 
     // The same scan under the other property name and the other reader. The parameter is what makes one
     // scan two, so a change that quietly hard-coded either name again shows up here.
-    expect(safelistAllowReadLines($glob, 'selectors'))->toBe(['directed' => [12, 18], 'raw' => [26, 31]])
-        ->and(safelistAllowReadLines($lint, 'selectors'))->toBe(['directed' => [], 'raw' => []])
-        ->and(safelistAllowReadLines($glob))->toBe(['directed' => [], 'raw' => []]);
+    expect(safelistAllowReadSites($glob, 'selectors'))->toBe(['directed' => ['silences', 'alsoSilences'], 'raw' => ['decidesAlone', 'names']])
+        ->and(safelistAllowReadSites($lint, 'selectors'))->toBe(['directed' => [], 'raw' => []])
+        ->and(safelistAllowReadSites($glob))->toBe(['directed' => [], 'raw' => []]);
 
     // And the refusal, written out: each property's reader is its OWN. A selector read through
     // `LintSafelist::matches` — the call this stack shipped, and the one that widened a redaction
     // control to accept `*` — is raw here, not directed, so the guard would name it.
     $crossed = str_replace('allow', 'selectors', $lint);
 
-    expect(safelistAllowReadLines($crossed, 'selectors'))->toBe(['directed' => [], 'raw' => [12, 18, 26, 31]]);
+    expect(safelistAllowReadSites($crossed, 'selectors'))->toBe(['directed' => [], 'raw' => ['silences', 'alsoSilences', 'decidesAlone', 'names']]);
 });
