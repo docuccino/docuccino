@@ -45,11 +45,17 @@ const FLOORS = [
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this
     // number — read the figure as "mostly proven out-of-process", never as "untested".
     // The split that produces it: what merely parses source runs well above the package average —
-    // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
-    // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/88). Raising this
-    // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Measured 48.57% (1193/2456) — ratcheted 47 → 48, the measured integer, with 0.57pp behind it, about
-    // fourteen statements. The floor got here as 44 → 46 → 47 → 48 by keeping the HttpException status
+    // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (46/47), and so
+    // does the trace's file bookkeeping (`TraceFiles`, 10/10) — while the `Tracer` wiring around them is
+    // Scope-driven and pcov-invisible either way (0/86). Raising this floor means moving more of the
+    // package into the first half; docs/testing.md records each move.
+    // Measured 49.05% (1209/2465) — the floor HOLDS at 48, one short of the measured integer, on the
+    // trigger the laravel note above states: 49% of this denominator is 1208 statements against the 1209
+    // covered, so ratcheting would leave one statement of margin and the next uncovered line would fail
+    // the gate on its own. It ratchets when there is more than a statement behind it. The rise from
+    // 48.57% is the trace's file accounting moving into the in-process half (`TraceFiles` is pure
+    // bookkeeping, so the two questions it separates are unit-proven rather than subprocess-proven).
+    // The floor got here as 44 → 46 → 47 → 48 by keeping the HttpException status
     // read's reflection and its decisions in process behind a source seam, so only the bodies-and-fold
     // adapter is subprocess-only; the hop into the static factory a throw names, the one rule both
     // construction readers share, the response-key range check and the file a folded constant is declared

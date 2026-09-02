@@ -170,6 +170,28 @@ own (seeded from the action's parameter type):
 - `app/Filters/ListingTitleSearchFilter.php` — the custom `Spatie\QueryBuilder\Filters\Filter` the entry
   above instantiates.
 
+The chain where each fact sits one hop further out than the last, and two of those hops are TRAITS: PHP
+reports a trait-imported method as the using class's own, so a body the trace harvests is written in a file
+it never opens by name. The bounds are what make the frontier measurable (`trace-qb-bounds`), one fact per
+file, so a budget or a depth one short has to lose exactly one of them:
+
+- `app/Http/Controllers/ExportListController.php` + `app/Http/Controllers/Concerns/ListsExports.php` — the
+  controller declares nothing but `use ListsExports`, so even the trace's ROOT has its body written
+  elsewhere; the action returns `(new ExportIndexQuery)->query()->paginateList(25)`.
+- `app/Queries/ExportIndexQuery.php` — `query()` writes the chain's origin and its `defaultSort('sku')`,
+  and applies the filters through the concern below.
+- `app/Queries/Concerns/FiltersExports.php` — the trait carrying `exportFilters()`, whose body writes
+  `allowedFilters(['sku', AllowedFilter::exact('status')])` and hops on one file further.
+- `app/Queries/ExportSorts.php` — `apply()` writes `allowedSorts(['sku', 'created_at'])`, the deepest fact
+  in the chain.
+
+And the one hop a FOLD may make that a descent may not — `canFoldCallee()` also reads a non-vendor helper
+in the file being walked, and an array return is no type the trace follows:
+
+- `modules/Billing/ExportFacetQuery.php` + `modules/Billing/Concerns/NamesExportFacets.php` — a modular
+  query object outside the descend scope spreading its allow-list from a trait
+  (`->allowedFilters(...$this->exportFacets())`), so the concern's body has exactly one reader.
+
 ### Exception-flow analysis
 
 - `app/Http/Controllers/ThrowsController.php` — the actions the exception-flow layer is measured against,
