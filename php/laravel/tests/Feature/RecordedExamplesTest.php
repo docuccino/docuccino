@@ -528,17 +528,24 @@ it('publishes the recorded names on the shared error component, cold and warm al
     }
 });
 
-it('says so where a recorded name went nowhere', function (): void {
+it('says nothing where a recorded name reaches the shared error component', function (): void {
     /** @var Router $router */
     $router = app('router');
     $router->get('api/zz-denied', [ErrorsController::class, 'denied']);
+    $router->get('api/zz-denied-again', [ErrorsController::class, 'deniedAgain']);
 
     $id = recordedDocument($this->recordings)['paths']['/api/zz-denied']['get']['x-docuccino']['id'];
     writeRecording($this->recordings, $id, 'GET /api/zz-denied', [
         RecordedExample::of('403', 'application/json', ['code' => 'forbidden'], 'missing'),
     ]);
 
-    expect(recordedDiagnosticCodes($this->recordings))->toBe(['examples.recording-name-unpublished']);
+    // Silence, and the name really is there — silence about a loss would read the same from here, which
+    // is why the published map is asserted in the same test rather than left to its neighbour.
+    $document = recordedDocument($this->recordings);
+
+    expect(recordedDiagnosticCodes($this->recordings))->toBe([])
+        ->and($document['components']['responses']['Error403']['content']['application/json']['examples'])
+        ->toBe(['missing' => ['value' => ['code' => 'forbidden']]]);
 });
 
 it('says nothing about a name the document publishes', function (): void {

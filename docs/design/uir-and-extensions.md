@@ -1157,8 +1157,9 @@ subsystem. Five decisions carry the feature:
   hand edit, or a heuristic added since) and `examples.recording-unsafe` names the pointer, never the
   value.
 - **The example is the MEDIA TYPE's, not the schema's.** `SharedErrorResponses` strips
-  `content[<media type>].example` before it groups, so a recording written into the schema would key the
-  hoist and could drop an unrelated route's 404 out of its shared component and back inline.
+  `content[<media type>].example` and `.examples` before it groups, so a recording written into the
+  schema would key the hoist and could drop an unrelated route's 404 out of its shared component and
+  back inline.
   `setExample()` is first-writer-wins and carries no provenance record — that is the cost, and it is the
   same one every media-type example already pays — so the `integration` rung is settled by the DRAFT
   rather than by the extension: `setExample()`/`illustrateExamples()` fill the illustration bags,
@@ -1174,12 +1175,15 @@ subsystem. Five decisions carry the feature:
   then rename a published example. `ResponseDraft::freeze()` resolves the rest — a declared map takes
   named illustrations into it (a name passed at a call site is a name somebody CHOSE, unlike a key of our
   own) and wins every key it also spells, while a declared singular publishes alone, since filing a
-  recording beside it would mean inventing a name for the AUTHOR'S example. The exception is the hoist:
-  `SharedErrorResponses` leaves a media type already carrying an `examples` map whole, so on a status it
-  groups (`SharedErrorResponses::shares()` — the same grammar, read once) the names are not published at
-  all, the best body goes out as the singular `example`, and `examples.recording-name-unpublished` says
-  so — at INFO, because with naming now the only way to record, every recorded error body reaches it and
-  the one remaining remedy is a document-wide setting.
+  recording beside it would mean inventing a name for the AUTHOR'S example. An error status is NOT an
+  exception, and this extension reads no status at all: `SharedErrorResponses::illustrated()` takes a
+  media type's `examples` map off the dedupe key and `illustrate()` republishes it on the shared
+  component under the names it carries, settling a name two arms gave two different bodies exactly as it
+  settles an `#[Example]`'s (`components.example-name-conflict`). So a name recorded on a 404 publishes
+  where a consumer reads it — which is the case that matters most, a union error body being the one a
+  client has to branch on. That makes a published example name a function of what a SIBLING route
+  recorded, and the minted-name invariant is what holds: the answer comes from the SET of arms
+  contesting the body, never from the order they were met.
 
 Two supporting notes. `RouteContext::$operationId` carries the already-minted id into the draft phase,
 because a recording is filed under identity (so it survives a route rename) and deriving the id a second
