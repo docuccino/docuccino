@@ -105,6 +105,12 @@ function publicExtensionSurface(): array
         // publishing a different email address for the same keyword. It also carries the document's own
         // `representation.examples.formats` overrides at the single lookup, which a copy would not.
         'Docuccino\Core\Support\FormatSamples',
+        // Same exemption, same reason: the ONE ladder from a set of numeric bounds to a value they admit.
+        // A bound both constrains a value and names one, so `minimum: 5` has a legal illustration where a
+        // `pattern` has none — and an integration filling an unread member has to reach for the same one
+        // the validated field's example and the collection exporter reach for. A private copy is how one
+        // producer starts publishing `0` beside a floor of 5, which is a value that schema rejects.
+        'Docuccino\Core\Support\BoundedNumber',
         // Same exemption, same reason as FieldPath above: the ONE reading of a hand-written type string.
         // An attribute's `type:` is folded into a schema by an extension, and the notice that stands
         // down when a declaration has settled a container has to ask that same fold what the type
