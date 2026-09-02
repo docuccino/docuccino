@@ -37,11 +37,12 @@ find the general fact behind X and fix that.
 
 The other half is the same rule looking outward: **one instance means a class, so sweep for the
 rest.** Fixing what was reported and stopping there leaves siblings that will each arrive as their
-own report. Every large finding in this codebase has been a class rather than an instance — an empty
-object mistaken for an empty array in six separate readers, a key name used as a position in four
-members plus the test that guarded them, a diagnostic hardened in one field with its sibling left
-raw in four places. When a fix lands, say what the class is and what else you checked; a fix with no
-sweep beside it is a report closed, not a defect removed.
+own report. A review finding is a report too: it names the file the reviewer traced, not the extent
+of the defect. Every large finding in this codebase has been a class rather than an instance — an
+empty object mistaken for an empty array in six separate readers, a key name used as a position in
+four members plus the test that guarded them, a diagnostic hardened in one field with its sibling
+left raw in four places. When a fix lands, say what the class is and what else you checked; a fix
+with no sweep beside it is a report closed, not a defect removed.
 
 And size a mechanism to what has been measured, not to what could be true. An argument from a
 standard or a limit is a reason to *look*, and the count is the reason to build: a guard with zero
@@ -93,7 +94,14 @@ it prevents.
   silently changes what a generated client means. Golden files under
   `php/*/tests/Fixtures/golden/` are byte-locked — never regenerate casually; a
   sanctioned regeneration is an ISOLATED commit explaining exactly why bytes changed.
-  (`DOCUCCINO_UPDATE_GOLDEN=1` regenerates locally; CI guards it is unset.)
+  (`DOCUCCINO_UPDATE_GOLDEN=1` regenerates locally; CI guards it is unset.) And stillness is
+  evidence too, in the other direction: a change that alters what a tier publishes and moves NO
+  golden has not been shown safe, it has shown the corpus is silent about it. Ask which golden
+  should have moved; where none can, the fixture standing in the affected population is missing and
+  writing it is part of the change. Measure the axis the change acts on — the published document —
+  and not only the mechanism that produces it. Zero goldens moved across the whole of v0.13.1, and
+  that was reported as reassurance in every status update; of the 13 laravel goldens, 6 involve a
+  registered handler and none stood in the affected population.
 - **A degraded answer must still be true**: prefer a valid vague schema over a precise false
   one. An unconstrained-but-honest shape costs a client some type safety; a confidently wrong
   one costs them a runtime failure. When recovery is partial, widen rather than guess — and say
@@ -236,7 +244,11 @@ tests/fixture-app/           the real-engine fixture app: tracked overlay source
   whether they answer alike, which is how a tightened `maxItems` failed a release gate on the same
   day a tightened `maxContains` passed it. Where one fact is computed at more than one site, the
   sites owe a guard that they agree — and it must state the rule independently, because a guard that
-  asks the code for its own rule agrees with whatever the code does.
+  asks the code for its own rule agrees with whatever the code does. A test written in the same
+  change as the behaviour it asserts is that same failure with a longer feedback loop: it ratifies
+  the change's premise instead of checking it. Where a change reverses what the document publishes,
+  its test owes the reason the NEW answer is right, stated from the contract — a passing test
+  asserting the old wrong answer is how one reached a release past three reviewers.
   An invariant stated in prose owes a test that fails when it is broken: reversing a `sort()` whose
   docblock said the answer must never depend on producer order passed all 8327 tests, and swapping a
   merge order documented as append-only passed every test of the file that documents it. And a claimed
