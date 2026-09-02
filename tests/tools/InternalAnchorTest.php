@@ -85,31 +85,59 @@ function anchorsOffered(string $path): array
 }
 
 /**
- * Every internal anchored link the pages state, as `[page route, href]`.
+ * The two forms a page states an internal anchored link in, as `form => pattern`.
  *
- * Two forms, because a page states links two ways and the docblock above promises both. Markdown
- * `](…)` is the common one; a Starlight component takes its target as an `href="…"` attribute instead,
- * which a markdown-only scan reads straight past — seven `<LinkCard>` targets sat unchecked that way,
- * and a component link rots exactly as silently as a prose one.
+ * Two, because a page states links two ways and the docblock above promises both. Markdown `](…)` is the
+ * common one; a Starlight component takes its target as an `href="…"` attribute instead, which a
+ * markdown-only scan reads straight past — seven `<LinkCard>` targets sat unchecked that way, and a
+ * component link rots exactly as silently as a prose one.
  *
- * @return list<array{string, string}>
+ * Named rather than inlined so each one can be counted on its own. The two divide one domain, and a
+ * single floor over their sum is no floor on the smaller: 644 markdown links against 7 attribute ones
+ * means the attribute pattern can stop matching entirely with the total barely moving.
+ *
+ * @return array<string, string>
  */
-function anchoredLinks(): array
+function anchoredLinkPatterns(): array
 {
-    $links = [];
+    return [
+        'markdown' => '/\]\((\/[^)\s]*#[^)\s]*|#[^)\s]+)\)/',
+        'attribute' => '/\bhref=["\'](\/[^"\'\s]*#[^"\'\s]*|#[^"\'\s]+)["\']/',
+    ];
+}
+
+/**
+ * Every internal anchored link the pages state, as `[page route, href]`, grouped by the form it is
+ * written in.
+ *
+ * @return array<string, list<array{string, string}>>
+ */
+function anchoredLinksByForm(): array
+{
+    $links = array_fill_keys(array_keys(anchoredLinkPatterns()), []);
 
     foreach (anchorPages() as $route => $path) {
         $source = (string) file_get_contents($path);
 
-        foreach (['/\]\((\/[^)\s]*#[^)\s]*|#[^)\s]+)\)/', '/\bhref=["\'](\/[^"\'\s]*#[^"\'\s]*|#[^"\'\s]+)["\']/'] as $pattern) {
+        foreach (anchoredLinkPatterns() as $form => $pattern) {
             preg_match_all($pattern, $source, $matches);
             foreach ($matches[1] as $href) {
-                $links[] = [$route, $href];
+                $links[$form][] = [$route, $href];
             }
         }
     }
 
     return $links;
+}
+
+/**
+ * The same set flattened, which is what the rot check walks.
+ *
+ * @return list<array{string, string}>
+ */
+function anchoredLinks(): array
+{
+    return array_merge(...array_values(anchoredLinksByForm()));
 }
 
 it('points every internal anchor at a heading that exists', function (): void {
@@ -135,13 +163,23 @@ it('points every internal anchor at a heading that exists', function (): void {
 });
 
 it('is reading pages, headings and links rather than matching nothing', function (): void {
-    // The plausible minimums: a scan that stopped recognising any of the three would otherwise pass
-    // forever, and this guard is the only thing asking. Well under what the site holds today.
+    // The plausible minimums: a scan that stopped recognising any of these would otherwise pass forever,
+    // and this guard is the only thing asking. Well under what the site holds today.
+    //
+    // Every LINK FORM carries its own, because the two divide one domain and the sum is dominated by one
+    // of them: the tree holds 644 markdown links and 7 attribute ones, so breaking the attribute pattern
+    // leaves a total of 644 against a floor of 300 and every row still green — which is how those seven
+    // came to be unchecked in the first place.
     $anchors = array_merge(...array_values(array_map(anchorsOffered(...), anchorPages())));
+    $byForm = array_map('count', anchoredLinksByForm());
 
     expect(count(anchorPages()))->toBeGreaterThan(25)
         ->and(count($anchors))->toBeGreaterThan(200)
-        ->and(count(anchoredLinks()))->toBeGreaterThan(300);
+        ->and($byForm['markdown'])->toBeGreaterThan(300)
+        ->and($byForm['attribute'])->toBeGreaterThan(2)
+        // …and the flattened set the rot check walks is the whole union, so a form cannot be counted here
+        // and then dropped on the way out.
+        ->and(count(anchoredLinks()))->toBe(array_sum($byForm));
 });
 
 it('slugifies a heading the way the site does', function (string $heading, string $slug): void {

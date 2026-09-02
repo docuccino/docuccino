@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Integration;
 
-use Docuccino\Core\Draft\OperationDraft;
-use Docuccino\Core\Pipeline\FragmentCache;
-use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
@@ -88,29 +85,8 @@ it('invalidates a cached fragment when a file the status was read from is edited
     // entry stays warm, which is a route publishing a status its code no longer states.
     /** @var list<string> $dependencies */
     $dependencies = throwsAnalysis($method)['dependencyFiles'];
-    $path = FixtureRunner::path($edited);
-    $before = file_get_contents($path);
-    expect($before)->toBeString();
 
-    $dir = sys_get_temp_dir().'/docuccino-throw-deps-'.uniqid('', true);
-    $cache = static fn (): FragmentCache => new FragmentCache(true, $dir, 't', 's', 'i');
-    $key = 'throw-status';
-
-    try {
-        $cache()->put($key, new OperationFragment('/probes', 'get', (new OperationDraft)->freeze(), 'GET /probes'), $dependencies);
-
-        // Warm to begin with — otherwise the row would pass with the whole dependency list dropped.
-        expect($cache()->get($key))->not->toBeNull();
-
-        file_put_contents($path, $before."\n// edited\n");
-
-        expect($cache()->get($key))->toBeNull();
-    } finally {
-        file_put_contents($path, (string) $before);
-        array_map('unlink', glob($dir.'/*') ?: []);
-        @unlink($dir.'/.gitignore');
-        @rmdir($dir);
-    }
+    expect(fragmentAcrossDependencyEdit($dependencies, $edited))->toBe(['warm' => true, 'staleAfterEdit' => true]);
 })->with([
     'the trait the throw is written in' => ['traitThrownStatus', 'app/Support/Concerns/GuardsProbeState.php'],
     'the file the status constant is declared in' => ['constantPinnedStatus', 'app/Support/ProbeStatuses.php'],
