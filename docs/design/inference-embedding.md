@@ -494,7 +494,7 @@ The `casts()` **method** form (Laravel 11+) is not yet folded into the floor cas
 analysis, unlike the reflected `$casts` property) — tracked as AUDIT-eloquent gap #2 (separate M
 effort); the `$casts` property form is recovered today.
 
-## 6. Exception flow (3 layers) — CORRECTED per the Phase 0 spike (8/8 fixture cases PASS)
+## 6. Exception flow (3 layers)
 
 1. PHPStan throw points (free). **Noise rule (corrected): drop `!isExplicit()` points**
    (always bare `Throwable`) — `canContainAnyThrowable` is NOT a discriminator (nearly all
@@ -568,9 +568,14 @@ trait-imported method as the using class's, so a shared guard clause's `throw` a
 only through `Callee::writtenIn()` — and the file declaring a class constant a fold read
 (`ConstantSource`), since `parent::__construct(HttpStatus::CONFLICT, …)` takes its status from somewhere
 else entirely. Under-keying either one leaves a warm build publishing a status the code no longer states.
-The same defect exists in `Tracer`, whose file set doubles as its per-analysis BUDGET; admitting a second
-file per callee there changes what a trace can reach, so it is a change of its own with its own
-measurement.
+`Tracer` had the same defect and no longer does: `TraceFiles` keeps the two questions apart — `admit()`
+opens a file and charges a budget slot, `depend()` records one without charging — so recording the file a
+body was written in cannot make a trace reach less. The reader that still has it is
+`ResponseShapeRefiner`, where `DescentBudget::$files` is simultaneously the dependency log and the budget
+ledger: `computeCalleeShape()` and `factoryShape()` touch `$callee->file` alone, so a response shape
+recovered from a trait-written body names only the using class's file. Splitting charge from record there
+needs a second seam — `affordable()` re-checks a memo entry's file set against the budget — so it is a
+change of its own with its own measurement.
 
 **A closure the analysed body hands to a callee.** PHPStan scopes a closure separately, so a `throw`
 inside one reaches the enclosing method as the CALL that received it — a bare `Throwable` where the callee

@@ -368,15 +368,14 @@ final class ThrowAnalyzer
             return [];
         }
 
-        $file = $scope->getFile();
         $results = [];
         foreach ($node->getArgs() as $argument) {
-            $closure = $this->closureArgument($argument->value, $scope, $file);
+            $closure = $this->closureArgument($argument->value, $scope);
             if ($closure === null) {
                 continue;
             }
 
-            $this->visitedFiles[$file] = true;
+            $this->dependOn([$scope->getFile()]);
 
             // `$visited` travels through untouched: a closure is not a callee anyone can cycle back into,
             // and the depth it spends is what bounds it. What it must not do is lose the callees the path
@@ -395,23 +394,13 @@ final class ThrowAnalyzer
         return $results;
     }
 
-    /**
-     * The harvested closure one argument is: written at the call, or held in a local this body assigns it
-     * to exactly once. A local written twice answers null from {@see FileAnalyzer::localAssignments()},
-     * which is the same "whichever branch ran" refusal every other reader of a local makes.
-     */
-    private function closureArgument(Node\Expr $expr, Scope $scope, string $file): ?ClosureReturnStatementsNode
+    /** The harvested closure one argument is — written at the call, or held in a local behind it. */
+    private function closureArgument(Node\Expr $expr, Scope $scope): ?ClosureReturnStatementsNode
     {
-        if ($expr instanceof Node\Expr\Variable && is_string($expr->name)) {
-            $key = FileAnalyzer::scopeKey($scope);
-            $assigned = $key === null
-                ? null
-                : ($this->fileAnalyzer->localAssignments($file)[$key][$expr->name] ?? null);
-            $expr = $assigned === null ? $expr : $assigned[0];
-        }
+        [$written] = $this->localValue($expr, $scope);
 
-        return $expr instanceof Node\Expr\Closure
-            ? ($this->fileAnalyzer->closures($file)[$expr->getStartFilePos()] ?? null)
+        return $written instanceof Node\Expr\Closure
+            ? ($this->fileAnalyzer->closures($scope->getFile())[$written->getStartFilePos()] ?? null)
             : null;
     }
 
@@ -595,7 +584,7 @@ final class ThrowAnalyzer
      * The status a `throw` states for a class that pins none: the argument it writes into the slot the
      * class forwards, or — where it names a static factory instead — the one that factory builds with.
      * Read off the construction the throw names, which is the one written at it or one assignment behind
-     * it ({@see thrownExpression()}).
+     * it ({@see localValue()}).
      *
      * `spoke` says whether the site PRESENTED a construction at all, which is a different fact from what
      * that construction folded to. A throw point that merely declares the exception, a rethrow of one
@@ -612,7 +601,7 @@ final class ThrowAnalyzer
             return ['status' => null, 'spoke' => false];
         }
 
-        [$thrown, $scope] = $this->thrownExpression($node->expr, $scope);
+        [$thrown, $scope] = $this->localValue($node->expr, $scope);
 
         $slot = $this->httpExceptionStatus->statusParameter($fqcn);
         $construction = $this->construction($thrown, $fqcn, $scope);
@@ -641,23 +630,23 @@ final class ThrowAnalyzer
     }
 
     /**
-     * What a `throw` really names, with the scope that expression is written in: the thrown expression
-     * itself, or — where a local is thrown — the one this body assigned to it. `$e = new X(451); … throw
-     * $e;` builds its status one statement behind the throw, and a reader that only matches at the throw
-     * calls that site silent and lets the class's own agreement answer over the top of a construction the
-     * code really made.
+     * What an expression really names, with the scope that value is written in: the expression itself, or —
+     * where it is a local — the one this body assigned to it exactly once. `$e = new X(451); … throw $e;`
+     * builds its status one statement behind the throw, and a reader that only matched at the throw called
+     * that site silent and let the class's own agreement answer over the top of a construction the code
+     * really made; `$reject = function () { … }; $db->transaction($reject);` hands a body over one
+     * assignment back the same way.
      *
-     * The same hop {@see closureArgument()} makes, through the same reader and with the same refusals: a
-     * local written twice, bound by a `catch`, or taken from a parameter answers null from
+     * A local written twice, bound by a `catch`, or taken from a parameter answers null from
      * {@see FileAnalyzer::localAssignments()}, and the variable stands — which is the rethrow that says
      * nothing about how the exception was built.
      *
-     * The scope travels with the expression because the fold happens where the value is WRITTEN, for the
+     * The scope travels with the expression because a fold happens where the value is WRITTEN, for the
      * reason {@see FileAnalyzer::scopeAtCall()} states.
      *
      * @return array{Node\Expr, Scope}
      */
-    private function thrownExpression(Node\Expr $expr, Scope $scope): array
+    private function localValue(Node\Expr $expr, Scope $scope): array
     {
         if (! $expr instanceof Node\Expr\Variable || ! is_string($expr->name)) {
             return [$expr, $scope];

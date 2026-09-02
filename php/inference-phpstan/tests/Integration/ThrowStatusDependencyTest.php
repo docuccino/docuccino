@@ -55,6 +55,27 @@ it('depends on the file a folded status constant is declared in', function (): v
         ->toContain('ExportArchivedException.php');
 })->group('fixture');
 
+it('depends on a file a fold READ even where the fold refused what it found', function (): void {
+    // The rule the comment beside the read states, on a DECLINE: `ProbeStatuses::RETRIES` is 3, so the
+    // range gate refuses it and the class states nothing — and that file decided all the same. Reproduced
+    // before this was fixed: with the constant at 3 the list held ExportRelayedException.php and
+    // HttpException.php and not ProbeStatuses.php, and with it at 415 the route published 415 and the file
+    // appeared. So editing the constant left every warm route publishing no status while a cold build
+    // published one, with the fragment still valid — bytes and the unread-status notice both.
+    expect(throwDependencyNames('unreadableConstantStatus'))
+        ->toContain('ProbeStatuses.php')
+        ->toContain('ExportRelayedException.php');
+})->group('fixture');
+
+it('depends on the file a factory a TRAIT writes is written in', function (): void {
+    // A factory the read cannot use is still a factory the read went to: the trait's file is where the
+    // status is written, so moving it into the class — which is what the notice asks for — has to rebuild
+    // every route that throws through it.
+    expect(throwDependencyNames('traitFactoryStatus'))
+        ->toContain('BuildsProbeFailures.php')
+        ->toContain('ExportThrottledException.php');
+})->group('fixture');
+
 it('depends on the file the factory was written in', function (): void {
     // The same soundness one hop on: the status this route publishes is now a fact of a factory body, so
     // that file has to be able to invalidate the route as well.

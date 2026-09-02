@@ -222,7 +222,14 @@ so a base's trait was invisible to it. `FactoryStatus` refused an inherited fact
 readers of one question answered differently about one class. And `Callee->file` is
 `getDeclaringClass()->getFileName()`, which for a trait's method is the USING class's file: the `throw` and
 the `@throws` a shared guard clause is written with were read from a file no fragment ever depended on.
-`DeclarationFiles` exists in core because this had already been met once, on inherited properties.
+`DeclarationFiles` exists in core because this had already been met once, on inherited properties. Then
+`Tracer` recorded the same `Callee->file` as its whole dependency set, so an allow-list or a page-size
+written in a shared concern was harvested and published while no fragment depended on the file it was
+written in. It stayed that way one round longer than the throw analyzer's half because `$visitedFiles`
+answered two questions at once — the dependency set AND the traversal budget — so recording the second
+file would have bought a shorter trace; `TraceFiles` separates charging from recording, and
+`ResponseShapeRefiner` still owes the same split (`DescentBudget::$files` is both ledgers, and a shape
+recovered from a trait-written body names only the using class's file).
 
 *The tell.* A walk, a scan or a `getFileName()` that stops at the class the question was asked about,
 beside a claim in the docblock that it covers everything the class does. Reflection will not object: it

@@ -92,9 +92,12 @@ it('finds every `new` a body makes of the class', function (string $code, int $f
     // What the fold over a class's own constructions is handed. Every row states which `new`s PHP would
     // bind to this class, not which of them a reader happens to like: `self` and `static` name it here,
     // its own name names it, and a construction nested in a closure the body carries is still one the
-    // body makes.
-    expect(StatusForwarding::constructionsOf(forwardingStmts($code), 'App\\Exceptions\\ExportRejected'))
-        ->toHaveCount($found);
+    // body makes. The body is the class's own, which is what the third argument says.
+    expect(StatusForwarding::constructionsOf(
+        forwardingStmts($code),
+        'App\\Exceptions\\ExportRejected',
+        'App\\Exceptions\\ExportRejected',
+    ))->toHaveCount($found);
 })->with([
     'through `self`' => ['return new self($columns);', 1],
     'through `static`' => ['return new static($columns, 409);', 1],

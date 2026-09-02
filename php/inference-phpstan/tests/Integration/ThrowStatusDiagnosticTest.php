@@ -31,6 +31,10 @@ it('names the class whose HTTP status it could not read', function (string $meth
     'the same construction one assignment behind the throw' => ['heldRuntimeConstructionAtThrowSite', 'App\\Exceptions\\ExportBlockedException'],
     // A class its base and its own factory build at two statuses, reached where nothing says which ran.
     'a class built two ways, reached with no construction' => ['inheritedAgreementStatus', 'App\\Exceptions\\ExportOfflineException'],
+    // Two shapes the author really can act on: a constant that is no status, and a factory written in a
+    // trait — moving either into the class the status belongs to is what the notice asks for.
+    'a constant reaching the parent that is no status' => ['unreadableConstantStatus', 'App\\Exceptions\\ExportRelayedException'],
+    'a factory the class gets from a trait' => ['traitFactoryStatus', 'App\\Exceptions\\ExportThrottledException'],
 ])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {

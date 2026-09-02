@@ -8,4 +8,7 @@ namespace Docuccino\Inference\PhpStan\Tests\Support\Fixtures;
 class ProbeConstantBase implements ProbeConstantContract
 {
     public const FROM_BASE = 410;
+
+    /** Redeclared by the subclass, the only shape `parent::` and `self::` answer differently for. */
+    public const SHADOWED = 410;
 }
