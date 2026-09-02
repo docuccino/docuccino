@@ -88,7 +88,9 @@ final class RateLimitResponsesExtension implements OperationExtension
         }
         $response->set('headers', $built['headers'], $contribution);
 
-        $content = $this->body($context) ?? $built['content'];
+        $chain = $this->body($context);
+        $content = $chain['content'] ?? $built['content'];
+        $placeholders = $chain['placeholders'] ?? [];
         if (is_array($content)) {
             foreach ($content as $mediaType => $media) {
                 // Registered first, for the reason core's response-draft merge states: a chain answer that
@@ -104,8 +106,11 @@ final class RateLimitResponsesExtension implements OperationExtension
                     $response->content((string) $mediaType)->set((string) $keyword, $value, $contribution);
                 }
 
+                // With whichever of its members the chain FILLED rather than read, for the reason core's
+                // response-draft merge states: the frozen body cannot say, and a copy that dropped the
+                // set would publish a filled example claiming every member of it was proven.
                 if (is_array($media) && array_key_exists('example', $media)) {
-                    $response->setExample((string) $mediaType, $media['example']);
+                    $response->setExample((string) $mediaType, $media['example'], $placeholders[(string) $mediaType] ?? []);
                 }
             }
         }
@@ -127,7 +132,11 @@ final class RateLimitResponsesExtension implements OperationExtension
      * `$ref`s nothing, and an unreferenced component would make a cold build's bytes differ from a
      * warm one's. Any schema the copied content points at stays registered.
      *
-     * @return array<array-key, mixed>|null
+     * The filled members of each media type's example travel beside the content, since the chain's draft
+     * is the only thing that knows them. A body reached through a `$ref` states none: what is copied there
+     * is a component somebody else published, and this says no more about it than the document does.
+     *
+     * @return array{content: array<array-key, mixed>, placeholders: array<string, list<string>>}|null
      */
     private function body(RouteContext $context): ?array
     {
@@ -151,10 +160,20 @@ final class RateLimitResponsesExtension implements OperationExtension
 
             $frozen = $mapped->draft->freeze();
             if ($frozen->content !== null && $frozen->content !== []) {
-                return $frozen->content;
+                $placeholders = [];
+                foreach (array_keys($frozen->content) as $mediaType) {
+                    $filled = $mapped->draft->examplePlaceholders((string) $mediaType);
+                    if ($filled !== []) {
+                        $placeholders[(string) $mediaType] = $filled;
+                    }
+                }
+
+                return ['content' => $frozen->content, 'placeholders' => $placeholders];
             }
 
-            return $frozen->ref === null ? null : self::referencedContent($frozen->ref, $context);
+            $referenced = $frozen->ref === null ? null : self::referencedContent($frozen->ref, $context);
+
+            return $referenced === null ? null : ['content' => $referenced, 'placeholders' => []];
         } finally {
             $context->components->restoreResponses($snapshot);
         }

@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Emit\UirEmitter;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
 use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Inference\ReturnSite;
 use Docuccino\Core\Inference\SourceLocation;
@@ -17,11 +20,16 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\CredentialsRejectedException;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\GuardedController;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\GuardProblem;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\GuardProblemRenderer;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\PortalController;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\PortalProblem;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\PortalProblemRenderer;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\RegionBlockedException;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\RoleMissingException;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\SessionExpiredException;
 use Docuccino\Laravel\Tests\Fixtures\SharedErrors\TokenExpiredException;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -222,4 +230,213 @@ it('publishes the same bytes and the same diagnostics on a warm fragment-cache b
     $warm = assertWarmEqualsCold(guardedRoutes(...), guardedRoutes(...), guardEngine(...));
 
     expect(guardMediaAt($warm->document->toArray(), 'pricing')['examples'])->toHaveCount(3);
+});
+
+/**
+ * The 401 arms {@see PortalProblemRenderer} answers, as endpoint → [exception, the words that arm writes
+ * out]. A null word is one the arm asks the exception for, which folds to nothing and leaves the schema
+ * to answer — the whole reason an error example carries a member the build never read.
+ */
+const PORTAL_ARMS = [
+    'dashboard' => [SessionExpiredException::class, 'https://example.com/problems/session-expired', 'Sign in again to continue.'],
+    'exports' => [CredentialsRejectedException::class, null, null],
+    'reports' => [CredentialsRejectedException::class, null, null],
+];
+
+/**
+ * The authenticated endpoints, `$only` naming which of them the router gets.
+ *
+ * @param  list<string>  $only
+ */
+function portalRoutes(Router $router, array $only): void
+{
+    foreach ($only as $action) {
+        $router->get('api/portal-'.$action, [PortalController::class, $action]);
+    }
+}
+
+/**
+ * The engine as {@see PortalProblemRenderer} scripts it: one constructed `PortalProblem` per arm, at 401
+ * under `application/problem+json`, carrying one supplied constructor argument per member — folded where
+ * the arm wrote the word out, unfolded where it asked the exception.
+ *
+ * The renderer registers ONCE per application, however many builds a test runs: the handler outlives a
+ * build, and re-registering would change what the next build's descriptor cache is keyed on.
+ */
+function portalEngine(): TypeEngine
+{
+    /** @var object $handler */
+    $handler = app(ExceptionHandler::class);
+    $renderer = new PortalProblemRenderer;
+
+    if (! app()->bound('tests.portal-renderer')) {
+        app()->instance('tests.portal-renderer', true);
+        $handler->renderable($renderer);
+    }
+
+    $function = new ReflectionFunction(Closure::fromCallable($renderer));
+    $location = new SourceLocation('');
+    $unread = static fn (?string $word): DType => $word === null
+        ? new UnknownT('constructor argument not folded')
+        : new LiteralT($word);
+
+    $callables = [];
+    $analyses = [];
+    foreach (PORTAL_ARMS as $action => [$exception, $type, $detail]) {
+        $symbol = (new CallableRef(
+            (string) $function->getFileName(),
+            $renderer::class,
+            $function->getName(),
+            0,
+            $function->getParameters()[0]->getName(),
+            $exception,
+        ))->symbol();
+
+        $callables[$symbol] = new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ClassT(PortalProblem::class),
+                new LiteralT(401),
+                new LiteralT('application/problem+json'),
+                new ArrayShapeT([
+                    new ArrayShapeField('type', $unread($type)),
+                    new ArrayShapeField('title', new LiteralT('Unauthenticated')),
+                    new ArrayShapeField('status', new LiteralT(401)),
+                    new ArrayShapeField('detail', $unread($detail)),
+                ]),
+            ]),
+            $location,
+        )]);
+
+        $analyses[PortalController::class.'::'.$action] = new ActionAnalysis(
+            returns: [new ReturnSite(new ArrayShapeT([new ArrayShapeField('ok', ScalarT::bool())]), $location)],
+            throws: [new ThrownException($exception, 401, [], ThrowConfidence::Certain, ThrowDisposition::Signal)],
+        );
+    }
+
+    return WorkbenchEngine::make($callables, [
+        PortalProblem::class => new ClassMetadata(PortalProblem::class, [
+            new PropertyMetadata('type', ScalarT::string()),
+            new PropertyMetadata('title', ScalarT::string()),
+            new PropertyMetadata('status', ScalarT::int()),
+            new PropertyMetadata('detail', ScalarT::string()),
+        ]),
+    ], $analyses);
+}
+
+/**
+ * The document a given set of portal routes produces, alone.
+ *
+ * @param  list<string>  $only
+ * @return array<string, mixed>
+ */
+function portalDocument(array $only): array
+{
+    /** @var Router $router */
+    $router = app('router');
+    $router->setRoutes(new RouteCollection);
+    portalRoutes($router, $only);
+
+    app()->instance(TypeEngine::class, portalEngine());
+
+    return generateDocument()->document->toArray();
+}
+
+/**
+ * The 401 media type one portal route documents, read through whatever component it ended up in.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, mixed>
+ */
+function portalMediaAt(array $document, string $action): array
+{
+    $response = $document['paths']['/api/portal-'.$action]['get']['responses']['401'] ?? [];
+
+    $ref = is_array($response) ? ($response['$ref'] ?? null) : null;
+    if (is_string($ref)) {
+        $response = $document['components']['responses'][substr($ref, strlen('#/components/responses/'))] ?? [];
+    }
+
+    $media = is_array($response) ? ($response['content']['application/problem+json'] ?? []) : [];
+
+    return is_array($media) ? $media : [];
+}
+
+/** The `x-docuccino.facts` an operation's own 401 node carries beside its `$ref`. */
+function portalFactsAt(array $document, string $action): array
+{
+    $facts = $document['paths']['/api/portal-'.$action]['get']['responses']['401']['x-docuccino']['facts'] ?? [];
+
+    return is_array($facts) ? $facts : [];
+}
+
+it('publishes one illustration where two arms of an error differ only where one of them filled in', function (): void {
+    // Both arms answer 401 with one carrier, one status, one media type and one title; one writes its
+    // problem type and detail out and the other asks the exception, so the build reads them on one arm
+    // and fills them from the declared type on the other. A filled member is not a value the server
+    // sends, so the filled body illustrates nothing the read one does not — and publishing both told a
+    // consumer this contract has two shapes, under two keys neither of which names anything.
+    $document = portalDocument(['dashboard', 'exports']);
+    $media = portalMediaAt($document, 'dashboard');
+
+    expect($media)->not->toHaveKey('examples')
+        ->and($media['example'])->toBe([
+            'type' => 'https://example.com/problems/session-expired',
+            'title' => 'Unauthenticated',
+            'status' => 401,
+            'detail' => 'Sign in again to continue.',
+        ])
+        ->and(array_keys($document['components']['responses']))->toBe(['Error401'])
+        // The one channel that can carry the answer: the arm that filled says so on its own node, which
+        // is what survives a warm fragment-cache hit.
+        ->and(portalFactsAt($document, 'exports'))
+        ->toBe(['examplePlaceholders' => ['application/problem+json' => ['detail', 'type']]])
+        ->and(portalFactsAt($document, 'dashboard'))->toBe([]);
+});
+
+it('keeps an example the application wrote beside the one the arms collapsed to', function (): void {
+    // An author's example is evidence of a body somebody saw, so it arrives with nothing recorded as
+    // filled and is therefore one the collapse can never drop. What collapses is only what the build
+    // filled in for itself.
+    $document = portalDocument(['dashboard', 'exports', 'reports']);
+    $values = array_map(
+        static fn (array $example): mixed => $example['value'],
+        portalMediaAt($document, 'dashboard')['examples'],
+    );
+
+    // …and the author's example carries no fill record of its own, however much its arm filled in for the
+    // example it displaced: the record belongs to the body that PUBLISHES, or an author's own words would
+    // be droppable on the strength of a body nobody published.
+    expect(portalFactsAt($document, 'reports'))->toBe([])
+        ->and($values)->toHaveCount(2)
+        ->and($values)->toContain([
+            'type' => 'https://example.com/problems/session-expired',
+            'title' => 'Unauthenticated',
+            'status' => 401,
+            'detail' => 'Sign in again to continue.',
+        ])
+        ->and($values)->toContain([
+            'type' => 'https://example.com/problems/portal-token-revoked',
+            'title' => 'Unauthenticated',
+            'status' => 401,
+            'detail' => 'The access token for this portal was revoked.',
+        ]);
+});
+
+it('collapses to the same example, and the same bytes, on a warm fragment-cache build', function (): void {
+    // The sharp risk. The arms reach the hoist as cached fragments, so the choice has to be a function of
+    // the accumulated set at the end — first- or last-writer-wins would publish one arm's body cold and
+    // the other's warm, which is a changed contract nobody asked for.
+    $before = static fn (Router $router) => portalRoutes($router, ['dashboard']);
+    $after = static fn (Router $router) => portalRoutes($router, ['dashboard', 'exports', 'reports']);
+
+    $warm = assertWarmEqualsCold($before, $after, portalEngine(...));
+    $document = $warm->document->toArray();
+
+    expect(portalMediaAt($document, 'exports')['examples'])->toHaveCount(2)
+        ->and(portalFactsAt($document, 'exports'))
+        ->toBe(['examplePlaceholders' => ['application/problem+json' => ['detail', 'type']]]);
+
+    // Byte-locked, because this population had no golden: every laravel golden's error examples folded
+    // in full, so nothing in the corpus stood where an example has to be filled at all.
+    assertGolden('workbench-shared-error-example.uir.json', (new UirEmitter)->emit($warm->document));
 });

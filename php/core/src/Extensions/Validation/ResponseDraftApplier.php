@@ -66,8 +66,11 @@ final class ResponseDraftApplier
             }
 
             // Carry the media-type example (a sibling of `schema`) across the merge; first writer wins.
+            // Which of its members the producer FILLED rather than read travels with it: the frozen body
+            // alone cannot say, and a hop that dropped the set would leave a filled example looking like
+            // one every member of which was proven ({@see ResponseDraft::setExample()}).
             if (is_array($media) && array_key_exists('example', $media)) {
-                $response->setExample((string) $mediaType, $media['example']);
+                $response->setExample((string) $mediaType, $media['example'], $draft->examplePlaceholders((string) $mediaType));
             }
         }
     }
