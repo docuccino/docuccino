@@ -30,6 +30,8 @@ use Illuminate\Cache\RateLimiter;
  *
  * The body comes from the error-response chain rather than this integration — see {@see body()} for why a
  * middleware-synthesized response has to ask, and why it stays inline.
+ *
+ * @phpstan-type ChainBody array{content: array<array-key, mixed>|null, placeholders: array<string, list<string>>}
  */
 final class RateLimitResponsesExtension implements OperationExtension
 {
@@ -49,6 +51,14 @@ final class RateLimitResponsesExtension implements OperationExtension
 
     public function handle(OperationDraft $operation, RouteContext $context): void
     {
+        // A document that publishes no error responses publishes no 429 either. The 429 is an error
+        // response synthesized from middleware rather than from a throw, but it is one — so it answers to
+        // the document-level switch exactly as the implicit 401/403/404/422, the declared errors and the
+        // Query Builder's 400 do, and the per-route knob for keeping one is `#[IgnoreResponse]`.
+        if ($context->document->errorResponses === 'none') {
+            return;
+        }
+
         $limits = $this->throttles($context);
         if ($limits === []) {
             return;
@@ -89,15 +99,18 @@ final class RateLimitResponsesExtension implements OperationExtension
         }
         $response->set('headers', $built['headers'], $contribution);
 
-        $chain = $this->body($context);
         // The stock `{message}` is the FRAMEWORK's shape, so it is withheld on the one route whose own
         // handler demonstrably renders the throttle exception and whose result the build could not read —
         // the same standing-aside the framework-defaults tier and the terminal fallback make off the same
         // fact ({@see AppRenderedErrors}). This is the fourth producer of a framework-shaped error body,
         // and filling the gap here would re-assert on a throttled route exactly what the other three
         // withheld everywhere else. The status, the reason and the rate headers all still answer.
-        $content = $chain['content'] ?? ($chain['appRendered'] ? null : $built['content']);
-        $placeholders = $chain['placeholders'];
+        //
+        // So a chain that ANSWERED is used as it stands, `content: null` included; only a chain with
+        // nothing to say falls through to the framework shape.
+        $chain = $this->body($context);
+        $content = $chain === null ? $built['content'] : $chain['content'];
+        $placeholders = $chain['placeholders'] ?? [];
         if (is_array($content)) {
             foreach ($content as $mediaType => $media) {
                 // Registered first, for the reason core's response-draft merge states: a chain answer that
@@ -124,8 +137,10 @@ final class RateLimitResponsesExtension implements OperationExtension
     }
 
     /**
-     * What the error-response chain says this 429's body is: its `content` where the chain stated one and
-     * null where it did not, and whether the application's own handler is the reason it did not.
+     * What the error-response chain says this 429's body is, or null where it said nothing usable — the
+     * one answer that falls through to the framework's own shape. A chain that answered with NO body has
+     * still answered: `content` is null and this 429 publishes no body, which is the whole point of
+     * asking.
      *
      * This 429 is synthesized from middleware rather than from a throw the engine saw, so the
      * error-response chain never gets asked about it — and hardcoding Laravel's shape would contradict an
@@ -150,16 +165,10 @@ final class RateLimitResponsesExtension implements OperationExtension
      * is the only thing that knows them. A body reached through a `$ref` states none: what is copied there
      * is a component somebody else published, and this says no more about it than the document does.
      *
-     * @return array{content: array<array-key, mixed>|null, placeholders: array<string, list<string>>, appRendered: bool}
+     * @return ChainBody|null
      */
-    private function body(RouteContext $context): array
+    private function body(RouteContext $context): ?array
     {
-        $nothing = ['content' => null, 'placeholders' => [], 'appRendered' => false];
-
-        if ($context->document->errorResponses === 'none') {
-            return $nothing;
-        }
-
         $components = $context->components->snapshot();
         $notes = $context->notes()->snapshot();
         $answer = null;
@@ -173,13 +182,13 @@ final class RateLimitResponsesExtension implements OperationExtension
             }
         }
 
-        return $answer ?? $nothing;
+        return $answer;
     }
 
     /**
      * One consultation of the chain: its answer, or null where nothing usable came back.
      *
-     * @return array{content: array<array-key, mixed>|null, placeholders: array<string, list<string>>, appRendered: bool}|null
+     * @return ChainBody|null
      */
     private function ask(RouteContext $context): ?array
     {
@@ -204,19 +213,19 @@ final class RateLimitResponsesExtension implements OperationExtension
                 }
             }
 
-            return ['content' => $frozen->content, 'placeholders' => $placeholders, 'appRendered' => false];
+            return ['content' => $frozen->content, 'placeholders' => $placeholders];
         }
 
         $referenced = $frozen->ref === null ? null : self::referencedContent($frozen->ref, $context);
         if ($referenced !== null) {
-            return ['content' => $referenced, 'placeholders' => [], 'appRendered' => false];
+            return ['content' => $referenced, 'placeholders' => []];
         }
 
         // A tier answered and stated no body. Where that is the gate — the application renders this
         // exception itself and the build could not read what it renders it to — the answer IS the body
         // being withheld, and it is kept rather than rolled back.
         return AppRenderedErrors::includes($context, self::THROTTLE_EXCEPTION)
-            ? ['content' => null, 'placeholders' => [], 'appRendered' => true]
+            ? ['content' => null, 'placeholders' => []]
             : null;
     }
 

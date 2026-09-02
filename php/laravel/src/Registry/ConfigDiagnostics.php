@@ -88,25 +88,26 @@ final class ConfigDiagnostics
             );
         }
 
-        // Presence, not `?? null`: a key holding null is an author who named the key and an `env()` that
-        // came back empty, and reading that as "unset" is how the one value that turns every error
-        // response off used to arrive here unreported. Absence alone is silent.
-        $configured = array_key_exists('error_responses', $document->raw) ? $document->raw['error_responses'] : 'none';
-        if (! in_array($configured, self::VALID_ERROR_RESPONSES, true)) {
-            // A WARNING, like the other two here that drop something the author wrote rather than merely
-            // ignoring a switch: what this key names is the whole document's error contract, so a value
-            // read as something else changes the body of every error response in it.
-            $diagnostics[] = new Diagnostic(
-                severity: Severity::Warning,
-                code: 'config.unknown-error-responses',
-                message: sprintf(
-                    "error_responses is %s, which names no error-response strategy — the document is built as if it said 'default'.",
-                    is_string($configured) ? "'".PlainText::of($configured)."'" : get_debug_type($configured),
-                ),
-                help: "Valid values are 'default' (the framework's own error shapes, and the implicit "
-                    ."responses) and 'none'. The shape your own exception handling returns is read from "
-                    .'your code either way, and is published over both.',
-            );
+        // Asked by presence: a key holding null is an author who named it, and only an absent key is silent.
+        if (array_key_exists('error_responses', $document->raw)) {
+            $configured = $document->raw['error_responses'];
+
+            if (! in_array($configured, self::VALID_ERROR_RESPONSES, true)) {
+                // A WARNING, like the other two here that drop something the author wrote rather than
+                // merely ignoring a switch: what this key names is the whole document's error contract,
+                // so a value read as something else changes the body of every error response in it.
+                $diagnostics[] = new Diagnostic(
+                    severity: Severity::Warning,
+                    code: 'config.unknown-error-responses',
+                    message: sprintf(
+                        "error_responses is %s, which names no error-response strategy — the document is built as if it said 'default'.",
+                        is_string($configured) ? "'".PlainText::of($configured)."'" : get_debug_type($configured),
+                    ),
+                    help: "Valid values are 'default' (the framework's own error shapes, and the implicit "
+                        ."responses) and 'none'. The shape your own exception handling returns is read from "
+                        .'your code either way, and is published over both.',
+                );
+            }
         }
 
         $strategy = $document->tags['default_strategy'] ?? null;
