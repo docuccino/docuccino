@@ -13,6 +13,31 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.14.0
+
+### Breaking changes
+
+- **laravel**: remove the problem-details error preset ([#358](https://github.com/docuccino/docuccino/pull/358))
+  - the `problem-details` error preset is removed. `error_responses` now accepts `'default'` or `'none'` only, and the bag form (`['preset' => …, 'errors_shape' => …]`) is gone with it. A document still configured either way is built as if it said `'default'` and reports `config.unknown-error-responses` at warning, so nothing fails silently. Set it to `'default'` or `'none'` explicitly: REMOVING the key is not the same edit, because an absent `error_responses` resolves to `'none'` and publishes no error responses at all.
+
+### Bug fixes
+
+- **laravel**: say what the too-dynamic warning is, and what a filled example really carries ([#374](https://github.com/docuccino/docuccino/pull/374))
+- **repo**: edit the fixture tree as one writer replacing whole files, never truncating one others read ([#372](https://github.com/docuccino/docuccino/pull/372))
+- **core**: read a bound as the values it admits, not as the value one unit past it ([#371](https://github.com/docuccino/docuccino/pull/371))
+- **inference-phpstan**: depend on a declaration a fold read, and locate one without loading it ([#370](https://github.com/docuccino/docuccino/pull/370))
+- **core**: illustrate a schema from every keyword that names a value ([#369](https://github.com/docuccino/docuccino/pull/369))
+- **inference-phpstan**: depend on every file a traced body was written in, not only the class that reports it ([#368](https://github.com/docuccino/docuccino/pull/368))
+- **repo**: read a config key by presence, and widen three guards to the domain they claim ([#363](https://github.com/docuccino/docuccino/pull/363))
+- **laravel**: withhold the framework error body at every producer that fills one in ([#362](https://github.com/docuccino/docuccino/pull/362))
+- **inference-phpstan**: read a class by everything that builds it, and depend on every file that decided ([#361](https://github.com/docuccino/docuccino/pull/361))
+- **laravel**: illustrate an unread error member with a value its own schema accepts ([#360](https://github.com/docuccino/docuccino/pull/360))
+- **core**: publish one generated illustration where a second only filled a member in ([#359](https://github.com/docuccino/docuccino/pull/359))
+- **laravel**: publish the media type a handler proved when its body could not be read ([#357](https://github.com/docuccino/docuccino/pull/357))
+- **inference-phpstan**: read a status where the throw is not a literal construction ([#355](https://github.com/docuccino/docuccino/pull/355))
+- **laravel**: keep the error body a handler proved when its status could not be read ([#354](https://github.com/docuccino/docuccino/pull/354))
+- **ci**: install the phpstan the fixture app can actually resolve, and give clover room ([#365](https://github.com/docuccino/docuccino/pull/365))
+
 ## v0.13.1
 
 ### Features
