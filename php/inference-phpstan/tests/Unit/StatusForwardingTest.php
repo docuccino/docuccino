@@ -10,7 +10,7 @@ use PhpParser\ParserFactory;
  * The parse half of the HttpException status read: which `parent::__construct()` a body makes, what it puts
  * in one slot of it, whether the body writes the variable it forwards, and every `new` the body makes of
  * the class. No types are resolved here, so these run in process; that a real
- * constructor's statements arrive looking like this is the fixture group's job ({@see ThrowCasesTest}).
+ * constructor's statements arrive looking like this is the fixture group's job ({@see ThrowStatusTest}).
  *
  * @return array<array-key, Node\Stmt>
  */

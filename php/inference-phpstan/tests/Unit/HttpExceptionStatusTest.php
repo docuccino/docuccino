@@ -25,7 +25,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 /**
  * The status read over REAL exception classes — the hierarchy, the visibility and the parse are all real,
  * and only the bodies, the fold and the parameter defaults come from a source. That the analyser hands over
- * the same bodies and folds the same constants is the fixture group's job ({@see ThrowCasesTest});
+ * the same bodies and folds the same constants is the fixture group's job ({@see ThrowStatusTest});
  * everything the read DECIDES is decided here.
  */
 function httpStatuses(bool $projectSeesTheFile = true): HttpExceptionStatus
