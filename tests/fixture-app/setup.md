@@ -210,7 +210,18 @@ own (seeded from the action's parameter type):
 - `app/Exceptions/ProbeStaleException.php` + `app/Support/Concerns/GuardsProbeState.php` — no constructor
   of its own and exactly ONE factory, so the class states its status once and nothing at a `throw` repeats
   it. Reached from a trait's guard clause, which surfaces at the action as a declared exception rather than
-  a construction: the population where the class has to answer for itself.
+  a construction: the population where the class has to answer for itself. The trait is also where the
+  `throw` and the `@throws` are WRITTEN, so it is the file that has to invalidate a warm fragment.
+- `app/Exceptions/ProbeProblemBase.php` + `app/Exceptions/ExportRelocatedException.php` +
+  `app/Exceptions/ExportOfflineException.php` — a base whose `new static(503)` builds each subclass. One
+  subclass adds nothing, so 503 is the only way it is ever built; the other adds a factory of its own at
+  413, so it is built two ways and states neither. The pair is why reading only a class's OWN declared
+  code answers a status the base contradicts.
+- `app/Exceptions/ExportArchivedException.php` + `app/Support/ProbeStatuses.php` — a status pinned through
+  a constant declared in a file the exception class does not name, which is the second file a fold reads
+  and the second one a warm build has to notice changing.
+- `app/Support/ProbeGuards.php` — a helper taking two callbacks, so two closures reach one call on ONE
+  line: they are two bodies, and a reader keying closures by line answers the second for both.
 
 ### Data + Eloquent model reflection
 
@@ -364,7 +375,9 @@ own (seeded from the action's parameter type):
   are only reachable through the trait's own file.
 - `app/Exceptions/RenderCallbacks.php` — a method returning a per-exception render closure
   (`fn (OutOfStockException $e) => response()->json(['error' => …], 409)`), analysed by
-  file+line.
+  file+line. `pair()` beside it returns TWO closures written on one line, which is all reflection can say
+  about either: the boundary where the tier documents nothing rather than one callback's response for the
+  other's exception.
 - `app/Exceptions/InvokableProblemRenderer.php` — a catch-all `__invoke(Throwable $e): JsonResponse`
   with sequential `instanceof` branches (409/401 + a 500 default) emitting a distinct
   `application/problem+json`-style body (a `type`/`title`/`status`/`instance` shape). Registered as an

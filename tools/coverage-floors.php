@@ -46,14 +46,15 @@ const FLOORS = [
     // `ConstantFolder` is pure php-parser over parsed source, so it unit-tests in-process (41/43) — while
     // the `Tracer` wiring around it is Scope-driven and pcov-invisible either way (0/88). Raising this
     // floor means moving more of the package into the first half; docs/testing.md records each move.
-    // Measured 47.32% (1094/2312) — ratcheted 46 → 47, the measured integer, on the trigger the previous
-    // note set: the figure has cleared 47 with 0.32pp behind it, about seven statements. The floor got
-    // here as 44 → 46 → 47 by keeping the HttpException status read's reflection and its decisions in
-    // process behind a source seam, so only the bodies-and-fold adapter is subprocess-only; the hop into
-    // the static factory a throw names, the one rule both construction readers share, and the
-    // response-key range check are all written the same way. Recorded as measured so the number cannot
-    // drift silently, and read the same way as before: mostly proven out-of-process, never untested.
-    'inference-phpstan' => 47,
+    // Measured 48.57% (1193/2456) — ratcheted 47 → 48, the measured integer, with 0.57pp behind it, about
+    // fourteen statements. The floor got here as 44 → 46 → 47 → 48 by keeping the HttpException status
+    // read's reflection and its decisions in process behind a source seam, so only the bodies-and-fold
+    // adapter is subprocess-only; the hop into the static factory a throw names, the one rule both
+    // construction readers share, the response-key range check and the file a folded constant is declared
+    // in (`ConstantSource`, native reflection over a declaration) are all written the same way. Recorded
+    // as measured so the number cannot drift silently, and read the same way as before: mostly proven
+    // out-of-process, never untested.
+    'inference-phpstan' => 48,
 ];
 
 $report = $argv[1] ?? 'build/clover.xml';

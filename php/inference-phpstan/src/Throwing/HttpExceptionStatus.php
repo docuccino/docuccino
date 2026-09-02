@@ -48,7 +48,16 @@ use ReflectionParameter;
  * analysed set and discarding every recorded walk the replay layer holds. The gate turns a cost with no
  * answer behind it into neither, and it is the same gate {@see FactoryStatus} applies one hop on.
  *
+ * And the gate is also why the reads below cost the replay layer nothing, which is worth recording so it is
+ * not re-litigated: the adapter primes the application's whole PSR-4 tree at boot, so every project
+ * exception class is already in the analysed set and reading one cannot grow it. Measured over one build of
+ * the fixture app's 41 throw actions, the analysed-file count is 144 with these reads, without them, and
+ * without the hierarchy walk — identical, so no recording is ever discarded. What they do cost is 2 more
+ * live file walks out of 15, for exception classes nothing else opened, which is inside run-to-run noise
+ * (1.24–1.28s against 1.24–1.29s).
+ *
  * @phpstan-type StatusPin array{status: int|null, parameter: int|null, files: list<string>}
+ * @phpstan-type AgreedRead array{status: int|null, files: list<string>}
  * @phpstan-type ConstructorSlot array{names: list<string>, default: int|null}
  *
  * @internal
@@ -68,10 +77,10 @@ final class HttpExceptionStatus
     private array $cache = [];
 
     /**
-     * {@see agreed()} by FQCN, kept for the same reason and holding its nulls, so a class that agrees on
-     * nothing is memoised as a decline rather than re-read per route.
+     * {@see agreed()} by FQCN, kept for the same reason and holding its declines, so a class that agrees
+     * on nothing is memoised rather than re-read per route.
      *
-     * @var array<string, int|null>
+     * @var array<string, AgreedRead>
      */
     private array $agreed = [];
 
@@ -112,38 +121,40 @@ final class HttpExceptionStatus
      * constructions here are a subset of the application's rather than all of them — which is why
      * {@see ThrowAnalyzer} asks this only where the throw site itself said nothing, never over a
      * construction it could read. Everything that would make the answer a guess rather than the class's
-     * own statement still declines: a class using a trait, whose factories are written in a file this
-     * read never sees; a constructor that writes the status it forwards, which names no slot to fold
-     * into; a class outside the project, whose bodies PHPStan strips; and constructions that disagree,
-     * where the class genuinely has several.
+     * own statement still declines: a constructor that writes the status it forwards, which names no slot
+     * to fold into; a class or ancestor this read cannot see all of ({@see constructionsOfSelf()}); and
+     * constructions that disagree, where the class genuinely has several.
+     *
+     * The files are the declarations the read went beyond the hierarchy for — a class constant a
+     * construction names ({@see ConstantSource}). The hierarchy's own files come back from
+     * {@see filesFor()}, which every caller of this already asks.
+     *
+     * @return AgreedRead
      */
-    public function agreed(string $fqcn): ?int
+    public function agreed(string $fqcn): array
     {
-        if (array_key_exists($fqcn, $this->agreed)) {
+        if (isset($this->agreed[$fqcn])) {
             return $this->agreed[$fqcn];
         }
 
-        $this->agreed[$fqcn] = null;
+        $this->agreed[$fqcn] = ['status' => null, 'files' => []];
 
         // A slot is only ever answered for a class; the `class_exists()` is spelled out beside it for the
         // same reason {@see resolve()} spells one out — it is what makes the name one reflection may take.
         $slot = $this->statusParameter($fqcn);
         if ($slot === null || ! class_exists($fqcn)) {
-            return null;
+            return $this->agreed[$fqcn];
         }
 
-        $class = new ReflectionClass($fqcn);
-        $file = $class->getFileName();
-        if ($file === false || $class->getTraitNames() !== [] || ! $this->projectFilter->isProjectFile($file)) {
-            return null;
+        $sites = $this->constructionsOfSelf(new ReflectionClass($fqcn));
+        if ($sites === null) {
+            return $this->agreed[$fqcn];
         }
 
-        return $this->agreed[$fqcn] = $this->agreedOver(
-            $this->constructionsIn($class->getName(), $file),
-            $class->getName(),
-            $slot,
-            $file,
-        );
+        $files = [];
+        $status = $this->agreedOver($sites, $fqcn, $slot, $files);
+
+        return $this->agreed[$fqcn] = ['status' => $status, 'files' => array_values(array_unique($files))];
     }
 
     /**
@@ -274,6 +285,10 @@ final class HttpExceptionStatus
             return $none;
         }
 
+        // The declaration a `parent::__construct(HttpStatus::CONFLICT, …)` reads decides this class's
+        // status, so it joins the set whether or not the fold went on to succeed.
+        $files = [...$files, ...ConstantSource::files($argument, $class->getName())];
+
         $folded = HttpStatusCode::folded($this->bodies->foldInt($file, $argument, $call));
         if ($folded !== null) {
             return ['status' => $folded, 'parameter' => null, 'files' => $files];
@@ -295,11 +310,17 @@ final class HttpExceptionStatus
             return $none;
         }
 
-        return [
-            'status' => $this->forwardedDefault($class, $constructor, $index, $file),
-            'parameter' => $index,
-            'files' => $files,
-        ];
+        // …and the declaration behind the DEFAULT of that slot, which is the value a construction leaving
+        // it empty passes. Named through reflection rather than evaluated: `getDefaultValueConstantName()`
+        // reads the initialiser's name off the declaration, where `getDefaultValue()` would run it.
+        $default = ConstantSource::fileForName(self::defaultConstantName($constructor, $index) ?? '', $class->getName());
+        if ($default !== null) {
+            $files[] = $default;
+        }
+
+        $status = $this->forwardedDefault($class, $constructor, $index, $file, $files);
+
+        return ['status' => $status, 'parameter' => $index, 'files' => array_values(array_unique($files))];
     }
 
     /**
@@ -313,51 +334,109 @@ final class HttpExceptionStatus
      * trait's methods are written in another file, so a `new self(...)` there is one this read never sees.
      *
      * @param  ReflectionClass<object>  $class
+     * @param  list<string>  $files
      */
     private function forwardedDefault(
         ReflectionClass $class,
         ReflectionMethod $constructor,
         int $index,
         string $file,
+        array &$files,
     ): ?int {
         if (! $constructor->isPrivate() || $class->getTraitNames() !== []) {
             return null;
         }
 
-        return $this->agreedOver($this->constructionsIn($class->getName(), $file), $class->getName(), $index, $file);
-    }
-
-    /**
-     * The one status a set of the class's own constructions folds to, each in the scope it is written.
-     *
-     * @param  list<Node\Expr\New_>  $constructions
-     */
-    private function agreedOver(array $constructions, string $class, int $slot, string $file): ?int
-    {
-        return ConstructionStatus::agreedIn(
-            $constructions,
-            $slot,
-            $this->constructorSlot($class, $slot),
-            fn (Node\Expr $argument, Node\Expr\New_ $at): ?int => $this->bodies->foldInt($file, $argument, $at),
+        // The class's own declared code is the whole set here, and no ancestor is walked: a private
+        // constructor is out of scope from a base, so a `new static(…)` in one would not even compile.
+        return $this->agreedOver(
+            $this->constructionsIn($class->getName(), $class->getName(), $file),
+            $class->getName(),
+            $index,
+            $files,
         );
     }
 
     /**
-     * Every `new` the class writes of itself, across every method it declares — its constructor included,
-     * which a private constructor is reachable from and from nowhere else.
+     * The one status a set of the class's own constructions folds to, each at the site it is written.
+     * `$files` collects the declarations the folds read, for the dependency set.
      *
-     * @return list<Node\Expr\New_>
+     * @param  list<ConstructionSite>  $sites
+     * @param  list<string>  $files
      */
-    private function constructionsIn(string $class, string $file): array
+    private function agreedOver(array $sites, string $class, int $slot, array &$files): ?int
     {
+        return ConstructionStatus::agreedIn(
+            $sites,
+            $slot,
+            $this->constructorSlot($class, $slot),
+            function (Node\Expr $argument, ConstructionSite $site) use (&$files): ?int {
+                $files = [...$files, ...ConstantSource::files($argument, $site->declaringClass)];
+
+                return $this->bodies->foldInt($site->file, $argument, $site->construction);
+            },
+        );
+    }
+
+    /**
+     * Every construction of `$class` this build can see, each with the file it is written in — or null
+     * where the set could not be completed, which is a different answer from an empty one.
+     *
+     * A construction the class makes of ITSELF is one written in its own declared code OR in a class it
+     * inherits from: `new static(…)` in a base builds the subclass as surely as `new self(…)` in the
+     * subclass does, and reading only the subclass's own answers a status for a class that has two. So
+     * the walk is the hierarchy, up to `HttpException`, whose own constructor takes the status and builds
+     * no subclass. Read them all or read none: an ancestor written in a file this build cannot open — a
+     * class outside the project, whose bodies PHPStan strips — or one using a TRAIT, whose methods live in
+     * a file this read never opens, leaves a construction unseen, and a partial set is a status the class
+     * may not have.
+     *
+     * @param  ReflectionClass<object>  $class
+     * @return list<ConstructionSite>|null
+     */
+    private function constructionsOfSelf(ReflectionClass $class): ?array
+    {
+        $target = $class->getName();
         $constructions = [];
-        foreach ($this->bodies->methods($file, $class) as $statements) {
-            foreach (StatusForwarding::constructionsOf($statements, $class) as $construction) {
+
+        for (
+            $declaring = $class;
+            $declaring !== false && $declaring->getName() !== KnownThrowers::HTTP_EXCEPTION;
+            $declaring = $declaring->getParentClass()
+        ) {
+            $file = $declaring->getFileName();
+            if ($file === false
+                || $declaring->getTraitNames() !== []
+                || ! $this->projectFilter->isProjectFile($file)
+            ) {
+                return null;
+            }
+
+            foreach ($this->constructionsIn($target, $declaring->getName(), $file) as $construction) {
                 $constructions[] = $construction;
             }
         }
 
         return $constructions;
+    }
+
+    /**
+     * Every `new` that builds `$target` in the methods `$declaring` writes in `$file` — its constructor
+     * included, which a private constructor is reachable from and from nowhere else. Each one carries
+     * where it is written ({@see ConstructionSite}).
+     *
+     * @return list<ConstructionSite>
+     */
+    private function constructionsIn(string $target, string $declaring, string $file): array
+    {
+        $sites = [];
+        foreach ($this->bodies->methods($file, $declaring) as $statements) {
+            foreach (StatusForwarding::constructionsOf($statements, $target, $declaring) as $construction) {
+                $sites[] = new ConstructionSite($construction, $file, $declaring);
+            }
+        }
+
+        return $sites;
     }
 
     /**
@@ -379,6 +458,16 @@ final class HttpExceptionStatus
         return HttpStatusCode::folded(
             $this->bodies->intDefault($file, $method->getDeclaringClass()->getName(), $method->getName(), $index),
         );
+    }
+
+    /** The constant a parameter's default NAMES, where it names one — never the value it would evaluate to. */
+    private static function defaultConstantName(ReflectionMethod $method, int $index): ?string
+    {
+        $parameter = $method->getParameters()[$index] ?? null;
+
+        return $parameter?->isDefaultValueAvailable() === true && $parameter->isDefaultValueConstant()
+            ? $parameter->getDefaultValueConstantName()
+            : null;
     }
 
     /**

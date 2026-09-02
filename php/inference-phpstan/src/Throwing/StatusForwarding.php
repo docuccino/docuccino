@@ -90,24 +90,29 @@ final class StatusForwarding
     }
 
     /**
-     * Every `new` in a body that builds `$class` — a factory's own, and one nested in a closure it carries.
+     * Every `new` in a body that builds `$target` — a factory's own, and one nested in a closure it
+     * carries. `$declaring` is the class the body is WRITTEN in, which is what decides whether the two
+     * relative names build the target: `new static` does wherever it is written, and `new self` only
+     * where the body is the target's own. A base's `new self(…)` builds the base.
      *
      * @param  array<array-key, Node\Stmt>  $statements
+     * @param  string|null  $declaring  null where the body is the target's own
      * @return list<Node\Expr\New_>
      */
-    public static function constructionsOf(array $statements, string $class): array
+    public static function constructionsOf(array $statements, string $target, ?string $declaring = null): array
     {
         /** @var list<Node\Expr\New_> $constructions */
         $constructions = (new NodeFinder)->find(
             $statements,
-            static fn (Node $node): bool => $node instanceof Node\Expr\New_ && self::constructs($node, $class),
+            static fn (Node $node): bool => $node instanceof Node\Expr\New_
+                && self::constructs($node, $target, $declaring ?? $target),
         );
 
         return $constructions;
     }
 
-    /** Whether a `new` builds `$class` — by name, or through the `self`/`static` that mean it here. */
-    private static function constructs(Node\Expr\New_ $node, string $class): bool
+    /** Whether a `new` written in `$declaring` builds `$target` — by name, or through `self`/`static`. */
+    private static function constructs(Node\Expr\New_ $node, string $target, string $declaring): bool
     {
         if (! $node->class instanceof Node\Name) {
             return false;
@@ -115,8 +120,10 @@ final class StatusForwarding
 
         $lowered = $node->class->toLowerString();
 
-        return $lowered === 'self'
-            || $lowered === 'static'
-            || $lowered === strtolower(ltrim($class, '\\'));
+        // Late static binding: `new static` builds whichever class was entered, so a base's builds the
+        // subclass. `new self` names the class the line is written in, which is the target only there.
+        return $lowered === 'static'
+            || ($lowered === 'self' && $declaring === $target)
+            || $lowered === strtolower(ltrim($target, '\\'));
     }
 }

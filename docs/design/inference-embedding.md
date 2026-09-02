@@ -530,7 +530,9 @@ see, so four reads sit under layer 1 and answer in this order:
   the constructor's default, one writing it takes its own literal, and they either agree or the class pins
   nothing.
 - **What THIS construction passes** — the argument a `throw new X(…)` writes into the slot the class
-  forwards, the constructor default where it writes none.
+  forwards, the constructor default where it writes none. The construction is the one the throw names,
+  written at it or one assignment behind it (`$e = new X(451); … throw $e;`), through the same local
+  reader the closure hop uses; a rethrow of an exception this body did not build stays silent.
 - **What the factory the throw names builds with** (`FactoryStatus`) — one hop, no further.
 - **What the class's own constructions agree on** (`HttpExceptionStatus::agreed()`) — the same fold as the
   first read, without the private-constructor condition, and therefore a weaker claim: the constructions
@@ -541,6 +543,16 @@ see, so four reads sit under layer 1 and answer in this order:
   presented itself and would not fold has spoken: the response is whatever was chosen at run time, and the
   class's agreement is no evidence for it, so the order (not a `??` chain) is what keeps this honest.
 
+**What counts as a construction the class makes of ITSELF** is one rule, and both readers of it obey it:
+a `new` written in the class's own declared code OR in a class it inherits from. `new static(…)` in a base
+builds the subclass by late static binding, so it is one of the ways that subclass is built; `new self(…)`
+in the base builds the base, whose instance is another class's. So `agreed()` walks the hierarchy up to
+`HttpException` and `FactoryStatus` accepts a factory a base declares, both reading each body against the
+class it is WRITTEN in. Read them all or read none: an ancestor written in a file the build cannot open,
+or one using a trait, leaves a construction unseen, and a partial set is a status the class may not have —
+a subclass with its own factory under a base that also builds it really does have two statuses, and
+reading only its own declared code publishes one of them for both.
+
 The middle two are one rule (`ConstructionStatus`), because they are the same construction one hop
 apart: a `throw new X` and a `throw X::make()` whose factory is `return new self` must publish the same
 status, and they once did not. The agreement over a SET of constructions is that same rule again
@@ -550,13 +562,27 @@ happens in the scope at the CALL, never a body's end scope — a constructor tha
 parameter after forwarding it makes the two disagree, and the end scope names a value the callee never
 received.
 
+**Every file the status was read from is a dependency.** The class's whole hierarchy, the factory's file,
+and two the body itself does not name: the file a callee's body is WRITTEN in — PHP reports a
+trait-imported method as the using class's, so a shared guard clause's `throw` and `@throws` are reachable
+only through `Callee::writtenIn()` — and the file declaring a class constant a fold read
+(`ConstantSource`), since `parent::__construct(HttpStatus::CONFLICT, …)` takes its status from somewhere
+else entirely. Under-keying either one leaves a warm build publishing a status the code no longer states.
+The same defect exists in `Tracer`, whose file set doubles as its per-analysis BUDGET; admitting a second
+file per callee there changes what a trace can reach, so it is a change of its own with its own
+measurement.
+
 **A closure the analysed body hands to a callee.** PHPStan scopes a closure separately, so a `throw`
 inside one reaches the enclosing method as the CALL that received it — a bare `Throwable` where the callee
 declares one (`Connection::transaction`), nothing at all where it does not. `FileAnalyzer::closures()`
-already holds the closure's own `ClosureReturnStatementsNode` against the same walk, so the three layers
-are re-run over its throw points and the status is read exactly where it is written. Bounded to what the
-body itself writes: a closure at the argument, or one assignment behind it, against descent's own depth
-budget and cycle guard. An ARROW function is the boundary — PHPStan models it with `InArrowFunctionNode`,
+already holds the closure's own `ClosureReturnStatementsNode` against the same walk — keyed by START
+OFFSET, because two closures written on one line are two bodies and a line-keyed map answers the last of
+them for both — so the three layers are re-run over its throw points and the status is read exactly where
+it is written. Bounded to what the body itself writes: a closure at the argument, or one assignment behind
+it, against descent's own depth budget and cycle guard. The one caller with no offset to ask with is the
+handler tier, which locates a render callback from `ReflectionFunction`'s file+line
+(`FileAnalyzer::closureAtLine()`); a line carrying two callbacks is one reflection cannot tell apart, so
+it answers neither. An ARROW function is the boundary — PHPStan models it with `InArrowFunctionNode`,
 which carries no statement result, so there are no throw points to read and the exception is not surfaced
 at all (pinned as a fixture row rather than described).
 

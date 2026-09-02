@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Inference\PhpStan\Throwing\ConstructionSite;
 use Docuccino\Inference\PhpStan\Throwing\ConstructionStatus;
 use Docuccino\Inference\PhpStan\Throwing\HttpStatusCode;
 use PhpParser\Node;
@@ -61,18 +62,23 @@ it('reads the status one call passes in a slot', function (string $code, int $sl
 ]);
 
 /**
- * Every `new X(...)` in a snippet, which is what the class read and the factory read each hand the fold.
+ * Every `new X(...)` in a snippet as the site it is written at — which is what the class read and the
+ * factory read each hand the fold. One file per snippet here; that a class's constructions can come from
+ * SEVERAL is {@see HttpExceptionStatusTest}'s hierarchy rows.
  *
- * @return list<Node\Expr\New_>
+ * @return list<ConstructionSite>
  */
-function constructionSet(string $code): array
+function constructionSet(string $code, string $file = '/x.php'): array
 {
     $parsed = (new ParserFactory)->createForNewestSupportedVersion()->parse('<?php '.$code) ?? [];
 
     /** @var list<Node\Expr\New_> $found */
     $found = (new NodeFinder)->findInstanceOf($parsed, Node\Expr\New_::class);
 
-    return $found;
+    return array_map(
+        static fn (Node\Expr\New_ $new): ConstructionSite => new ConstructionSite($new, $file, 'App\\X'),
+        $found,
+    );
 }
 
 it('reads the one status a set of constructions agrees on', function (string $code, ?int $expected): void {
@@ -105,6 +111,26 @@ it('reads the one status a set of constructions agrees on', function (string $co
     'no constructions at all' => ['return $this->fields;', null],
     'agreeing on a number that is no status' => ['new X([], 0); new X([], 0);', null],
 ]);
+
+it('folds each construction in the file it was written in', function (): void {
+    // A class's constructions are not all in one file — a base's `new static(…)` builds the subclass from
+    // the base's own file — so the fold is told WHERE each one is written. Stated as the rule rather than
+    // read off the code: an argument folded against another file's scope is a value that line never passed.
+    $seen = [];
+    $status = ConstructionStatus::agreedIn(
+        [...constructionSet('new X([], 409);', '/own.php'), ...constructionSet('new X([], 409);', '/base.php')],
+        1,
+        ['names' => ['fields', 'statusCode'], 'default' => null],
+        static function (Node\Expr $argument, ConstructionSite $site) use (&$seen): ?int {
+            $seen[] = $site->file;
+
+            return $argument instanceof Node\Scalar\Int_ ? $argument->value : null;
+        },
+    );
+
+    expect($status)->toBe(409)
+        ->and($seen)->toBe(['/own.php', '/base.php']);
+});
 
 it('admits exactly the integers a response can be keyed by', function (?int $value, ?int $expected): void {
     // Stated from the format rather than from the code: OpenAPI keys a response by `1xx`–`5xx`, so anything

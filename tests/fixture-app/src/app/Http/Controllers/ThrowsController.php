@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
 use App\Support\Concerns\GuardsProbeState;
+use App\Support\ProbeGuards;
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -391,6 +392,67 @@ class ThrowsController extends Controller
     public function runtimeStatusAtThrowSite(int $chosen): void
     {
         throw new \App\Exceptions\ExportBlockedException('The export is blocked.', $chosen);
+    }
+
+    /**
+     * Case 10p: a subclass whose only factory is the base's. `new static(503)` up
+     * there builds THIS class, so the throw names a status even though nothing
+     * here or in the class itself repeats it.
+     */
+    public function inheritedFactoryStatus(): void
+    {
+        throw \App\Exceptions\ExportRelocatedException::unavailable();
+    }
+
+    /**
+     * Case 10p': the same base under a subclass that adds a factory of its own,
+     * reached where the site carries no construction at all. The class is built
+     * at 503 and at 413, so its own agreement cannot say which this is.
+     */
+    public function inheritedAgreementStatus(bool $offline, bool $oversized): void
+    {
+        $this->guardProbeReachable($offline, $oversized);
+    }
+
+    /**
+     * Case 10q: the construction one assignment behind the throw, which is how a
+     * body that decorates the exception before throwing it is written.
+     */
+    public function heldConstructionAtThrowSite(): void
+    {
+        $blocked = new \App\Exceptions\ExportBlockedException('The export is blocked.', 451);
+
+        throw $blocked;
+    }
+
+    /**
+     * Case 10q': the same shape with the status chosen at run time. The site DID
+     * present a construction, so the class's own 409 is no evidence for it.
+     */
+    public function heldRuntimeConstructionAtThrowSite(int $chosen): void
+    {
+        $blocked = new \App\Exceptions\ExportBlockedException('The export is blocked.', $chosen);
+
+        throw $blocked;
+    }
+
+    /**
+     * Case 10r: two closures handed to one call on ONE line. They are two bodies
+     * and two errors, and a reader keying them by line answers the second for
+     * both.
+     */
+    public function pairedClosureThrownStatus(ProbeGuards $guards): void
+    {
+        $guards->either(function (): void { throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.'); }, function (): void { throw \App\Exceptions\ExportUnsupportedException::forFormat('tsv'); });
+    }
+
+    /**
+     * Case 10s: a status pinned through a constant the application declares in
+     * another file, which is the file that decides what this route publishes.
+     */
+    public function constantPinnedStatus(): void
+    {
+        throw new \App\Exceptions\ExportArchivedException;
     }
 
     /**

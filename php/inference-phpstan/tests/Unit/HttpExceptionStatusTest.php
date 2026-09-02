@@ -45,7 +45,7 @@ it('reads what a class states about its status', function (string $fqcn, ?int $p
 
     expect($statuses->pinned($fqcn))->toBe($pinned)
         ->and($statuses->statusParameter($fqcn))->toBe($parameter)
-        ->and($statuses->agreed($fqcn))->toBe($agreed);
+        ->and($statuses->agreed($fqcn)['status'])->toBe($agreed);
 })->with([
     ...HttpProbeRows::statuses(),
     // No class below `HttpException` adds a constructor, so its own runs and argument 0 IS the status.
@@ -67,9 +67,9 @@ it('reads one class\'s own constructions once, however many routes throw it', fu
     $agreed = $statuses->agreed(ProbeBranchingFactory::class);
     $folds = count($bodies->folded);
 
-    expect($agreed)->toBeNull()
+    expect($agreed['status'])->toBeNull()
         ->and($folds)->toBeGreaterThan(0)
-        ->and($statuses->agreed(ProbeBranchingFactory::class))->toBeNull()
+        ->and($statuses->agreed(ProbeBranchingFactory::class))->toBe($agreed)
         ->and($bodies->folded)->toHaveCount($folds);
 });
 
@@ -124,8 +124,8 @@ it('will not read a class outside the project', function (): void {
         ->and($gated->pinned(ProbePinned::class))->toBeNull()
         // The class's own constructions are behind the same gate: a body PHPStan strips reads as a class
         // that builds itself nowhere, which would answer the constructor's default for a class stating none.
-        ->and($gated->agreed(ProbeScanFactory::class))->toBeNull()
-        ->and($gated->agreed(ProbeFactory::class))->toBeNull()
+        ->and($gated->agreed(ProbeScanFactory::class)['status'])->toBeNull()
+        ->and($gated->agreed(ProbeFactory::class)['status'])->toBeNull()
         // The hierarchy is still reflection, so a class adding no constructor still names its slot.
         ->and($gated->statusParameter(ProbeNoConstructor::class))->toBe(0);
 });
@@ -197,7 +197,7 @@ it('states nothing about a class whose body it cannot read', function (): void {
 
     expect($statuses->pinned(ProbePinned::class))->toBeNull()
         ->and($statuses->pinned(ProbeFactory::class))->toBeNull()
-        ->and($statuses->agreed(ProbeScanFactory::class))->toBeNull()
+        ->and($statuses->agreed(ProbeScanFactory::class)['status'])->toBeNull()
         ->and($statuses->statusParameter(ProbePinned::class))->toBeNull()
         // The hierarchy is still reflection, so a class adding no constructor still answers.
         ->and($statuses->statusParameter(ProbeNoConstructor::class))->toBe(0);
