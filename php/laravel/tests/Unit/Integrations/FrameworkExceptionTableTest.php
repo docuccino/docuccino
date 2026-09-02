@@ -37,8 +37,7 @@ it('declines an unmapped exception', function (): void {
  * The status an error whose own status nothing could read is published under. Written out here rather than
  * read back off the table, because a guard that asks the code for its own rule agrees with whatever the
  * code does — and this key is contested: the tier that folded a body but no status, the framework-defaults
- * tier, the preset and the terminal fallback all have to name the same one, or one error is published
- * twice.
+ * tier and the terminal fallback all have to name the same one, or one error is published twice.
  */
 it('classifies an unread status the same way every tier that publishes it must', function (string $fqcn, string $status): void {
     expect(FrameworkExceptionTable::classification($fqcn))->toBe($status);

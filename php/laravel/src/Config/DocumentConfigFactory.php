@@ -10,6 +10,7 @@ use Docuccino\Core\Extensions\Contracts\TagMapper;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\LineEndings;
+use Docuccino\Laravel\Registry\ConfigDiagnostics;
 use Docuccino\Laravel\Tags\PrefixTagMapper;
 use Illuminate\Contracts\Container\Container;
 
@@ -62,9 +63,7 @@ final readonly class DocumentConfigFactory
             routeFilter: $closure instanceof Closure ? $closure : null,
             includeVendor: ($routes['include_vendor'] ?? false) === true,
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
-            // A closed set of two: anything else reads as the shipped `default` rather than silently
-            // turning every error response off, and ConfigDiagnostics says so.
-            errorResponses: ($config['error_responses'] ?? 'none') === 'none' ? 'none' : 'default',
+            errorResponses: self::errorResponses($config),
             // A glob holding a NUL byte raises out of `glob()` and takes the build with it, so it never
             // reaches one — the same refusal every other path key gets, reported by ConfigDiagnostics.
             overlays: array_values(array_filter(
@@ -80,6 +79,28 @@ final readonly class DocumentConfigFactory
             tagMapper: $this->resolveTagMapper($tags),
             raw: $config,
         );
+    }
+
+    /**
+     * The error-response strategy: a closed set of two, where only an ABSENT key falls back to `none`.
+     *
+     * Absent and present-but-null are deliberately different readings. A document that never names the
+     * key has expressed nothing, and `none` is the documented fallback it gets — the shipped file says
+     * `default`, so a second document inherits none of the first's errors. A key that IS present has an
+     * author behind it, and `env('DOCUCCINO_ERRORS')` with the variable unset is exactly that: an intent
+     * expressed and unreadable. Reading it as `none` would take every 4xx and 5xx out of the document
+     * without a word, so it degrades the way every other value outside the set does — as the shipped
+     * `default`, with {@see ConfigDiagnostics} naming it.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private static function errorResponses(array $config): string
+    {
+        if (! array_key_exists('error_responses', $config)) {
+            return 'none';
+        }
+
+        return $config['error_responses'] === 'none' ? 'none' : 'default';
     }
 
     /**

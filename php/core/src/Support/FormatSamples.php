@@ -18,9 +18,18 @@ namespace Docuccino\Core\Support;
  * caller: the synthesized property example and the error-example fill are handed the map by the
  * representation policy that reaches them, and the collection exporter by `EmitOptions::$formatSamples`.
  *
- * Public, not `@internal` — the Laravel adapter's built-in integrations fill an unread response member
- * from the schema beside it, and a `format` there has to be illustrated by the same value as everywhere
- * else, so they use this directly rather than inlining a copy to dodge the arch-test allow-list.
+ * **Public API, deliberately and permanently.** This class carries no `@internal` marker, so `for()`,
+ * `formats()` and the class name itself are part of the surface that freezes at v1 — a decision, not a
+ * side effect of the adapter needing them. The alternative was a private copy of the table in the
+ * adapter, and a copy is the one thing this class exists to prevent: the whole point is that the error
+ * example an integration fills and the example core synthesizes illustrate an `email` with the SAME
+ * value, and two tables agree only until somebody edits one. Freezing two short static methods is a
+ * cheaper commitment than a divergence no test would notice, and it lets an extension author fill a
+ * member the same way a built-in integration does instead of inventing a second answer.
+ *
+ * What is frozen is the SURFACE, not the values: a document restates any sample it likes through
+ * `representation.examples.formats`, and a change to a constant here moves every document that did not,
+ * so it is an ordinary output change and goes through the goldens like one.
  */
 final class FormatSamples
 {

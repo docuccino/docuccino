@@ -127,6 +127,7 @@ matches the rest of the document:
 | --- | --- |
 | `default` | Laravel's `{ "message": string }`, which is what `ThrottleRequests` returns. |
 | Your own handler covers throttling | Whatever that handler builds. |
+| Your own handler covers throttling, and its body doesn't read | No body — the `429` keeps its status, description and rate-limit headers. Publishing Laravel's shape over a renderer you replaced would name members your server never sends. |
 | `none`, or nothing in the chain answers | The stock `{ "message": string }`. |
 
 The body is copied in rather than `$ref`'d, because the chain's own shared response carries none of the

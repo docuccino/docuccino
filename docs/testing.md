@@ -272,11 +272,16 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.28%** | 97    | fully in-process-measurable                      |
-| `laravel`           | **96.29%** | 96    | ratcheted 95 → 96; 0.29pp behind it, ~30 statements |
-| `inference-phpstan` | **48.57%** | 48    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **97.29%** | 97    | fully in-process-measurable; 0.29pp behind it, ~37 statements |
+| `laravel`           | **96.30%** | 96    | ratcheted 95 → 96; 0.30pp behind it, ~35 statements |
+| `inference-phpstan` | **48.57%** | 48    | real path is subprocess-only → `fixture`-proven; 0.57pp, ~14 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.40%     | —     | informational only; no longer a gate             |
+| Overall             | 92.34%     | —     | informational only; no longer a gate             |
+
+Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
+clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
+one artifact the ratchet policy has nothing else to check against, and it drifts a hundredth at a time:
+update all three in the same change or none of them.
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,

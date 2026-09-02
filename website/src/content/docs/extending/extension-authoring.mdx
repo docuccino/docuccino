@@ -539,8 +539,8 @@ change one, in the order to reach for them.
 3. **Replace the mapper.** Register your own `ExceptionToResponse` for the exception. The chain takes
    the first mapper that both supports the throw and answers, and an unannotated extension sorts at
    `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
-   (`LAST`), so yours wins over both, body and name together, with no `#[ExtensionOrder]` at all. Two
-   One tier still runs ahead of it: the inferred-handler tier (`FIRST`), which documents the shape your
+   (`LAST`), so yours wins over both, body and name together, with no `#[ExtensionOrder]` at all. One
+   tier still runs ahead of it: the inferred-handler tier (`FIRST`), which documents the shape your
    app's own handler really returns. To beat that, say so —
    `#[ExtensionOrder(priority: Priorities::FIRST + 1)]`.
 

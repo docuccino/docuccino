@@ -143,9 +143,14 @@ it('divides every producer of a framework-shaped error body between writing the 
         };
     }
 
-    // Well under what the tree holds, and far enough above zero that a scan which stopped recognising
-    // either of its two shapes fails loudly rather than passing on an empty set.
-    expect(count($readers) + count($writers) + count($neither))->toBeGreaterThanOrEqual(4);
+    // Not a floor: this population is five, so no number "well under what the tree holds" is far enough
+    // above zero to mean anything, and the three exact assertions below already fail on a scan that lost
+    // a member or found none. What is owed instead is the PARTITION — every producer the scan found lands
+    // in exactly one bucket, so a classification that answered twice or dropped one shows up here rather
+    // than as a bucket that quietly agrees with a shorter list. The scan's own denominator is guarded
+    // separately, by the test below.
+    expect(array_merge($readers, $writers, $neither))
+        ->toHaveCount(count(adapterFrameworkErrorProducers()));
 
     sort($readers);
     $gated = array_map(static fn (array $row): string => $row[0]::class, array_values(gatedTiers()));
@@ -162,6 +167,88 @@ it('divides every producer of a framework-shaped error body between writing the 
         // the shared table for a status key and a reason phrase and never for a body.
         ->and($neither)->toBe([HandlerResponseBuilder::class]);
 });
+
+it('recognises every class the adapter declares, so none can hide behind a modifier', function (): void {
+    // The union of the two derivations above is only as wide as the set of files the scan can name a class
+    // in, and nothing was asking how wide THAT was: the pattern accepted `final class` and no other
+    // modifier, so `final readonly class` and `abstract class` — 56 files — were outside the guard for the
+    // shape of their declaration. A producer landing in one of them would have been silently uncovered.
+    //
+    // The oracle is PHP's own tokenizer rather than a second regex, so it states the rule independently:
+    // a guard that asks the pattern for its own answer agrees with whatever the pattern does. Anonymous
+    // classes and `Foo::class` are not declarations and are excluded on the token stream, not by pattern.
+    $root = dirname(__DIR__, 3).'/src';
+    $missed = [];
+    $declared = 0;
+
+    /** @var iterable<SplFileInfo> $entries */
+    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($entries as $entry) {
+        if (! $entry->isFile() || $entry->getExtension() !== 'php') {
+            continue;
+        }
+
+        $source = (string) file_get_contents($entry->getPathname());
+        if (! declaresNamedClass($source)) {
+            continue;
+        }
+
+        $declared++;
+        if (preg_match(adapterClassPattern().'/m', $source) !== 1) {
+            $missed[] = substr($entry->getPathname(), strlen($root) + 1);
+        }
+    }
+
+    sort($missed);
+
+    // Well under what the tree holds, and far above zero: a tokenizer walk that stopped recognising a
+    // class declaration would otherwise report perfect agreement over an empty set.
+    expect($declared)->toBeGreaterThan(100)
+        ->and($missed)->toBe([]);
+});
+
+/**
+ * Whether $source declares a named class, read off PHP's token stream: a `T_CLASS` that is neither the
+ * `::class` constant nor an anonymous `new class`. The independent statement of what the scan's pattern
+ * has to recognise.
+ */
+function declaresNamedClass(string $source): bool
+{
+    $tokens = array_values(array_filter(
+        token_get_all($source),
+        static fn (array|string $token): bool => is_string($token) || ! in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true),
+    ));
+
+    foreach ($tokens as $index => $token) {
+        if (is_string($token) || $token[0] !== T_CLASS) {
+            continue;
+        }
+
+        $previous = $tokens[$index - 1] ?? null;
+        $next = $tokens[$index + 1] ?? null;
+
+        // `Foo::class` puts a `::` in front of it; `new class(...) {}` has no name after it.
+        if (is_array($previous) && $previous[0] === T_DOUBLE_COLON) {
+            continue;
+        }
+        if (is_array($next) && $next[0] === T_STRING) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * The declaration of a class, with every modifier PHP lets sit in front of one. `final readonly class`
+ * and `abstract class` are both ordinary here — 56 of the adapter's classes carry one — and a pattern
+ * matching only `final` reads straight past them, which would have left the scan below blind to a
+ * producer for the shape of its declaration rather than for anything it does.
+ */
+function adapterClassPattern(string $tail = ''): string
+{
+    return '/^\s*(?:(?:final|abstract|readonly)\s+)*class\s+(\w+)'.$tail;
+}
 
 /**
  * Every class in the adapter that can come to publish a framework-shaped error body, as FQCN => its
@@ -185,11 +272,11 @@ function adapterFrameworkErrorProducers(): array
         }
 
         $source = (string) file_get_contents($entry->getPathname());
-        if (! preg_match('/^\s*(?:final\s+)?class\s+(\w+)/m', $source, $class)) {
+        if (! preg_match(adapterClassPattern().'/m', $source, $class)) {
             continue;
         }
 
-        $implements = (bool) preg_match('/^\s*(?:final\s+)?class\s+\w+[^{]*\bimplements\b[^{]*\bExceptionToResponse\b/m', $source);
+        $implements = (bool) preg_match(adapterClassPattern('[^{]*\bimplements\b[^{]*\bExceptionToResponse\b').'/m', $source);
         if (! $implements && ! str_contains($source, 'FrameworkExceptionTable::')) {
             continue;
         }
