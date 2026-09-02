@@ -52,6 +52,12 @@ final class ResponseDraftApplier
         }
 
         foreach ($frozen->content ?? [] as $mediaType => $media) {
+            // Registered before its keywords are copied, because a producer that states a media type and
+            // constrains nothing under it — "a body of this type, shape unknown" — states an EMPTY schema,
+            // and a merge driven by the keyword loop alone would read that as nothing to say and drop the
+            // representation the producer had proved.
+            $response->content((string) $mediaType);
+
             $schema = is_array($media) && is_array($media['schema'] ?? null) ? $media['schema'] : [];
             foreach ($schema as $keyword => $value) {
                 if ($keyword === 'x-docuccino') {

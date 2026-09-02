@@ -42,7 +42,10 @@ final class HandlerDeferralSummaryTransformer implements DocumentTransformer
                 severity: Severity::Info,
                 code: 'inferred-handler.too-dynamic',
                 message: sprintf(
-                    'The exception handler %s could not fold a JSON response for %d exception type(s): %s%s; those responses defer to the next error tier.',
+                    // Not "defers to the next tier": where the media type folded and the body did not, the
+                    // tier answers with the media type alone, so what every entry here has in common is
+                    // the shape being missing rather than what the chain did about it.
+                    'The exception handler %s could not fold a JSON response for %d exception type(s): %s%s; those errors are documented without the shape it renders.',
                     // Our words are composed around the scrubbed label, never through it: the exception
                     // FQCNs beside it are namespaces, and the count is a number.
                     $this->messagePaths->relative($summary['callback']),

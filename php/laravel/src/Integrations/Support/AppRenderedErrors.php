@@ -10,8 +10,10 @@ use Docuccino\Core\Extensions\Context\RouteNotes;
 /**
  * The exceptions this route's build watched the APPLICATION's own handler render — a renderer that was
  * found, analysed, and answers with a response of its own instead of handing the throwable back to the
- * framework. Written by the inferred-handler tier as it reads each renderer, whether or not it could
- * publish what it read.
+ * framework — and could not publish what it read. Written by the inferred-handler tier where it
+ * DECLINES, which is where the readers below are reached: the chain stops at the first tier to answer,
+ * so an exception this one answered for is never put to another, and a note recorded there would say
+ * something nothing can hear.
  *
  * The tiers behind it read it to know when to stop talking. A framework-default body is a claim about
  * what the FRAMEWORK renders, and an application that demonstrably renders the exception itself has

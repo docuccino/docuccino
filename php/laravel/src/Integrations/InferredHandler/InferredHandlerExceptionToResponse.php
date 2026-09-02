@@ -74,29 +74,34 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
         $context->recordDependencyFiles($analysis->dependencyFiles);
         $this->reportIllegalNames($analysis, $context, $components);
 
-        // Recorded before anything is published, and whether or not the body could be read: the fact the
-        // tiers behind this one need is that the APPLICATION renders this exception, not that this tier
-        // managed to document it ({@see AppRenderedErrors}).
-        if ($analysis->returns !== [] && ! HandlerResponseBuilder::isDelegation($analysis)) {
-            AppRenderedErrors::record($context, $exception->exceptionFqcn, $callable->target());
-        }
-
         $response = HandlerResponseBuilder::build(
             $analysis,
             $context,
             Contribution::integration('inferred-handler'),
             $exception,
+            $callable->target(),
         );
         if ($response !== null) {
             return $response;
         }
 
-        // Nothing recovered. A framework delegation (`return null`/void arm) is expected, so defer
-        // quietly; a real fold failure is noted per callback for one summary diagnostic at build. The note
-        // goes on the ROUTE and not into the log the summary reads: it has to ride this route's fragment,
-        // or a warm build comes back without the summary a cold one publishes ({@see HandlerDeferralLog}).
+        // Declined, so the chain moves on — and the two notes below are both messages to what comes next.
+        // The gate says the APPLICATION renders this exception and this build could not read what it
+        // renders it to, which is exactly the question the tiers behind ask before publishing a body of
+        // the framework's ({@see AppRenderedErrors}); recording it where the tier ANSWERED would write a
+        // fact nothing can read, since no later tier is asked about an exception already answered for.
+        // A framework delegation (`return null`/void arm) is neither: the framework really does render
+        // those, so the gate stays open and the deferral goes unnoted. An analysis that recovered no
+        // return at all refutes nothing either, though it is still a fold that failed.
+        if ($analysis->returns !== [] && ! HandlerResponseBuilder::isDelegation($analysis)) {
+            AppRenderedErrors::record($context, $exception->exceptionFqcn, $callable->target());
+        }
+
+        // The deferral is noted per callback for one summary diagnostic at build. The note goes on the
+        // ROUTE and not into the log the summary reads: it has to ride this route's fragment, or a warm
+        // build comes back without the summary a cold one publishes ({@see HandlerDeferralLog}).
         if (! HandlerResponseBuilder::isDelegation($analysis)) {
-            $context->notes()->record(HandlerDeferralLog::CHANNEL, $callable->target(), $exception->exceptionFqcn);
+            HandlerDeferralLog::record($context, $callable->target(), $exception->exceptionFqcn);
         }
 
         return null;

@@ -12,7 +12,9 @@ use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ReturnSite;
@@ -240,4 +242,32 @@ it('is about the body alone — the status a tier classifies never moves', funct
     expect($gated)->toBeInstanceOf(ResponseDraft::class)
         ->and($gated?->status)->toBe($open?->status)
         ->and($gated?->freeze()->description)->toBe($open?->freeze()->description);
+});
+
+it('records nothing where the tier ANSWERED, since no tier behind is asked about it', function (): void {
+    // The gate exists to stand the tiers behind down, and they are only reached where this tier declines
+    // — `RouteContext::mapThrow()` stops at the first answer. A renderer whose media type folded and whose
+    // body did not is answered for HERE, so a note about it could be read by nothing; recording one would
+    // be state written for a reader that no longer exists. The paired row below is the same renderer with
+    // no media type to keep, which still declines and still owes the note.
+    $symbol = registerRenderCallback(
+        static fn (ProbeRejection $e) => response()->json(['dynamic' => true], 400, ['Content-Type' => 'application/problem+json']),
+        ProbeRejection::class,
+    );
+
+    $answered = gateContext('default', WorkbenchEngine::make([$symbol => new ActionAnalysis(returns: [new ReturnSite(
+        new ClassT('Illuminate\\Http\\JsonResponse', [new UnknownT('payload not folded'), new UnknownT('status not folded'), new LiteralT('application/problem+json')]),
+        new SourceLocation(''),
+    )])]));
+    $declined = gateContext('default', WorkbenchEngine::make([$symbol => new ActionAnalysis(returns: [new ReturnSite(
+        new ClassT('Illuminate\\Http\\JsonResponse', [new UnknownT('payload not folded'), new UnknownT('status not folded')]),
+        new SourceLocation(''),
+    )])]));
+
+    $tier = app(InferredHandlerExceptionToResponse::class);
+
+    expect($tier->toResponse(gateThrow(ProbeRejection::class), $answered, new ComponentRegistry))->not->toBeNull()
+        ->and(AppRenderedErrors::includes($answered, ProbeRejection::class))->toBeFalse()
+        ->and($tier->toResponse(gateThrow(ProbeRejection::class), $declined, new ComponentRegistry))->toBeNull()
+        ->and(AppRenderedErrors::includes($declined, ProbeRejection::class))->toBeTrue();
 });

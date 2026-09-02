@@ -142,6 +142,7 @@ it('completes an example whose required members did not all fold', function (): 
         handlerContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -170,6 +171,7 @@ it('keeps an example whose literals cover every required member', function (): v
         handlerContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -189,6 +191,7 @@ it('keeps an example when the shape requires nothing at all', function (): void 
         handlerContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -204,6 +207,7 @@ function objectExample(array $members, int $status = 422): array
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -251,6 +255,7 @@ it('leaves out a member the branch renders only sometimes', function (): void {
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -277,6 +282,7 @@ it('still shows a sometimes-rendered member the schema requires of every respons
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -327,6 +333,7 @@ it('documents an object body under the status its own construction folded', func
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(500),
+        'App\\Exceptions\\Handler::render',
     );
 
     $frozen = $draft?->freeze()->toArray() ?? [];
@@ -347,6 +354,7 @@ it('keeps the hint when nothing in the body states a status either', function ()
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(500),
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($draft?->status)->toBe('500');
@@ -380,6 +388,7 @@ it('fills a member from the value its own schema states, not from its type', fun
         $context,
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)->toBe([
@@ -409,6 +418,7 @@ it('still pins a status member to the response status over a stated default', fu
         $context,
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     expect($draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null)
@@ -431,6 +441,7 @@ it('leaves out a supplied member the schema declares no type for', function (): 
         $context,
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $content = $draft?->freeze()->toArray()['content']['application/problem+json'] ?? [];
@@ -459,6 +470,7 @@ it('illustrates a nullable member through its non-null branch', function (): voi
         $context,
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $example = $draft?->freeze()->toArray()['content']['application/problem+json']['example'] ?? null;
@@ -475,6 +487,7 @@ it('falls back to the required members when no construction was seen at all', fu
         problemDocumentContext(),
         Contribution::integration('inferred-handler'),
         handlerThrow(422),
+        'App\\Exceptions\\Handler::render',
     );
 
     $content = $draft?->freeze()->toArray()['content']['application/problem+json'] ?? [];

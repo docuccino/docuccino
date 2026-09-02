@@ -89,11 +89,19 @@ the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Un
 so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
 handler is too dynamic to read statically, Docuccino records a diagnostic and moves on to the next tier.
 
-The two halves are read separately. A handler whose **body** reads but whose status does not — a status
-off `$e->getCode()`, an enum method, or an `HttpException` subclass that sets its own — still publishes
-that body, under the status the framework classifies the exception as. Documenting the shape your server
-actually sends matters more than the number it is filed under, and the number is the one every other tier
-would have used anyway.
+Each part of the response is read on its own. A handler whose **body** reads but whose status does not — a
+status off `$e->getCode()`, an enum method, or an `HttpException` subclass that sets its own — still
+publishes that body, under the status the framework classifies the exception as. Documenting the shape
+your server actually sends matters more than the number it is filed under, and the number is the one every
+other tier would have used anyway.
+
+The same holds one step further down. When the body will not read but the **content type** does — you set
+`['Content-Type' => 'application/problem+json']` on the response and built the payload somewhere Docuccino
+cannot follow — the error is documented under that content type with a schema that constrains nothing.
+Publishing nothing would say the error returns no body, and borrowing a shape from a later tier would name
+members your server never sends; "a body of this type, contents unknown" is the statement your code
+supports. Clients lose type safety for that one error and no more, and the diagnostic names the callback
+to make readable.
 
 ### Responses built through a helper
 
@@ -430,8 +438,12 @@ Both of those bodies are the **framework's**, so neither is published over a han
 replaces it. Where Docuccino can see that your handler renders an exception and cannot read what it
 renders it to, the response keeps its status and its description and carries no body at all — a shape
 your server does not send would leave every generated client with the wrong type for that error. The
-diagnostic names the callback to fix; the [Problem Details preset](#the-problem-details-preset-opt-in) is not
-affected, since a document that opted into it has declared that shape itself.
+diagnostic names the callback to fix.
+
+The [Problem Details preset](#the-problem-details-preset-opt-in) still answers in that case: a document that
+opted into it has declared that shape itself, and a handler nobody could read has not contradicted it. What
+does contradict it is a handler that named a content type — that reading comes from your code, so it is
+published instead, unconstrained.
 
 ## Implicit responses (middleware, bindings & validation)
 
