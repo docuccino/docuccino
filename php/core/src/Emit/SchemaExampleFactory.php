@@ -7,6 +7,7 @@ namespace Docuccino\Core\Emit;
 use Docuccino\Core\Canonical\Canonicalizer;
 use Docuccino\Core\Draft\SchemaKeywords;
 use Docuccino\Core\Support\Arr;
+use Docuccino\Core\Support\BoundedNumber;
 use Docuccino\Core\Support\FormatSamples;
 use Docuccino\Core\Support\JsonValue;
 use stdClass;
@@ -60,6 +61,9 @@ final readonly class SchemaExampleFactory
 {
     /** Deep enough for any real payload; past it a self-referential schema is the likelier reading. */
     private const int MAX_DEPTH = 8;
+
+    /** Where a bounded number starts from — the neutral one, moved onto the nearest value the bounds admit. */
+    private const int NUMBER_SEED = 0;
 
     /**
      * @param  array<string, string>  $formatSamples  the document's configured samples, merged over
@@ -367,11 +371,17 @@ final readonly class SchemaExampleFactory
      */
     private function byType(array $schema, array $components, int $depth, array $stack): ?array
     {
-        return match ($this->type($schema)) {
+        $type = $this->type($schema);
+
+        return match ($type) {
             'object' => $this->object($schema, $components, $depth, $stack),
             'array' => $this->list($schema, $components, $depth, $stack),
             'string' => [$this->string($schema)],
-            'integer', 'number' => [$this->number($schema)],
+            // A bound both constrains a value and NAMES one, so the nearest legal number is what a
+            // consumer gets ({@see BoundedNumber} for the ladder, which every producer of a
+            // representative value reads). Bounds that cross admit nothing, and this factory has
+            // somewhere to put that: no value, so the position leaves the member out.
+            'integer', 'number' => BoundedNumber::nearest($schema, self::NUMBER_SEED, $type === 'integer'),
             'boolean' => [true],
             'null' => [null],
             default => [null],
@@ -679,16 +689,6 @@ final readonly class SchemaExampleFactory
         $format = $schema['format'] ?? null;
 
         return is_string($format) ? (FormatSamples::for($format, $this->formatSamples) ?? 'string') : 'string';
-    }
-
-    /**
-     * @param  array<string, mixed>  $schema
-     */
-    private function number(array $schema): int|float
-    {
-        $minimum = $schema['minimum'] ?? null;
-
-        return is_int($minimum) || is_float($minimum) ? $minimum : 0;
     }
 
     /**

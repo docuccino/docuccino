@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Support\BoundedNumber;
 use Docuccino\Core\Support\FormatSamples;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\FrameworkClasses;
@@ -86,6 +87,9 @@ final class HandlerResponseBuilder
 {
     /** How far a placeholder follows nested schemas before flattening — a self-referential one never ends. */
     private const PLACEHOLDER_DEPTH = 4;
+
+    /** Where a bounded number starts from — the neutral one, moved onto the nearest value the bounds admit. */
+    private const NUMBER_SEED = 0;
 
     /** What a `JsonResponse` is sent as when the render path stated no content type of its own. */
     private const DEFAULT_MEDIA_TYPE = 'application/json';
@@ -487,9 +491,13 @@ final class HandlerResponseBuilder
      * REJECTS — so a member the document declares two lines up as one of a fixed set of codes, or as a
      * date-time, would otherwise be illustrated by something the build's own example lint reports every
      * time (`lint.example-mismatch`), against an example its reader never wrote and cannot correct. A
-     * keyword stating a CONSTRAINT rather than a value — `pattern`, the length and range bounds — is
-     * deliberately not read: no constant satisfies an arbitrary regex, and nothing in this corpus states
-     * one on a body member this tier fills. The lint remains the backstop there.
+     * numeric bound is read for the same reason and by the same table every other producer of a
+     * representative value reads ({@see BoundedNumber}): it constrains a value and it also names one, so
+     * `minimum: 5` is answered by 5 where `0` is a value that schema rejects.
+     *
+     * A constraint that names NO value stays unread: no constant satisfies an arbitrary `pattern`, and
+     * nothing in this corpus states a length bound on a body member this tier fills. The lint remains the
+     * backstop there.
      *
      * The second half of the answer is whether the value came from the type rather than from something
      * the schema STATED, which is the whole question {@see placeholder()} passes on. It is answered here
@@ -546,11 +554,16 @@ final class HandlerResponseBuilder
             return [$deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : new stdClass, true];
         }
 
-        return [match (true) {
-            self::isType($type, 'integer'), self::isType($type, 'number') => 0,
-            self::isType($type, 'boolean') => true,
-            default => 'string',
-        }, true];
+        if (self::isType($type, 'integer') || self::isType($type, 'number')) {
+            $bounded = BoundedNumber::nearest($spec, self::NUMBER_SEED, self::isType($type, 'integer'));
+
+            // Bounds that cross admit no number at all, and this tier has nowhere to put that — dropping
+            // the member would drop the whole example. So the seed stands and the build's example lint
+            // names the contradiction the document itself carries, which its reader CAN act on.
+            return [$bounded === null ? self::NUMBER_SEED : $bounded[0], true];
+        }
+
+        return [self::isType($type, 'boolean') ? true : 'string', true];
     }
 
     /**
@@ -620,17 +633,21 @@ final class HandlerResponseBuilder
     }
 
     /**
-     * The schema a placeholder is actually derived from: the reference followed, and a nullable branch
+     * The schema a placeholder is actually derived from: the reference followed, a conjunction reduced to
+     * the one schema its branches add up to ({@see conjoined()}), and a nullable branch
      * (`anyOf: [X, {type: null}]` — how a nullable `$ref` or composite is expressed) reduced to `X`, since
      * illustrating the null branch would show nothing. The first non-null branch wins for a wider union;
      * picking one member of a union is what an example is.
+     *
+     * A union's chosen branch is reduced again, because a nullable intersection arrives as a conjunction
+     * INSIDE the branch.
      *
      * @param  array<array-key, mixed>  $spec
      * @return array<array-key, mixed>
      */
     private static function effectiveSpec(array $spec, RouteContext $context): array
     {
-        $spec = self::resolveSchema($spec, $context);
+        $spec = self::conjoined(self::resolveSchema($spec, $context), $context);
         $branches = $spec['anyOf'] ?? $spec['oneOf'] ?? null;
 
         if (! is_array($branches)) {
@@ -639,11 +656,82 @@ final class HandlerResponseBuilder
 
         foreach ($branches as $branch) {
             if (is_array($branch) && ! self::isType($branch['type'] ?? null, 'null')) {
-                return self::resolveSchema($branch, $context);
+                return self::conjoined(self::resolveSchema($branch, $context), $context);
             }
         }
 
         return $spec;
+    }
+
+    /**
+     * An `allOf` reduced to the single schema its branches add up to — how an intersection-typed member
+     * reaches the document, and without this the member has no readable type at all and gets illustrated
+     * `"string"`, a value every branch of it rejects.
+     *
+     * The rule: each branch's keywords accumulate in BRANCH ORDER and the first statement of a keyword
+     * wins, except `properties`, which accumulate member by member under that same rule, and `required`,
+     * which unions — for those two the conjunction of the branches IS their union. A keyword two branches
+     * spell differently is a contradiction the document already carries, and the first branch is the one
+     * every other reader of the document shows (the same authored-order reading `enum` and a union's
+     * branches get); the example lint names the contradiction.
+     *
+     * One level: a branch that is a boolean is no schema object and states nothing, and a branch carrying
+     * a conjunction OF ITS OWN is left folded rather than followed, since a `$ref` cycle through one would
+     * not end and nothing mints the shape. The answer therefore never states an `allOf`.
+     *
+     * @param  array<array-key, mixed>  $spec
+     * @return array<array-key, mixed>
+     */
+    private static function conjoined(array $spec, RouteContext $context): array
+    {
+        $branches = $spec['allOf'] ?? null;
+
+        if (! is_array($branches)) {
+            return $spec;
+        }
+
+        unset($spec['allOf']);
+
+        foreach ($branches as $branch) {
+            if (is_array($branch)) {
+                $spec = self::conjoin($spec, self::resolveSchema($branch, $context));
+            }
+        }
+
+        return $spec;
+    }
+
+    /**
+     * One branch folded into what the conjunction has so far, under the rule {@see conjoined()} states.
+     *
+     * @param  array<array-key, mixed>  $into
+     * @param  array<array-key, mixed>  $branch
+     * @return array<array-key, mixed>
+     */
+    private static function conjoin(array $into, array $branch): array
+    {
+        foreach ($branch as $keyword => $value) {
+            $existing = $into[$keyword] ?? null;
+
+            if ($keyword === 'allOf') {
+                // A conjunction of its own, which this reduction does not follow — carrying it forward
+                // would leave the answer stating a keyword the reduction promises to have removed.
+                continue;
+            }
+
+            if ($keyword === 'properties' && is_array($value)) {
+                $into['properties'] = (is_array($existing) ? $existing : []) + $value;
+            } elseif ($keyword === 'required' && is_array($value)) {
+                $into['required'] = array_values(array_unique([
+                    ...array_values(is_array($existing) ? $existing : []),
+                    ...array_values($value),
+                ], SORT_REGULAR));
+            } elseif (! array_key_exists($keyword, $into)) {
+                $into[$keyword] = $value;
+            }
+        }
+
+        return $into;
     }
 
     /**
