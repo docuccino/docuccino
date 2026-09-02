@@ -43,10 +43,10 @@ final class DefaultExceptionToResponse implements ExceptionToResponse
         RouteContext $context,
         ComponentRegistry $components,
     ): ResponseDraft {
-        // A status nothing read is keyed at the shared unplaced status rather than at a number this tier
-        // picks, so every tier that may also publish this error keys it the same way.
+        // A status nothing read is keyed at the exception's shared classification rather than at a number
+        // this tier picks, so every tier that may also publish this error keys it the same way.
         $status = $exception->httpStatusHint === null
-            ? FrameworkExceptionTable::UNPLACED_STATUS
+            ? FrameworkExceptionTable::classification($exception->exceptionFqcn)
             : (string) $exception->httpStatusHint;
 
         $draft = new ResponseDraft($status);

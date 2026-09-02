@@ -8,9 +8,9 @@ use Illuminate\Http\JsonResponse;
 use Throwable;
 
 /**
- * One arm, one problem document, and two members it can only ask the failure for. The words it writes out
- * fold; the enum and the instant do not, so the example beside the schema has to be filled at exactly the
- * two members the schema itself says the most about.
+ * One arm, one problem document, and four members it can only ask the failure for. The words it writes out
+ * fold; the enum, the instant, the flag and the extension bag do not, so the example beside the schema has
+ * to be filled at every member the schema itself is the only thing that describes.
  */
 final class ExportProblemRenderer
 {
@@ -26,6 +26,8 @@ final class ExportProblemRenderer
             status: 409,
             reason: $e->reason(),
             failedAt: $e->failedAt(),
+            retryable: $e->retryable(),
+            context: $e->context(),
         ))->toProblemResponse();
     }
 }

@@ -21,6 +21,7 @@ use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Support\FormatSamples;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\FrameworkClasses;
+use stdClass;
 
 /**
  * Builds an error {@see ResponseDraft} from a handler/closure analysis (design §6): reads the recovered
@@ -53,17 +54,21 @@ use Docuccino\Laravel\Support\FrameworkClasses;
  * ({@see build()}).
  *
  * The MEDIA TYPE is one of those four because no later tier reads the renderer — they assert
- * `application/json` off a classification of the exception CLASS. Where the render path folded the type
- * and not the payload, the true statement is "a body of this media type, shape unknown", and the response
- * carries that type under an EMPTY schema, which is what a media type with no keyword written into it
- * freezes to. Of the three shapes available it is the only honest one: `{type: object}` claims a JSON
- * object the build never saw (the payload may be a list or a scalar), and omitting `schema` leaves a
- * generator choosing between "any body" and "no body", which is the ambiguity this answers. An empty
- * schema also hoists nowhere, so no component is minted for a shape nobody read. The cost is type safety
- * and never truth, which is the trade the degraded-answer rule asks for. Provenance is no weaker than a
- * folded body's — the same producer read the same render path — so the write is the same contribution,
- * and the half that did NOT fold is said where an author acts on it: the `inferred-handler.too-dynamic`
- * summary still names the callback ({@see HandlerDeferralLog}).
+ * `application/json` off a classification of the exception CLASS. And wherever this tier answers with no
+ * body at all, the true statement is "a body of this media type, shape unknown": the response carries
+ * that type under an EMPTY schema, which is what a media type with no keyword written into it freezes
+ * to. Of the three shapes available it is the only honest one: `{type: object}` claims a JSON object the
+ * build never saw (the payload may be a list or a scalar), and omitting `schema` leaves a generator
+ * choosing between "any body" and "no body" — and publishing no `content` picks the wrong one of those
+ * two outright, since a tier that ANSWERS leaves nobody behind it to say otherwise. An empty schema also
+ * hoists nowhere, so no component is minted for a shape nobody read. The cost is type safety and never
+ * truth, which is the trade the degraded-answer rule asks for. Which type: the one the render path folded
+ * where it folded one, and `application/json` where it did not, because the recovered class is a
+ * `JsonResponse` and that is what one sends — the same reading the folded-body branch makes. Provenance
+ * is no weaker than a folded body's — the same producer read the same render path — so the write is the
+ * same contribution, and the half that did NOT fold is said where an author acts on it, on every path
+ * that publishes a shapeless body: the `inferred-handler.too-dynamic` summary names the callback
+ * ({@see HandlerDeferralLog}).
  *
  * When the body is an object the engine watched being constructed, the fourth type arg names the arguments
  * it was built with, and those decide the example's membership rather than the schema's `required` list: an
@@ -103,19 +108,14 @@ final class HandlerResponseBuilder
             $statusArg = $type->typeArgs[1] ?? null;
             $mediaType = self::statedContentType($type->typeArgs[2] ?? null);
 
-            $status = self::foldStatus($statusArg, $payload, $members, $exception->httpStatusHint);
-            if ($status === null) {
-                // Nothing anywhere stated a status. What the render path FOLDED is still proven — the
-                // shape, or at least the media type it is sent as — and the only thing missing is the key
-                // to file it under, so it is filed under the exception's classification rather than
-                // dropped onto a tier that would assert a different media type over it. With neither,
-                // there is nothing to keep and the decline below is the whole answer.
-                if (! self::statesBody($payload) && $mediaType === null) {
-                    return null;
-                }
-
-                $status = FrameworkExceptionTable::classification($exception->exceptionFqcn);
-            }
+            // Nothing anywhere stated a status. What the render path FOLDED is still proven — the shape,
+            // or at least the media type it is sent as — and the only thing missing is the key to file it
+            // under, so it is filed under the exception's classification rather than dropped onto a tier
+            // that would assert a different media type over it. With neither there is nothing to keep,
+            // which the one guard below answers for this branch too: a classification is never a status
+            // HTTP forbids a body on, so the guard reduces to exactly "no body and no media type here".
+            $status = self::foldStatus($statusArg, $payload, $members, $exception->httpStatusHint)
+                ?? FrameworkExceptionTable::classification($exception->exceptionFqcn);
 
             $draft = new ResponseDraft($status);
 
@@ -125,11 +125,6 @@ final class HandlerResponseBuilder
             // body is asked ({@see ExceptionToResponse}: null defers). So the tier declines, exactly as its
             // own contract says it does for a body too dynamic to fold, and the deferral log turns it into
             // one `inferred-handler.too-dynamic` diagnostic naming the callback.
-            //
-            // Which is also why the branch above declines when {@see foldStatus()} came back empty and no
-            // body folded either: with no status on either side and none on the throw — an HttpException
-            // subclass whose own is unreadable arrives exactly so — a tier with nothing to say would be
-            // writing a number nothing stated onto a response with no content.
             //
             // A status HTTP forbids a body on is no failure — there, no content is the truth. Neither is a
             // status this tier FOLDED itself, nor a MEDIA TYPE it folded: each is a fact no later tier has
@@ -161,13 +156,16 @@ final class HandlerResponseBuilder
                 if ($example !== [] && self::satisfies($example, self::resolveSchema($schema, $context))) {
                     $draft->setExample($media, $example, $placeholders);
                 }
-            } elseif (! $draft->isBodyless() && $mediaType !== null) {
-                // The widened answer: the representation is read off the render path, the shape is not.
-                // Registering the media type and writing no keyword into it is what publishes an empty
-                // schema — see the class docblock for why that beats both `{type: object}` and no schema
-                // at all. The author is told the shape was lost, since a partial recovery that says
-                // nothing is a silent degradation.
-                $draft->content($mediaType);
+            } elseif (! $draft->isBodyless()) {
+                // The widened answer: the representation is stated, the shape is not. Registering the
+                // media type and writing no keyword into it is what publishes an empty schema — see the
+                // class docblock for why that beats both `{type: object}` and no schema at all. Where the
+                // render path folded no type of its own the response is a `JsonResponse`, which sends
+                // `application/json` — the same reading the folded-body branch above makes, and the only
+                // one that keeps a response the tier ANSWERS for from claiming the error has no body. The
+                // author is told the shape was lost, since a partial recovery that says nothing is a
+                // silent degradation.
+                $draft->content($mediaType ?? self::DEFAULT_MEDIA_TYPE);
                 HandlerDeferralLog::record($context, $renderer, $exception->exceptionFqcn);
             }
 
@@ -431,17 +429,22 @@ final class HandlerResponseBuilder
     }
 
     /**
-     * The entry an `enum` illustrates itself with, or null where the schema states none. The FIRST entry: a
-     * list's order is authored, so every other reader of the document shows that same branch. A null there
-     * counts as unstated, exactly as it does in {@see statedValue()}.
+     * The entry an `enum` illustrates itself with, wrapped so a null entry is distinguishable from a
+     * schema stating no enum at all; null where it states none. The FIRST entry: a list's order is
+     * authored, so every other reader of the document shows that same branch.
+     *
+     * Wrapped rather than bare because the two readings are opposite here, unlike in
+     * {@see statedValue()}: an entry of `null` is a value the enum ADMITS, so falling through to the
+     * type would illustrate the member with something the same two lines of schema reject.
      *
      * @param  array<array-key, mixed>  $spec
+     * @return array{mixed}|null
      */
-    private static function enumValue(array $spec): mixed
+    private static function enumValue(array $spec): ?array
     {
         $enum = $spec['enum'] ?? null;
 
-        return is_array($enum) && $enum !== [] ? array_values($enum)[0] : null;
+        return is_array($enum) && $enum !== [] ? [array_values($enum)[0]] : null;
     }
 
     /**
@@ -514,7 +517,7 @@ final class HandlerResponseBuilder
 
         $enumValue = self::enumValue($spec);
         if ($enumValue !== null) {
-            return [$enumValue, true];
+            return [$enumValue[0], true];
         }
 
         $format = $spec['format'] ?? null;
@@ -537,28 +540,33 @@ final class HandlerResponseBuilder
         }
 
         if (self::isType($type, 'object')) {
-            return [$deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : [], true];
+            // Never `[]`: a PHP array cannot spell the empty JSON object, and one published beside a
+            // `type: object` is an example that same schema rejects (design §1, "The empty-object
+            // invariant"). The depth cap answers the same way, for the same reason.
+            return [$deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : new stdClass, true];
         }
 
         return [match (true) {
             self::isType($type, 'integer'), self::isType($type, 'number') => 0,
-            self::isType($type, 'boolean') => false,
+            self::isType($type, 'boolean') => true,
             default => 'string',
         }, true];
     }
 
     /**
-     * A nested object's required members only. An object requiring nothing comes out empty rather than
-     * inventing a key, which is still a truthful instance of it.
+     * A nested object's required members only. An object requiring nothing comes out EMPTY rather than
+     * inventing a key, which is still a truthful instance of it — and empty is a {@see stdClass}, never
+     * `[]`, because a PHP array cannot spell `{}` and the array writes back as a JSON list the schema
+     * beside it rejects (design §1, "The empty-object invariant").
      *
      * @param  array<array-key, mixed>  $spec
-     * @return array<string, mixed>
+     * @return array<string, mixed>|stdClass
      */
-    private static function objectPlaceholder(array $spec, RouteContext $context, int $depth): array
+    private static function objectPlaceholder(array $spec, RouteContext $context, int $depth): array|stdClass
     {
         $properties = $spec['properties'] ?? null;
         if (! is_array($properties)) {
-            return [];
+            return new stdClass;
         }
 
         $required = is_array($spec['required'] ?? null) ? $spec['required'] : [];
@@ -571,7 +579,7 @@ final class HandlerResponseBuilder
             }
         }
 
-        return $example;
+        return $example === [] ? new stdClass : $example;
     }
 
     /**

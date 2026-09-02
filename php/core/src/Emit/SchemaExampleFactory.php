@@ -19,6 +19,7 @@ use stdClass;
  * is fixed in advance and never taken from encounter order: a map of `examples` picks its lowest key,
  * because JSON object order is not an authored fact, while `enum` and `oneOf` pick their first entry,
  * because a list's order IS authored and every other reader of the document shows the same branch.
+ * Where a schema states a value AND pins one, the pin wins ({@see stated()}).
  *
  * An empty object comes back as a {@see stdClass}, not `[]` ({@see JsonValue} for that convention). The
  * value is serialised into a JSON string for the collection, and an empty PHP array would render as
@@ -208,6 +209,14 @@ final readonly class SchemaExampleFactory
      */
     private function stated(array $schema): ?array
     {
+        // `const` outranks everything, an author's own `example` included: it is the one keyword that
+        // leaves a SINGLE legal value, so any other value stated beside it is one this very schema
+        // rejects. `enum` does not move up with it — it leaves several legal values, and an author's
+        // example is normally one of them and the better illustration for having been chosen.
+        if (array_key_exists('const', $schema)) {
+            return [$schema['const']];
+        }
+
         $illustration = $this->illustration($schema);
         if ($illustration !== null) {
             return $illustration;
@@ -215,10 +224,6 @@ final readonly class SchemaExampleFactory
 
         if (array_key_exists('default', $schema)) {
             return [$schema['default']];
-        }
-
-        if (array_key_exists('const', $schema)) {
-            return [$schema['const']];
         }
 
         if (isset($schema['enum']) && is_array($schema['enum']) && $schema['enum'] !== []) {
