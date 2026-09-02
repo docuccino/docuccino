@@ -573,7 +573,7 @@ try-it panel and every generated snippet start filled in rather than blank:
 | `email` / `url` / `ip` / `uuid` / `ulid` | `user@example.com` · `https://example.com` · `192.0.2.1` · a sample UUID / ULID |
 | `date` (and an ISO `date_format`) | `2024-01-01` |
 | `in:GBP,USD,EUR`, `Rule::enum(Currency::class)` | `GBP` — the first member, the one every viewer and generator shows |
-| `integer\|min:18`, `numeric\|between:0,10`, `gte:1` | the lowest legal value: `18`, `1`, `1` |
+| `integer\|min:18`, `numeric\|between:0,10`, `gte:1` | `18`, `1`, `1` — the value `1`, raised to any floor, dropped to any ceiling, stepped clear of an exclusive bound, and last of all moved onto a `multiple_of` |
 | `string\|max:100`, `size:5`, `min:12` | a sample of a length the bound allows |
 | `digits:5` | `12345` — a digit run, so leading zeros stay possible |
 | `alpha`, `alpha_dash`, `starts_with:ACME-`, `ends_with:.png` | a value the pattern accepts |

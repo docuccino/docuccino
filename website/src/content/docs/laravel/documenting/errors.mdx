@@ -10,7 +10,7 @@ documents them for you by reading how your application actually handles exceptio
 to sensible defaults for the framework's built-in ones.
 
 For each exception an endpoint can throw, Docuccino resolves a response through three tiers. The first
-tier that can produce a shape wins, and your [attributes](/laravel/reference/attributes/#response),
+tier with something to say wins, and your [attributes](/laravel/reference/attributes/#response),
 docblocks, overlays or config always override the result:
 
 <Steps>
@@ -24,6 +24,11 @@ docblocks, overlays or config always override the result:
    that status (`500` when the status can't be determined), so an error is never simply undocumented.
 
 </Steps>
+
+Answering is not the same as filling in a body. Where Docuccino can see that your own handler renders an
+exception and cannot read what it renders it to, the tier that answers publishes the status and its reason
+phrase and leaves the body unsaid: a stock shape is a claim about what the *framework* sends, and your code
+has already refuted it. [Framework defaults](#framework-defaults) has the detail.
 
 Docuccino has no error *preset* to turn on, and needs none: an application that answers
 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` is documented as answering
@@ -90,7 +95,9 @@ directly from the code:
 Throw this from an action and a `402` response with that body shape is documented. The description is
 the RFC 9110 reason phrase for the status (`401` is `Unauthorized`, `422` is `Unprocessable Entity`, and
 so on); a status without a standard phrase — like `402` here — is documented with a generic `Error`. If a
-handler is too dynamic to read statically, Docuccino records a diagnostic and moves on to the next tier.
+handler is too dynamic to read statically, Docuccino records a diagnostic and publishes what it *did* read;
+where it read nothing at all the response falls to the next tier, which answers with the status alone
+wherever it can see a renderer of yours returning a response for that exception.
 
 Each part of the response is read on its own. A handler whose **body** reads but whose status does not — a
 status off `$e->getCode()`, an enum method, or an `HttpException` subclass that sets its own — still
@@ -105,6 +112,36 @@ Publishing nothing would say the error returns no body, and borrowing a shape fr
 members your server never sends; "a body of this type, contents unknown" is the statement your code
 supports. Clients lose type safety for that one error and no more, and the diagnostic names the callback
 to make readable.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Exceptions/ProblemRenderer.php
+	public function __invoke(ModelNotFoundException $e): JsonResponse
+	{
+	    // The label is a literal on the call; the payload comes back from a formatter
+	    // resolved at run time, so nothing static can say what shape it takes.
+	    return response()->json($this->format($e), 404, [
+	        'Content-Type' => 'application/problem+json',
+	    ]);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"404": {
+	  "description": "Not Found",
+	  "content": {
+	    "application/problem+json": {
+	      "schema": {}
+	    }
+	  }
+	}
+	```
+	</TabItem>
+</Tabs>
+
+An empty schema hoists nowhere, so nothing is minted into `components` for a shape nobody read.
 
 ### Responses built through a helper
 
@@ -190,14 +227,33 @@ fill is confined to examples; nothing invented ever reaches a schema.
 | Member | In the example |
 | --- | --- |
 | Folded to a literal, or pinned by a `const` | Its real value, verbatim. |
-| Required, didn't fold | A placeholder for its type. An object gets its own required members; an array with `items` gets one element, built the same way. |
+| Carrying an `example` or a `default` of its own | That value. Your own word for what a member looks like beats anything derived from its type. |
+| Required, didn't fold | Filled from the member's own schema — see the ladder below. |
 | Optional, and the code didn't supply it | Left out — the example is *this* branch's body, not the union of every branch's. |
 | Supplied by the code, optional in the schema | Included: being passed here is the stronger fact. |
 | Optional, supplied, no type stated | Left out. `"string"` for what may well be a list would state what the code never said. |
 | Required, no type stated | Filled with `"string"` anyway — dropping an otherwise-complete example is worse. |
 
-Nullable members are illustrated through their non-null branch, `$ref`s are followed, and placeholders
-stop at a small depth so a self-referential problem document can't unroll forever.
+**A member is filled from every keyword that names a value, and its bare type is the last of them.** The
+schema printed beside the example is the honest half of what is known about that member, so the fill reads
+all of it rather than the `type` alone — an `enum` illustrated `"string"` would be a body your server
+refuses, and the [example lint](/laravel/reference/configuration/#lint) would then report it against an
+example you never wrote and cannot correct:
+
+| The member's schema says | The example shows |
+| --- | --- |
+| `enum` | Its first entry — a list's order is yours, and it's the branch every other reader of the document shows. |
+| `format` | The sample for that format, from the same table [`representation.examples.formats`](/laravel/reference/configuration/#representation) configures. |
+| A numeric bound — `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | A number those bounds admit. `minimum: 5` shows `5`, because `0` is a value that schema rejects. |
+| `allOf` | The one schema its branches add up to, read again by these same rules — an intersection-typed member has no readable type of its own. |
+| Only a type | `"string"`, `0`, `true`, an object's own required members, or a one-element array built the same way. |
+
+`pattern` and the length bounds are deliberately **not** read: they constrain a value without naming one,
+and no constant satisfies an arbitrary regex. A member described that way is illustrated from its type, and
+the example lint is what tells you the two disagree.
+
+Nullable members are illustrated through their non-null branch, `$ref`s are followed, and the fill
+stops at a small depth so a self-referential problem document can't unroll forever.
 
 One refusal is deliberate: a constructor argument written as a **credential-named** constant
 (`self::SIGNING_KEY`) is never folded, because a folded literal becomes a published example. Its
@@ -252,8 +308,15 @@ reading the method body: a `match ($this)` arm for that case, or a plain constan
 The bounds are deliberate:
 
 - A method whose body is **computed** rather than a direct constant — `return __($this->titleKey());`,
-  `return strtoupper($this->name);` — does not fold. The member is documented at its widened type with
-  no `const` or example, never a guessed value.
+  `return strtoupper($this->name);` — does not fold. The member is documented at its widened type with no
+  `const`, and illustrated [from that schema](#examples-are-completed-not-withheld) like any other member
+  nothing folded — never pinned to a guessed value.
+- A **translated** title is the commonest of those, and the refusal is deliberate rather than a bound
+  nobody got to. The translator answers in the process running the build, under whatever locale that
+  process happens to have, so folding `__('errors.forbidden')` would publish one machine's words as your
+  contract and move the document's bytes with `app.locale`. Anything the served request decides is the
+  same argument: an RFC 9457 `instance` written as `$request->getPathInfo()` is a different value on every
+  response, so it is described and illustrated, never pinned.
 - A **vendor** enum's methods are never analyzed (the project-only boundary applies to enums too); its
   `->value`/`->name` still fold.
 - If the arm passes a `ProblemType` it can't pin to one case (a variable, `ProblemType::from($code)`),
@@ -346,6 +409,31 @@ replaces it. Where Docuccino can see that your handler renders an exception and 
 renders it to, the response keeps its status and its description and carries no body at all — a shape
 your server does not send would leave every generated client with the wrong type for that error. The
 diagnostic names the callback to fix.
+
+<Tabs>
+	<TabItem label="Your code">
+	```php
+	// app/Exceptions/ProblemRenderer.php — a plain response, and a status read off the exception
+	public function __invoke(ModelNotFoundException $e): Response
+	{
+	    return response($this->body($e), $e->getCode() ?: 404);
+	}
+	```
+	</TabItem>
+	<TabItem label="Generated OpenAPI">
+	```json
+	"404": {
+	  "description": "Not Found"
+	}
+	```
+	</TabItem>
+</Tabs>
+
+Nothing is minted into `components` either: there is no body for a `NotFound` entry to hold, so every
+operation that can throw it publishes those same two lines rather than a `$ref`. The tier still
+**answers** — standing aside would only hand the same guess to the tier behind it — so no later tier
+fills the gap, and the same restraint covers the [`429`](/laravel/documenting/rate-limiting/) a throttled
+route documents.
 
 One reading survives a body that would not fold: a handler that named a content type. That comes from
 your code rather than from a classification of the exception, so the response states that media type, with
@@ -818,7 +906,7 @@ One key:
 
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `error_responses` | `default` \| `none` | `default` | What to publish for the exceptions your application does not render itself. Your inferred handlers take precedence regardless; `none` also turns off the implicit responses above. |
+| `error_responses` | `default` \| `none` | `default` | What to publish for the exceptions your application does not render itself. Your inferred handlers take precedence regardless; `none` also turns off the implicit responses above, the throttled `429` among them. |
 
 :::tip
 Because Docuccino reads your *actual* handling first, most apps get accurate error docs with no

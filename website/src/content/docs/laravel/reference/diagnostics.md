@@ -40,6 +40,24 @@ php artisan docuccino:export --fail-on=info
 On an existing codebase, start at `warning` and tighten to `info` later. A gate that fires on day one
 is a gate the team switches off.
 
+:::caution[A severity can move, and one just did]
+`inferred-handler.too-dynamic` is now a **warning** where it used to be an info. Nothing about your
+application changed, so if you gate CI at `--fail-on=warning` the first build after upgrading can go red
+on code you didn't touch.
+
+It was promoted because it no longer only means "documented more vaguely". Where it fires and the tier
+stands aside, your own renderer has demonstrably replaced the framework's body, so the error publishes
+with no `content` — and [`assertValidResponse()`](/laravel/guides/contract-testing/#assert-an-exchange)
+fails a response that really returns bytes against exactly that. A diagnostic whose consequence is a red
+test suite is not a notice.
+
+Two ways forward. Fix the callback, which is what the diagnostic's own help spells out — see
+[an error response lost its body](/laravel/guides/troubleshooting/#an-error-response-lost-its-body).
+Or list the code under [`diagnostics.accept`](/laravel/reference/configuration/#diagnostics) while you
+do: acceptance carves it out of the exit code and nothing else, so it keeps printing and the document is
+byte-identical either way.
+:::
+
 ## Accepting a code
 
 The other way to tighten a gate is to accept the codes you can't act on. List them under
