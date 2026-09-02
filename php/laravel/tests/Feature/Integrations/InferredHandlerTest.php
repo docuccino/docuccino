@@ -530,12 +530,11 @@ it('answers only with what the tiers behind it do not have', function (array $ty
 /**
  * A renderer whose body folded under a status nothing could read, for a throw that carried none either —
  * an `HttpException` subclass whose own status the analyser cannot read arrives exactly so, and so does a
- * `$e->getCode()` status on a plain exception. `$errorResponses` is the document's preset, because the
- * regression this pins was on the DEFAULT one.
+ * `$e->getCode()` status on a plain exception.
  *
  * @return array{0: array<string, mixed>, 1: array<string, mixed>}
  */
-function unreadStatusBuild(string $errorResponses): array
+function unreadStatusBuild(): array
 {
     $symbol = registerRenderCallback(
         static fn (ProbeRejection $e) => response()->json(['type' => 'about:blank', 'title' => 'Nope'], $e->getCode(), ['Content-Type' => 'application/problem+json']),
@@ -562,20 +561,18 @@ function unreadStatusBuild(string $errorResponses): array
         ],
     );
     app()->instance(TypeEngine::class, $engine);
-    config()->set('docuccino.documents.default.error_responses', $errorResponses);
-
     $result = generateDocument();
     $document = $result->document->toArray();
 
     return [$document, ['responses' => $document['paths']['/api/forms/{form}']['get']['responses'], 'diagnostics' => $result->diagnostics]];
 }
 
-it('keeps the body it folded, under the classification, when nothing read a status', function (string $errorResponses): void {
+it('keeps the body it folded, under the classification, when nothing read a status', function (): void {
     // The regression: only the STATUS was unreadable, and declining threw away two proven facts — the
     // shape and the media type the renderer sends them as — to avoid stating one unproven number. The
     // response then fell to a tier that asserts `application/json` `{message}`, so one application
     // published two error vocabularies and every generated client got the wrong type for this error.
-    [$document, $build] = unreadStatusBuild($errorResponses);
+    [$document, $build] = unreadStatusBuild();
     $responses = $build['responses'];
 
     // Filed under the exception's framework classification — the same key the tiers behind it would have
@@ -599,18 +596,17 @@ it('keeps the body it folded, under the classification, when nothing read a stat
     // The body folded, so nothing was too dynamic. The unread status is the analyser's own notice to make.
     $codes = array_map(static fn ($d): string => $d->code, $build['diagnostics']);
     expect($codes)->not->toContain('inferred-handler.too-dynamic');
-})->with(['default', 'problem-details']);
+});
 
 /**
  * A renderer that set an explicit content type on a body too dynamic to fold — `$r = Problem::from($e);
  * …; return response()->json($r->toArray(), …, ['Content-Type' => …])` reaches the adapter exactly so.
  * `$hint` picks which of the two declines the build used to take: a throw carrying a status lands behind
- * the status fold, one carrying none in front of it. `$errorResponses` is the document's preset, because
- * the tier ordering behind this one differs between the two.
+ * the status fold, one carrying none in front of it.
  *
  * @return array{0: array<string, mixed>, 1: list<Diagnostic>}
  */
-function unreadBodyBuild(string $errorResponses, Closure $render, string $exceptionFqcn, ?int $hint): array
+function unreadBodyBuild(Closure $render, string $exceptionFqcn, ?int $hint): array
 {
     $symbol = registerRenderCallback($render, $exceptionFqcn);
 
@@ -630,7 +626,6 @@ function unreadBodyBuild(string $errorResponses, Closure $render, string $except
             ),
         ],
     ));
-    config()->set('docuccino.documents.default.error_responses', $errorResponses);
 
     $result = generateDocument();
 
@@ -639,15 +634,14 @@ function unreadBodyBuild(string $errorResponses, Closure $render, string $except
 
 /**
  * Why this answer is right, from the contract rather than from the code: this tier answers with what the
- * tiers behind it do not have, and none of them reads the renderer — they assert `application/json`, or
- * the active preset's own type, off a classification of the exception CLASS. The content type the render
- * path folded is therefore a fact only this tier holds, and it is a fact about the response the server
+ * tiers behind it do not have, and none of them reads the renderer — they assert `application/json` off a
+ * classification of the exception CLASS. The content type the render path folded is therefore a fact only
+ * this tier holds, and it is a fact about the response the server
  * really sends. Declining published an error with no `content`, which says the error returns nothing;
  * a degraded answer has to stay true, and "a body of this media type, shape unknown" is the true one.
  */
-it('states the media type it read, unconstrained, when the body did not fold', function (string $errorResponses): void {
+it('states the media type it read, unconstrained, when the body did not fold', function (): void {
     [$document, $diagnostics] = unreadBodyBuild(
-        $errorResponses,
         static fn (ModelNotFoundException $e) => response()->json($e->getMessage() === '' ? [] : ['detail' => $e->getMessage()], 404, ['Content-Type' => 'application/problem+json']),
         MODEL_NOT_FOUND,
         404,
@@ -657,9 +651,8 @@ it('states the media type it read, unconstrained, when the body did not fold', f
     $producers = array_map(static fn (array $r): string => $r['producer'], $responses['404']['x-docuccino']['provenance'] ?? []);
     $content = resolveResponse($document, $responses['404'])['content'] ?? [];
 
-    // The media type the renderer set — never `application/json`, and never the preset's assertion over
-    // the top of it: this tier is ordered first so a renderer the build READ outranks a declaration
-    // about what the document's errors look like.
+    // The media type the renderer set — never `application/json`: this tier is ordered first, so a
+    // renderer the build READ outranks any tier that answers off the exception's class alone.
     expect($producers)->toContain('integration:inferred-handler')
         ->and($content)->toHaveKey('application/problem+json')
         ->and($content)->not->toHaveKey('application/json');
@@ -676,14 +669,13 @@ it('states the media type it read, unconstrained, when the body did not fold', f
 
     // Widening is not going quiet: the half that did not fold is still the author's to fix.
     expect(array_map(static fn ($d): string => $d->code, $diagnostics))->toContain('inferred-handler.too-dynamic');
-})->with(['default', 'problem-details']);
+});
 
-it('files that media type under the classification when nothing read a status either', function (string $errorResponses): void {
+it('files that media type under the classification when nothing read a status either', function (): void {
     // The decline in FRONT of the status fold, where the throw carried no status of its own. The key is
     // the exception's framework classification — the same key every tier behind would have used, so the
     // error is published once — and the media type rides along rather than being dropped with it.
     [$document, $diagnostics] = unreadBodyBuild(
-        $errorResponses,
         static fn (ProbeRejection $e) => response()->json($e->getMessage() === '' ? [] : ['detail' => $e->getMessage()], $e->getCode(), ['Content-Type' => 'application/problem+json']),
         ProbeRejection::class,
         null,
@@ -702,7 +694,7 @@ it('files that media type under the classification when nothing read a status ei
         ->not->toContain('integration:inferred-handler');
 
     expect(array_map(static fn ($d): string => $d->code, $diagnostics))->toContain('inferred-handler.too-dynamic');
-})->with(['default', 'problem-details']);
+});
 
 it('leaves the media type unsaid where the renderer stated none, so the tiers behind still speak', function (): void {
     // The neighbour that must not move: with no content type folded either, this tier holds nothing the

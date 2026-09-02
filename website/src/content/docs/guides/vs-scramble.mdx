@@ -130,7 +130,6 @@ and it carries abilities, scopes and permissions through to the operation.
 | Exceptions thrown in the action, and `abort()` helpers | ✓ | ✓ | ✓ |
 | Your *real* error shapes, read from your exception handling | ✓ | — | — |
 | Error **examples**, with `const`-pinned literal members | ✓ | — | — |
-| RFC 9457 Problem Details preset | ✓ | — | — |
 
 Reading your actual exception handling is where inference goes furthest, and it's covered in detail
 [below](#what-docuccino-infers-for-you). Scramble documents the exceptions it can see being thrown —
@@ -184,7 +183,8 @@ against:
   modes, token abilities as `x-abilities`, Passport OAuth2 scopes per operation and client-credentials
   flows, and role/permission requirements as `x-permissions`.
 - **Errors** — the framework's own `401` / `403` / `404` / `422` shapes, plus your *real* error bodies
-  read out of your exception handling, and an RFC 9457 Problem Details preset behind one config line.
+  read out of your exception handling, down to the media type they are sent as — an application that
+  answers RFC 9457 `application/problem+json` is documented as answering it, with no option to set.
 - **Rate limits** — `429` responses with `Retry-After` and `X-RateLimit-*` headers, documented by what
   each header means so every throttled route shares one component, plus a build-time warning for a
   `throttle:` name nothing registered.

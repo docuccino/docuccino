@@ -15,15 +15,13 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
-use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
 
 /**
  * The error-response chain order is deterministic and load-bearing (design §6, first supports()
- * wins): inferred handler (the app's real shapes) → Problem Details preset → framework-default
- * shapes → terminal fallback. Resolved through the real {@see ExtensionRegistry} so registration
- * order cannot perturb it.
+ * wins): inferred handler (the app's real shapes) → framework-default shapes → terminal fallback.
+ * Resolved through the real {@see ExtensionRegistry} so registration order cannot perturb it.
  */
 it('resolves the exception mapper chain in the documented tier order', function (): void {
     $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(new DocumentConfig('default', [])), []);
@@ -32,7 +30,6 @@ it('resolves the exception mapper chain in the documented tier order', function 
 
     expect($order)->toBe([
         InferredHandlerExceptionToResponse::class,
-        ProblemDetailsExceptionToResponse::class,
         FrameworkErrorsExceptionToResponse::class,
         DefaultExceptionToResponse::class,
     ]);
@@ -62,17 +59,17 @@ it('emits the shared 401 reason phrase Unauthorized from the terminal fallback t
         ->and($draft->resolvedField('description'))->toBe('Unauthorized');
 });
 
-it('cascades past the deferring inferred tier to the problem-details preset, skipping the framework tier', function (): void {
+it('cascades past the deferring inferred tier to the framework tier, never reaching the fallback', function (): void {
     $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(new DocumentConfig('default', [])), []);
 
-    // A document that opted into the Problem Details preset, throwing a framework exception for which
-    // no render callback is registered — so the inferred-handler tier has nothing to fold and defers.
+    // A framework exception for which no render callback is registered — so the inferred-handler tier has
+    // nothing to fold and defers, and the tier behind it answers.
     $context = new RouteContext(
         route: new RouteDescriptor(['GET'], 'api/cascade'),
         actionRef: new ActionRef('', null, 'index'),
         attributes: new AttributeSet,
         engine: new NullTypeEngine,
-        document: new DocumentConfig('default', [], errorResponses: 'problem-details'),
+        document: new DocumentConfig('default', [], errorResponses: 'default'),
     );
     $throw = new ThrownException(
         'Illuminate\\Validation\\ValidationException',
@@ -89,13 +86,13 @@ it('cascades past the deferring inferred tier to the problem-details preset, ski
     ))[0];
     expect($inferred->supports($throw, $context))->toBeFalse();
 
-    // Runtime first-supports-wins: the winner is the Problem Details preset, and the framework tier
-    // sits after it in the chain, so it is never consulted.
+    // Runtime first-supports-wins: the winner is the framework tier, and the terminal fallback sits after
+    // it in the chain, so it is never consulted for an exception the table knows.
     $winner = null;
-    $reachedFramework = false;
+    $reachedFallback = false;
     foreach ($resolved->exceptionToResponse as $mapper) {
-        if ($mapper instanceof FrameworkErrorsExceptionToResponse) {
-            $reachedFramework = true;
+        if ($mapper instanceof DefaultExceptionToResponse) {
+            $reachedFallback = true;
         }
         if ($mapper->supports($throw, $context)) {
             $winner = $mapper;
@@ -103,7 +100,7 @@ it('cascades past the deferring inferred tier to the problem-details preset, ski
         }
     }
 
-    expect($winner)->toBeInstanceOf(ProblemDetailsExceptionToResponse::class)
-        ->and($winner->producer())->toBe('integration:problem-details')
-        ->and($reachedFramework)->toBeFalse();
+    expect($winner)->toBeInstanceOf(FrameworkErrorsExceptionToResponse::class)
+        ->and($winner->producer())->toBe('integration:framework-errors')
+        ->and($reachedFallback)->toBeFalse();
 });

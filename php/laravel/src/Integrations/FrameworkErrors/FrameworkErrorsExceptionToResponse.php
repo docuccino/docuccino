@@ -20,9 +20,9 @@ use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
  * exception the framework renders to each status. `401`/`403`/`404` are `{message}`; `422` adds the
  * field-keyed `errors` map.
  *
- * Ordered LATE — after the inferred-handler tier (FIRST) and any active preset (EARLY), before the
- * terminal fallback (LAST) — so a real handler or preset always wins and this only covers what neither
- * did. Matching is subtype-aware; an exception outside the table is declined so the chain continues.
+ * Ordered LATE — after the inferred-handler tier (FIRST) and anything an extension orders ahead of it,
+ * before the terminal fallback (LAST) — so a real handler always wins and this only covers what it did
+ * not. Matching is subtype-aware; an exception outside the table is declined so the chain continues.
  *
  * The shapes are the framework's, so they are withheld where the application demonstrably renders the
  * exception itself and the build could not read what it renders it to: the status still stands, the body

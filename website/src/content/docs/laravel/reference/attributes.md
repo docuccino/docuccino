@@ -455,7 +455,7 @@ on `403`, hiding it is the wrong lever. Reach for one of these instead:
 
 | You want | Reach for |
 | --- | --- |
-| Laravel's stock `errors` member on `422` only, on a shared error shape | The [Problem Details preset](/laravel/documenting/errors/#the-problem-details-preset-opt-in) — it already emits the `allOf` of the shared problem schema plus `errors`. |
+| Laravel's stock `errors` member on `422` only, on a shared error shape | Build it in the handler branch that returns it. Each branch of your renderer is [read on its own](/laravel/documenting/errors/), so a `422` arm that adds `errors` is documented with it and the other statuses without. |
 | Your own class, correct on every status | A dedicated type for the odd status, plus [`#[Response(status: 422, type: …)]`](#response) on the actions that return it. |
 | One class, the property merely not always present | `array\|Optional $errors` on a Data class — documented, but not `required`. |
 | A spec-side one-off you don't want in the code | [Vary one response from a shared component](/laravel/guides/customizing-output/#vary-one-response-from-a-shared-component) with an Overlay. |

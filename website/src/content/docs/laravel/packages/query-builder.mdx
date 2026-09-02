@@ -873,7 +873,8 @@ allow-list is still validated exactly as you wrote it, so the enum stays true ei
 
 Spatie Query Builder runs in **strict mode by default** — an unknown filter, sort, or include raises an
 `InvalidQuery` (HTTP `400`). Docuccino documents that `400` on every Query Builder operation, rendered
-in your chosen error style (framework defaults or the Problem Details preset), so consumers know a
+in the same style as the document's other errors (your own handler's shape where it renders one, else
+the framework default), so consumers know a
 mistyped parameter is rejected rather than silently ignored:
 
 ```json

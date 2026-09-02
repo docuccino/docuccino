@@ -297,8 +297,8 @@ that only `422` ever fills, so it's `#[Hidden]`; now `422` under-documents itsel
 
 `#[Hidden]` can't help here: it's document-wide, because a class is one component (see
 [`#[Hidden]`](/laravel/reference/attributes/#hidden) for the alternatives, and prefer them when you own
-the class — the [Problem Details preset](/laravel/documenting/errors/#the-problem-details-preset-opt-in)
-already emits this exact shape, and a dedicated `ValidationProblemData` is honest on every status). When
+the class — a dedicated `ValidationProblemData` is honest on every status, and a renderer whose `422`
+branch builds a different body is [documented as building one](/laravel/documenting/errors/)). When
 you'd rather keep one class and correct the document, an overlay merges the extra member onto that one
 response:
 

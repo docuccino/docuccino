@@ -16,7 +16,6 @@ use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
-use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitResponsesExtension;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -265,6 +264,24 @@ function rateLimited429(string $errorResponses, array $mappers): array
     ];
 }
 
+/**
+ * A mapper answering the way an application's own error handling does when the build read a shared body
+ * out of it: a `$ref` to a response component it registered, whose content names a media type of the
+ * application's own and points at the schema for it. The 429 has to copy that content rather than the
+ * reference, since the reference carries none of this route's headers.
+ */
+function chainReferencingSharedError(): ExceptionToResponse
+{
+    return chainAnswering(static function (ResponseDraft $draft, ComponentRegistry $components): void {
+        $schema = $components->reference('AppProblem', ['type' => 'object', 'properties' => ['title' => ['type' => 'string']]], 'test:app-problem');
+        $components->referenceResponse('AppProblem429', [
+            'description' => 'Too Many Requests',
+            'content' => ['application/problem+json' => ['schema' => $schema]],
+        ]);
+        $draft->setRef('#/components/responses/AppProblem429', Contribution::integration('test-chain'));
+    });
+}
+
 /** A mapper that always answers, with whatever the callback puts on the draft. */
 function chainAnswering(Closure $build): ExceptionToResponse
 {
@@ -292,30 +309,30 @@ function chainAnswering(Closure $build): ExceptionToResponse
     };
 }
 
-it('takes the 429 media type from the problem-details chain', function (): void {
+it('takes the 429 media type from the error-response chain', function (): void {
     // The 429 is synthesized from middleware, not from a throw the engine saw, so the chain is never asked
-    // about it unless this extension asks — and hardcoding Laravel's `{message}` would contradict a
-    // document whose whole error contract is application/problem+json.
-    $result = rateLimited429('problem-details', [new ProblemDetailsExceptionToResponse]);
+    // about it unless this extension asks — and hardcoding Laravel's `{message}` would contradict an
+    // application whose own handler renders application/problem+json for the very same exception.
+    $result = rateLimited429('default', [chainReferencingSharedError()]);
 
     expect(array_keys($result['content']))->toBe(['application/problem+json'])
         ->and($result['content']['application/problem+json']['schema']['$ref'] ?? null)
-        ->toBe('#/components/schemas/ProblemDetails');
+        ->toBe('#/components/schemas/AppProblem');
 });
 
 it('leaves no response component behind after asking the chain, but keeps the schema it points at', function (): void {
-    // The chain registers a shared `Problem429`, but this response inlines the content (its per-route
+    // The chain registers a shared response, but this 429 inlines the content (its per-route
     // X-RateLimit-* headers can't ride a shared response), so nothing would ever $ref it — and an
     // unreferenced component makes a cold build's bytes differ from a warm-cache one's. The schema the
     // copied content DOES point at has to survive, or that $ref dangles.
-    $result = rateLimited429('problem-details', [new ProblemDetailsExceptionToResponse]);
+    $result = rateLimited429('default', [chainReferencingSharedError()]);
 
     expect($result['responses'])->toBe([])
-        ->and($result['schemas'])->toHaveKey('ProblemDetails');
+        ->and($result['schemas'])->toHaveKey('AppProblem');
 });
 
 it('keeps the stock {message} body when the document documents no errors', function (): void {
-    $result = rateLimited429('none', [new ProblemDetailsExceptionToResponse]);
+    $result = rateLimited429('none', [chainReferencingSharedError()]);
 
     expect(array_keys($result['content']))->toBe(['application/json'])
         ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
@@ -326,7 +343,7 @@ it('keeps a chain answer that names a media type and constrains nothing under it
     // whose content type it could. Copying it keyword by keyword finds no keyword, and the 429 would come
     // back stating `application/json` `{message}`: the framework shape over a document that just refuted
     // it. The representation is the fact, so it survives with an empty schema under it.
-    $result = rateLimited429('problem-details', [chainAnswering(static function (ResponseDraft $draft): void {
+    $result = rateLimited429('default', [chainAnswering(static function (ResponseDraft $draft): void {
         $draft->content('application/problem+json');
     })]);
 
@@ -335,7 +352,7 @@ it('keeps a chain answer that names a media type and constrains nothing under it
 });
 
 it('uses a chain answer that carries inline content verbatim', function (): void {
-    $result = rateLimited429('problem-details', [chainAnswering(static function (ResponseDraft $draft): void {
+    $result = rateLimited429('default', [chainAnswering(static function (ResponseDraft $draft): void {
         $draft->content('application/vnd.acme+json')->set('type', 'object', Contribution::integration('test-chain'));
     })]);
 
@@ -344,7 +361,7 @@ it('uses a chain answer that carries inline content verbatim', function (): void
 });
 
 it('falls back to the stock body when the chain answer cannot be read', function (?Closure $build): void {
-    $result = rateLimited429('problem-details', $build === null ? [] : [chainAnswering($build)]);
+    $result = rateLimited429('default', $build === null ? [] : [chainAnswering($build)]);
 
     expect(array_keys($result['content']))->toBe(['application/json'])
         ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
@@ -357,7 +374,7 @@ it('falls back to the stock body when the chain answer cannot be read', function
     }],
     // A pointer that isn't a response component at all.
     'a ref outside components.responses' => [static function (ResponseDraft $draft): void {
-        $draft->setRef('#/components/schemas/ProblemDetails', Contribution::integration('test-chain'));
+        $draft->setRef('#/components/schemas/AppProblem', Contribution::integration('test-chain'));
     }],
     // A registered response that carries no body to copy.
     'a ref to a bodiless response' => [static function (ResponseDraft $draft, ComponentRegistry $components): void {

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
-use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsSchema;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -112,15 +111,15 @@ it('declares no name for a status with no reason phrase of its own', function ()
         ->and(FrameworkExceptionTable::componentName('402'))->toBeNull();
 });
 
-it('makes the framework-errors description and problem-details title agree on the 401 phrase', function (): void {
+it('publishes the RFC 9110 401 phrase in both places a consumer meets it', function (): void {
+    // Two published facts come off one phrase: the sentence a reader sees on the response, and the name a
+    // client catches. The phrase is stated here rather than read back off the table, because a guard that
+    // asks the code for its own answer agrees with whatever the code says — and 401 is the one HTTP calls
+    // "Unauthorized" (RFC 9110 §15.5.2) where Laravel's own message says "Unauthenticated".
     $auth = 'Illuminate\\Auth\\AuthenticationException';
 
-    $frameworkDescription = FrameworkErrorsExceptionToResponse::table()[$auth]['description'];
-    $problemTitle = ProblemDetailsSchema::table()[$auth]['title'];
-
-    expect($frameworkDescription)->toBe('Unauthorized')
-        ->and($problemTitle)->toBe('Unauthorized')
-        ->and($frameworkDescription)->toBe($problemTitle);
+    expect(FrameworkErrorsExceptionToResponse::table()[$auth]['description'])->toBe('Unauthorized')
+        ->and(FrameworkExceptionTable::componentName('401'))->toBe('Unauthorized');
 });
 
 /** A subclass of ModelNotFoundException, to prove subtype-aware matching. */

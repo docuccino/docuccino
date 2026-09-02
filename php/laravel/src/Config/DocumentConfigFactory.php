@@ -41,11 +41,6 @@ final readonly class DocumentConfigFactory
 
         $closure = $routes['closure'] ?? null;
 
-        // `error_responses` is either a preset string or a bag ['preset' => …, 'errors_shape' => …].
-        $errorResponses = $config['error_responses'] ?? 'none';
-        $preset = is_array($errorResponses) ? ($errorResponses['preset'] ?? 'none') : $errorResponses;
-        $errorsShape = is_array($errorResponses) ? ($errorResponses['errors_shape'] ?? 'map') : 'map';
-
         $rawInfo = Hydrate::map($config['info'] ?? []);
         $info = $this->resolveInfo($rawInfo);
 
@@ -67,8 +62,9 @@ final readonly class DocumentConfigFactory
             routeFilter: $closure instanceof Closure ? $closure : null,
             includeVendor: ($routes['include_vendor'] ?? false) === true,
             authMiddleware: is_string($security['auto_detect_middleware'] ?? null) ? $security['auto_detect_middleware'] : null,
-            errorResponses: is_string($preset) ? $preset : 'none',
-            errorsShape: $errorsShape === 'pointer-list' ? 'pointer-list' : 'map',
+            // A closed set of two: anything else reads as the shipped `default` rather than silently
+            // turning every error response off, and ConfigDiagnostics says so.
+            errorResponses: ($config['error_responses'] ?? 'none') === 'none' ? 'none' : 'default',
             // A glob holding a NUL byte raises out of `glob()` and takes the build with it, so it never
             // reaches one — the same refusal every other path key gets, reported by ConfigDiagnostics.
             overlays: array_values(array_filter(
