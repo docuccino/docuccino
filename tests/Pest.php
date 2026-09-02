@@ -2556,3 +2556,26 @@ function decisionGaps(array $known, array $decided): array
         array_values(array_diff($decided, $known)),
     ];
 }
+
+/**
+ * A heading's anchor, the way github-slugger — which both Starlight and GitHub use — makes one: the
+ * rendered text, lower-cased, with everything but letters, digits, spaces, `_` and `-` dropped, and
+ * spaces hyphenated. No leading/trailing trim and no `-1`/`-2` disambiguator, because the slugger adds
+ * neither on a first occurrence.
+ *
+ * Shared because two guards resolve links against docs-page anchors — the site-wide one and the
+ * diagnostics reference's — and two implementations of one slugger disagree the moment a heading uses
+ * a character they read differently. They already did: one kept `_` and non-ASCII letters and the other
+ * stripped both, latent only because no heading had reached for either yet.
+ */
+function docsAnchorSlug(string $heading): string
+{
+    $text = str_replace(['&amp;', '&lt;', '&gt;', '&quot;', '&#39;', '&nbsp;'], ['&', '<', '>', '"', "'", ' '], $heading);
+    // The rendered text, not the markup: inline code, links and emphasis all contribute their contents.
+    $text = (string) preg_replace('/`([^`]*)`/', '$1', $text);
+    $text = (string) preg_replace('/\[([^\]]*)\]\([^)]*\)/', '$1', $text);
+    $text = (string) preg_replace('/\*{1,3}/', '', $text);
+    $text = mb_strtolower(trim($text));
+
+    return str_replace(' ', '-', (string) preg_replace('/[^\p{L}\p{N} _-]+/u', '', $text));
+}

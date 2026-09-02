@@ -65,6 +65,19 @@ separate guard that reads the source of truth. That question misses the fifth, w
 is merely pointed at the wrong invariant: for a test added alongside a behaviour change, ask
 separately whether the answer it asserts is right, not merely whether it can fail.
 
+*The test that recognises each — and the one that does not.* The first four are mechanical, so the tell
+is executable and a guard can hold it: mutate the code the test covers and watch the suite. The fifth
+has **no test, and cannot have one**, which is worth stating rather than leaving as a gap. Every other
+entry in this file names a guard because the thing being checked is a property of the CODE; "the
+asserted answer is the wrong answer" is a disagreement between a test and the contract, and the
+contract is not in the repository in a form anything can compare against — a guard for it would need
+the correct behaviour written down somewhere the test is not, which is just the test again. What
+carries it instead is a review question, asked where the risk is concentrated: a test born in the same
+change as the behaviour it asserts inherits that change's misunderstanding, and neither its author nor
+a reader diffing the two can see it, because they agree. Three reviewers passed the shipped instance.
+So for that population the reviewer restates the contract from the design docs BEFORE reading the
+assertion, and the four mechanical siblings above are the ones the tell is allowed to settle.
+
 ## A key the document publishes that the runtime would not return
 
 *Instances.* `$appends` and `$with` relations bypassed the model deny-list entirely; the

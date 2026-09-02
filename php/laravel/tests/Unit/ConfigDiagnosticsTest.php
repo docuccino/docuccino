@@ -104,9 +104,14 @@ it('warns, and names what was built instead, for an error_responses value that i
     'a misspelling' => ['defualt', "'defualt'"],
     'an array where a strategy name belongs' => [['preset' => 'problem-details'], 'array'],
     'a boolean' => [false, 'bool'],
+    // The key an author wrote with an `env()` behind it that came back empty. It is a PRESENT key, so it
+    // reads as `default` like every other unrecognised value — only deleting the key gets you `none`.
+    'an unset env()' => [null, 'null'],
 ]);
 
 it('says nothing about the two error_responses values there are, or about a document that sets neither', function (): void {
+    // The third case is ABSENCE, which is not a misconfiguration: it is how a document asks for no error
+    // responses at all, and the row above proves that a key present and holding null is a different thing.
     expect(ConfigDiagnostics::for(configDoc(raw: ['error_responses' => 'default'])))->toBe([])
         ->and(ConfigDiagnostics::for(configDoc(raw: ['error_responses' => 'none'])))->toBe([])
         ->and(ConfigDiagnostics::for(configDoc()))->toBe([]);

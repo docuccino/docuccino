@@ -368,8 +368,10 @@ errors:
 If your action *also* throws one of these explicitly, the two merge into a single response for that
 status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
 integration, and takes its body from this same resolution, so an app whose handler renders
-`application/problem+json` gets a problem document there too. Set `error_responses` to `none` to turn all
-of this off.
+`application/problem+json` gets a problem document there too — and where your handler demonstrably
+renders throttling but Docuccino cannot read what it renders it to, the `429` states its status, its
+reason and its rate-limit headers and says nothing about the body, exactly as the statuses above do. Set
+`error_responses` to `none` to turn all of this off.
 
 :::note
 CSRF (`419`), maintenance mode (`503`), and exceptions thrown from arbitrary custom middleware are
@@ -425,13 +427,21 @@ description and headers included — that response is hoisted too, and each oper
 | Hoisted | Not hoisted |
 | --- | --- |
 | The body shape of a `4xx`/`5xx` two or more operations state identically | A shape no other operation shares |
-| A response two or more operations state identically, however each illustrates or describes it | A response no other operation matches, a description-only response, or one that is already a `$ref` — the preset's `Problem*` components included |
+| A response two or more operations state identically, however each illustrates or describes it | A response no other operation matches, a description-only response, or one that is already a `$ref` — a status an [`#[ErrorComponent]`](#name-your-own-errors-with-errorcomponent) already named, say |
 
 **How an operation illustrates an error is never part of its contract.** Two `403`s returning the same
-body with different example messaging are one `Forbidden`, and the shared response carries both examples.
-Where the operations agree on one illustration it stays the media type's single `example`; where they
-don't, they become an `examples` map keyed from each body's own content, so adding or removing an
-endpoint never renames another one's example.
+body with different example messaging are one `Forbidden`. Where the operations agree on one
+illustration it stays the media type's single `example`; where they genuinely differ, they become an
+`examples` map keyed from each body's own content, so adding or removing an endpoint never renames
+another one's example.
+
+**An illustration is only kept where it says something the others don't.** A member no render path
+spelled out is [filled from its schema](#examples-are-completed-not-withheld) so the example stays a
+valid instance of the shape beside it, and an arm differing from another *only* at members it filled
+that way is dropped — `"string"` is not a value your server sends, and offering it as a second body
+would show a reader two shapes where your code has one. An example you wrote yourself, or one recorded
+from your test suite, is never dropped this way: nothing in it was filled, so every member it states is
+one it can stand behind.
 
 **Neither is how it describes one.** Two operations answering `404` with the same body share one
 component even where each words it differently: the shared response publishes the wording the most

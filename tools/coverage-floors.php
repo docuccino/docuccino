@@ -28,15 +28,17 @@ declare(strict_types=1);
  */
 const FLOORS = [
     // Fully in-process-measurable: UIR model, canonicalizer, identities, drafts, emitters, diff, the
-    // phpdoc type grammar, the contract checker. Measured 97.51% (11656/11954) — ratcheted 96 → 97, the
-    // measured integer at last: 97 now leaves 0.51pp, about sixty statements, rather than the 0.09pp
-    // hair-trigger that held this floor one short while the figure sat at 97.09%.
+    // phpdoc type grammar, the contract checker. Measured 97.29% (12186/12525) — ratcheted 96 → 97 back
+    // when the figure was 97.51% over a 571-statement smaller package, and it holds at the measured
+    // integer still, with 0.29pp behind it: about thirty-seven statements. The drop from 97.51 is the
+    // denominator, not a lost proof — core has since absorbed work at slightly under its own average,
+    // which is the ordinary direction and is why the floor stays where it is rather than ratcheting.
     'core' => 97,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 96.29% (11015/11439) — ratcheted 95 → 96 on the trigger the
+    // contract-testing assertions. Measured 96.30% (11050/11474) — ratcheted 95 → 96 on the trigger the
     // previous note set, which held the floor one short of the measured integer while 96.00% would have
-    // left four tenths of one statement of margin. The figure now clears 96 with 0.29pp behind it, about
-    // thirty statements, so a line going uncovered no longer fails the gate on its own.
+    // left four tenths of one statement of margin. The figure now clears 96 with 0.30pp behind it, about
+    // thirty-five statements, so a line going uncovered no longer fails the gate on its own.
     'laravel' => 96,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),

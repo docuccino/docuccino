@@ -228,7 +228,11 @@ its body, its status and the media type it is sent as — wins ahead of this fal
 governs the [implicit 401/422/404/403 responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation)
 (none of them are emitted under `none`).
 
-Any other value is reported as `config.unknown-error-responses` and read as `default`.
+Deleting the key is how you ask for `none` — that is the fallback a document that doesn't name the key
+gets, and it is why a second document [inherits nothing](/laravel/guides/multiple-documents/) from the
+first. Keeping the key and giving it anything else — a misspelling, or an `env()` whose variable isn't
+set — is reported as `config.unknown-error-responses` and read as `default`, so a value that can't be
+read never quietly empties the document of its errors.
 
 ### `tags`
 

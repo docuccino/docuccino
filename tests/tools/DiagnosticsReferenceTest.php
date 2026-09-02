@@ -507,9 +507,10 @@ function diagnosticReferenceAnchors(): array
             continue;
         }
 
-        $slug = strtolower($m[1]);
-        $slug = preg_replace('/[^a-z0-9 -]/', '', $slug) ?? '';
-        $anchors[] = trim(preg_replace('/\s+/', '-', trim($slug)) ?? '', '-');
+        // The site's one slugger, shared with the anchor guard. It used to be reimplemented here and the
+        // two disagreed — this copy stripped `_` and every non-ASCII letter, which github-slugger keeps —
+        // so a section heading reaching for either would have been resolved against an anchor nobody serves.
+        $anchors[] = docsAnchorSlug($m[1]);
     }
 
     return $anchors;

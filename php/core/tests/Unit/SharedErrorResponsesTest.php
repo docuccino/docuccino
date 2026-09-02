@@ -559,7 +559,7 @@ it('hoists no shape from what is not worth sharing', function (string $case, arr
     ['a repeated response with no body', ['/a' => ['404' => ['description' => 'Not Found']], '/b' => ['404' => ['description' => 'Not Found']]]],
     // Success bodies are not this transformer's business.
     ['a repeated 200', ['/a' => ['200' => messageBody('OK')], '/b' => ['200' => messageBody('OK')]]],
-    // The Problem Details preset's own hoists are already shared.
+    // A response the producer already published as a component is shared by definition.
     ['responses that are already references', ['/a' => ['404' => ['$ref' => '#/components/responses/ProblemNotFound']], '/b' => ['404' => ['$ref' => '#/components/responses/ProblemNotFound']]]],
     // The component registry already hoisted this shape; pointing a pointer at a pointer buys nothing.
     ['schemas that are already references', [
