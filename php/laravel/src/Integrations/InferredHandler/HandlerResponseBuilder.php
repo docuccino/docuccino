@@ -18,6 +18,7 @@ use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\DType\VoidT;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Support\FormatSamples;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\FrameworkClasses;
 
@@ -430,6 +431,20 @@ final class HandlerResponseBuilder
     }
 
     /**
+     * The entry an `enum` illustrates itself with, or null where the schema states none. The FIRST entry: a
+     * list's order is authored, so every other reader of the document shows that same branch. A null there
+     * counts as unstated, exactly as it does in {@see statedValue()}.
+     *
+     * @param  array<array-key, mixed>  $spec
+     */
+    private static function enumValue(array $spec): mixed
+    {
+        $enum = $spec['enum'] ?? null;
+
+        return is_array($enum) && $enum !== [] ? array_values($enum)[0] : null;
+    }
+
+    /**
      * A stand-in for one member: the `const` the schema pins, the real status for an integer `status`, else
      * a value that reads unmistakably as a placeholder for its declared type.
      *
@@ -464,10 +479,22 @@ final class HandlerResponseBuilder
      * spatie property's `@example` or its PHP default reaches the component schema, and either is the app's
      * own word for what this member looks like — which `"string"` is not.
      *
+     * Failing that, the keywords that NAME the member's value domain are read before its type is. An `enum`
+     * and a `format` each say what the member holds, and `"string"` is a value the schema they describe
+     * REJECTS — so a member the document declares two lines up as one of a fixed set of codes, or as a
+     * date-time, would otherwise be illustrated by something the build's own example lint reports every
+     * time (`lint.example-mismatch`), against an example its reader never wrote and cannot correct. A
+     * keyword stating a CONSTRAINT rather than a value — `pattern`, the length and range bounds — is
+     * deliberately not read: no constant satisfies an arbitrary regex, and nothing in this corpus states
+     * one on a body member this tier fills. The lint remains the backstop there.
+     *
      * The second half of the answer is whether the value came from the type rather than from something
      * the schema STATED, which is the whole question {@see placeholder()} passes on. It is answered here
      * so there is one reading of it: a guard deciding it in a branch structure of its own would be a
-     * second grammar to keep in step with this one.
+     * second grammar to keep in step with this one. An `enum` entry and a format sample are on the DERIVED
+     * side of that line: both come from the schema rather than from anything the code said, so the member
+     * stays in the fill record {@see ResponseDraft::setExample()} keeps, and a collapse reading that record
+     * still knows this arm never read it.
      *
      * @param  array<array-key, mixed>  $spec
      * @return array{mixed, bool}
@@ -483,6 +510,19 @@ final class HandlerResponseBuilder
         $stated = self::statedValue($spec);
         if ($stated !== null) {
             return [$stated, false];
+        }
+
+        $enumValue = self::enumValue($spec);
+        if ($enumValue !== null) {
+            return [$enumValue, true];
+        }
+
+        $format = $spec['format'] ?? null;
+        $sample = is_string($format)
+            ? FormatSamples::for($format, $context->representation()->formatSamples)
+            : null;
+        if ($sample !== null) {
+            return [$sample, true];
         }
 
         $type = $spec['type'] ?? null;

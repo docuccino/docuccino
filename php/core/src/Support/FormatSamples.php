@@ -6,19 +6,21 @@ namespace Docuccino\Core\Support;
 
 /**
  * One sample value per JSON Schema `format`, shared by everything that has to produce a value the
- * format would accept: the collection exporter's whole-body builder and the synthesized property
- * example a recovered rule set earns. One table, so the two can never disagree about what an email
- * looks like.
+ * format would accept: the collection exporter's whole-body builder, the synthesized property example a
+ * recovered rule set earns, and the fill an error example puts where a member went unread. One table, so
+ * they can never disagree about what an email looks like.
  *
  * Every value is a constant. Nothing here is derived from the clock, the locale or the environment —
  * a sample that moved with the date would move the document with it.
  *
  * A document can replace individual samples (`representation.examples.formats`). The merge happens HERE,
- * at the one lookup, so the table stays the single answer to "what does an email look like" for both
- * callers: the synthesized property example is handed the map by the representation policy that reaches
- * it, and the collection exporter by `EmitOptions::$formatSamples`.
+ * at the one lookup, so the table stays the single answer to "what does an email look like" for every
+ * caller: the synthesized property example and the error-example fill are handed the map by the
+ * representation policy that reaches them, and the collection exporter by `EmitOptions::$formatSamples`.
  *
- * @internal
+ * Public, not `@internal` — the Laravel adapter's built-in integrations fill an unread response member
+ * from the schema beside it, and a `format` there has to be illustrated by the same value as everywhere
+ * else, so they use this directly rather than inlining a copy to dodge the arch-test allow-list.
  */
 final class FormatSamples
 {

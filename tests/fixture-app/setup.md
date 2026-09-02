@@ -323,8 +323,11 @@ own (seeded from the action's parameter type):
   credential (`self::SUPPORT_API_KEY`) and renders through `toNegotiatedResponse()`, pinning both refusals
   — no folded secret in a published example, and no media-type label borrowed from the helper's other
   branch; the `JsonException` arm writes the same credential behind a `??` default, which PHPStan types as
-  the constant's own string and a guard reading only the outermost expression would fold; and the fallback
-  writes every argument as a literal at the call site.
+  the constant's own string and a guard reading only the outermost expression would fold; the
+  `DomainException` arm titles its problem with `__('errors.forbidden')`, whose answer is the ANALYSING
+  process's locale rather than the contract, so it pins that such a member stays UNREAD — a folded
+  translation would publish one machine's words as the contract; and the fallback writes every argument
+  as a literal at the call site.
 - `app/Exceptions/DataProblemDocument.php` — the Data-object counterpart of
   `ProblemResponse::fromProblem()`: a factory answering the DTO rather than a response, so the
   constructor is a call hop away from the response and every member reads off one of the factory's
