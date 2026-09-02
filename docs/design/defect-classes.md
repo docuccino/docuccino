@@ -237,6 +237,34 @@ answer the class may not have. Where the fact is a FILE, ask the member rather t
 subclass under a base that also builds it, a base building `self` rather than `static`, and a base carrying
 a trait — each of which flips when the walk is removed.
 
+## An illustration read against fewer keywords than its schema states
+
+A generated example is published BESIDE the schema it illustrates, so whatever validates the document
+holds it to that schema — here the build's own `ExampleAudit` (`lint.example-mismatch`) and the vendored
+OAS meta-schemas. A producer deriving its value from a SUBSET of the keywords therefore does not degrade
+gracefully into vagueness: it publishes a body the server refuses, and the build then reports the
+mismatch to an author who never wrote the example and cannot correct it. Every instance so far has been
+one producer reading `type` and stopping.
+
+*Instances.* The error-example fill read `type` alone, four times over: `type: object` illustrated by a
+PHP `[]`, which writes back as the JSON list `[]`; a member the document declares as a backed `enum` or
+as a `date-time` illustrated `"string"`; a member carrying a numeric bound illustrated `0` beside a floor
+of 5; and a member described by an `allOf` with no readable type at all, falling through to `"string"`,
+which every branch of it rejects. Core's collection exporter had the same defect one keyword along — it
+read `minimum` and nothing else, so `exclusiveMinimum: 0` published `0`, six times across the corpus.
+
+*The tell.* Two producers computing "one representative value for this schema", one reading more keywords
+than the other. What separates a readable keyword from the rest is whether it NAMES a value: `const`,
+`example`, `default`, `enum`, `format` and the four numeric bounds each name one, so each has a legal
+illustration to reach for. `pattern` and the length bounds constrain without naming, no constant satisfies
+an arbitrary regex, and there the lint is the backstop rather than the bug.
+
+*The fix that worked.* One table per fact, shared rather than reimplemented — `Core\Support\FormatSamples`
+for a format, `Core\Support\BoundedNumber` for a set of bounds — and `ExampleValueAgreementTest` beside
+them, which states the ladder independently of both implementations, puts every row to both, and pins the
+differences that deliberately stand as rows of their own. A keyword read at one site and not the other
+then fails a test instead of reaching a document.
+
 ## A node located by line, where the offset is its identity
 
 A line is not a position. Two nodes written on one line are two nodes, and a map keyed by line silently

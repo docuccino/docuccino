@@ -439,6 +439,58 @@ it('fills a member from the value its own schema states, not from its type', fun
     ]);
 });
 
+it('fills a member from the bound its schema carries, and still calls that member unread', function (): void {
+    // A bound is the one CONSTRAINT that also names a legal value, which is why it is read where a
+    // `pattern` is not: `0` is a value `minimum: 5` rejects, and a filled member the schema next to it
+    // rejects is a body the server refuses AND a `lint.example-mismatch` against an example its reader
+    // never wrote. The answers here come from the keywords' own meaning — 5 clears a floor of 5, 1 is the
+    // nearest integer above an exclusive 0, and 10 is the first multiple of 10 at or above a floor of 1.
+    //
+    // Then the second half, which a better fill could quietly lose: every one of them is still recorded as
+    // a member NOTHING READ. `5` reads exactly like a value a server sends, and the record is the only
+    // thing that can tell those apart downstream — a collapse consulting it would otherwise treat this arm
+    // as having read the member and drop a rival illustration that had actually proved it.
+    $context = handlerContext(new StubTypeEngine(classes: [
+        'App\\Data\\BoundedProblem' => new ClassMetadata('App\\Data\\BoundedProblem', [
+            new PropertyMetadata('status', ScalarT::int()),
+            new PropertyMetadata('attempt', ScalarT::int()),
+            new PropertyMetadata('backoff', ScalarT::int()),
+            new PropertyMetadata('quota', ScalarT::int()),
+        ]),
+    ]));
+
+    // The component as the document publishes it — a hand-authored one, since no type mapper mints a
+    // bound: the fill reads whatever the finished component says, wherever that came from.
+    $context->components->registerSchema('BoundedProblem', [
+        'type' => 'object',
+        'properties' => [
+            'status' => ['type' => 'integer'],
+            'attempt' => ['type' => 'integer', 'exclusiveMinimum' => 0],
+            'backoff' => ['type' => 'integer', 'minimum' => 1, 'multipleOf' => 10],
+            'quota' => ['type' => 'integer', 'minimum' => 5],
+        ],
+        'required' => ['status', 'attempt', 'backoff', 'quota'],
+    ], 'App\\Data\\BoundedProblem');
+
+    $frozen = HandlerResponseBuilder::build(
+        handlerAnalysis(new ClassT('App\\Data\\BoundedProblem'), 429),
+        $context,
+        Contribution::integration('inferred-handler'),
+        handlerThrow(429),
+        'App\\Exceptions\\Handler::render',
+    )?->freeze()->toArray() ?? [];
+
+    expect($frozen['content']['application/problem+json']['example'] ?? null)->toBe([
+        // Unbounded and named `status`, so it is the one member here that is not a fill at all: it is the
+        // status this response really answers with.
+        'status' => 429,
+        'attempt' => 1,
+        'backoff' => 10,
+        'quota' => 5,
+    ])->and($frozen['x-docuccino']['facts']['examplePlaceholders'] ?? null)
+        ->toBe(['application/problem+json' => ['attempt', 'backoff', 'quota']]);
+});
+
 it('still pins a status member to the response status over a stated default', function (): void {
     // `status` echoes the status THIS response is documented under (RFC 9457's convention). A default the
     // class happens to carry describes some other response, so it must not win here.
