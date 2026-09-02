@@ -4,19 +4,21 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
+use App\Support\ProbeStatuses;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * The static-factory idiom: one private constructor with the status defaulted, and named factories for the
  * cases the API tells apart. Nothing outside the class can build it, and no factory writes the status slot,
- * so 422 is what every instance carries rather than what most of them happen to.
+ * so 422 is what every instance carries rather than what most of them happen to. The default names the
+ * application's own constant, so the number is written in a file this class does not mention.
  */
 final class ExportRejectedException extends HttpException
 {
     /**
      * @param  list<string>  $columns
      */
-    private function __construct(private readonly array $columns, int $statusCode = 422)
+    private function __construct(private readonly array $columns, int $statusCode = ProbeStatuses::REJECTED)
     {
         parent::__construct($statusCode, 'The export was rejected.');
     }

@@ -34,21 +34,25 @@ final class ConstructionStatus
      * One that folds to nothing takes the whole answer with it, and two that fold to different statuses
      * state neither — a class or a factory that builds two ways genuinely has no one status.
      *
-     * @param  list<Node\Expr\New_>  $constructions
+     * Each construction arrives as the SITE it is written at, because a class's constructions need not
+     * all be written in one place: a base's `new static(…)` builds the subclass from the base's own file
+     * and class, and folding its argument anywhere else reads a scope the line was never in.
+     *
+     * @param  list<ConstructionSite>  $sites
      * @param  array{names: list<string>, default: int|null}  $constructor  as {@see inSlot()}
-     * @param  callable(Node\Expr, Node\Expr\New_): ?int  $fold  the caller's own constant fold, taking the
-     *                                                           argument and the construction it sits in
+     * @param  callable(Node\Expr, ConstructionSite): ?int  $fold  the caller's own constant fold, taking the
+     *                                                             argument and the site it sits at
      */
-    public static function agreedIn(array $constructions, int $slot, array $constructor, callable $fold): ?int
+    public static function agreedIn(array $sites, int $slot, array $constructor, callable $fold): ?int
     {
         $status = null;
 
-        foreach ($constructions as $construction) {
+        foreach ($sites as $site) {
             $one = self::inSlot(
-                $construction,
+                $site->construction,
                 $slot,
                 $constructor,
-                static fn (Node\Expr $argument): ?int => $fold($argument, $construction),
+                static fn (Node\Expr $argument): ?int => $fold($argument, $site),
             );
 
             if ($one === null || ($status !== null && $one !== $status)) {

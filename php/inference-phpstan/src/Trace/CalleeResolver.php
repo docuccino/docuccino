@@ -7,6 +7,8 @@ namespace Docuccino\Inference\PhpStan\Trace;
 use PhpParser\Node;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ReflectionProvider;
+use ReflectionException;
+use ReflectionMethod;
 
 /**
  * The one call-resolution service for both the {@see Tracer} and the throw analyzer, on PHPStan's
@@ -76,9 +78,26 @@ final class CalleeResolver
                 return null; // PHP-internal / stub-only ⇒ vendor terminal
             }
 
-            return new Callee($declaring->getName(), $method, $file);
+            return new Callee($declaring->getName(), $method, $file, self::writtenIn($declaring->getName(), $method));
         }
 
         return null; // magic / forwarded / unresolvable ⇒ vendor terminal
+    }
+
+    /**
+     * Where the method's own body is written, which for a TRAIT's method is not the declaring class's file:
+     * PHP reports the member as the using class's, and only `ReflectionMethod` names the file it was copied
+     * from. Native reflection rather than the provider's, because that is the one stack that answers this
+     * question — and null wherever it cannot, leaving {@see Callee::writtenIn()} on the declaring class's.
+     */
+    private static function writtenIn(string $class, string $method): ?string
+    {
+        try {
+            $file = (new ReflectionMethod($class, $method))->getFileName();
+        } catch (ReflectionException) {
+            return null; // a class or method only the provider knows: a stub, a magic forward
+        }
+
+        return $file === false ? null : $file;
     }
 }

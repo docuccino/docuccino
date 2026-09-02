@@ -172,3 +172,55 @@ package's?
 the counted throw before the closure it is measured against, so no vendor return type governs whether it
 is reachable — and say in the fixture why it is written that way, since the natural ordering is the one
 that breaks. The matrix leg is the executor; nothing in a single-version run can catch it.
+## A member reached through inheritance, read as though it were the class's own
+
+PHP hands an inherited or trait-imported member back looking like the class's, and a reader that asks
+reflection one question gets an answer about the wrong file — or a reader that scans only the class's own
+declared code never sees half of what builds it. Both halves publish a confident answer for a class the
+code contradicts.
+
+*Instances.* `HttpExceptionStatus::agreed()` folded the `new`s a class writes of ITSELF out of its own
+file alone, so a subclass with one factory at 413 under a base whose `new static(503)` also builds it
+answered 413 — a precise false status, at exactly the throw points (a trait's guard, a `@throws`, a
+rethrow) the read exists for. Its trait gate asked `getTraitNames()`, which reports the class's OWN traits,
+so a base's trait was invisible to it. `FactoryStatus` refused an inherited factory outright, so the two
+readers of one question answered differently about one class. And `Callee->file` is
+`getDeclaringClass()->getFileName()`, which for a trait's method is the USING class's file: the `throw` and
+the `@throws` a shared guard clause is written with were read from a file no fragment ever depended on.
+`DeclarationFiles` exists in core because this had already been met once, on inherited properties.
+
+*The tell.* A walk, a scan or a `getFileName()` that stops at the class the question was asked about,
+beside a claim in the docblock that it covers everything the class does. Reflection will not object: it
+answers about the class, and the class honestly reports the parent's member as its own.
+
+*The fix that worked.* State ONE rule for what belongs to the class — for a construction, "written in its
+own declared code or in a class it inherits from, with `new static` binding late and `new self` binding to
+the class the line sits in" — and make every reader of it obey. Read the whole hierarchy or read none: an
+ancestor whose file cannot be opened, or one using a trait, leaves a member unseen, and a partial set is an
+answer the class may not have. Where the fact is a FILE, ask the member rather than the class
+(`ReflectionMethod::getFileName()`, `DeclarationFiles`), and record both. The probes are the guard: a
+subclass under a base that also builds it, a base building `self` rather than `static`, and a base carrying
+a trait — each of which flips when the walk is removed.
+
+## A node located by line, where the offset is its identity
+
+A line is not a position. Two nodes written on one line are two nodes, and a map keyed by line silently
+keeps the last of them — deterministically, so no golden and no byte comparison will ever see it.
+
+*Instances.* `FileAnalyzer` harvested closures into `$closures[$node->getClosureExpr()->getStartLine()]`.
+While the only consumer located a render callback by `ReflectionFunction`'s file+line the collision was
+rare; the moment every closure argument at every throw point became a consumer,
+`$this->guard(function () { throw A; }, function () { throw B; })` resolved both arguments to the second
+body and A vanished from the document with no diagnostic. The same file's `scopeAtCall()` had already been
+written the other way, with a docblock saying why: an offset is unique per node and survives a re-parse
+where an object handle does not.
+
+*The tell.* An AST map keyed by `getStartLine()` whose consumer holds the node itself — it has an offset
+and is throwing it away. The related tell is a lookup that CANNOT hold the node (reflection gives file and
+line and nothing else) and silently picks one of several matches.
+
+*The fix that worked.* Key by `getStartFilePos()` for every consumer holding the node, and give the one
+consumer that has only a line an explicit ask that DECLINES when the line carries more than one — the
+degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
+fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
+`return`.

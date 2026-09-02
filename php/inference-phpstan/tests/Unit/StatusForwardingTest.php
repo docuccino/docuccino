@@ -109,3 +109,20 @@ it('finds every `new` a body makes of the class', function (string $code, int $f
     'a class named by a variable' => ['return new $class($columns);', 0],
     'nothing constructed at all' => ['return $this->columns;', 0],
 ]);
+
+it('reads a BASE\'s body by what PHP binds there, not by what the subclass would', function (string $code, int $found): void {
+    // The same scan over a body written one class UP, which is where the two relative names stop meaning
+    // the same thing. Stated from PHP's own binding: `new static` is late static binding, so a base's
+    // builds whichever class was entered — this one included — while `new self` names the class the line
+    // is written in, and the base's instance is not the subclass's.
+    expect(StatusForwarding::constructionsOf(
+        forwardingStmts($code),
+        'App\\Exceptions\\ExportRejected',
+        'App\\Exceptions\\ProblemBase',
+    ))->toHaveCount($found);
+})->with([
+    'the base\'s `new static`, which builds the subclass' => ['return new static($columns, 409);', 1],
+    'the base\'s `new self`, which builds the base' => ['return new self($columns, 409);', 0],
+    'the subclass named outright from the base' => ['return new \\App\\Exceptions\\ExportRejected($columns);', 1],
+    'the base named outright, which is not the subclass' => ['return new \\App\\Exceptions\\ProblemBase($columns);', 0],
+]);

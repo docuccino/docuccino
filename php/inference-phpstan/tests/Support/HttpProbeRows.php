@@ -79,7 +79,21 @@ final class HttpProbeRows
             'no constructor at all — the status is an argument' => [self::NAMESPACE.'ProbeNoConstructor', null, 0, null],
             'an abstract base that adds nothing' => [self::NAMESPACE.'ProbeBase', null, 0, null],
             'an abstract base carrying only a factory' => [self::NAMESPACE.'ProbeFactoryBase', null, 0, 503],
-            'a subclass whose only factory is its base\'s' => [self::NAMESPACE.'ProbeInheritsFactory', null, 0, null],
+            // A base's `new static(…)` builds the SUBCLASS, so a subclass declaring nothing of its own is
+            // still built exactly one way and states that status as surely as the base does.
+            'a subclass whose only factory is its base\'s' => [self::NAMESPACE.'ProbeInheritsFactory', null, 0, 503],
+            // …and one that adds a factory of its own has two, which is no one status. Reading only its own
+            // declared code answered the 413 for a class the base builds as a 503.
+            'a subclass with a factory of its own under a base that builds' => [self::NAMESPACE.'ProbeOwnAndInheritedFactory', null, 0, null],
+            // A base whose factory names `self` builds the BASE, so the base states 410 and the subclass
+            // states nothing: the same walk answering and declining on one hierarchy.
+            'a base whose factory builds `self`' => [self::NAMESPACE.'ProbeSelfBuildingBase', null, 0, 410],
+            'a subclass of the base that builds `self`' => [self::NAMESPACE.'ProbeInheritsSelfFactory', null, 0, null],
+            // The trait gate is owed per ANCESTOR, not once for the class. Each of these builds itself two
+            // ways — 410 in front of the read, 409 in the trait's file it never opens — so the visible half
+            // agrees with itself at a status that is only half the class's.
+            'a base carrying one factory in a trait and one of its own' => [self::NAMESPACE.'ProbeBaseWithTrait', null, 0, null],
+            'a subclass whose BASE uses the trait, which it does not' => [self::NAMESPACE.'ProbeInheritsTraitFactory', null, 0, null],
             'a class whose factory builds it two ways' => [self::NAMESPACE.'ProbeBranchingFactory', null, 0, null],
             'a class whose factory builds through another' => [self::NAMESPACE.'ProbeIndirectFactory', null, 0, null],
             'a class whose factory names its arguments' => [self::NAMESPACE.'ProbeNamedFactory', null, 0, 409],

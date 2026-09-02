@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Integration;
 
+use Docuccino\Core\Draft\OperationDraft;
+use Docuccino\Core\Pipeline\FragmentCache;
+use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
@@ -126,6 +129,20 @@ dataset('throw cases', [
     // response is whatever was chosen at run time. What the class's own factory agrees on — a 409 — is no
     // evidence for THIS throw, so no status is the honest answer.
     'a construction whose status is chosen at run time' => ['runtimeStatusAtThrowSite', ['ExportBlockedException@null']],
+    // …and the same guard where the construction is one ASSIGNMENT behind the throw, which is how a body
+    // that decorates an exception before throwing it is written. The 451 is the status the code built,
+    // and the class's own 409 would be a status this response never has.
+    'a construction one assignment behind the throw' => ['heldConstructionAtThrowSite', ['ExportBlockedException@451']],
+    'the same, with its status chosen at run time' => ['heldRuntimeConstructionAtThrowSite', ['ExportBlockedException@null']],
+    // A class is built by its BASE too: `new static(503)` one class up builds this one, so a subclass
+    // adding nothing still has a status, and one adding a factory of its own has two and states neither.
+    'a factory the subclass inherits from its base' => ['inheritedFactoryStatus', ['ExportRelocatedException@503']],
+    'a class its own base and its own factory build differently' => ['inheritedAgreementStatus', ['ExportOfflineException@null']],
+    // Two closures handed to one call on ONE line are two bodies and two errors; a reader keying them by
+    // line resolves both to the second, and the first error leaves the document without a word.
+    'two closures written on one line' => ['pairedClosureThrownStatus', ['ExportLockedException@423', 'ExportUnsupportedException@422']],
+    // A status pinned through a constant declared in another file entirely.
+    'a status pinned through another file\'s constant' => ['constantPinnedStatus', ['ExportArchivedException@415']],
 ]);
 
 it('surfaces exactly the expected API errors', function (string $method, array $expected): void {
@@ -164,6 +181,9 @@ it('names the class whose HTTP status it could not read', function (string $meth
     // A status chosen at run time, which is the one thing the notice's help text asks the author to
     // change — and the class's own agreement may not answer over the top of it.
     'a construction whose status is chosen at run time' => ['runtimeStatusAtThrowSite', 'App\\Exceptions\\ExportBlockedException'],
+    'the same construction one assignment behind the throw' => ['heldRuntimeConstructionAtThrowSite', 'App\\Exceptions\\ExportBlockedException'],
+    // A class its base and its own factory build at two statuses, reached where nothing says which ran.
+    'a class built two ways, reached with no construction' => ['inheritedAgreementStatus', 'App\\Exceptions\\ExportOfflineException'],
 ])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
@@ -195,6 +215,12 @@ it('says nothing where the status read, and nothing about a class the author doe
     // Nothing is surfaced from an arrow function at all, so there is no class to name.
     'arrowThrownStatus',
     'nestedClosureThrownStatus',
+    // The construction one assignment behind the throw, and the base's factory the subclass inherits:
+    // both name a status, so neither class is one the author is asked about.
+    'heldConstructionAtThrowSite',
+    'inheritedFactoryStatus',
+    'pairedClosureThrownStatus',
+    'constantPinnedStatus',
 ])->group('fixture');
 
 it('answers the same status whether the construction is at the throw or one hop inside a factory', function (): void {
@@ -245,6 +271,85 @@ it('depends on the file the status was written in', function (): void {
     expect($names)->toContain('PortalUnavailableException.php')
         ->and($names)->toContain('PortalException.php');
 })->group('fixture');
+
+/**
+ * The basenames one action's analysis reported as its dependency set.
+ *
+ * @return list<string>
+ */
+function throwDependencyNames(string $method): array
+{
+    /** @var list<string> $files */
+    $files = throwsAnalysis($method)['dependencyFiles'];
+
+    return array_map(static fn (string $file): string => basename($file), $files);
+}
+
+it('depends on the file a declared exception was written in', function (): void {
+    // Fragment-cache soundness for a throw point that carries no construction at all: the `throw` and the
+    // `@throws` that surfaces it are both written in the TRAIT, so editing the trait to throw something
+    // else changes what this route publishes. Only the exception class's own file was ever recorded, and
+    // a warm build then went on publishing the exception the trait no longer throws.
+    expect(throwDependencyNames('traitThrownStatus'))
+        ->toContain('GuardsProbeState.php')
+        ->toContain('ProbeStaleException.php');
+})->group('fixture');
+
+it('depends on the file a status constant a DEFAULT names is declared in', function (): void {
+    // The private constructor's default is what every instance of this class carries, and the number is
+    // written in another file: reflection names the constant off the declaration rather than evaluating
+    // it, and that name is what puts the file on the list.
+    expect(throwDependencyNames('pinnedHttpStatus'))
+        ->toContain('ProbeStatuses.php')
+        ->toContain('ExportRejectedException.php');
+})->group('fixture');
+
+it('depends on the file a folded status constant is declared in', function (): void {
+    // The same soundness for the other half of a fold: `parent::__construct(ProbeStatuses::ARCHIVED, …)`
+    // takes its status from a file the exception class does not name, and changing the constant there
+    // changes every route that throws it.
+    expect(throwDependencyNames('constantPinnedStatus'))
+        ->toContain('ProbeStatuses.php')
+        ->toContain('ExportArchivedException.php');
+})->group('fixture');
+
+it('invalidates a cached fragment when a file the status was read from is edited', function (string $method, string $edited): void {
+    // The end of the chain, through the real cache: what the analysis reports is what a fragment stores,
+    // and editing any file on that list has to make the entry stale. Without the file on the list the
+    // entry stays warm, which is a route publishing a status its code no longer states.
+    /** @var list<string> $dependencies */
+    $dependencies = throwsAnalysis($method)['dependencyFiles'];
+    $path = FixtureRunner::path($edited);
+    $before = file_get_contents($path);
+    expect($before)->toBeString();
+
+    $dir = sys_get_temp_dir().'/docuccino-throw-deps-'.uniqid('', true);
+    $cache = static fn (): FragmentCache => new FragmentCache(true, $dir, 't', 's', 'i');
+    $key = 'throw-status';
+
+    try {
+        $cache()->put($key, new OperationFragment('/probes', 'get', (new OperationDraft)->freeze(), 'GET /probes'), $dependencies);
+
+        // Warm to begin with — otherwise the row would pass with the whole dependency list dropped.
+        expect($cache()->get($key))->not->toBeNull();
+
+        file_put_contents($path, $before."\n// edited\n");
+
+        expect($cache()->get($key))->toBeNull();
+    } finally {
+        file_put_contents($path, (string) $before);
+        array_map('unlink', glob($dir.'/*') ?: []);
+        @unlink($dir.'/.gitignore');
+        @rmdir($dir);
+    }
+})->with([
+    'the trait the throw is written in' => ['traitThrownStatus', 'app/Support/Concerns/GuardsProbeState.php'],
+    'the file the status constant is declared in' => ['constantPinnedStatus', 'app/Support/ProbeStatuses.php'],
+    'the base whose factory builds the subclass' => ['inheritedFactoryStatus', 'app/Exceptions/ProbeProblemBase.php'],
+    // The same constant one spelling on: a defaulted status slot, whose value a construction leaving the
+    // slot empty passes and whose declaration reflection names rather than evaluates.
+    'the file a defaulted status constant is declared in' => ['pinnedHttpStatus', 'app/Support/ProbeStatuses.php'],
+])->group('fixture');
 
 it('depends on the file the factory was written in', function (): void {
     // The same soundness one hop on: the status this route publishes is now a fact of a factory body, so

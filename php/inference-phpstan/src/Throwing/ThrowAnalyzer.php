@@ -268,6 +268,13 @@ final class ThrowAnalyzer
         $calleeIsProject = ! $isLiteral && $callee !== null
             && $this->projectFilter->isProjectFile($callee->file);
 
+        // The `@throws` this point is reading is WRITTEN in the callee — a trait's guard clause, a service
+        // method — so that file decides which exception the route publishes and joins the dependency set.
+        // Descent records its callee for the same reason; an explicit point never reaches descent.
+        if ($calleeIsProject) {
+            $this->dependOn([$callee->file, $callee->writtenIn()]);
+        }
+
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
             $resolution = $this->statusForType($class, $node, $scope);
@@ -308,7 +315,8 @@ final class ThrowAnalyzer
             return []; // cycle guard — treated as descended (no drop)
         }
 
-        $this->visitedFiles[$callee->file] = true;
+        // Both files: the harvest comes off the declaring class's, and a trait's body is written in another.
+        $this->dependOn([$callee->file, $callee->writtenIn()]);
         $childNode = $this->fileAnalyzer->method($callee->file, $callee->class, $callee->method);
         if ($childNode === null) {
             return [];
@@ -403,7 +411,7 @@ final class ThrowAnalyzer
         }
 
         return $expr instanceof Node\Expr\Closure
-            ? ($this->fileAnalyzer->closures($file)[$expr->getStartLine()] ?? null)
+            ? ($this->fileAnalyzer->closures($file)[$expr->getStartFilePos()] ?? null)
             : null;
     }
 
@@ -461,12 +469,26 @@ final class ThrowAnalyzer
             $node,
             $argIndex,
             $constructor,
-            static function (Node\Expr $argument) use ($scope): ?int {
+            function (Node\Expr $argument) use ($scope): ?int {
+                // A `throw new X(HttpStatus::CONFLICT)` takes its status from another file's declaration,
+                // which then decides what this route publishes ({@see ConstantSource}).
+                $this->dependOn(ConstantSource::files($argument, $scope->getClassReflection()?->getName()));
+
                 $type = $scope->getType($argument);
 
                 return $type instanceof ConstantIntegerType ? $type->getValue() : null;
             },
         );
+    }
+
+    /**
+     * @param  list<string>  $files
+     */
+    private function dependOn(array $files): void
+    {
+        foreach ($files as $file) {
+            $this->visitedFiles[$file] = true;
+        }
     }
 
     /**
@@ -538,14 +560,18 @@ final class ThrowAnalyzer
     private function httpStatus(string $fqcn, Node $node, Scope $scope): ?int
     {
         // The class's own file now decides what this route publishes, so it joins the dependency set.
-        foreach ($this->httpExceptionStatus->filesFor($fqcn) as $file) {
-            $this->visitedFiles[$file] = true;
-        }
+        $this->dependOn($this->httpExceptionStatus->filesFor($fqcn));
 
         $status = $this->httpExceptionStatus->pinned($fqcn);
         if ($status === null) {
             $site = $this->atThrowSite($fqcn, $node, $scope);
-            $status = $site['spoke'] ? $site['status'] : $this->httpExceptionStatus->agreed($fqcn);
+            if ($site['spoke']) {
+                $status = $site['status'];
+            } else {
+                $agreement = $this->httpExceptionStatus->agreed($fqcn);
+                $status = $agreement['status'];
+                $this->dependOn($agreement['files']);
+            }
         }
 
         // Only where the author can act. A vendor exception's status is unreadable for a reason no one
@@ -566,15 +592,17 @@ final class ThrowAnalyzer
     }
 
     /**
-     * The status a literal `throw` states for a class that pins none: the argument it writes into the slot
-     * the class forwards, or — where it names a static factory instead — the one that factory builds with.
+     * The status a `throw` states for a class that pins none: the argument it writes into the slot the
+     * class forwards, or — where it names a static factory instead — the one that factory builds with.
+     * Read off the construction the throw names, which is the one written at it or one assignment behind
+     * it ({@see thrownExpression()}).
      *
      * `spoke` says whether the site PRESENTED a construction at all, which is a different fact from what
-     * that construction folded to. A throw point that merely declares the exception, a `throw $e`, a throw
-     * built somewhere this hop is not entitled to read — none of them say anything about how the exception
-     * was constructed, and only there may the class answer for itself. A construction that presented
-     * itself and would not fold has spoken: it says the response is whatever was chosen at run time, which
-     * the class's own agreement is no evidence for.
+     * that construction folded to. A throw point that merely declares the exception, a rethrow of one
+     * this body did not build, a throw built somewhere this hop is not entitled to read — none of them say
+     * anything about how the exception was constructed, and only there may the class answer for itself. A
+     * construction that presented itself and would not fold has spoken: it says the response is whatever
+     * was chosen at run time, which the class's own agreement is no evidence for.
      *
      * @return array{status: int|null, spoke: bool}
      */
@@ -584,8 +612,10 @@ final class ThrowAnalyzer
             return ['status' => null, 'spoke' => false];
         }
 
+        [$thrown, $scope] = $this->thrownExpression($node->expr, $scope);
+
         $slot = $this->httpExceptionStatus->statusParameter($fqcn);
-        $construction = $this->construction($node->expr, $fqcn, $scope);
+        $construction = $this->construction($thrown, $fqcn, $scope);
         if ($construction !== null) {
             return [
                 'status' => $slot === null ? null : $this->foldStatusArg(
@@ -598,18 +628,47 @@ final class ThrowAnalyzer
             ];
         }
 
-        $factory = $this->factoryName($node->expr, $fqcn, $scope);
+        $factory = $this->factoryName($thrown, $fqcn, $scope);
         if ($factory === null) {
             return ['status' => null, 'spoke' => false];
         }
 
         $read = $this->factoryStatus->forFactory($fqcn, $factory);
         // The factory's file decides what this route publishes too, so it joins the dependency set.
-        foreach ($read['files'] as $file) {
-            $this->visitedFiles[$file] = true;
-        }
+        $this->dependOn($read['files']);
 
         return ['status' => $read['status'], 'spoke' => true];
+    }
+
+    /**
+     * What a `throw` really names, with the scope that expression is written in: the thrown expression
+     * itself, or — where a local is thrown — the one this body assigned to it. `$e = new X(451); … throw
+     * $e;` builds its status one statement behind the throw, and a reader that only matches at the throw
+     * calls that site silent and lets the class's own agreement answer over the top of a construction the
+     * code really made.
+     *
+     * The same hop {@see closureArgument()} makes, through the same reader and with the same refusals: a
+     * local written twice, bound by a `catch`, or taken from a parameter answers null from
+     * {@see FileAnalyzer::localAssignments()}, and the variable stands — which is the rethrow that says
+     * nothing about how the exception was built.
+     *
+     * The scope travels with the expression because the fold happens where the value is WRITTEN, for the
+     * reason {@see FileAnalyzer::scopeAtCall()} states.
+     *
+     * @return array{Node\Expr, Scope}
+     */
+    private function thrownExpression(Node\Expr $expr, Scope $scope): array
+    {
+        if (! $expr instanceof Node\Expr\Variable || ! is_string($expr->name)) {
+            return [$expr, $scope];
+        }
+
+        $key = FileAnalyzer::scopeKey($scope);
+        $assigned = $key === null
+            ? null
+            : ($this->fileAnalyzer->localAssignments($scope->getFile())[$key][$expr->name] ?? null);
+
+        return $assigned === null ? [$expr, $scope] : $assigned;
     }
 
     /** The `new X(...)` a thrown expression is, where X is the exception the status is wanted for. */
