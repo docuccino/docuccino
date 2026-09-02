@@ -58,7 +58,7 @@ final class HandlerDeferralSummaryTransformer implements DocumentTransformer
                     $preview,
                     $more,
                 ),
-                help: 'Two remedies. Make the arm readable: return a JsonResponse — `response()->json(…)`, not a plain `response()`, a view or a redirect — with a literal integer status (`404`, not `$e->getCode()` or a ternary); either a status that folds or a body that folds is enough, and that is what settles this. Or state the response yourself with #[Response(status: 404, type: ErrorPayload::class)] on the action, which publishes the shape — it corrects the document without silencing this notice, and the notice keeps naming the callback.',
+                help: 'Two remedies. Make the arm readable: return a JsonResponse — `response()->json(…)`, not a plain `response()`, a view or a redirect — with the payload written at that call site, and a literal integer status (`404`, not `$e->getCode()` or a ternary). The payload is what settles this: where only the status or the `Content-Type` folded, the response publishes that much and no shape, and this warning stands. Or state the response yourself with #[Response(status: 404, type: ErrorPayload::class)] on the action, which publishes the shape — it corrects the document without silencing this warning, and the warning keeps naming the callback.',
             ));
         }
     }

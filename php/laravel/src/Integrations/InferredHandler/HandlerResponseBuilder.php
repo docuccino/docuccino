@@ -37,8 +37,9 @@ use stdClass;
  * falls back to the one the body states, and only then to the exception's own hint ({@see foldStatus()}).
  *
  * When the body is an object the engine watched being constructed, the fourth type arg names the arguments
- * it was built with, and those decide the example's MEMBERSHIP rather than the schema's `required` list
- * ({@see suppliedMembers()}). Only the schema is ever consulted for what such a member should look like.
+ * it was built with, and those ADD to the example's membership over the schema's `required` list rather
+ * than replacing it ({@see example()} for the whole rule, {@see suppliedMembers()} for what the map says).
+ * Only the schema is ever consulted for what such a member should look like.
  *
  * What this tier answers with where only half the response folded is design §6, "The inferred-handler
  * tier, and the four facts it answers for": the four facts worth an answer at all ({@see build()}), the

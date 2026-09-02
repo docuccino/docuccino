@@ -77,9 +77,13 @@ it('emits one summary diagnostic per callback with count + first few exception t
         ->and($diagnostics[0]->message)->toContain('App\\Renderer::__invoke')
         // The help names both remedies — making the arm readable, and stating the response outright with
         // the attribute and the arguments that do it — and says that the attribute corrects the document
-        // without silencing this, because the deferral is recorded before any attribute layer runs.
+        // without silencing this, because the deferral is recorded before any attribute layer runs. It
+        // calls itself a warning, since it is one, and it credits only the PAYLOAD with settling it: a
+        // status or media type the arm folded is published and the deferral is recorded beside it —
+        // InferredHandlerTest's "states the representation and the loss where it folded a status and no
+        // body" is where that population is pinned.
         ->and($diagnostics[0]->help)->toBe(
-            'Two remedies. Make the arm readable: return a JsonResponse — `response()->json(…)`, not a plain `response()`, a view or a redirect — with a literal integer status (`404`, not `$e->getCode()` or a ternary); either a status that folds or a body that folds is enough, and that is what settles this. Or state the response yourself with #[Response(status: 404, type: ErrorPayload::class)] on the action, which publishes the shape — it corrects the document without silencing this notice, and the notice keeps naming the callback.',
+            'Two remedies. Make the arm readable: return a JsonResponse — `response()->json(…)`, not a plain `response()`, a view or a redirect — with the payload written at that call site, and a literal integer status (`404`, not `$e->getCode()` or a ternary). The payload is what settles this: where only the status or the `Content-Type` folded, the response publishes that much and no shape, and this warning stands. Or state the response yourself with #[Response(status: 404, type: ErrorPayload::class)] on the action, which publishes the shape — it corrects the document without silencing this warning, and the warning keeps naming the callback.',
         );
 });
 

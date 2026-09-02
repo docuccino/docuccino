@@ -326,10 +326,10 @@ not support. What it costs is a type a generated client had, so it is worth clos
 <Steps>
 
 1. **Make the arm readable.** Return a `JsonResponse` — `response()->json(…)`, not a plain `response()`,
-   a view or a redirect — with a literal integer status (`404`, not `$e->getCode()` or a ternary). A
-   status that folds *or* a body that folds is enough. Where only the `Content-Type` folds, the response
-   states that media type under a schema constraining nothing, which is a weaker claim than a shape and
-   a stronger one than silence.
+   a view or a redirect — with the payload written at that call site and a literal integer status (`404`,
+   not `$e->getCode()` or a ternary). The payload is the half that brings the shape back: where only the
+   status or the `Content-Type` folds, the response states that media type under a schema constraining
+   nothing — a weaker claim than a shape and a stronger one than silence — and the warning stands.
 
 2. **State it yourself.** [`#[Response(status: 404, type: ErrorPayload::class)]`](/laravel/reference/attributes/#response)
    on the action publishes the shape over the tier, so the response is complete again. It corrects the
