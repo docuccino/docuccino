@@ -10,7 +10,7 @@
              headroom above that is for the parallel COVERAGE merge, which is the one step that holds
              every worker's coverage at once: at 1G it died in `CoverageMerger::addCoverageFromFile`
              with the suite already green, so the cap read as "parallel coverage is unsupported". -->
-        <ini name="memory_limit" value="4G"/>
+        <ini name="memory_limit" value="8G"/>
     </php>
     <testsuites>
         <testsuite name="core">
