@@ -1011,6 +1011,77 @@ function loadFixtureAppVersionChanges(): void
 }
 
 /**
+ * One `ThrowsController` action analysed by the real engine. The exception-flow suites split by
+ * subject and each runs in its own Pest worker, so these four helpers are shared here rather than
+ * redeclared per file.
+ *
+ * @return array<string, mixed>
+ */
+function throwsAnalysis(string $method): array
+{
+    return FixtureRunner::analyze(
+        'app/Http/Controllers/ThrowsController.php',
+        'App\\Http\\Controllers\\ThrowsController',
+        $method,
+    );
+}
+
+/**
+ * @return list<string> signal-disposition exceptions as "ShortName@status"
+ */
+function signalThrows(string $method): array
+{
+    $analysis = throwsAnalysis($method);
+
+    $out = [];
+    /** @var list<array<string, mixed>> $throws */
+    $throws = $analysis['throws'];
+    foreach ($throws as $throw) {
+        if (($throw['disposition'] ?? null) !== 'signal') {
+            continue;
+        }
+        $fqcn = (string) $throw['exceptionFqcn'];
+        $pos = strrpos($fqcn, '\\');
+        $short = $pos !== false ? substr($fqcn, $pos + 1) : $fqcn;
+        $out[] = $short.'@'.($throw['httpStatusHint'] ?? 'null');
+    }
+    sort($out);
+
+    return $out;
+}
+
+/**
+ * @return list<string> the messages of every unread-HTTP-status notice the analysis raised
+ */
+function unreadStatusDiagnostics(string $method): array
+{
+    /** @var list<array<string, mixed>> $diagnostics */
+    $diagnostics = throwsAnalysis($method)['diagnostics'];
+
+    $out = [];
+    foreach ($diagnostics as $diagnostic) {
+        if (($diagnostic['code'] ?? null) === 'inference.http-exception-status-unread') {
+            $out[] = (string) $diagnostic['message'];
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * The basenames one action's analysis reported as its dependency set.
+ *
+ * @return list<string>
+ */
+function throwDependencyNames(string $method): array
+{
+    /** @var list<string> $files */
+    $files = throwsAnalysis($method)['dependencyFiles'];
+
+    return array_map(static fn (string $file): string => basename($file), $files);
+}
+
+/**
  * One named path parameter of an emitted operation, or null when the operation has no such parameter.
  *
  * @param  array<string, mixed>  $operation

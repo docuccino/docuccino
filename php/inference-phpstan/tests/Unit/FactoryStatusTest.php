@@ -26,7 +26,7 @@ use Docuccino\Inference\PhpStan\Throwing\HttpExceptionStatus;
  * The one hop from a `throw X::y()` into the factory it names, over REAL exception classes: the hierarchy,
  * the visibility and the constructor defaults are reflection over the probes, and only the bodies and the
  * fold come from a source. That the analyser hands over the same bodies is the fixture group's job
- * ({@see ThrowCasesTest}); everything the hop DECIDES is decided here.
+ * ({@see ThrowStatusTest}); everything the hop DECIDES is decided here.
  */
 function factoryStatuses(bool $projectSeesTheFile = true): FactoryStatus
 {
