@@ -17,7 +17,7 @@ beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
 });
 
-it('surfaces exactly the expected API errors', function (string $method, array $expected): void {
+it('publishes the status each construction shape writes', function (string $method, array $expected): void {
     sort($expected);
 
     expect(signalThrows($method))->toBe($expected);

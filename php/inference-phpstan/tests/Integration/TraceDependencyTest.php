@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Docuccino\Inference\PhpStan\Tests\Integration;
 
-use Docuccino\Core\Draft\OperationDraft;
-use Docuccino\Core\Pipeline\FragmentCache;
-use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 
 /**
@@ -139,29 +136,8 @@ it('invalidates a cached fragment when a file a traced fact was written in is ed
     // warm, which is a route publishing an allow-list its code no longer enforces.
     /** @var list<string> $dependencies */
     $dependencies = ($subject === 'descended' ? exportTrace() : exportFacetTrace())['dependencyFiles'];
-    $path = FixtureRunner::path($edited);
-    $before = file_get_contents($path);
-    expect($before)->toBeString();
 
-    $dir = sys_get_temp_dir().'/docuccino-trace-deps-'.uniqid('', true);
-    $cache = static fn (): FragmentCache => new FragmentCache(true, $dir, 't', 's', 'i');
-    $key = 'trace-written-in';
-
-    try {
-        $cache()->put($key, new OperationFragment('/exports', 'get', (new OperationDraft)->freeze(), 'GET /exports'), $dependencies);
-
-        // Warm to begin with — otherwise the row would pass with the whole dependency list dropped.
-        expect($cache()->get($key))->not->toBeNull();
-
-        file_put_contents($path, $before."\n// edited\n");
-
-        expect($cache()->get($key))->toBeNull();
-    } finally {
-        file_put_contents($path, (string) $before);
-        array_map('unlink', glob($dir.'/*') ?: []);
-        @unlink($dir.'/.gitignore');
-        @rmdir($dir);
-    }
+    expect(fragmentAcrossDependencyEdit($dependencies, $edited))->toBe(['warm' => true, 'staleAfterEdit' => true]);
 })->with([
     'the concern a descended body is written in' => ['descended', 'app/Queries/Concerns/FiltersExports.php'],
     'the concern a folded return is written in' => ['folded', 'modules/Billing/Concerns/NamesExportFacets.php'],

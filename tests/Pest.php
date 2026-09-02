@@ -46,9 +46,12 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
+use Docuccino\Core\Pipeline\OperationFragment;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
+use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
 use Docuccino\Laravel\Commands\WatchCommand;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
@@ -1082,6 +1085,46 @@ function throwDependencyNames(string $method): array
 }
 
 /**
+ * Whether a fragment built on $dependencies is warm to begin with, and then stale once one file the
+ * analysis named is edited — driven through the real {@see FragmentCache}.
+ *
+ * Both halves are reported rather than asserted, because either alone proves nothing: an entry that
+ * was never warm goes stale with the whole dependency list dropped, and an entry that stays warm is
+ * the defect. Three suites ask this of three different producers, so the dance lives here — and with
+ * it the one place that edits the tree the rest of the suite is analysing ({@see FixtureEdit}).
+ *
+ * @param  list<string>  $dependencies  the dependency files the analysis reported
+ * @return array{warm: bool, staleAfterEdit: bool}
+ */
+function fragmentAcrossDependencyEdit(array $dependencies, string $editedRelative): array
+{
+    $path = FixtureRunner::path($editedRelative);
+    $dir = sys_get_temp_dir().'/docuccino-dependency-edit-'.uniqid('', true);
+    $key = 'dependency-edit';
+
+    try {
+        return FixtureEdit::exclusively(static function () use ($dependencies, $path, $dir, $key): array {
+            $cache = static fn (): FragmentCache => new FragmentCache(true, $dir, 't', 's', 'i');
+            $fragment = new OperationFragment('/subject', 'get', (new OperationDraft)->freeze(), 'GET /subject');
+            $cache()->put($key, $fragment, $dependencies);
+
+            $warm = $cache()->get($key) !== null;
+            $before = (string) file_get_contents($path);
+
+            try {
+                FixtureEdit::write($path, $before."\n// edited\n");
+
+                return ['warm' => $warm, 'staleAfterEdit' => $cache()->get($key) === null];
+            } finally {
+                FixtureEdit::write($path, $before);
+            }
+        });
+    } finally {
+        removeFragmentCacheDir($dir);
+    }
+}
+
+/**
  * One named path parameter of an emitted operation, or null when the operation has no such parameter.
  *
  * @param  array<string, mixed>  $operation
@@ -1274,6 +1317,44 @@ function referencesIn(string $directory, string $pattern): array
     sort($names);
 
     return $names;
+}
+
+/**
+ * Every call one source makes to one of $functions, as `function called in enclosingFunction` strings.
+ *
+ * Tokenised for the reason {@see referencesIn} tokenises, and the reason matters more here than usual:
+ * the names being looked for are ordinary English words as well as functions, so a grep flags every
+ * docblock that discusses one. A method or constant of the same name is somebody else's, and so is a
+ * declaration of one.
+ *
+ * @param  list<string>  $functions
+ * @return list<string>
+ */
+function globalCallSites(string $source, array $functions): array
+{
+    $tokens = significantTokens($source);
+    $found = [];
+
+    foreach ($tokens as $index => $token) {
+        foreach ($functions as $function) {
+            if (! namesGlobalSymbol($token, $function)) {
+                continue;
+            }
+
+            $previous = $tokens[$index - 1] ?? null;
+            if ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION])) {
+                continue;
+            }
+
+            if (($tokens[$index + 1] ?? null)?->text !== '(') {
+                continue;
+            }
+
+            $found[] = $function.' called in '.enclosingFunction($tokens, $index);
+        }
+    }
+
+    return $found;
 }
 
 /**

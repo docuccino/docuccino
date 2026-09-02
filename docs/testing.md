@@ -256,7 +256,7 @@ Consequences:
 
 - The `fixture` group is the **behavioural proof** for the inference engine's real path
   (return types, throw analysis, QB trace, determinism). It is *not* a line-coverage
-  contributor. Do not read `inference-phpstan`'s ~35% line figure as "untested" — read it
+  contributor. Do not read `inference-phpstan`'s ~49% line figure as "untested" — read it
   as "mostly proven out-of-process".
 - The CI **coverage** job therefore runs `--exclude-group=fixture` (fast, no app to
   provision) and the separate **fixture** job keeps proving the engine behaviourally.
@@ -272,11 +272,11 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.29%** | 97    | fully in-process-measurable; 0.29pp behind it, ~37 statements |
+| `core`              | **97.31%** | 97    | fully in-process-measurable; 0.31pp behind it, ~39 statements |
 | `laravel`           | **96.30%** | 96    | ratcheted 95 → 96; 0.30pp behind it, ~35 statements |
-| `inference-phpstan` | **48.57%** | 48    | real path is subprocess-only → `fixture`-proven; 0.57pp, ~14 statements |
+| `inference-phpstan` | **49.09%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.09pp, ~2 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.34%     | —     | informational only; no longer a gate             |
+| Overall             | 92.40%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
 clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
@@ -340,6 +340,18 @@ the first is reflection plus the same `ClassBodies` source the probes already dr
 (`ConstantSource`) is native reflection over a declaration with no analyser in it at all — so the package
 went to 48.57% and the floor to 48 while `ThrowAnalyzer` took its usual pcov-invisible share.
 
+And once more on the arc after it, by the second shape rather than the first: the trace's file
+bookkeeping came OUT of the `Tracer`. `TraceFiles` answers the two questions `$visitedFiles` had been
+answering at once — which files the traversal may still open, and which files the fragment depends on —
+and being pure bookkeeping it is unit-drivable in the parent process (10/10) where the `Tracer` wiring
+around it is Scope-driven and pcov-invisible either way (0/86). That took the package to 49.09%
+(1209/2463) and the floor to 49. The floor is thin there and taken deliberately: 49% of that denominator
+is 1206.87 statements, so 1209 covered leaves **2.13** — two lines, against the ~35 and ~39 the `laravel`
+and `core` floors carry. It is taken because the two decisions before it declined at 0.4 of a statement
+(`laravel` at 96.00%) and at 1.0 (this package at 49.05%), which are a next-line trigger and a one-line
+one, and because a floor of 48 would let 26 statements regress here without a word. When it does fire,
+the answer is the one it has been five times already: close a gap the standards were asking for anyway.
+
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
 `fixture` group is its behavioural proof. Raising that number means adding **in-process** unit tests
@@ -351,7 +363,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **48**.
+  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **49**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

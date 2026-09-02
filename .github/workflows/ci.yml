@@ -211,19 +211,22 @@ jobs:
     # coverage we have is whatever single phpstan the provisioning happens to resolve.
     # Before 2.2.10 `getByType(NodeScopeResolver::class)` hands over the fiber-driven
     # resolver and from 2.2.10 the plain one, which is a live behavioural fork — both
-    # must be exercised. This leg is the fiber side, and it pins 2.2.2 rather than our
-    # own floor of 2.2.0 because the fixture app installs larastan, whose 3.11.0 raised
-    # its requirement to `^2.2.2`: the exact 2.2.0 pin stopped resolving the day that
-    # shipped, with no change here. 2.2.2 is the lowest larastan admits and is still
-    # pre-2.2.10, so the fork is still covered. The quality job keeps 2.2.0 — it needs
-    # no larastan, so it can still test our true floor. Move this pin only to the
-    # lowest version larastan allows, and never past 2.2.9 without replacing the leg,
-    # or the fiber wiring goes untested. Laravel 13 matches `illuminate/*: ^12.0 || ^13.0`.
+    # must be exercised. This leg is the fiber side, so what it owes is any version
+    # BELOW 2.2.10, not one particular version. It is a range rather than an exact pin
+    # because the low end is not ours to choose: the fixture app installs larastan, and
+    # larastan's 3.11.0 raised its own requirement to `^2.2.2`, which stopped an exact
+    # 2.2.0 pin resolving the day it shipped with no change here — a red branch for a
+    # third party's floor moving. `>=2.2.2` keeps the floor honest about that; `<2.2.10`
+    # is the part that matters, and composer resolves the highest in range (2.2.9), so
+    # the next larastan bump inside the range needs no edit either. The quality job keeps
+    # 2.2.0 — it needs no larastan, so it can still test our true floor. Widening past
+    # 2.2.9 needs the leg replaced, or the fiber wiring goes untested.
+    # Laravel 13 matches `illuminate/*: ^12.0 || ^13.0`.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { laravel: '^12.0', phpstan: '2.2.2' }
+          - { laravel: '^12.0', phpstan: '>=2.2.2,<2.2.10' }
           - { laravel: '^12.0', phpstan: '*' }
           - { laravel: '^13.0', phpstan: '*' }
     steps:

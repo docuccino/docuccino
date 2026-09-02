@@ -189,7 +189,7 @@ it('recognises every class the adapter declares, so none can hide behind a modif
         }
 
         $source = (string) file_get_contents($entry->getPathname());
-        if (! declaresNamedClass($source)) {
+        if (! adapterDeclaresNamedClass($source)) {
             continue;
         }
 
@@ -212,7 +212,7 @@ it('recognises every class the adapter declares, so none can hide behind a modif
  * `::class` constant nor an anonymous `new class`. The independent statement of what the scan's pattern
  * has to recognise.
  */
-function declaresNamedClass(string $source): bool
+function adapterDeclaresNamedClass(string $source): bool
 {
     $tokens = array_values(array_filter(
         token_get_all($source),
