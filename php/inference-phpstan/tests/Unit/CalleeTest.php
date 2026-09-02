@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use Docuccino\Inference\PhpStan\Tests\Support\TraitUsingRenderer;
 use Docuccino\Inference\PhpStan\Trace\Callee;
+use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
+use PHPStan\Reflection\ReflectionProvider;
 
 /**
  * The resolved call target, whose {@see Callee::key()} is what the descent memoises and cycle-guards on.
@@ -33,4 +36,27 @@ it('names the file a body was written in apart from the one its class is', funct
     expect($callee->writtenIn())->toBe('/app/Support/Concerns/Guards.php')
         // …and identity is still the declaring class's, so one shared guard is walked once.
         ->and($callee->key())->toBe('App\\Http\\Controllers\\ProbeController::guard');
+});
+
+it('reads a trace root by the same two files a resolved callee carries', function (): void {
+    // The root arrives as a class/method/file rather than as a call to resolve, and a trait-imported
+    // action is the same defect as a trait-imported callee: the harvest comes off the class's file and
+    // the body that decided is written in the trait's. The provider is never consulted for this.
+    $resolver = new CalleeResolver($this->createStub(ReflectionProvider::class));
+
+    $root = $resolver->root(TraitUsingRenderer::class, 'traitDeclared', '/app/TraitUsingRenderer.php');
+
+    expect($root->file)->toBe('/app/TraitUsingRenderer.php')
+        ->and(basename($root->writtenIn()))->toBe('DeclaresProblems.php')
+        ->and($root->key())->toBe(TraitUsingRenderer::class.'::traitDeclared');
+});
+
+it('leaves a trace root it cannot reflect on the file it was given', function (): void {
+    // A method reflection cannot name — a stub, a class only the analyser knows — degrades to the file
+    // the caller handed over rather than dropping the root's accounting altogether.
+    $resolver = new CalleeResolver($this->createStub(ReflectionProvider::class));
+
+    $root = $resolver->root('App\\Nowhere\\Absent', 'handle', '/app/Nowhere/Absent.php');
+
+    expect($root->writtenIn())->toBe('/app/Nowhere/Absent.php');
 });

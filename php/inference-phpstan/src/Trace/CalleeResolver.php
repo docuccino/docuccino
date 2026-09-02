@@ -85,6 +85,16 @@ final class CalleeResolver
     }
 
     /**
+     * The trace's own root, which arrives as a class/method/file rather than as a call to resolve: the
+     * declaration read is the same one every callee gets, so a trait-imported action is keyed like a
+     * trait-imported callee.
+     */
+    public function root(string $class, string $method, string $file): Callee
+    {
+        return new Callee($class, $method, $file, self::writtenIn($class, $method));
+    }
+
+    /**
      * Where the method's own body is written, which for a TRAIT's method is not the declaring class's file:
      * PHP reports the member as the using class's, and only `ReflectionMethod` names the file it was copied
      * from. Native reflection rather than the provider's, because that is the one stack that answers this

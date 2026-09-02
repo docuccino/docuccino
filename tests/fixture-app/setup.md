@@ -78,6 +78,14 @@ require-dev:
 
 ## Exact installed versions (composer.lock, this host)
 
+Read this table as a record of what the recipe happened to resolve, never as an input to a fixture's
+expected answer. Nothing the fixture group asserts may be a function of the versions below — the
+Query-Builder bound frontier (`TraceDependencyTest`) least of all, because its coordinates are counts of
+files a walk had room to open and every one of them has to be a file this repo writes. See
+[`docs/design/defect-classes.md`](../../docs/design/defect-classes.md) §"A fixture that agrees with the
+vendor major it resolved": both instances of that class were rows that read the installed tree, and CI's
+two fixture-matrix legs are what execute the difference.
+
 | Package | Version |
 |---|---|
 | laravel/framework | v12.64.0 |
@@ -169,6 +177,31 @@ own (seeded from the action's parameter type):
   its builder and the body is nothing but `$query->paginateList(25)`.
 - `app/Filters/ListingTitleSearchFilter.php` — the custom `Spatie\QueryBuilder\Filters\Filter` the entry
   above instantiates.
+
+The chain where each fact sits one hop further out than the last, and two of those hops are TRAITS: PHP
+reports a trait-imported method as the using class's own, so a body the trace harvests is written in a file
+it never opens by name. The bounds are what make the frontier measurable (`trace-qb-bounds`), one fact per
+file, so a budget or a depth one short has to lose exactly one of them:
+
+- `app/Http/Controllers/ExportListController.php` + `app/Http/Controllers/Concerns/ListsExports.php` — the
+  controller declares nothing but `use ListsExports`, so even the trace's ROOT has its body written
+  elsewhere; the action returns `(new ExportIndexQuery)->query()->paginateList(25)`. That CHAIN is
+  deliberate and the frontier's budget order depends on it: the two links share the start offset
+  php-parser reports for both, so they are what proves a chain descends in the order it is written rather
+  than in the order the analyser hands the nodes over.
+- `app/Queries/ExportIndexQuery.php` — `query()` writes the chain's origin and its `defaultSort('sku')`,
+  and applies the filters through the concern below.
+- `app/Queries/Concerns/FiltersExports.php` — the trait carrying `exportFilters()`, whose body writes
+  `allowedFilters(['sku', AllowedFilter::exact('status')])` and hops on one file further.
+- `app/Queries/ExportSorts.php` — `apply()` writes `allowedSorts(['sku', 'created_at'])`, the deepest fact
+  in the chain.
+
+And the one hop a FOLD may make that a descent may not — `canFoldCallee()` also reads a non-vendor helper
+in the file being walked, and an array return is no type the trace follows:
+
+- `modules/Billing/ExportFacetQuery.php` + `modules/Billing/Concerns/NamesExportFacets.php` — a modular
+  query object outside the descend scope spreading its allow-list from a trait
+  (`->allowedFilters(...$this->exportFacets())`), so the concern's body has exactly one reader.
 
 ### Exception-flow analysis
 

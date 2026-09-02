@@ -176,15 +176,37 @@ legs and surfaced nothing at all on the Laravel 13 one. Every local run and ever
 The product side of the same class already has a rule in `CLAUDE.md` — an integration emitting its own
 major's grammar rather than the resolved one.
 
+The second instance moved a whole TABLE, and the vendor's contribution was not a signature but a
+traversal order. `TraceDependencyTest`'s bound frontier asserts which facts the trace proves at a file
+budget of 1, 2, 3 and 4, and the budget is spent on the two links of the traced action's chain,
+`(new ExportIndexQuery)->query()->paginateList(25)`. php-parser reports one start offset for both links —
+the receiver's — so the descent's sort by source position TIED, and a tie is decided by whoever handed the
+nodes over: PHPStan's node-callback order for a chained expression, the very order the sort exists to
+neutralise. The two fixture-matrix legs resolve different analyser versions, they answer that order
+differently, so the query class and the custom terminal changed places and two rows read their facts at
+swapped budgets — 8 of 8 on Laravel 12, 6 of 8 on Laravel 13, on a table whose whole job was to prove the
+budget arithmetic had not moved. It had never once run on the plain leg: the frontier was written after the
+last verification anyone did there.
+
 *The tell.* A fixture whose assertion depends on what a VENDOR method's signature says, rather than on
 what the fixture's own code says — a return type, a generic, a `@throws`, a by-reference parameter. Ask of
 every real-engine row: which half of this answer is the fixture's, and which half is the installed
-package's?
+package's? Ask it of a COUNT and of an ORDER too, not only of a type: a row whose expected value is how
+many files a walk had room for, or which of two hops it took first, is answering with whatever the vendor
+tree contributes to that number. The sharp version, which would have caught the second instance where the
+signature question does not: any tie in an ordering the product introduced to be deterministic — a sort
+whose key two candidates can share hands the decision straight back to the library that produced them.
 
-*The fix that worked.* Move the fact being counted out from behind the vendor's decision — here, write
-the counted throw before the closure it is measured against, so no vendor return type governs whether it
-is reachable — and say in the fixture why it is written that way, since the natural ordering is the one
-that breaks. The matrix leg is the executor; nothing in a single-version run can catch it.
+*The fix that worked.* Move the fact being counted out from behind the vendor's decision — for the first,
+write the counted throw before the closure it is measured against, so no vendor return type governs
+whether it is reachable — and say in the fixture why it is written that way, since the natural ordering is
+the one that breaks. The second was fixed in the PRODUCT rather than the fixture, because the tie was the
+product's: `SourceOrder` positions a call at its own name instead of at the receiver offset every link of
+a chain shares, so a chain descends left-to-right on any analyser and the delegation is gone. The fixture
+then restates its frontier from what the bounds MEAN, with a row beside it asserting that every file in
+the counted path is one this repo writes and none of them sits under `vendor/` — the tell, executed. The
+matrix leg is the executor; nothing in a single-version run can catch either, and a single-version run is
+what a new table gets by default.
 ## A member reached through inheritance, read as though it were the class's own
 
 PHP hands an inherited or trait-imported member back looking like the class's, and a reader that asks
