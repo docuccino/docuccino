@@ -43,10 +43,12 @@ use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ExportFailure;
  * type-derived placeholders, plus the real response status. The fill is confined to examples, which are
  * illustrative by definition; nothing invented ever reaches a schema.
  *
- * When the body is an object the engine watched being constructed, the arguments it was built with decide
- * membership instead: supplied beats optional (this branch passed it, so this response has it) and
- * unsupplied beats required (this branch didn't, so it doesn't). An argument that renders the key only on
- * some responses decides nothing, and the schema answers for it.
+ * When the body is an object the engine watched being constructed, the arguments it was built with ADD to
+ * membership rather than replacing the schema's: supplied beats optional (this branch passed it, so this
+ * response has it), and a member the schema REQUIRES is illustrated whether the branch passed it or not,
+ * since an example missing one would fail against the schema printed beside it ('still fills a required
+ * member no argument accounted for' is that guard). Only an unsupplied optional member is left out — and
+ * an argument that renders the key only on some responses decides nothing, so the schema answers for it.
  */
 /**
  * The throw the tier is answering for. Only its status hint and its FQCN reach the builder: the hint is
