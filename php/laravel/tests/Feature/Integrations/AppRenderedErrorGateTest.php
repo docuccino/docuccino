@@ -26,7 +26,6 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
-use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
 use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 use Docuccino\Laravel\Tests\Fixtures\InferredHandler\ProbeRejection;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
@@ -117,18 +116,77 @@ it('keys the note by the exact exception, so one throw’s renderer never silenc
         ->toBe(['message' => ['type' => 'string']]);
 });
 
-it('never gates the active preset, whose body is the application’s own declared contract', function (): void {
-    // The preset is not the framework speaking: the document opted into it, so it describes the shape the
-    // application publishes and a renderer nobody could read does not refute it.
-    $context = gateContext('problem-details');
-    AppRenderedErrors::record($context, ModelNotFoundException::class, 'App\\Exceptions\\Handler::render');
+it('divides every mapper the adapter ships between writing the note and reading it', function (): void {
+    // The two rows above are a SUBSET guard, and a subset guard is silent outside itself: a third tier
+    // publishing a framework body with no gate on it would pass every test in this file. So the domain —
+    // every ExceptionToResponse this package ships — is asserted against the union, and a mapper owing no
+    // answer would have to be added here as a row rather than falling in the gap.
+    $readers = [];
+    $writers = [];
+    $neither = [];
 
-    $components = new ComponentRegistry;
-    $draft = (new ProblemDetailsExceptionToResponse)->toResponse(gateThrow(ModelNotFoundException::class), $context, $components);
+    foreach (adapterExceptionMappers() as $fqcn => $source) {
+        $reads = str_contains($source, 'AppRenderedErrors::includes');
+        $writes = str_contains($source, 'AppRenderedErrors::record');
 
-    expect($draft?->freeze()->ref)->toBe('#/components/responses/ProblemNotFound')
-        ->and($components->responses()['ProblemNotFound']['content'] ?? [])->toHaveKey('application/problem+json');
+        match (true) {
+            $reads => $readers[] = $fqcn,
+            $writes => $writers[] = $fqcn,
+            default => $neither[] = $fqcn,
+        };
+    }
+
+    // Well under what the tree holds, and far enough above zero that a scan which stopped recognising the
+    // shape fails loudly rather than passing on an empty set.
+    expect(count($readers) + count($writers) + count($neither))->toBeGreaterThanOrEqual(3);
+
+    sort($readers);
+    $gated = array_map(static fn (array $row): string => $row[0]::class, array_values(gatedTiers()));
+    sort($gated);
+
+    expect($readers)->toBe($gated)
+        // The inferred-handler tier is the only writer: it is the one that watched the renderer.
+        ->and($writers)->toBe([InferredHandlerExceptionToResponse::class])
+        // Nothing else. A mapper publishing a body of the APPLICATION's own is not the framework speaking
+        // and owes no gate — but it owes a row here saying so, rather than being silently uncovered.
+        ->and($neither)->toBe([]);
 });
+
+/**
+ * Every `ExceptionToResponse` this package ships, as FQCN => its source. A source scan rather than a
+ * reflection sweep, because the classification below is about which call each one makes.
+ *
+ * @return array<class-string, string>
+ */
+function adapterExceptionMappers(): array
+{
+    $root = dirname(__DIR__, 3).'/src';
+    $found = [];
+
+    /** @var iterable<SplFileInfo> $entries */
+    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($entries as $entry) {
+        if (! $entry->isFile() || $entry->getExtension() !== 'php') {
+            continue;
+        }
+
+        $source = (string) file_get_contents($entry->getPathname());
+        if (! preg_match('/^\s*(?:final\s+)?class\s+(\w+)[^{]*\bimplements\b[^{]*\bExceptionToResponse\b/m', $source, $class)) {
+            continue;
+        }
+        if (! preg_match('/^namespace\s+([^;]+);/m', $source, $namespace)) {
+            continue;
+        }
+
+        /** @var class-string $fqcn */
+        $fqcn = trim($namespace[1]).'\\'.$class[1];
+        $found[$fqcn] = $source;
+    }
+
+    ksort($found);
+
+    return $found;
+}
 
 /**
  * The write side, through the real tier: which renderers count as the application answering for an

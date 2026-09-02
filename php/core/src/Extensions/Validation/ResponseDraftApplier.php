@@ -27,9 +27,8 @@ final class ResponseDraftApplier
         $response = $operation->response($draft->status);
         $contribution = Contribution::forProducer($producer, $source);
 
-        // A mapper referencing a shared response component (the Problem Details preset's reusable
-        // `#/components/responses/Problem*`) freezes as a `$ref` — so the status entry becomes that
-        // reference rather than an inline body.
+        // A mapper referencing a shared `#/components/responses/*` component freezes as a `$ref` — so the
+        // status entry becomes that reference rather than an inline body.
         if ($frozen->ref !== null) {
             $response->setRef($frozen->ref, $contribution);
 

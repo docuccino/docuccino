@@ -118,7 +118,7 @@ final class RateLimitResponsesExtension implements OperationExtension
      * error-response chain never gets asked about it — and hardcoding Laravel's shape would contradict an
      * app whose handler renders `application/problem+json` for the very same exception. Asking the chain
      * fixes that. The response stays inline rather than `$ref`-ing the chain's component, because that
-     * component carries none of the `X-RateLimit-*` headers this 429 needs; when a preset answers with a
+     * component carries none of the `X-RateLimit-*` headers this 429 needs; when a mapper answers with a
      * reference, the referenced component's content is copied in instead. The finished 429 — headers and
      * all — is then hoisted into its own shared component by `SharedErrorResponses`, which it can be
      * because the headers are identical for every throttled route.

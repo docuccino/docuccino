@@ -890,7 +890,6 @@ or an `ExceptionToResponse::producer()` returning `'integration:<name>'`. The fu
 | `Sanctum`            | `sanctum`              |
 | `Passport`           | `passport`             |
 | `Permission`         | `permission`           |
-| `ProblemDetails`     | `problem-details`      |
 | `FrameworkErrors`    | `framework-errors`     |
 | `InferredHandler`    | `inferred-handler`     |
 | `Validation`         | `validation`           |
@@ -1018,7 +1017,8 @@ interface ExceptionToResponse {
 //      itself, or one HTTP forbids a body on. Handler files join dependencyFiles.
 //   2. FrameworkDefaultsExceptionToResponse — Laravel's stock JSON shapes
 //      (422 {message,errors}, 401/403/404 {message}), maintained per Laravel version.
-//   3. Presets (problem-details) + user extensions; attributes/config override anything.
+//   3. DefaultExceptionToResponse — the terminal fallback: {message} under the status.
+//      User extensions slot in by order; attributes/config override anything.
 ```
 
 **No `ExampleProvider`.** Examples were sketched as a contract of their own and never needed one:
@@ -1557,11 +1557,12 @@ when a registration path exists and the `emit()` signature settles.
       FQCN (`IdentityGenerator::namedSchemaId`). Making visibility status-aware would make component
       identity status-dependent, breaking both the FQCN pin and the registry's structural dedupe — one
       class would fan out into a component per status it appears under. The capability itself already
-      exists where it can be stated honestly: the problem-details preset emits `allOf: [{$ref ProblemDetails},
-      {properties: {errors}}]` for validation entries (`ProblemDetailsSchema::response()`), because there
-      the 422 shape is the preset's own fact, not a property of the app's class. App-side answers, in order:
-      the preset; a per-status type + `#[Response(status:, type:)]`; `array|Optional` (in `properties`, out of
-      `required`); an overlay on the one operation's response; a `DocumentTransformer` for many at once.
+      exists where it can be stated honestly: a renderer whose 422 arm builds a body with `errors` and whose
+      404 arm builds one without is documented per arm, because each arm is analysed on its own — there the
+      per-status difference is a fact about the CODE and not a per-status view of one class. App-side answers,
+      in order: build the odd status in its own arm; a per-status type + `#[Response(status:, type:)]`;
+      `array|Optional` (in `properties`, out of `required`); an overlay on the one operation's response; a
+      `DocumentTransformer` for many at once.
       **If ever revisited**, the only sound shape is the existing DEVIATION rule — dereference the component
       inline for THAT response and patch the inline copy (precedent: `#[BodyParameter]` forcing a hoisted
       request body inline, above) — never a status-aware converter.
@@ -1779,7 +1780,7 @@ return [
             'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
             'routes' => ['include' => ['api/*'], 'exclude' => [...], 'closure' => null],
             'security' => [...full scheme set..., 'auto_detect_middleware' => 'auth*'],
-            'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+            'error_responses' => 'default',
             'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
             'content' => ['dir' => 'resources/docs/api'],
             'overlays' => ['resources/docs/overlays/*.yaml'],
@@ -1814,11 +1815,13 @@ return [
 ];
 ```
 
-`error_responses` accepts either a string preset — `default` (framework-default JSON error shapes),
-`problem-details` (the RFC 9457 preset), or `none` (no error responses) — **or** a bag
-`['preset' => <string>, 'errors_shape' => 'map'|'pointer-list']`, where `errors_shape` chooses how a
-422 body models its `errors`: `map` (field → messages, the default) or `pointer-list` (a list of
-`{detail, pointer}` objects, JSON-Pointer style). `tags.default_strategy` chooses how an operation
+`error_responses` says what is published for the exceptions the application does not render itself:
+`default` (framework-default JSON error shapes, plus the implicit responses) or `none` (neither). It is a
+closed set of two, and any other value is read as `default` and reported as
+`config.unknown-error-responses` — a document's whole error contract is not a thing to change on a
+misspelling, in either direction. There is no preset: what an application's own handler returns, down to
+the media type it sends it as, is read from its code and published over both.
+`tags.default_strategy` chooses how an operation
 with no `#[Group]` gets its default tag: `controller` (the controller's short name → `tags.map`, the
 default) or `none` (no default tag); an unknown value coerces to `controller` and emits a
 `config.unknown-tag-strategy` info diagnostic. `tags.definitions` entries are full OAS 3.2 Tag
@@ -1829,7 +1832,7 @@ that sort, so the result never depends on definition order: a `parent` naming no
 both cases the offending LINK alone is dropped (the tag stays) so the hierarchy is always a forest.
 `summary`/`parent`/`kind` are 3.2-only — the 3.1 downlevel drops each with its own
 `downlevel.tag-*` warning. Setting `enabled` on one of the always-on producers
-(validation / form_request / framework_errors / problem_details / inferred_handler) has no effect and
+(validation / form_request / framework_errors / inferred_handler) has no effect and
 emits a `config.enabled-ignored` info diagnostic — only the toggleable integrations honour `enabled`.
 Integration config lives under one `integrations.<name>` bag per integration — there is no
 back-compat read of the old flat `security.sanctum` / `passport` / `query_builder` locations
@@ -2015,8 +2018,8 @@ genuinely theirs (Sanctum's `session.cookie`, Passport's URLs, scopes and grants
       "responses": {
         "200": { "x-docuccino": { "id": "res:v1:e1f2a3b4c5d6e7f8" }, "description": "Paginated list of forms",
                  "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedFormData" } } } },
-        "401": { "$ref": "#/components/responses/ProblemUnauthenticated" },
-        "422": { "$ref": "#/components/responses/ProblemValidation" }
+        "401": { "$ref": "#/components/responses/Unauthorized" },
+        "422": { "$ref": "#/components/responses/UnprocessableEntity" }
       }
     }
   }

@@ -71,9 +71,8 @@ it('reads prose as prose, however array-shaped it looks', function (): void {
         <?php
 
         return [
-            // A bag also picks how a 422 models its `errors`:
-            // ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'] — 'map' (field
-            // to messages) is the default.
+            // Written either way — a plain string, or, if the key ever took a bag,
+            // ['strategy' => 'default', 'shape' => 'wide'] — because this is a sentence.
             'error_responses' => 'default',
         ];
         PHP;

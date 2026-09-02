@@ -33,11 +33,11 @@ const FLOORS = [
     // hair-trigger that held this floor one short while the figure sat at 97.09%.
     'core' => 97,
     // Fully in-process-measurable: provider, registry, pipeline, commands, Integrations/, the
-    // contract-testing assertions. Measured 96.00% (9757/10164) and HELD at 95, one short of the
-    // measured integer for the reason core's note records: 96 would leave 0.0035pp — four tenths of one
-    // statement — so a single line going uncovered anywhere in the package would fail the gate. Ratchet
-    // it the run after the figure clears 96 with a margin behind it.
-    'laravel' => 95,
+    // contract-testing assertions. Measured 96.29% (11015/11439) — ratcheted 95 → 96 on the trigger the
+    // previous note set, which held the floor one short of the measured integer while 96.00% would have
+    // left four tenths of one statement of margin. The figure now clears 96 with 0.29pp behind it, about
+    // thirty statements, so a line going uncovered no longer fails the gate on its own.
+    'laravel' => 96,
     // Deliberately LOW and not comparable to the others: this package's real analysis runs inside a
     // separate PHP subprocess (see docs/testing.md §"Why the coverage job excludes the fixture group"),
     // which pcov cannot instrument either way. Its behavioural proof is the `fixture` group, not this

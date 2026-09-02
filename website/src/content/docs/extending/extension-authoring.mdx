@@ -540,9 +540,9 @@ change one, in the order to reach for them.
    the first mapper that both supports the throw and answers, and an unannotated extension sorts at
    `Priorities::DEFAULT` — ahead of the framework-errors tier (`LATE`) and the terminal fallback
    (`LAST`), so yours wins over both, body and name together, with no `#[ExtensionOrder]` at all. Two
-   tiers still run ahead of it: the inferred-handler tier (`FIRST`), which documents the shape your
-   app's own handler really returns, and the Problem Details preset (`EARLY`) where you've opted in.
-   To beat either, say so — `#[ExtensionOrder(priority: Priorities::FIRST + 1)]`.
+   One tier still runs ahead of it: the inferred-handler tier (`FIRST`), which documents the shape your
+   app's own handler really returns. To beat that, say so —
+   `#[ExtensionOrder(priority: Priorities::FIRST + 1)]`.
 
    ```php
    final class InvoiceNotFound implements ExceptionToResponse

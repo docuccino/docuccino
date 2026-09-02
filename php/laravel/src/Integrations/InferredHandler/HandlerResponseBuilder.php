@@ -52,20 +52,17 @@ use Docuccino\Laravel\Support\FrameworkClasses;
  * ({@see build()}).
  *
  * The MEDIA TYPE is one of those four because no later tier reads the renderer — they assert
- * `application/json`, or the active preset's own type, off a classification of the exception CLASS. Where
- * the render path folded the type and not the payload, the true statement is "a body of this media type,
- * shape unknown", and the response carries that type under an EMPTY schema, which is what a media type
- * with no keyword written into it freezes to. Of the three shapes available it is the only honest one:
- * `{type: object}` claims a JSON object the build never saw (the payload may be a list or a scalar), and
- * omitting `schema` leaves a generator choosing between "any body" and "no body", which is the ambiguity
- * this answers. An empty schema also hoists nowhere, so no component is minted for a shape nobody read.
- * The cost is type safety and never truth, which is the trade the degraded-answer rule asks for — and it
- * is paid twice where a preset is active, since the shape that preset would have published at the same
- * media type is lost with it. A preset declares what a document's errors look like and this tier reports
- * what one renderer does, which is why it is ordered ahead of it. Provenance is no weaker than a folded
- * body's — the same producer read the same render path — so the write is the same contribution, and the
- * half that did NOT fold is said where an author acts on it: the `inferred-handler.too-dynamic` summary
- * still names the callback ({@see HandlerDeferralLog}).
+ * `application/json` off a classification of the exception CLASS. Where the render path folded the type
+ * and not the payload, the true statement is "a body of this media type, shape unknown", and the response
+ * carries that type under an EMPTY schema, which is what a media type with no keyword written into it
+ * freezes to. Of the three shapes available it is the only honest one: `{type: object}` claims a JSON
+ * object the build never saw (the payload may be a list or a scalar), and omitting `schema` leaves a
+ * generator choosing between "any body" and "no body", which is the ambiguity this answers. An empty
+ * schema also hoists nowhere, so no component is minted for a shape nobody read. The cost is type safety
+ * and never truth, which is the trade the degraded-answer rule asks for. Provenance is no weaker than a
+ * folded body's — the same producer read the same render path — so the write is the same contribution,
+ * and the half that did NOT fold is said where an author acts on it: the `inferred-handler.too-dynamic`
+ * summary still names the callback ({@see HandlerDeferralLog}).
  *
  * When the body is an object the engine watched being constructed, the fourth type arg names the arguments
  * it was built with, and those decide the example's membership rather than the schema's `required` list: an

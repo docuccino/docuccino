@@ -218,22 +218,17 @@ Declaring any `schemes` here **defers** the auto-config security integrations (S
 ### `error_responses`
 
 ```php
-'error_responses' => 'default', // 'default' | 'problem-details' | 'none'
-
-// Or a bag, to also choose the Problem Details 422 `errors` shape:
-'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
+'error_responses' => 'default', // 'default' | 'none'
 ```
 
-Selects the error-response strategy. `default` documents Laravel's stock JSON error shapes;
-`problem-details` activates the [RFC 9457 preset](/laravel/documenting/errors/) (`application/problem+json`);
-`none` emits no error responses. In every case, an [inferred exception handler](/laravel/documenting/errors/)
-that recovers your app's real error shape wins ahead of this fallback. The strategy also governs the
-[implicit 401/422/404/403 responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation)
+Selects what is published for the exceptions your application does *not* render itself. `default`
+documents Laravel's stock JSON error shapes; `none` emits no error responses. Either way, an
+[inferred exception handler](/laravel/documenting/errors/) that recovers your app's real error shape —
+its body, its status and the media type it is sent as — wins ahead of this fallback. The strategy also
+governs the [implicit 401/422/404/403 responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation)
 (none of them are emitted under `none`).
 
-`errors_shape` (only meaningful with the Problem Details preset) chooses how the `422` body models
-`errors`: `map` (a field-keyed map of message lists, the default) or `pointer-list` (a list of
-`{detail, pointer}` JSON-Pointer objects).
+Any other value is reported as `config.unknown-error-responses` and read as `default`.
 
 ### `tags`
 

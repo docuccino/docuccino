@@ -469,7 +469,7 @@ an object's keys.
 A `*` child settles nothing, because Laravel applies a `field.*` rule to every value whatever the keys
 are. It constrains the value, and the container is whatever else established it — the named children
 above, or, for a Spatie Data property, the [type its docblock
-states](/laravel/packages/spatie-data/#requests-from-a-data-class). With nothing else to go on, `array`
+states](/laravel/packages/spatie-data/#request-bodies-from-data-classes). With nothing else to go on, `array`
 plus a `*` child is a JSON array, which is all the information there is.
 
 An `array` rule with **no** child rules at all — no `*`, no named keys — settles nothing either way, and

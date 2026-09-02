@@ -30,9 +30,9 @@ use Throwable;
  *
  * The recovered `JsonResponse<payload, status>` becomes the documented response, under the name the
  * render path declared with `#[ErrorComponent]` where one did. A body too dynamic to fold defers with an
- * info diagnostic so the next tier (preset, framework defaults) fills in. Ordered FIRST so ground truth
- * beats any preset — a mapper that must beat it says so with an order of its own. Handler files join the
- * route's fragment-cache deps.
+ * info diagnostic so the next tier (framework defaults) fills in. Ordered FIRST so ground truth beats
+ * anything a document declares about its errors in the abstract — a mapper that must beat it says so with
+ * an order of its own. Handler files join the route's fragment-cache deps.
  */
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class InferredHandlerExceptionToResponse implements ExceptionToResponse

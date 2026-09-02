@@ -1,6 +1,6 @@
 ---
 title: Error responses
-description: Document 4xx and 5xx responses automatically — from your real exception handling, framework defaults, or the RFC 9457 preset.
+description: Document 4xx and 5xx responses automatically — read out of your real exception handling, with framework defaults behind them.
 ---
 
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
@@ -9,22 +9,25 @@ Error responses are one of the most tedious parts of API docs to maintain by han
 documents them for you by reading how your application actually handles exceptions, and falls back
 to sensible defaults for the framework's built-in ones.
 
-For each exception an endpoint can throw, Docuccino resolves a response through four tiers. The first
+For each exception an endpoint can throw, Docuccino resolves a response through three tiers. The first
 tier that can produce a shape wins, and your [attributes](/laravel/reference/attributes/#response),
 docblocks, overlays or config always override the result:
 
 <Steps>
 
-1. **Your exception handling** — the shape your code really returns.
+1. **Your exception handling** — the shape your code really returns, under the media type it really
+   sends it as.
 
-2. **The Problem Details preset** — RFC 9457 responses, when you opt in.
+2. **Framework defaults** — Laravel's stock JSON shapes for the exceptions it renders itself.
 
-3. **Framework defaults** — Laravel's stock JSON shapes for the exceptions it renders itself.
-
-4. **A generic fallback** — any other exception with a known status gets `{ "message": string }` under
+3. **A generic fallback** — any other exception with a known status gets `{ "message": string }` under
    that status (`500` when the status can't be determined), so an error is never simply undocumented.
 
 </Steps>
+
+Docuccino has no error *preset* to turn on, and needs none: an application that answers
+[RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` is documented as answering
+problem+json because its renderer says so, and one that answers something else is documented as that.
 
 ## Your exception handling (automatic)
 
@@ -273,9 +276,7 @@ schema to a bare `JsonResponse`. See
 
 One class is one component, so a single shared error Data class documents one shape for every status
 that uses it — there's no per-status variant of it, and [`#[Hidden]`](/laravel/reference/attributes/#hidden)
-hides a property everywhere or nowhere. If you'd rather not write the class at all, the
-[Problem Details preset](#the-problem-details-preset-opt-in) ships the same idea with `errors` already
-grafted onto `422` alone.
+hides a property everywhere or nowhere.
 
 ### A member only some statuses carry
 
@@ -321,100 +322,6 @@ components don't exist yet at overlay time: targeting `components.responses.*` g
 `overlay.target-missing` warning and no change. Use a transformer.
 :::
 
-## The Problem Details preset (opt-in)
-
-Prefer [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` responses? Turn
-on the preset:
-
-```php
-// config/docuccino.php → documents.default
-'error_responses' => 'problem-details',
-```
-
-The framework exceptions become reusable `#/components/responses/Problem*` entries, all built on one
-shared `ProblemDetails` schema (`type`, `title`, `status`, `detail`, `instance`) — so an operation's
-error responses are a `$ref`, not a copy, and the shape is described exactly once:
-
-<Tabs>
-	<TabItem label="On the operation">
-	```json
-	"responses": {
-	  "201": { "description": "Created", "content": { "application/json": {
-	    "schema": { "$ref": "#/components/schemas/InvoiceResource" }
-	  } } },
-	  "422": { "$ref": "#/components/responses/ProblemValidation" }
-	}
-	```
-	</TabItem>
-	<TabItem label="Shared components">
-	```json
-	"ProblemDetails": {
-	  "type": "object",
-	  "properties": {
-	    "type":     { "type": "string", "format": "uri", "default": "about:blank" },
-	    "title":    { "type": "string" },
-	    "status":   { "type": "integer" },
-	    "detail":   { "type": "string" },
-	    "instance": { "type": "string", "format": "uri" }
-	  }
-	},
-	// components.responses
-	"ProblemValidation": {
-	  "description": "Validation failed",
-	  "content": { "application/problem+json": {
-	    "schema": { "allOf": [
-	      { "$ref": "#/components/schemas/ProblemDetails" },
-	      { "type": "object", "properties": { "errors": {
-	        "type": "object",
-	        "additionalProperties": { "type": "array", "items": { "type": "string" } }
-	      } } }
-	    ] },
-	    "example": {
-	      "type": "about:blank", "title": "Unprocessable Entity", "status": 422,
-	      "detail": "Validation failed.", "errors": { "field": ["The field is invalid."] }
-	    }
-	  } }
-	}
-	```
-	</TabItem>
-</Tabs>
-
-The shared schema stays open — no `additionalProperties: false` — so your app is free to add its own
-members. Every response carries a worked example, and the components you get are:
-
-| Component | Status | For |
-| --- | --- | --- |
-| `ProblemValidation` | `422` | `ValidationException` — adds the `errors` member |
-| `ProblemUnauthenticated` | `401` | `AuthenticationException` |
-| `ProblemForbidden` | `403` | `AuthorizationException` |
-| `ProblemNotFound` | `404` | `ModelNotFoundException`, `NotFoundHttpException` |
-| `Problem<status>` | that status | Any other `HttpException` whose status folds to a constant |
-
-Your own inferred handlers still win where they apply, so the preset only covers what you haven't
-handled yourself.
-
-### Choosing the `422` errors shape
-
-By default `errors` is a field-keyed map of message lists, matching Laravel's stock validation JSON.
-RFC 9457 implementations often prefer a list of JSON-Pointer objects instead — pass the bag form to
-switch:
-
-```php
-'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
-```
-
-```json
-"errors": {
-  "type": "array",
-  "items": {
-    "type": "object",
-    "properties": { "detail": { "type": "string" }, "pointer": { "type": "string" } },
-    "required": ["detail", "pointer"]
-  }
-}
-// example: [ { "detail": "The field is invalid.", "pointer": "#/field" } ]
-```
-
 ## Framework defaults
 
 With `error_responses` set to `default` (the shipped value), Docuccino documents Laravel's stock JSON
@@ -440,17 +347,16 @@ renders it to, the response keeps its status and its description and carries no 
 your server does not send would leave every generated client with the wrong type for that error. The
 diagnostic names the callback to fix.
 
-The [Problem Details preset](#the-problem-details-preset-opt-in) still answers in that case: a document that
-opted into it has declared that shape itself, and a handler nobody could read has not contradicted it. What
-does contradict it is a handler that named a content type — that reading comes from your code, so it is
-published instead, unconstrained.
+One reading survives a body that would not fold: a handler that named a content type. That comes from
+your code rather than from a classification of the exception, so the response states that media type, with
+a schema constraining nothing — "a problem+json body, shape unread" rather than a shape nobody saw.
 
 ## Implicit responses (middleware, bindings & validation)
 
 Some error responses never appear as a `throw` in your action — the framework produces them from
 middleware or while resolving the request. Docuccino synthesizes these from statically-visible
-signals and runs each through the same resolution above, so the body matches your chosen style
-(framework defaults or the Problem Details preset):
+signals and runs each through the same resolution above, so the body matches the rest of the document's
+errors:
 
 | Status | When it's added | How to opt out |
 | --- | --- | --- |
@@ -461,8 +367,9 @@ signals and runs each through the same resolution above, so the body matches you
 
 If your action *also* throws one of these explicitly, the two merge into a single response for that
 status — you never get a duplicate. `429` is documented by the [rate-limiting](/laravel/documenting/rate-limiting/)
-integration, and takes its body from this same resolution, so a `problem-details` app gets a problem
-document there too. Set `error_responses` to `none` to turn all of this off.
+integration, and takes its body from this same resolution, so an app whose handler renders
+`application/problem+json` gets a problem document there too. Set `error_responses` to `none` to turn all
+of this off.
 
 :::note
 CSRF (`419`), maintenance mode (`503`), and exceptions thrown from arbitrary custom middleware are
@@ -892,23 +799,18 @@ keep every copy inline.
 
 ## Configuration
 
-One key, in either a string or a bag form:
+One key:
 
 ```php
 // config/docuccino.php → documents.default
 'error_responses' => 'default',
-
-// Or, to also choose how a Problem Details 422 models `errors`:
-'error_responses' => ['preset' => 'problem-details', 'errors_shape' => 'pointer-list'],
 ```
 
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `error_responses` (or `preset`) | `default` \| `problem-details` \| `none` | `default` | Which fallback strategy to use. Your inferred handlers take precedence regardless; `none` also turns off the implicit responses above. |
-| `errors_shape` | `map` \| `pointer-list` | `map` | The Problem Details `422` `errors` shape. Only meaningful with the `problem-details` preset. |
+| `error_responses` | `default` \| `none` | `default` | What to publish for the exceptions your application does not render itself. Your inferred handlers take precedence regardless; `none` also turns off the implicit responses above. |
 
 :::tip
 Because Docuccino reads your *actual* handling first, most apps get accurate error docs with no
-configuration — the preset and defaults are just there for the exceptions you haven't handled
-explicitly.
+configuration — the defaults are just there for the exceptions you haven't handled explicitly.
 :::

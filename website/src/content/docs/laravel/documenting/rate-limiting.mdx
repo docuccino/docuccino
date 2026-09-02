@@ -126,7 +126,6 @@ matches the rest of the document:
 | `error_responses` | The `429` body |
 | --- | --- |
 | `default` | Laravel's `{ "message": string }`, which is what `ThrottleRequests` returns. |
-| `problem-details` | The same `ProblemDetails` shape as every other error, under `application/problem+json`. |
 | Your own handler covers throttling | Whatever that handler builds. |
 | `none`, or nothing in the chain answers | The stock `{ "message": string }`. |
 

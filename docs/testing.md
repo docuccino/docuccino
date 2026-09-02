@@ -264,7 +264,7 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-08-28)
+## Measured coverage (2026-09-02)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -272,11 +272,11 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 
 | Package             | Measured   | Floor | Why                                              |
 |---------------------|------------|-------|--------------------------------------------------|
-| `core`              | **97.51%** | 97    | fully in-process-measurable                      |
-| `laravel`           | **96.00%** | 95    | 96 would leave 0.0035pp — four tenths of a statement |
-| `inference-phpstan` | **47.32%** | 47    | real path is subprocess-only → `fixture`-proven  |
+| `core`              | **97.28%** | 97    | fully in-process-measurable                      |
+| `laravel`           | **96.29%** | 96    | ratcheted 95 → 96; 0.29pp behind it, ~30 statements |
+| `inference-phpstan` | **47.78%** | 47    | real path is subprocess-only → `fixture`-proven  |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.41%     | —     | informational only; no longer a gate             |
+| Overall             | 92.40%     | —     | informational only; no longer a gate             |
 
 Every ratchet UP follows one of two shapes, and both are worth aiming for deliberately rather than
 waiting for. Either **the work landed in the measurable half** — a rule driven by native reflection,
@@ -285,6 +285,10 @@ was moved out** of a subprocess-only class into one of its own, which is the pre
 the engine gains work (`DescentBudget`, `ContentTypeLabel`, `SourceOrder`, core's `ArrayKey` all came
 out that way). The per-ratchet arithmetic lives in git history; what has to be recorded here is the
 other direction.
+
+A denominator change can also move the ratio UP, and one did: deleting a built-in error preset took
+about 130 well-covered adapter statements out of both halves, and `laravel` came back at 96.29% — the
+figure the previous note was waiting for, so the floor ratcheted 95 → 96 rather than sitting one short.
 
 **A floor drop is only ever a documented denominator change**, and there have been two.
 
@@ -336,7 +340,7 @@ for its pure/parent-process classes, never more subprocess fixture tests.
   under **pcov** (via `setup-php`) plus `php tools/coverage-floors.php`, which enforces a floor
   **per package**. `composer test:coverage` runs the same two steps locally.
 - Each floor is an **honest floor** — the measured-now percentage rounded DOWN to an integer, never
-  an aspiration. Current floors: `core` **97**, `laravel` **95**, `inference-phpstan` **47**.
+  an aspiration. Current floors: `core` **97**, `laravel` **96**, `inference-phpstan` **47**.
 - **Why per-package rather than one global `--min`:** the engine package's real path is
   subprocess-only and invisible to pcov, so every engine feature it gained *diluted the global
   ratio even while genuine in-process coverage rose*. A single global gate therefore sat one engine

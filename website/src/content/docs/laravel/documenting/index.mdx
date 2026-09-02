@@ -114,7 +114,6 @@ can also be switched off per document with `integrations.<key>.enabled = false` 
 | Integration | What it documents | Requires | Config |
 | --- | --- | --- | --- |
 | [Inferred exception handlers](/laravel/documenting/errors/) | 4xx/5xx responses from your *real* error handling — render callbacks, exception `render()`, and `Responsable` exceptions | Built in — always on | [`error_responses`](/laravel/reference/configuration/#error_responses) |
-| [Problem Details preset](/laravel/documenting/errors/) | RFC 9457 `application/problem+json` error responses | Built in — opt-in | [`error_responses: 'problem-details'`](/laravel/reference/configuration/#error_responses) |
 | [Framework error defaults](/laravel/documenting/errors/) | Laravel's stock JSON error shapes — `{message, errors}` for 422, `{message}` for 401/403/404 | Built in — always on | [`error_responses`](/laravel/reference/configuration/#error_responses) |
 
 ### Authentication &amp; operations
