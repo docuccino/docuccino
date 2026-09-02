@@ -29,10 +29,11 @@ use Throwable;
  * reachable branch; then the exception's own `render()`; then a `Responsable`'s `toResponse()`.
  *
  * The recovered `JsonResponse<payload, status>` becomes the documented response, under the name the
- * render path declared with `#[ErrorComponent]` where one did. A body too dynamic to fold defers with an
- * info diagnostic so the next tier (framework defaults) fills in. Ordered FIRST so ground truth beats
- * anything a document declares about its errors in the abstract — a mapper that must beat it says so with
- * an order of its own. Handler files join the route's fragment-cache deps.
+ * render path declared with `#[ErrorComponent]` where one did. A body too dynamic to fold raises one
+ * `inferred-handler.too-dynamic` warning whether or not the tier still answers, and defers to the next
+ * tier (framework defaults) only where nothing else folded ({@see HandlerResponseBuilder}). Ordered
+ * FIRST so ground truth beats anything a document declares about its errors in the abstract — a mapper
+ * that must beat it says so with an order of its own. Handler files join the route's fragment-cache deps.
  */
 #[ExtensionOrder(priority: Priorities::FIRST)]
 final class InferredHandlerExceptionToResponse implements ExceptionToResponse

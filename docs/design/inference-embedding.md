@@ -347,10 +347,11 @@ the harvest a shapeless class. `ResponseShapeRefiner` follows the indirection an
    that is neither null nor a marker of its own. A tail that reads THROUGH the argument
    (`$p->detail() ?? new Optional`) is never settled from out there however solid the receiver: what the
    caller proved is that the receiver exists, and the key hangs on what the read answers. The adapter's
-   response seam reads the map for exactly that (§6): it decides the example's membership, while the schema
-   still decides what each member looks like. Nothing here expands the object — property semantics, name
-   mappers and `Optional`/`Lazy` markers are the adapter's business, and the engine only ever says "this
-   response carries that object, built with these arguments".
+   response seam reads the map for exactly that (§6): a supplied member is in the example whatever the
+   schema calls it, while the schema still requires what it requires — a required member absent from the
+   map is illustrated too — and still decides what each member looks like. Nothing here expands the
+   object — property semantics, name mappers and `Optional`/`Lazy` markers are the adapter's business, and
+   the engine only ever says "this response carries that object, built with these arguments".
 5. **Bounds, memoisation, containment.** Depth and the per-analysis file budget are the §3 bounds
    reused verbatim (default 4 / 40). Memoisation is per callee `class::method` (and per
    `(enum-case, method)` for folds). A recovered shape is call-independent but NOT bound-independent, so
