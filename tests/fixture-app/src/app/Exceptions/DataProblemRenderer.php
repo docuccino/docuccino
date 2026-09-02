@@ -33,6 +33,8 @@ use Throwable;
  *     helper's other branch;
  *   - the `JsonException` arm writes the same credential behind a `??` default, the shape a guard that
  *     unwrapped only concatenation would fold straight through;
+ *   - the `DomainException` arm titles the problem with a TRANSLATED string, the answer to which is the
+ *     analysing process's locale and not the contract;
  *   - the fallback writes every argument as a literal at the call site.
  */
 final class DataProblemRenderer
@@ -92,6 +94,18 @@ final class DataProblemRenderer
                 title: 'Error',
                 status: 500,
                 detail: self::SUPPORT_KEY_OVERRIDE ?? self::SUPPORT_API_KEY,
+            ))->toProblemResponse($request);
+        }
+
+        if ($e instanceof \DomainException) {
+            // What a real application titles a problem with once it serves more than one language. The
+            // translator answers here, in the analysing process, with whatever `app.locale` happens to be —
+            // so a fold would publish one machine's words as the contract.
+            return (new ProblemDocumentData(
+                type: 'about:blank',
+                title: __('errors.forbidden'),
+                status: 403,
+                detail: 'Something went wrong.',
             ))->toProblemResponse($request);
         }
 

@@ -15,6 +15,7 @@ use Docuccino\Core\Inference\DType\ArrayShapeField;
 use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
+use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\ListT;
 use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\NullT;
@@ -33,6 +34,7 @@ use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\InferredHandler\HandlerResponseBuilder;
+use Docuccino\Laravel\Tests\Fixtures\SharedErrors\ExportFailure;
 
 /**
  * The example an inferred handler response carries has to be a valid instance of the schema beside it. Only
@@ -264,6 +266,45 @@ it('leaves out a member the branch renders only sometimes', function (): void {
         'status' => 422,
         'detail' => 'string',
     ]);
+});
+
+it('illustrates an unread member from the value domain its schema states', function (): void {
+    // An example is an instance of the schema beside it, and where that schema NAMES the values the member
+    // may hold, `"string"` is not one of them: a consumer copying the example would send a body the server
+    // refuses, and the build's own example lint would report a mismatch its reader never wrote and cannot
+    // correct. Which entry is settled in advance rather than by encounter order — the first, because a
+    // list's order is authored and every other reader of the document shows that same branch.
+    //
+    // The member is still a FILL: nothing about this response was read, only the schema next to it. So it
+    // stays in the record, and a reader of the record still knows this arm never proved the value.
+    $context = handlerContext(new StubTypeEngine(classes: [
+        'App\\Data\\ExportProblem' => new ClassMetadata('App\\Data\\ExportProblem', [
+            new PropertyMetadata('status', ScalarT::int()),
+            new PropertyMetadata('reason', new EnumT(ExportFailure::class, ['QuotaExceeded', 'SourceUnavailable'])),
+        ]),
+    ]));
+
+    $draft = HandlerResponseBuilder::build(
+        handlerAnalysis(
+            new ClassT('App\\Data\\ExportProblem'),
+            409,
+            suppliedMembers(['status' => 409, 'reason' => null]),
+        ),
+        $context,
+        Contribution::integration('inferred-handler'),
+        handlerThrow(409),
+        'App\\Exceptions\\Handler::render',
+    );
+
+    $frozen = $draft?->freeze()->toArray() ?? [];
+
+    // The case NAMES, because this context carries only core's case-names enum mapper. What the fill reads
+    // is the schema the document actually published, never the type behind it — an application whose
+    // reflection-rich mapper publishes backing values gets those instead, and neither is second-guessed.
+    expect($frozen['content']['application/problem+json']['example'] ?? null)
+        ->toBe(['status' => 409, 'reason' => 'QuotaExceeded'])
+        ->and($frozen['x-docuccino']['facts']['examplePlaceholders'] ?? null)
+        ->toBe(['application/problem+json' => ['reason']]);
 });
 
 it('still shows a sometimes-rendered member the schema requires of every response', function (): void {
