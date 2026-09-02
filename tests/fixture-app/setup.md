@@ -180,7 +180,13 @@ own (seeded from the action's parameter type):
   positionally and named, taken from a constructor default the construction leaves empty, that same
   construction one hop away inside the factory the `throw` names, and chosen per factory — plus the
   degradations, where a constructor normalises what it was handed, reuses the parameter after forwarding
-  it, or a factory builds two ways, and the two vendor cases nothing is said about.
+  it, or a factory builds two ways, and the two vendor cases nothing is said about. And where the throw
+  point carries no construction at all: thrown from a trait method and declared at the caller, rethrown
+  from a `catch`, and written inside a closure the action hands to a callee — as an argument, held in a
+  local first, in an arrow function, which is one boundary the hop stops at, and nested past the descent
+  budget, which is the other — the last of those writing its counted throw ahead of the closure it
+  measures against, because `transaction()` is generic over its callback from Laravel 13 on and a closure
+  that only throws makes everything after the call dead code.
 - `app/Services/OrderService.php` — `place()` / `placeDeclared()` / `reserve()`, the 2-level
   throw chain descended by the exception-flow layer.
 - `app/Exceptions/OutOfStockException.php` — a custom domain exception (also reused by the
@@ -201,6 +207,10 @@ own (seeded from the action's parameter type):
   is no status at all.
 - `app/Exceptions/ExportSupersededException.php` — the status parameter reused after it was forwarded, so
   a read taken in the body's END scope would answer a status nothing was ever built with.
+- `app/Exceptions/ProbeStaleException.php` + `app/Support/Concerns/GuardsProbeState.php` — no constructor
+  of its own and exactly ONE factory, so the class states its status once and nothing at a `throw` repeats
+  it. Reached from a trait's guard clause, which surfaces at the action as a declared exception rather than
+  a construction: the population where the class has to answer for itself.
 
 ### Data + Eloquent model reflection
 

@@ -8,7 +8,9 @@ use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
+use App\Support\Concerns\GuardsProbeState;
 use Illuminate\Auth\SessionGuard;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +26,7 @@ use Illuminate\Support\Facades\Cache;
 class ThrowsController extends Controller
 {
     use AuthorizesRequests;
+    use GuardsProbeState;
 
     /**
      * Case 1: direct abort() + abort_if(). Both are implicit Throwable throw
@@ -276,6 +279,118 @@ class ThrowsController extends Controller
     public function factoryOverriddenStatus(): void
     {
         throw \App\Exceptions\ExportConflictException::notPermitted();
+    }
+
+    /**
+     * Case 10l: the throw is written in a TRAIT and reaches the action as a
+     * declared exception, so the throw point carries no construction to fold.
+     * The class builds itself exactly one way, which is the only thing left
+     * that can answer.
+     */
+    public function traitThrownStatus(bool $stale): void
+    {
+        $this->guardProbeState($stale);
+    }
+
+    /**
+     * Case 10l': the same class reached by a rethrow, which says nothing about
+     * how the exception was built either.
+     */
+    public function rethrownStatus(bool $stale): void
+    {
+        try {
+            $this->guardProbeState($stale);
+        } catch (\App\Exceptions\ProbeStaleException $e) {
+            throw $e;
+        }
+    }
+
+    /**
+     * Case 10m: the throw is inside a closure the action hands to a callee, so
+     * the action's own throw point is the CALL. The status is written at the
+     * throw, one scope in.
+     */
+    public function closureThrownStatus(ConnectionInterface $connection): void
+    {
+        $connection->transaction(function (): void {
+            throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.');
+        });
+    }
+
+    /**
+     * Case 10m': the same, with the throw naming a factory — the shape a guarded
+     * write really takes, where the status is two hops from the analysed method.
+     */
+    public function closureFactoryThrownStatus(ConnectionInterface $connection): void
+    {
+        $connection->transaction(function (): void {
+            throw \App\Exceptions\ExportUnsupportedException::forFormat('tsv');
+        });
+    }
+
+    /**
+     * Case 10m'': the closure held in a local before it is handed over, which is
+     * the same closure one assignment away.
+     */
+    public function heldClosureThrownStatus(ConnectionInterface $connection): void
+    {
+        $reject = function (): void {
+            throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.');
+        };
+
+        $connection->transaction($reject);
+    }
+
+    /**
+     * Case 10n: the same throw in an ARROW function, which PHPStan models with no
+     * statement result — so there are no throw points to read and the exception
+     * is not surfaced at all. The boundary of the hop above, pinned rather than
+     * described.
+     */
+    public function arrowThrownStatus(ConnectionInterface $connection): void
+    {
+        $connection->transaction(fn (): never => throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.'));
+    }
+
+    /**
+     * Case 10n': the budget the closure hop shares with descent. Each nesting
+     * spends one, so the throw three closures in is the last one read and the
+     * one behind it is out of budget — the containment, written where it can be
+     * counted rather than described.
+     *
+     * The in-budget throw is guarded, and written BEFORE the closure that is out
+     * of budget, because `transaction()` is generic over what its callback
+     * returns from Laravel 13 on: a closure that only ever throws returns
+     * `never`, which makes the call `never` and every statement after it dead
+     * code with no throw point of its own. Put the counted throw last and this
+     * row counts nothing at all on one half of the matrix — see
+     * docs/design/inference-embedding.md §6, the closure hop.
+     */
+    public function nestedClosureThrownStatus(ConnectionInterface $connection, bool $locked): void
+    {
+        $connection->transaction(function () use ($connection, $locked): void {
+            $connection->transaction(function () use ($connection, $locked): void {
+                $connection->transaction(function () use ($connection, $locked): void {
+                    if ($locked) {
+                        throw new \App\Exceptions\ExportLockedException(423, 'The export is locked.');
+                    }
+
+                    $connection->transaction(function (): void {
+                        throw new \App\Exceptions\ExportLockedException(410, 'The export is gone.');
+                    });
+                });
+            });
+        });
+    }
+
+    /**
+     * Case 10o: a construction that PRESENTED itself and would not fold — the
+     * status is chosen at run time. What the class's own factory agrees on is no
+     * evidence for this response, so the honest answer is no status at all.
+     */
+    public function runtimeStatusAtThrowSite(int $chosen): void
+    {
+        throw new \App\Exceptions\ExportBlockedException('The export is blocked.', $chosen);
     }
 
     /**

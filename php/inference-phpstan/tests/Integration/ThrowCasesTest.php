@@ -102,6 +102,30 @@ dataset('throw cases', [
     // the class alone can only answer null for both, and answering 500 would invent a failure twice over.
     'one factory of a two-status class' => ['factoryDefaultedStatus', ['ExportConflictException@409']],
     'its sibling, the same class at another status' => ['factoryOverriddenStatus', ['ExportConflictException@403']],
+    // Where the throw point carries NO construction, the class's own is the only thing left that can
+    // answer — and a class that builds itself exactly one way has said its status once, in that one place.
+    // Every row here surfaced the exception with no status at all until the class was asked.
+    'a class that builds itself one way, thrown from a trait' => ['traitThrownStatus', ['ProbeStaleException@409']],
+    'the same class reached by a rethrow' => ['rethrownStatus', ['ProbeStaleException@409']],
+    // A closure is its own scope, so the analysed method's throw point is the CALL that was handed the
+    // closure — a bare `Throwable`, or nothing at all. The status is written one scope in.
+    'a status written at a throw inside a closure' => ['closureThrownStatus', ['ExportLockedException@423']],
+    'a factory named at a throw inside a closure' => ['closureFactoryThrownStatus', ['ExportUnsupportedException@422']],
+    'a closure held in a local before it is handed over' => ['heldClosureThrownStatus', ['ExportLockedException@423']],
+    // The boundary of that hop, pinned rather than described: PHPStan models an arrow function with no
+    // statement result, so it has no throw points to read and nothing is surfaced.
+    'the same throw in an arrow function' => ['arrowThrownStatus', []],
+    // …and the other boundary, counted rather than described: a closure spends one of descent's own
+    // depth budget, so the throw three closures in is read and the 410 one nesting behind it is not.
+    // The counted throw is written BEFORE the closure it is measured against, and that is load-bearing:
+    // `transaction()` is generic over its callback's return from Laravel 13 on, so a closure that only
+    // throws makes the call `never` and everything after it dead code the application cannot reach.
+    // Written the other way round this row read 423 on Laravel 12 and nothing at all on Laravel 13.
+    'closures nested past the descent budget' => ['nestedClosureThrownStatus', ['ExportLockedException@423']],
+    // And the guard on all of it: a construction that PRESENTED itself and would not fold has said the
+    // response is whatever was chosen at run time. What the class's own factory agrees on — a 409 — is no
+    // evidence for THIS throw, so no status is the honest answer.
+    'a construction whose status is chosen at run time' => ['runtimeStatusAtThrowSite', ['ExportBlockedException@null']],
 ]);
 
 it('surfaces exactly the expected API errors', function (string $method, array $expected): void {
@@ -137,6 +161,9 @@ it('names the class whose HTTP status it could not read', function (string $meth
     'a factory that builds the class two ways' => ['unreadHttpStatus', 'App\\Exceptions\\ExportConflictException'],
     'a constructor that moves the status it was handed' => ['movedHttpStatus', 'App\\Exceptions\\ExportPartialException'],
     'a constructor that reuses the status after forwarding it' => ['supersededHttpStatus', 'App\\Exceptions\\ExportSupersededException'],
+    // A status chosen at run time, which is the one thing the notice's help text asks the author to
+    // change — and the class's own agreement may not answer over the top of it.
+    'a construction whose status is chosen at run time' => ['runtimeStatusAtThrowSite', 'App\\Exceptions\\ExportBlockedException'],
 ])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
@@ -158,6 +185,16 @@ it('says nothing where the status read, and nothing about a class the author doe
     // And nothing for a plain domain exception either: it is not an HttpException, so there is no status
     // on it to have failed to read.
     'deepUndeclared',
+    // The shapes the class now answers for itself, each of which used to earn a notice naming a class
+    // whose author had already written the status exactly once.
+    'traitThrownStatus',
+    'rethrownStatus',
+    'closureThrownStatus',
+    'closureFactoryThrownStatus',
+    'heldClosureThrownStatus',
+    // Nothing is surfaced from an arrow function at all, so there is no class to name.
+    'arrowThrownStatus',
+    'nestedClosureThrownStatus',
 ])->group('fixture');
 
 it('answers the same status whether the construction is at the throw or one hop inside a factory', function (): void {
@@ -168,6 +205,33 @@ it('answers the same status whether the construction is at the throw or one hop 
     expect(signalThrows('defaultedHttpStatusAtThrowSite'))
         ->toBe(signalThrows('defaultedHttpStatusInFactory'))
         ->and(signalThrows('defaultedHttpStatusAtThrowSite'))->toBe(['ExportBlockedException@409']);
+})->group('fixture');
+
+it('answers the same status whether the throw is written inline or inside a closure', function (): void {
+    // The same "covering is not agreeing" rule one scope in: each spelling has a row above, and neither
+    // asks whether they agree. The rule is stated here rather than read off the code — where a `throw` is
+    // written is not a fact about the response, so a closure the method hands to a callee that runs it
+    // owes the same answer the method's own body would.
+    expect(signalThrows('closureThrownStatus'))
+        ->toBe(signalThrows('httpStatusAtThrowSite'))
+        ->and(signalThrows('closureThrownStatus'))->toBe(['ExportLockedException@423'])
+        ->and(signalThrows('heldClosureThrownStatus'))->toBe(signalThrows('closureThrownStatus'));
+})->group('fixture');
+
+it('names the closure the throw was written in', function (): void {
+    // The chain is what an author is shown when they go looking, and a throw two scopes down that reports
+    // only the action names a line with no `throw` on it.
+    /** @var list<array<string, mixed>> $throws */
+    $throws = throwsAnalysis('closureThrownStatus')['throws'];
+
+    /** @var list<array<string, mixed>> $chain */
+    $chain = $throws[0]['callChain'];
+    $symbols = array_map(static fn (array $frame): string => (string) $frame['symbol'], $chain);
+
+    expect($symbols)->toBe([
+        'ThrowsController::closureThrownStatus',
+        'ThrowsController::closureThrownStatus::{closure}',
+    ]);
 })->group('fixture');
 
 it('depends on the file the status was written in', function (): void {

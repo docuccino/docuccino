@@ -311,13 +311,19 @@ names went through the same seam and stayed in the measurable half, taking the p
 the one rule both construction readers share and the response-key range check beside it, taking it to 47.32%
 and the floor to 47.
 
-Two more moves are worth keeping as precedent because the denominator went the *other* way and the answer
+Three more moves are worth keeping as precedent because the denominator went the *other* way and the answer
 was NOT to lower a floor. When the response refiner gained a 61-statement, Scope-driven construction-site
 descent that pcov cannot observe, the package fell to 36.68% — and the fix was closing a real gap the
 standards already required, giving `NativeTypeMapper` (a lookup table with zero in-process coverage) its
 dataset test. When core's `ArrayKey` absorbed the list-vs-map key rule from the engine's two byte-identical
 private copies, a well-covered 7/8 block left the engine and took it below its floor — and the answer was
 `EngineConfig`/`RuntimeConfig`, pure parent-process value objects at 1/9 between them, going to 9/9.
+And when the throw analyzer learned to read a closure the analysed body hands to a callee, ~35 statements
+went into `ThrowAnalyzer` — a file at 0/208, because nothing constructs it outside the engine — taking the
+package to 46.97% against a floor of 47. The answer again was a gap the standards already required:
+`AnalyzedBodies`, the analyser's half of the `ClassBodies` seam, sat at 0/18 while its twin `ParsedBodies`
+carried every status-read test, and its constant fold is drivable in process through
+`ScriptedRuntimeAdapter`. That plus the memo invariant its own docblock states took the package to 47.73%.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the

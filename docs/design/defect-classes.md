@@ -140,3 +140,28 @@ DEPTH produces a particular answer is not.
 *The fix that worked.* Make the machine fact an input and state every answer as a row, so the deep and
 the shallow case are both asserted on every machine. The shallow row is the valuable one — it pins the
 behaviour CI observed as a positive claim rather than leaving it to be discovered as a failure.
+
+## A fixture that agrees with the vendor major it resolved
+
+The sibling of the class above, one layer out: not the machine, the vendor tree. A fixture's expected
+answer is decided by a package's phpdoc, that phpdoc differs across the majors the product supports, and
+the run that proves the fixture installs exactly one of them.
+
+*Instances.* `ThrowsController::nestedClosureThrownStatus` counts the closure hop's depth budget by
+putting one throw three closures in and a second one deeper, and asserting only the first is read. It was
+written with the counted throw AFTER the deeper closure. `Connection::transaction()` returns `mixed` up to
+Laravel 12 and is generic over its callback's return from Laravel 13 on, so a closure that only ever
+throws makes the call `never` and the statement after it unreachable: the row read 423 on the Laravel 12
+legs and surfaced nothing at all on the Laravel 13 one. Every local run and every other CI leg was green.
+The product side of the same class already has a rule in `CLAUDE.md` — an integration emitting its own
+major's grammar rather than the resolved one.
+
+*The tell.* A fixture whose assertion depends on what a VENDOR method's signature says, rather than on
+what the fixture's own code says — a return type, a generic, a `@throws`, a by-reference parameter. Ask of
+every real-engine row: which half of this answer is the fixture's, and which half is the installed
+package's?
+
+*The fix that worked.* Move the fact being counted out from behind the vendor's decision — here, write
+the counted throw before the closure it is measured against, so no vendor return type governs whether it
+is reachable — and say in the fixture why it is written that way, since the natural ordering is the one
+that breaks. The matrix leg is the executor; nothing in a single-version run can catch it.

@@ -89,39 +89,19 @@ final class FactoryStatus
     }
 
     /**
-     * The one status every construction in the body agrees on. A body that builds the class twice with two
-     * statuses states neither, and one construction that would not fold takes the whole answer with it.
+     * The one status every construction in the body agrees on — the same rule the throw site reads a
+     * `throw new X(…)` by, so one hop apart cannot mean two answers.
      *
      * @param  array<array-key, Node\Stmt>  $body
      */
     private function fromBody(string $fqcn, string $file, array $body, int $slot): ?int
     {
-        $constructions = StatusForwarding::constructionsOf($body, $fqcn);
-        if ($constructions === []) {
-            return null;
-        }
-
-        $constructor = $this->statuses->constructorSlot($fqcn, $slot);
-
-        $status = null;
-        foreach ($constructions as $construction) {
-            // The same rule the throw site reads a `throw new X(…)` by, so one hop apart cannot mean two
-            // answers.
-            $one = ConstructionStatus::inSlot(
-                $construction,
-                $slot,
-                $constructor,
-                fn (Node\Expr $argument): ?int => $this->bodies->foldInt($file, $argument, $construction),
-            );
-
-            if ($one === null || ($status !== null && $one !== $status)) {
-                return null;
-            }
-
-            $status = $one;
-        }
-
-        return $status;
+        return ConstructionStatus::agreedIn(
+            StatusForwarding::constructionsOf($body, $fqcn),
+            $slot,
+            $this->statuses->constructorSlot($fqcn, $slot),
+            fn (Node\Expr $argument, Node\Expr\New_ $at): ?int => $this->bodies->foldInt($file, $argument, $at),
+        );
     }
 
     /**

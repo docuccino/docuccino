@@ -522,20 +522,52 @@ effort); the `$casts` property form is recovered today.
 ### The status an `HttpException` subclass carries
 
 A subclass that IS a status states it in its own `parent::__construct()`, which no name-keyed table can
-see, so three reads sit under layer 1 and answer in this order:
+see, so four reads sit under layer 1 and answer in this order:
 
 - **What the class pins on every instance** (`HttpExceptionStatus`) — a constant reaching the parent call,
-  or a constructor parameter with a constant default that only this class can fill (private constructor, no
-  trait, no in-class `new self(...)` writing the slot, no write to the parameter before it is forwarded).
+  or, for a class only it can construct (private constructor, no trait, no write to the parameter before it
+  is forwarded), the one status every `new` it writes of itself folds to: one leaving the slot empty takes
+  the constructor's default, one writing it takes its own literal, and they either agree or the class pins
+  nothing.
 - **What THIS construction passes** — the argument a `throw new X(…)` writes into the slot the class
   forwards, the constructor default where it writes none.
 - **What the factory the throw names builds with** (`FactoryStatus`) — one hop, no further.
+- **What the class's own constructions agree on** (`HttpExceptionStatus::agreed()`) — the same fold as the
+  first read, without the private-constructor condition, and therefore a weaker claim: the constructions
+  are a subset of the application's rather than all of them. It answers only where the throw point carried
+  NO construction for the two reads above to fold, which is where the fold used to be asked for a literal
+  `throw` node alone and every other way an exception reached the analysis got no status at all — a throw
+  inside a closure, one written in a trait and declared at the caller, a rethrow. A construction that
+  presented itself and would not fold has spoken: the response is whatever was chosen at run time, and the
+  class's agreement is no evidence for it, so the order (not a `??` chain) is what keeps this honest.
 
-The second and third are one rule (`ConstructionStatus`), because they are the same construction one hop
+The middle two are one rule (`ConstructionStatus`), because they are the same construction one hop
 apart: a `throw new X` and a `throw X::make()` whose factory is `return new self` must publish the same
-status, and they once did not. Every fold happens in the scope at the CALL, never a body's end scope — a
-constructor that reassigns its status parameter after forwarding it makes the two disagree, and the end
-scope names a value the callee never received.
+status, and they once did not. The agreement over a SET of constructions is that same rule again
+(`ConstructionStatus::agreedIn`), read by the class, by a factory, and by nothing else: one construction
+that would not fold takes the whole answer with it, and two folding differently state neither. Every fold
+happens in the scope at the CALL, never a body's end scope — a constructor that reassigns its status
+parameter after forwarding it makes the two disagree, and the end scope names a value the callee never
+received.
+
+**A closure the analysed body hands to a callee.** PHPStan scopes a closure separately, so a `throw`
+inside one reaches the enclosing method as the CALL that received it — a bare `Throwable` where the callee
+declares one (`Connection::transaction`), nothing at all where it does not. `FileAnalyzer::closures()`
+already holds the closure's own `ClosureReturnStatementsNode` against the same walk, so the three layers
+are re-run over its throw points and the status is read exactly where it is written. Bounded to what the
+body itself writes: a closure at the argument, or one assignment behind it, against descent's own depth
+budget and cycle guard. An ARROW function is the boundary — PHPStan models it with `InArrowFunctionNode`,
+which carries no statement result, so there are no throw points to read and the exception is not surfaced
+at all (pinned as a fixture row rather than described).
+
+The callee's OWN signature decides what is left to read after it, and it is a function of the version the
+app resolved. `Connection::transaction()` returns `mixed` up to Laravel 12 and is generic over its callback
+(`@param (\Closure(static): TReturn) $callback`, `@return TReturn`) from Laravel 13, so a closure that only
+ever throws makes the whole call `never` and every statement after it dead code — PHPStan reports no throw
+point for any of it, correctly, because the application really cannot reach it. Nothing in the analysis is
+owed a change for that; what it means is that a FIXTURE counting this hop has to put the throw it counts
+BEFORE the closure it is measuring against, or it counts one answer on Laravel 12 and nothing at all on
+Laravel 13. `nestedClosureThrownStatus` is written that way and says so.
 
 Only PROJECT files are read. PHPStan strips an unprimed file's bodies, so a vendor subclass's
 `parent::__construct(409, …)` arrives as an empty statement list and the read declines anyway — measured
@@ -554,10 +586,14 @@ firing population was measured against one real application's 47 `HttpException`
 what a class pins on ITSELF left 10 unread, and 9 of those were the static-factory idiom — correct
 idiomatic code with nothing for the author to change, which is the shape that trains a reader to ignore the
 channel. That is the population the factory hop is written for. The construction read removes another part
-of it, the class that defaults its status and is built with the argument left off. What remains is the part
-an author CAN act on: a status chosen at run time, a construction behind an unreadable spread, a factory
-that builds the class two ways. The notice is gated on the exception class being the project's, because the
-remedy it names is an edit to the class — advice nobody can take for a class they do not own.
+of it, the class that defaults its status and is built with the argument left off. The class-agreement read
+removes the last non-actionable part: a second application reported six classes named by the notice whose
+authors had each written the status exactly once, in the class's only factory, and whose only fault was
+being reached by a throw point that carried no construction — nothing they could have changed would have
+helped, because the fold was never asked. What remains is the part an author CAN act on: a status chosen at
+run time, a construction behind an unreadable spread, a factory that builds the class two ways. The notice
+is gated on the exception class being the project's, because the remedy it names is an edit to the class —
+advice nobody can take for a class they do not own.
 
 Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
 confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
