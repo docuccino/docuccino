@@ -142,7 +142,9 @@ final class Tracer
         }
 
         // Order by source position — PHPStan's callback order for a chained expression is not
-        // left-to-right — and let first-seen win. Collect then recurse; never nest processNodes.
+        // left-to-right, and {@see SourceOrder} is what makes a chain's links order by the name they are
+        // written with rather than by the receiver offset they share — and let first-seen win. Collect
+        // then recurse; never nest processNodes.
         usort($descend, static fn (array $a, array $b): int => $a['pos'] <=> $b['pos']);
         $seen = [];
         foreach ($descend as $target) {
@@ -220,8 +222,14 @@ final class Tracer
     }
 
     /**
-     * Answer this walk's queued folds, in the order they were requested. No visitor runs during a fold, so
-     * the queue cannot grow while it drains. The callee's file is charged the budget like any other.
+     * Answer this walk's queued folds, in the order they were requested — PHPStan's node-callback order,
+     * which is not the order the calls are written. Unlike the descent that is not an ordering the output
+     * can see: a visitor reserves its entry's position BEFORE asking, so the document reads in walk order
+     * whichever fold answers first, and every fold in the corpus resolves into a file the walk already
+     * opened, so none of them compete for the budget either. Ordering them by source position would be a
+     * mechanism with no measured population; it becomes one the day a fold reaches a file of its own.
+     * No visitor runs during a fold, so the queue cannot grow while it drains. The callee's file is charged
+     * the budget like any other.
      */
     private function foldPending(): void
     {

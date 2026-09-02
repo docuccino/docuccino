@@ -81,6 +81,30 @@ it('depends on the file a traced body was written in', function (): void {
         ->toContain('ExportListController.php');
 })->group('fixture');
 
+it('counts none but the application\'s own files, so the frontier cannot move with the vendor tree', function (): void {
+    // The tell of the class the frontier below belongs to, executed rather than stated. The budget is a
+    // count of files OPENED, so whatever sits in the counted path decides at which budget each fact
+    // appears — and a vendor file in there makes those coordinates a function of the installed major, not
+    // of the fixture. Every hop of this chain is a file this repo writes: the controller, the query class,
+    // the sorts helper and the custom terminal are opened, and the two traits are recorded off the walks
+    // that read them. Nothing from `vendor/` is either.
+    $trace = exportTrace();
+    /** @var list<string> $files */
+    $files = $trace['dependencyFiles'];
+
+    expect(exportDependencyNames($trace))
+        ->toEqualCanonicalizing([
+            'ExportListController.php',
+            'ListsExports.php',
+            'ExportIndexQuery.php',
+            'FiltersExports.php',
+            'ExportSorts.php',
+            'ListQueryBuilder.php',
+        ])
+        ->and(array_values(array_filter($files, static fn (string $file): bool => str_contains($file, '/vendor/'))))
+        ->toBe([]);
+})->group('fixture');
+
 it('recovers the same facts at each descent bound, and depends on the trait only where it read one', function (
     int $fileBudget,
     int $traceDepth,
@@ -90,13 +114,27 @@ it('recovers the same facts at each descent bound, and depends on the trait only
     array $terminals,
     bool $dependsOnTrait,
 ): void {
-    // The bound frontier, measured rather than argued. Each fact below sits one hop further out than the
-    // last, so a budget or a depth one short of the chain has to lose exactly one of them — which is the
-    // guard that recording the trait's file costs the traversal nothing: were it charged a slot, the row
-    // at a budget of 4 would stop reaching the sorts one hop past it.
+    // The bound frontier, stated from what the two bounds MEAN: `fileBudget` counts the files the walk may
+    // open and `traceDepth` the hops it may make from the root, so each row is the set of facts a walk with
+    // exactly that much room can prove. Both coordinates are facts of the fixture. Every file in the
+    // counted path is one this repo writes — the row above is that guard — and the order the budget is
+    // spent in is the order the calls are WRITTEN, because a call is positioned by its own name
+    // ({@see SourceOrder}): the action's chain reads `->query()` before `->paginateList(25)`, so the query
+    // class opens before the custom terminal. Neither coordinate may read the installed Laravel, and the
+    // first version of this table did: the two links of that chain share the receiver offset php-parser
+    // reports for both, the sort tied, and the tie handed the order to PHPStan's node-callback order, which
+    // the fixture matrix' two legs answer differently.
     //
-    // The last row is the shipped default (40 / 4). The `dependsOnTrait` column is the other half of the
-    // same claim: a trait file is a dependency where a body was read out of it and not merely where a
+    // So, by budget: slot 1 the controller, whose own body names the custom terminal; slot 2 the query
+    // class the chain's first link resolves to, carrying its default sort and the filters the trait inlines
+    // into that file; slot 3 the sorts helper one hop past the trait; slot 4 the custom terminal's own file
+    // and the vendor `paginate()` behind it. By depth: the query class is one hop out, the trait body two,
+    // the sorts helper three. The last row is the shipped default (40 / 4).
+    //
+    // Recording a file a body was WRITTEN in must cost the traversal nothing, and the tight budgets are
+    // what hold that: were `depend()` charged a slot, the budget-2 row would never open the query class and
+    // the budget-3 and budget-4 rows would stop reaching the sorts. The `dependsOnTrait` column is the
+    // other half — a trait file is a dependency where a body was read out of it and not merely where a
     // callee resolved into it, which is why the depth-1 row wants it absent.
     $trace = exportTrace($fileBudget, $traceDepth);
 
@@ -107,9 +145,9 @@ it('recovers the same facts at each descent bound, and depends on the trait only
         ->and(in_array('FiltersExports.php', exportDependencyNames($trace), true))->toBe($dependsOnTrait);
 })->with([
     'a budget for the action alone' => [1, 4, [], [], [], ['paginateList'], false],
-    'one more, spent on the custom terminal' => [2, 4, [], [], [], ['paginateList', 'paginate'], false],
-    'one more, spent on the query class the trait is imported into' => [3, 4, EXPORT_FILTERS, [], ["'sku'"], ['paginateList', 'paginate'], true],
-    'one more, spent on the helper a hop past the trait' => [4, 4, EXPORT_FILTERS, EXPORT_SORTS, ["'sku'"], ['paginateList', 'paginate'], true],
+    'one more, spent on the query class the chain opens with' => [2, 4, EXPORT_FILTERS, [], ["'sku'"], ['paginateList'], true],
+    'one more, spent on the helper a hop past the trait' => [3, 4, EXPORT_FILTERS, EXPORT_SORTS, ["'sku'"], ['paginateList'], true],
+    'one more, spent on the custom terminal the chain ends with' => [4, 4, EXPORT_FILTERS, EXPORT_SORTS, ["'sku'"], ['paginateList', 'paginate'], true],
     'a depth reaching the query class but not the trait body' => [40, 1, [], [], ["'sku'"], ['paginateList', 'paginate'], false],
     'a depth reaching the trait body but not past it' => [40, 2, EXPORT_FILTERS, [], ["'sku'"], ['paginateList', 'paginate'], true],
     'a depth reaching the helper past the trait' => [40, 3, EXPORT_FILTERS, EXPORT_SORTS, ["'sku'"], ['paginateList', 'paginate'], true],

@@ -78,6 +78,14 @@ require-dev:
 
 ## Exact installed versions (composer.lock, this host)
 
+Read this table as a record of what the recipe happened to resolve, never as an input to a fixture's
+expected answer. Nothing the fixture group asserts may be a function of the versions below — the
+Query-Builder bound frontier (`TraceDependencyTest`) least of all, because its coordinates are counts of
+files a walk had room to open and every one of them has to be a file this repo writes. See
+[`docs/design/defect-classes.md`](../../docs/design/defect-classes.md) §"A fixture that agrees with the
+vendor major it resolved": both instances of that class were rows that read the installed tree, and CI's
+two fixture-matrix legs are what execute the difference.
+
 | Package | Version |
 |---|---|
 | laravel/framework | v12.64.0 |
@@ -177,7 +185,10 @@ file, so a budget or a depth one short has to lose exactly one of them:
 
 - `app/Http/Controllers/ExportListController.php` + `app/Http/Controllers/Concerns/ListsExports.php` — the
   controller declares nothing but `use ListsExports`, so even the trace's ROOT has its body written
-  elsewhere; the action returns `(new ExportIndexQuery)->query()->paginateList(25)`.
+  elsewhere; the action returns `(new ExportIndexQuery)->query()->paginateList(25)`. That CHAIN is
+  deliberate and the frontier's budget order depends on it: the two links share the start offset
+  php-parser reports for both, so they are what proves a chain descends in the order it is written rather
+  than in the order the analyser hands the nodes over.
 - `app/Queries/ExportIndexQuery.php` — `query()` writes the chain's origin and its `defaultSort('sku')`,
   and applies the filters through the concern below.
 - `app/Queries/Concerns/FiltersExports.php` — the trait carrying `exportFilters()`, whose body writes
