@@ -193,8 +193,11 @@ Error handling deserves a closer look, because it's where inference goes furthes
 render callbacks, exception `render()` methods and `Responsable` exceptions — and where a member of
 your error body is statically knowable (a per-branch `type` URI, a `title`, a status that echoes the
 response) it pins that member as a schema `const` and includes it in a generated example, following
-helper indirection and enum accessors to find it. Members it can't resolve are left out rather than
-invented. Documentation you'd otherwise hand-maintain alongside the code that produces it.
+helper indirection and enum accessors to find it. A member it can't resolve keeps its declared type in the
+schema and is never pinned to a guessed value; in the example it is illustrated from that schema — an
+`enum`'s first case, a `format`'s sample, a value the bounds admit — so the example stays a valid instance
+of the shape beside it, and an optional member your code didn't supply is left out altogether.
+Documentation you'd otherwise hand-maintain alongside the code that produces it.
 
 ## Three things that change about your workflow
 

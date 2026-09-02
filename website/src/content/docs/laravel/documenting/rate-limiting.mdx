@@ -123,12 +123,13 @@ Middleware synthesizes the `429`, so no `throw` announces it — Docuccino asks 
 [error-response chain](/laravel/documenting/errors/) about `ThrottleRequestsException` anyway, and the body
 matches the rest of the document:
 
-| `error_responses` | The `429` body |
+| The situation | The `429` |
 | --- | --- |
-| `default` | Laravel's `{ "message": string }`, which is what `ThrottleRequests` returns. |
+| `error_responses` is `default` | Laravel's `{ "message": string }`, which is what `ThrottleRequests` returns. |
 | Your own handler covers throttling | Whatever that handler builds. |
 | Your own handler covers throttling, and its body doesn't read | No body — the `429` keeps its status, description and rate-limit headers. Publishing Laravel's shape over a renderer you replaced would name members your server never sends. |
-| `none`, or nothing in the chain answers | The stock `{ "message": string }`. |
+| Nothing in the chain answers | The stock `{ "message": string }`. |
+| `error_responses` is `none` | No `429` at all. That switch turns off every error the document synthesizes rather than reads, and this is one of them; the rate-limit headers go with it, since a response is the only place a header can be published. |
 
 The body is copied in rather than `$ref`'d, because the chain's own shared response carries none of the
 `X-RateLimit-*` headers this `429` needs. The finished response — headers and all — is then
@@ -170,3 +171,10 @@ The integration is always on, and has one switch:
 Turning it off for a document emits one `integration.disabled` info diagnostic per build, so the choice
 stays visible in the output rather than looking like a bug. See the
 [`integrations` reference](/laravel/reference/configuration/#integrations).
+
+Two other switches reach the same response.
+[`error_responses => 'none'`](/laravel/reference/configuration/#error_responses) removes every error the
+document synthesizes rather than reads, and the `429` is one of them — so it is the wrong reach if the
+`429` is the one you wanted to keep. Drop responses one at a time with
+[`#[IgnoreResponse]`](/laravel/reference/attributes/#ignoreresponse) instead: `#[IgnoreResponse(429)]`
+takes the `429` off one operation, and naming the other statuses leaves the `429` standing.
