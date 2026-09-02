@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Docuccino\Inference\PhpStan\Tests\Support\TraitUsingRenderer;
 use Docuccino\Inference\PhpStan\Trace\Callee;
 use Docuccino\Inference\PhpStan\Trace\CalleeResolver;
+use PHPStan\Reflection\ClassReflection;
 use PHPStan\Reflection\ReflectionProvider;
 
 /**
@@ -38,25 +39,56 @@ it('names the file a body was written in apart from the one its class is', funct
         ->and($callee->key())->toBe('App\\Http\\Controllers\\ProbeController::guard');
 });
 
-it('reads a trace root by the same two files a resolved callee carries', function (): void {
-    // The root arrives as a class/method/file rather than as a call to resolve, and a trait-imported
-    // action is the same defect as a trait-imported callee: the harvest comes off the class's file and
-    // the body that decided is written in the trait's. The provider is never consulted for this.
+it('leaves a trace root whose declaration cannot be located on the file it was given', function (string $class): void {
+    // The root arrives as a class/method/file rather than as a call to resolve, and it makes the same
+    // declaration read every callee gets — asked of the ANALYSER's reflection, which locates a declaration
+    // by reading files. A provider that knows neither of these names answers nothing, and the root's
+    // accounting degrades to the file the caller handed over rather than being dropped.
+    //
+    // A trait-imported action really being keyed with the TRAIT's file is the other half, and it needs the
+    // real analyser: TraceDependencyTest's `ListsExports.php` rows are that half.
     $resolver = new CalleeResolver($this->createStub(ReflectionProvider::class));
 
-    $root = $resolver->root(TraitUsingRenderer::class, 'traitDeclared', '/app/TraitUsingRenderer.php');
+    $root = $resolver->root($class, 'traitDeclared', '/app/TraitUsingRenderer.php');
 
-    expect($root->file)->toBe('/app/TraitUsingRenderer.php')
-        ->and(basename($root->writtenIn()))->toBe('DeclaresProblems.php')
-        ->and($root->key())->toBe(TraitUsingRenderer::class.'::traitDeclared');
-});
+    expect($root->writtenIn())->toBe('/app/TraitUsingRenderer.php')
+        ->and($root->key())->toBe($class.'::traitDeclared');
+})->with([
+    'a class the analyser has no declaration for' => ['App\\Nowhere\\Absent'],
+    // …and one this process really could reflect on, which is the point: nothing but the provider is asked.
+    'a class only native reflection knows' => [TraitUsingRenderer::class],
+]);
 
-it('leaves a trace root it cannot reflect on the file it was given', function (): void {
-    // A method reflection cannot name — a stub, a class only the analyser knows — degrades to the file
-    // the caller handed over rather than dropping the root's accounting altogether.
-    $resolver = new CalleeResolver($this->createStub(ReflectionProvider::class));
+it('locates a declaration through the analyser, never from a class NAME', function (): void {
+    // A name handed to native reflection is a name AUTOLOADED, and autoloading a class executes the file
+    // that declares it — so reading a callee's declaration that way makes the generator run analysed code
+    // at every resolved call in every walked body, vendor included. Measured over one Query-Builder trace
+    // of one fixture action: three classes the process had not loaded would have been loaded, one of them
+    // a vendor internal the application never instantiates.
+    //
+    // Two halves, because either on its own passes the wrong code. The parameter type is what leaves no
+    // name there to load — a resolved `ClassReflection`, which the analyser located by reading files. The
+    // source scan is what catches a body that fetches the name back off it, which no signature can. A
+    // behavioural row can stand in for neither: the read is only reached once the provider has resolved
+    // the class, which needs the real analyser rather than a stub.
+    //
+    // The scan tokenises rather than greps, for the reason the boundary scans do: the docblock beside the
+    // read names `new ReflectionMethod` to say what it does not do, and raw text calls that a hit.
+    $code = implode('', array_map(
+        static fn (array|string $token): string => match (true) {
+            is_string($token) => $token,
+            in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true) => '',
+            default => $token[1],
+        },
+        token_get_all((string) file_get_contents(dirname(__DIR__, 2).'/src/Trace/CalleeResolver.php')),
+    ));
 
-    $root = $resolver->root('App\\Nowhere\\Absent', 'handle', '/app/Nowhere/Absent.php');
+    $type = (new ReflectionMethod(CalleeResolver::class, 'writtenIn'))->getParameters()[0]->getType();
 
-    expect($root->writtenIn())->toBe('/app/Nowhere/Absent.php');
+    expect($type)->toBeInstanceOf(ReflectionNamedType::class)
+        ->and($type->getName())->toBe(ClassReflection::class)
+        ->and($code)->not->toContain('new Reflection')
+        // The floor: the read it DOES make, so a scan that stopped recognising this file fails loudly
+        // rather than passing on a shape it no longer finds.
+        ->and($code)->toContain('getNativeReflection()->getMethod(');
 });

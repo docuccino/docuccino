@@ -73,6 +73,9 @@ final class HttpProbeRows
             'a constructor that never reaches its parent' => [self::NAMESPACE.'ProbeNoParentCall', null, null, null],
             // A constant that is no HTTP status: it would become the response key `"0"`.
             'a pin outside the range a status can take' => [self::NAMESPACE.'ProbeOutOfRangePin', null, null, null],
+            // …and the same refusal over a constant declared in another file, which decided the answer and
+            // so is a dependency whether or not the fold went on to succeed.
+            'a pin outside the range, read from another file' => [self::NAMESPACE.'ProbeOutOfRangeConstantPin', null, null, null],
             'a default outside the range a status can take' => [self::NAMESPACE.'ProbeOutOfRangeDefault', null, 0, null],
 
             // No constructor below `HttpException` adds one, so its own runs and argument 0 IS the status.

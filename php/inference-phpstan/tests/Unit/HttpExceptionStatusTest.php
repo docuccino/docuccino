@@ -8,6 +8,7 @@ use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeConstructedDefa
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeFactory;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeInherited;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeNoConstructor;
+use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeOutOfRangeConstantPin;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbeOutOfRangeDefault;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePinned;
 use Docuccino\Inference\PhpStan\Tests\Support\Fixtures\Http\ProbePlain;
@@ -169,6 +170,20 @@ it('records every file in the hierarchy, not only the one that declares the cons
         ->and($names)->toContain('ProbeBase.php')
         ->and($names)->toContain('HttpException.php')
         ->and(httpStatuses()->filesFor(ProbePlain::class))->toBe([]);
+});
+
+it('records a declaration a fold READ even where the fold refused it', function (): void {
+    // Fragment-cache soundness on a DECLINE. `parent::__construct(ProbeConstantHolder::OUT_OF_RANGE, …)`
+    // reads its status out of another file and 99 is no response key, so the class states nothing — and
+    // that other file is still what decided: edit the constant to 415 and a cold build publishes 415 while
+    // a warm one, keyed without the file, goes on publishing no status at all. What the read went through
+    // to reach its answer is a dependency whether or not the answer was a status.
+    $read = httpStatuses();
+    $names = array_map(static fn (string $file): string => basename($file), $read->filesFor(ProbeOutOfRangeConstantPin::class));
+
+    expect($read->pinned(ProbeOutOfRangeConstantPin::class))->toBeNull()
+        ->and($names)->toContain('ProbeConstantHolder.php')
+        ->and($names)->toContain('ProbeOutOfRangeConstantPin.php');
 });
 
 it('states nothing about a class whose body it cannot read', function (): void {

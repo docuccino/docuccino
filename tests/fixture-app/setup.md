@@ -213,7 +213,8 @@ in the file being walked, and an array return is no type the trace follows:
   positionally and named, taken from a constructor default the construction leaves empty, that same
   construction one hop away inside the factory the `throw` names, and chosen per factory — plus the
   degradations, where a constructor normalises what it was handed, reuses the parameter after forwarding
-  it, or a factory builds two ways, and the two vendor cases nothing is said about. And where the throw
+  it, a factory builds two ways, a factory lives in a trait, or a constant reaching the parent is no HTTP
+  status at all — and the two vendor cases nothing is said about. And where the throw
   point carries no construction at all: thrown from a trait method and declared at the caller, rethrown
   from a `catch`, and written inside a closure the action hands to a callee — as an argument, held in a
   local first, in an arrow function, which is one boundary the hop stops at, and nested past the descent
@@ -253,6 +254,15 @@ in the file being walked, and an array return is no type the trace follows:
 - `app/Exceptions/ExportArchivedException.php` + `app/Support/ProbeStatuses.php` — a status pinned through
   a constant declared in a file the exception class does not name, which is the second file a fold reads
   and the second one a warm build has to notice changing.
+- `app/Exceptions/ExportRelayedException.php` — the same spelling reaching for `ProbeStatuses::RETRIES`,
+  which is no HTTP status: the fold refuses it, and the file it is declared in decided that. The decline
+  that proves a file a fold READ is a dependency whether or not the fold succeeded.
+- `app/Exceptions/ExportThrottledException.php` + `app/Exceptions/Concerns/BuildsProbeFailures.php` — the
+  only factory a class has, written in a TRAIT. `new static(429)` there really builds the class and no
+  reader of a body is entitled to it (parsing the trait's file keys its methods under the trait; the
+  analyser's walk of that file holds no bodies at all, because PHPStan reads a trait in the using class's
+  context), so the answer is the vague-but-true decline with the notice beside it — and the trait's file is
+  still a dependency.
 - `app/Support/ProbeGuards.php` — a helper taking two callbacks, so two closures reach one call on ONE
   line: they are two bodies, and a reader keying closures by line answers the second for both.
 

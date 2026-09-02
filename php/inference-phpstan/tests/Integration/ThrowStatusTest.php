@@ -94,4 +94,12 @@ it('surfaces exactly the expected API errors', function (string $method, array $
     'two closures written on one line' => ['pairedClosureThrownStatus', ['ExportLockedException@423', 'ExportUnsupportedException@422']],
     // A status pinned through a constant declared in another file entirely.
     'a status pinned through another file\'s constant' => ['constantPinnedStatus', ['ExportArchivedException@415']],
+    // …and the same spelling whose constant is no status: the fold refuses 3 rather than publishing the
+    // response key `"3"`, which is the degradation the range gate exists for.
+    'a constant reaching the parent that is no status' => ['unreadableConstantStatus', ['ExportRelayedException@null']],
+    // The factory a TRAIT writes. The `new static(429)` really does build this class, and neither reader of
+    // a body is entitled to it: parsing the trait's file keys its methods under the trait, and the
+    // analyser's walk of that file holds no bodies at all because PHPStan reads a trait in the using
+    // class's context. So the honest answer is no status, with the notice beside it.
+    'a factory the class gets from a trait' => ['traitFactoryStatus', ['ExportThrottledException@null']],
 ])->group('fixture');
