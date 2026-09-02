@@ -33,6 +33,37 @@ it('declines an unmapped exception', function (): void {
     expect(FrameworkExceptionTable::match('RuntimeException'))->toBeNull();
 });
 
+/**
+ * The status an error whose own status nothing could read is published under. Written out here rather than
+ * read back off the table, because a guard that asks the code for its own rule agrees with whatever the
+ * code does — and this key is contested: the tier that folded a body but no status, the framework-defaults
+ * tier, the preset and the terminal fallback all have to name the same one, or one error is published
+ * twice.
+ */
+it('classifies an unread status the same way every tier that publishes it must', function (string $fqcn, string $status): void {
+    expect(FrameworkExceptionTable::classification($fqcn))->toBe($status);
+})->with([
+    'validation → 422' => ['Illuminate\\Validation\\ValidationException', '422'],
+    'authentication → 401' => ['Illuminate\\Auth\\AuthenticationException', '401'],
+    'authorization → 403' => ['Illuminate\\Auth\\Access\\AuthorizationException', '403'],
+    'model-not-found → 404' => ['Illuminate\\Database\\Eloquent\\ModelNotFoundException', '404'],
+    'records-not-found (parent) → 404' => ['Illuminate\\Database\\RecordsNotFoundException', '404'],
+    'http-not-found → 404' => ['Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException', '404'],
+    'a subclass inherits its base' => [FixtureMissingModelException::class, '404'],
+    // Outside the table there is no classification at all, only the key the document cannot do without.
+    'an application exception → the unplaced status' => ['App\\Exceptions\\ProbeFailure', '500'],
+    'a bare RuntimeException → the unplaced status' => ['RuntimeException', '500'],
+]);
+
+it('covers every mapped exception in the classification rows above', function (): void {
+    // The rows are a literal list, so an exception added to the table without one would classify by
+    // nobody's decision and this file would stay green.
+    $classified = ['Illuminate\\Validation\\ValidationException', 'Illuminate\\Auth\\AuthenticationException', 'Illuminate\\Auth\\Access\\AuthorizationException', 'Illuminate\\Database\\Eloquent\\ModelNotFoundException', 'Illuminate\\Database\\RecordsNotFoundException', 'Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException'];
+
+    expect($classified)->toBe(FrameworkExceptionTable::exceptions())
+        ->and($classified)->not->toBeEmpty();
+});
+
 it('uses the RFC reason phrase for every mapped status', function (string $status, string $reason): void {
     expect(FrameworkExceptionTable::reason($status))->toBe($reason);
 })->with(FrameworkExceptionTable::reasonPhrases());

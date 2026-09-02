@@ -12,6 +12,7 @@ use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 
 /**
@@ -19,6 +20,10 @@ use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
  * body, so error docs are never empty when nothing more specific matched. Pinned last so specific
  * mappers always win. Reason phrases come from the shared {@see FrameworkExceptionTable} so this tier
  * can't drift from the others on a status's label.
+ *
+ * The generic body is the FRAMEWORK's, so it is withheld on the one route where the application's own
+ * handler demonstrably renders the exception and the build could not read the result — the status and
+ * its reason phrase still answer ({@see AppRenderedErrors}).
  */
 #[ExtensionOrder(priority: Priorities::LAST)]
 final class DefaultExceptionToResponse implements ExceptionToResponse
@@ -50,6 +55,15 @@ final class DefaultExceptionToResponse implements ExceptionToResponse
         $contribution = Contribution::forProducer('fallback', $context->actionSource());
 
         $draft->setDescription(FrameworkExceptionTable::reason($status), $contribution);
+
+        // Same standing-aside as the framework-defaults tier makes, for the same reason and off the same
+        // fact: the generic body below is what the FRAMEWORK sends, and an application whose own handler
+        // demonstrably renders this exception has replaced it ({@see AppRenderedErrors}). Never being
+        // empty is this tier's job; being empty is not what a status and a reason phrase are.
+        if (AppRenderedErrors::includes($context, $exception->exceptionFqcn)) {
+            return $draft;
+        }
+
         // Generic body, but not a generic error: the status still says which one, so the shared
         // component is named after it. A status with no reason phrase of its own declares nothing.
         $draft->claimComponentName(FrameworkExceptionTable::componentName($status), $contribution, isStatusDefault: true);

@@ -16,6 +16,7 @@ use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ComponentDeclaration;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 use Docuccino\Laravel\Support\ErrorComponentDiagnostic;
 use ReflectionMethod;
 use Throwable;
@@ -73,11 +74,18 @@ final class InferredHandlerExceptionToResponse implements ExceptionToResponse
         $context->recordDependencyFiles($analysis->dependencyFiles);
         $this->reportIllegalNames($analysis, $context, $components);
 
+        // Recorded before anything is published, and whether or not the body could be read: the fact the
+        // tiers behind this one need is that the APPLICATION renders this exception, not that this tier
+        // managed to document it ({@see AppRenderedErrors}).
+        if ($analysis->returns !== [] && ! HandlerResponseBuilder::isDelegation($analysis)) {
+            AppRenderedErrors::record($context, $exception->exceptionFqcn, $callable->target());
+        }
+
         $response = HandlerResponseBuilder::build(
             $analysis,
             $context,
             Contribution::integration('inferred-handler'),
-            $exception->httpStatusHint,
+            $exception,
         );
         if ($response !== null) {
             return $response;

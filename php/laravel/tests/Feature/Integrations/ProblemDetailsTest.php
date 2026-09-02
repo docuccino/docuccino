@@ -7,13 +7,23 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Patch\Contribution;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerResponseBuilder;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsExceptionToResponse;
 use Docuccino\Laravel\Integrations\ProblemDetails\ProblemDetailsSchema;
 use Docuccino\Laravel\Registry\DefaultExtensions;
@@ -111,18 +121,33 @@ it('keeps an HttpException whose status did not fold inside the preset, at the u
         ->and($components->responses()['Problem500']['content'])->toHaveKey('application/problem+json');
 });
 
-it('keys an error nothing could read a status off the same way in both tiers that publish it', function (): void {
-    // Two sites answer "what status does an error with none of its own go under". The rule is stated here
-    // rather than read back off the constant, because a guard that asks the code for its own answer agrees
-    // with whatever the code says — and two tiers keying one error differently publishes two responses
-    // where the server sends one.
-    $throw = problemThrow('Symfony\\Component\\HttpKernel\\Exception\\HttpException', null);
+it('keys an error nothing could read a status off the same way in every tier that publishes it', function (): void {
+    // Three sites answer "what status does an error with none of its own go under": the preset, the
+    // terminal fallback, and the inferred-handler tier when it folded a BODY but no status. The rule is
+    // stated here rather than read back off the constant, because a guard that asks the code for its own
+    // answer agrees with whatever the code says — and two tiers keying one error differently publishes two
+    // responses where the server sends one.
+    $fqcn = 'Symfony\\Component\\HttpKernel\\Exception\\HttpException';
+    $throw = problemThrow($fqcn, null);
 
     $preset = (new ProblemDetailsExceptionToResponse)->toResponse($throw, problemContext(), new ComponentRegistry);
     $fallback = (new DefaultExceptionToResponse)->toResponse($throw, problemContext(), new ComponentRegistry);
+    $handler = HandlerResponseBuilder::build(
+        new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [
+                new ArrayShapeT([new ArrayShapeField('title', new LiteralT('Nope'))]),
+                new UnknownT('status not folded'),
+            ]),
+            new SourceLocation(''),
+        )]),
+        problemContext(),
+        Contribution::integration('inferred-handler'),
+        $throw,
+    );
 
     expect($preset?->status)->toBe('500')
-        ->and($fallback->status)->toBe('500');
+        ->and($fallback->status)->toBe('500')
+        ->and($handler?->status)->toBe('500');
 });
 
 it('leaves an unreadable HTTP error on the preset rather than letting the fallback answer for it', function (): void {
