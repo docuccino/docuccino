@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\EnumT;
 use Docuccino\Core\Inference\DType\LiteralT;
+use Docuccino\Core\Inference\DType\MapT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\PropertyMetadata;
@@ -504,6 +505,8 @@ function exportEngine(): TypeEngine
                 new ArrayShapeField('status', new LiteralT(409)),
                 new ArrayShapeField('reason', new UnknownT('constructor argument not folded')),
                 new ArrayShapeField('failedAt', new UnknownT('constructor argument not folded')),
+                new ArrayShapeField('retryable', new UnknownT('constructor argument not folded')),
+                new ArrayShapeField('context', new UnknownT('constructor argument not folded')),
             ]),
         ]),
         $location,
@@ -527,6 +530,8 @@ function exportEngine(): TypeEngine
             new PropertyMetadata('status', ScalarT::int()),
             new PropertyMetadata('reason', new EnumT(ExportFailure::class, ['QuotaExceeded', 'SourceUnavailable'])),
             new PropertyMetadata('failedAt', new ClassT(CarbonImmutable::class)),
+            new PropertyMetadata('retryable', ScalarT::bool()),
+            new PropertyMetadata('context', new MapT(ScalarT::string(), new UnknownT('mixed'))),
         ]),
     ], $analyses);
 }
@@ -587,7 +592,14 @@ it('illustrates a filled member with a value the schema beside it accepts', func
     $document = exportDocument();
     $media = exportMediaAt($document, 'archive');
 
-    expect($media['example'])->toBe([
+    // The extension bag is lifted out first, because `[]` and `{}` are ONE PHP value and an identity
+    // comparison cannot tell them apart — which is the defect at that member, so it is asserted below by
+    // the only comparison that can see it. Its presence is asserted here, so lifting it hides nothing.
+    $example = $media['example'];
+    expect($example)->toHaveKey('context');
+    unset($example['context']);
+
+    expect($example)->toBe([
         'type' => 'https://example.com/problems/export-refused',
         'title' => 'Conflict',
         'status' => 409,
@@ -597,7 +609,14 @@ it('illustrates a filled member with a value the schema beside it accepts', func
         // The one sample the whole build illustrates a `date-time` with. A constant: nothing here may move
         // with the clock or the machine.
         'failedAt' => '2024-01-01T00:00:00Z',
+        'retryable' => true,
     ]);
+
+    // A bag the schema calls an OBJECT, illustrated by a PHP array, publishes as the JSON list `[]` — a
+    // value that same schema rejects, and one the build's own example lint then reports against an example
+    // its reader never wrote (design §1, the empty-object invariant). `stdClass` is the spelling that
+    // survives to the bytes, so it is what the fill has to produce.
+    expect($media['example']['context'])->toEqual(new stdClass);
 });
 
 it('still records a schema-derived fill as a member nothing read', function (): void {
@@ -609,7 +628,7 @@ it('still records a schema-derived fill as a member nothing read', function (): 
 
     $facts = $document['paths']['/api/export-archive']['get']['responses']['409']['x-docuccino']['facts'] ?? [];
 
-    expect($facts)->toBe(['examplePlaceholders' => ['application/problem+json' => ['failedAt', 'reason']]]);
+    expect($facts)->toBe(['examplePlaceholders' => ['application/problem+json' => ['context', 'failedAt', 'reason', 'retryable']]]);
 });
 
 it('publishes an error example no build-time lint can fault', function (): void {

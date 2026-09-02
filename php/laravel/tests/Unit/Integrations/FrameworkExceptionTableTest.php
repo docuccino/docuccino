@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -53,6 +54,30 @@ it('classifies an unread status the same way every tier that publishes it must',
     'an application exception → the unplaced status' => ['App\\Exceptions\\ProbeFailure', '500'],
     'a bare RuntimeException → the unplaced status' => ['RuntimeException', '500'],
 ]);
+
+it('never classifies an error at a status HTTP forbids a body on', function (): void {
+    // What the inferred-handler builder rests on. It files a response whose status nothing read under a
+    // classification, then asks ONE guard whether it has anything worth publishing — and that guard reads
+    // a bodyless status as "no content is the truth here" rather than as a loss. A classification landing
+    // on one would therefore turn "nothing was recovered" into an answer claiming the error sends no body.
+    //
+    // The bodyless statuses are written out rather than read off the draft, because a guard that asks the
+    // code for its own rule agrees with whatever the code does.
+    $bodyless = ['204', '205', '304'];
+    $classified = array_map(
+        FrameworkExceptionTable::classification(...),
+        [...FrameworkExceptionTable::exceptions(), 'RuntimeException'],
+    );
+
+    expect(array_intersect($classified, $bodyless))->toBe([])
+        ->and($classified)->not->toBeEmpty()
+        // Anti-vacuity: the draft really does refuse a body at each of those, so the emptiness above is
+        // the question it looks like rather than two unrelated lists failing to meet.
+        ->and(array_map(static fn (string $s): bool => (new ResponseDraft($s))->isBodyless(), $bodyless))
+        ->toBe([true, true, true])
+        ->and(array_map(static fn (string $s): bool => (new ResponseDraft($s))->isBodyless(), $classified))
+        ->not->toContain(true);
+});
 
 it('covers every mapped exception in the classification rows above', function (): void {
     // The rows are a literal list, so an exception added to the table without one would classify by

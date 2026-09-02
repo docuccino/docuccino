@@ -17,6 +17,7 @@ use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToRes
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
 use Docuccino\Laravel\Registry\DefaultExtensions;
 use Docuccino\Laravel\Registry\ExtensionRegistry;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
  * The error-response chain order is deterministic and load-bearing (design §6, first supports()
@@ -58,6 +59,30 @@ it('emits the shared 401 reason phrase Unauthorized from the terminal fallback t
     expect($draft->status)->toBe('401')
         ->and($draft->resolvedField('description'))->toBe('Unauthorized');
 });
+
+it('keys an unread status at the exception’s classification, exactly as the tier ahead of it would', function (string $fqcn, string $status): void {
+    // A status nothing read still needs a key, and this tier is the one that has to invent it. Inventing
+    // its own would be a second answer to a question the shared table already answers — and two tiers
+    // keying one error differently publish two responses where the server sends one, which is the whole
+    // reason that table exists. Stated as the classification each exception carries, not as the number
+    // this tier happens to reach for.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/unread-status'),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet,
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', []),
+    );
+    $throw = new ThrownException($fqcn, null, [], ThrowConfidence::Certain, ThrowDisposition::Signal);
+
+    expect((new DefaultExceptionToResponse)->toResponse($throw, $context, new ComponentRegistry)->status)->toBe($status);
+})->with([
+    // The framework tier ordinarily answers for a mapped exception first, so this is what the document
+    // says when an application turns that integration off — and it agrees with what it would have said.
+    'a mapped exception classifies' => [ModelNotFoundException::class, '404'],
+    // Outside the table there is no classification, only the key the document cannot do without.
+    'an application exception takes the unplaced status' => ['App\\Exceptions\\ProbeFailure', '500'],
+]);
 
 it('cascades past the deferring inferred tier to the framework tier, never reaching the fallback', function (): void {
     $resolved = app(ExtensionRegistry::class)->resolve(app(), DefaultExtensions::all(new DocumentConfig('default', [])), []);

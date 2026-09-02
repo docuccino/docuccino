@@ -549,26 +549,13 @@ final class SharedErrorResponses implements DocumentTransformer
     }
 
     /**
-     * One contract's unnamed illustrations with every one of them that says strictly LESS than another
-     * dropped — the arms of a body that differ only where one of them filled a member in.
+     * One contract's unnamed illustrations with every one that says strictly LESS than another dropped —
+     * the arms of a body that differ only where one of them filled a member in. Design
+     * §"Shared error components" has the rule and why it is subsumption rather than a score.
      *
-     * The rule is SUBSUMPTION and never a score. An illustration is dropped only against one carrying the
-     * same members, agreeing on every one it did not fill, and having READ every member where the two
-     * disagree: then the survivor states everything the dropped one stated and more, so nothing the build
-     * proved is lost. A "keep the most complete" rule agrees with this on a body one arm half-read and
-     * quietly deletes a true illustration the moment two arms fold two different real values at one
-     * member — which is two variants of a contract, not one shown twice.
-     *
-     * Which member is filled cannot be read off the value ({@see ResponseDraft::setExample()}), so an
-     * illustration whose producer recorded nothing — an author's own example, a recorded body, anything
-     * copied without its set — has an empty set here and can therefore only ever be a survivor.
-     *
-     * A function of the SET: every survivor is one nothing else subsumes, and a dropped illustration is
-     * dropped against a SURVIVOR rather than against something dropped in turn, so no walk order and no
-     * arrival order can change the answer. That second condition is not a formality — subsumption is not
-     * transitive, so `A < B < C` with `A` not under `C` is reachable, and dropping `A` for a `B` that is
-     * itself dropped would lose what `A` alone read. An illustration no survivor covers is kept, which is
-     * also what makes an empty survivor set harmless rather than a merge that publishes nothing.
+     * The two passes are what make the answer a function of the SET: a body is dropped only against one
+     * that SURVIVES, never against something dropped in turn, because subsumption is not transitive and
+     * `A < B < C` with `A` not under `C` is reachable.
      *
      * @param  array<string, mixed>  $values  canonical bytes → the example they encode
      * @param  array<string, list<string>>  $filled  canonical bytes → the members that body filled in
@@ -576,47 +563,51 @@ final class SharedErrorResponses implements DocumentTransformer
      */
     private static function collapse(array $values, array $filled): array
     {
+        // A pure fast path — one illustration has nothing to be covered BY, and the passes below would
+        // answer the same set the long way round.
         if (count($values) < 2) {
             return $values;
         }
 
         $survivors = [];
         foreach ($values as $content => $value) {
-            foreach ($values as $other => $stronger) {
-                if ($other !== $content && self::subsumes($stronger, $filled[$other] ?? [], $value, $filled[$content] ?? [])) {
-                    continue 2;
-                }
+            if (! self::coveredBy($content, $value, $values, $filled)) {
+                $survivors[$content] = $value;
             }
-
-            $survivors[$content] = $value;
         }
 
         $out = $survivors;
         foreach ($values as $content => $value) {
-            if (array_key_exists($content, $survivors)) {
-                continue;
+            if (! array_key_exists($content, $survivors) && ! self::coveredBy($content, $value, $survivors, $filled)) {
+                $out[$content] = $value;
             }
-
-            foreach ($survivors as $other => $stronger) {
-                if (self::subsumes($stronger, $filled[$other] ?? [], $value, $filled[$content] ?? [])) {
-                    continue 2;
-                }
-            }
-
-            $out[$content] = $value;
         }
 
         return $out;
     }
 
     /**
+     * Whether anything in `$against` subsumes the illustration keyed `$content` — the one question both
+     * passes of {@see collapse()} ask, of two different sets. A body never covers itself.
+     *
+     * @param  array<string, mixed>  $against
+     * @param  array<string, list<string>>  $filled
+     */
+    private static function coveredBy(string $content, mixed $value, array $against, array $filled): bool
+    {
+        foreach ($against as $other => $stronger) {
+            if ($other !== $content && self::subsumes($stronger, $filled[$other] ?? [], $value, $filled[$content] ?? [])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Whether `$stronger` says everything `$weaker` says and more: the same members, and every member
      * they disagree on one `$weaker` FILLED and `$stronger` read. Anything else — a different member set,
      * a disagreement neither side filled, a disagreement both filled — is two illustrations.
-     *
-     * The exemption falls out of that rather than needing a clause: an illustration whose producer
-     * recorded nothing has an empty set, so the first member it disagrees on is one it cannot show it
-     * filled, and it stays.
      *
      * @param  list<string>  $strongerFilled
      * @param  list<string>  $weakerFilled

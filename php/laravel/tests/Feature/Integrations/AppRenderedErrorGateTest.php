@@ -25,14 +25,16 @@ use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
 use Docuccino\Laravel\Integrations\FrameworkErrors\FrameworkErrorsExceptionToResponse;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerResponseBuilder;
 use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
+use Docuccino\Laravel\Integrations\RateLimit\RateLimitResponsesExtension;
 use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 use Docuccino\Laravel\Tests\Fixtures\InferredHandler\ProbeRejection;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
- * Two tiers publish a body that is the FRAMEWORK's rather than the application's — the framework-defaults
+ * Two TIERS publish a body that is the FRAMEWORK's rather than the application's — the framework-defaults
  * shapes and the terminal fallback's `{message}` — and both stand aside from the BODY (never the status)
  * where the build watched the application's own handler render the exception and could not read what it
  * rendered it to.
@@ -40,6 +42,9 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * The gate is what this file is about, in both directions and over both tiers, because a gate that never
  * closes publishes a shape the server does not send and a gate that never opens strips the error contract
  * off every application that has no custom handler at all — which is the population those tiers exist for.
+ *
+ * They are not the whole of the domain, though, which is the last test here: the rate-limit 429 fills the
+ * same gap with the same `{message}` from outside this interface entirely, and is gated with them.
  */
 function gateContext(string $errorResponses = 'default', ?TypeEngine $engine = null): RouteContext
 {
@@ -116,16 +121,18 @@ it('keys the note by the exact exception, so one throw’s renderer never silenc
         ->toBe(['message' => ['type' => 'string']]);
 });
 
-it('divides every mapper the adapter ships between writing the note and reading it', function (): void {
-    // The two rows above are a SUBSET guard, and a subset guard is silent outside itself: a third tier
-    // publishing a framework body with no gate on it would pass every test in this file. So the domain —
-    // every ExceptionToResponse this package ships — is asserted against the union, and a mapper owing no
-    // answer would have to be added here as a row rather than falling in the gap.
+it('divides every producer of a framework-shaped error body between writing the note and reading it', function (): void {
+    // The rows above are a SUBSET guard, and a subset guard is silent outside itself. The subset that had
+    // been asserted was one INTERFACE, and the fourth producer of a framework-shaped error body is not a
+    // mapper at all: the rate-limit 429 asks the chain and fills the gap from Laravel's own `{message}`,
+    // which is the same claim the two tiers here withhold. So the domain is the UNION of the two ways a
+    // class can come to publish that body — implementing the chain's contract, and reaching for the shared
+    // framework error table — and a member owing no answer carries a row rather than falling in the gap.
     $readers = [];
     $writers = [];
     $neither = [];
 
-    foreach (adapterExceptionMappers() as $fqcn => $source) {
+    foreach (adapterFrameworkErrorProducers() as $fqcn => $source) {
         $reads = str_contains($source, 'AppRenderedErrors::includes');
         $writes = str_contains($source, 'AppRenderedErrors::record');
 
@@ -136,29 +143,36 @@ it('divides every mapper the adapter ships between writing the note and reading 
         };
     }
 
-    // Well under what the tree holds, and far enough above zero that a scan which stopped recognising the
-    // shape fails loudly rather than passing on an empty set.
-    expect(count($readers) + count($writers) + count($neither))->toBeGreaterThanOrEqual(3);
+    // Well under what the tree holds, and far enough above zero that a scan which stopped recognising
+    // either of its two shapes fails loudly rather than passing on an empty set.
+    expect(count($readers) + count($writers) + count($neither))->toBeGreaterThanOrEqual(4);
 
     sort($readers);
     $gated = array_map(static fn (array $row): string => $row[0]::class, array_values(gatedTiers()));
+    // The 429 is gated in the same direction and off the same note, through its own entry point rather
+    // than the chain's — `RateLimitTest` drives both directions of it.
+    $gated[] = RateLimitResponsesExtension::class;
     sort($gated);
 
     expect($readers)->toBe($gated)
         // The inferred-handler tier is the only writer: it is the one that watched the renderer.
         ->and($writers)->toBe([InferredHandlerExceptionToResponse::class])
-        // Nothing else. A mapper publishing a body of the APPLICATION's own is not the framework speaking
-        // and owes no gate — but it owes a row here saying so, rather than being silently uncovered.
-        ->and($neither)->toBe([]);
+        // A producer publishing a body of the APPLICATION's own is not the framework speaking and owes no
+        // gate — but it owes a row here saying so, rather than being silently uncovered. The builder reads
+        // the shared table for a status key and a reason phrase and never for a body.
+        ->and($neither)->toBe([HandlerResponseBuilder::class]);
 });
 
 /**
- * Every `ExceptionToResponse` this package ships, as FQCN => its source. A source scan rather than a
- * reflection sweep, because the classification below is about which call each one makes.
+ * Every class in the adapter that can come to publish a framework-shaped error body, as FQCN => its
+ * source: the ones implementing the error chain's contract, and the ones reaching for the shared framework
+ * exception table. A source scan rather than a reflection sweep, because the classification above is about
+ * which call each one makes — and a UNION of two derivations, because either alone leaves the other's
+ * members silently uncovered.
  *
  * @return array<class-string, string>
  */
-function adapterExceptionMappers(): array
+function adapterFrameworkErrorProducers(): array
 {
     $root = dirname(__DIR__, 3).'/src';
     $found = [];
@@ -171,7 +185,12 @@ function adapterExceptionMappers(): array
         }
 
         $source = (string) file_get_contents($entry->getPathname());
-        if (! preg_match('/^\s*(?:final\s+)?class\s+(\w+)[^{]*\bimplements\b[^{]*\bExceptionToResponse\b/m', $source, $class)) {
+        if (! preg_match('/^\s*(?:final\s+)?class\s+(\w+)/m', $source, $class)) {
+            continue;
+        }
+
+        $implements = (bool) preg_match('/^\s*(?:final\s+)?class\s+\w+[^{]*\bimplements\b[^{]*\bExceptionToResponse\b/m', $source);
+        if (! $implements && ! str_contains($source, 'FrameworkExceptionTable::')) {
             continue;
         }
         if (! preg_match('/^namespace\s+([^;]+);/m', $source, $namespace)) {

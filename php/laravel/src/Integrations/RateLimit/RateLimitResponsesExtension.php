@@ -14,6 +14,7 @@ use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
 use Docuccino\Laravel\Integrations\Support\FrameworkExceptionTable;
 use Docuccino\Laravel\Support\IgnoredResponses;
 use Illuminate\Cache\RateLimiter;
@@ -89,8 +90,14 @@ final class RateLimitResponsesExtension implements OperationExtension
         $response->set('headers', $built['headers'], $contribution);
 
         $chain = $this->body($context);
-        $content = $chain['content'] ?? $built['content'];
-        $placeholders = $chain['placeholders'] ?? [];
+        // The stock `{message}` is the FRAMEWORK's shape, so it is withheld on the one route whose own
+        // handler demonstrably renders the throttle exception and whose result the build could not read —
+        // the same standing-aside the framework-defaults tier and the terminal fallback make off the same
+        // fact ({@see AppRenderedErrors}). This is the fourth producer of a framework-shaped error body,
+        // and filling the gap here would re-assert on a throttled route exactly what the other three
+        // withheld everywhere else. The status, the reason and the rate headers all still answer.
+        $content = $chain['content'] ?? ($chain['appRendered'] ? null : $built['content']);
+        $placeholders = $chain['placeholders'];
         if (is_array($content)) {
             foreach ($content as $mediaType => $media) {
                 // Registered first, for the reason core's response-draft merge states: a chain answer that
@@ -117,7 +124,8 @@ final class RateLimitResponsesExtension implements OperationExtension
     }
 
     /**
-     * The 429 body the document's own error style calls for, or null to keep the stock `{message}`.
+     * What the error-response chain says this 429's body is: its `content` where the chain stated one and
+     * null where it did not, and whether the application's own handler is the reason it did not.
      *
      * This 429 is synthesized from middleware rather than from a throw the engine saw, so the
      * error-response chain never gets asked about it — and hardcoding Laravel's shape would contradict an
@@ -132,51 +140,84 @@ final class RateLimitResponsesExtension implements OperationExtension
      * `$ref`s nothing, and an unreferenced component would make a cold build's bytes differ from a
      * warm one's. Any schema the copied content points at stays registered.
      *
+     * A mapper's ROUTE NOTES roll back only where its answer is DISCARDED, which is the same rule
+     * {@see IgnoredResponses::mapThrow()} states: a note written while building something nobody will see
+     * is a fact about nothing and reaches the document as a diagnostic asking the author to fix it, while
+     * a note about the body this 429 goes on to publish — or deliberately withholds — describes a
+     * response the route really has.
+     *
      * The filled members of each media type's example travel beside the content, since the chain's draft
      * is the only thing that knows them. A body reached through a `$ref` states none: what is copied there
      * is a component somebody else published, and this says no more about it than the document does.
      *
-     * @return array{content: array<array-key, mixed>, placeholders: array<string, list<string>>}|null
+     * @return array{content: array<array-key, mixed>|null, placeholders: array<string, list<string>>, appRendered: bool}
      */
-    private function body(RouteContext $context): ?array
+    private function body(RouteContext $context): array
     {
+        $nothing = ['content' => null, 'placeholders' => [], 'appRendered' => false];
+
         if ($context->document->errorResponses === 'none') {
+            return $nothing;
+        }
+
+        $components = $context->components->snapshot();
+        $notes = $context->notes()->snapshot();
+        $answer = null;
+
+        try {
+            $answer = $this->ask($context);
+        } finally {
+            $context->components->restoreResponses($components);
+            if ($answer === null) {
+                $context->notes()->restore($notes);
+            }
+        }
+
+        return $answer ?? $nothing;
+    }
+
+    /**
+     * One consultation of the chain: its answer, or null where nothing usable came back.
+     *
+     * @return array{content: array<array-key, mixed>|null, placeholders: array<string, list<string>>, appRendered: bool}|null
+     */
+    private function ask(RouteContext $context): ?array
+    {
+        $mapped = $context->mapThrow(new ThrownException(
+            self::THROTTLE_EXCEPTION,
+            429,
+            [],
+            ThrowConfidence::Certain,
+            ThrowDisposition::Signal,
+        ));
+        if ($mapped === null) {
             return null;
         }
 
-        $snapshot = $context->components->snapshot();
-
-        try {
-            $mapped = $context->mapThrow(new ThrownException(
-                self::THROTTLE_EXCEPTION,
-                429,
-                [],
-                ThrowConfidence::Certain,
-                ThrowDisposition::Signal,
-            ));
-            if ($mapped === null) {
-                return null;
-            }
-
-            $frozen = $mapped->draft->freeze();
-            if ($frozen->content !== null && $frozen->content !== []) {
-                $placeholders = [];
-                foreach (array_keys($frozen->content) as $mediaType) {
-                    $filled = $mapped->draft->examplePlaceholders((string) $mediaType);
-                    if ($filled !== []) {
-                        $placeholders[(string) $mediaType] = $filled;
-                    }
+        $frozen = $mapped->draft->freeze();
+        if ($frozen->content !== null && $frozen->content !== []) {
+            $placeholders = [];
+            foreach (array_keys($frozen->content) as $mediaType) {
+                $filled = $mapped->draft->examplePlaceholders((string) $mediaType);
+                if ($filled !== []) {
+                    $placeholders[(string) $mediaType] = $filled;
                 }
-
-                return ['content' => $frozen->content, 'placeholders' => $placeholders];
             }
 
-            $referenced = $frozen->ref === null ? null : self::referencedContent($frozen->ref, $context);
-
-            return $referenced === null ? null : ['content' => $referenced, 'placeholders' => []];
-        } finally {
-            $context->components->restoreResponses($snapshot);
+            return ['content' => $frozen->content, 'placeholders' => $placeholders, 'appRendered' => false];
         }
+
+        $referenced = $frozen->ref === null ? null : self::referencedContent($frozen->ref, $context);
+        if ($referenced !== null) {
+            return ['content' => $referenced, 'placeholders' => [], 'appRendered' => false];
+        }
+
+        // A tier answered and stated no body. Where that is the gate — the application renders this
+        // exception itself and the build could not read what it renders it to — the answer IS the body
+        // being withheld, and it is kept rather than rolled back.
+        return AppRenderedErrors::includes($context, self::THROTTLE_EXCEPTION)
+            ? ['content' => null, 'placeholders' => [], 'appRendered' => true]
+            : null;
     }
 
     /**

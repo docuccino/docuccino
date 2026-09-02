@@ -340,6 +340,17 @@ final class ResponseDraft
     {
         [, $generated] = $this->illustration($mediaType);
 
+        return $this->filled($mediaType, $generated);
+    }
+
+    /**
+     * The same answer for a caller that has already walked the ladder ({@see freeze()} has), so the two
+     * cannot come to different conclusions about one media type and the walk happens once.
+     *
+     * @return list<string>
+     */
+    private function filled(string $mediaType, bool $generated): array
+    {
         return $generated ? ($this->examplePlaceholders[$mediaType] ?? []) : [];
     }
 
@@ -515,10 +526,10 @@ final class ResponseDraft
         if ($this->content !== []) {
             $content = [];
             foreach ($this->content as $mediaType => $schema) {
-                [$illustration] = $this->illustration((string) $mediaType);
+                [$illustration, $generated] = $this->illustration((string) $mediaType);
                 $content[$mediaType] = ['schema' => $schema->freeze()->toArray()] + $illustration;
 
-                $filled = $this->examplePlaceholders((string) $mediaType);
+                $filled = $this->filled((string) $mediaType, $generated);
                 if ($filled !== []) {
                     $placeholders[(string) $mediaType] = $filled;
                 }

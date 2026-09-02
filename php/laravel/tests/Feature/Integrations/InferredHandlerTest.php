@@ -452,10 +452,48 @@ it('leaves the body unsaid where a renderer it could not read has already replac
     expect($codes)->toContain('inferred-handler.too-dynamic');
 });
 
+it('states the representation and the loss where it folded a status and no body', function (): void {
+    // The population the row above lands on, in full. This tier ANSWERS here — it folded a 409 no later
+    // tier could have — and answering ends the chain, so whatever it publishes is the whole of what the
+    // document will ever say about that error. Two things follow, and each is a rule this package already
+    // states elsewhere: a response with no `content` says the error returns NOTHING, which is false of a
+    // renderer that always sends a body, so the representation a `JsonResponse` sends is published under
+    // an empty schema; and a partial recovery that says nothing is a silent degradation, so the callback
+    // whose shape was lost is named where the author will see it.
+    $symbol = registerRenderCallback(
+        static fn (ModelNotFoundException $e) => response()->json(['dynamic' => true], 409),
+        MODEL_NOT_FOUND,
+    );
+
+    app()->instance(TypeEngine::class, WorkbenchEngine::make([
+        $symbol => new ActionAnalysis(returns: [new ReturnSite(
+            new ClassT('Illuminate\\Http\\JsonResponse', [new UnknownT('payload not folded'), new LiteralT(409)]),
+            new SourceLocation(''),
+        )]),
+    ]));
+
+    $result = generateDocument();
+    $document = $result->document->toArray();
+    $response = resolveResponse($document, $document['paths']['/api/forms/{form}']['get']['responses']['409']);
+    $codes = array_map(static fn ($d): string => $d->code, $result->diagnostics);
+
+    expect(array_keys($response['content'] ?? []))->toBe(['application/json'])
+        // Empty, not `{type: object}`: the payload may be a list or a scalar, and nothing read it. An
+        // empty schema hoists nowhere either, so no component is minted for a shape nobody saw.
+        ->and($response['content']['application/json']['schema'] ?? null)->toBe([])
+        ->and($codes)->toContain('inferred-handler.too-dynamic');
+});
+
 /**
  * The whole decline rule, arm by arm. The tier answers when it has something the tiers behind it do not
- * — the body, a status it folded itself, or a status HTTP forbids a body on — and declines when it has
- * nothing, since a bodyless error response is a false claim and an answer that ends the chain.
+ * — the body, the media type it is sent as, a status it folded itself, or a status HTTP forbids a body
+ * on — and declines when it has nothing, since a bodyless error response is a false claim and an answer
+ * that ends the chain.
+ *
+ * Which is also the rule for what it answers WITH: wherever it answers and the payload did not fold, it
+ * publishes the media type under an empty schema, because a response with no `content` says the error
+ * returns nothing and there is no tier behind it left to say otherwise. The one exception is the status
+ * HTTP forbids a body on, where nothing IS the truth.
  *
  * `$typeArgs` is what the engine recovered; `$status` is where the response lands and `$producer` which
  * tier owns it. The 404 is the hint the thrown `ModelNotFoundException` arrives with. `$body` is what the
@@ -496,12 +534,15 @@ it('answers only with what the tiers behind it do not have', function (array $ty
         false,
     ],
     // A status the render path folded is a fact no later tier has — they classify the exception type
-    // without reading the renderer — so the response keeps it and says only what it knows.
+    // without reading the renderer — so the response keeps it. The body it carries is `application/json`
+    // under an empty schema: a `JsonResponse` sends that type, and this tier ANSWERING means no tier
+    // behind it will be asked, so publishing no `content` would be the document stating that a 409 the
+    // renderer really gives a body to returns nothing at all.
     'an unfolded payload under a folded status' => [
         [new UnknownT('payload not folded'), new LiteralT(409)],
         '409',
         'integration:inferred-handler',
-        false,
+        true,
     ],
     // A media type the render path folded is a fact no later tier has either, and the body it carries is
     // one the server really sends — so the response states the representation and constrains nothing.

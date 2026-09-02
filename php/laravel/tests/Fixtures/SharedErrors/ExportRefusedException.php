@@ -8,14 +8,18 @@ use Carbon\CarbonImmutable;
 use RuntimeException;
 
 /**
- * An export the service refused. Both the reason and the instant it happened are properties of the
- * failure rather than of the endpoint, so no render arm can write either of them out.
+ * An export the service refused. Everything the problem document says about it — the reason, the instant,
+ * whether another attempt is worth making and whatever the service attached — is a property of the failure
+ * rather than of the endpoint, so no render arm can write any of them out.
  */
 final class ExportRefusedException extends RuntimeException
 {
     public function __construct(
         private readonly ExportFailure $reason,
         private readonly CarbonImmutable $failedAt,
+        private readonly bool $retryable = false,
+        /** @var array<string, mixed> */
+        private readonly array $context = [],
     ) {
         parent::__construct('The export was refused.');
     }
@@ -28,5 +32,16 @@ final class ExportRefusedException extends RuntimeException
     public function failedAt(): CarbonImmutable
     {
         return $this->failedAt;
+    }
+
+    public function retryable(): bool
+    {
+        return $this->retryable;
+    }
+
+    /** @return array<string, mixed> */
+    public function context(): array
+    {
+        return $this->context;
     }
 }

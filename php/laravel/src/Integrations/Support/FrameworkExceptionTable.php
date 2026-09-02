@@ -91,9 +91,11 @@ final class FrameworkExceptionTable
     /**
      * The status an error is published under when nothing in the code stated one: the exception's own
      * framework classification where this table knows it, and {@see UNPLACED_STATUS} otherwise. It is a
-     * classification and not a reading — the build never saw a number — which is why every tier that has
-     * to key such a response asks here rather than picking its own: two tiers keying one error differently
-     * publish two responses where the server sends one.
+     * classification and not a reading — the build never saw a number — which is why the two tiers with
+     * no reading to fall back on (the inferred-handler builder and the terminal fallback) both ask here
+     * rather than picking their own: two tiers keying one error differently publish two responses where
+     * the server sends one. The framework-defaults tier keys off {@see match()} instead, one call lower
+     * on the same table, because it needs the body shape beside the status.
      */
     public static function classification(string $fqcn): string
     {

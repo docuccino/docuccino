@@ -26,7 +26,9 @@ use Illuminate\Validation\ValidationException;
  * route-model binding's 404, a validated request's 422) rather than scripted onto the operation.
  *
  * A body carrying `errors` under 422 and not under 404 is the other half: the per-status difference is a
- * fact about the two arms, so stating it needs no per-status view of one shared shape.
+ * fact about the two arms, so stating it needs no per-status view of one shared shape. The two tests
+ * below are ONE guard on that, and each states both sides of it — a refinement that leaked `errors` onto
+ * every arm is exactly what a pair of tests each asserting only its own arm's presence would miss.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -95,7 +97,11 @@ it('publishes the media type and the body an application’s own renderer proved
     $schema = resolveSchema($document, $content['application/problem+json']['schema'] ?? []);
     expect($schema['type'] ?? null)->toBe('object')
         ->and(array_keys($schema['properties'] ?? []))->toContain('type', 'title', 'status', 'detail')
-        ->and($schema['properties'] ?? [])->not->toHaveKey('message');
+        ->and($schema['properties'] ?? [])->not->toHaveKey('message')
+        // The 404 half of the per-status difference: this arm builds no `errors`, so this body states
+        // none. Asserted here rather than only where 422 states one, because `toContain()` is not
+        // exclusive and a refinement leaking the member onto every arm would satisfy that side alone.
+        ->and($schema['properties'] ?? [])->not->toHaveKey('errors');
 })->group('fixture');
 
 it('carries the member one status has and the others do not, because the arms differ', function (): void {
@@ -112,6 +118,9 @@ it('carries the member one status has and the others do not, because the arms di
 
     $schema = resolveSchema($document, $content['application/problem+json']['schema'] ?? []);
     expect(array_keys($schema['properties'] ?? []))->toContain('errors')
+        // And everything the 404 arm states as well, which is what makes `errors` the DIFFERENCE between
+        // the two rather than this arm simply being read better.
+        ->and(array_keys($schema['properties'] ?? []))->toContain('type', 'title', 'status', 'detail')
         // A list of pointer objects, because that is what the arm builds — not a shape chosen by config.
         ->and($schema['properties']['errors']['type'] ?? null)->toBe('array')
         ->and(array_keys($schema['properties']['errors']['items']['properties'] ?? []))->toContain('pointer', 'detail');

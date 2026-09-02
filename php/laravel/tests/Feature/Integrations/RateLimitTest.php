@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Core\Diagnostics\Severity;
+use Docuccino\Core\Document\ResponseObject;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Draft\ResponseDraft;
 use Docuccino\Core\Extensions\Context\AttributeSet;
@@ -12,13 +13,25 @@ use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\ExceptionToResponse;
 use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
+use Docuccino\Core\Inference\DType\ClassT;
+use Docuccino\Core\Inference\DType\NullT;
 use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Core\Inference\ReturnSite;
+use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Laravel\Exceptions\DefaultExceptionToResponse;
+use Docuccino\Laravel\Integrations\InferredHandler\HandlerDeferralLog;
+use Docuccino\Laravel\Integrations\InferredHandler\InferredHandlerExceptionToResponse;
 use Docuccino\Laravel\Integrations\RateLimit\RateLimitResponsesExtension;
+use Docuccino\Laravel\Integrations\Support\AppRenderedErrors;
+use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Workbench\App\Http\Controllers\FormController;
@@ -234,19 +247,20 @@ it('adds no 429 to an unthrottled route', function (): void {
 
 /**
  * Run the extension over a throttled route with the given error style and mapper chain, and hand back the
- * frozen 429's content plus whatever response components the run left registered.
+ * frozen 429 plus whatever the run left behind: the response components, and the route notes, which are
+ * the other thing a consultation can leave behind and must not.
  *
  * @param  list<ExceptionToResponse>  $mappers
- * @return array{content: array<string, mixed>, responses: array<string, array<string, mixed>>, schemas: array<string, array<string, mixed>>}
+ * @return array{response: ResponseObject, content: array<string, mixed>, responses: array<string, array<string, mixed>>, schemas: array<string, array<string, mixed>>, notes: array<string, array<string, list<string>>>}
  */
-function rateLimited429(string $errorResponses, array $mappers): array
+function rateLimited429(string $errorResponses, array $mappers, ?TypeEngine $engine = null): array
 {
     $components = new ComponentRegistry;
     $context = new RouteContext(
         route: new RouteDescriptor(['GET'], 'api/throttled', middleware: ['throttle:60,1']),
         actionRef: new ActionRef('', null, 'index'),
         attributes: new AttributeSet,
-        engine: new NullTypeEngine,
+        engine: $engine ?? new NullTypeEngine,
         document: new DocumentConfig('default', [], errorResponses: $errorResponses),
         extensions: new ResolvedExtensions(
             exceptionToResponse: $mappers,
@@ -257,10 +271,34 @@ function rateLimited429(string $errorResponses, array $mappers): array
     $operation = new OperationDraft;
     (new RateLimitResponsesExtension(app(RateLimiter::class)))->handle($operation, $context);
 
+    $response = $operation->freeze()->responses['429'];
+
     return [
-        'content' => $operation->freeze()->responses['429']->content ?? [],
+        'response' => $response,
+        'content' => $response->content ?? [],
         'responses' => $components->responses(),
         'schemas' => $components->schemas(),
+        'notes' => $context->notes()->all(),
+    ];
+}
+
+/**
+ * The real error chain an application with a handler of its own presents to this 429: the inferred-handler
+ * tier reading a renderer registered for the throttle exception, then the terminal fallback. `$returns` is
+ * what the engine recovered from that renderer.
+ *
+ * @return array{list<ExceptionToResponse>, TypeEngine}
+ */
+function throttleRenderChain(ReturnSite ...$returns): array
+{
+    $symbol = registerRenderCallback(
+        static fn (ThrottleRequestsException $e) => response('slow down', 429),
+        ThrottleRequestsException::class,
+    );
+
+    return [
+        [app(InferredHandlerExceptionToResponse::class), new DefaultExceptionToResponse],
+        WorkbenchEngine::make([$symbol => new ActionAnalysis(returns: $returns)]),
     ];
 }
 
@@ -358,6 +396,56 @@ it('uses a chain answer that carries inline content verbatim', function (): void
 
     expect(array_keys($result['content']))->toBe(['application/vnd.acme+json'])
         ->and($result['content']['application/vnd.acme+json']['schema']['type'] ?? null)->toBe('object');
+});
+
+it('withholds the stock body where the application renders the throttle itself', function (): void {
+    // The 429 is the FOURTH producer of a framework-shaped error body, and the same fact stands the other
+    // three down: an application whose own handler renders this exception, and whose result the build could
+    // not read, has refuted `{"message": string}`. Filling the gap here would re-assert on every throttled
+    // route precisely what the framework-defaults tier and the terminal fallback withhold everywhere else —
+    // and it would do so over code that says otherwise, which is the one thing a degraded answer may not do.
+    [$mappers, $engine] = throttleRenderChain(new ReturnSite(new ClassT('Illuminate\\Http\\Response'), new SourceLocation('')));
+
+    $result = rateLimited429('default', $mappers, $engine);
+
+    // The status, its reason and the rate headers are this integration's own and untouched — only the body
+    // the chain refuted goes unsaid.
+    expect($result['content'])->toBe([])
+        ->and($result['response']->description)->toBe('Too Many Requests — the rate limit for this endpoint has been exceeded.')
+        ->and(array_keys($result['response']->headers ?? []))->toContain('Retry-After');
+});
+
+it('keeps the stock body where that same renderer hands the throttle back to the framework', function (): void {
+    // The gate open, on the same chain: a `return null` arm is the application deferring to the framework,
+    // so the framework's own shape is the truth and the 429 states it. Paired with the row above because a
+    // gate that never opens strips the body off every throttled route in every application.
+    [$mappers, $engine] = throttleRenderChain(new ReturnSite(new NullT, new SourceLocation('')));
+
+    $result = rateLimited429('default', $mappers, $engine);
+
+    expect(array_keys($result['content']))->toBe(['application/json'])
+        ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
+});
+
+it('leaves no route note behind when the chain answer is discarded, and keeps the one it uses', function (): void {
+    // Asking the chain is a READ, and the components rollback has always said so. A note is the same kind
+    // of fact reaching the document by another road — the deferral summary asks an author to make a
+    // callback foldable — so a note written while building an answer nobody sees is a fact about nothing.
+    // The rule is {@see IgnoredResponses::mapThrow()}'s: roll back where the answer is DISCARDED, and stand
+    // where it is used. Both halves here, because a rollback that took the second with it would lose the
+    // one report an author can act on for a 429 whose body really was lost.
+    //
+    // The discarded half needs a chain that writes a note and then lands nothing, which is a chain with no
+    // terminal tier behind the one that declined — an application's own mapper ordering, since the tier
+    // that declines here is the same one that records.
+    [$mappers, $engine] = throttleRenderChain(new ReturnSite(new ClassT('Illuminate\\Http\\Response'), new SourceLocation('')));
+    $discarded = rateLimited429('default', [$mappers[0]], $engine);
+    $used = rateLimited429('default', $mappers, $engine);
+
+    // Anti-vacuity: the same consultation really does write both notes, so the emptiness above is a
+    // rollback rather than a route nothing ever recorded anything on.
+    expect($discarded['notes'])->toBe([])
+        ->and(array_keys($used['notes']))->toBe([AppRenderedErrors::CHANNEL, HandlerDeferralLog::CHANNEL]);
 });
 
 it('falls back to the stock body when the chain answer cannot be read', function (?Closure $build): void {
