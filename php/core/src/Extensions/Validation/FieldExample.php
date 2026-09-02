@@ -56,7 +56,14 @@ final class FieldExample
     /** Past this a conforming sample is noise rather than an illustration, so none is published. */
     private const int MAX_LENGTH = 64;
 
-    /** The neutral starting point for a bounded number, moved onto the nearest legal value. */
+    /**
+     * Where a bounded number starts from. ONE rather than the neutral zero, because this is the producer
+     * that publishes nothing at all unless a rule pinned a bound — so the seed is only ever seen BESIDE a
+     * constraint, and 1 is the value that demonstrates one. A `multiple_of:5` illustrates 5 where 0
+     * satisfies every step there is, and `max`, `lt` and `lte` illustrate a value a client would send
+     * rather than the one edge of the range that usually means "none". Asserted against the other two
+     * seeds, with this reason, by the adapter's example-agreement rows.
+     */
     private const int NUMBER_SEED = 1;
 
     /**
@@ -174,10 +181,11 @@ final class FieldExample
     }
 
     /**
-     * The lowest legal value at or above the seed, so a `min:18` documents 18 and a `max:5` still
+     * The value the bounds admit nearest the seed, so a `min:18` documents 18 and a `max:5` still
      * documents something a client can send — {@see BoundedNumber} for the ladder, which the collection
-     * exporter and the error-example fill read the same way. Bounds that cross publish nothing, and so
-     * does a rule set that pinned only the type: `type: integer` says that already.
+     * exporter and the error-example fill read too, each from a seed of its own. A range nothing inhabits
+     * publishes nothing, and so does a rule set that pinned only the type: `type: integer` says that
+     * already.
      *
      * @param  array<string, mixed>  $keywords
      * @return array{mixed}|null

@@ -268,9 +268,44 @@ an arbitrary regex, and there the lint is the backstop rather than the bug.
 
 *The fix that worked.* One table per fact, shared rather than reimplemented — `Core\Support\FormatSamples`
 for a format, `Core\Support\BoundedNumber` for a set of bounds — and `ExampleValueAgreementTest` beside
-them, which states the ladder independently of both implementations, puts every row to both, and pins the
-differences that deliberately stand as rows of their own. A keyword read at one site and not the other
-then fails a test instead of reaching a document.
+them, which states the ladder independently of every implementation, puts every row to all three
+producers, and pins the differences that deliberately stand as rows of their own. A keyword read at one
+site and not the other then fails a test instead of reaching a document. The bounds table then had three
+defects of its own, which is the next class below: one table per fact narrows what has to be right, and
+does not make it right.
+
+## An arithmetic step chosen for determinism, never checked against the set it had to land in
+
+A value derived from constraints is derived by *steps*, and each step is chosen because it can be named
+deterministically. That says nothing about whether it lands in the set the constraints describe — and
+where it does not, the code reports the set EMPTY, which is the one answer that cannot be checked against
+the constraints it came from.
+
+*Instances*, all three in the one 140-line ladder from a set of numeric bounds to a value they admit.
+The step off an exclusive `number` bound was `x + 1`, legal and deterministic and a whole unit too far:
+`{exclusiveMinimum: 0, exclusiveMaximum: 1}` — a probability, inhabited by 0.5 — came back "no number
+validates", and an exported collection drops a query parameter whose schema admits nothing, so the
+consumer never learned the parameter existed. The step onto a `multipleOf` was `ceil()` alone, so a
+value dropped to a CEILING was rounded away from the range: `{minimum: -10, maximum: -5, multipleOf: 3}`
+reported empty with -6 legal. And nothing re-asked whether the finished value was a number at all, so
+two finite bounds a step apart overflowed to INF — which one emitter refuses outright and another
+stringifies to `"INF"` — while the `integer` arm cast it and emitted a PHP warning from a shipped code
+path, an exception under any warnings-to-`ErrorException` handler.
+
+*The tell.* Not a missing oracle: every row of that ladder's dataset was validated against the keywords
+by a JSON Schema validator that knows nothing about the implementation. The rows were the whole set of
+*answers a producer had been seen to need*, and an emptiness answer is where a wrong step and a genuinely
+empty set are indistinguishable — so the missing rows were the inhabited sets nobody had reached yet.
+Ask, of any `null`/"no value" branch: is this a fact about the INPUT, or about the walk that gave up?
+
+*The fix that worked.* The emptiness rows assert the other way round — every value the ladder could have
+arrived at, the bounds it states and the midpoint between them, is put to the validator and refused, so
+`null` is proven to be a fact about the bounds. The step off an exclusive bound became "one whole unit,
+or half the room to the opposite bound where a unit would leave the range", and the step onto a multiple
+tries both directions, taking the one away from the pressure first. And the `null` contract was split in
+the docblock, because it had grown a second meaning: a set nothing inhabits, and a value only an
+unrepresentable double could be. `BoundedNumberTest` is the oracle; `ExampleValueAgreementTest` holds the
+three producers that read the ladder to one answer.
 
 ## A node located by line, where the offset is its identity
 

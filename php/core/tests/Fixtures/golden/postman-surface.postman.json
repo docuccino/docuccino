@@ -48,6 +48,11 @@
                   "disabled": true
                 },
                 {
+                  "key": "sample",
+                  "value": "0.5",
+                  "disabled": true
+                },
+                {
                   "key": "sort",
                   "value": "name",
                   "disabled": true
@@ -92,6 +97,11 @@
                     {
                       "key": "page",
                       "value": "1",
+                      "disabled": true
+                    },
+                    {
+                      "key": "sample",
+                      "value": "0.5",
                       "disabled": true
                     },
                     {

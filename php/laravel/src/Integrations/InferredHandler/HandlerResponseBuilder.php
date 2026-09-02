@@ -30,53 +30,21 @@ use stdClass;
  * type (default `application/json`, `application/problem+json` when the helper set that header), then hoists
  * the payload schema through the route's converter.
  *
- * The example carries only members that folded to a literal — including a {@see StatusMarkerT} member (a
- * value echoing the response status) resolved to this response's status, so the 403 arm says `403`.
- * Required members that didn't fold are filled with type-derived placeholders (and the real status) so the
- * example is a valid instance of the schema beside it — see {@see example()} for why that fill is confined
- * to examples and nothing else. A status that didn't fold falls back to the one the body itself states, and
- * only then to the exception's own status hint ({@see foldStatus()}).
- *
- * With none of the three, what the render path DID fold — a body, or failing that the media type it is
- * sent as — is still a proven fact, and the only thing missing is the key to file it under, so the
- * response is filed under the exception's framework classification
- * ({@see FrameworkExceptionTable::classification()}) — the same question the framework-defaults tier and
- * the fallback answer, so the error is published once rather than by two tiers under two keys. That key is
- * a classification and not a reading, which the analyser already says out loud with its
- * `inference.http-exception-status-unread` notice; throwing the reading away to avoid stating it would
- * leave the response to a tier that asserts a different media type, and a confident wrong shape costs the
- * consumer more than an approximate status. With neither there is nothing to keep, and the tier declines
- * ({@see build()}).
- *
- * A payload that didn't fold ({@see UnknownT}, or no shape recovered at all) has no body to document, and
- * an error response with no `content` states that the error returns nothing — so the tier answers only
- * when it has something the chain's later tiers do not: the body, the MEDIA TYPE the body is sent as, a
- * status it folded itself, or a status HTTP forbids a body on. Otherwise it declines and they fill in
- * ({@see build()}).
- *
- * The MEDIA TYPE is one of those four because no later tier reads the renderer — they assert
- * `application/json` off a classification of the exception CLASS. And wherever this tier answers with no
- * body at all, the true statement is "a body of this media type, shape unknown": the response carries
- * that type under an EMPTY schema, which is what a media type with no keyword written into it freezes
- * to. Of the three shapes available it is the only honest one: `{type: object}` claims a JSON object the
- * build never saw (the payload may be a list or a scalar), and omitting `schema` leaves a generator
- * choosing between "any body" and "no body" — and publishing no `content` picks the wrong one of those
- * two outright, since a tier that ANSWERS leaves nobody behind it to say otherwise. An empty schema also
- * hoists nowhere, so no component is minted for a shape nobody read. The cost is type safety and never
- * truth, which is the trade the degraded-answer rule asks for. Which type: the one the render path folded
- * where it folded one, and `application/json` where it did not, because the recovered class is a
- * `JsonResponse` and that is what one sends — the same reading the folded-body branch makes. Provenance
- * is no weaker than a folded body's — the same producer read the same render path — so the write is the
- * same contribution, and the half that did NOT fold is said where an author acts on it, on every path
- * that publishes a shapeless body: the `inferred-handler.too-dynamic` summary names the callback
- * ({@see HandlerDeferralLog}).
+ * The example carries only members that folded to a literal — a {@see StatusMarkerT} member among them,
+ * resolved to this response's status, so the 403 arm says `403` — and required members that didn't fold
+ * are filled with type-derived placeholders so the example is a valid instance of the schema beside it
+ * ({@see example()} for why that fill is confined to examples and nothing else). A status that didn't fold
+ * falls back to the one the body states, and only then to the exception's own hint ({@see foldStatus()}).
  *
  * When the body is an object the engine watched being constructed, the fourth type arg names the arguments
- * it was built with, and those decide the example's membership rather than the schema's `required` list: an
- * argument passed at this call site is in THIS response even where the schema calls it optional, and one
- * that wasn't passed is absent even where the schema calls it required. An argument that renders the key
- * only sometimes settles nothing and hands the question back to the schema
+ * it was built with, and those decide the example's MEMBERSHIP rather than the schema's `required` list
  * ({@see suppliedMembers()}). Only the schema is ever consulted for what such a member should look like.
+ *
+ * What this tier answers with where only half the response folded is design §6, "The inferred-handler
+ * tier, and the four facts it answers for": the four facts worth an answer at all ({@see build()}), the
+ * classification an unread status is filed under
+ * ({@see FrameworkExceptionTable::classification()}), and why a body it could not read is a media type
+ * under an EMPTY schema rather than no `content`.
  *
  * Null means this tier has no answer: no `JsonResponse` was recovered — either a `return null`/void arm
  * ({@see isDelegation()} — the renderer handing the type back to the framework, not a fold failure) or a
@@ -88,7 +56,10 @@ final class HandlerResponseBuilder
     /** How far a placeholder follows nested schemas before flattening — a self-referential one never ends. */
     private const PLACEHOLDER_DEPTH = 4;
 
-    /** Where a bounded number starts from — the neutral one, moved onto the nearest value the bounds admit. */
+    /**
+     * Where a bounded number starts from. ZERO, for the reason core's factory states: this fills a bare
+     * `type: integer` member too, where the seed is the whole answer, and the neutral value claims least.
+     */
     private const NUMBER_SEED = 0;
 
     /** What a `JsonResponse` is sent as when the render path stated no content type of its own. */
@@ -548,18 +519,18 @@ final class HandlerResponseBuilder
         }
 
         if (self::isType($type, 'object')) {
-            // Never `[]`: a PHP array cannot spell the empty JSON object, and one published beside a
-            // `type: object` is an example that same schema rejects (design §1, "The empty-object
-            // invariant"). The depth cap answers the same way, for the same reason.
+            // The depth cap answers `{}` rather than `[]` for the reason {@see objectPlaceholder()}
+            // states.
             return [$deeper < self::PLACEHOLDER_DEPTH ? self::objectPlaceholder($spec, $context, $deeper) : new stdClass, true];
         }
 
         if (self::isType($type, 'integer') || self::isType($type, 'number')) {
             $bounded = BoundedNumber::nearest($spec, self::NUMBER_SEED, self::isType($type, 'integer'));
 
-            // Bounds that cross admit no number at all, and this tier has nowhere to put that — dropping
-            // the member would drop the whole example. So the seed stands and the build's example lint
-            // names the contradiction the document itself carries, which its reader CAN act on.
+            // The keywords name no number to publish ({@see BoundedNumber}) and this tier has nowhere
+            // to put that — dropping the member would drop the whole example. So the seed stands and the
+            // build's example lint reports it against the schema beside it, which is the two lines of
+            // the document the author wrote: a range nothing inhabits, or a bound no double could hold.
             return [$bounded === null ? self::NUMBER_SEED : $bounded[0], true];
         }
 
@@ -670,13 +641,20 @@ final class HandlerResponseBuilder
      *
      * The rule: each branch's keywords accumulate in BRANCH ORDER and the first statement of a keyword
      * wins, except `properties`, which accumulate member by member under that same rule, and `required`,
-     * which unions — for those two the conjunction of the branches IS their union. A keyword two branches
-     * spell differently is a contradiction the document already carries, and the first branch is the one
-     * every other reader of the document shows (the same authored-order reading `enum` and a union's
-     * branches get); the example lint names the contradiction.
+     * which unions — for those two the conjunction of the branches IS their union.
+     *
+     * First-wins is exactly right for a keyword whose two spellings cannot both hold — `type`, `const`,
+     * `format` — where the second is a contradiction the document already carries and the first branch is
+     * the one every other reader of the document shows (the same authored-order reading `enum` and a
+     * union's branches get); the example lint names it. It is NOT the conjunction of a numeric BOUND,
+     * where two spellings have a well-defined answer (the higher floor, the lower ceiling) that this does
+     * not compute, so a value legal under branch one and refused by branch two can come out. No producer
+     * writes a body member as an `allOf` of bounds — the only in-tree producer writes object `$ref`
+     * branches — and the divergence is a row of the adapter's example-agreement table rather than reach
+     * nothing exercises.
      *
      * One level: a branch that is a boolean is no schema object and states nothing, and a branch carrying
-     * a conjunction OF ITS OWN is left folded rather than followed, since a `$ref` cycle through one would
+     * a conjunction OF ITS OWN is DROPPED rather than followed, since a `$ref` cycle through one would
      * not end and nothing mints the shape. The answer therefore never states an `allOf`.
      *
      * @param  array<array-key, mixed>  $spec
