@@ -255,18 +255,7 @@ it('adds no 429 to an unthrottled route', function (): void {
  */
 function rateLimited429(string $errorResponses, array $mappers, ?TypeEngine $engine = null): array
 {
-    $components = new ComponentRegistry;
-    $context = new RouteContext(
-        route: new RouteDescriptor(['GET'], 'api/throttled', middleware: ['throttle:60,1']),
-        actionRef: new ActionRef('', null, 'index'),
-        attributes: new AttributeSet,
-        engine: $engine ?? new NullTypeEngine,
-        document: new DocumentConfig('default', [], errorResponses: $errorResponses),
-        extensions: new ResolvedExtensions(
-            exceptionToResponse: $mappers,
-        ),
-        components: $components,
-    );
+    $context = rateLimitContext($errorResponses, $mappers, $engine);
 
     $operation = new OperationDraft;
     (new RateLimitResponsesExtension(app(RateLimiter::class)))->handle($operation, $context);
@@ -276,10 +265,31 @@ function rateLimited429(string $errorResponses, array $mappers, ?TypeEngine $eng
     return [
         'response' => $response,
         'content' => $response->content ?? [],
-        'responses' => $components->responses(),
-        'schemas' => $components->schemas(),
+        'responses' => $context->components->responses(),
+        'schemas' => $context->components->schemas(),
         'notes' => $context->notes()->all(),
     ];
+}
+
+/**
+ * The throttled route the rows above run over, as a context of its own — so a row that expects NO 429 can
+ * read the components and the notes back without reaching for a response the document does not carry.
+ *
+ * @param  list<ExceptionToResponse>  $mappers
+ */
+function rateLimitContext(string $errorResponses, array $mappers, ?TypeEngine $engine = null): RouteContext
+{
+    return new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/throttled', middleware: ['throttle:60,1']),
+        actionRef: new ActionRef('', null, 'index'),
+        attributes: new AttributeSet,
+        engine: $engine ?? new NullTypeEngine,
+        document: new DocumentConfig('default', [], errorResponses: $errorResponses),
+        extensions: new ResolvedExtensions(
+            exceptionToResponse: $mappers,
+        ),
+        components: new ComponentRegistry,
+    );
 }
 
 /**
@@ -369,11 +379,27 @@ it('leaves no response component behind after asking the chain, but keeps the sc
         ->and($result['schemas'])->toHaveKey('AppProblem');
 });
 
-it('keeps the stock {message} body when the document documents no errors', function (): void {
-    $result = rateLimited429('none', [chainReferencingSharedError()]);
+it('documents no 429 at all when the document documents no errors', function (): void {
+    // `error_responses => 'none'` is a statement about the whole document: it publishes no error response
+    // Docuccino synthesized, and the 429 is one — synthesized from middleware rather than from a throw,
+    // but an error response either way, which is why the configuration reference lists it among the
+    // implicit responses the switch turns off. It used to publish the 429 with Laravel's stock `{message}`
+    // body under `none`, because only the chain CONSULT was gated and the response itself was not: a
+    // switch named `none` that yields a response with a framework-shaped body in it.
+    //
+    // The rate headers go with it. They are facts about throttling rather than about the error body, and
+    // they have nowhere to be published except on a response this document does not carry; a route that
+    // wants its 429 kept while the rest go is asking for `#[IgnoreResponse]` on the others, not for this.
+    $operation = new OperationDraft;
+    $context = rateLimitContext('none', [chainReferencingSharedError()]);
 
-    expect(array_keys($result['content']))->toBe(['application/json'])
-        ->and($result['content']['application/json']['schema']['properties'] ?? [])->toHaveKey('message');
+    (new RateLimitResponsesExtension(app(RateLimiter::class)))->handle($operation, $context);
+
+    expect($operation->freeze()->responses)->toBe([])
+        // Nothing is left behind either: no shared component, and no note asking an author to fix a
+        // callback for a body nobody will see.
+        ->and($context->components->responses())->toBe([])
+        ->and($context->notes()->all())->toBe([]);
 });
 
 it('keeps a chain answer that names a media type and constrains nothing under it', function (): void {

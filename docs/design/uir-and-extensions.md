@@ -1056,6 +1056,48 @@ interface ExceptionToResponse {
 //      User extensions slot in by order; attributes/config override anything.
 ```
 
+### The inferred-handler tier, and the four facts it answers for
+
+`InferredHandler\HandlerResponseBuilder` is the only tier that reads the application's own renderer, so
+what it does when half the response folded and half did not decides whether the other tiers ever get
+asked. A payload that didn't fold (`UnknownT`, or no shape recovered at all) has no body to document, and
+an error response with no `content` states that the error returns *nothing* — so the tier answers only
+where it holds something the tiers behind it do not, and otherwise declines and lets them fill in. Four
+facts qualify:
+
+- the **body**, where the payload folded;
+- the **media type** the body is sent as;
+- a **status it folded itself**;
+- a **status HTTP forbids a body on**, which is a fact about the response whatever the payload did.
+
+The media type is one of the four because no later tier reads the renderer at all — they assert
+`application/json` off a classification of the exception CLASS. So wherever this tier answers with no body,
+the true statement is "a body of this media type, shape unknown": the response carries that type under an
+**empty schema**, which is what a media type with no keyword written into it freezes to. Of the three
+shapes available it is the only honest one. `{type: object}` claims a JSON object the build never saw (the
+payload may be a list or a scalar); omitting `schema` leaves a generator choosing between "any body" and
+"no body"; and publishing no `content` picks the wrong one of those two outright, since a tier that
+ANSWERS leaves nobody behind it to say otherwise. An empty schema also hoists nowhere, so no component is
+minted for a shape nobody read. The cost is type safety and never truth, which is the trade the
+degraded-answer rule asks for.
+
+Which type: the one the render path folded where it folded one, and `application/json` where it did not,
+because the recovered class is a `JsonResponse` and that is what one sends — the same reading the
+folded-body branch makes. Provenance is no weaker than a folded body's, since the same producer read the
+same render path, so the write is the same contribution; and the half that did NOT fold is said where an
+author acts on it, on every path that publishes a shapeless body, by the
+`inferred-handler.too-dynamic` summary naming the callback (`HandlerDeferralLog`).
+
+**An unread status is filed under a CLASSIFICATION.** Where nothing anywhere stated a status, what the
+render path folded is still a proven fact and the only thing missing is the key to file it under — so the
+response goes under the exception's framework classification (`FrameworkExceptionTable::classification()`),
+which is the same question the framework-defaults tier and the terminal fallback answer, so the error is
+published once rather than by two tiers under two keys. That key is a classification and not a reading,
+which the analyser already says out loud with its `inference.http-exception-status-unread` notice; throwing
+the reading away to avoid stating it would leave the response to a tier that asserts a different media
+type, and a confident wrong shape costs the consumer more than an approximate status. With neither a body
+nor a media type there is nothing to keep, and the tier declines.
+
 **No `ExampleProvider`.** Examples were sketched as a contract of their own and never needed one:
 `#[Example]` and `@example` are read by the attribute/docblock extensions like any other override, and
 an extension that wants to attach one writes it through `ResponseDraft::setExample()` or the schema

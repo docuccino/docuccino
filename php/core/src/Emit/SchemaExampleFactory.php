@@ -62,7 +62,11 @@ final readonly class SchemaExampleFactory
     /** Deep enough for any real payload; past it a self-referential schema is the likelier reading. */
     private const int MAX_DEPTH = 8;
 
-    /** Where a bounded number starts from — the neutral one, moved onto the nearest value the bounds admit. */
+    /**
+     * Where a bounded number starts from. ZERO, because this factory answers for a BARE `type: integer`
+     * too, where the seed is the whole answer and the neutral value is the one claiming least. The
+     * validated field's seed is 1 for the opposite reason — it never answers without a bound.
+     */
     private const int NUMBER_SEED = 0;
 
     /**
