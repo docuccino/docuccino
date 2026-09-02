@@ -135,6 +135,38 @@ What they hold you to:
   download, or a media type documented with no schema. The note is raised on your runner's warning
   channel, against the test that produced it, so a pass that proved less than it looks like says so
   (`pest --display-warnings`, `phpunit --display-warnings`). It never fails a test on its own.
+- **Form request bodies are checked, uploads included.** An endpoint whose body Docuccino publishes as
+  `multipart/form-data` or `application/x-www-form-urlencoded` — anything with a `file` or `image`
+  validation rule lands in the first — is held to that schema like any other: required parts, types,
+  enums, and a part the document names no property for. `$this->post('/api/invoices', [...])` is all it
+  takes. Your framework parses a form body out of the request before a test can see the bytes, so the
+  check reads the fields it was parsed into, and every member is read as the type the document
+  documents, the way a query value is — except for a comma, which in a form body is a character and not
+  a list separator. A file part is checked as present and as the string a binary part is; its contents
+  are not read.
+- **The fields are read as they arrived, not as your application left them.** `TrimStrings` and
+  `ConvertEmptyStringsToNull` are in Laravel's default global stack and rewrite the request in place,
+  and every `$request->merge()` in your middleware and controllers adds fields no client sent — so the
+  parameter bag an assertion can reach is not the message. The trait records each request at the front
+  of the middleware stack, ahead of all of it. Where nothing recorded one — a suite that reaches the
+  assertions without the trait, or a `TestResponse` built by hand — the body is not checked and the note
+  says so, rather than reading whatever is in the bag. `ApiContract::captureRequestBodies()` turns the
+  recording on for a test case that cannot take the trait.
+- **A request carrying a file is read as the multipart request it is.** Laravel's test client labels
+  `post()` `application/x-www-form-urlencoded` even when you hand it an `UploadedFile`, and no client
+  can send a file that way — so a request with file parts is checked against the `multipart/form-data`
+  body your document publishes. `postJson()` is the other way round: it lifts the `UploadedFile` out and
+  really does send JSON, so it is checked as JSON and told the contract documents multipart. Use
+  `post()` for an endpoint documented as multipart.
+- **A body that got both the bytes and the type wrong hears about both.** A missing required body and a
+  media type the contract documents no entry for are two independent mistakes, and they are reported
+  together rather than one at a time.
+- **A streamed response is checked against what it streamed.** `response()->stream(…)` and
+  `streamJson(…)` hand PHP no body string at all; the assertions run the stream and check the bytes it
+  wrote, so a streamed endpoint is held to its documented schema like any other. Only where you asked
+  about the response: `assertValidRequest()` never runs the callback, so an endpoint that streams
+  forever, or whose closure consumes a queue or deletes a file, does neither on a request-only
+  assertion.
 - **A status documented with no `content` at all is different, and it fails.** Omitting `content` in
   OpenAPI asserts the response has *no body*, so a `404` documented that way against a `404` that really
   sends bytes is a document under-describing your API, and the failure names both halves: the status the
