@@ -202,7 +202,10 @@ final class HttpExceptionStatus
             return $this->cache[$fqcn];
         }
 
-        return $this->cache[$fqcn] = $this->forClass(new ReflectionClass($fqcn));
+        $read = $this->forClass(new ReflectionClass($fqcn));
+        $read['files'] = array_values(array_unique($read['files']));
+
+        return $this->cache[$fqcn] = $read;
     }
 
     /**
@@ -252,21 +255,19 @@ final class HttpExceptionStatus
         array $inherited,
         array $files,
     ): array {
-        $none = ['status' => null, 'parameter' => null, 'files' => $files];
-
         $file = $class->getFileName();
         if ($file === false || ! $this->projectFilter->isProjectFile($file)) {
-            return $none;
+            return self::nothing($files);
         }
 
         $body = $this->bodies->methods($file, $class->getName())['__construct'] ?? null;
         if ($body === null) {
-            return $none;
+            return self::nothing($files);
         }
 
         $call = StatusForwarding::parentCall($body);
         if ($call === null) {
-            return $none;
+            return self::nothing($files);
         }
 
         // A literal the parent pins is one no subclass can move: it reaches the parent's own
@@ -277,12 +278,12 @@ final class HttpExceptionStatus
 
         $slot = $inherited['parameter'];
         if ($slot === null) {
-            return $none;
+            return self::nothing($files);
         }
 
         $argument = StatusForwarding::argumentAt($call, $slot, self::parameterNames($parent->getConstructor()));
         if ($argument === null) {
-            return $none;
+            return self::nothing($files);
         }
 
         // The declaration a `parent::__construct(HttpStatus::CONFLICT, …)` reads decides this class's
@@ -295,19 +296,19 @@ final class HttpExceptionStatus
         }
 
         if (! $argument instanceof Node\Expr\Variable || ! is_string($argument->name)) {
-            return $none;
+            return self::nothing($files);
         }
 
         // A body that WRITES the variable it forwards hands the parent a value neither the caller nor the
         // default names — `if ($errors === []) { $statusCode = 400; }` really builds a 400 — so this class
         // forwards no slot at all, and a `throw new X(409, …)` cannot be read off one either.
         if (StatusForwarding::reassigns($body, $argument->name)) {
-            return $none;
+            return self::nothing($files);
         }
 
         $index = array_search($argument->name, self::parameterNames($constructor), true);
         if (! is_int($index)) {
-            return $none;
+            return self::nothing($files);
         }
 
         // …and the declaration behind the DEFAULT of that slot, which is the value a construction leaving
@@ -320,7 +321,21 @@ final class HttpExceptionStatus
 
         $status = $this->forwardedDefault($class, $constructor, $index, $file, $files);
 
-        return ['status' => $status, 'parameter' => $index, 'files' => array_values(array_unique($files))];
+        return ['status' => $status, 'parameter' => $index, 'files' => $files];
+    }
+
+    /**
+     * A class that states nothing, answering with the files the read had already gone through to find
+     * that out. Spelled as a function of the live set rather than captured once at the top of a body: a
+     * declaration a fold READ decided this class's status whether or not the fold went on to succeed, and
+     * a decline handing back a stale copy of the set leaves that file off the fragment's dependency list.
+     *
+     * @param  list<string>  $files
+     * @return StatusPin
+     */
+    private static function nothing(array $files): array
+    {
+        return ['status' => null, 'parameter' => null, 'files' => $files];
     }
 
     /**

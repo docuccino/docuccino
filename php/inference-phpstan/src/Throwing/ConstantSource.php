@@ -63,11 +63,10 @@ final class ConstantSource
         }
 
         $class = substr($name, 0, $split);
+        $lowered = strtolower($class);
 
         return self::fileOf(
-            in_array(strtolower($class), ['self', 'static', 'parent'], true)
-                ? self::relative(strtolower($class), $self)
-                : $class,
+            in_array($lowered, ['self', 'static', 'parent'], true) ? self::relative($lowered, $self) : $class,
             substr($name, $split + 2),
         );
     }
@@ -110,8 +109,16 @@ final class ConstantSource
     /** What `self`, `static` or `parent` names in a body written in `$self`. */
     private static function relative(string $keyword, ?string $self): ?string
     {
-        if ($self === null || $keyword !== 'parent') {
-            return $keyword === 'parent' ? null : $self;
+        // A caller with no class to give — the registry folds a call PHPStan normalised, with no class body
+        // around it — names nothing relative, and guessing one would record a file the line never read.
+        if ($self === null) {
+            return null;
+        }
+
+        // `self` and `static` are both the class the line is written in: this read is over a declaration,
+        // where late binding has nothing to bind to.
+        if ($keyword !== 'parent') {
+            return $self;
         }
 
         if (! class_exists($self)) {

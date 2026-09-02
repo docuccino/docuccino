@@ -95,17 +95,20 @@ final class StatusForwarding
      * relative names build the target: `new static` does wherever it is written, and `new self` only
      * where the body is the target's own. A base's `new self(…)` builds the base.
      *
+     * Named rather than defaulted, because the default that reads well here — the body is the target's
+     * own — is the exact wrong answer for the body this read exists to walk: a base's, where `new self`
+     * builds the base and calling it the target publishes another class's status.
+     *
      * @param  array<array-key, Node\Stmt>  $statements
-     * @param  string|null  $declaring  null where the body is the target's own
      * @return list<Node\Expr\New_>
      */
-    public static function constructionsOf(array $statements, string $target, ?string $declaring = null): array
+    public static function constructionsOf(array $statements, string $target, string $declaring): array
     {
         /** @var list<Node\Expr\New_> $constructions */
         $constructions = (new NodeFinder)->find(
             $statements,
             static fn (Node $node): bool => $node instanceof Node\Expr\New_
-                && self::constructs($node, $target, $declaring ?? $target),
+                && self::constructs($node, $target, $declaring),
         );
 
         return $constructions;

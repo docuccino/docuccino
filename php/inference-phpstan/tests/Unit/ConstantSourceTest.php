@@ -53,6 +53,11 @@ it('names the file every class constant an expression reaches is declared in', f
     // Inherited: PHP takes the value from where it is DECLARED, so that is the file that has to invalidate.
     'a constant inherited from a base' => ['self::FROM_BASE', ['ProbeConstantBase.php']],
     'the same constant reached through `parent`' => ['parent::FROM_BASE', ['ProbeConstantBase.php']],
+    // The one shape the two relative names answer differently for. Everywhere else `getDeclaringClass()`
+    // walks to the same declaration from either, so a row over an unshadowed constant proves nothing
+    // about which class `parent` resolved to.
+    'a constant the class REDECLARES, reached through `self`' => ['self::SHADOWED', ['ProbeConstantHolder.php']],
+    'the same constant reached through `parent`, which is the base\'s' => ['parent::SHADOWED', ['ProbeConstantBase.php']],
     // …and an interface's, which no walk of the class hierarchy's own files would ever name.
     'a constant declared on an interface' => ['self::FROM_INTERFACE', ['ProbeConstantContract.php']],
     // An expression is not one constant: an arithmetic fold reads both declarations.
@@ -99,6 +104,9 @@ it('names the file behind a constant reflection reports as a parameter default',
     ],
     'one written relative to the declaring class' => ['self::FROM_INTERFACE', 'ProbeConstantContract.php'],
     'parent, which is the base rather than the class' => ['parent::FROM_BASE', 'ProbeConstantBase.php'],
+    // …and the same name over a REDECLARED constant, where the two really do name two files.
+    'parent over a constant the class redeclares' => ['parent::SHADOWED', 'ProbeConstantBase.php'],
+    'self over that same constant' => ['self::SHADOWED', 'ProbeConstantHolder.php'],
     'a global constant, which names no file' => ['PHP_INT_MAX', null],
     'a name no class answers to' => ['App\Nope\NoSuchClass::CONFLICT', null],
 ]);

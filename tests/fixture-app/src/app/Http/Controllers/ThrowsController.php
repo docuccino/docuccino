@@ -456,6 +456,25 @@ class ThrowsController extends Controller
     }
 
     /**
+     * Case 10t: a factory the class gets from a TRAIT, so the `new static(…)`
+     * that builds it is written in a file PHP reports as this class's own.
+     */
+    public function traitFactoryStatus(): void
+    {
+        throw \App\Exceptions\ExportThrottledException::throttled();
+    }
+
+    /**
+     * Case 10u: a constant reaching the parent that is no HTTP status, so the
+     * fold refuses it — and the file it is declared in still decided what this
+     * route publishes.
+     */
+    public function unreadableConstantStatus(): void
+    {
+        throw new \App\Exceptions\ExportRelayedException;
+    }
+
+    /**
      * Case 9: the app's OWN validate(), which the KnownThrowers registry keys
      * ValidationException/422 on by bare method name. The callee is project code
      * the engine can read, so what it actually throws (OutOfStockException) has
