@@ -394,12 +394,17 @@ A **`ResponseDraft`** — which you also construct directly, `new ResponseDraft(
 `ExceptionToResponse` returns one — offers `setDescription(?string, $by)`, `setRef(?string, $by)`,
 `set(field, value, $by)`, `content(string $mediaType): SchemaDraft` for the response body schema,
 `hasContent()` / `primaryMediaType()` to inspect what's there, and
-`setExample(string $mediaType, mixed $example)` to attach an example body alongside that media type's
-schema. Examples are **first-writer-wins**: if another producer already attached one for that media
-type, yours is left out, so the result never depends on extension evaluation order. An example is only
-emitted when that media type also carries a schema, so set the body schema too. This is exactly the
-method the built-in inferred-handler support uses to attach its error-response examples — no separate
-back door. `claimComponentName(?string $name, $by)` names the shared component an error body publishes
+`setExample(string $mediaType, mixed $example, array $placeholders = [])` to attach an example body
+alongside that media type's schema. Examples are **first-writer-wins**: if another producer already
+attached one for that media type, yours is left out, so the result never depends on extension evaluation
+order. An example is only emitted when that media type also carries a schema, so set the body schema too.
+This is exactly the method the built-in inferred-handler support uses to attach its error-response
+examples — no separate back door. `$placeholders` names the members you *filled* from a declared type
+rather than read from the code: an error body's [shared-response
+hoist](/laravel/documenting/errors/#repeated-bodies-become-shared-components) drops an illustration that
+differs from another only at members it filled, and that set is how it tells one from two genuinely
+different bodies. Pass none — the default — and every member of your example counts as read, which is
+what makes it an illustration the hoist may never drop. `claimComponentName(?string $name, $by)` names the shared component an error body publishes
 under — see below.
 
 A **`SchemaDraft`** adds `property(string $name): self` for nesting into an object's properties,

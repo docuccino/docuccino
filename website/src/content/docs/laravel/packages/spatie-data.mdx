@@ -533,8 +533,9 @@ Where the class **overrides** `toResponse()` or `transform()`, Docuccino reads y
 payload is still the Data class — a transformed array and the documented schema are the same body.
 
 Constructor arguments decide the [example](/laravel/documenting/errors/#examples-are-completed-not-withheld):
-a member passed at that call site is in that body even where the schema marks it `Optional`, and one
-nobody passed is absent even where the schema requires it.
+a member passed at that call site is in that body even where the schema marks it `Optional`, and an
+`Optional` one nobody passed is left out. A member the schema *requires* is illustrated either way — an
+example missing one would fail validation against the very schema printed beside it.
 
 ## Nested collections
 

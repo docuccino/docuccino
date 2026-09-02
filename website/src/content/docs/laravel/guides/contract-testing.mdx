@@ -135,6 +135,16 @@ What they hold you to:
   download, or a media type documented with no schema. The note is raised on your runner's warning
   channel, against the test that produced it, so a pass that proved less than it looks like says so
   (`pest --display-warnings`, `phpunit --display-warnings`). It never fails a test on its own.
+- **A status documented with no `content` at all is different, and it fails.** Omitting `content` in
+  OpenAPI asserts the response has *no body*, so a `404` documented that way against a `404` that really
+  sends bytes is a document under-describing your API, and the failure names both halves: the status the
+  contract documents no body for, and how many bytes came back. The commonest way to get there is a renderer of your
+  own that Docuccino could see run and could not read, which
+  [withholds the framework's shape rather than asserting it](/laravel/documenting/errors/#framework-defaults);
+  the failing test is the push to make that arm readable, or to state the shape with
+  [`#[Response(status: …, type: …)]`](/laravel/reference/attributes/#response). The
+  `inferred-handler.too-dynamic` warning on your build predicts this test, so a red suite here should
+  never be the first you hear of it.
 - **Query and header values are read as the type the contract documents.** `?page=2` is checked as the
   integer `2`; `?page=first` is checked as the string it is, so the failure names the real problem
   instead of silently becoming `0`. A comma list (`?sort=total,-created_at`) becomes the array

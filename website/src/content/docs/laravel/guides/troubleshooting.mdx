@@ -29,6 +29,7 @@ Then match the symptom:
 | A database, Redis or queue exception before analysis starts | [The app won't boot](#the-app-wont-boot-during-export) |
 | `engine.boot-failed` | [The analyzer won't start](#the-analyzer-wont-start) |
 | Composer refuses to install on Laravel 13 | [Dependency conflicts](#dependency-conflicts) |
+| A `4xx` or `5xx` with no body, or a shared error `$ref` that disappeared | [An error response lost its body](#an-error-response-lost-its-body) |
 | An `#[ErrorComponent]` name nowhere in the document | [`#[ErrorComponent]` changed nothing](#errorcomponent-changed-nothing) |
 | `inference.action-failed` on one or two actions | [Reading diagnostics](#reading-diagnostics) |
 | Any other diagnostic code | [Diagnostics reference](/laravel/reference/diagnostics/) |
@@ -299,11 +300,53 @@ constraint widening is a small, fast release. Prefer that over a permanent `conf
 
 ---
 
+## An error response lost its body
+
+**Symptom.** A status that used to publish a body — often every `404`, or every `429` on a throttled
+route — is suddenly two lines, and the `$ref` to the shared component it pointed at is gone with the
+component:
+
+```json
+"404": { "description": "Not Found" }
+```
+
+**Cause.** Docuccino can see that your *own* handler renders that exception, and it could not read what
+your handler renders it to. The body it would otherwise have published is Laravel's stock
+`{ "message": string }`, which your renderer replaced — so it is withheld rather than asserted over code
+that refutes it, and no tier behind fills the gap. There is then no body for a component name to land on,
+which is why the `$ref` and the component go too. Read your diagnostics and you'll find
+`inferred-handler.too-dynamic` naming the callback; if you gate CI at `--fail-on=warning`, that is also
+what turned the build red.
+
+This is not a regression in what your API does — it is the document stopping short of a claim it could
+not support. What it costs is a type a generated client had, so it is worth closing.
+
+**Fix.** Two ways, and either settles it:
+
+<Steps>
+
+1. **Make the arm readable.** Return a `JsonResponse` — `response()->json(…)`, not a plain `response()`,
+   a view or a redirect — with a literal integer status (`404`, not `$e->getCode()` or a ternary). A
+   status that folds *or* a body that folds is enough. Where only the `Content-Type` folds, the response
+   states that media type under a schema constraining nothing, which is a weaker claim than a shape and
+   a stronger one than silence.
+
+2. **State it yourself.** [`#[Response(status: 404, type: ErrorPayload::class)]`](/laravel/reference/attributes/#response)
+   on the action publishes the shape over the tier, so the response is complete again. It corrects the
+   document without silencing the diagnostic, which keeps naming the callback.
+
+</Steps>
+
+The whole rule, with the output either way, is in [Framework
+defaults](/laravel/documenting/errors/#framework-defaults).
+
+---
+
 ## `#[ErrorComponent]` changed nothing
 
 **Symptom.** You marked something with `#[ErrorComponent]`, regenerated, and `components.responses` has
-no entry under the name you chose. Read your diagnostics first — the two causes are told apart by
-whether the build said anything.
+no entry under the name you chose. Read your diagnostics first — the three causes are told apart by
+whether the build said anything, and by which code it said.
 
 **Cause, if it warned `attribute.error-component-unread`.** You marked the **controller action**. The
 attribute names an error where the error is *defined*, and an action is where several of your errors
@@ -328,6 +371,12 @@ it is, and the name is published the moment a second operation states the same e
 several endpoints to share it and none did, they are stating different bodies — see [Repeated bodies
 become shared components](/laravel/documenting/errors/#repeated-bodies-become-shared-components) for
 what counts as the same one.
+
+**Cause, if it warned `inferred-handler.too-dynamic`.** The response has no body to name. Your own
+handler renders that exception and Docuccino could not read what it renders it to, so the body was
+withheld and the component name is skipped with it — a name needs a shape to sit on. The attribute is
+fine; what is missing is the body. See [An error response lost its
+body](#an-error-response-lost-its-body).
 
 One more way to see nothing: an `#[ErrorComponent]` on a **base controller** your API classes extend
 names nothing either, and is reported nowhere — a warning per route of every child would say the same
@@ -401,7 +450,9 @@ Two flags make diagnostics more useful:
    floor — anything that loud or louder fails the run.
 
    `--fail-on=warning` already catches the loud failures of recovery: an engine that never started,
-   an action whose analysis failed, an attribute that didn't take. `--fail-on=info` adds the
+   an action whose analysis failed, an attribute that didn't take, and an exception handler too dynamic
+   to read — which predicts [an error response with no
+   body](#an-error-response-lost-its-body). `--fail-on=info` adds the
    *widening* diagnostics on top — the ones that say Docuccino recovered less than your code claims
    and published something broader to stay truthful. That is the gate on inference certainty, and
    it's the one that catches a model quietly losing its columns.
