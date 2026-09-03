@@ -13,6 +13,13 @@ is in the [repository](https://github.com/docuccino/docuccino) git log.
 
 Each package repository also carries its own `CHANGELOG.md` with just its entries.
 
+## v0.14.1
+
+### Bug fixes
+
+- **laravel**: check a form request body as the message arrived, not as the application rewrote it ([#380](https://github.com/docuccino/docuccino/pull/380))
+- **laravel**: publish every recorded example name, on an error status as on any other ([#379](https://github.com/docuccino/docuccino/pull/379))
+
 ## v0.14.0
 
 ### Breaking changes
