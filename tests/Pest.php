@@ -2211,6 +2211,7 @@ function contractOperationDocumenting(array $responses): ContractOperation
  * @param  array<string, mixed>  $query
  * @param  array<string, list<string>>  $headers
  * @param  array<string, list<string>>  $responseHeaders
+ * @param  array<array-key, mixed>|null  $requestForm
  */
 function contractExchange(
     string $method,
@@ -2224,6 +2225,8 @@ function contractExchange(
     ?string $requestContentType = 'application/json',
     array $responseHeaders = [],
     bool $ambiguousEmptyRequestBody = false,
+    ?array $requestForm = null,
+    ?string $requestBodyUnread = null,
 ): Exchange {
     return new Exchange(
         method: $method,
@@ -2233,6 +2236,8 @@ function contractExchange(
         headers: $headers,
         requestBody: $requestBody,
         requestContentType: $requestContentType,
+        requestForm: $requestForm,
+        requestBodyUnread: $requestBodyUnread,
         ambiguousEmptyRequestBody: $ambiguousEmptyRequestBody,
         responseBody: $responseBody,
         responseContentType: $responseContentType,
@@ -2248,6 +2253,34 @@ function contractExchange(
 function checkContract(Exchange $exchange, ?callable $mutate = null): CheckResult
 {
     return (new ContractChecker(contractIndex($mutate)))->check($exchange);
+}
+
+/**
+ * The contract whose request bodies are FORMS: a required `multipart/form-data` upload, an optional
+ * `application/x-www-form-urlencoded` replace, and a JSON operation beside them so one check can be
+ * asked the same question about all three.
+ *
+ * A fixture of its own rather than two more operations in the shared contract document: that one is the
+ * source of truth for a dozen counted assertions, and a population added to it moves every one of them
+ * without saying anything about forms.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
+ */
+function formContractIndex(?callable $mutate = null): ContractIndex
+{
+    $document = loadFixture('contract-forms.uir.json');
+
+    return ContractIndex::fromArray($mutate === null ? $document : $mutate($document));
+}
+
+/**
+ * Check one exchange against {@see formContractIndex()}.
+ *
+ * @param  callable(array<string, mixed>): array<string, mixed>|null  $mutate
+ */
+function checkFormContract(Exchange $exchange, ?callable $mutate = null): CheckResult
+{
+    return (new ContractChecker(formContractIndex($mutate)))->check($exchange);
 }
 
 /**
