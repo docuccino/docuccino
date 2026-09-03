@@ -563,9 +563,10 @@ An OpenAPI 3.0 export drops that override — 3.0 ignores anything beside a `$re
 `downlevel.ref-siblings` note, so a 3.0 reader sees the shared component's own wording.
 
 Names you chose yourself survive that merge. Where an operation's error carries
-[`#[Example(name: …)]`](/laravel/documenting/examples/#illustrating-something-other-than-the-success-response), the shared response
-publishes your key next to the generated ones, so annotating one route never changes what the others
-publish. The exception is two operations giving one name to two different examples: only you can say
+[`#[Example(name: …)]`](/laravel/documenting/examples/#illustrating-something-other-than-the-success-response) — or a
+[recorded name](/laravel/documenting/examples/#examples-your-tests-recorded), which is a name you chose at a
+call site — the shared response publishes your key next to the generated ones, so annotating one route
+never changes what the others publish. The exception is two operations giving one name to two different examples: only you can say
 which body that name means, so neither gets it — each example publishes under that name plus a hash of
 its own content, and the build reports `components.example-name-conflict` naming the key. Rename one, or
 make them agree, and the name is published as you wrote it. The component they share is never what pays

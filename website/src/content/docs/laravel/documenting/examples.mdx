@@ -384,14 +384,14 @@ inventing a name for *yours*, which is not Docuccino's to choose.
 A recording is also only ever an illustration. A status or media type your document doesn't describe
 gets no example from one — a recording never adds a response the contract doesn't state.
 
-<Aside type="note" title="Names and shared error responses">
+<Aside type="note" title="Names on a shared error response">
 Docuccino collapses an error body repeated across operations into one shared component every route
-`$ref`s. A media type carrying an `examples` map can't take part in that, so a named recording on a
-4xx or 5xx would quietly drop an *unrelated* route's 404 back inline. Rather than let one route's tests
-change another route's document, the body publishes there as the singular `example` and an
-`examples.recording-name-unpublished` note tells you the name went nowhere — nothing else is lost. Turn
-[`representation.errors.components`](/laravel/reference/configuration/#representation) off if you would
-rather have the names.
+`$ref`s, and your recorded names travel onto it under the keys you gave them — which is exactly where
+they matter most, since a union error body is the one a client has to branch on. Two routes recording
+the same name for two different bodies is the one case nobody but you can settle: neither keeps the
+name, each publishes under that name plus a hash of its own content, and the build reports
+[`components.example-name-conflict`](/laravel/reference/diagnostics/#routes-operations-and-names). Rename one, or
+make them agree.
 </Aside>
 
 ### When recordings go stale
@@ -408,7 +408,6 @@ about each one.
 | `examples.recording-orphaned` | warning | A recording for an operation this document no longer has — the route was renamed, moved or removed |
 | `examples.recording-unsafe` | warning | A committed body still holds what looks like a credential; it wasn't published |
 | `examples.recording-unnamed` | info | A committed body no assertion named — from before recording was opt-in. It still publishes, and no run will refresh it |
-| `examples.recording-name-unpublished` | info | A recorded name on an error response the document shares as a component; the body publishes without it |
 
 <Aside type="caution" title="An example that doesn't match its schema is a lie">
 Inference can't be wrong about a shape it derived; a hand-written example can say anything at all, and
