@@ -115,7 +115,7 @@ final class IgnoredParametersExtension implements OperationExtension
     private function locations(RouteContext $context, IgnoreParam $ignore): array
     {
         if ($ignore->in === null) {
-            return ParameterLocations::ALL;
+            return ParameterLocations::all();
         }
 
         $location = ParameterLocations::read($ignore->in);
