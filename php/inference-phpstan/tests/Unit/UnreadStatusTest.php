@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Tests\Unit;
 
 use Docuccino\Core\Inference\SourceLocation;
-use Docuccino\Inference\PhpStan\Throwing\StatusRead;
+use Docuccino\Inference\PhpStan\Throwing\ThrowAnalyzer;
 use Docuccino\Inference\PhpStan\Throwing\UnreadStatus;
 use Docuccino\Inference\PhpStan\Throwing\UnreadStatusReason;
-use ReflectionClass;
+use PhpParser\Node;
+use PhpParser\NodeFinder;
+use PhpParser\ParserFactory;
 use ReflectionMethod;
 
 /**
@@ -70,7 +72,10 @@ it('reads actionability off the file the fold read, never off the exception clas
         inProjectCode: false,
     );
 
-    // And a project file whose reason has no remedy anyone owns stays silent on the reason alone.
+    // And the gate's other conjunct, executed rather than assumed: a reason with no remedy is silent
+    // whatever file it was read in. The analyser never builds this pairing — `ForeignClass` is recorded
+    // only where the class is foreign, and with `inProjectCode` false in the same breath — so this is the
+    // row that says a future producer could not report one by getting the flag wrong.
     $foreign = new UnreadStatus(
         'Symfony\\Component\\HttpKernel\\Exception\\ConflictHttpException',
         UnreadStatusReason::ForeignClass,
@@ -113,38 +118,62 @@ it('keys one notice per exception, reason and site rather than per path that rea
         ->not->toBe($at(22, UnreadStatusReason::UnstatedByClass)->key());
 });
 
-it('pairs a status with its reading and a missing status with its record', function (): void {
-    $unread = new UnreadStatus(
-        'App\\Exceptions\\ExportConflictException',
-        UnreadStatusReason::UnstatedByClass,
-        new SourceLocation('/app/Exceptions/ExportConflictException.php', 9),
-        inProjectCode: true,
-    );
-
-    expect(StatusRead::of(409)->status)->toBe(409)
-        ->and(StatusRead::of(409)->unread)->toBeNull()
-        ->and(StatusRead::of(409)->isUnplaced())->toBeFalse()
-        ->and(StatusRead::unread($unread)->status)->toBeNull()
-        ->and(StatusRead::unread($unread)->unread)->toBe($unread)
-        ->and(StatusRead::unread($unread)->isUnplaced())->toBeTrue();
-});
-
 /**
- * The invariant executed rather than asserted: there must be no way to build "no status" with nothing
- * to report. Both named constructors are checked above; this is the other half — that they are the
- * only two, so a fifth call site cannot quietly make the pair a third way.
+ * The invariant executed rather than asserted, and at the level it actually has to hold: the ANALYSIS
+ * may not hand back "no status" with nothing to report. It is checkable because the two halves are one
+ * expression — the recorder is the only thing in {@see ThrowAnalyzer} that evaluates to a missing
+ * status, so a null the document keys at its unplaced status is a null something filed a reason for.
+ *
+ * Read off the source rather than asked of the class, so it states the rule independently of whatever
+ * the code currently does; a `return null` added to either status answer fails here rather than going
+ * out as a response nobody can explain.
  */
-it('refuses to be constructed any way that could lose the reason', function (): void {
-    $class = new ReflectionClass(StatusRead::class);
+it('produces a missing status in one place only, and files a reason there', function (): void {
+    $file = dirname(__DIR__, 2).'/src/Throwing/ThrowAnalyzer.php';
+    $ast = (new ParserFactory)->createForHostVersion()->parse((string) file_get_contents($file)) ?? [];
+    $finder = new NodeFinder;
 
-    $factories = array_values(array_map(
-        static fn (ReflectionMethod $method): string => $method->getName(),
-        array_filter(
-            $class->getMethods(ReflectionMethod::IS_PUBLIC),
-            static fn (ReflectionMethod $method): bool => $method->isStatic(),
-        ),
-    ));
+    // Every record the analyser builds…
+    $records = $finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\New_
+        && $node->class instanceof Node\Name
+        && $node->class->toString() === 'UnreadStatus');
 
-    expect($class->getConstructor()?->isPrivate())->toBeTrue()
-        ->and($factories)->toBe(['of', 'unread']);
+    // …is handed straight to the call that files it, so none can be built and dropped.
+    $filed = [];
+    foreach ($finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\MethodCall
+        && $node->var instanceof Node\Expr\Variable
+        && $node->var->name === 'this'
+        && $node->name instanceof Node\Identifier
+        && $node->name->toString() === 'unread') as $call) {
+        /** @var Node\Expr\MethodCall $call */
+        foreach ($call->getArgs() as $argument) {
+            $filed[] = $argument->value;
+        }
+    }
+
+    // A scan that matched nothing would pass forever: the analyser really files several.
+    expect(count($records))->toBeGreaterThan(2);
+
+    foreach ($records as $record) {
+        expect(in_array($record, $filed, true))->toBeTrue();
+    }
+
+    // And the other half: the two methods that answer with a status never write the missing one
+    // themselves — no `return null`, and no `null` sitting in the array shape one of them hands back.
+    $isNull = static fn (?Node $node): bool => $node instanceof Node\Expr\ConstFetch
+        && $node->name->toLowerString() === 'null';
+
+    $answers = $finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Stmt\ClassMethod
+        && in_array($node->name->toString(), ['httpStatus', 'statusForType'], true));
+
+    expect($answers)->toHaveCount(2);
+
+    foreach ($answers as $answer) {
+        $literals = $finder->find($answer, static fn (Node $node): bool => ($node instanceof Node\Stmt\Return_
+            && $isNull($node->expr)) || ($node instanceof Node\ArrayItem && $isNull($node->value)));
+
+        expect($literals)->toBe([]);
+    }
+
+    expect((string) (new ReflectionMethod(ThrowAnalyzer::class, 'unread'))->getReturnType())->toBe('null');
 });

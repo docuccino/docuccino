@@ -621,14 +621,15 @@ Where nothing folds, the status is null — "an HTTP error whose status did not 
 therefore not automatically a Signal: `ThrowSignal` demotes a foreign declaration whose status nothing
 could read, HttpException subclass or otherwise.
 
-**One reading, so the two conditions cannot disagree.** A status is read as a `StatusRead`: the number the
-code states, or an `UnreadStatus` saying which fold gave up, where the `throw` is written and whether the
-code the fold read is the application's own. The pairing is the invariant — the constructor is private and
-neither named constructor can build "no status" with nothing to report — because a null hint is exactly what
-the adapter keys at `FrameworkExceptionTable::UNPLACED_STATUS`, and the condition that PUBLISHES that
-response and the condition the build can REPORT on must be one fact rather than two readers agreeing.
-They were two, and they disagreed: the report was gated on the exception CLASS being declared in the
-project, which is not the file every fold reads. `abort($status)` raises the framework's own
+**One reading, so the two conditions cannot disagree.** A missing status is produced in exactly one
+expression, `ThrowAnalyzer::unread()`: it files an `UnreadStatus` — which fold gave up, where the `throw` is
+written, and whether the code the fold read is the application's own — and answers the null. That is the
+invariant, and it holds of the ANALYSIS rather than of a type, because nothing else in the class evaluates
+to a missing status. A null hint is exactly what the adapter keys at
+`FrameworkExceptionTable::UNPLACED_STATUS`, so the condition that PUBLISHES that response and the condition
+the build can REPORT on are one fact rather than two readers agreeing. They were two, and they disagreed:
+the report was gated on the exception CLASS being declared in the project, which is not the file every fold
+reads. `abort($status)` raises the framework's own
 `HttpException`, so a status chosen at run time published the unplaced 500 and named nothing, while the
 expression that would not fold was a line of the application's own code with the constant it wanted
 missing from it. `UnplacedStatusReconciliationTest` holds the two against each other over the whole
