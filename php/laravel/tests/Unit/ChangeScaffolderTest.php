@@ -419,3 +419,46 @@ it('says which parameter differences it could read no rename out of', function (
     expect(scaffoldClasses($plan))->toBe([])
         ->and($plan->gaps)->toContain('The query parameter `q` went and nothing that arrived beside it wears the same shape, so no rename could be read out of it — and no verb declares a parameter a version simply stopped accepting.');
 });
+
+/**
+ * The source-of-truth guard `PARAMETER_ARRIVALS` owes. It is a hand-maintained set, and a
+ * hand-maintained set is silent when it goes short: a differ that started minting a fourth
+ * arrival-shaped code would be read as a difference the vocabulary does not express and demoted to a
+ * gap sentence, with the whole suite green.
+ *
+ * So the differ's own source is the list, and the assertion is the UNION — every parameter code it
+ * mints is either classified by the table or carries a row here saying it deliberately owes no answer.
+ * A guard over only the classified half is silent about exactly the codes that go missing, and one
+ * over only the exclusions is silent about the rest.
+ */
+it('classifies every parameter code the differ mints, or says which of them owe no answer', function (): void {
+    // The codes no rename can be assembled out of, each with what makes that true. A new entry here is
+    // a claim, so it needs a sentence like the ones above it.
+    $owesNoAnswer = [
+        'parameter.became-required' => 'a required-ness move on a parameter that stayed where it was, and the vocabulary has no verb for one',
+        'parameter.became-optional' => 'the same fact the other way round, and the same absence of a verb',
+        'parameter.description-changed' => 'prose about a parameter neither side moved, so there is no departure to pair an arrival with',
+    ];
+
+    $source = (string) file_get_contents(dirname(__DIR__, 3).'/core/src/Diff/DocumentDiffer.php');
+    preg_match_all("/'(parameter\\.[a-z-]+)'/", $source, $matches);
+
+    $minted = array_values(array_unique($matches[1]));
+    sort($minted, SORT_STRING);
+
+    $constant = (new ReflectionClass(ChangeScaffolder::class))->getReflectionConstant('PARAMETER_ARRIVALS');
+
+    /** @var array<string, string> $table */
+    $table = $constant === false ? [] : $constant->getValue();
+
+    $union = array_values(array_unique([...array_keys($table), ...array_keys($owesNoAnswer)]));
+    sort($union, SORT_STRING);
+
+    // A scan that matched nothing has to fail rather than pass, so the plausible minimum is stated
+    // beside the real assertion: the differ mints six parameter codes today.
+    expect($source)->not->toBe('')
+        ->and(count($minted))->toBeGreaterThanOrEqual(6)
+        ->and($minted)->toBe($union)
+        // And no code is answered both ways, which would make the union hold while saying two things.
+        ->and(array_intersect(array_keys($table), array_keys($owesNoAnswer)))->toBe([]);
+});
