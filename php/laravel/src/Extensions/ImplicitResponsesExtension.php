@@ -143,10 +143,6 @@ final class ImplicitResponsesExtension implements OperationExtension
             $findings[] = $gate->describe().', but '.$policyMethod.'() returns true unconditionally';
         }
 
-        if ($findings === []) {
-            return;
-        }
-
         $context->components->addDiagnostic(new Diagnostic(
             severity: Severity::Info,
             code: 'authorization.gate-cannot-deny',
@@ -222,7 +218,7 @@ final class ImplicitResponsesExtension implements OperationExtension
      */
     private static function middlewareSignal(string $middleware): ?string
     {
-        if (str_starts_with($middleware, 'can:')) {
+        if (CanGate::matches($middleware)) {
             return 'can-middleware';
         }
         if ($middleware === 'signed' || str_starts_with($middleware, 'signed:')) {

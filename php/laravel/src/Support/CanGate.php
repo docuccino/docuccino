@@ -5,15 +5,25 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Support;
 
 /**
- * A route's `can:` middleware, read the way Laravel's own `Route::can()` writes it: the ability, then
- * the comma-separated model arguments. `->can('view', Widget::class)` reaches the route as
+ * A route's authorization middleware, read the way Laravel's own `Route::can()` writes it: the ability,
+ * then the comma-separated model arguments. `->can('view', Widget::class)` reaches the route as
  * `can:view,App\Models\Widget`, and `->can('view')` as `can:view` with no arguments at all.
  *
- * Pure, so the middleware grammar is dataset-testable. Null for anything that is not a `can:` gate.
+ * The `can` alias is one of two spellings. `Authorize::using('view', Widget::class)` — the class-name
+ * style the framework ships for middleware that takes arguments — renders the same gate as
+ * `Illuminate\Auth\Middleware\Authorize:view,App\Models\Widget`, with no alias in it at all, so the
+ * prefix list lives here and every reader asks this class rather than spelling one of them out again.
+ *
+ * Pure, so the middleware grammar is dataset-testable. Null for anything that is not a gate.
  */
 final readonly class CanGate
 {
-    private const string PREFIX = 'can:';
+    /**
+     * Every spelling of the authorization middleware, longest first so no short alias shadows another.
+     *
+     * @var list<string>
+     */
+    private const array PREFIXES = ['Illuminate\\Auth\\Middleware\\Authorize:', 'can:'];
 
     /**
      * @param  list<string>  $arguments  each either a class name (Laravel says so when it contains a
@@ -26,11 +36,12 @@ final readonly class CanGate
 
     public static function parse(string $middleware): ?self
     {
-        if (! str_starts_with($middleware, self::PREFIX)) {
+        $prefix = self::prefix($middleware);
+        if ($prefix === null) {
             return null;
         }
 
-        $parts = explode(',', substr($middleware, strlen(self::PREFIX)));
+        $parts = explode(',', substr($middleware, strlen($prefix)));
         $ability = trim($parts[0]);
         if ($ability === '') {
             return null;
@@ -42,6 +53,26 @@ final readonly class CanGate
         ));
 
         return new self($ability, $arguments);
+    }
+
+    /**
+     * Whether a middleware string IS an authorization gate, however it is spelled — the question a
+     * reader that only needs the signal asks, and the reason no caller repeats a prefix.
+     */
+    public static function matches(string $middleware): bool
+    {
+        return self::prefix($middleware) !== null;
+    }
+
+    private static function prefix(string $middleware): ?string
+    {
+        foreach (self::PREFIXES as $prefix) {
+            if (str_starts_with($middleware, $prefix)) {
+                return $prefix;
+            }
+        }
+
+        return null;
     }
 
     /** Whether an argument names a class — the same test the `can:` middleware itself applies. */
