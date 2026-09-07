@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Composer\Autoload\ClassLoader;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteContext;
@@ -11,20 +12,30 @@ use Docuccino\Core\Inference\NullTypeEngine;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Registry\DefaultExtensions;
+use Docuccino\Laravel\Routing\VendorRoutePolicy;
 use Docuccino\Laravel\Support\CanGate;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\GatePoliciesDigestContributor;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Awning;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Banner;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Kiosk;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\KioskController;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Marquee;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\MarqueeAccess;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Placard;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\BannerPolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\BaseSignagePolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\KioskPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\PlacardPolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\SignagePolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Signage;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
+use Illuminate\Auth\Access\Gate as IlluminateGate;
 use Illuminate\Auth\Access\Response;
+use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
+use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -97,6 +108,38 @@ function gateRoutes(): void
     $router->get('api/kiosks-public-any', [KioskController::class, 'index'])
         ->can('viewAny', Kiosk::class);
 
+    // The ability method is INHERITED. The gate resolves to SignagePolicy, which declares nothing —
+    // so the class the report names has to be the one the body is written in.
+    $router->get('api/signage', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', Signage::class);
+
+    // Same shape reached through a trait rather than a parent.
+    $router->get('api/banners', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', Banner::class);
+
+    // No policy for the model at all — nothing registered, and nothing at the conventional name.
+    $router->get('api/awnings', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', Awning::class);
+
+    // The policy exists and declares no such ability, so the gate falls through to a Gate::define'd
+    // closure this never reads.
+    $router->get('api/kiosks-destroyed', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('destroy', Kiosk::class);
+
+    // `signed` AFTER the gate. Route::can() appends its middleware, so this is the only order in which
+    // the second signal is reached by the loop rather than by the signal check ahead of it.
+    $router->get('api/kiosks-signed-last', [KioskController::class, 'index'])
+        ->can('viewAny', Kiosk::class)
+        ->middleware('signed');
+
+    // The gate as `Authorize::using()` writes it: the middleware's own class name, no `can:` alias.
+    $router->get('api/marquees-using', [KioskController::class, 'index'])
+        ->middleware(['auth:web', Authorize::using('view', Marquee::class)]);
+
     // The author has already dropped the response, so there is no 403 to report on.
     $router->get('api/kiosks-muted', [KioskController::class, 'muted'])
         ->middleware('auth:web')
@@ -110,6 +153,21 @@ beforeEach(function (): void {
     Gate::policy(Marquee::class, MarqueeAccess::class);
     gateRoutes();
 });
+
+/**
+ * One authenticated `->can('viewAny', Kiosk::class)` route as a context, for the rows that ask
+ * {@see GateDenial} directly rather than through a build — the ones about what it was handed.
+ */
+function gateDenialContext(): RouteContext
+{
+    return new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/kiosks', middleware: ['auth:web', 'can:viewAny,'.Kiosk::class]),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], authMiddleware: 'auth*'),
+    );
+}
 
 /** The gate-reachability diagnostics of one build, keyed by the route signature they name. */
 function gateFindings(): array
@@ -153,6 +211,24 @@ it('resolves a policy nothing but an explicit Gate::policy() registration would 
         ->and(gateFindings()['GET /api/marquees']->message)->toContain('MarqueeAccess::view()');
 });
 
+it('names the class the ability method is declared in, not the one the gate resolved to', function (): void {
+    // The blocker this row exists for: the reflection that reads the body already answers with the
+    // DECLARING class, and naming the resolved policy instead sent the reader to a file with no such
+    // method in it. SignagePolicy declares nothing at all.
+    expect(gateFindings())->toHaveKey('GET /api/signage')
+        ->and(gateFindings()['GET /api/signage']->message)
+        ->toContain(BaseSignagePolicy::class.'::viewAny()')
+        ->not->toContain(SignagePolicy::class.'::viewAny()');
+});
+
+it('reports an ability method a policy takes from a trait', function (): void {
+    // The other way a body lands outside the policy's own file. PHP flattens a trait method into the
+    // using class, so the name is already the one a reader would call — and the FILE the check reads,
+    // and gates actionability on, is the trait's.
+    expect(gateFindings())->toHaveKey('GET /api/banners')
+        ->and(gateFindings()['GET /api/banners']->message)->toContain(BannerPolicy::class.'::viewAny()');
+});
+
 it('stays silent on every gate shape that can deny', function (string $signature): void {
     expect(gateFindings())->not->toHaveKey($signature);
 })->with([
@@ -164,6 +240,9 @@ it('stays silent on every gate shape that can deny', function (string $signature
     'a signed middleware holding the same 403 up' => ['GET /api/kiosks-signed'],
     'a guest-reachable route whose policy method refuses guests' => ['GET /api/kiosks-public'],
     'a 403 the author already dropped' => ['GET /api/kiosks-muted'],
+    'no policy for the model at all' => ['GET /api/awnings'],
+    'a policy that declares no such ability method' => ['GET /api/kiosks-destroyed'],
+    'a signed middleware the gate was declared BEFORE' => ['GET /api/kiosks-signed-last'],
 ]);
 
 it('still publishes the 403 on every route it stays silent about', function (string $path, string $method): void {
@@ -178,7 +257,20 @@ it('still publishes the 403 on every route it stays silent about', function (str
     ['/api/kiosks-abilities', 'get'],
     ['/api/kiosks-signed', 'get'],
     ['/api/kiosks-public', 'get'],
+    ['/api/awnings', 'get'],
+    ['/api/kiosks-destroyed', 'get'],
+    ['/api/kiosks-signed-last', 'get'],
 ]);
+
+it('synthesizes and reports the 403 of a gate written as Authorize::using()', function (): void {
+    // `Route::can()` is one of two spellings the framework ships. The class-name form carries no `can:`
+    // alias, so before the prefix list moved into CanGate this route published no 403 whatsoever.
+    $document = generateDocument()->document->toArray();
+
+    expect($document['paths']['/api/marquees-using']['get']['responses'])->toHaveKey('403')
+        ->and(gateFindings())->toHaveKey('GET /api/marquees-using')
+        ->and(gateFindings()['GET /api/marquees-using']->message)->toContain('MarqueeAccess::view()');
+});
 
 it('reports the guest-reachable route whose policy method admits guests', function (): void {
     // The pair to the silence row above: same route shape, same literal `return true;`, and the only
@@ -218,12 +310,31 @@ afterEach(function (): void {
 it('reports the same gates on a warm build as on a cold one', function (): void {
     fragmentCacheDir('fragments');
 
+    $engine = new CountingTypeEngine(WorkbenchEngine::make());
+    app()->instance(TypeEngine::class, $engine);
+
     $cold = diagnosticRecords(generateDocument()->diagnostics);
+    $engine->analyzeCount = 0;
     $warm = diagnosticRecords(generateDocument()->diagnostics);
 
-    expect($warm)->toBe($cold)
+    // Two equal builds prove nothing on their own — two COLD builds are equal too. The second one has
+    // to be the cache answering, which is what a zero analyse count says.
+    expect($engine->analyzeCount)->toBe(0)
+        ->and($warm)->toBe($cold)
         ->and(json_encode($warm))->toContain('authorization.gate-cannot-deny');
 });
+
+/** Composer's own loader, the one thing that publishes where a class WOULD be written. */
+function composerClassLoader(): ClassLoader
+{
+    foreach (spl_autoload_functions() as $autoloader) {
+        if (is_array($autoloader) && ($autoloader[0] ?? null) instanceof ClassLoader) {
+            return $autoloader[0];
+        }
+    }
+
+    throw new RuntimeException('no Composer autoloader registered');
+}
 
 /**
  * Build cold, then warm, and hand back the counting engine with a warm build already proven — every
@@ -283,6 +394,47 @@ it('invalidates the fragment when the policy method it read is edited', function
     unlink($file);
 });
 
+it('invalidates the fragment when a policy appears at the name the convention looks under', function (): void {
+    // The under-keyed direction: the Gate resolves a conventional policy by class_exists, so CREATING
+    // one changes the verdict while changing no file the build read and no registration the digest
+    // sees. Where a policy would be written is a path this records the ABSENCE of, which the cache
+    // stores as a fact rather than skipping.
+    $directory = sys_get_temp_dir().'/docuccino-gate-absent-'.uniqid('', true);
+    mkdir($directory.'/Policies', 0o777, true);
+    $namespace = 'DocuccinoAbsentGate'.dechex(random_int(0, PHP_INT_MAX));
+    $model = $namespace.'\\Awning';
+    file_put_contents($directory.'/Awning.php', "<?php\nnamespace $namespace;\nclass Awning {}\n");
+    require $directory.'/Awning.php';
+    composerClassLoader()->addPsr4($namespace.'\\', [$directory]);
+
+    app('router')->get('api/awnings-temp', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', $model);
+    app('router')->getRoutes()->refreshNameLookups();
+
+    $engine = gateWarmedEngine();
+    expect(gateFindings())->not->toHaveKey('GET /api/awnings-temp');
+
+    // Write the policy the convention was looking for. The class stays unloadable in THIS process —
+    // Composer remembers a class it failed to find — so the claim here is only the invalidation, which
+    // is the half that cannot be seen any other way.
+    file_put_contents(
+        $directory.'/Policies/AwningPolicy.php',
+        "<?php\nnamespace $namespace\\Policies;\nclass AwningPolicy { public function viewAny(?object \$user): bool { return true; } }\n",
+    );
+    clearstatcache();
+
+    $engine->analyzeCount = 0;
+    generateDocument();
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    unlink($directory.'/Policies/AwningPolicy.php');
+    unlink($directory.'/Awning.php');
+    rmdir($directory.'/Policies');
+    rmdir($directory);
+});
+
 it('keys the fragment cache on the app\'s gate registrations', function (): void {
     // A `Gate::policy()` call, a policy-name guesser and a `Gate::before` hook all live in a service
     // provider, which no route records. Without this the first build after one was added would serve
@@ -311,7 +463,7 @@ it('contributes the gate registrations whatever a document turns off', function 
 
 it('digests every gate registration that can change a verdict', function (): void {
     $gate = app(GateContract::class);
-    $digest = static fn (): string => (new GatePoliciesDigestContributor($gate))->digest();
+    $digest = static fn (): string => (new GatePoliciesDigestContributor(static fn (): GateContract => $gate))->digest();
 
     $base = $digest();
     expect($base)->toContain('gate-policies:')
@@ -339,13 +491,90 @@ it('digests a policy map by content rather than by the order it was registered',
     $one = app(GateContract::class);
     $one->policy(Marquee::class, MarqueeAccess::class);
     $one->policy(Placard::class, PlacardPolicy::class);
-    $first = (new GatePoliciesDigestContributor($one))->digest();
+    $first = (new GatePoliciesDigestContributor(static fn (): GateContract => $one))->digest();
 
     $two = clone app(GateContract::class);
     $two->policy(Placard::class, PlacardPolicy::class);
     $two->policy(Marquee::class, MarqueeAccess::class);
 
-    expect((new GatePoliciesDigestContributor($two))->digest())->toBe($first);
+    expect((new GatePoliciesDigestContributor(static fn (): GateContract => $two))->digest())->toBe($first);
+});
+
+it('says nothing about a policy method a package declares', function (): void {
+    // The report's whole remedy is an edit. A policy shipped inside a package, or a vendor base class
+    // an application policy extends, is a body its reader does not own — so the check answers "is there
+    // a shape where this fires and nothing can be done?" with no, rather than naming somebody else's
+    // file. The boundary is the directory the fixture policy really sits in, which stands in for a
+    // package without one having to be installed.
+    $context = gateDenialContext();
+    $gate = CanGate::parse('can:viewAny,'.Kiosk::class);
+    $resolver = static fn (): GateContract => app(GateContract::class);
+    $policyFile = (new ReflectionClass(KioskPolicy::class))->getFileName();
+    $vendor = new VendorRoutePolicy($policyFile === false ? '' : dirname($policyFile));
+
+    expect($gate)->not->toBeNull()
+        ->and((new GateDenial($resolver, $vendor->isVendorFile(...)))->undeniablePolicyMethod($context, $gate))->toBeNull()
+        // Anti-vacuity: the same gate with no boundary reports, so the silence above is the boundary's
+        // doing and not the fixture's.
+        ->and((new GateDenial($resolver))->undeniablePolicyMethod($context, $gate))->toBe(KioskPolicy::class.'::viewAny');
+});
+
+it('gives the check the application vendor boundary it needs', function (): void {
+    // The rule above only holds where something supplies the boundary, and nothing else in the suite
+    // would notice if the provider stopped.
+    $boundary = (new ReflectionProperty(GateDenial::class, 'isVendorFile'))->getValue(app(GateDenial::class));
+
+    expect($boundary)->toBeInstanceOf(Closure::class)
+        ->and($boundary(base_path('vendor/acme/signage/src/Policies/SignPolicy.php')))->toBeTrue()
+        ->and($boundary(base_path('app/Policies/SignPolicy.php')))->toBeFalse();
+});
+
+it('builds, and stays silent, for an application with no Gate bound', function (): void {
+    // The check reaches the container for a Gate, and an app that replaced the framework auth providers
+    // has none. Resolving that eagerly turned a working build into a thrown exception, since the
+    // extension registry does not catch what a constructor raises.
+    unset(app()[GateContract::class]);
+
+    expect(static fn () => app(GateContract::class))->toThrow(BindingResolutionException::class)
+        ->and(gateFindings())->toBe([])
+        // The 403 itself is not the check's to withhold: it publishes from the gate's presence.
+        ->and(generateDocument()->document->toArray()['paths']['/api/kiosks']['get']['responses'])->toHaveKey('403');
+});
+
+it('stays silent when the application own policy-name guesser throws', function (): void {
+    // A guesser is arbitrary application code, and it is the one piece of it a build runs. Whatever it
+    // does, the answer is a gate this could not resolve.
+    expect(gateFindings())->toHaveKey('GET /api/kiosks');
+
+    Gate::guessPolicyNamesUsing(static fn (string $class): string => throw new RuntimeException('nope'));
+    $after = gateFindings();
+
+    expect($after)->not->toHaveKey('GET /api/kiosks')
+        // Anti-vacuity: a policy the app registered explicitly is answered before the guesser is asked,
+        // so the silence above is about the throw and not about the build having stopped working.
+        ->and($after)->toHaveKey('GET /api/marquees');
+});
+
+it('stays silent when the Gate resolution step it calls throws', function (): void {
+    // The other half of the resolution an application can reach into: a Gate SUBCLASS. The methods are
+    // invoked by reflection because none of them is public, so what one of them raises has to answer
+    // "a gate this could not resolve" and never reach the build.
+    $gate = new class(app(), static fn () => null) extends IlluminateGate
+    {
+        protected function getPolicyFromAttribute(string $class): ?string
+        {
+            throw new RuntimeException('nope');
+        }
+    };
+
+    $context = gateDenialContext();
+    $canGate = CanGate::parse('can:viewAny,'.Kiosk::class);
+
+    expect($canGate)->not->toBeNull()
+        ->and((new GateDenial(static fn (): GateContract => $gate))->undeniablePolicyMethod($context, $canGate))->toBeNull()
+        // Anti-vacuity: the same subclass without the throw resolves the very same gate.
+        ->and((new GateDenial(static fn (): GateContract => new IlluminateGate(app(), static fn () => null)))
+            ->undeniablePolicyMethod($context, $canGate))->toBe(KioskPolicy::class.'::viewAny');
 });
 
 it('says nothing it cannot read, rather than guessing', function (): void {
@@ -434,21 +663,14 @@ it('says nothing it cannot read, rather than guessing', function (): void {
         }
     };
 
-    $context = new RouteContext(
-        route: new RouteDescriptor(['GET'], 'api/kiosks', middleware: ['auth:web', 'can:viewAny,'.Kiosk::class]),
-        actionRef: new ActionRef('', KioskController::class, 'index'),
-        attributes: new AttributeSet([]),
-        engine: new NullTypeEngine,
-        document: new DocumentConfig('default', [], authMiddleware: 'auth*'),
-    );
-
+    $context = gateDenialContext();
     $gate = CanGate::parse('can:viewAny,'.Kiosk::class);
 
     expect($gate)->not->toBeNull()
-        ->and((new GateDenial($foreign))->undeniablePolicyMethod($context, $gate))->toBeNull()
-        ->and((new GatePoliciesDigestContributor($foreign))->digest())->toBe('')
+        ->and((new GateDenial(static fn (): GateContract => $foreign))->undeniablePolicyMethod($context, $gate))->toBeNull()
+        ->and((new GatePoliciesDigestContributor(static fn (): GateContract => $foreign))->digest())->toBe('')
         // Anti-vacuity: the real Gate answers for the very same context, so the null above is about the
         // Gate this cannot read and not about the fixture.
-        ->and((new GateDenial(app(GateContract::class)))->undeniablePolicyMethod($context, $gate))
+        ->and((new GateDenial(static fn (): GateContract => app(GateContract::class)))->undeniablePolicyMethod($context, $gate))
         ->toBe(KioskPolicy::class.'::viewAny');
 });

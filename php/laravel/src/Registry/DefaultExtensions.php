@@ -85,7 +85,10 @@ final class DefaultExtensions
             // not one of them is installed.
             AuthConfigDigestContributor::class,
             // Gate registrations are the framework's too, and the implicit 403's reachability check
-            // reads them off the booted app rather than off any file a route records.
+            // reads them off the booted app rather than off any file a route records. Reflection only:
+            // no policy is ever built. The one bit of application code a build runs is a registered
+            // `guessPolicyNamesUsing()` callback, which IS the answer to which policy a model resolves
+            // to and cannot be read any other way.
             GatePoliciesDigestContributor::class,
             AttributeOverridesExtension::class,
             // Reads a committed file of responses a test suite recorded; nothing is executed here.

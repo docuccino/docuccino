@@ -245,12 +245,22 @@ gate. Usually that is the whole story; where it is not, this says so and the res
 |---|---|---|---|
 | `authorization.gate-cannot-deny` | info | A route's `->can()` gate resolves to a policy method whose whole body is `return true;`, and nothing else on the route produces a `403` — so the error the operation publishes is one no request can provoke, and it reaches a consumer as a dead `catch` branch in their generated client | Tighten the policy method, so the `403` describes something that can happen — or, if the gate is deliberately a formality, drop the response with [`#[IgnoreResponse(403)]`](/laravel/reference/attributes/#ignoreresponse) on the action. The response is published either way: dropping a real error needs certainty a build cannot have, so this reports and changes nothing |
 
-Only a literal, unconditional `return true;` counts. A method that reads anything at all — the user, a
-request, ambient state, a helper — can deny, and the notice stays quiet even where the body looks
-decorative: `return currentTeam() instanceof Team;` names neither a user nor a permission and denies
-perfectly well. It is quiet, too, wherever the gate's own answer is not the last word — a
-`Gate::before` or `Gate::after` hook, a policy `before()` method, a `signed` or `verified` middleware
-beside the gate, a `FormRequest` that authorizes, or a `403` your action throws for itself.
+Only a literal, unconditional `return true;` counts — or, where an analyser is installed, a body every
+one of whose returns it can prove is `true`. A method that reads anything at all — the user, a request,
+ambient state, a helper — can deny, and the notice stays quiet even where the body looks decorative:
+`return currentTeam() instanceof Team;` names neither a user nor a permission and denies perfectly well.
+It is quiet, too, wherever the gate's own answer is not the last word — a `Gate::before` or `Gate::after`
+hook, a policy `before()` method, a `signed` or `verified` middleware beside the gate, a `FormRequest`
+that authorizes, or a `403` your action throws for itself.
+
+The notice names the class the ability method is **declared** in, which is not always the policy the gate
+resolved to: an inherited or trait-provided method is written somewhere else, and that is the file to
+open. For the same reason it says nothing about a method declared under `vendor/` — a policy a package
+ships, or a base class one of yours extends. The only remedy there would be an edit to somebody else's
+code, so there is nothing to report.
+
+Both spellings of the middleware are read: `->can('view', Post::class)` and
+`Authorize::using('view', Post::class)`.
 
 ## Security schemes
 

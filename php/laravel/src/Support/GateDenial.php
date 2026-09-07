@@ -4,16 +4,13 @@ declare(strict_types=1);
 
 namespace Docuccino\Laravel\Support;
 
+use Closure;
 use Docuccino\Core\Extensions\Context\RouteContext;
-use Docuccino\Laravel\Integrations\Support\ParsedClassFile;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Support\Str;
-use PhpParser\Node\Expr\ConstFetch;
-use PhpParser\Node\Stmt\Return_;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
-use ReflectionObject;
 use ReflectionParameter;
 use Throwable;
 
@@ -23,36 +20,48 @@ use Throwable;
  * `return true;` leaves the document promising an error the endpoint cannot produce, which reaches a
  * consumer as a dead `catch` branch in a generated client.
  *
- * Deliberately narrow, and every uncertainty answers "it can deny": the false negative is a 403 that
- * stays published, the false positive is an author invited to hide a real error. So only a literal,
- * unconditional `return true;` counts — a helper call, a `$user` check, anything read at all is
- * silence. Three shapes decide the gate somewhere the policy method's body cannot be seen, and each is
- * checked rather than assumed away:
+ * Deliberately narrow, and every uncertainty answers "it can deny" ({@see GateBody} owns what counts).
+ * Narrow in a second way too: the report only fires where the reader could act on it, which means the
+ * ability method has to be DECLARED in the application's own code. A policy shipped by a package, or a
+ * vendor base class an application policy inherits from, is a body nobody reading the diagnostic can
+ * tighten — so it is silent there rather than naming an edit in someone else's repository.
  *
- *  - a `Gate::before`/`Gate::after` registration, or a policy `before()` method, either of which can
- *    answer for every ability the policy covers;
- *  - a route a guest can reach whose policy method refuses guests — Laravel denies that without ever
- *    calling the method ({@see methodAllowsGuests()});
- *  - a gate whose argument is not a class a build can name, which resolves to a `Gate::define`d
- *    closure instead of to any policy.
+ * Three shapes decide the gate somewhere the method's body cannot be seen, and each is checked rather
+ * than assumed away: a `Gate::before`/`Gate::after` registration or a policy `before()` method; a route
+ * a guest can reach whose policy method refuses guests, which Laravel denies without ever calling the
+ * method ({@see methodAllowsGuests()}); and a gate whose argument is not a class a build can name,
+ * which resolves to a `Gate::define`d closure instead of to any policy.
  *
- * The policy is resolved by ASKING the booted app's {@see Gate} rather than by re-deriving Laravel's
- * convention: `getPolicyFor()` is the one answer that already honours `Gate::policy()`, a provider's
- * `$policies`, a model's `#[UsePolicy]` and a custom `guessPolicyNamesUsing()` callback. What no route
- * file reflects keys the fragment cache instead ({@see GatePoliciesDigestContributor}).
+ * Resolution goes through {@see GateInternals} — Laravel's own order, without ever building a policy.
+ * What no route file reflects keys the fragment cache instead ({@see GatePoliciesDigestContributor}).
  */
 final class GateDenial
 {
-    public function __construct(private readonly Gate $gate) {}
+    /**
+     * @param  Closure(): ?Gate  $gate  resolved when a gate is actually read, not when this is built: an
+     *                                  application that replaced the default auth providers has no Gate to
+     *                                  bind, and that is a check which says nothing rather than a failed build
+     * @param  (Closure(string): bool)|null  $isVendorFile  the app's vendor boundary; without one nothing
+     *                                                      is vendor and every policy counts as the reader's own
+     */
+    public function __construct(
+        private readonly Closure $gate,
+        private readonly ?Closure $isVendorFile = null,
+    ) {}
 
     /**
-     * The policy method this gate provably cannot be denied by — `App\Policies\WidgetPolicy::view` — or
-     * null whenever the gate can deny OR nothing here could settle it. The two are one answer on
-     * purpose: both mean the 403 keeps its place and nothing is reported.
+     * The policy method this gate provably cannot be denied by — `App\Policies\WidgetPolicy::view`,
+     * named for the class that DECLARES the method rather than the one the gate resolved to, so the
+     * reader opens a file the body is really in — or null whenever the gate can deny OR nothing here
+     * could settle it. The two are one answer on purpose: both mean the 403 keeps its place and nothing
+     * is reported.
      */
     public function undeniablePolicyMethod(RouteContext $context, CanGate $gate): ?string
     {
-        if ($this->hooksRegistered()) {
+        $internals = GateInternals::read(($this->gate)());
+        // A Gate this cannot read counts as one that HAS hooks — the conservative answer, not the
+        // convenient one.
+        if ($internals === null || $internals->hooksRegistered()) {
             return null;
         }
 
@@ -64,14 +73,16 @@ final class GateDenial
         // The model's own file decides part of the resolution — a `#[UsePolicy]` attribute lives there.
         $this->recordClassFile($context, $model);
 
-        $policy = $this->policyFor($model);
+        $policy = $internals->policyClassFor($model);
         if ($policy === null) {
+            $this->recordAbsentPolicies($context, $internals->guessedNames($model));
+
             return null;
         }
 
         // Both files, because they can differ and either can change the answer: `before()` would be added
         // to the policy class, while an inherited or trait-provided ability method is written elsewhere.
-        $this->recordClassFile($context, $policy::class);
+        $this->recordClassFile($context, $policy);
 
         $name = str_contains($gate->ability, '-') ? Str::camel($gate->ability) : $gate->ability;
         if (! method_exists($policy, $name)) {
@@ -87,6 +98,13 @@ final class GateDenial
         }
         $context->recordDependencyFiles([$file]);
 
+        // Where the body is WRITTEN is what decides whether the reader can act: an inherited or
+        // trait-provided ability method belongs to whoever ships that file, and the diagnostic's remedy
+        // is an edit to it.
+        if ($this->isVendorFile !== null && ($this->isVendorFile)($file)) {
+            return null;
+        }
+
         if (method_exists($policy, 'before')) {
             return null;
         }
@@ -97,49 +115,11 @@ final class GateDenial
             return null;
         }
 
-        return $this->returnsTrueUnconditionally($method, $file) ? $policy::class.'::'.$name : null;
-    }
-
-    /**
-     * Whether anything is registered that can answer an ability over a policy's head. Read by
-     * reflection because the {@see Gate} contract publishes no accessor for either callback list, and a
-     * Gate this cannot read counts as one that HAS hooks — the conservative answer, not the convenient
-     * one.
-     */
-    private function hooksRegistered(): bool
-    {
-        try {
-            $reflection = new ReflectionObject($this->gate);
-
-            foreach (['beforeCallbacks', 'afterCallbacks'] as $property) {
-                if (! $reflection->hasProperty($property)) {
-                    return true;
-                }
-
-                $callbacks = $reflection->getProperty($property)->getValue($this->gate);
-                if (! is_array($callbacks) || $callbacks !== []) {
-                    return true;
-                }
-            }
-        } catch (Throwable) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /** The policy the gate authorizes with, built exactly as an authorize call would build it. */
-    private function policyFor(string $model): ?object
-    {
-        try {
-            $policy = $this->gate->getPolicyFor($model);
-        } catch (Throwable) {
-            // Resolution runs the policy through the container. One that cannot be built is one this
-            // cannot read.
-            return null;
-        }
-
-        return is_object($policy) ? $policy : null;
+        // A body nobody could read is one that can deny — the false negative is a 403 that stays
+        // published, the false positive is an author invited to hide a real error.
+        return GateBody::read($context, $method, $file) === GateBody::AlwaysAllows
+            ? $method->getDeclaringClass()->getName().'::'.$name
+            : null;
     }
 
     /**
@@ -159,6 +139,20 @@ final class GateDenial
         }
 
         return $context->routeBindings[$argument] ?? null;
+    }
+
+    /**
+     * The convention resolves by `class_exists`, so a policy the application has not written yet is a
+     * file this build READ the absence of. Recording where it would go makes creating it invalidate the
+     * fragment, instead of leaving a warm build repeating the verdict from before it existed.
+     *
+     * @param  list<string>  $names
+     */
+    private function recordAbsentPolicies(RouteContext $context, array $names): void
+    {
+        foreach ($names as $name) {
+            $context->recordDependencyFiles(Psr4ClassFile::candidates($name));
+        }
     }
 
     private function recordClassFile(RouteContext $context, string $class): void
@@ -196,32 +190,5 @@ final class GateDenial
         } catch (Throwable) {
             return false;
         }
-    }
-
-    /**
-     * Whether the method's whole body is a literal `return true;`. Read off the source rather than
-     * inferred: the answer has to be certain, and `true` arriving from anything — a call, a variable, a
-     * conditional — is a body that can deny.
-     */
-    private function returnsTrueUnconditionally(ReflectionMethod $method, string $file): bool
-    {
-        $node = ParsedClassFile::methods($file)[$method->getName()] ?? null;
-        // One file can hold several classes and traits declaring one method name, and the parse keys by
-        // name alone. The line is what ties a node to the method reflection found.
-        if ($node === null || $node->getStartLine() !== $method->getStartLine()) {
-            return false;
-        }
-
-        $statements = $node->stmts;
-        if ($statements === null || count($statements) !== 1) {
-            return false;
-        }
-
-        $statement = $statements[0];
-        if (! $statement instanceof Return_ || ! $statement->expr instanceof ConstFetch) {
-            return false;
-        }
-
-        return strtolower($statement->expr->name->toString()) === 'true';
     }
 }
