@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
  * means a client pinned to an older version is refused outright, and it is the half a contract test can
  * actually falsify.
  *
- * Docuccino executes nothing of the application, so it neither reads nor runs this.
+ * Docuccino compiles the declarative half only, so it neither reads nor runs this.
  */
 final class UpgradeFromPinnedApiVersion
 {

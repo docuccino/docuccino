@@ -987,8 +987,8 @@ function ensureFixtureAvailable(bool $available): void
  * reflection, so the class has to load — which in a real application is composer's `App\` autoloader
  * doing what it does for every other class under `app/`. The fixture app's autoloader cannot be
  * registered here (its Laravel and this process's clash), and nothing else about the change classes
- * needs it: their attribute arguments are constant expressions the compiler already settled, and a
- * `::class` naming an analysis-only class is a string rather than a load.
+ * needs it: their attribute arguments are literal constants, and a `::class` naming an analysis-only
+ * class is a string rather than a load.
  *
  * Registered once per process and idempotent, because a Pest worker runs many tests.
  */
