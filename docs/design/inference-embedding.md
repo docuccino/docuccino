@@ -635,9 +635,15 @@ missing from it. `UnplacedStatusReconciliationTest` holds the two against each o
 fixture controller, with a hand-written ledger of the rows nobody can act on, so a new silence fails
 until somebody records why.
 
-Actionability is decided once, after the record, off the file the fold READ — never off where the exception
-is declared. The reasons with no remedy anyone owns (`ForeignClass`: a class whose declarations are outside
-the project, so this build never opened them) are recorded and not reported.
+**The reason is what happened at the site; actionability is the file the fold READ.** The two come from two
+places on purpose. A `throw new HttpException($chosenAtRunTime)` written in a controller is the same defect
+as `abort($chosen)` one line up — a Symfony class either way, an unfoldable expression on the author's own
+line either way — so the class the exception happens to belong to may not decide whether anyone hears about
+it. What the class decides is the case where nothing at the site could speak: a construction into a class
+that forwards no status slot (Symfony's own `ConflictHttpException`, whose number is written in a `vendor/`
+constructor PHPStan strips), a factory this build may not read, or a throw point presenting no construction
+at all. There the fold really was reading the class's declarations, and `ForeignClass` — the one reason with
+no remedy anyone owns — belongs to exactly that branch. Those firings are recorded and not reported.
 
 **The `inference.http-exception-status-unread` notice.** Where it fires is what earns it its place. The
 firing population was measured against one real application's 47 `HttpException` subclasses: reading only
@@ -652,9 +658,10 @@ helped, because the fold was never asked. What remains is the part an author CAN
 run time, a construction behind an unreadable spread, a factory that builds the class two ways. The notice
 is gated on the code the fold read being the project's, because the remedy it names is an edit to that code
 — advice nobody can take for a file they do not own. Measured over the fixture controller after the
-widening: 11 unplaced statuses reported, 1 silent (Symfony's own `ConflictHttpException`, whose status is
-written in a `vendor/` constructor whose body PHPStan strips), and the two firings the widening added are
-both `abort($chosen)`, where the constant the notice asks for goes on the line it names.
+widening: 13 unplaced statuses published, 12 reported, 1 silent (Symfony's own `ConflictHttpException`,
+whose status is written in a `vendor/` constructor whose body PHPStan strips), and the three firings the
+widening added are `abort($chosen)`, `abort_if($flag, $chosen)` and `throw new HttpException($chosen, …)` —
+the same defect at three spellings, where the constant the notice asks for goes on the line it names.
 
 And the notice is where the CAUSE lives, because the provenance trail has nowhere to put it: a
 contribution records a producer, a rung, a value and one source, so it can say the `fallback` rung

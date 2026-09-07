@@ -7,12 +7,11 @@ namespace Docuccino\Inference\PhpStan\Throwing;
 /**
  * Which fold gave up when a throw carried no readable HTTP status. The response is published under the
  * adapter's unplaced status either way, so this is the part a reader cannot work out from the document:
- * one of these four sentences is the difference between "write a constant here" and "nothing you own
- * could have helped".
+ * which of four reads was asked, and what would have answered it.
  *
- * Every case answers {@see because()}; only the ones whose remedy is an edit the author owns answer
- * {@see remedy()}. Whether a firing IS one of those is not the reason's call — a status argument folded
- * in a package-shipped action is the same reason in code nobody here can edit — so it is
+ * Every case answers {@see because()}; the three that name a fold over code an author can be writing in
+ * answer {@see remedy()} too. Whether a firing IS one of those is not the reason's call — a status
+ * argument folded in a package-shipped action is the same reason in code nobody here can edit — so it is
  * {@see UnreadStatus::isActionable()} that decides, off the file the fold actually read.
  *
  * @internal
@@ -43,9 +42,14 @@ enum UnreadStatusReason: string
     }
 
     /**
-     * What the author can change, or null where nothing they own would help — which is the whole
-     * reason the two are separate: a notice that fires where the remedy is an edit to `vendor/`
-     * trains a reader to ignore the channel and takes the useful notices with it.
+     * What the author can change so the NEXT build reads a number, or null for the one reason that is
+     * never published — `ForeignClass` is recorded only where the class is declared outside the project,
+     * and it is recorded with `inProjectCode` false in the same breath, so nothing here would ever be
+     * printed. Null is that channel decision and not a claim that the reader is powerless: they could
+     * always state the status themselves with `#[Response(status: …)]`, which is advice about the
+     * DOCUMENT rather than about the fold, and which the three published remedies already carry. A
+     * notice that fired where the fold's remedy is an edit to `vendor/` would train a reader to ignore
+     * the channel and take the useful notices with it, which is why the two are separate at all.
      */
     public function remedy(): ?string
     {

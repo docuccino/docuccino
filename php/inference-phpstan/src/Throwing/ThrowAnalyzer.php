@@ -583,39 +583,59 @@ final class ThrowAnalyzer
      * The order is what keeps the last of those honest. A site that DID present a construction has already
      * said what this response is, and a `throw new X($chosenAtRunTime)` that would not fold has said the
      * class's agreement is not it — so the class answers only where nothing at the site could.
+     *
+     * And the two halves of the record come from two different places, which is the whole rule: the REASON
+     * is what happened at this site, while ACTIONABILITY is the file the fold that gave up was reading.
+     * A `throw new HttpException($chosenAtRunTime)` written in a controller folds an expression on the
+     * author's own line, and that the class behind it is Symfony's says nothing about who can act — the
+     * same defect a report keyed on the exception class had for `abort($status)`, one shape over. Only
+     * where nothing at the site could speak is the fold over the CLASS's declarations, and only there does
+     * a foreign class mean nobody was ever going to read a number.
      */
     private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): StatusRead
     {
         // The class's own file now decides what this route publishes, so it joins the dependency set.
         $this->dependOn($this->httpExceptionStatus->filesFor($fqcn));
 
-        $status = $this->httpExceptionStatus->pinned($fqcn);
-        $reason = UnreadStatusReason::DynamicConstruction;
-        if ($status === null) {
-            $site = $this->atThrowSite($fqcn, $node, $scope);
-            if ($site['spoke']) {
-                $status = $site['status'];
-            } else {
-                $agreement = $this->httpExceptionStatus->agreed($fqcn);
-                $status = $agreement['status'];
-                $this->dependOn($agreement['files']);
-                $reason = UnreadStatusReason::UnstatedByClass;
+        $pinned = $this->httpExceptionStatus->pinned($fqcn);
+        if ($pinned !== null) {
+            return StatusRead::of($pinned);
+        }
+
+        $site = $this->atThrowSite($fqcn, $node, $scope);
+        if ($site['status'] !== null) {
+            return StatusRead::of($site['status']);
+        }
+
+        if ($site['foldedHere']) {
+            return $this->recorded(StatusRead::unread(new UnreadStatus(
+                $fqcn,
+                UnreadStatusReason::DynamicConstruction,
+                $frame->location,
+                $this->projectFilter->isProjectFile($scope->getFile()),
+            )));
+        }
+
+        if (! $site['spoke']) {
+            $agreement = $this->httpExceptionStatus->agreed($fqcn);
+            $this->dependOn($agreement['files']);
+            if ($agreement['status'] !== null) {
+                return StatusRead::of($agreement['status']);
             }
         }
 
-        if ($status !== null) {
-            return StatusRead::of($status);
-        }
-
-        // A class declared outside the project answers for none of the above: this build never opened the
-        // declarations that would have stated a status, so what the SITE did says nothing about why. The
-        // remedy for that one is an edit to code the reader does not own, which is why its reason carries
-        // none — but it is recorded like every other, because the document publishes its 500 either way.
+        // Nothing at this site could state a status — the class forwards no slot to fold into, names a
+        // factory this build may not read, or the throw presented no construction at all — so the fold
+        // that gave up was reading the CLASS's own declarations. Where those are outside the project this
+        // build never opened them, so no edit the reader owns would have made a number readable; the
+        // record is kept all the same, because the document publishes the unplaced status either way.
         $ownClass = $this->declaredInProject($fqcn);
 
         return $this->recorded(StatusRead::unread(new UnreadStatus(
             $fqcn,
-            $ownClass ? $reason : UnreadStatusReason::ForeignClass,
+            $ownClass
+                ? ($site['spoke'] ? UnreadStatusReason::DynamicConstruction : UnreadStatusReason::UnstatedByClass)
+                : UnreadStatusReason::ForeignClass,
             $frame->location,
             $ownClass,
         )));
@@ -641,12 +661,19 @@ final class ThrowAnalyzer
      * construction that presented itself and would not fold has spoken: it says the response is whatever
      * was chosen at run time, which the class's own agreement is no evidence for.
      *
-     * @return array{status: int|null, spoke: bool}
+     * `foldedHere` is the narrower fact the reader needs, and it is why the two are not one flag: it says
+     * the expression this read gave up on is written in the file the `throw` is, so the author of that
+     * file is the one who can put a constant there. A construction into a class that forwards no status
+     * slot — Symfony's own `ConflictHttpException`, whose number is written in a `vendor/` constructor —
+     * presented itself and folded nothing HERE: there was no argument at this site to read, and the
+     * declaration that would have answered is somebody else's.
+     *
+     * @return array{status: int|null, spoke: bool, foldedHere: bool}
      */
     private function atThrowSite(string $fqcn, Node $node, Scope $scope): array
     {
         if (! $node instanceof Node\Expr\Throw_) {
-            return ['status' => null, 'spoke' => false];
+            return ['status' => null, 'spoke' => false, 'foldedHere' => false];
         }
 
         [$thrown, $scope] = $this->localValue($node->expr, $scope);
@@ -662,19 +689,22 @@ final class ThrowAnalyzer
                     $this->httpExceptionStatus->constructorSlot($fqcn, $slot),
                 ),
                 'spoke' => true,
+                'foldedHere' => $slot !== null,
             ];
         }
 
         $factory = $this->factoryName($thrown, $fqcn, $scope);
         if ($factory === null) {
-            return ['status' => null, 'spoke' => false];
+            return ['status' => null, 'spoke' => false, 'foldedHere' => false];
         }
 
         $read = $this->factoryStatus->forFactory($fqcn, $factory);
         // The factory's file decides what this route publishes too, so it joins the dependency set.
         $this->dependOn($read['files']);
 
-        return ['status' => $read['status'], 'spoke' => true];
+        // The factory's body is read where this build is entitled to read it, so what gave up there is a
+        // declaration of the class's rather than a line of this one.
+        return ['status' => $read['status'], 'spoke' => true, 'foldedHere' => false];
     }
 
     /**

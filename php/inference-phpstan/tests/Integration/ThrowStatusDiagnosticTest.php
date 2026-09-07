@@ -27,6 +27,10 @@ it('names the class whose HTTP status it could not read', function (string $meth
     // while the document published the unplaced status all the same.
     'a status argument chosen at run time' => ['dynamicAbortStatus', 'Symfony\\Component\\HttpKernel\\Exception\\HttpException'],
     'the same one argument along' => ['dynamicAbortIfStatus', 'Symfony\\Component\\HttpKernel\\Exception\\HttpException'],
+    // The same exception CONSTRUCTED here rather than aborted with. The class is Symfony's either way,
+    // and the expression that will not fold is this line either way — so a reader that answers these two
+    // differently is reading the wrong file, which is what it did.
+    'a vendor class built here with a status chosen at run time' => ['dynamicVendorConstructionStatus', 'Symfony\\Component\\HttpKernel\\Exception\\HttpException'],
     'a factory that builds the class two ways' => ['unreadHttpStatus', 'App\\Exceptions\\ExportConflictException'],
     'a constructor that moves the status it was handed' => ['movedHttpStatus', 'App\\Exceptions\\ExportPartialException'],
     'a constructor that reuses the status after forwarding it' => ['supersededHttpStatus', 'App\\Exceptions\\ExportSupersededException'],
@@ -80,7 +84,7 @@ it('names the same site the throw itself carries', function (string $method): vo
 
     expect(unreadStatusDiagnostics($method)[0] ?? '')
         ->toContain($deepest['file'].':'.$deepest['line']);
-})->with(['deepUnreadHttpStatus', 'unreadHttpStatus', 'dynamicAbortStatus'])->group('fixture');
+})->with(['deepUnreadHttpStatus', 'unreadHttpStatus', 'dynamicAbortStatus', 'dynamicVendorConstructionStatus'])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
     expect(unreadStatusDiagnostics($method))->toBe([]);
