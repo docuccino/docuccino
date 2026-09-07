@@ -505,10 +505,7 @@ class ThrowsController extends Controller
 
     /**
      * Case 1d: the framework's own HttpException, constructed HERE with a status
-     * chosen at run time. The class is Symfony's and the constant the notice asks
-     * for goes on this line, so it is owed for exactly the reason `abort($chosen)`
-     * above is — a reader keyed on where the exception class is declared calls the
-     * two of them differently and reports only one.
+     * chosen at run time, so the constant the notice asks for goes on this line.
      */
     public function dynamicVendorConstructionStatus(int $chosen): void
     {

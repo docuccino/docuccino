@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Throwing;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Inference\Frame;
 use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
@@ -58,8 +57,8 @@ final class ThrowAnalyzer
     /** @var array<string, true> */
     private array $visitedFiles = [];
 
-    /** @var array<string, UnreadStatus> throws whose status did not fold, by {@see UnreadStatus::key()} */
-    private array $unreadStatuses = [];
+    /** Throws whose status did not fold, and the notices they publish. */
+    private UnreadStatuses $unreadStatuses;
 
     public function __construct(
         private readonly ReflectionProvider $reflectionProvider,
@@ -76,7 +75,9 @@ final class ThrowAnalyzer
         // was dead — the one construction always passes the config's — and it read as the real one, so
         // changing it moved nothing while looking like it had.
         private readonly int $maxDepth,
-    ) {}
+    ) {
+        $this->unreadStatuses = new UnreadStatuses;
+    }
 
     /**
      * @return list<ThrownException>
@@ -84,7 +85,7 @@ final class ThrowAnalyzer
     public function analyze(MethodReturnStatementsNode $node, string $selfLabel): array
     {
         $this->visitedFiles = [];
-        $this->unreadStatuses = [];
+        $this->unreadStatuses = new UnreadStatuses;
 
         $raw = $this->analyzeMethod($node, $selfLabel, 0, [], []);
 
@@ -100,39 +101,14 @@ final class ThrowAnalyzer
     }
 
     /**
-     * One notice per unread throw — the exception, the site the `throw` is written at, and which fold
-     * gave up ({@see UnreadStatus::sentence()}) — for the firings a reader can act on. They ride the
-     * analysis, so a warm build reports what a cold one did. Where it fires, and the measurement that
-     * sized its population, are in docs/design/inference-embedding.md §6.
-     *
-     * Every unread status is RECORDED ({@see unread()}); this is where the ones whose remedy nobody
-     * owns are dropped, so the actionability decision has one home and cannot be mistaken for the
-     * publish condition. The sentence names an analyser path, so it goes through {@see $labels} on the
-     * way out — the same crossing every other message this engine composes makes.
+     * The notices this analysis has to give ({@see UnreadStatuses::diagnostics()}). They ride the
+     * analysis, so a warm build reports what a cold one did.
      *
      * @return list<Diagnostic>
      */
     public function diagnostics(): array
     {
-        $keys = array_keys($this->unreadStatuses);
-        sort($keys);
-
-        $diagnostics = [];
-        foreach ($keys as $key) {
-            $unread = $this->unreadStatuses[$key];
-            if (! $unread->isActionable()) {
-                continue;
-            }
-
-            $diagnostics[] = new Diagnostic(
-                severity: Severity::Info,
-                code: 'inference.http-exception-status-unread',
-                message: $this->labels->relative($unread->sentence()),
-                help: $unread->reason->remedy(),
-            );
-        }
-
-        return $diagnostics;
+        return $this->unreadStatuses->diagnostics($this->labels);
     }
 
     /**
@@ -230,15 +206,14 @@ final class ThrowAnalyzer
 
         // The registry answers null for one entry shape only — one that folds its status from an argument
         // ({@see KnownThrower}'s two constructors leave a fixed-status entry nothing to fail at) — so that
-        // fold is the reason, and the file the fold READ is what says whether anyone can act on it. The
-        // exception here is always the framework's own `HttpException`, which is why a test keyed on the
-        // exception CLASS called every dynamic `abort()` unactionable and reported none of them.
-        $read = $status ?? $this->unread(new UnreadStatus(
+        // fold is the reason, and the file the fold READ is what says whether anyone can act on it — the
+        // exception here is always the framework's own, so the class says nothing about who can.
+        $read = $status ?? $this->unread(
             $thrower->exceptionFqcn,
             UnreadStatusReason::DynamicArgument,
             $frame->location,
             $this->projectFilter->isProjectFile($scope->getFile()),
-        ));
+        );
 
         // Certain when PHPStan corroborated the same concrete type; likely when we rescued a bare-Throwable.
         $corroborated = $explicit && in_array($thrower->exceptionFqcn, $type->getObjectClassNames(), true);
@@ -260,15 +235,17 @@ final class ThrowAnalyzer
      * adapter keys at its own unplaced status, so the condition that PUBLISHES such a response and the
      * condition the build can REPORT on are one fact rather than two readers agreeing.
      *
+     * It takes the record's PARTS rather than the record, so filing is the only way to build one at all
+     * and "recorded but dropped" is not a thing this class can express. Where the records then go, and
+     * which of them are worth a reader's time, is {@see UnreadStatuses}.
+     *
      * Whether the report reaches anyone is a separate question, answered later and off the file the fold
      * read ({@see UnreadStatus::isActionable()}). Silence there is a decision about the audience;
      * silence here would be a fact nobody recorded.
      */
-    private function unread(UnreadStatus $unread): null
+    private function unread(string $fqcn, UnreadStatusReason $reason, SourceLocation $at, bool $inProject): null
     {
-        $this->unreadStatuses[$unread->key()] = $unread;
-
-        return null;
+        return $this->unreadStatuses->record(new UnreadStatus($fqcn, $reason, $at, $inProject));
     }
 
     /**
@@ -591,13 +568,9 @@ final class ThrowAnalyzer
      * said what this response is, and a `throw new X($chosenAtRunTime)` that would not fold has said the
      * class's agreement is not it — so the class answers only where nothing at the site could.
      *
-     * And the two halves of the record come from two different places, which is the whole rule: the REASON
-     * is what happened at this site, while ACTIONABILITY is the file the fold that gave up was reading.
-     * A `throw new HttpException($chosenAtRunTime)` written in a controller folds an expression on the
-     * author's own line, and that the class behind it is Symfony's says nothing about who can act — the
-     * same defect a report keyed on the exception class had for `abort($status)`, one shape over. Only
-     * where nothing at the site could speak is the fold over the CLASS's declarations, and only there does
-     * a foreign class mean nobody was ever going to read a number.
+     * The reason each record carries is what happened at the SITE, while its actionability is the file the
+     * fold that gave up was reading — the rule in docs/design/inference-embedding.md §6, which is also why
+     * only the last branch here, where nothing at the site could speak, may answer `ForeignClass`.
      */
     private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): ?int
     {
@@ -615,12 +588,12 @@ final class ThrowAnalyzer
         }
 
         if ($site['foldedHere']) {
-            return $this->unread(new UnreadStatus(
+            return $this->unread(
                 $fqcn,
                 UnreadStatusReason::DynamicConstruction,
                 $frame->location,
                 $this->projectFilter->isProjectFile($scope->getFile()),
-            ));
+            );
         }
 
         if (! $site['spoke']) {
@@ -638,14 +611,14 @@ final class ThrowAnalyzer
         // record is kept all the same, because the document publishes the unplaced status either way.
         $ownClass = $this->declaredInProject($fqcn);
 
-        return $this->unread(new UnreadStatus(
+        return $this->unread(
             $fqcn,
             $ownClass
                 ? ($site['spoke'] ? UnreadStatusReason::DynamicConstruction : UnreadStatusReason::UnstatedByClass)
                 : UnreadStatusReason::ForeignClass,
             $frame->location,
             $ownClass,
-        ));
+        );
     }
 
     /** Whether the exception class itself is the application's, which is whose declarations were read. */
@@ -668,12 +641,9 @@ final class ThrowAnalyzer
      * construction that presented itself and would not fold has spoken: it says the response is whatever
      * was chosen at run time, which the class's own agreement is no evidence for.
      *
-     * `foldedHere` is the narrower fact the reader needs, and it is why the two are not one flag: it says
-     * the expression this read gave up on is written in the file the `throw` is, so the author of that
-     * file is the one who can put a constant there. A construction into a class that forwards no status
-     * slot — Symfony's own `ConflictHttpException`, whose number is written in a `vendor/` constructor —
-     * presented itself and folded nothing HERE: there was no argument at this site to read, and the
-     * declaration that would have answered is somebody else's.
+     * `foldedHere` is the narrower fact, and why the two are not one flag: it says the expression this read
+     * gave up on is written in the file the `throw` is. A construction into a class that forwards no status
+     * slot presented itself and folded nothing HERE — there was no argument at this site to read at all.
      *
      * @return array{status: int|null, spoke: bool, foldedHere: bool}
      */

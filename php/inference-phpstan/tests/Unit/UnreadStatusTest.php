@@ -11,7 +11,10 @@ use Docuccino\Inference\PhpStan\Throwing\UnreadStatusReason;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use ReflectionMethod;
+use SplFileInfo;
 
 /**
  * The pairing that keeps "the document published an unplaced status" and "the build had something to
@@ -120,60 +123,185 @@ it('keys one notice per exception, reason and site rather than per path that rea
 
 /**
  * The invariant executed rather than asserted, and at the level it actually has to hold: the ANALYSIS
- * may not hand back "no status" with nothing to report. It is checkable because the two halves are one
- * expression — the recorder is the only thing in {@see ThrowAnalyzer} that evaluates to a missing
- * status, so a null the document keys at its unplaced status is a null something filed a reason for.
+ * may not hand back "no status" with nothing to report. {@see ThrowAnalyzer::unread()} takes the
+ * record's PARTS, so filing is the only way to build one and a record built-and-dropped is not
+ * expressible; what is left to guard is a bare `null` written where a status belongs.
  *
- * Read off the source rather than asked of the class, so it states the rule independently of whatever
- * the code currently does; a `return null` added to either status answer fails here rather than going
- * out as a response nobody can explain.
+ * Both halves are DERIVED from the source rather than listed, because a list only ever proves its own
+ * rows — a third terminal status decision was added once and the listed two stayed green over it. The
+ * sink is every `ThrownException` the package builds, which is where a missing status stops being an
+ * internal answer and becomes a response the document publishes. The producers are every method whose
+ * declared type admits a missing status, and each owes a ROW saying which kind it is, so a new one
+ * fails here until somebody classifies it rather than falling in the gap between the two guards.
  */
 it('produces a missing status in one place only, and files a reason there', function (): void {
-    $file = dirname(__DIR__, 2).'/src/Throwing/ThrowAnalyzer.php';
-    $ast = (new ParserFactory)->createForHostVersion()->parse((string) file_get_contents($file)) ?? [];
+    $parser = (new ParserFactory)->createForHostVersion();
     $finder = new NodeFinder;
+    $src = dirname(__DIR__, 2).'/src';
 
-    // Every record the analyser builds…
-    $records = $finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\New_
-        && $node->class instanceof Node\Name
-        && $node->class->toString() === 'UnreadStatus');
-
-    // …is handed straight to the call that files it, so none can be built and dropped.
-    $filed = [];
-    foreach ($finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\MethodCall
-        && $node->var instanceof Node\Expr\Variable
-        && $node->var->name === 'this'
-        && $node->name instanceof Node\Identifier
-        && $node->name->toString() === 'unread') as $call) {
-        /** @var Node\Expr\MethodCall $call */
-        foreach ($call->getArgs() as $argument) {
-            $filed[] = $argument->value;
+    $sources = [];
+    /** @var SplFileInfo $entry */
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS)) as $entry) {
+        if ($entry->isFile() && $entry->getExtension() === 'php') {
+            $sources[$entry->getPathname()] = $parser->parse((string) file_get_contents($entry->getPathname())) ?? [];
         }
     }
+    ksort($sources);
 
-    // A scan that matched nothing would pass forever: the analyser really files several.
-    expect(count($records))->toBeGreaterThan(2);
+    // A walk that stopped finding the package would agree with everything below.
+    expect(count($sources))->toBeGreaterThan(20);
 
-    foreach ($records as $record) {
-        expect(in_array($record, $filed, true))->toBeTrue();
-    }
+    // Every branch an expression can answer with, so a `null` tucked behind a `??`, a ternary or a
+    // match arm is read as the answer it is.
+    $branches = static function (Node\Expr $expr) use (&$branches): array {
+        if ($expr instanceof Node\Expr\BinaryOp\Coalesce) {
+            return [...$branches($expr->left), ...$branches($expr->right)];
+        }
 
-    // And the other half: the two methods that answer with a status never write the missing one
-    // themselves — no `return null`, and no `null` sitting in the array shape one of them hands back.
+        if ($expr instanceof Node\Expr\Ternary) {
+            return [...($expr->if === null ? [] : $branches($expr->if)), ...$branches($expr->else)];
+        }
+
+        if ($expr instanceof Node\Expr\Match_) {
+            $arms = [];
+            foreach ($expr->arms as $arm) {
+                $arms = [...$arms, ...$branches($arm->body)];
+            }
+
+            return $arms;
+        }
+
+        return [$expr];
+    };
+
     $isNull = static fn (?Node $node): bool => $node instanceof Node\Expr\ConstFetch
         && $node->name->toLowerString() === 'null';
 
-    $answers = $finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Stmt\ClassMethod
-        && in_array($node->name->toString(), ['httpStatus', 'statusForType'], true));
-
-    expect($answers)->toHaveCount(2);
-
-    foreach ($answers as $answer) {
-        $literals = $finder->find($answer, static fn (Node $node): bool => ($node instanceof Node\Stmt\Return_
-            && $isNull($node->expr)) || ($node instanceof Node\ArrayItem && $isNull($node->value)));
-
-        expect($literals)->toBe([]);
+    // The sink. `ThrownException::$httpStatusHint` is what the adapter keys its unplaced status off, so
+    // this is the boundary an unread status crosses to become a response somebody has to explain.
+    $statuses = [];
+    $sinkFiles = [];
+    foreach ($sources as $file => $ast) {
+        foreach ($finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\New_
+            && $node->class instanceof Node\Name
+            && $node->class->toString() === 'ThrownException') as $construction) {
+            /** @var Node\Expr\New_ $construction */
+            $sinkFiles[$file] = true;
+            foreach ($construction->getArgs() as $position => $argument) {
+                if ($argument->name?->toString() === 'httpStatusHint' || ($argument->name === null && $position === 1)) {
+                    $statuses = [...$statuses, ...$branches($argument->value)];
+                }
+            }
+        }
     }
 
-    expect((string) (new ReflectionMethod(ThrowAnalyzer::class, 'unread'))->getReturnType())->toBe('null');
+    // Zero would pass forever, and the sink is the whole subject of the file.
+    expect($statuses)->not->toBeEmpty();
+
+    foreach ($statuses as $status) {
+        expect($isNull($status))->toBeFalse();
+    }
+
+    // Which also says WHERE the producers can be: nothing else in the package builds one, so the rows
+    // below may be read off a single class without listing that as an assumption.
+    $analyzer = $src.'/Throwing/ThrowAnalyzer.php';
+    expect(array_keys($sinkFiles))->toBe([$analyzer]);
+
+    // The producers, derived from what each method's declared type admits rather than from a list of
+    // names: a scalar `?int`/`null`, or an array shape carrying a nullable `status`.
+    $admitsMissing = static function (Node\Stmt\ClassMethod $method): bool {
+        $type = $method->returnType;
+        if ($type instanceof Node\Identifier && $type->toLowerString() === 'null') {
+            return true;
+        }
+
+        if ($type instanceof Node\NullableType && (string) $type->type === 'int') {
+            return true;
+        }
+
+        if ($type instanceof Node\UnionType) {
+            $names = array_map(static fn (Node $part): string => strtolower((string) $part), $type->types);
+            if (in_array('int', $names, true) && in_array('null', $names, true)) {
+                return true;
+            }
+        }
+
+        return preg_match('/status\s*:\s*(\?int|int\|null|null\|int)/', (string) $method->getDocComment()?->getText()) === 1;
+    };
+
+    $producers = [];
+    foreach ($finder->find($sources[$analyzer], static fn (Node $node): bool => $node instanceof Node\Stmt\ClassMethod) as $method) {
+        /** @var Node\Stmt\ClassMethod $method */
+        if ($admitsMissing($method)) {
+            $producers[$method->name->toString()] = $method;
+        }
+    }
+    ksort($producers);
+
+    // Terminal: its answer IS the status the document carries, so a bare `null` there is a response
+    // nothing recorded. Intermediate: its `null` says one read did not fold, and a terminal method
+    // decides what that means — so it may write one, and may never be a status on its own.
+    $rows = [
+        'atThrowSite' => 'intermediate',
+        'foldStatusArg' => 'intermediate',
+        'httpStatus' => 'terminal',
+        'statusForType' => 'terminal',
+        'unread' => 'recorder',
+    ];
+
+    // The union against the domain: a method that starts admitting a missing status owes a row here.
+    expect(array_keys($producers))->toBe(array_keys($rows));
+
+    foreach ($rows as $name => $kind) {
+        $method = $producers[$name];
+
+        if ($kind === 'terminal') {
+            // No `return null`, and no `null` in the `status` slot of an array shape one hands back.
+            $written = [];
+            foreach ($finder->find($method, static fn (Node $node): bool => $node instanceof Node\Stmt\Return_
+                && $node->expr !== null) as $return) {
+                /** @var Node\Stmt\Return_ $return */
+                $written = [...$written, ...$branches($return->expr)];
+            }
+
+            foreach ($finder->find($method, static fn (Node $node): bool => $node instanceof Node\ArrayItem
+                && $node->key instanceof Node\Scalar\String_
+                && $node->key->value === 'status') as $item) {
+                /** @var Node\ArrayItem $item */
+                $written = [...$written, ...$branches($item->value)];
+            }
+
+            expect($written)->not->toBeEmpty();
+
+            foreach ($written as $expression) {
+                expect($isNull($expression))->toBeFalse();
+            }
+        }
+
+        if ($kind === 'intermediate') {
+            // The exemption expires the moment one is wired straight into a published status.
+            foreach ($statuses as $status) {
+                expect($status instanceof Node\Expr\MethodCall
+                    && $status->name instanceof Node\Identifier
+                    && $status->name->toString() === $name)->toBeFalse();
+            }
+        }
+    }
+
+    // And the recorder: the one place a record is built, which is what makes filing the only way to
+    // make one at all.
+    $built = [];
+    foreach ($sources as $file => $ast) {
+        foreach ($finder->find($ast, static fn (Node $node): bool => $node instanceof Node\Expr\New_
+            && $node->class instanceof Node\Name
+            && $node->class->toString() === 'UnreadStatus') as $construction) {
+            $built[] = $file;
+        }
+    }
+
+    expect($built)->toBe([$analyzer])
+        ->and($finder->find($producers['unread'], static fn (Node $node): bool => $node instanceof Node\Expr\New_
+            && $node->class instanceof Node\Name
+            && $node->class->toString() === 'UnreadStatus'))->toHaveCount(1)
+        ->and((string) (new ReflectionMethod(ThrowAnalyzer::class, 'unread'))->getReturnType())->toBe('null');
 });

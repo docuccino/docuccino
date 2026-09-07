@@ -42,14 +42,8 @@ enum UnreadStatusReason: string
     }
 
     /**
-     * What the author can change so the NEXT build reads a number, or null for the one reason that is
-     * never published — `ForeignClass` is recorded only where the class is declared outside the project,
-     * and it is recorded with `inProjectCode` false in the same breath, so nothing here would ever be
-     * printed. Null is that channel decision and not a claim that the reader is powerless: they could
-     * always state the status themselves with `#[Response(status: …)]`, which is advice about the
-     * DOCUMENT rather than about the fold, and which the three published remedies already carry. A
-     * notice that fired where the fold's remedy is an edit to `vendor/` would train a reader to ignore
-     * the channel and take the useful notices with it, which is why the two are separate at all.
+     * What the author can change so the NEXT build reads a number, or null where the fold read a
+     * declaration nobody here owns and there is nothing to ask for.
      */
     public function remedy(): ?string
     {
