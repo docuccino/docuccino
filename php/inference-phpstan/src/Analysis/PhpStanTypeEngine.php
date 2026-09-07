@@ -57,6 +57,16 @@ use Throwable;
 final class PhpStanTypeEngine implements TypeEngine
 {
     /**
+     * Per-build memo of action analyses, so one controller method is analysed once however many routes
+     * reach it — and once for a whole export run rather than once per version document, since every
+     * document asks the identical {@see ActionRef} sequence and the answer is a function of the ref alone.
+     * Keyed on the ref's whole tuple and not on {@see ActionRef::symbol()}: see {@see actionKey()}.
+     *
+     * @var array<string, ActionAnalysis>
+     */
+    private array $actionMemo = [];
+
+    /**
      * Per-build memo of callable analyses, so one handler body queried by many routes is analysed once.
      * It lives and dies with the engine instance — one container, one build, one memo.
      *
@@ -96,6 +106,24 @@ final class PhpStanTypeEngine implements TypeEngine
     ) {}
 
     public function analyzeAction(ActionRef $action): ActionAnalysis
+    {
+        return $this->actionMemo[self::actionKey($action)] ??= $this->analyzeActionUncached($action);
+    }
+
+    /**
+     * The whole ref, and not {@see ActionRef::symbol()}, because symbol() is a LABEL and not an identity:
+     * a closure route carries no class, so every closure in one routes file collapses onto
+     * `routes/api.php::{closure}` there. What the answer can depend on is the file, the declaring class and
+     * the method — {@see FileAnalyzer::method()} reads exactly those — plus the line, which the failure
+     * path reports as the analysis's own source location. Two refs equal on all four are indistinguishable
+     * to this engine, which is what lets one answer serve both.
+     */
+    private static function actionKey(ActionRef $action): string
+    {
+        return $action->file."\0".($action->class ?? '')."\0".$action->method."\0".$action->line;
+    }
+
+    private function analyzeActionUncached(ActionRef $action): ActionAnalysis
     {
         try {
             return $this->doAnalyze($action);
