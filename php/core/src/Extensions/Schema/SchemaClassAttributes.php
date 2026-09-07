@@ -92,6 +92,14 @@ final class SchemaClassAttributes
      * holds the two together: a second row added here with no observation site of its own would
      * otherwise inherit the first's wording and say something false about it.
      *
+     * What a row costs, then, is a condition that really is a predicate on the ROUTE, decidable where
+     * the type's role at that route is known — which is what lets one observation ride that route's
+     * fragment and the verdict be reached once over the set. `#[SchemaName]` and `#[SchemaId]` have no
+     * such predicate and so have no row: they are read wherever a component is MINTED for the type, a
+     * fact about the document's whole component set that turns on a representation policy, on whether
+     * the class could be expanded at all, and on an unrelated `#[BodyParameter]` on the action — never
+     * on the verb. A route-shaped wording would say something false about them.
+     *
      * @var array<class-string, string>
      */
     public const array CONDITIONAL = [
