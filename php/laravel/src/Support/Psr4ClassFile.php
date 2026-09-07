@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Support;
 
 use Composer\Autoload\ClassLoader;
-use Throwable;
 
 /**
  * Where a class WOULD be written under the application's PSR-4 map, whether or not the file is there
@@ -48,8 +47,10 @@ final class Psr4ClassFile
     }
 
     /**
-     * The registered PSR-4 prefixes, off Composer's own loader. Nothing else publishes the map, and a
-     * runtime without it is one this says nothing about.
+     * The registered PSR-4 prefixes, off Composer's own loaders — EVERY one of them, merged. Nothing
+     * else publishes the map, and a runtime without it is one this says nothing about. Taking the first
+     * loader and stopping gives an application that registered a second one half a map, which for a
+     * cache key is a fragment keyed on paths the class is not at.
      *
      * @return array<string, list<string>>
      */
@@ -59,23 +60,22 @@ final class Psr4ClassFile
             return [];
         }
 
-        try {
-            foreach (spl_autoload_functions() as $autoloader) {
-                if (! is_array($autoloader) || ! ($autoloader[0] instanceof ClassLoader)) {
-                    continue;
-                }
-
-                $prefixes = [];
-                foreach ($autoloader[0]->getPrefixesPsr4() as $prefix => $directories) {
-                    $prefixes[$prefix] = array_values(array_filter($directories, is_string(...)));
-                }
-
-                return $prefixes;
+        $prefixes = [];
+        foreach (spl_autoload_functions() as $autoloader) {
+            if (! is_array($autoloader) || ! ($autoloader[0] instanceof ClassLoader)) {
+                continue;
             }
-        } catch (Throwable) {
-            return [];
+
+            foreach ($autoloader[0]->getPrefixesPsr4() as $prefix => $directories) {
+                foreach ($directories as $directory) {
+                    $prefixes[$prefix][] = $directory;
+                }
+            }
         }
 
-        return [];
+        return array_map(
+            static fn (array $directories): array => array_values(array_unique($directories)),
+            $prefixes,
+        );
     }
 }

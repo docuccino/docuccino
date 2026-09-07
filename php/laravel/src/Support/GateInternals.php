@@ -14,11 +14,17 @@ use Throwable;
  * reflection because the contract publishes no accessor for any of them: the policy map, the two hook
  * lists, and the naming machinery that says which policy class a model resolves to.
  *
- * Nothing here BUILDS a policy. Both readers want a class NAME and a method's source, so
- * `Gate::getPolicyFor()` — which ends in `$container->make($policy)` — is not the way to ask: that runs
- * the policy's constructor, resolves whatever it injects and fires every `Container::resolving` hook,
- * at documentation-build time. The one piece of application code that can still run is a registered
- * `guessPolicyNamesUsing()` callback, which IS the naming answer and cannot be read any other way.
+ * No policy OBJECT is ever constructed here, and that is the whole of the claim. Both readers want a
+ * class NAME and a method's source, so `Gate::getPolicyFor()` — which ends in
+ * `$container->make($policy)` — is not the way to ask: that runs the policy's constructor, resolves
+ * whatever it injects and fires every `Container::resolving` hook, at documentation-build time.
+ *
+ * Application code still RUNS, and the claim is deliberately not wider than it is. Resolution
+ * autoloads — `class_exists()` on a guessed name, `is_subclass_of()` on the model, Laravel's own
+ * `getPolicyFromAttribute()` — and a file's top-level statements run when it is loaded, exactly as they
+ * do for every controller, model and form request a build already loads. A registered
+ * `guessPolicyNamesUsing()` callback runs too, because it IS the naming answer and cannot be read any
+ * other way.
  *
  * {@see read()} answering null means someone else's Gate. Each caller states its own degradation
  * beside its own use, because they differ: {@see GateDenial} treats it as a Gate that HAS hooks and

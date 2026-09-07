@@ -495,6 +495,53 @@ it('invalidates the fragment when a policy appears at the name the convention lo
     rmdir($directory);
 });
 
+it('invalidates the fragment on the conventional name even where a policy already resolved', function (): void {
+    // The same under-keying one resolution branch over. Laravel asks the name guesser BEFORE it falls
+    // back to a registration on a PARENT class, so a model can resolve to its parent's policy with the
+    // conventional name still absent — and writing that file then moves the gate to a different policy
+    // while nothing the build read has changed. Recording the guessed names only where resolution came
+    // back empty left this branch keyed on nothing.
+    $directory = sys_get_temp_dir().'/docuccino-gate-parent-'.uniqid('', true);
+    mkdir($directory.'/Policies', 0o777, true);
+    $namespace = 'DocuccinoParentGate'.dechex(random_int(0, PHP_INT_MAX));
+    file_put_contents($directory.'/Signs.php', "<?php\nnamespace $namespace;\nclass Awning {}\nclass Marquee extends Awning {}\n");
+    file_put_contents(
+        $directory.'/Policies/AwningPolicy.php',
+        "<?php\nnamespace $namespace\\Policies;\nclass AwningPolicy { public function viewAny(?object \$user): bool { return true; } }\n",
+    );
+    require $directory.'/Signs.php';
+    require $directory.'/Policies/AwningPolicy.php';
+    composerClassLoader()->addPsr4($namespace.'\\', [$directory]);
+    Gate::policy($namespace.'\\Awning', $namespace.'\\Policies\\AwningPolicy');
+
+    app('router')->get('api/marquees-temp', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', $namespace.'\\Marquee');
+    app('router')->getRoutes()->refreshNameLookups();
+
+    $engine = gateWarmedEngine();
+    // The gate DID resolve — through the parent's registration — which is what makes this the branch
+    // the recording used to skip.
+    expect(gateFindings())->toHaveKey('GET /api/marquees-temp');
+
+    file_put_contents(
+        $directory.'/Policies/MarqueePolicy.php',
+        "<?php\nnamespace $namespace\\Policies;\nclass MarqueePolicy { public function viewAny(?object \$user): bool { return \$user !== null; } }\n",
+    );
+    clearstatcache();
+
+    $engine->analyzeCount = 0;
+    generateDocument();
+
+    expect($engine->analyzeCount)->toBeGreaterThan(0);
+
+    unlink($directory.'/Policies/MarqueePolicy.php');
+    unlink($directory.'/Policies/AwningPolicy.php');
+    unlink($directory.'/Signs.php');
+    rmdir($directory.'/Policies');
+    rmdir($directory);
+});
+
 it('keys the fragment cache on the app\'s gate registrations', function (): void {
     // A `Gate::policy()` call, a policy-name guesser and a `Gate::before` hook all live in a service
     // provider, which no route records. Without this the first build after one was added would serve
@@ -576,7 +623,56 @@ it('says nothing about a policy method a package declares', function (): void {
         ->and((new GateDenial($resolver, $vendor->isVendorFile(...)))->undeniablePolicyMethod($context, $gate))->toBeNull()
         // Anti-vacuity: the same gate with no boundary reports, so the silence above is the boundary's
         // doing and not the fixture's.
-        ->and((new GateDenial($resolver))->undeniablePolicyMethod($context, $gate))->toBe(KioskPolicy::class.'::viewAny');
+        ->and((new GateDenial($resolver, static fn (): bool => false))->undeniablePolicyMethod($context, $gate))->toBe(KioskPolicy::class.'::viewAny');
+});
+
+it('says nothing about an ability method an application policy inherits from a vendor base class', function (): void {
+    // The composition the rule is written for, and the one the row above does not hold: the application
+    // owns the policy the gate resolves TO, and a package owns the base class the ability is written
+    // in, so the remedy the report would name is an edit to somebody else's repository. Two directories
+    // because that is the only way a boundary can tell the two halves apart — every policy fixture in
+    // this suite sits in one.
+    $token = 'docuccino-package-'.dechex(random_int(0, PHP_INT_MAX));
+    $root = sys_get_temp_dir().'/docuccino-gate-inherit-'.uniqid('', true);
+    mkdir($root.'/'.$token, 0o777, true);
+    mkdir($root.'/app', 0o777, true);
+
+    $namespace = 'DocuccinoInheritGate'.dechex(random_int(0, PHP_INT_MAX));
+    file_put_contents(
+        $root.'/'.$token.'/BaseSignPolicy.php',
+        "<?php\nnamespace $namespace\\Vendor;\nclass BaseSignPolicy { public function viewAny(?object \$user): bool { return true; } }\n",
+    );
+    file_put_contents(
+        $root.'/app/Sign.php',
+        "<?php\nnamespace $namespace;\nclass Sign {}\nclass SignPolicy extends Vendor\\BaseSignPolicy {}\n",
+    );
+    require $root.'/'.$token.'/BaseSignPolicy.php';
+    require $root.'/app/Sign.php';
+    Gate::policy($namespace.'\\Sign', $namespace.'\\SignPolicy');
+
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/signs', middleware: ['auth:web', 'can:viewAny,'.$namespace.'\\Sign']),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], authMiddleware: 'auth*'),
+    );
+    $gate = CanGate::parse('can:viewAny,'.$namespace.'\\Sign');
+    $resolver = static fn (): GateContract => app(GateContract::class);
+
+    expect($gate)->not->toBeNull()
+        ->and((new GateDenial($resolver, static fn (string $file): bool => str_contains($file, $token)))
+            ->undeniablePolicyMethod($context, $gate))->toBeNull()
+        // Anti-vacuity, and the mechanism in one line: with nothing vendor the same gate reports, and
+        // what it names is the BASE's method — so the file the boundary is asked about is the base's.
+        ->and((new GateDenial($resolver, static fn (): bool => false))->undeniablePolicyMethod($context, $gate))
+        ->toBe($namespace.'\\Vendor\\BaseSignPolicy::viewAny');
+
+    unlink($root.'/'.$token.'/BaseSignPolicy.php');
+    unlink($root.'/app/Sign.php');
+    rmdir($root.'/'.$token);
+    rmdir($root.'/app');
+    rmdir($root);
 });
 
 it('gives the check the application vendor boundary it needs', function (): void {
@@ -631,9 +727,9 @@ it('stays silent when the Gate resolution step it calls throws', function (): vo
     $canGate = CanGate::parse('can:viewAny,'.Kiosk::class);
 
     expect($canGate)->not->toBeNull()
-        ->and((new GateDenial(static fn (): GateContract => $gate))->undeniablePolicyMethod($context, $canGate))->toBeNull()
+        ->and((new GateDenial(static fn (): GateContract => $gate, static fn (): bool => false))->undeniablePolicyMethod($context, $canGate))->toBeNull()
         // Anti-vacuity: the same subclass without the throw resolves the very same gate.
-        ->and((new GateDenial(static fn (): GateContract => new IlluminateGate(app(), static fn () => null)))
+        ->and((new GateDenial(static fn (): GateContract => new IlluminateGate(app(), static fn () => null), static fn (): bool => false))
             ->undeniablePolicyMethod($context, $canGate))->toBe(KioskPolicy::class.'::viewAny');
 });
 
@@ -727,10 +823,10 @@ it('says nothing it cannot read, rather than guessing', function (): void {
     $gate = CanGate::parse('can:viewAny,'.Kiosk::class);
 
     expect($gate)->not->toBeNull()
-        ->and((new GateDenial(static fn (): GateContract => $foreign))->undeniablePolicyMethod($context, $gate))->toBeNull()
+        ->and((new GateDenial(static fn (): GateContract => $foreign, static fn (): bool => false))->undeniablePolicyMethod($context, $gate))->toBeNull()
         ->and((new GatePoliciesDigestContributor(static fn (): GateContract => $foreign))->digest())->toBe('')
         // Anti-vacuity: the real Gate answers for the very same context, so the null above is about the
         // Gate this cannot read and not about the fixture.
-        ->and((new GateDenial(static fn (): GateContract => app(GateContract::class)))->undeniablePolicyMethod($context, $gate))
+        ->and((new GateDenial(static fn (): GateContract => app(GateContract::class), static fn (): bool => false))->undeniablePolicyMethod($context, $gate))
         ->toBe(KioskPolicy::class.'::viewAny');
 });

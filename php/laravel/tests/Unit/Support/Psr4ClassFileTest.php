@@ -45,6 +45,27 @@ it('answers the same whatever order the directories were registered in', functio
         ->and(Psr4ClassFile::candidates($two.'Thing'))->toBe(['/srv/a/Thing.php', '/srv/b/Thing.php']);
 });
 
+it('reads every registered Composer loader, not just the first one it finds', function (): void {
+    // An application that registers a second loader — a package's own, a test harness's — had half its
+    // map read, and half a map is a fragment keyed on paths the class is not at.
+    $only = 'DocuccinoPsr4Second'.dechex(random_int(0, PHP_INT_MAX)).'\\';
+    $shared = 'DocuccinoPsr4Shared'.dechex(random_int(0, PHP_INT_MAX)).'\\';
+    $second = new ClassLoader;
+    $second->addPsr4($only, ['/srv/second/src']);
+    $second->addPsr4($shared, ['/srv/second/src']);
+    psr4Loader()->addPsr4($shared, ['/srv/first/src']);
+    $second->register();
+
+    try {
+        expect(Psr4ClassFile::candidates($only.'Widget'))->toBe(['/srv/second/src/Widget.php'])
+            // Merged rather than shadowed: one prefix in two loaders means both its directories.
+            ->and(Psr4ClassFile::candidates($shared.'Widget'))
+            ->toBe(['/srv/first/src/Widget.php', '/srv/second/src/Widget.php']);
+    } finally {
+        $second->unregister();
+    }
+});
+
 it('says nothing about a class no PSR-4 prefix covers', function (): void {
     expect(Psr4ClassFile::candidates('NothingMapsThis\\AtAll\\Widget'))->toBe([]);
 });

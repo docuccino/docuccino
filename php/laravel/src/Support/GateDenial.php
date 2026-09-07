@@ -33,6 +33,9 @@ use Throwable;
  * which resolves to a `Gate::define`d closure instead of to any policy.
  *
  * Resolution goes through {@see GateInternals} — Laravel's own order, without ever building a policy.
+ * The cost of not building one is a container rebinding: an application that binds a policy class to a
+ * different concrete runs that concrete, while this reads the source of the class the Gate names. The
+ * blast radius is one Info diagnostic, because the 403 publishes either way.
  * What no route file reflects keys the fragment cache instead ({@see GatePoliciesDigestContributor}).
  */
 final class GateDenial
@@ -41,12 +44,14 @@ final class GateDenial
      * @param  Closure(): ?Gate  $gate  resolved when a gate is actually read, not when this is built: an
      *                                  application that replaced the default auth providers has no Gate to
      *                                  bind, and that is a check which says nothing rather than a failed build
-     * @param  (Closure(string): bool)|null  $isVendorFile  the app's vendor boundary; without one nothing
-     *                                                      is vendor and every policy counts as the reader's own
+     * @param  Closure(string): bool  $isVendorFile  the app's vendor boundary. Required: the narrowness the
+     *                                               class docblock states IS the contract, and a construction
+     *                                               that left it out would quietly get a weaker check that
+     *                                               names a body in somebody else's package
      */
     public function __construct(
         private readonly Closure $gate,
-        private readonly ?Closure $isVendorFile = null,
+        private readonly Closure $isVendorFile,
     ) {}
 
     /**
@@ -73,10 +78,14 @@ final class GateDenial
         // The model's own file decides part of the resolution — a `#[UsePolicy]` attribute lives there.
         $this->recordClassFile($context, $model);
 
+        // Whatever the resolution answers, and not only where it answered nothing: the guesser is asked
+        // BEFORE the fallback to a parent class's registration, so a policy can be found with the
+        // conventional name still absent — and writing that file would change which policy the gate
+        // resolves to while the fragment is warm.
+        $this->recordAbsentPolicies($context, $internals->guessedNames($model));
+
         $policy = $internals->policyClassFor($model);
         if ($policy === null) {
-            $this->recordAbsentPolicies($context, $internals->guessedNames($model));
-
             return null;
         }
 
@@ -101,7 +110,7 @@ final class GateDenial
         // Where the body is WRITTEN is what decides whether the reader can act: an inherited or
         // trait-provided ability method belongs to whoever ships that file, and the diagnostic's remedy
         // is an edit to it.
-        if ($this->isVendorFile !== null && ($this->isVendorFile)($file)) {
+        if (($this->isVendorFile)($file)) {
             return null;
         }
 
@@ -144,7 +153,9 @@ final class GateDenial
     /**
      * The convention resolves by `class_exists`, so a policy the application has not written yet is a
      * file this build READ the absence of. Recording where it would go makes creating it invalidate the
-     * fragment, instead of leaving a warm build repeating the verdict from before it existed.
+     * fragment, instead of leaving a warm build repeating the verdict from before it existed. Recorded
+     * even where the file is already there: over-keying costs a rebuild, under-keying replays a verdict
+     * that is no longer true.
      *
      * @param  list<string>  $names
      */
