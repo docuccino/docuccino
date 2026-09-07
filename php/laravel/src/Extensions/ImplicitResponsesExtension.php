@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Extensions;
 
 use Docuccino\Attributes\Unauthenticated;
+use Docuccino\Core\Diagnostics\Diagnostic;
+use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Draft\OperationDraft;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Contracts\OperationExtension;
@@ -19,6 +21,8 @@ use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Support\AuthMiddlewareDetector;
+use Docuccino\Laravel\Support\CanGate;
+use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
 use ReflectionClass;
 
@@ -34,6 +38,13 @@ use ReflectionClass;
  *  | 422    | a validated request body was recovered (Data / FormRequest / action rules()) |
  *  | 404    | the route has ≥1 model-bound path parameter (one 404 per operation, not per param) |
  *  | 403    | `can:` / `signed` / `verified` middleware, or a FormRequest `authorize()` not `return true` |
+ *
+ * The 403 is inferred from the PRESENCE of a gate, which is right for `signed`/`verified` and only
+ * usually right for `can:`: a policy method that returns `true` unconditionally cannot deny, and the
+ * error is then one no request can provoke. Where this is the operation's ONLY 403 and every `can:`
+ * gate on the route is that shape, the response still publishes — a diagnostic can never drop a real
+ * error, and dropping this one would need certainty a build does not have — and
+ * `authorization.gate-cannot-deny` says so ({@see GateDenial} for how narrow "cannot deny" is).
  *
  * Runs LATE in the Errors phase at integration precedence, so an exception the action also throws
  * explicitly ({@see ErrorResponsesExtension}) owns its status and shadows the synthesis — no double
@@ -55,6 +66,7 @@ final class ImplicitResponsesExtension implements OperationExtension
     private const AUTHORIZATION = 'Illuminate\\Auth\\Access\\AuthorizationException';
 
     public function __construct(
+        private readonly GateDenial $gates,
         private readonly ResponseDraftApplier $applier = new ResponseDraftApplier,
     ) {}
 
@@ -84,11 +96,67 @@ final class ImplicitResponsesExtension implements OperationExtension
             $this->synthesize($operation, $context, 404, self::MODEL_NOT_FOUND, 'route-model-binding');
         }
 
-        // 403 — authorization middleware or a FormRequest authorize() gate.
+        // 403 — authorization middleware or a FormRequest authorize() gate. Whether the operation
+        // already carries one is read BEFORE the synthesis: every other producer of a 403 — an explicit
+        // throw, an attribute, an action's authorize() — has run by now, and their 403 is reachable
+        // whatever the gates say.
         $authorization = $this->authorizationSignal($context);
         if ($authorization !== null) {
+            $noOther403 = ! $operation->hasResponse('403');
             $this->synthesize($operation, $context, 403, self::AUTHORIZATION, $authorization);
+
+            if ($noOther403 && $operation->hasResponse('403')) {
+                $this->reportUndeniableGates($context, $authorization);
+            }
         }
+    }
+
+    /**
+     * Reports a published 403 that no gate on the route can produce. Silent unless the gates are the
+     * WHOLE story: a `signed`/`verified` middleware or a FormRequest gate denies on its own, and the
+     * signal name is what says which of them the 403 came from.
+     */
+    private function reportUndeniableGates(RouteContext $context, string $signal): void
+    {
+        if ($signal !== 'can-middleware' || $this->formRequestAuthorizes($context)) {
+            return;
+        }
+
+        $findings = [];
+        foreach ($context->route->middleware as $middleware) {
+            $gate = CanGate::parse($middleware);
+            if ($gate === null) {
+                // A `signed` or `verified` middleware denies on its own, so the 403 is reachable however
+                // the gates read.
+                if (self::middlewareSignal($middleware) !== null) {
+                    return;
+                }
+
+                continue;
+            }
+
+            $policyMethod = $this->gates->undeniablePolicyMethod($context, $gate);
+            if ($policyMethod === null) {
+                // One gate that can deny — or that could not be resolved — makes the 403 reachable.
+                return;
+            }
+
+            $findings[] = $gate->describe().', but '.$policyMethod.'() returns true unconditionally';
+        }
+
+        if ($findings === []) {
+            return;
+        }
+
+        $context->components->addDiagnostic(new Diagnostic(
+            severity: Severity::Info,
+            code: 'authorization.gate-cannot-deny',
+            message: count($findings) === 1
+                ? sprintf('Publishes a 403 from %s, so the gate cannot deny.', $findings[0])
+                : sprintf('Publishes a 403 from %d ->can() gates — %s — so no gate on this route can deny.', count($findings), implode('; ', $findings)),
+            routeSignature: $context->route->signature($context->httpMethod()),
+            help: 'Drop the response with #[IgnoreResponse(403)] on the action if the gate is meant to be a formality, or tighten the policy method so the 403 it publishes is one a request can provoke.',
+        ));
     }
 
     private function synthesize(
@@ -139,18 +207,33 @@ final class ImplicitResponsesExtension implements OperationExtension
     private function authorizationSignal(RouteContext $context): ?string
     {
         foreach ($context->route->middleware as $middleware) {
-            if (str_starts_with($middleware, 'can:')) {
-                return 'can-middleware';
-            }
-            if ($middleware === 'signed' || str_starts_with($middleware, 'signed:')) {
-                return 'signed-middleware';
-            }
-            if ($middleware === 'verified' || str_starts_with($middleware, 'verified:')) {
-                return 'verified-middleware';
+            $signal = self::middlewareSignal($middleware);
+            if ($signal !== null) {
+                return $signal;
             }
         }
 
         return $this->formRequestAuthorizes($context) ? 'formrequest-authorize' : null;
+    }
+
+    /**
+     * The 403 signal ONE middleware raises, or null. Stated once because two readers ask it: the signal
+     * above takes the first answer in route order, while the reachability check needs to know whether
+     * anything OTHER than a `can:` gate is also holding the 403 up.
+     */
+    private static function middlewareSignal(string $middleware): ?string
+    {
+        if (str_starts_with($middleware, 'can:')) {
+            return 'can-middleware';
+        }
+        if ($middleware === 'signed' || str_starts_with($middleware, 'signed:')) {
+            return 'signed-middleware';
+        }
+        if ($middleware === 'verified' || str_starts_with($middleware, 'verified:')) {
+            return 'verified-middleware';
+        }
+
+        return null;
     }
 
     /** Whether the route's FormRequest declares an authorize() gate that is not a literal `return true`. */
