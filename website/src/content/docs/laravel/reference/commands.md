@@ -20,7 +20,8 @@ Shared behavior:
   every configured document. An unknown key errors and exits `1`. Per-document results
   aggregate: any single document failing fails the whole command.
 - **Diagnostics.** `export`, `validate` and `cache` print diagnostics grouped by route signature in
-  deterministic order; `diff`, `clear`, `coverage` and `explain` print none. `watch` and `install`
+  deterministic order; `explain` prints only the ones about the operation it is explaining; `diff`,
+  `clear` and `coverage` print none. `watch` and `install`
   print whatever the export they run prints, and nothing of their own — what they report is about your
   setup rather than about the document, which is a console message.
 - **`--memory-limit`.** Accepted by every command that builds a document — `export`, `validate`,
@@ -878,6 +879,18 @@ php artisan docuccino:explain "POST /api/invoices" --field=responses.201.descrip
 
 A field the trail names but the document does not carry reads `(removed by this layer)` — that layer
 wrote a deletion, which is a decision about the field rather than a missing value.
+
+### What the build reported about it
+
+Under the trail come the diagnostics for **that operation** — matched on the route signature the
+report already groups by, so nothing about the rest of the document appears. The trail says which rung
+wrote a field and where from; it has no room for why a producer could only answer vaguely, and that is
+usually the actual question. An error response filed under `500` is the case people arrive with: the
+trail names the `fallback` rung and the action, and the notice beside it names the exception, the file
+and line its `throw` is written at, and which fold gave up on its status.
+
+Diagnostics for the whole document, and the `--fail-on` gate over them, stay with
+[`docuccino:export`](#docuccinoexport).
 
 ### Naming the endpoint
 
