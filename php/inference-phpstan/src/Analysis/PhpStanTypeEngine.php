@@ -137,9 +137,11 @@ final class PhpStanTypeEngine implements TypeEngine
      * The whole ref, and not {@see ActionRef::symbol()}, because symbol() is a LABEL and not an identity:
      * a closure route carries no class, so every closure in one routes file collapses onto
      * `routes/api.php::{closure}` there. What the answer can depend on is the file, the declaring class and
-     * the method — {@see FileAnalyzer::method()} reads exactly those — plus the line, which the failure
-     * path reports as the analysis's own source location. Two refs equal on all four are indistinguishable
-     * to this engine, which is what lets one answer serve both.
+     * the method — {@see FileAnalyzer::method()} reads exactly those — plus the line, which is not there
+     * merely to be reported: {@see traceClosure()} SELECTS which closure it walks by
+     * `getStartLine() === $action->line`, so two refs differing only in line name two different bodies
+     * and get two different answers. Two refs equal on all four are indistinguishable to this engine,
+     * which is what lets one answer serve both.
      */
     private static function actionKey(ActionRef $action): string
     {
