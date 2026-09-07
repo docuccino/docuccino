@@ -57,7 +57,7 @@ final class ThrowAnalyzer
     /** @var array<string, true> */
     private array $visitedFiles = [];
 
-    /** @var array<string, true> HttpException subclasses whose status did not fold, by FQCN */
+    /** @var array<string, UnreadStatus> throws whose status did not fold, by {@see UnreadStatus::key()} */
     private array $unreadStatuses = [];
 
     public function __construct(
@@ -96,30 +96,38 @@ final class ThrowAnalyzer
     }
 
     /**
-     * One notice per PROJECT exception class whose HTTP status this build could not read — not one per
-     * throw site, and never for a class the author does not own. They ride the analysis, so a warm build
-     * reports what a cold one did. Where it fires, and the measurement that sized its population, are in
-     * docs/design/inference-embedding.md §6.
+     * One notice per unread throw — the exception, the site the `throw` is written at, and which fold
+     * gave up ({@see UnreadStatus::sentence()}) — for the firings a reader can act on. They ride the
+     * analysis, so a warm build reports what a cold one did. Where it fires, and the measurement that
+     * sized its population, are in docs/design/inference-embedding.md §6.
+     *
+     * Every unread status is RECORDED ({@see StatusRead}); this is where the ones whose remedy nobody
+     * owns are dropped, so the actionability decision has one home and cannot be mistaken for the
+     * publish condition.
      *
      * @return list<Diagnostic>
      */
     public function diagnostics(): array
     {
-        $classes = array_keys($this->unreadStatuses);
-        sort($classes);
+        $keys = array_keys($this->unreadStatuses);
+        sort($keys);
 
-        return array_map(
-            static fn (string $fqcn): Diagnostic => new Diagnostic(
+        $diagnostics = [];
+        foreach ($keys as $key) {
+            $unread = $this->unreadStatuses[$key];
+            if (! $unread->isActionable()) {
+                continue;
+            }
+
+            $diagnostics[] = new Diagnostic(
                 severity: Severity::Info,
                 code: 'inference.http-exception-status-unread',
-                message: sprintf(
-                    '%s extends HttpException, but the status it sets could not be read; the error is documented without a status of its own.',
-                    $fqcn,
-                ),
-                help: 'Say the status where the exception is built, as a constant — a literal or a class constant both fold, and so does the constructor default a construction leaves the slot empty for. A status chosen at run time is not one: this build cannot tell which of them the response is. Pin it in the class with `parent::__construct(409, …)` if every instance is that status, and otherwise write it at the `throw`, or in the static factory the `throw` names.',
-            ),
-            $classes,
-        );
+                message: $unread->sentence(),
+                help: $unread->reason->remedy(),
+            );
+        }
+
+        return $diagnostics;
     }
 
     /**
@@ -215,16 +223,45 @@ final class ThrowAnalyzer
             return null;
         }
 
+        // The registry answers null for one entry shape only — one that folds its status from an argument
+        // ({@see KnownThrower}'s two constructors leave a fixed-status entry nothing to fail at) — so that
+        // fold is the reason, and the file the fold READ is what says whether anyone can act on it. The
+        // exception here is always the framework's own `HttpException`, which is why a test keyed on the
+        // exception CLASS called every dynamic `abort()` unactionable and reported none of them.
+        $read = $this->recorded($status === null
+            ? StatusRead::unread(new UnreadStatus(
+                $thrower->exceptionFqcn,
+                UnreadStatusReason::DynamicArgument,
+                $frame->location,
+                $this->projectFilter->isProjectFile($scope->getFile()),
+            ))
+            : StatusRead::of($status));
+
         // Certain when PHPStan corroborated the same concrete type; likely when we rescued a bare-Throwable.
         $corroborated = $explicit && in_array($thrower->exceptionFqcn, $type->getObjectClassNames(), true);
 
         return new ThrownException(
             $thrower->exceptionFqcn,
-            $status,
+            $read->status,
             [...$priorChain, $frame],
             $corroborated ? ThrowConfidence::Certain : ThrowConfidence::Likely,
             ThrowDisposition::Signal,
         );
+    }
+
+    /**
+     * Records an unread status on the way past, and hands the reading back so the caller reads the
+     * status off the same value that carried the record. Every null status in this class goes through
+     * here — which is what makes {@see StatusRead}'s invariant hold of the analysis and not just of the
+     * type: a status the document publishes as unplaced is one the build has something to say about.
+     */
+    private function recorded(StatusRead $read): StatusRead
+    {
+        if ($read->unread !== null) {
+            $this->unreadStatuses[$read->unread->key()] = $read->unread;
+        }
+
+        return $read;
     }
 
     /**
@@ -277,10 +314,10 @@ final class ThrowAnalyzer
 
         $results = [];
         foreach ($this->concreteClasses($type) as $class) {
-            $resolution = $this->statusForType($class, $node, $scope);
+            $resolution = $this->statusForType($class, $node, $scope, $frame);
             $results[] = new ThrownException(
                 $class,
-                $resolution['status'],
+                $resolution['read']->status,
                 [...$priorChain, $frame],
                 $isLiteral ? ThrowConfidence::Certain : ThrowConfidence::Declared,
                 ThrowSignal::disposition($isLiteral, $calleeIsProject, $resolution['fellBack']),
@@ -501,24 +538,24 @@ final class ThrowAnalyzer
     /**
      * The status a thrown type carries, and whether that answer is the FALLBACK rather than something the
      * code states. The two are separate because 500 is a real status a class may pin, and because "an HTTP
-     * error whose status did not fold" is a third answer again — null, which is not the same claim as "no
-     * HTTP status at all".
+     * error whose status did not fold" is a third answer again — a {@see StatusRead} with no status, which
+     * is not the same claim as "no HTTP status at all".
      *
-     * @return array{status: int|null, fellBack: bool}
+     * @return array{read: StatusRead, fellBack: bool}
      */
-    private function statusForType(string $fqcn, Node $node, Scope $scope): array
+    private function statusForType(string $fqcn, Node $node, Scope $scope, Frame $frame): array
     {
         // KnownThrowers is the single source: exact FQCN wins, else a subclass inherits its parent's status.
         $exact = $this->knownThrowers->statusForExceptionFqcn($fqcn);
         if ($exact !== null) {
-            return ['status' => $exact, 'fellBack' => false];
+            return ['read' => StatusRead::of($exact), 'fellBack' => false];
         }
 
         if ($this->reflectionProvider->hasClass($fqcn)) {
             $reflection = $this->reflectionProvider->getClass($fqcn);
             foreach ($this->knownThrowers->knownStatuses() as $known => $status) {
                 if ($reflection->is($known)) {
-                    return ['status' => $status, 'fellBack' => false];
+                    return ['read' => StatusRead::of($status), 'fellBack' => false];
                 }
             }
         }
@@ -528,30 +565,32 @@ final class ThrowAnalyzer
             // read" — not "the answer was the 500". Being an HttpException subclass is not itself a status:
             // a vendor `@throws` of one this build cannot read says no more about the API than any other
             // vendor plumbing, and calling it read would promote it to a Signal with nothing behind it.
-            $status = $this->httpStatus($fqcn, $node, $scope);
+            $read = $this->httpStatus($fqcn, $node, $scope, $frame);
 
-            return ['status' => $status, 'fellBack' => $status === null];
+            return ['read' => $read, 'fellBack' => $read->isUnplaced()];
         }
 
-        return ['status' => 500, 'fellBack' => true]; // internal / unhandled
+        return ['read' => StatusRead::of(500), 'fellBack' => true]; // internal / unhandled
     }
 
     /**
      * What an `HttpException` subclass's status is here: the one the class pins on every instance, else the
      * one THIS throw builds it with — and where the throw carries no construction at all, the one every
-     * construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}). Null when
-     * none of them reads, which earns the class one diagnostic ({@see diagnostics()}).
+     * construction the class writes of itself agrees on ({@see HttpExceptionStatus::agreed()}). Where none of
+     * them reads, the answer carries the record of which fold gave up, which is what {@see diagnostics()}
+     * reports from.
      *
      * The order is what keeps the last of those honest. A site that DID present a construction has already
      * said what this response is, and a `throw new X($chosenAtRunTime)` that would not fold has said the
      * class's agreement is not it — so the class answers only where nothing at the site could.
      */
-    private function httpStatus(string $fqcn, Node $node, Scope $scope): ?int
+    private function httpStatus(string $fqcn, Node $node, Scope $scope, Frame $frame): StatusRead
     {
         // The class's own file now decides what this route publishes, so it joins the dependency set.
         $this->dependOn($this->httpExceptionStatus->filesFor($fqcn));
 
         $status = $this->httpExceptionStatus->pinned($fqcn);
+        $reason = UnreadStatusReason::DynamicConstruction;
         if ($status === null) {
             $site = $this->atThrowSite($fqcn, $node, $scope);
             if ($site['spoke']) {
@@ -560,20 +599,29 @@ final class ThrowAnalyzer
                 $agreement = $this->httpExceptionStatus->agreed($fqcn);
                 $status = $agreement['status'];
                 $this->dependOn($agreement['files']);
+                $reason = UnreadStatusReason::UnstatedByClass;
             }
         }
 
-        // Only where the author can act. A vendor exception's status is unreadable for a reason no one
-        // reading the notice owns, and the remedy it names is an edit to `vendor/` — the non-actionable
-        // firing that trains people to ignore the channel and takes the useful notices with it.
-        if ($status === null && $this->declaredInProject($fqcn)) {
-            $this->unreadStatuses[$fqcn] = true;
+        if ($status !== null) {
+            return StatusRead::of($status);
         }
 
-        return $status;
+        // A class declared outside the project answers for none of the above: this build never opened the
+        // declarations that would have stated a status, so what the SITE did says nothing about why. The
+        // remedy for that one is an edit to code the reader does not own, which is why its reason carries
+        // none — but it is recorded like every other, because the document publishes its 500 either way.
+        $ownClass = $this->declaredInProject($fqcn);
+
+        return $this->recorded(StatusRead::unread(new UnreadStatus(
+            $fqcn,
+            $ownClass ? $reason : UnreadStatusReason::ForeignClass,
+            $frame->location,
+            $ownClass,
+        )));
     }
 
-    /** Whether the exception class itself is the application's, which is who a diagnostic can address. */
+    /** Whether the exception class itself is the application's, which is whose declarations were read. */
     private function declaredInProject(string $fqcn): bool
     {
         return $this->reflectionProvider->hasClass($fqcn)

@@ -613,6 +613,24 @@ Where nothing folds, the status is null — "an HTTP error whose status did not 
 therefore not automatically a Signal: `ThrowSignal` demotes a foreign declaration whose status nothing
 could read, HttpException subclass or otherwise.
 
+**One reading, so the two conditions cannot disagree.** A status is read as a `StatusRead`: the number the
+code states, or an `UnreadStatus` saying which fold gave up, where the `throw` is written and whether the
+code the fold read is the application's own. The pairing is the invariant — the constructor is private and
+neither named constructor can build "no status" with nothing to report — because a null hint is exactly what
+the adapter keys at `FrameworkExceptionTable::UNPLACED_STATUS`, and the condition that PUBLISHES that
+response and the condition the build can REPORT on must be one fact rather than two readers agreeing.
+They were two, and they disagreed: the report was gated on the exception CLASS being declared in the
+project, which is not the file every fold reads. `abort($status)` raises the framework's own
+`HttpException`, so a status chosen at run time published the unplaced 500 and named nothing, while the
+expression that would not fold was a line of the application's own code with the constant it wanted
+missing from it. `UnplacedStatusReconciliationTest` holds the two against each other over the whole
+fixture controller, with a hand-written ledger of the rows nobody can act on, so a new silence fails
+until somebody records why.
+
+Actionability is decided once, after the record, off the file the fold READ — never off where the exception
+is declared. The reasons with no remedy anyone owns (`ForeignClass`: a class whose declarations are outside
+the project, so this build never opened them) are recorded and not reported.
+
 **The `inference.http-exception-status-unread` notice.** Where it fires is what earns it its place. The
 firing population was measured against one real application's 47 `HttpException` subclasses: reading only
 what a class pins on ITSELF left 10 unread, and 9 of those were the static-factory idiom — correct
@@ -624,8 +642,19 @@ authors had each written the status exactly once, in the class's only factory, a
 being reached by a throw point that carried no construction — nothing they could have changed would have
 helped, because the fold was never asked. What remains is the part an author CAN act on: a status chosen at
 run time, a construction behind an unreadable spread, a factory that builds the class two ways. The notice
-is gated on the exception class being the project's, because the remedy it names is an edit to the class —
-advice nobody can take for a class they do not own.
+is gated on the code the fold read being the project's, because the remedy it names is an edit to that code
+— advice nobody can take for a file they do not own. Measured over the fixture controller after the
+widening: 11 unplaced statuses reported, 1 silent (Symfony's own `ConflictHttpException`, whose status is
+written in a `vendor/` constructor whose body PHPStan strips), and the two firings the widening added are
+both `abort($chosen)`, where the constant the notice asks for goes on the line it names.
+
+And the notice is where the CAUSE lives, because the provenance trail has nowhere to put it: a
+contribution records a producer, a rung, a value and one source, so it can say the `fallback` rung
+published the 500 at the action's line and cannot say which exception, or which fold gave up. So the
+notice names all three — exception, `throw` site, reason — and the site it names is the LAST frame of the
+throw's own call chain, which is the same code the response's provenance is built from.
+`docuccino:explain` prints the operation's diagnostics under its trail, which is what joins the two
+halves on one screen.
 
 Result model: `ThrownException{exceptionFqcn, httpStatusHint: ?int, callChain: list<Frame>,
 confidence: certain|declared|likely, disposition: signal|internal|dropped}` —
