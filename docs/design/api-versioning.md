@@ -77,9 +77,15 @@ So the unit is one registered change carrying all three, ordered within a versio
 
 ### The declarative half must be statically foldable
 
-**Docuccino executes nothing.** The declarative half therefore has to be readable without running it.
-A closure over an array is not — and that is the shape every existing Laravel migrations package uses,
-which is why there is nothing in the ecosystem to compile today.
+**Docuccino does not run the application to read a change.** The declarative half therefore has to be
+readable without running it. A closure over an array is not — and that is the shape every existing
+Laravel migrations package uses, which is why there is nothing in the ecosystem to compile today.
+
+"Executes nothing" would overstate it, and the overstatement is the kind that stops the next reader
+writing a guard. An attribute argument must be a constant expression, so a closure cannot be written
+there; `new` can be, and its constructor runs when the attribute is instantiated. The scalar-only
+signatures are a type guard, not an execution guard — stated in full at
+`Laravel\Routing\AttributeCollector`, which is the one place an attribute is materialised.
 
 Foldability is requirement one on the vocabulary, not an ergonomic detail discovered later. The Query
 Builder integration already constant-folds through helper methods several calls deep, so this is known

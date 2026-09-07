@@ -162,7 +162,7 @@ Both tools let you correct what was extracted and keep the correction: Scribe by
 [OpenAPI Overlay](/laravel/guides/customizing-output/). [Where Scribe is
 stronger](#where-scribe-is-stronger) covers the bottom four rows in detail.
 
-The three contract-testing rows are the other side of "never executes your code". Docuccino does not
+The three contract-testing rows are the other side of never running your endpoints. Docuccino does not
 run your endpoints to *capture* a response the way Scribe does — but your test suite already runs them,
 so it holds that traffic to the generated document instead, reports which documented endpoints the
 suite never touched, and can record those responses into committed files the build publishes as

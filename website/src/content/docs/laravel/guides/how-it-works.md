@@ -4,7 +4,8 @@ description: The Docuccino pipeline — route discovery, static analysis that ne
 ---
 
 Docuccino turns your application into documentation in five stages. The most important thing to know
-about that pipeline is what it **doesn't** do: it never executes your application code.
+about that pipeline is what it **doesn't** do: it never runs your application to find out what it
+does.
 
 <figure>
 <svg viewBox="0 0 960 120" role="img" aria-label="Pipeline: route discovery, then static analysis, then UIR, then emitters, then viewer" style="width:100%;height:auto;font-family:inherit">

@@ -6,8 +6,8 @@ description: Document path, query, header and cookie parameters, request bodies,
 import { Card, CardGrid, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
 Docuccino documents everything an endpoint accepts — path parameters, query parameters, and request
-bodies — by reading your routes and validation rules **statically**. It never executes your rules or
-constructs your objects, so generating docs has no side effects.
+bodies — by reading your routes and validation rules **statically**. It never runs a rule and never
+dispatches a request, so generating docs has no side effects.
 
 <CardGrid>
 	<Card title="Path parameters" icon="seti:default">From the route template and route-model bindings.</Card>

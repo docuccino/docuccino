@@ -1118,7 +1118,8 @@ contract-testing observer seam (`Laravel\Testing\Contracts\ContractObserver`) al
 request, the response and the matched operation. `Laravel\Testing\ExampleRecorder` writes each
 observed exchange to a committed file per operation, and `Laravel\Extensions\RecordedExamplesExtension`
 reads it back at build time. Reading a committed file is ALL the build does — no test runs, no route is
-dispatched, no database is opened — so "Docuccino never executes your application code" is unchanged.
+dispatched, no database is opened — so the pipeline's argument, that the build reads files and runs
+none of the application's endpoints, is unchanged.
 The file format, the store, the redaction and the whole-document audit are core
 (`Core\Examples\*`): the input is a data file rather than Laravel code, exactly as for the content
 subsystem. Five decisions carry the feature:
