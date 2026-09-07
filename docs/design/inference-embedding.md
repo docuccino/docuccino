@@ -629,12 +629,9 @@ to a missing status. A null hint is exactly what the adapter keys at
 `FrameworkExceptionTable::UNPLACED_STATUS`, so the condition that PUBLISHES that response and the condition
 the build can REPORT on are one fact rather than two readers agreeing. They were two, and they disagreed:
 the report was gated on the exception CLASS being declared in the project, which is not the file every fold
-reads. `abort($status)` raises the framework's own
-`HttpException`, so a status chosen at run time published the unplaced 500 and named nothing, while the
-expression that would not fold was a line of the application's own code with the constant it wanted
-missing from it. `UnplacedStatusReconciliationTest` holds the two against each other over the whole
-fixture controller, with a hand-written ledger of the rows nobody can act on, so a new silence fails
-until somebody records why.
+reads. `abort($status)` raises the framework's own `HttpException`, so a status chosen at run time published
+the unplaced 500 and named nothing, while the expression that would not fold was a line of the application's
+own code with the constant it wanted missing from it.
 
 **The reason is what happened at the site; actionability is the file the fold READ.** The two come from two
 places on purpose. A `throw new HttpException($chosenAtRunTime)` written in a controller is the same defect
@@ -645,6 +642,14 @@ that forwards no status slot (Symfony's own `ConflictHttpException`, whose numbe
 constructor PHPStan strips), a factory this build may not read, or a throw point presenting no construction
 at all. There the fold really was reading the class's declarations, and `ForeignClass` — the one reason with
 no remedy anyone owns — belongs to exactly that branch. Those firings are recorded and not reported.
+
+`UnplacedStatusReconciliationTest` holds the two conditions against each other over the whole fixture
+controller, in both directions: nothing published silently, and nothing reported that the document does not
+publish. Its hand-written ledger of the rows nobody can act on is itself checked — an entry is only
+excusable while the application does not declare the class, read off the fixture's own autoload map — so a
+row cannot be closed by pasting a sentence. That check is also why the ledger's unit is the class where the
+notice's is the site: what it proves is a property of the class, which every throw site reaching it
+inherits.
 
 **The `inference.http-exception-status-unread` notice.** Where it fires is what earns it its place. The
 firing population was measured against one real application's 47 `HttpException` subclasses: reading only
