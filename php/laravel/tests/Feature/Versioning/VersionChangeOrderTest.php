@@ -116,8 +116,15 @@ it('applies both request verbs of one change without complaint, which the other 
  * Nothing else in the vocabulary can name a parameter, so there is no target it could rot and none that
  * could rot its own — which is a claim worth executing rather than leaving as a sentence, because it is
  * the reason the rule was not re-derived for it.
+ *
+ * One order runs, and there is no second one to run: `VerbOrder::read()` is the only thing that decides
+ * it, an `AttributeSet` has already lost the order the author wrote by the time anything can ask, and
+ * this verb reaches `operation.parameters[]` while its neighbour reaches `components.schemas` — disjoint
+ * positions, so there is nothing an order could change. What this row proves is that both verbs of one
+ * change arrive; the executed guard for the ORDER is the two pairs above, which go red when the halves
+ * of `read()` are swapped.
  */
-it('applies a parameter rename and a schema rename on one change, in either order', function (): void {
+it('applies a parameter rename and a schema rename declared on one change, each to its own half', function (): void {
     /** @var Router $router */
     $router = app('router');
     $router->get('api/versioned-search', [VersionedFormController::class, 'search']);
