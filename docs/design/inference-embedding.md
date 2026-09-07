@@ -664,6 +664,10 @@ whose status is written in a `vendor/` constructor whose body PHPStan strips), a
 widening added are `abort($chosen)`, `abort_if($flag, $chosen)` and `throw new HttpException($chosen, …)` —
 the same defect at three spellings, where the constant the notice asks for goes on the line it names.
 
+The sentence leaves the engine publishable, through the same `MessagePaths` relativiser every other message
+this engine composes goes through: the site comes straight off the analyser as an absolute path, the
+adapter scrubs again on the way into a fragment, and an engine is a contract another host can call.
+
 And the notice is where the CAUSE lives, because the provenance trail has nowhere to put it: a
 contribution records a producer, a rung, a value and one source, so it can say the `fallback` rung
 published the 500 at the action's line and cannot say which exception, or which fold gave up. So the

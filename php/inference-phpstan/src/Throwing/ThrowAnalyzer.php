@@ -11,6 +11,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
+use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Support\Fqcn;
 use Docuccino\Inference\PhpStan\Analysis\FileAnalyzer;
 use Docuccino\Inference\PhpStan\Support\ProjectFilter;
@@ -68,6 +69,9 @@ final class ThrowAnalyzer
         private readonly CalleeResolver $calleeResolver,
         private readonly HttpExceptionStatus $httpExceptionStatus,
         private readonly FactoryStatus $factoryStatus,
+        // A diagnostic leaves here publishable, like every other one the engine composes: the file a
+        // notice names is a raw analyser path, and an engine is a contract another host can call.
+        private readonly MessagePaths $labels,
         // No default: the budget is `EngineConfig::$throwDepth` and nowhere else. A second copy here
         // was dead — the one construction always passes the config's — and it read as the real one, so
         // changing it moved nothing while looking like it had.
@@ -103,7 +107,8 @@ final class ThrowAnalyzer
      *
      * Every unread status is RECORDED ({@see unread()}); this is where the ones whose remedy nobody
      * owns are dropped, so the actionability decision has one home and cannot be mistaken for the
-     * publish condition.
+     * publish condition. The sentence names an analyser path, so it goes through {@see $labels} on the
+     * way out — the same crossing every other message this engine composes makes.
      *
      * @return list<Diagnostic>
      */
@@ -122,7 +127,7 @@ final class ThrowAnalyzer
             $diagnostics[] = new Diagnostic(
                 severity: Severity::Info,
                 code: 'inference.http-exception-status-unread',
-                message: $unread->sentence(),
+                message: $this->labels->relative($unread->sentence()),
                 help: $unread->reason->remedy(),
             );
         }

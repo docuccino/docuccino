@@ -68,8 +68,13 @@ it('names the throw site and the fold that gave up, not the line the route enter
  * The site the notice names is the last frame of the throw's own call chain — the same code the
  * response's provenance is built from — so the two halves of the answer meet at one file and line
  * rather than at two the reader has to relate.
+ *
+ * And it names it PUBLISHABLY. A diagnostic is embedded in the document, so the run the analyser hands
+ * back — an absolute path off the machine that ran it — may not leave the engine as it stands. The
+ * adapter scrubs what crosses into a fragment as well, but an engine is a contract another host can
+ * call, so the guarantee is asserted here rather than inherited from a caller.
  */
-it('names the same site the throw itself carries', function (string $method): void {
+it('names the same site the throw itself carries, without naming the machine', function (string $method): void {
     $analysis = throwsAnalysis($method);
 
     /** @var list<array<string, mixed>> $throws */
@@ -81,9 +86,16 @@ it('names the same site the throw itself carries', function (string $method): vo
     /** @var list<array{symbol: string, location: array{file: string, line: int}}> $chain */
     $chain = $unplaced[0]['callChain'];
     $deepest = $chain[count($chain) - 1]['location'];
+    $relative = str_replace(FixtureRunner::appRoot().'/', '', $deepest['file']);
+
+    // The identity the analyser carries really is absolute, so the row below is about a crossing that
+    // happens rather than about a path that was relative all along.
+    expect($deepest['file'])->toStartWith('/')
+        ->and($relative)->not->toStartWith('/');
 
     expect(unreadStatusDiagnostics($method)[0] ?? '')
-        ->toContain($deepest['file'].':'.$deepest['line']);
+        ->toContain($relative.':'.$deepest['line'])
+        ->not->toContain($deepest['file']);
 })->with(['deepUnreadHttpStatus', 'unreadHttpStatus', 'dynamicAbortStatus', 'dynamicVendorConstructionStatus'])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
