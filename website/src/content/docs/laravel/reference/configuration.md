@@ -644,11 +644,18 @@ with it.
 
 ### Data leakage
 
-The data-leakage pass checks two things.
+The data-leakage pass checks three things.
 
 **Property names.** A name that looks sensitive (`password`, `token`, `secret`, `api_key`, …) warns with
 its JSON pointer. Names normalize to lowercase alphanumerics, so `api_key`, `apiKey` and `API-KEY` are
 one token.
+
+**Parameter names.** The same heuristics read the name of every parameter your document publishes — an
+operation's own, a path item's shared ones, and `components.parameters`. Only `query` and `path`
+parameters are read: a URL is recorded in access logs, proxy logs, browser history and outbound
+`Referer` headers, which is what makes `?api_key=…` the well-known anti-pattern this warning is about.
+A `header` or `cookie` parameter is where a credential is *supposed* to travel, so neither warns. A
+parameter written as a `$ref` is reported once, at the component it points at.
 
 **Published values.** Every leaf under `example`, `examples`, `const`, `enum` and `default` is matched
 against known credential shapes — the check that catches a real secret folded out of a class constant
@@ -672,8 +679,8 @@ legitimate server URL).
 | Key | Default | Effect |
 | --- | --- | --- |
 | `enabled` | `true` | Turn the pass on/off. |
-| `allow` | `[]` | Safelist by property name or JSON pointer. Silences both kinds of finding; for a value, use the pointer. A **name** silences the lint only — the [response recorder](/laravel/documenting/examples/#credentials-never-reach-the-file) redacts by name regardless, and honours a pointer alone. |
-| `patterns` | built-in table | Extra token → label heuristics for **names**, merged over the built-in table (key = normalized token, matched when a name *contains* it). |
+| `allow` | `[]` | Safelist by property name, parameter name or JSON pointer. Silences all three kinds of finding; for a value, use the pointer. A **name** silences the lint only — the [response recorder](/laravel/documenting/examples/#credentials-never-reach-the-file) redacts by name regardless, and honours a pointer alone. |
+| `patterns` | built-in table | Extra token → label heuristics for **property and parameter names**, merged over the built-in table (key = normalized token, matched when a name *contains* it). |
 
 ### Descriptions
 
