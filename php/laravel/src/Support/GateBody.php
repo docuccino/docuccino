@@ -17,9 +17,21 @@ use ReflectionMethod;
  * implicit 403 asks of a `return true`-shaped gate, whether the gate is a FormRequest's `authorize()`
  * or the policy method behind a `can:` middleware.
  *
- * Three-valued because {@see Unread} is not an answer: the producers disagree about what to do with it,
- * and each states its own default at its own call site rather than having one baked in here.
- * `docs/design/defect-classes.md` §"One question, three answers" records the three rows.
+ * Three-valued because {@see Unread} is not one answer: the producers want opposite defaults for it and
+ * both are right, so each states its own at its own call site rather than having one baked in here.
+ * The three rows, stated here because nothing inside a single producer could say they differ:
+ *
+ *  - `ImplicitResponsesExtension`'s FormRequest arm takes the engine's answer alone ({@see analysed()})
+ *    and reads {@see Unread} as a gate that never refuses, so no 403 publishes. It decides whether to
+ *    PUBLISH an error, and an error nothing can throw is the cost of being wrong.
+ *  - The same extension's `can:` path takes both reads ({@see read()}) and reads {@see Unread} as a
+ *    gate that can refuse, so nothing is reported. It decides whether to REPORT on an error already
+ *    published, and an author invited to hide a real one is the cost of being wrong.
+ *  - `ActionAuthorizeResponsesExtension` does not read the body at all and publishes the 403 whenever
+ *    an `authorize()` exists — a question left unasked on purpose, rather than answered a third way.
+ *
+ * `docs/design/defect-classes.md` §"A partition that covers everything and agrees on nothing" is the
+ * class this was an instance of.
  */
 enum GateBody
 {

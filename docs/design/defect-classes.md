@@ -125,9 +125,22 @@ leaving, `not` leaving and the `contains` bounds decided it. So `maxItems: 2 →
 while `maxContains: 2 → 9` passed it — same document, same gate, same day. Three of the four wrong
 sites were pinned by tests whose comments asserted the behaviour was deliberate.
 
+The implicit `403` is the same shape one layer over. Three producers each ask whether an authorization
+gate's body could ever refuse, and each answered a body it could not read differently: the FormRequest
+arm asked the ENGINE and read silence as a gate that never refuses, `GateDenial` asked the SOURCE for a
+single literal `return true;` — a strictly weaker read, privately re-implemented — and read the same
+silence as a gate that CAN refuse, and the Laravel Actions arm asks nothing at all. Nothing said the
+three disagreed, and the weakest of them was a copy of the strongest. `GateBody` is the seam now, with
+the three rows written down in its own docblock; `GateBodyTest` is what recognises a producer that
+stops asking through it.
+
 *The tell.* One fact computed independently at more than one site, where the only guard holding the
 sites together reads their INPUTS. A second tell is prose: this rule was stated in five places, and
-three of those paragraphs certified behaviour the code did not have.
+three of those paragraphs certified behaviour the code did not have. Where the callers' defaults
+legitimately differ, the seam answers three-valued and each caller collapses it at its own call site —
+in the schema-diff case all four disagreeing sites were wrong, while in the gate case two opposite
+defaults are both right, because one decides whether to PUBLISH an error and the other whether to
+REPORT on one.
 
 *The fix that worked.* One function from the direction to the verdict, owned by the single reader of
 all three tables — and the tables return the DIRECTION rather than a pre-collapsed boolean, because a
@@ -329,33 +342,3 @@ consumer that has only a line an explicit ask that DECLINES when the line carrie
 degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
-
-## One question, three answers, none of them written down
-
-Three producers of the implicit `403` each ask whether an authorization gate's body could ever refuse,
-and each answers a body it cannot read differently. While each answer lived inside its own producer,
-nothing said the three disagreed, and the weakest of them was a private re-implementation of the
-strongest.
-
-*Instances.* `ImplicitResponsesExtension`'s FormRequest arm asked the ENGINE — several return
-statements, a folded branch, dependency files recorded on the way past — and treated "the engine said
-nothing" as a gate that never refuses, so no `403`. `GateDenial` asked the SOURCE for a single literal
-`return true;`, a strictly weaker read, and treated the same silence as a gate that CAN refuse, so no
-diagnostic. `ActionAuthorizeResponsesExtension` does not read the body at all and publishes the `403`
-whenever an `authorize()` exists.
-
-*The tell.* Two producers whose behaviour rests on the same predicate, where one of them spells the
-predicate out privately. The opposite defaults are not the defect — they are both right for their own
-caller, because one decides whether to PUBLISH an error and the other whether to REPORT on one, and the
-cost of being wrong runs opposite ways. The defect is that neither says so.
-
-*The fix that worked.* One `GateBody` seam owning the question and answering three-valued —
-`AlwaysAllows`, `CanDeny`, `Unread` — with both reads behind it and each caller stating its own `Unread`
-default in one visible line at its own call site. The FormRequest arm takes the engine's answer alone
-(`analysed()`); the `can:` path takes both (`read()`), because the analyser is a dev-only install and a
-check that quietly stopped working without it would be a feature only the docs machine has. Inside
-`read()` the narrow read goes FIRST, which is the non-obvious half: where it answers at all it is
-certain, and the engine reports a failed analysis as a return of unknown type — indistinguishable from a
-body that really does return something else — so letting the wider reader overrule the certain one turns
-an analyser having a bad day into a check that silently stops firing. The third producer's row is that it
-asks nothing, said in its own docblock rather than left to be noticed.

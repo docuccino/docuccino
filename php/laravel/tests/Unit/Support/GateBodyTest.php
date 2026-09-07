@@ -112,10 +112,8 @@ it('reaches past the source read with what the analyser proved', function (): vo
 });
 
 it('keeps the certain answer when the analyser contradicts it', function (): void {
-    // The engine reports a FAILED analysis as a return of unknown type, which reads exactly like a body
-    // that really does return something else. A single literal `return true;` is certain, so it is not
-    // something a wider reader may overrule — otherwise an analyser having a bad day silently turns the
-    // check off for every application that installed one.
+    // The row that holds the ordering rule stated on GateBody::read(): an analyser having a bad day
+    // must not be able to turn the check off.
     $reflected = gateBodyMethod('Bodies', 'allows');
     $engine = new StubTypeEngine([gateBodyRef($reflected)->symbol() => new ActionAnalysis(returns: [
         new ReturnSite(new UnknownT('analysis failed'), new SourceLocation(gateBodyFile(), 1)),

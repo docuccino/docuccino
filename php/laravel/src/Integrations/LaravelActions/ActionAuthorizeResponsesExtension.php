@@ -26,8 +26,7 @@ use ReflectionClass;
  * The third producer of an implicit 403, and the one that does not read the gate's body at all: an
  * action's `authorize()` is dispatched by the package's own decorator, and whether the body could
  * refuse is a question this deliberately leaves unasked rather than answering it differently from the
- * other two. The three rows are stated together in `docs/design/defect-classes.md`
- * §"One question, three answers", where the seam the other two ask through is named.
+ * other two. The `GateBody` seam the other two ask through states all three rows.
  */
 final class ActionAuthorizeResponsesExtension implements OperationExtension
 {
