@@ -70,7 +70,7 @@ All 40 attributes, grouped by what they do:
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
 | [`#[RenamedRequestField]`](#renamedrequestfield) | Declare a request field that older versions accept under another name. |
-| [`#[RenamedParameter]`](#renamedparameter) | Declare a query, path, header or cookie parameter that older versions call something else. |
+| [`#[RenamedParameter]`](#renamedparameter) | Declare a query, header or cookie parameter that older versions call something else. |
 | [`#[MadeResponseFieldRequired]`](#maderesponsefieldrequired) | Declare a response field that older versions did not promise to send. |
 | [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
 | [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
@@ -1318,17 +1318,25 @@ public function __construct(
 )
 ```
 
-Declares that a query, path, header or cookie parameter went by another name in the versions before the
+Declares that a query, header or cookie parameter went by another name in the versions before the
 change. `to` is the name your code takes today, `from` the name the older document publishes.
 
 It names no class, and that is the whole difference from the two field renames: a parameter stands on
 the **operation** rather than in a body — `?search=` is a member of a request line, not of a shape — so
 where it travels and what it is called is all there is to name.
 
-`in` is one of `query`, `path`, `header` or `cookie`, in any case. Anything else names no location
-OpenAPI has, and is reported as `versioning.change-invalid` rather than guessed at: two operations can
-carry `page` in the query and in the path, so a rename that widened to "any location" would move a
-parameter you never named.
+`in` is one of `query`, `header` or `cookie`, in any case. Anything else names no location OpenAPI has,
+and is reported as `versioning.change-invalid` rather than guessed at: two operations can carry `page`
+in the query and in the path, so a rename that widened to "any location" would move a parameter you
+never named.
+
+`in: 'path'` is refused, with the same `versioning.change-invalid`. A path parameter is named twice — on
+the parameter and again as the `{expression}` of the path it stands under — and a change can address
+only the first, so moving it would publish an expression naming no parameter beside a parameter naming
+no expression: invalid in both directions, and a generated client loses the operation or its URL
+builder. There is nothing lost by refusing it, either: nothing on the wire carries a path parameter's
+name — a client sends `/invoices/42` — so no older version ever accepted a different one. Where the URL
+itself changed, that is an older *route*, and the honest way to describe one is to keep serving it.
 
 ```php
 #[ApiVersionChange(

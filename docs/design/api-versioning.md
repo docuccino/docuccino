@@ -413,6 +413,16 @@ half of every rename in a real version history undeclarable. `#[RenamedRequestFi
   query and in the path, so a rename that guessed would move a parameter the author never named. The
   four locations and the case-folding are stated once, shared with `#[IgnoreParam]`'s reading of the
   same word.
+- **`path` is one of the four locations and is not one of the renameable ones.** A path parameter's name
+  is stated TWICE — on the parameter and again as the `{expression}` of the path key it stands under —
+  and only the parameter is a node a version change addresses, so renaming it alone publishes an
+  expression naming no parameter beside a parameter naming no expression: invalid in both directions,
+  and a generated client loses the operation or its URL builder. Refused rather than made to work, and
+  the reason is not the cost of rewriting the template but that there is nothing to describe — nothing
+  on the wire carries a path parameter's name (a client sends `/things/42`), so no older version ever
+  accepted a different one. Rewriting the key would also re-spell the path every identity under that
+  operation is minted from, so the older document's operations would pair with nothing in the newer
+  one's diff: a version history reading as every operation removed and re-added.
 - **No example rewriter was needed, and one half of that was worth checking.** A request-body rename
   moves a key in `requestBody.content.*.example`, which `ChangedFieldExamples`' OAS descent already
   reaches — so the request rename inherited the rewriter whole, and what it owed was a test that the
@@ -431,8 +441,8 @@ half of every rename in a real version history undeclarable. `#[RenamedRequestFi
   path item through a `$ref` make both operations one node, so renaming its parameter would rename it
   for the path the scope excluded — the widening a scope exists to prevent. Refused for the same reason
   a private copy of a schema cannot be written there, under the same code, and it is why the parameter
-  walk is per NODE rather than per site: two sites over one node would otherwise apply the verb twice
-  and report the second pass as a rotted declaration.
+  walk is per NODE rather than per site: one node is one declaration and one edit, so it owes one
+  report, and asking it once per site names two operations for a refusal fixed once.
 - **The contract check is at its most falsifiable here.** A response verb is caught by a response that
   came out wrong; a request rename is caught by the application REFUSING a request its own document
   calls valid — a client locked out rather than mildly misinformed, and the failure a version history

@@ -290,7 +290,7 @@ to no class. There are seven:
 | --- | --- | --- |
 | [`#[RenamedResponseField]`](/laravel/reference/attributes/#renamedresponsefield) | this response field used to be called something else | publishes it under the old name |
 | [`#[RenamedRequestField]`](/laravel/reference/attributes/#renamedrequestfield) | this request field used to be called something else | accepts it under the old name |
-| [`#[RenamedParameter]`](/laravel/reference/attributes/#renamedparameter) | this query, path, header or cookie parameter used to be called something else | documents it under the old name |
+| [`#[RenamedParameter]`](/laravel/reference/attributes/#renamedparameter) | this query, header or cookie parameter used to be called something else | documents it under the old name |
 | [`#[MadeResponseFieldRequired]`](/laravel/reference/attributes/#maderesponsefieldrequired) | this response field is now always sent | leaves it out of `required` |
 | [`#[MadeResponseFieldOptional]`](/laravel/reference/attributes/#maderesponsefieldoptional) | this response field can now be absent | names it in `required` |
 | [`#[MadeRequestFieldOptional]`](/laravel/reference/attributes/#maderequestfieldoptional) | this request field is now optional | names it in `required`, and refuses a body without it |
@@ -331,9 +331,16 @@ field renamed on both sides therefore takes one declaration per side.
 
 `#[RenamedParameter]` is the one verb that names no class, because there is no class to name: a
 parameter stands on the **operation** rather than in a body, so where it travels and what it is called
-is all there is. `in:` is one of `query`, `path`, `header` or `cookie` — anything else names no location
-OpenAPI has and is refused, rather than widened to "wherever a parameter of that name turns up", which
-would move a `page` in the path when you meant the one in the query.
+is all there is. `in:` is one of `query`, `header` or `cookie` — anything else names no location OpenAPI
+has and is refused, rather than widened to "wherever a parameter of that name turns up", which would
+move a `page` in the path when you meant the one in the query.
+
+A **path** parameter is the one location this cannot move, and `in: 'path'` is refused with a reason. Its
+name is written twice — on the parameter and again as the `{expression}` of the path it stands under —
+and a change can address only the first, so moving it would publish an expression naming no parameter
+beside a parameter naming no expression. Nothing is lost by refusing it: a client sends `/invoices/42`
+and no name travels with it, so no older version ever accepted a different one. Where the URL itself
+changed you have an older *route*, and the honest way to describe one is to keep serving it.
 
 ```php
 #[ApiVersionChange(

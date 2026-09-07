@@ -80,7 +80,7 @@ function safelistExplainedRawSelectorReads(): array
         'php/laravel/src/Versioning/ApiVersionTransformer.php::applyToOperations' => 'chooses every operation or the matched ones, then iterates the selectors into namesAny()',
         // Whether the change is scoped, to say whether the parameter is missing from the whole document
         // or only from the operations the scope names. A wording, not a match.
-        'php/laravel/src/Versioning/ParameterRenameEdit.php::missing' => 'words the report for a scoped change or an unscoped one',
+        'php/laravel/src/Versioning/ParameterRenameEdit.php::unreached' => 'words the report for a scoped change or an unscoped one',
     ];
 }
 

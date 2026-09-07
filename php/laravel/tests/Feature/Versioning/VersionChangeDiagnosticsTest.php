@@ -55,6 +55,39 @@ it('says which declaration cannot be applied as it is written', function (): voi
         ->and($messages)->not->toContain('NotAChange');
 });
 
+/*
+ * One author-written word, read once. Every verb normalises its declaration before anything compares or
+ * stores it, and this pair is what made that worth stating: read as typed, `from: 'title'` and
+ * `to: ' title'` are two different names, so the self-rename refusal let them past — and the change
+ * then arrived at the other end as a collision with a field nobody had renamed.
+ */
+it('refuses a rename whose two ends are one name with room around it', function (): void {
+    $diagnostics = versioningDiagnostics('tests/Fixtures/Versioning/PaddedSelfRename');
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))
+        ->toBe(['versioning.change-invalid', 'versioning.change-invalid']);
+
+    $messages = implode("\n", array_map(static fn (Diagnostic $d): string => $d->message, $diagnostics));
+
+    // The field verb and the parameter verb both, because the normalisation is one place for every verb.
+    expect($messages)->toContain('renames "title" to itself')
+        ->toContain('renames "search" to itself');
+});
+
+/*
+ * And the half that proves the normalisation is applied rather than only compared: a declaration padded
+ * on the class AND on both ends of the rename still names what it means. Stored as typed, the class
+ * would mint an identity no schema carries and the field would match no property.
+ */
+it('reads a padded declaration as the names it means', function (): void {
+    expect(versioningDiagnostics('tests/Fixtures/Versioning/PaddedRename'))->toBe([]);
+
+    $schema = generateDocument(key: 'v')->document->toArray()['components']['schemas']['FormData'];
+
+    expect(array_keys($schema['properties']))->toBe(['id', 'name', 'publishedAt'])
+        ->and($schema['required'])->toBe(['id', 'name']);
+});
+
 it('refuses a rename that would collapse two published fields into one', function (): void {
     $diagnostics = versioningDiagnostics('tests/Fixtures/Versioning/Occupied');
 

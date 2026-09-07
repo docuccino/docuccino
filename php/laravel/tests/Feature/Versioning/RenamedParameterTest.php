@@ -28,6 +28,7 @@ beforeEach(function (): void {
     $router = app('router');
     $router->get('api/versioned-search', [VersionedFormController::class, 'search']);
     $router->post('api/versioned-forms', [VersionedFormController::class, 'store']);
+    $router->get('api/versioned-forms/{formId}', [VersionedFormController::class, 'locate']);
 });
 
 it('publishes a query parameter under the name older versions took', function (): void {
@@ -155,6 +156,33 @@ it('refuses to rename a parameter onto a name the operation already declares', f
 });
 
 /*
+ * A rename that applies to one operation and is refused by another. Two operations declaring one
+ * parameter are two declarations rather than two copies of one node, so the answers cannot be collapsed
+ * into the strongest of them: collapsing them left `GET /api/versioned-search` renamed, the operation
+ * that still takes both spellings at today's name, and NOTHING said about a version document that spells
+ * one logical parameter two ways.
+ */
+it('reports the operation a rename was refused for, even where another took it', function (): void {
+    /** @var Router $router */
+    $router = app('router');
+    $router->get('api/versioned-search-legacy', [VersionedFormController::class, 'searchEitherWay']);
+
+    $diagnostics = versioningDiagnostics('tests/Fixtures/Versioning/RenamedParam', route: 'api/versioned-*');
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe(['versioning.change-invalid'])
+        ->and($diagnostics[0]->message)->toContain('the operation "GET /api/versioned-search-legacy" already declares a query parameter called "q"')
+        ->toContain('collapse two parameters into one');
+
+    $document = generateDocument(key: 'v')->document->toArray();
+
+    // The one it could take, taken; the one it could not, left at the name the code gives it.
+    expect(array_column($document['paths']['/api/versioned-search']['get']['parameters'], 'name'))
+        ->toBe(['q', 'trace_id'])
+        ->and(array_column($document['paths']['/api/versioned-search-legacy']['get']['parameters'], 'name'))
+        ->toBe(['search', 'q']);
+});
+
+/*
  * `in:` is a closed set, and a value outside it names nothing to look for. It cannot be widened to "any
  * location" either: two operations can carry `page` in the query and in the path, so a rename that
  * guessed would move a parameter the author never named.
@@ -166,6 +194,46 @@ it('refuses an `in:` that names no parameter location, quoting the ones that do'
         ->and($diagnostics[0]->message)->toContain('`in: "body"`, which names no parameter location')
         ->and($diagnostics[0]->help)->toContain('`cookie`, `header`, `path`, `query`')
         ->toContain('spelled in any case');
+});
+
+/*
+ * The three locations a rename can move, against one operation that declares a parameter in all four.
+ * For these the name stands in exactly one place — the parameter itself — so moving it is the whole of
+ * the change, and each is read off a real build rather than off the verb agreeing with itself about a
+ * location string.
+ */
+it('renames a parameter in the query, in a header and in a cookie', function (): void {
+    expect(versionedLocateParameters('tests/Fixtures/Versioning/RenamedParamEveryLocation'))
+        ->toBe(['path:formId', 'query:columns', 'header:X-Trace-Id', 'cookie:sid'])
+        ->and(versioningDiagnostics('tests/Fixtures/Versioning/RenamedParamEveryLocation', route: 'api/versioned-forms/*'))
+        ->toBe([]);
+});
+
+/*
+ * And the fourth, which is refused. A path parameter's name is stated TWICE — on the parameter and as
+ * the `{expression}` of the path it stands under — and a version change can address only the first, so
+ * moving it alone publishes `/api/versioned-forms/{formId}` beside a parameter called `identifier`: an
+ * expression naming no parameter next to a parameter naming no expression, which is invalid in both
+ * directions and costs a generated client the operation or its URL builder.
+ *
+ * Refused rather than rewritten, because nothing on the wire carries the name at all — a client sends
+ * `/api/versioned-forms/3` — so no older version accepted another one, and re-spelling the template
+ * would re-spell the path every identity under that operation is minted from.
+ */
+it('refuses to rename a path parameter, and leaves the template and the parameter agreeing', function (): void {
+    $diagnostics = versioningDiagnostics('tests/Fixtures/Versioning/RenamedParamInPath', route: 'api/versioned-forms/*');
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe(['versioning.change-invalid'])
+        ->and($diagnostics[0]->message)->toContain('renames the path parameter "formId"')
+        ->toContain('named by the URL template it stands under')
+        ->and($diagnostics[0]->help)->toContain('Nothing on the wire carries a path parameter\'s name')
+        ->toContain('`query`, `header` or `cookie`');
+
+    $document = generateDocument(key: 'v')->document->toArray();
+
+    // Nothing half-written: the path still states the expression the parameter beside it declares.
+    expect(array_keys($document['paths']))->toBe(['/api/versioned-forms/{formId}'])
+        ->and(versionedLocateParameters('tests/Fixtures/Versioning/RenamedParamInPath'))->toContain('path:formId');
 });
 
 it('refuses a parameter rename with an empty end, or one onto itself', function (string $dir, string $problem): void {
