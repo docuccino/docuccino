@@ -96,11 +96,11 @@ final class VerbOrder
         }
 
         foreach ($attributes->all(RenamedResponseField::class) as $declaration) {
-            $verbs[] = self::rename($declaration->schema, $declaration->from, $declaration->to, SchemaFacet::Response, '#[RenamedResponseField]', $class, $diagnostics);
+            $verbs[] = self::rename($declaration, SchemaFacet::Response, '#[RenamedResponseField]', $class, $diagnostics);
         }
 
         foreach ($attributes->all(RenamedRequestField::class) as $declaration) {
-            $verbs[] = self::rename($declaration->schema, $declaration->from, $declaration->to, SchemaFacet::Request, '#[RenamedRequestField]', $class, $diagnostics);
+            $verbs[] = self::rename($declaration, SchemaFacet::Request, '#[RenamedRequestField]', $class, $diagnostics);
         }
 
         foreach ($attributes->all(RenamedParameter::class) as $declaration) {
@@ -159,17 +159,21 @@ final class VerbOrder
     }
 
     /**
+     * The declaration itself rather than its three strings: `from` and `to` are adjacent, same-typed
+     * and transposable, and a caller spelling them the wrong way round would declare the reverse of the
+     * change with nothing to catch it.
+     *
      * @param  list<Diagnostic>  $diagnostics
      */
-    private static function rename(string $schema, string $from, string $to, SchemaFacet $facet, string $declaration, string $class, array &$diagnostics): ?RenameEdit
+    private static function rename(RenamedResponseField|RenamedRequestField $rename, SchemaFacet $facet, string $declaration, string $class, array &$diagnostics): ?RenameEdit
     {
-        $pair = self::renameable($from, $to, $declaration, $class, $diagnostics);
+        $pair = self::renameable($rename->from, $rename->to, $declaration, $class, $diagnostics);
 
         if ($pair === null) {
             return null;
         }
 
-        return new RenameEdit(trim($schema), $pair['from'], $pair['to'], $facet);
+        return new RenameEdit(trim($rename->schema), $pair['from'], $pair['to'], $facet);
     }
 
     /**

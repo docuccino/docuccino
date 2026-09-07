@@ -407,21 +407,28 @@ it('never pairs a parameter that went in one location with one that arrived in a
         ->and($plan->gaps)->toContain('No verb declares a parameter a version ADDED: older versions simply do not accept it, which is what their documents already say.');
 });
 
+/*
+ * And the ambiguous case is a different sentence from the unpaired one, because it is a different fact.
+ * Two that went and one that arrived: the one arrival wears the shape of BOTH departures, so nothing
+ * here names a single pair. An author told "nothing that arrived beside it wears the same shape" —
+ * while looking at a diff where two things did, which is exactly why nothing was written — would go
+ * looking for a shape difference that is not there.
+ */
 it('says which parameter differences it could read no rename out of', function (): void {
-    // Two that went and one that arrived: the one arrival wears the shape of both departures, so
-    // nothing here names a single pair and guessing would rename the wrong parameter in every document
-    // derived from this version.
     $plan = scaffoldPlan(
         scaffoldParameterDocument(['forms' => [['query', 'q'], ['query', 'term']]]),
         scaffoldParameterDocument(['forms' => [['query', 'search']]]),
     );
 
     expect(scaffoldClasses($plan))->toBe([])
-        ->and($plan->gaps)->toContain('The query parameter `q` went and nothing that arrived beside it wears the same shape, so no rename could be read out of it — and no verb declares a parameter a version simply stopped accepting.');
+        ->and($plan->gaps)->toContain('The query parameter `q` went and more than one that arrived beside it wears the same shape, so nothing here can tell which — declare the rename yourself, or leave it: no verb declares a parameter a version simply stopped accepting.')
+        ->and($plan->gaps)->toContain('The query parameter `term` went and more than one that arrived beside it wears the same shape, so nothing here can tell which — declare the rename yourself, or leave it: no verb declares a parameter a version simply stopped accepting.')
+        // And not the sentence for a departure nothing arrived beside, which is what it used to say.
+        ->and(implode("\n", $plan->gaps))->not->toContain('nothing that arrived beside it wears the same shape');
 });
 
 /**
- * The source-of-truth guard `PARAMETER_ARRIVALS` owes. It is a hand-maintained set, and a
+ * The source-of-truth guard `PARAMETER_MOVES` owes. It is a hand-maintained set, and a
  * hand-maintained set is silent when it goes short: a differ that started minting a fourth
  * arrival-shaped code would be read as a difference the vocabulary does not express and demoted to a
  * gap sentence, with the whole suite green.
@@ -446,7 +453,7 @@ it('classifies every parameter code the differ mints, or says which of them owe 
     $minted = array_values(array_unique($matches[1]));
     sort($minted, SORT_STRING);
 
-    $constant = (new ReflectionClass(ChangeScaffolder::class))->getReflectionConstant('PARAMETER_ARRIVALS');
+    $constant = (new ReflectionClass(ChangeScaffolder::class))->getReflectionConstant('PARAMETER_MOVES');
 
     /** @var array<string, string> $table */
     $table = $constant === false ? [] : $constant->getValue();

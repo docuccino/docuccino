@@ -28,17 +28,12 @@ use Docuccino\Laravel\Versioning\ChangeDirectories;
  * 3. Two roots of equal length both holding the file name no single module, so the change falls back
  *    rather than picking one: a tie broken by glob enumeration order would be a destination that moves
  *    when a sibling module is added.
- * 4. No root holds it — a class outside every declared module, or a class whose file cannot be read —
- *    and the first configured directory takes it.
+ * 4. No root holds it — a class outside every declared module, a class whose file cannot be read, or a
+ *    change naming no class at all — and the first configured directory takes it.
  *
  * A change names exactly one class, so a diff spanning two modules writes each change beside its own
  * module. There is nothing to refuse: the ambiguity the refusal would guard against is a SINGLE class
  * two modules both claim, which is case 3.
- *
- * One verb names no class at all — a renamed PARAMETER belongs to an operation rather than to a shape —
- * and it falls to case 4 by having no file to look for rather than by having one nothing claims. The
- * reason says so, because "no configured module holds " with nothing after it is a sentence that reads
- * as a bug.
  *
  * @internal
  */
@@ -63,13 +58,9 @@ final readonly class ChangePlacement
             return new ChangeDestination($this->forced, 'you named it with --in');
         }
 
-        if ($fqcn === '') {
-            return new ChangeDestination($this->directories[0] ?? '', count($this->directories) === 1
-                ? 'the only configured change directory'
-                : 'the first configured change directory; the change names a parameter rather than a class, so no module owns it');
-        }
-
-        $file = DeclarationFiles::of($fqcn)[0] ?? null;
+        // One verb names no class at all — a renamed PARAMETER belongs to an operation rather than to a
+        // shape — so there is no file for a module to hold, and it falls to case 4 that way.
+        $file = $fqcn === '' ? null : DeclarationFiles::of($fqcn)[0] ?? null;
         $claims = $file === null ? [] : $this->claims($file);
 
         if (count($claims) === 1) {
@@ -114,8 +105,8 @@ final readonly class ChangePlacement
     }
 
     /**
-     * Why the first configured directory took it — the tie, the absence of a module, or there having
-     * been only ever one place to write.
+     * Why the first configured directory took it — the tie, the absence of a module, the change naming
+     * no class, or there having been only ever one place to write.
      *
      * @param  array<string, true>  $claims
      */
@@ -136,7 +127,11 @@ final readonly class ChangePlacement
             return 'the only configured change directory';
         }
 
-        return sprintf('the first configured change directory; no configured module holds %s', $fqcn);
+        // "no configured module holds " with nothing after it reads as a bug, and a change naming no
+        // class is here for a different reason anyway: there was never a file to hold.
+        return $fqcn === ''
+            ? 'the first configured change directory; the change names a parameter rather than a class, so no module owns it'
+            : sprintf('the first configured change directory; no configured module holds %s', $fqcn);
     }
 
     /**

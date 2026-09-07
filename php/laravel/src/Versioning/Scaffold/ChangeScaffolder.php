@@ -58,17 +58,17 @@ final readonly class ChangeScaffolder
     private const string NO_IDENTITIES = 'The old artifact carries no Docuccino identities, so no schema in it can be tied to the class that produces it and nothing was scaffolded. Export the previous version as UIR (`docuccino:export --format=uir`) and diff against that.';
 
     /**
-     * The differ's classifications for a parameter that came or went, and which side of the diff each
-     * stands on. A rename is invisible to a differ — it reads as one of each — so these are the only
-     * codes a parameter rename can be assembled out of, and every other parameter code falls through to
-     * the gap line like any difference no verb declares.
+     * The differ's classifications for a parameter that came or went, each mapped to the half of a
+     * candidate rename it fills. A rename is invisible to a differ — it reads as one of each — so these
+     * are the only codes a parameter rename can be assembled out of, and every other parameter code
+     * falls through to the gap line like any difference no verb declares.
      *
-     * @var array<string, string>
+     * @var array<string, 'gone'|'arrived'>
      */
-    private const array PARAMETER_ARRIVALS = [
-        'parameter.removed' => 'old',
-        'parameter.added' => 'new',
-        'parameter.added-required' => 'new',
+    private const array PARAMETER_MOVES = [
+        'parameter.removed' => 'gone',
+        'parameter.added' => 'arrived',
+        'parameter.added-required' => 'arrived',
     ];
 
     /**
@@ -104,7 +104,7 @@ final readonly class ChangeScaffolder
         $parameterChanges = [];
 
         foreach ($changeset->changes as $change) {
-            if ($change->target === ChangeTarget::Parameter && isset(self::PARAMETER_ARRIVALS[$change->code])) {
+            if ($change->target === ChangeTarget::Parameter && isset(self::PARAMETER_MOVES[$change->code])) {
                 $parameterChanges[] = $change;
 
                 continue;
@@ -394,9 +394,8 @@ final readonly class ChangeScaffolder
      * it is flattened onto one operation under an identity that is a function of the operation, the
      * location and the NAME. That makes the pairing operation-local — a `q` that went and a `search`
      * that arrived on the same operation, in the same location, wearing the same published shape — and
-     * it makes the pairing rule the same one {@see renames()} applies, for the same reason: a rename is
-     * invisible to a differ, the shape is the only evidence there is, and two candidates means there is
-     * no evidence.
+     * it makes the pairing rule the same one the schema side applies, and for the same reason
+     * ({@see uniquePairs()}).
      *
      * @param  list<Change>  $changes
      * @param  array<string, mixed>  $oldDoc
@@ -417,8 +416,9 @@ final readonly class ChangeScaffolder
         $moved = [];
 
         foreach ($changes as $change) {
-            $side = self::PARAMETER_ARRIVALS[$change->code] ?? null;
-            $entry = $side === 'old' ? $old[$change->id] ?? null : $new[$change->id] ?? null;
+            // Present for every code plan() collects, which is the only route in here.
+            $half = self::PARAMETER_MOVES[$change->code] ?? 'arrived';
+            $entry = $half === 'gone' ? $old[$change->id] ?? null : $new[$change->id] ?? null;
 
             if ($entry === null) {
                 // No node to read it off: the artifact carries no identity for that parameter, or it is
@@ -430,7 +430,7 @@ final readonly class ChangeScaffolder
             }
 
             $bucket = $moved[$entry['site']][$entry['in']] ?? ['gone' => [], 'arrived' => []];
-            $bucket[$side === 'old' ? 'gone' : 'arrived'][] = $entry;
+            $bucket[$half][] = $entry;
             $moved[$entry['site']][$entry['in']] = $bucket;
         }
 
@@ -443,14 +443,22 @@ final readonly class ChangeScaffolder
             ksort($locations, SORT_STRING);
 
             foreach ($locations as $in => $bucket) {
-                $paired = self::pairedNames($bucket['gone'], $bucket['arrived']);
+                [$paired, $ambiguous] = self::pairedNames($bucket['gone'], $bucket['arrived']);
 
                 foreach ($paired as $from => $to) {
                     $observed[$in."\0".$from."\0".$to][] = (string) $site;
                 }
 
+                foreach ($ambiguous as $name) {
+                    self::note($gaps, sprintf(
+                        'The %s parameter `%s` went and more than one that arrived beside it wears the same shape, so nothing here can tell which — declare the rename yourself, or leave it: no verb declares a parameter a version simply stopped accepting.',
+                        $in,
+                        $name,
+                    ));
+                }
+
                 foreach ($bucket['gone'] as $entry) {
-                    if (! isset($paired[$entry['name']])) {
+                    if (! isset($paired[$entry['name']]) && ! in_array($entry['name'], $ambiguous, true)) {
                         self::note($gaps, sprintf(
                             'The %s parameter `%s` went and nothing that arrived beside it wears the same shape, so no rename could be read out of it — and no verb declares a parameter a version simply stopped accepting.',
                             $in,
@@ -488,9 +496,8 @@ final readonly class ChangeScaffolder
      *
      * The subset rule is the schema side's, read on the axis a parameter has: the base is every
      * operation the HEAD publishes the parameter for, and a scope is written only where the rename was
-     * observed on strictly fewer of them. What differs is that there is nothing to fork — a parameter
-     * belongs to one operation already — so an `#[AppliesTo]` here narrows which operations are visited
-     * and nothing else.
+     * observed on strictly fewer of them. What differs is that a scope here has only the one branch —
+     * {@see OperationVerb} states why, and it is why nothing below writes a fork.
      *
      * @param  array<string, mixed>  $newDoc
      * @param  list<string>  $sites
@@ -531,12 +538,12 @@ final readonly class ChangeScaffolder
     }
 
     /**
-     * Which gone name is which arrived name, by identical published shape and unique in both directions
-     * — {@see renames()}'s rule, over parameters instead of properties.
+     * Which gone name is which arrived name, by identical published shape — {@see uniquePairs()}'s rule,
+     * over parameters instead of properties, and reporting the same two answers.
      *
      * @param  list<ParameterEntry>  $gone
      * @param  list<ParameterEntry>  $arrived
-     * @return array<string, string> from => to
+     * @return array{0: array<string, string>, 1: list<string>} from => to, and the names left ambiguous
      */
     private static function pairedNames(array $gone, array $arrived): array
     {
@@ -549,18 +556,7 @@ final readonly class ChangeScaffolder
             }
         }
 
-        $paired = [];
-        foreach ($candidates as $from => $matches) {
-            $claimants = array_filter($candidates, static fn (array $others): bool => in_array($matches[0], $others, true));
-
-            if (count($matches) === 1 && count($claimants) === 1) {
-                $paired[(string) $from] = $matches[0];
-            }
-        }
-
-        ksort($paired, SORT_STRING);
-
-        return $paired;
+        return self::uniquePairs($candidates);
     }
 
     /**
@@ -635,11 +631,7 @@ final readonly class ChangeScaffolder
 
     /**
      * Which removed field is which added field under a new name: the two whose published shape is
-     * IDENTICAL, and only where that pairing is unique in both directions.
-     *
-     * A rename is the one difference a diff cannot see directly — it reads as a removal and an addition
-     * — so the shape is the only evidence there is. Two candidates means there is no evidence, and
-     * guessing would rename the wrong field in every document derived from this version.
+     * IDENTICAL, read by {@see uniquePairs()}.
      *
      * @param  list<string>  $removed
      * @param  list<string>  $added
@@ -660,16 +652,36 @@ final readonly class ChangeScaffolder
             }
         }
 
-        $renames = [];
+        return self::uniquePairs($candidates);
+    }
+
+    /**
+     * Which of these candidate pairings names a single pair, and which names more than one.
+     *
+     * A rename is the one difference a diff cannot see directly — it reads as a removal and an addition
+     * — so the shape is the only evidence there is. Unique in BOTH directions is what makes it
+     * evidence: one thing arrived wearing this shape, and this the only thing that went wearing it.
+     * Anything else names no single pair, and guessing would rename the wrong thing in every document
+     * derived from this version.
+     *
+     * Both answers are handed back because they are different things to say. A name with no candidate
+     * at all went and nothing replaced it; a name with two went and the tool cannot tell which
+     * replaced it — and a caller holding only the pairs cannot tell those apart, so it tells the author
+     * the first when the truth is the second.
+     *
+     * @param  array<array-key, list<string>>  $candidates  what went => the names that arrived wearing its shape
+     * @return array{0: array<string, string>, 1: list<string>} from => to, and the names left ambiguous
+     */
+    private static function uniquePairs(array $candidates): array
+    {
+        $paired = [];
         $ambiguous = [];
 
         foreach ($candidates as $from => $matches) {
-            // Unique in both directions: one added field wearing this shape, and this the only removed
-            // field wearing it. Anything else names no single pair.
             $claimants = array_filter($candidates, static fn (array $others): bool => in_array($matches[0], $others, true));
 
             if (count($matches) === 1 && count($claimants) === 1) {
-                $renames[(string) $from] = $matches[0];
+                $paired[(string) $from] = $matches[0];
 
                 continue;
             }
@@ -677,10 +689,10 @@ final readonly class ChangeScaffolder
             $ambiguous[] = (string) $from;
         }
 
-        ksort($renames, SORT_STRING);
+        ksort($paired, SORT_STRING);
         sort($ambiguous, SORT_STRING);
 
-        return [$renames, $ambiguous];
+        return [$paired, $ambiguous];
     }
 
     /**

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Versioning;
 
 use Docuccino\Core\Diagnostics\Diagnostic;
-use Docuccino\Core\Diagnostics\Severity;
 use Docuccino\Core\Document\ChangedFieldExamples;
 use Docuccino\Core\Identity\IdentityGenerator;
 use Docuccino\Core\Support\PlainText;
@@ -143,18 +142,12 @@ final readonly class ParameterRenameEdit implements OperationVerb
      */
     public function unreached(VersionChange $change): Diagnostic
     {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'versioning.change-target-missing',
-            message: sprintf(
-                '%s renames %s, which %s declares, so this version still says what the code says.',
-                PlainText::of($change->class),
-                $this->declares(),
-                $change->selectors === []
-                    ? 'no operation this document publishes'
-                    : 'no operation its #[AppliesTo] names',
-            ),
-            help: 'Update the change to name the parameter as it is spelled today, or retire it if the parameter is gone.',
-        );
+        return VerbDiagnostics::targetMissing($change, sprintf(
+            'renames %s, which %s declares',
+            $this->declares(),
+            $change->selectors === []
+                ? 'no operation this document publishes'
+                : 'no operation its #[AppliesTo] names',
+        ), 'parameter');
     }
 }

@@ -30,7 +30,7 @@ final readonly class RenameEdit implements VersionVerb
         private string $schema,
         private string $from,
         private string $to,
-        private SchemaFacet $facet = SchemaFacet::Response,
+        private SchemaFacet $facet,
     ) {}
 
     public function schema(): string
@@ -112,18 +112,12 @@ final readonly class RenameEdit implements VersionVerb
                 PlainText::of($this->from),
                 PlainText::of($this->to),
             )),
-            VerbOutcome::Absent => new Diagnostic(
-                severity: Severity::Warning,
-                code: 'versioning.change-target-missing',
-                message: sprintf(
-                    '%s renames "%s", which the %sschema for %s no longer publishes, so this version still says what the code says.',
-                    PlainText::of($change->class),
-                    PlainText::of($this->to),
-                    $this->facet->schemaQualifier(),
-                    PlainText::of($this->schema),
-                ),
-                help: 'Update the change to name the field as it is spelled today, or retire it if the field is gone.',
-            ),
+            VerbOutcome::Absent => VerbDiagnostics::targetMissing($change, sprintf(
+                'renames "%s", which the %sschema for %s no longer publishes',
+                PlainText::of($this->to),
+                $this->facet->schemaQualifier(),
+                PlainText::of($this->schema),
+            ), 'field'),
             VerbOutcome::Unresolved => VerbDiagnostics::schemaUnresolved($change, $this),
         };
     }

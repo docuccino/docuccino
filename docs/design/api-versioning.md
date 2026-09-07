@@ -365,8 +365,9 @@ Four decisions worth keeping:
 
 - **Only what a verb expresses, and everything else said out loud.** The differences the vocabulary
   reaches become classes; every other one is printed with nothing written for it, counted by kind so a
-  real release's diff stays readable. A wrong declaration puts a shape nobody served into every older document, and silence reads
-  as "nothing changed there" — which is the failure the whole feature exists to prevent.
+  real release's diff stays readable. A wrong declaration puts a shape nobody served into every older
+  document, and silence reads as "nothing changed there" — which is the failure the whole feature
+  exists to prevent.
 - **A rename is only a rename when the evidence is unique.** A diff sees a removal and an addition; the
   published shape is the only evidence that they are one field. Where two candidates wear one shape the
   command declines and names the fields, because a guess renames the wrong end in every derived
