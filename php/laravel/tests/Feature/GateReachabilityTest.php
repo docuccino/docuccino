@@ -28,14 +28,18 @@ use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\BaseSignagePolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\KioskPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\PlacardPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\SignagePolicy;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\TurnstilePolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Signage;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Turnstile;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
 use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Illuminate\Auth\Access\Gate as IlluminateGate;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Contracts\Container\BindingResolutionException;
+use Illuminate\Routing\Middleware\ValidateSignature;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -140,6 +144,32 @@ function gateRoutes(): void
     $router->get('api/marquees-using', [KioskController::class, 'index'])
         ->middleware(['auth:web', Authorize::using('view', Marquee::class)]);
 
+    // `signed` and `verified` written the same way round — their own static constructors render the
+    // middleware's class name, exactly as `Authorize::using()` does. A reader that knows only the alias
+    // reports these routes for a 403 the signature and the verification really do produce.
+    $router->get('api/kiosks-signed-class', [KioskController::class, 'index'])
+        ->middleware(['auth:web', ValidateSignature::relative()])
+        ->can('viewAny', Kiosk::class);
+
+    $router->get('api/kiosks-signed-absolute', [KioskController::class, 'index'])
+        ->middleware(['auth:web', ValidateSignature::absolute()])
+        ->can('viewAny', Kiosk::class);
+
+    $router->get('api/kiosks-verified-class', [KioskController::class, 'index'])
+        ->middleware(['auth:web', EnsureEmailIsVerified::redirectTo('verification.notice')])
+        ->can('viewAny', Kiosk::class);
+
+    // The authorization middleware naming no ability at all: it IS the middleware, so the 403 publishes
+    // — an ability nothing defines denies whatever meets it — and no policy stands behind it to read.
+    $router->get('api/kiosks-unnamed', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('');
+
+    // A policy the container is the only way to BUILD, for the row that proves nothing builds one.
+    $router->get('api/turnstiles', [KioskController::class, 'index'])
+        ->middleware('auth:web')
+        ->can('viewAny', Turnstile::class);
+
     // The author has already dropped the response, so there is no 403 to report on.
     $router->get('api/kiosks-muted', [KioskController::class, 'muted'])
         ->middleware('auth:web')
@@ -151,6 +181,7 @@ function gateRoutes(): void
 beforeEach(function (): void {
     bindStubEngine();
     Gate::policy(Marquee::class, MarqueeAccess::class);
+    TurnstilePolicy::$constructed = 0;
     gateRoutes();
 });
 
@@ -199,6 +230,24 @@ it('reports the gate a policy method cannot deny, and keeps publishing the 403',
         ->and($document['paths']['/api/kiosks']['get']['responses'])->toHaveKey('403');
 });
 
+it('answers the question without ever building a policy', function (): void {
+    // The claim the whole of {@see GateInternals} exists for, EXECUTED rather than asserted. The one
+    // accessor the Gate contract publishes for this — `getPolicyFor()` — ends in
+    // `$container->make($policy)`, so reaching for it runs the policy's constructor, resolves whatever
+    // it injects and fires every `Container::resolving` hook the application registered, at
+    // documentation-build time. Every other policy in this suite has a trivial constructor and would
+    // let that regression through in silence.
+    expect(gateFindings())->toHaveKey('GET /api/turnstiles')
+        ->and(gateFindings()['GET /api/turnstiles']->message)->toContain(TurnstilePolicy::class.'::viewAny()')
+        ->and(TurnstilePolicy::$constructed)->toBe(0);
+
+    // Anti-vacuity: the counter does move, and what moves it is the very accessor resolution is
+    // written not to use — so the zero above is the check's doing and not the fixture's.
+    app(GateContract::class)->getPolicyFor(Turnstile::class);
+
+    expect(TurnstilePolicy::$constructed)->toBe(1);
+});
+
 it('resolves the gate through the route parameter form', function (): void {
     expect(gateFindings())->toHaveKey('GET /api/kiosks/{kiosk}')
         ->and(gateFindings()['GET /api/kiosks/{kiosk}']->message)
@@ -243,6 +292,12 @@ it('stays silent on every gate shape that can deny', function (string $signature
     'no policy for the model at all' => ['GET /api/awnings'],
     'a policy that declares no such ability method' => ['GET /api/kiosks-destroyed'],
     'a signed middleware the gate was declared BEFORE' => ['GET /api/kiosks-signed-last'],
+    // The false positive M1 was: each of these holds the 403 up on its own, and each is written in the
+    // spelling a reader of the alias alone does not see.
+    'ValidateSignature::relative() holding the same 403 up' => ['GET /api/kiosks-signed-class'],
+    'ValidateSignature::absolute() holding the same 403 up' => ['GET /api/kiosks-signed-absolute'],
+    'EnsureEmailIsVerified::redirectTo() holding the same 403 up' => ['GET /api/kiosks-verified-class'],
+    'an authorization middleware naming no ability' => ['GET /api/kiosks-unnamed'],
 ]);
 
 it('still publishes the 403 on every route it stays silent about', function (string $path, string $method): void {
@@ -260,6 +315,11 @@ it('still publishes the 403 on every route it stays silent about', function (str
     ['/api/awnings', 'get'],
     ['/api/kiosks-destroyed', 'get'],
     ['/api/kiosks-signed-last', 'get'],
+    ['/api/kiosks-signed-class', 'get'],
+    ['/api/kiosks-signed-absolute', 'get'],
+    ['/api/kiosks-verified-class', 'get'],
+    // Anti-vacuity for the silence row above it: the middleware is read, so the 403 is still there.
+    ['/api/kiosks-unnamed', 'get'],
 ]);
 
 it('synthesizes and reports the 403 of a gate written as Authorize::using()', function (): void {
