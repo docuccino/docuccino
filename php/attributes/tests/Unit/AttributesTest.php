@@ -38,6 +38,8 @@ use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
+use Docuccino\Attributes\Versioning\RenamedParameter;
+use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Attributes\Webhook;
 
@@ -105,6 +107,8 @@ function attributeCatalogue(): array
         'Versioning\\MadeResponseFieldOptional' => [MadeResponseFieldOptional::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\MadeResponseFieldRequired' => [MadeResponseFieldRequired::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RemovedResponseField' => [RemovedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\RenamedParameter' => [RenamedParameter::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
+        'Versioning\\RenamedRequestField' => [RenamedRequestField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
         'Versioning\\RenamedResponseField' => [RenamedResponseField::class, Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE],
     ];
 }
@@ -162,7 +166,8 @@ function defaultArgs(string $class): array
         Summary::class => ['Create an invoice'],
         ApiVersionChange::class => ['2026-09-01', 'Invoices publish `title` where they used to publish `name`.'],
         AppliesTo::class => ['GET /api/invoices'],
-        RenamedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
+        RenamedResponseField::class, RenamedRequestField::class => ['App\\Http\\Resources\\InvoiceResource', 'name', 'title'],
+        RenamedParameter::class => ['query', 'q', 'search'],
         RemovedResponseField::class => ['App\\Http\\Resources\\InvoiceResource', 'subtotal'],
         MadeResponseFieldRequired::class, MadeResponseFieldOptional::class,
         MadeRequestFieldOptional::class => ['App\\Http\\Resources\\InvoiceResource', 'title'],

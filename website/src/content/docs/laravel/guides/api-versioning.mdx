@@ -170,9 +170,16 @@ The destination and the reason are printed for every class, found module or not,
 the lot. Nothing is guessed: with a single literal directory configured there is no boundary to read and
 everything goes there, exactly as before.
 
+A renamed parameter is scoped the same way and for the same reason — the operations the diff showed it
+on, unless that is every operation the head declares it for — and it names no class, so it goes to the
+first configured directory with the reason saying that a parameter has no module to be owned by.
+
 Two things it will not do. It never touches a class that already exists — the sentence you wrote in one
 is the whole value of it. And it writes nothing for a difference no verb expresses; those are printed
-instead, so an incomplete version is one you can see rather than one you find out about later.
+instead, so an incomplete version is one you can see rather than one you find out about later. A
+parameter that went and nothing arrived to pair with, two departures one arrival could stand for, a
+parameter that arrived where an older version simply had none — each is a printed sentence rather than a
+guess.
 `--against=<git-ref>` reads the old artifact straight out of git if you would rather not check one out,
 and `--dry-run` prints the plan without writing. Full flags, and how to
 [customise the generated class](/laravel/reference/commands/#customising-the-generated-class), are in
@@ -276,17 +283,21 @@ is what says this document is one.
 
 ## The verbs a change can declare
 
-A change carries one or more verbs, each naming a class and a field. There are five:
+A change carries one or more verbs. Most name a class and a field; one names a parameter, which belongs
+to no class. There are seven:
 
 | Verb | Says | The older document |
 | --- | --- | --- |
-| [`#[RenamedResponseField]`](/laravel/reference/attributes/#renamedresponsefield) | this field used to be called something else | publishes it under the old name |
+| [`#[RenamedResponseField]`](/laravel/reference/attributes/#renamedresponsefield) | this response field used to be called something else | publishes it under the old name |
+| [`#[RenamedRequestField]`](/laravel/reference/attributes/#renamedrequestfield) | this request field used to be called something else | accepts it under the old name |
+| [`#[RenamedParameter]`](/laravel/reference/attributes/#renamedparameter) | this query, path, header or cookie parameter used to be called something else | documents it under the old name |
 | [`#[MadeResponseFieldRequired]`](/laravel/reference/attributes/#maderesponsefieldrequired) | this response field is now always sent | leaves it out of `required` |
 | [`#[MadeResponseFieldOptional]`](/laravel/reference/attributes/#maderesponsefieldoptional) | this response field can now be absent | names it in `required` |
 | [`#[MadeRequestFieldOptional]`](/laravel/reference/attributes/#maderequestfieldoptional) | this request field is now optional | names it in `required`, and refuses a body without it |
 | [`#[RemovedResponseField]`](/laravel/reference/attributes/#removedresponsefield) | this response field is gone | publishes it again, with the shape you declare |
 
-The first four name their field the way your code spells it **today** — including the rename's `to:`.
+Every one but the removal names its field or parameter the way your code spells it **today** —
+including each rename's `to:`.
 That is the direction the whole vocabulary runs in, and it is the one thing to keep straight.
 
 The removal is the exception, and it has to be: the field is not in your code, so there is no present
@@ -315,13 +326,35 @@ final class InvoiceShapeChanged {}
 
 A request verb names the class your **request body** is recovered from, and reaches only that shape.
 Where one class produces both — a Data class used on the way in and on the way out — the document
-publishes two schemas for it, and the request verbs and the response verbs address them separately.
+publishes two schemas for it, and the request verbs and the response verbs address them separately. A
+field renamed on both sides therefore takes one declaration per side.
+
+`#[RenamedParameter]` is the one verb that names no class, because there is no class to name: a
+parameter stands on the **operation** rather than in a body, so where it travels and what it is called
+is all there is. `in:` is one of `query`, `path`, `header` or `cookie` — anything else names no location
+OpenAPI has and is refused, rather than widened to "wherever a parameter of that name turns up", which
+would move a `page` in the path when you meant the one in the query.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'The invoice list takes `search` where it took `q`.',
+)]
+#[RenamedParameter(in: 'query', from: 'q', to: 'search')]
+final class InvoiceSearchReplacesQ {}
+```
 
 Most of them have a runtime half you must write, and one does not:
 
 - `#[MadeResponseFieldOptional]` and `#[RenamedResponseField]` make the older document say something
   *stricter* or *different*, so your runtime has to serve it — and the contract test below will fail
   if it doesn't.
+- `#[RenamedRequestField]` and `#[RenamedParameter]` are the same claim on the way **in**: the older
+  document now says a request spelling the field or the parameter the old way is valid, and that is only
+  true if your application still accepts it. This is the most falsifiable half of the vocabulary, and
+  the one that costs the most when it is wrong — a client pinned to that version is turned away rather
+  than merely misinformed. Replay a request written the old way with the version pinned; the assertion
+  refuses an exchange the document called valid and your app rejected.
 - `#[MadeResponseFieldRequired]` only ever drops a `required` entry, which widens what the older
   document accepts. Nothing can serve a response that violates it, so no contract test can falsify
   it: it is safe by construction rather than by being checked.
@@ -457,6 +490,10 @@ final class InvoiceListTitleReplacesName {}
 ```
 
 Name an operation as the document names it — a signature, an `operationId`, or either with a `*`.
+
+On a `#[RenamedParameter]` it is a plain filter and nothing else: a parameter belongs to one operation
+already, so there is no shared shape to fork and no scope that covers "all of them" to be the no-fork
+branch. It narrows which operations are visited, and the rest of this section is about the schema verbs.
 
 If that schema is published as a shared component and your scope covers only some of the operations
 that publish it, then in that version those operations genuinely have a different type from the rest.

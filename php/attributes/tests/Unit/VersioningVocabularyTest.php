@@ -7,6 +7,8 @@ use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
+use Docuccino\Attributes\Versioning\RenamedParameter;
+use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 
 /*
@@ -101,8 +103,8 @@ function changeVocabularyParameterCount(): int
 
 it('keeps every version-change declaration readable without running the application', function (): void {
     // A scan that stopped seeing the vocabulary must fail rather than pass forever on an empty set.
-    expect(count(versionChangeVocabulary()))->toBeGreaterThanOrEqual(6)
-        ->and(changeVocabularyParameterCount())->toBeGreaterThanOrEqual(16)
+    expect(count(versionChangeVocabulary()))->toBeGreaterThanOrEqual(8)
+        ->and(changeVocabularyParameterCount())->toBeGreaterThanOrEqual(22)
         ->and(unfoldableChangeParameters(versionChangeVocabulary()))->toBe([]);
 });
 
@@ -126,10 +128,13 @@ it('declares what the API did before the version the change shipped in', functio
         ->and($change->description)->toBe('Invoices publish `title` where they used to publish `name`.');
 });
 
-it('names the field the code publishes today and the one older versions published', function (): void {
+it('names the field the code publishes today and the one older versions published', function (string $class): void {
     // `to` is today's name and `from` is the old one — the pair read backwards renames the wrong end, so
-    // the direction is pinned rather than left to whoever reads the constructor next.
-    $renamed = new RenamedResponseField(
+    // the direction is pinned rather than left to whoever reads the constructor next. Both halves of the
+    // wire, because a rename is the one difference that really is one sentence read in two directions:
+    // the field is published under both names either way, and only what it is CALLED moves.
+    /** @var object{schema: string, from: string, to: string} $renamed */
+    $renamed = new $class(
         schema: 'App\\Http\\Resources\\InvoiceResource',
         from: 'name',
         to: 'title',
@@ -138,6 +143,24 @@ it('names the field the code publishes today and the one older versions publishe
     expect($renamed->schema)->toBe('App\\Http\\Resources\\InvoiceResource')
         ->and($renamed->from)->toBe('name')
         ->and($renamed->to)->toBe('title');
+})->with([
+    'the response half' => [RenamedResponseField::class],
+    'the request half' => [RenamedRequestField::class],
+]);
+
+/*
+ * The one verb that names no class. A parameter stands on the OPERATION rather than in a body, so there
+ * is nothing about it to name but where it travels and what it is called — and `in:` is a closed set,
+ * which is why the location is a string the adapter reads against the four OAS locations rather than a
+ * free-form word.
+ */
+it('names where a parameter travels and what it used to be called', function (): void {
+    $renamed = new RenamedParameter(in: 'query', from: 'q', to: 'search');
+
+    expect($renamed->in)->toBe('query')
+        ->and($renamed->from)->toBe('q')
+        ->and($renamed->to)->toBe('search')
+        ->and((new ReflectionClass(RenamedParameter::class))->getConstructor()?->getNumberOfParameters())->toBe(3);
 });
 
 /*
@@ -171,6 +194,8 @@ it('spells no verb for the combination the wire has no honest sentence for', fun
             MadeResponseFieldOptional::class,
             MadeResponseFieldRequired::class,
             RemovedResponseField::class,
+            RenamedParameter::class,
+            RenamedRequestField::class,
             RenamedResponseField::class,
         ]);
 });

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Docuccino\Attributes\Versioning\AppliesTo;
+use Docuccino\Attributes\Versioning\RenamedParameter;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Core\Diff\DocumentDiffer;
 use Docuccino\Core\Document\UirDocument;
@@ -70,7 +71,7 @@ function scaffoldClasses(ScaffoldPlan $plan): array
     return array_map(static fn (ScaffoldedChange $change): string => $change->class, $plan->changes);
 }
 
-it('declares a request field that stopped being required, which is the one request-side verb there is', function (): void {
+it('declares a request field that stopped being required', function (): void {
     $plan = scaffoldPlan(
         scaffoldDocument(['note' => ['type' => 'string']], ['note']),
         scaffoldDocument(['note' => ['type' => 'string']]),
@@ -96,15 +97,33 @@ it('refuses a request field that BECAME required, because no verb says it honest
         ->and($plan->gaps)->toContain('A request field that BECAME required has no honest verb — the older document would have to be looser than the wire, which nothing can check — so it was not written.');
 });
 
-it('refuses a renamed or removed request field', function (): void {
+/*
+ * The rename is the one difference the scaffolder writes for BOTH facets, because it is the one that is
+ * really one sentence read in two directions: the field is published under both names either way, and
+ * only what it is called moved. The class name carries the facet — one class can be published on both
+ * sides, and two changes of one name would be one file overwriting the other.
+ */
+it('declares a renamed request field, marked as the request half', function (): void {
     $plan = scaffoldPlan(
-        scaffoldDocument(['note' => ['type' => 'string'], 'gone' => ['type' => 'integer']]),
+        scaffoldDocument(['note' => ['type' => 'string']]),
         scaffoldDocument(['memo' => ['type' => 'string']]),
         FormData::class.'#request',
     );
 
+    expect(scaffoldClasses($plan))->toBe(['FormDataRequestMemoReplacesNote'])
+        ->and($plan->changes[0]->verb)->toBe("#[RenamedRequestField(schema: FormData::class, from: 'note', to: 'memo')]")
+        ->and($plan->changes[0]->description)->toBe('`FormData` accepts `memo` where it accepted `note`.')
+        ->and($plan->gaps)->toBe([]);
+});
+
+it('refuses a removed request field', function (): void {
+    $plan = scaffoldPlan(
+        scaffoldDocument(['note' => ['type' => 'string'], 'gone' => ['type' => 'integer']]),
+        scaffoldDocument(['note' => ['type' => 'string']]),
+        FormData::class.'#request',
+    );
+
     expect(scaffoldClasses($plan))->toBe([])
-        ->and($plan->gaps)->toContain('The vocabulary has no verb for a renamed REQUEST field, so the rename in a request body was not written.')
         ->and($plan->gaps)->toContain('The vocabulary has no verb for a removed REQUEST field: a request body that stopped accepting a field is not something an older document can be given back honestly.');
 });
 
@@ -291,3 +310,112 @@ it('writes nothing rather than a scope that would match more operations than it 
         '`FormData` changed for some of the operations that publish it and not others, and one of them goes by no name a scope can spell, so nothing was written for it.',
     ],
 ]);
+
+/*
+ * Parameters, which none of the component-keyed machinery above reaches: a parameter is flattened onto
+ * one operation under an identity that is a function of the operation, the location and the NAME. So the
+ * pairing is operation-local, and the evidence is the same one a property rename runs on — identical
+ * published shape, unique in both directions.
+ */
+
+/**
+ * Two operations, each declaring the parameters given, over one document — enough for the differ to
+ * pair by identity and for the scaffolder to read a rename out of the pairing.
+ *
+ * @param  array<string, list<array{0: string, 1: string}>>  $operations  signature-ish key => [in, name] pairs
+ */
+function scaffoldParameterDocument(array $operations): UirDocument
+{
+    $paths = [];
+
+    foreach ($operations as $path => $parameters) {
+        $paths['/api/'.$path] = ['get' => [
+            'x-docuccino' => ['id' => 'op:v1:'.$path],
+            'responses' => ['200' => ['description' => 'OK']],
+            'parameters' => array_map(static fn (array $parameter): array => [
+                'x-docuccino' => ['id' => 'par:v1:'.$path.'-'.$parameter[0].'-'.$parameter[1]],
+                'name' => $parameter[1],
+                'in' => $parameter[0],
+                'required' => false,
+                'schema' => ['type' => 'string'],
+            ], $parameters),
+        ]];
+    }
+
+    return UirDocument::fromArray([
+        'uir' => '1.0.0',
+        'openapi' => '3.2.0',
+        'info' => ['title' => 'Forms API', 'version' => '2026-09-01'],
+        'paths' => $paths,
+    ]);
+}
+
+it('declares a renamed query parameter, naming no class at all', function (): void {
+    $plan = scaffoldPlan(
+        scaffoldParameterDocument(['forms' => [['query', 'q']]]),
+        scaffoldParameterDocument(['forms' => [['query', 'search']]]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe(['QuerySearchReplacesQ'])
+        ->and($plan->changes[0]->verb)->toBe("#[RenamedParameter(in: 'query', from: 'q', to: 'search')]")
+        ->and($plan->changes[0]->description)->toBe('The query parameter `search` was called `q`.')
+        ->and($plan->changes[0]->imports)->toBe([RenamedParameter::class])
+        // No class, so nothing for the placement rule to read a module off.
+        ->and($plan->changes[0]->schema)->toBe('')
+        ->and($plan->changes[0]->scope)->toBe([])
+        ->and($plan->gaps)->toBe([]);
+});
+
+/*
+ * The subset rule on the axis a parameter has: the base is every operation the HEAD declares the
+ * parameter for, and a scope is written only where the rename was observed on strictly fewer of them.
+ * Unlike the schema side there is nothing to fork — the scope is a plain filter over operations.
+ */
+it('scopes a parameter rename to the operations the diff shows it on', function (): void {
+    $plan = scaffoldPlan(
+        scaffoldParameterDocument(['forms' => [['query', 'q']], 'entries' => [['query', 'search']]]),
+        scaffoldParameterDocument(['forms' => [['query', 'search']], 'entries' => [['query', 'search']]]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe(['QuerySearchReplacesQ'])
+        ->and($plan->changes[0]->scope)->toBe(["#[AppliesTo(operation: 'GET /api/forms')]"])
+        ->and($plan->changes[0]->imports)->toContain(AppliesTo::class);
+});
+
+it('leaves a parameter rename unscoped when every operation that declares it was renamed', function (): void {
+    $plan = scaffoldPlan(
+        scaffoldParameterDocument(['forms' => [['query', 'q']], 'entries' => [['query', 'q']]]),
+        scaffoldParameterDocument(['forms' => [['query', 'search']], 'entries' => [['query', 'search']]]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe(['QuerySearchReplacesQ'])
+        ->and($plan->changes[0]->scope)->toBe([]);
+});
+
+/*
+ * The pairing is per LOCATION as well as per operation: `page` in the query and `page` in the path are
+ * two parameters, and a rename read across the two would move one the author never named.
+ */
+it('never pairs a parameter that went in one location with one that arrived in another', function (): void {
+    $plan = scaffoldPlan(
+        scaffoldParameterDocument(['forms' => [['query', 'q']]]),
+        scaffoldParameterDocument(['forms' => [['header', 'search']]]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe([])
+        ->and($plan->gaps)->toContain('The query parameter `q` went and nothing that arrived beside it wears the same shape, so no rename could be read out of it — and no verb declares a parameter a version simply stopped accepting.')
+        ->and($plan->gaps)->toContain('No verb declares a parameter a version ADDED: older versions simply do not accept it, which is what their documents already say.');
+});
+
+it('says which parameter differences it could read no rename out of', function (): void {
+    // Two that went and one that arrived: the one arrival wears the shape of both departures, so
+    // nothing here names a single pair and guessing would rename the wrong parameter in every document
+    // derived from this version.
+    $plan = scaffoldPlan(
+        scaffoldParameterDocument(['forms' => [['query', 'q'], ['query', 'term']]]),
+        scaffoldParameterDocument(['forms' => [['query', 'search']]]),
+    );
+
+    expect(scaffoldClasses($plan))->toBe([])
+        ->and($plan->gaps)->toContain('The query parameter `q` went and nothing that arrived beside it wears the same shape, so no rename could be read out of it — and no verb declares a parameter a version simply stopped accepting.');
+});

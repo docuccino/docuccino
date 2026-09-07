@@ -351,3 +351,62 @@ it('leaves a pointer at a component the copy merely holds, and forks the rest', 
         ->and($outOfScope)->toBe(['$ref' => '#/components/schemas/FormTree'])
         ->and(array_keys($document['components']['schemas']['FormTree']['properties']))->toBe(['id', 'title']);
 });
+
+/*
+ * The same hole on the parameter axis, which is the other half of the sweep: a parameter rename has no
+ * fork to offer — a parameter belongs to one operation already — but two paths addressing ONE path item
+ * through a `$ref` still make both operations one node, so renaming its parameter would rename it for
+ * the path the scope excluded. That is the widening a scope exists to prevent, and it is refused rather
+ * than taken.
+ */
+it('refuses to rename a parameter on a path item the scope does not cover whole', function (): void {
+    $document = treeDocument(plainTreeSchemas());
+    $document['paths'] = [
+        '/api/versioned-trees' => ['$ref' => '#/components/pathItems/Trees'],
+        '/api/versioned-trees/archived' => ['$ref' => '#/components/pathItems/Trees'],
+    ];
+    $document['components']['pathItems'] = ['Trees' => ['get' => [
+        ...treeOperation('listTrees'),
+        'parameters' => [[
+            'x-docuccino' => ['id' => (new IdentityGenerator)->parameterId('op:v1:listTrees', 'query', 'search')],
+            'name' => 'search',
+            'in' => 'query',
+            'schema' => ['type' => 'string'],
+        ]],
+    ]]];
+
+    [$transformed, $diagnostics] = transformedVersion($document, 'tests/Fixtures/Versioning/ScopedTreeParameter');
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe(['versioning.scope-unforkable'])
+        ->and($diagnostics[0]->message)->toContain('shares with operations the scope leaves out')
+        ->toContain('the query parameter "search"')
+        // Its help names the path item rather than a component, because there is no schema to widen to.
+        ->and($diagnostics[0]->help)->toContain('every operation the shared path item publishes')
+        // Nothing moved: the shared path item still declares the parameter the code declares.
+        ->and($transformed['components']['pathItems']['Trees']['get']['parameters'][0]['name'])->toBe('search');
+});
+
+/*
+ * And the counter-case, which is what keeps the guard from being "a shared path item is never touched":
+ * a scope covering every operation behind it renames the parameter once, on the one node they share.
+ */
+it('renames a parameter on a shared path item once when the scope covers every operation behind it', function (): void {
+    $document = treeDocument(plainTreeSchemas());
+    $document['paths'] = ['/api/versioned-trees' => ['$ref' => '#/components/pathItems/Trees']];
+    $document['components']['pathItems'] = ['Trees' => ['get' => [
+        ...treeOperation('listTrees'),
+        'parameters' => [[
+            'x-docuccino' => ['id' => (new IdentityGenerator)->parameterId('op:v1:listTrees', 'query', 'search')],
+            'name' => 'search',
+            'in' => 'query',
+            'schema' => ['type' => 'string'],
+        ]],
+    ]]];
+
+    [$transformed, $diagnostics] = transformedVersion($document, 'tests/Fixtures/Versioning/ScopedTreeParameter');
+
+    expect(array_map(static fn (Diagnostic $d): string => $d->code, $diagnostics))->toBe([])
+        ->and($transformed['components']['pathItems']['Trees']['get']['parameters'][0]['name'])->toBe('q')
+        ->and($transformed['components']['pathItems']['Trees']['get']['parameters'][0]['x-docuccino']['id'])
+        ->toBe((new IdentityGenerator)->parameterId('op:v1:listTrees', 'query', 'q'));
+});

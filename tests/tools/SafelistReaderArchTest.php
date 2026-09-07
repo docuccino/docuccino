@@ -76,6 +76,11 @@ function safelistExplainedRawSelectorReads(): array
         'php/laravel/src/Versioning/ApiVersionTransformer.php::transform' => 'an unscoped change takes the other branch',
         // Hands each selector to the reader on its own, so the one that decided nothing can be named.
         'php/laravel/src/Versioning/ApiVersionTransformer.php::applyScoped' => 'iterates the selectors into namesAny()',
+        // Whether an operation verb is scoped at all, and then the same per-selector hand-off.
+        'php/laravel/src/Versioning/ApiVersionTransformer.php::applyToOperations' => 'chooses every operation or the matched ones, then iterates the selectors into namesAny()',
+        // Whether the change is scoped, to say whether the parameter is missing from the whole document
+        // or only from the operations the scope names. A wording, not a match.
+        'php/laravel/src/Versioning/ParameterRenameEdit.php::missing' => 'words the report for a scoped change or an unscoped one',
     ];
 }
 

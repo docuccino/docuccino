@@ -148,6 +148,12 @@ signature, an operationId, either with a `*` — read through `Glob`, the produc
 and the one `routes.include`/`routes.exclude` speak, so a `*` never means one thing to the author and
 another to the build.
 
+**It degrades to a plain filter for a verb whose subject is the operation.** `#[RenamedParameter]` names
+a parameter, which is flattened onto one operation already, so there is no shared shape to fork and no
+"scope covers all of them" branch to be the no-fork case. The scope decides which operations are
+visited and nothing else. Said here rather than left to be discovered, because the fork rule below is
+the thing a reader will assume applies.
+
 **The fork rule.** A narrowed change means the operations in scope genuinely have a different type from
 the rest in that version's document.
 
@@ -351,9 +357,9 @@ says out loud is that the WHY is still owed.
 
 Four decisions worth keeping:
 
-- **Only what a verb expresses, and everything else said out loud.** Five differences become classes;
-  every other one is printed with nothing written for it, counted by kind so a real release's diff stays
-  readable. A wrong declaration puts a shape nobody served into every older document, and silence reads
+- **Only what a verb expresses, and everything else said out loud.** The differences the vocabulary
+  reaches become classes; every other one is printed with nothing written for it, counted by kind so a
+  real release's diff stays readable. A wrong declaration puts a shape nobody served into every older document, and silence reads
   as "nothing changed there" — which is the failure the whole feature exists to prevent.
 - **A rename is only a rename when the evidence is unique.** A diff sees a removal and an addition; the
   published shape is the only evidence that they are one field. Where two candidates wear one shape the
@@ -377,6 +383,62 @@ repeatable publishing act, and the same one the config file uses. Not a step of 
 whose contract is "run me once, idempotently", and not a config key either: a stub is a file an author
 edits, so the file being there IS the statement that they want theirs, and deleting it puts the packaged
 one back. Nothing about it reaches a `configHash`.
+
+### The request-side renames — built
+
+`#[RenamedResponseField]` shipped and could not reach a request body or a parameter at all, which left
+half of every rename in a real version history undeclarable. `#[RenamedRequestField]` and
+`#[RenamedParameter]` close that. What building them established:
+
+- **A rename is symmetric across the wire where required-ness is not.** The three required-ness verbs
+  are three because `required` arriving narrows a request and moves nothing on a response, so "made
+  required" is two different sentences. A rename is one sentence read in two directions: the field is
+  published on both halves either way, and only what it is CALLED moves. So the two field renames are
+  one edit with a facet switch, and the scaffolder writes them for both facets, where every other verb
+  it writes is response-only.
+- **The facet is the whole risk, and it is provable.** `RecoveredRequest` mints
+  `SchemaIdentity::publishedId($fqcn, 'request')` while the response side is the bare identity, so a
+  class published on both sides is two nodes. A verb that silently edited the response schema when the
+  author named a request one would rewrite a shape nobody named. The guard is a class published on both
+  sides whose SAME field is spelled differently in each — so resolving the wrong node finds nothing and
+  reports a correct declaration as rotted, which is a visible failure rather than a silent one.
+- **A parameter is not a schema node, and the identity is the reason.** It is flattened onto
+  `operation.parameters[]` under `parameterId($operationId, $in, $name)` — a function of the NAME. So
+  the verb walks operations rather than resolving one identity, and renaming it must RE-MINT that id or
+  the document publishes a parameter whose identity claims a name it does not have, which is
+  deterministic and still a lie. Nothing is forked, because a parameter belongs to one operation
+  already.
+- **`in` is a closed set and is refused rather than widened.** A location OpenAPI has not got names
+  nothing to look for, and "any location" is not a safe default: two operations can carry `page` in the
+  query and in the path, so a rename that guessed would move a parameter the author never named. The
+  four locations and the case-folding are stated once, shared with `#[IgnoreParam]`'s reading of the
+  same word.
+- **No example rewriter was needed, and one half of that was worth checking.** A request-body rename
+  moves a key in `requestBody.content.*.example`, which `ChangedFieldExamples`' OAS descent already
+  reaches — so the request rename inherited the rewriter whole, and what it owed was a test that the
+  walk really descends there. A parameter rename moves NO example: a parameter's `example` and its
+  `examples` map hold the parameter's own VALUE, and that map's entries are keyed by example name, so
+  the parameter's name appears nowhere inside them — not even for a `deepObject` container, whose
+  example is keyed by its members. The one position that would carry a parameter name is an OAS Link
+  Object's `parameters` map, which nothing this product mints publishes.
+- **The verb order needed re-asking, not extending.** `VerbOrder` puts renames last because every other
+  verb names its field as the code spells it today. That holds unchanged for the request rename — the
+  identical before/after problem on the other half of the wire, with `#[MadeRequestFieldOptional]` as
+  its sibling. The parameter rename's position is NOT observable: nothing else in the vocabulary can
+  name a parameter, so there is no target it could rot. It is placed with the renames anyway, and both
+  claims are executed rather than asserted.
+- **The scope's one refusal is the same one the schema path already had.** Two paths addressing ONE
+  path item through a `$ref` make both operations one node, so renaming its parameter would rename it
+  for the path the scope excluded — the widening a scope exists to prevent. Refused for the same reason
+  a private copy of a schema cannot be written there, under the same code, and it is why the parameter
+  walk is per NODE rather than per site: two sites over one node would otherwise apply the verb twice
+  and report the second pass as a rotted declaration.
+- **The contract check is at its most falsifiable here.** A response verb is caught by a response that
+  came out wrong; a request rename is caught by the application REFUSING a request its own document
+  calls valid — a client locked out rather than mildly misinformed, and the failure a version history
+  introduces most easily, because the inbound migration is the half nobody looks at. Disabling the
+  workbench's upgrade middleware makes the check fail with "responded 422, which the contract does not
+  document (it documents 201)".
 
 ### Phase 2 — the production package
 

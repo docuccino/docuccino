@@ -1,6 +1,6 @@
 ---
 title: Attributes reference
-description: The docuccino/attributes package — all 38 attributes with signatures and examples.
+description: The docuccino/attributes package — all 40 attributes with signatures and examples.
 ---
 
 
@@ -32,7 +32,7 @@ say `list<T>` or `array<string, T>` for the one you mean.
 
 ## At a glance
 
-All 38 attributes, grouped by what they do:
+All 40 attributes, grouped by what they do:
 
 | Attribute | Does |
 | --- | --- |
@@ -69,6 +69,8 @@ All 38 attributes, grouped by what they do:
 | [`#[Webhook]`](#webhook) | Publish a class as a webhook your API delivers. |
 | [`#[ApiVersionChange]`](#apiversionchange) | Register one API version change, and the sentence consumers read about it. |
 | [`#[RenamedResponseField]`](#renamedresponsefield) | Declare a response field that older versions publish under another name. |
+| [`#[RenamedRequestField]`](#renamedrequestfield) | Declare a request field that older versions accept under another name. |
+| [`#[RenamedParameter]`](#renamedparameter) | Declare a query, path, header or cookie parameter that older versions call something else. |
 | [`#[MadeResponseFieldRequired]`](#maderesponsefieldrequired) | Declare a response field that older versions did not promise to send. |
 | [`#[MadeResponseFieldOptional]`](#maderesponsefieldoptional) | Declare a response field that older versions always sent. |
 | [`#[MadeRequestFieldOptional]`](#maderequestfieldoptional) | Declare a request field that older versions demanded. |
@@ -1264,6 +1266,82 @@ final class InvoiceFieldsRenamed {}
 Every argument is a plain string or a `::class` constant, which is what makes a change readable without
 running any of your code. An argument Docuccino cannot read is reported as `attribute.unreadable` and
 the declaration is skipped rather than guessed at.
+
+### `#[RenamedRequestField]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $schema,
+    public string $from,
+    public string $to,
+)
+```
+
+The request twin of `#[RenamedResponseField]`, and the same direction: `to` is the name your code
+accepts today, `from` the name the older document publishes.
+
+`schema` is the class your **request body** is recovered from — a form request, a Data class. That is a
+different shape from the response one even where one class produces both, and the two carry different
+identities in the document, so this verb reaches only the request half. A class published on both sides
+takes one declaration per side.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'Create an invoice with `title` where you sent `name`.',
+)]
+#[RenamedRequestField(schema: StoreInvoiceRequest::class, from: 'name', to: 'title')]
+final class InvoiceRequestTitleReplacesName {}
+```
+
+This one has a runtime half, and it is the half a per-version contract test can genuinely refuse. The
+older document now says a body spelling the field the old way is valid, and that is only true if your
+application still accepts it — so pin the version and replay a request written the old way: the
+assertion refuses an exchange the version documents as valid but the application turned away, which is
+a client locked out rather than a client merely misinformed.
+
+Every example published beside that request body moves with the schema, so an example a consumer copies
+and posts back stays a body the version accepts. One the rewrite cannot follow is dropped and reported
+as `versioning.example-dropped` rather than published failing its own schema.
+
+### `#[RenamedParameter]`
+
+Targets `CLASS`, repeatable.
+
+```php
+public function __construct(
+    public string $in,
+    public string $from,
+    public string $to,
+)
+```
+
+Declares that a query, path, header or cookie parameter went by another name in the versions before the
+change. `to` is the name your code takes today, `from` the name the older document publishes.
+
+It names no class, and that is the whole difference from the two field renames: a parameter stands on
+the **operation** rather than in a body — `?search=` is a member of a request line, not of a shape — so
+where it travels and what it is called is all there is to name.
+
+`in` is one of `query`, `path`, `header` or `cookie`, in any case. Anything else names no location
+OpenAPI has, and is reported as `versioning.change-invalid` rather than guessed at: two operations can
+carry `page` in the query and in the path, so a rename that widened to "any location" would move a
+parameter you never named.
+
+```php
+#[ApiVersionChange(
+    since: '2026-09-01',
+    description: 'The invoice list takes `search` where it took `q`.',
+)]
+#[RenamedParameter(in: 'query', from: 'q', to: 'search')]
+final class InvoiceSearchReplacesQ {}
+```
+
+Every operation the document publishes is visited. `#[AppliesTo]` narrows that to the operations you
+name and does nothing else — there is no shared shape to fork here, because a parameter belongs to one
+operation already.
 
 ### `#[MadeResponseFieldRequired]`
 
