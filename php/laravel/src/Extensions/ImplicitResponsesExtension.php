@@ -14,14 +14,13 @@ use Docuccino\Core\Extensions\Contracts\OperationPhase;
 use Docuccino\Core\Extensions\Ordering\ExtensionOrder;
 use Docuccino\Core\Extensions\Ordering\Priorities;
 use Docuccino\Core\Extensions\Validation\ResponseDraftApplier;
-use Docuccino\Core\Inference\ActionRef;
-use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\ThrowConfidence;
 use Docuccino\Core\Inference\ThrowDisposition;
 use Docuccino\Core\Inference\ThrownException;
 use Docuccino\Core\Provenance\Source;
 use Docuccino\Laravel\Support\AuthMiddlewareDetector;
 use Docuccino\Laravel\Support\CanGate;
+use Docuccino\Laravel\Support\GateBody;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
 use ReflectionClass;
@@ -265,19 +264,10 @@ final class ImplicitResponsesExtension implements OperationExtension
             return false;
         }
 
-        $line = $method->getStartLine();
-        $analysis = $context->engine->analyzeAction(new ActionRef($methodFile, $formRequest, 'authorize', $line === false ? 0 : $line));
-        $context->recordDependencyFiles($analysis->dependencyFiles);
-
-        // A `return true;` gate never fails, so no 403; anything else can deny. Unknown returns
-        // document nothing — the 403 only appears when the engine can prove the gate isn't `true`.
-        foreach ($analysis->returns as $return) {
-            if (! ($return->type instanceof LiteralT && $return->type->value === true)) {
-                return true;
-            }
-        }
-
-        return false;
+        // The engine's answer alone, and an unread body is NOT a gate here: the 403 only appears where
+        // the engine could prove the gate is something other than `true`, which is the opposite default
+        // to the one the `can:` path states for the same three-valued answer ({@see GateBody}).
+        return GateBody::analysed($context, $method, $methodFile) === GateBody::CanDeny;
     }
 
     private function signalSource(RouteContext $context, string $signal): Source

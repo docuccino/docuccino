@@ -329,3 +329,33 @@ consumer that has only a line an explicit ask that DECLINES when the line carrie
 degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
+
+## One question, three answers, none of them written down
+
+Three producers of the implicit `403` each ask whether an authorization gate's body could ever refuse,
+and each answers a body it cannot read differently. While each answer lived inside its own producer,
+nothing said the three disagreed, and the weakest of them was a private re-implementation of the
+strongest.
+
+*Instances.* `ImplicitResponsesExtension`'s FormRequest arm asked the ENGINE — several return
+statements, a folded branch, dependency files recorded on the way past — and treated "the engine said
+nothing" as a gate that never refuses, so no `403`. `GateDenial` asked the SOURCE for a single literal
+`return true;`, a strictly weaker read, and treated the same silence as a gate that CAN refuse, so no
+diagnostic. `ActionAuthorizeResponsesExtension` does not read the body at all and publishes the `403`
+whenever an `authorize()` exists.
+
+*The tell.* Two producers whose behaviour rests on the same predicate, where one of them spells the
+predicate out privately. The opposite defaults are not the defect — they are both right for their own
+caller, because one decides whether to PUBLISH an error and the other whether to REPORT on one, and the
+cost of being wrong runs opposite ways. The defect is that neither says so.
+
+*The fix that worked.* One `GateBody` seam owning the question and answering three-valued —
+`AlwaysAllows`, `CanDeny`, `Unread` — with both reads behind it and each caller stating its own `Unread`
+default in one visible line at its own call site. The FormRequest arm takes the engine's answer alone
+(`analysed()`); the `can:` path takes both (`read()`), because the analyser is a dev-only install and a
+check that quietly stopped working without it would be a feature only the docs machine has. Inside
+`read()` the narrow read goes FIRST, which is the non-obvious half: where it answers at all it is
+certain, and the engine reports a failed analysis as a return of unknown type — indistinguishable from a
+body that really does return something else — so letting the wider reader overrule the certain one turns
+an analyser having a bad day into a check that silently stops firing. The third producer's row is that it
+asks nothing, said in its own docblock rather than left to be noticed.
