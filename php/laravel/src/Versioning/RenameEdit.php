@@ -30,7 +30,7 @@ final readonly class RenameEdit implements VersionVerb
         private string $schema,
         private string $from,
         private string $to,
-        private SchemaFacet $facet = SchemaFacet::Response,
+        private SchemaFacet $facet,
     ) {}
 
     public function schema(): string

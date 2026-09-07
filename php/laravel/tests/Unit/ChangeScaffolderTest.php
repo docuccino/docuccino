@@ -428,7 +428,7 @@ it('says which parameter differences it could read no rename out of', function (
 });
 
 /**
- * The source-of-truth guard `PARAMETER_ARRIVALS` owes. It is a hand-maintained set, and a
+ * The source-of-truth guard `PARAMETER_MOVES` owes. It is a hand-maintained set, and a
  * hand-maintained set is silent when it goes short: a differ that started minting a fourth
  * arrival-shaped code would be read as a difference the vocabulary does not express and demoted to a
  * gap sentence, with the whole suite green.
@@ -453,7 +453,7 @@ it('classifies every parameter code the differ mints, or says which of them owe 
     $minted = array_values(array_unique($matches[1]));
     sort($minted, SORT_STRING);
 
-    $constant = (new ReflectionClass(ChangeScaffolder::class))->getReflectionConstant('PARAMETER_ARRIVALS');
+    $constant = (new ReflectionClass(ChangeScaffolder::class))->getReflectionConstant('PARAMETER_MOVES');
 
     /** @var array<string, string> $table */
     $table = $constant === false ? [] : $constant->getValue();

@@ -16,10 +16,10 @@ use Docuccino\Laravel\Versioning\VerbOutcome;
  * either way, so they are pinned here rather than left to whichever build meets one first.
  */
 
-/** The verb under test, and the identity generator the transformer would hand it. */
-function parameterRename(string $from = 'q', string $to = 'search'): ParameterRenameEdit
+/** The one verb every row below is asked of: `search` in the code today, `q` in the versions before. */
+function parameterRename(): ParameterRenameEdit
 {
-    return new ParameterRenameEdit('query', $from, $to);
+    return new ParameterRenameEdit('query', 'q', 'search');
 }
 
 it('leaves an operation that declares no parameters alone, and reports nothing found', function (): void {

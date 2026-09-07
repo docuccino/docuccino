@@ -58,17 +58,17 @@ final readonly class ChangeScaffolder
     private const string NO_IDENTITIES = 'The old artifact carries no Docuccino identities, so no schema in it can be tied to the class that produces it and nothing was scaffolded. Export the previous version as UIR (`docuccino:export --format=uir`) and diff against that.';
 
     /**
-     * The differ's classifications for a parameter that came or went, and which side of the diff each
-     * stands on. A rename is invisible to a differ — it reads as one of each — so these are the only
-     * codes a parameter rename can be assembled out of, and every other parameter code falls through to
-     * the gap line like any difference no verb declares.
+     * The differ's classifications for a parameter that came or went, each mapped to the half of a
+     * candidate rename it fills. A rename is invisible to a differ — it reads as one of each — so these
+     * are the only codes a parameter rename can be assembled out of, and every other parameter code
+     * falls through to the gap line like any difference no verb declares.
      *
-     * @var array<string, string>
+     * @var array<string, 'gone'|'arrived'>
      */
-    private const array PARAMETER_ARRIVALS = [
-        'parameter.removed' => 'old',
-        'parameter.added' => 'new',
-        'parameter.added-required' => 'new',
+    private const array PARAMETER_MOVES = [
+        'parameter.removed' => 'gone',
+        'parameter.added' => 'arrived',
+        'parameter.added-required' => 'arrived',
     ];
 
     /**
@@ -104,7 +104,7 @@ final readonly class ChangeScaffolder
         $parameterChanges = [];
 
         foreach ($changeset->changes as $change) {
-            if ($change->target === ChangeTarget::Parameter && isset(self::PARAMETER_ARRIVALS[$change->code])) {
+            if ($change->target === ChangeTarget::Parameter && isset(self::PARAMETER_MOVES[$change->code])) {
                 $parameterChanges[] = $change;
 
                 continue;
@@ -416,8 +416,9 @@ final readonly class ChangeScaffolder
         $moved = [];
 
         foreach ($changes as $change) {
-            $side = self::PARAMETER_ARRIVALS[$change->code] ?? null;
-            $entry = $side === 'old' ? $old[$change->id] ?? null : $new[$change->id] ?? null;
+            // Present for every code plan() collects, which is the only route in here.
+            $half = self::PARAMETER_MOVES[$change->code] ?? 'arrived';
+            $entry = $half === 'gone' ? $old[$change->id] ?? null : $new[$change->id] ?? null;
 
             if ($entry === null) {
                 // No node to read it off: the artifact carries no identity for that parameter, or it is
@@ -429,7 +430,7 @@ final readonly class ChangeScaffolder
             }
 
             $bucket = $moved[$entry['site']][$entry['in']] ?? ['gone' => [], 'arrived' => []];
-            $bucket[$side === 'old' ? 'gone' : 'arrived'][] = $entry;
+            $bucket[$half][] = $entry;
             $moved[$entry['site']][$entry['in']] = $bucket;
         }
 
@@ -495,9 +496,8 @@ final readonly class ChangeScaffolder
      *
      * The subset rule is the schema side's, read on the axis a parameter has: the base is every
      * operation the HEAD publishes the parameter for, and a scope is written only where the rename was
-     * observed on strictly fewer of them. What differs is that there is nothing to fork — a parameter
-     * belongs to one operation already — so an `#[AppliesTo]` here narrows which operations are visited
-     * and nothing else.
+     * observed on strictly fewer of them. What differs is that a scope here has only the one branch —
+     * {@see OperationVerb} states why, and it is why nothing below writes a fork.
      *
      * @param  array<string, mixed>  $newDoc
      * @param  list<string>  $sites

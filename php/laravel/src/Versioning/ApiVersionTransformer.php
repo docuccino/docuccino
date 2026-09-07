@@ -262,7 +262,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         $matched = [];
         foreach ($sites as $index => $site) {
             if ($selectors === [] || self::names($change, $site)) {
-                $matched[$index] = $site;
+                $matched[$index] = true;
             }
         }
 
@@ -287,7 +287,8 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         // second problem the reader would go looking for — of a parameter the document plainly declares.
         $walked = false;
 
-        foreach ($matched as $site) {
+        foreach (array_keys($matched) as $index) {
+            $site = $sites[$index];
             $node = implode("\0", $site['keys']);
             if (isset($written[$node])) {
                 continue;
@@ -317,7 +318,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // collapsing them lets a refusal on one hide under an edit on another — a version document
             // that spells one logical parameter two ways, with nothing said.
             $outcome = VerbOutcome::Absent;
-            $edited = $verb->apply($operation, self::forkScope($operation, $site), $this->identity, $outcome);
+            $edited = $verb->apply($operation, self::nodeScope($operation, $site), $this->identity, $outcome);
 
             if ($edited !== $operation) {
                 $doc = DocumentGraph::with($doc, $site['keys'], $edited);
@@ -403,12 +404,11 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Whether the node this site addresses is addressed by another site the scope did NOT match. Only
-     * the KEYS of `$matched` are read, so a caller may hold whatever it needs against them.
+     * Whether the node this site addresses is addressed by another site the scope did NOT match.
      *
      * @param  OperationSite  $site
      * @param  array<int, OperationSite>  $reaching
-     * @param  array<int, mixed>  $matched
+     * @param  array<int, true>  $matched
      */
     private static function sharedWithExcluded(array $site, array $reaching, array $matched): bool
     {
@@ -498,7 +498,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         // it, and the copy says something different the moment it is renamed. `ContractIndex` resolves
         // an id to the shallowest, first-sorted node carrying it — `paths` before `components` — so the
         // copy would win the id and the component would vanish from the index it is still published in.
-        return DocumentGraph::with($doc, $site['keys'], $this->reidentify($forked, DocumentGraph::identitiesIn($operation), self::forkScope($operation, $site)));
+        return DocumentGraph::with($doc, $site['keys'], $this->reidentify($forked, DocumentGraph::identitiesIn($operation), self::nodeScope($operation, $site)));
     }
 
     /**
@@ -533,13 +533,15 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * What the copy belongs to, which is what keeps its id a function of the thing: the operation's own
-     * identity where it has one, and the position it is published at where it does not.
+     * What a node inside this operation belongs to, which is what keeps its id a function of the thing:
+     * the operation's own identity where it has one, and the position it is published at where it does
+     * not. Asked by the fork, which re-mints every id it copied in, and by a verb that moves a name an
+     * id was derived from — nothing forks on that second path.
      *
      * @param  array<array-key, mixed>  $operation
      * @param  OperationSite  $site
      */
-    private static function forkScope(array $operation, array $site): string
+    private static function nodeScope(array $operation, array $site): string
     {
         $docuccino = $operation['x-docuccino'] ?? null;
         $id = is_array($docuccino) ? $docuccino['id'] ?? null : null;
