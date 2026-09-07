@@ -34,9 +34,12 @@ use Docuccino\Core\Inference\ActionAnalysis;
 use Docuccino\Core\Inference\ActionRef;
 use Docuccino\Core\Inference\CallableRef;
 use Docuccino\Core\Inference\ClassMetadata;
+use Docuccino\Core\Inference\DType\ArrayShapeField;
+use Docuccino\Core\Inference\DType\ArrayShapeT;
 use Docuccino\Core\Inference\DType\ClassT;
 use Docuccino\Core\Inference\DType\DType;
 use Docuccino\Core\Inference\DType\ListT;
+use Docuccino\Core\Inference\DType\LiteralT;
 use Docuccino\Core\Inference\DType\ScalarT;
 use Docuccino\Core\Inference\DType\UnknownT;
 use Docuccino\Core\Inference\NullTypeEngine;
@@ -79,6 +82,8 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
+use Workbench\App\Http\Requests\SearchFormsRequest;
+use Workbench\App\Http\Requests\StoreVersionedFormRequest;
 
 /*
  * Monorepo Pest bootstrap. Test files live alongside their package
@@ -2321,6 +2326,103 @@ function versionedFormDocuments(): array
 }
 
 /**
+ * One document's `FormData`, built with the changes in `$dir` applied.
+ *
+ * @return array<string, mixed>
+ */
+function versionedFormSchema(string $dir): array
+{
+    versioningDiagnostics($dir);
+
+    /** @var array<string, mixed> $schema */
+    $schema = generateDocument(key: 'v')->document->toArray()['components']['schemas']['FormData'];
+
+    return $schema;
+}
+
+/**
+ * The two shapes `POST /api/articles` publishes for one class: the body a client sends, and the
+ * article it gets back — the honest fixture for anything that has to resolve one of a class's two
+ * published shapes, since the two carry different identities and spell the same field differently.
+ *
+ * @return array{request: array<string, mixed>, response: array<string, mixed>}
+ */
+function versionedArticleSchemas(string $dir): array
+{
+    versioningDiagnostics($dir, route: 'api/articles');
+
+    /** @var array<string, array<string, mixed>> $schemas */
+    $schemas = generateDocument(key: 'v')->document->toArray()['components']['schemas'];
+
+    return ['request' => $schemas['ArticleRequest'], 'response' => $schemas['Article']];
+}
+
+/**
+ * The parameters `GET /api/versioned-search` declares ITSELF, with the changes in `$dir` applied — the
+ * version header is published as a `$ref` into `components.parameters`, and a parameter rename can only
+ * address the ones written on the operation.
+ *
+ * @return list<array<string, mixed>>
+ */
+function versionedSearchParameters(?string $dir): array
+{
+    versioningDiagnostics($dir, route: 'api/versioned-*');
+
+    /** @var list<array<string, mixed>> $parameters */
+    $parameters = generateDocument(key: 'v')->document->toArray()['paths']['/api/versioned-search']['get']['parameters'];
+
+    return array_values(array_filter($parameters, static fn (array $parameter): bool => isset($parameter['name'])));
+}
+
+/**
+ * The stub engine plus the two versioned FormRequests' `rules()` as it would recover them — constant
+ * array shapes, never executed.
+ *
+ * Shared because three suites need the same two: the rename verbs over a REQUEST body and over a QUERY
+ * parameter are the same recovery read at two positions (a GET verb's rules land as parameters, a POST
+ * verb's as a body), and a suite that scripted only its own half would be asserting against a document
+ * the other half never built.
+ */
+function bindVersionedRequestEngine(): void
+{
+    $location = new SourceLocation('');
+
+    app()->instance(TypeEngine::class, WorkbenchEngine::make(analysisOverrides: [
+        SearchFormsRequest::class.'::rules' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
+            new ArrayShapeField('search', new LiteralT('nullable|string|max:100')),
+            new ArrayShapeField('trace_id', new LiteralT('nullable|string')),
+        ]), $location)]),
+        StoreVersionedFormRequest::class.'::rules' => new ActionAnalysis(returns: [new ReturnSite(new ArrayShapeT([
+            new ArrayShapeField('title', new LiteralT('required|string|max:100')),
+        ]), $location)]),
+    ]));
+}
+
+/**
+ * Two documents over the versioned forms CREATE route and the versioned SEARCH one: the version the code
+ * is, and the version before `title` and `search` were called `name` and `q`.
+ *
+ * A history of its own for the request half of the wire, so the response suite's assertions stay about
+ * the response — and one bag rather than two, because the two routes are the two positions one
+ * FormRequest recovery lands at and a per-version contract check has to see both.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function versionedRequestDocuments(): array
+{
+    $shared = [
+        'routes' => ['include' => ['api/versioned-forms', 'api/versioned-search']],
+        'error_responses' => 'none',
+        'api_version' => ['changes' => ['workbench/app/Api/RequestVersions']],
+    ];
+
+    return [
+        'r2026-09-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-09-01']],
+        'r2026-06-01' => [...$shared, 'info' => ['title' => 'Forms API', 'version' => '2026-06-01']],
+    ];
+}
+
+/**
  * Two documents over the one versioned ENTRIES route, the same way {@see versionedFormDocuments()} is
  * two over the forms one: the version the code is, and the version before `submittedAt` stopped being
  * guaranteed. A history of its own, over its own shape, so the rename suite's assertions stay about
@@ -2449,10 +2551,16 @@ function workbenchContractPath(string $key = 'default'): string
  * the real emitter, not a document written by hand to suit the assertion.
  *
  * The artifact lands at {@see workbenchContractPath()}.
+ *
+ * `$bindEngine` is how a suite whose document needs more than the default stub gets it: the engine has
+ * to be the one the DOCUMENT was built with, so passing the binder keeps the artifact and the
+ * assertions looking at one build rather than at two.
+ *
+ * @param  callable(): void|null  $bindEngine
  */
-function workbenchContract(?callable $mutateConfig = null, string $key = 'default'): string
+function workbenchContract(?callable $mutateConfig = null, string $key = 'default', ?callable $bindEngine = null): string
 {
-    bindStubEngine();
+    ($bindEngine ?? bindStubEngine(...))();
 
     $path = workbenchContractPath($key);
     file_put_contents($path, (new UirEmitter)->emit(generateDocument($mutateConfig, $key)->document));

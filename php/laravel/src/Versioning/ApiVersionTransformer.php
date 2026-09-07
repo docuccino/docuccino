@@ -106,6 +106,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // In the order {@see VerbOrder} settles, which is the whole of what "the author's written
             // order" comes to once an AttributeSet has answered per type.
             foreach ($change->verbs as $verb) {
+                if ($verb instanceof OperationVerb) {
+                    $doc = $this->applyToOperations($doc, $verb, $change, $context, $said);
+
+                    continue;
+                }
+
                 $doc = $change->selectors === []
                     ? $this->apply($doc, $verb, $change, $context, $said)
                     : $this->applyScoped($doc, $verb, $change, $context, $said);
@@ -247,6 +253,96 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
+     * Applies a verb whose subject is the OPERATION rather than a schema, on every operation the change
+     * is in scope for — {@see OperationVerb} states why that is the whole of the scope rule here, and
+     * why the fork the schema path performs has no analogue.
+     *
+     * Every operation this document publishes is visited where no `#[AppliesTo]` is written, and only
+     * the ones a selector names where one is. There is no widening to refuse: an unscoped verb rewrites
+     * every operation that declares the parameter and a scoped one a subset of them, so a scope that
+     * decides nothing leaves the document alone and says which of the two things is wrong.
+     *
+     * The one thing a scope cannot narrow is a path item two paths address through a `$ref`, because
+     * both operations ARE one node — renaming its parameter would rename it for the path the scope
+     * excluded. Refused for the same reason {@see fork()} refuses to write a private copy there, and it
+     * is why the walk is per NODE rather than per site: two sites over one node would otherwise apply
+     * the verb twice, and the second pass over a parameter already carrying the older name would report
+     * a rotted declaration that is nothing of the kind.
+     *
+     * @param  array<string, mixed>  $doc
+     * @param  array<string, true>  $said
+     * @return array<string, mixed>
+     */
+    private function applyToOperations(array $doc, OperationVerb $verb, VersionChange $change, DocumentContext $context, array &$said): array
+    {
+        $sites = DocumentGraph::operationSites($doc);
+        $selectors = $change->selectors;
+
+        $matched = [];
+        foreach ($sites as $index => $site) {
+            if ($selectors === [] || self::names($change, $site)) {
+                $matched[$index] = $site;
+            }
+        }
+
+        foreach ($selectors as $selector) {
+            if (! self::namesAny([$selector], $sites)) {
+                self::reportOnce($context, self::selectorNamesNoOperation($change, $selector, $verb), $said);
+            }
+        }
+
+        if ($matched === []) {
+            return $doc;
+        }
+
+        $outcome = VerbOutcome::Absent;
+        $written = [];
+
+        // Whether any operation was actually looked at. A run where every matched one was refused above
+        // has said why already, and "no operation declares that parameter" on top of it would be a
+        // second problem the reader would go looking for — of a parameter the document plainly declares.
+        $walked = false;
+
+        foreach ($matched as $site) {
+            $node = implode("\0", $site['keys']);
+            if (isset($written[$node])) {
+                continue;
+            }
+            $written[$node] = true;
+
+            if (self::sharedWithExcluded($site, $sites, $matched)) {
+                self::reportOnce($context, self::unnarrowable($change, sprintf(
+                    'the operation "%s" is published through a path item it shares with operations the scope leaves out, so %s cannot be renamed for it alone and was left at the name the code gives it',
+                    PlainText::of($site['signature'] ?? implode('/', $site['keys'])),
+                    $verb->declares(),
+                )), $said);
+
+                continue;
+            }
+
+            $operation = DocumentGraph::at($doc, $site['keys']);
+            if (! is_array($operation)) {
+                continue;
+            }
+
+            $walked = true;
+            $edited = $verb->apply($operation, self::forkScope($operation, $site), $this->identity, $outcome);
+
+            if ($edited !== $operation) {
+                $doc = DocumentGraph::with($doc, $site['keys'], $edited);
+            }
+        }
+
+        $diagnostic = $walked ? $verb->diagnose($outcome, $change) : null;
+
+        if ($diagnostic !== null) {
+            self::reportOnce($context, $diagnostic, $said);
+        }
+
+        return $doc;
+    }
+
+    /**
      * Whether this change's scope names the operation. {@see Glob} is the product's one wildcard
      * grammar — the one `routes.include`/`routes.exclude` have always spoken — and a scope reading `*`
      * differently from the route filters would be a config entry that means one thing to the author and
@@ -302,11 +398,12 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
     }
 
     /**
-     * Whether the node this site addresses is addressed by another site the scope did NOT match.
+     * Whether the node this site addresses is addressed by another site the scope did NOT match. Only
+     * the KEYS of `$matched` are read, so a caller may hold whatever it needs against them.
      *
      * @param  OperationSite  $site
      * @param  array<int, OperationSite>  $reaching
-     * @param  array<int, true>  $matched
+     * @param  array<int, mixed>  $matched
      */
     private static function sharedWithExcluded(array $site, array $reaching, array $matched): bool
     {
@@ -563,6 +660,45 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
                 PlainText::of($verb->schema()),
             ),
             help: 'Write the operation the way the document names it — `GET /api/things`, an operationId, or either with a `*` — and check the document publishes that schema for it.',
+        );
+    }
+
+    /**
+     * An operation a scope matched that cannot be narrowed at all, for a verb whose subject is the
+     * operation. Its own help rather than {@see unforkable()}'s, because there is no schema to widen the
+     * scope to: the remedy is the scope or the shared path item, not a component.
+     */
+    private static function unnarrowable(VersionChange $change, string $problem): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'versioning.scope-unforkable',
+            message: sprintf('%s could not be narrowed as written: %s.', PlainText::of($change->class), $problem),
+            help: 'Drop the #[AppliesTo], or widen it to every operation the shared path item publishes, and the rename is applied to it once.',
+        );
+    }
+
+    /**
+     * A selector naming no operation at all, for a verb that names no schema. Worth a warning for the
+     * same reason its schema-side sibling is: a scope that matches nothing is indistinguishable from a
+     * change that was never declared, so a route renamed months later silently stops the change
+     * applying and nobody edited anything.
+     *
+     * Its own wording rather than the schema one's, because there is no schema to say the document
+     * publishes it for — the operation either exists or it does not.
+     */
+    private static function selectorNamesNoOperation(VersionChange $change, string $selector, OperationVerb $verb): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Warning,
+            code: 'versioning.scope-matches-nothing',
+            message: sprintf(
+                '%s is scoped to "%s", which names no operation this document publishes, so the rename of %s applies to nothing there.',
+                PlainText::of($change->class),
+                PlainText::of($selector),
+                $verb->declares(),
+            ),
+            help: 'Write the operation the way the document names it — `GET /api/things`, an operationId, or either with a `*`.',
         );
     }
 

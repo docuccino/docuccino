@@ -999,13 +999,14 @@ matching one operation more than intended widens the change silently. Where one 
 safely, nothing is written for that schema and the reason is printed: an incomplete version you can see
 costs you less than a complete one that lies.
 
-**It writes only what it can say truthfully.** Five differences have verbs — a renamed, removed or
-newly-required response field, and a response or request field that became optional — and everything
-else is printed under `Not declared` with nothing written for it. A field a version *added* needs no
-declaration (older documents simply don't publish it); a renamed request field, a request field that
-became *required*, and a type change have no honest verb; and a schema no class produces cannot be named
-by one. A wrong declaration would put a shape nobody served into every older document, which is worse
-than a gap you can see.
+**It writes only what it can say truthfully.** Seven differences have verbs — a renamed response,
+request or parameter name; a removed or newly-required response field; and a response or request field
+that became optional — and everything else is printed under `Not declared` with nothing written for it.
+A field or a parameter a version *added* needs no declaration (older documents simply don't accept it);
+a removed request field, a request field that became *required*, and a type change have no honest verb;
+a parameter that went with nothing wearing its shape arriving beside it is no rename anyone can read;
+and a schema no class produces cannot be named by one. A wrong declaration would put a shape nobody
+served into every older document, which is worse than a gap you can see.
 
 **Each class is written beside the module that owns it.** When
 [`api_version.changes`](/laravel/reference/configuration/#api_version) contains a glob, the wildcard is
@@ -1024,7 +1025,8 @@ rules, in order: `--in` overrides everything; otherwise the longest declared mod
 class's own file wins; two roots holding it equally name no single module, so the change falls back and
 says so; and a class no module holds — or a configuration with no glob in it at all — goes to the first
 configured directory. A diff spanning two modules writes each change beside its own module, because a
-change names exactly one class.
+change names exactly one class. A renamed **parameter** names no class at all, so it goes to the first
+configured directory with the reason saying which of the two things happened.
 
 **An existing class is never touched.** A file of that name is yours the moment it exists, and the
 command reports what it left alone rather than merging into it.

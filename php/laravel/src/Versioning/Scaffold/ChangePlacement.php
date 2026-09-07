@@ -35,6 +35,11 @@ use Docuccino\Laravel\Versioning\ChangeDirectories;
  * module. There is nothing to refuse: the ambiguity the refusal would guard against is a SINGLE class
  * two modules both claim, which is case 3.
  *
+ * One verb names no class at all — a renamed PARAMETER belongs to an operation rather than to a shape —
+ * and it falls to case 4 by having no file to look for rather than by having one nothing claims. The
+ * reason says so, because "no configured module holds " with nothing after it is a sentence that reads
+ * as a bug.
+ *
  * @internal
  */
 final readonly class ChangePlacement
@@ -51,11 +56,17 @@ final readonly class ChangePlacement
         private ?string $forced = null,
     ) {}
 
-    /** Where the change naming `$fqcn` is written, and why there. */
+    /** Where the change naming `$fqcn` is written, and why there. `$fqcn` is empty for a change that names no class. */
     public function for(string $fqcn): ChangeDestination
     {
         if ($this->forced !== null) {
             return new ChangeDestination($this->forced, 'you named it with --in');
+        }
+
+        if ($fqcn === '') {
+            return new ChangeDestination($this->directories[0] ?? '', count($this->directories) === 1
+                ? 'the only configured change directory'
+                : 'the first configured change directory; the change names a parameter rather than a class, so no module owns it');
         }
 
         $file = DeclarationFiles::of($fqcn)[0] ?? null;

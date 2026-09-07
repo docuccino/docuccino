@@ -8,10 +8,13 @@ use Docuccino\Attributes\Versioning\MadeRequestFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldOptional;
 use Docuccino\Attributes\Versioning\MadeResponseFieldRequired;
 use Docuccino\Attributes\Versioning\RemovedResponseField;
+use Docuccino\Attributes\Versioning\RenamedParameter;
+use Docuccino\Attributes\Versioning\RenamedRequestField;
 use Docuccino\Attributes\Versioning\RenamedResponseField;
 use Docuccino\Core\Diagnostics\Diagnostic;
 use Docuccino\Core\Extensions\Context\AttributeSet;
 use Docuccino\Core\Support\PlainText;
+use Docuccino\Laravel\Support\ParameterLocations;
 
 /**
  * The order one change's verbs are applied in, stated once and only here.
@@ -35,6 +38,15 @@ use Docuccino\Core\Support\PlainText;
  * invented, so the position of a re-added field would be a function of another of the change's own
  * verbs. Run it before, and every insertion is counted against the schema the CODE publishes.
  *
+ * The rule holds unchanged for the renames that reach a REQUEST body and a parameter, and it holds for
+ * the same reason rather than by extension. `#[RenamedRequestField]` renames a property of the request
+ * shape, which `#[MadeRequestFieldOptional]` names as the code spells it today — the identical
+ * before/after problem on the other half of the wire — so it goes last with its sibling.
+ * `#[RenamedParameter]` moves a name no other verb in the vocabulary can address at all: nothing today
+ * names a parameter, so there is no verb it could rot, and it is placed with the renames because that
+ * is where a verb that changes what something is CALLED belongs the day one does. Ordering it by that
+ * rule now rather than by its current independence is the whole point of stating the rule here.
+ *
  * Within one type the author's order stands: a change renaming two fields renames them as written.
  * Between the required-ness verbs and the removal the order is not observable — each names one field
  * of one shape, and a change declaring two contradictory things about one field is a change to fix
@@ -53,7 +65,7 @@ final class VerbOrder
      * legible in the file that owns it.
      *
      * @param  list<Diagnostic>  $diagnostics
-     * @return list<VersionVerb>
+     * @return list<VersionVerb|OperationVerb>
      */
     public static function read(AttributeSet $attributes, string $class, array &$diagnostics): array
     {
@@ -76,7 +88,15 @@ final class VerbOrder
         }
 
         foreach ($attributes->all(RenamedResponseField::class) as $declaration) {
-            $verbs[] = self::rename($declaration, $class, $diagnostics);
+            $verbs[] = self::rename($declaration->schema, $declaration->from, $declaration->to, SchemaFacet::Response, '#[RenamedResponseField]', $class, $diagnostics);
+        }
+
+        foreach ($attributes->all(RenamedRequestField::class) as $declaration) {
+            $verbs[] = self::rename($declaration->schema, $declaration->from, $declaration->to, SchemaFacet::Request, '#[RenamedRequestField]', $class, $diagnostics);
+        }
+
+        foreach ($attributes->all(RenamedParameter::class) as $declaration) {
+            $verbs[] = self::parameterRename($declaration, $class, $diagnostics);
         }
 
         return array_values(array_filter($verbs));
@@ -127,23 +147,68 @@ final class VerbOrder
     /**
      * @param  list<Diagnostic>  $diagnostics
      */
-    private static function rename(RenamedResponseField $rename, string $class, array &$diagnostics): ?RenameEdit
+    private static function rename(string $schema, string $from, string $to, SchemaFacet $facet, string $declaration, string $class, array &$diagnostics): ?RenameEdit
     {
-        if (trim($rename->from) === '' || trim($rename->to) === '') {
-            $diagnostics[] = VersionChangeCollector::unapplicable($class, 'one of its #[RenamedResponseField] declarations leaves `from:` or `to:` empty');
+        if (! self::renameable($from, $to, $declaration, $class, $diagnostics)) {
+            return null;
+        }
+
+        return new RenameEdit($schema, $from, $to, $facet);
+    }
+
+    /**
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private static function parameterRename(RenamedParameter $rename, string $class, array &$diagnostics): ?ParameterRenameEdit
+    {
+        if (! self::renameable($rename->from, $rename->to, '#[RenamedParameter]', $class, $diagnostics)) {
+            return null;
+        }
+
+        // A location OpenAPI has not got names nothing to look for, and a parameter cannot be found by
+        // name alone: two operations can carry `page` in the query and in the path, and renaming
+        // whichever was met first would move a parameter the author did not name.
+        $in = ParameterLocations::read($rename->in);
+
+        if ($in === null) {
+            $diagnostics[] = VersionChangeCollector::unapplicable($class, sprintf(
+                'one of its #[RenamedParameter] declarations says `in: "%s"`, which names no parameter location',
+                PlainText::of($rename->in),
+            ), sprintf('A parameter is in one of %s, spelled in any case.', ParameterLocations::quoted()));
 
             return null;
         }
 
-        if ($rename->from === $rename->to) {
+        return new ParameterRenameEdit($in, trim($rename->from), trim($rename->to));
+    }
+
+    /**
+     * The two refusals every rename shares: a pair with an empty end names nothing, and a pair with two
+     * equal ends declares a change nobody made.
+     *
+     * @param  list<Diagnostic>  $diagnostics
+     */
+    private static function renameable(string $from, string $to, string $declaration, string $class, array &$diagnostics): bool
+    {
+        if (trim($from) === '' || trim($to) === '') {
             $diagnostics[] = VersionChangeCollector::unapplicable($class, sprintf(
-                'one of its #[RenamedResponseField] declarations renames "%s" to itself',
-                PlainText::of($rename->from),
+                'one of its %s declarations leaves `from:` or `to:` empty',
+                $declaration,
             ));
 
-            return null;
+            return false;
         }
 
-        return new RenameEdit($rename->schema, $rename->from, $rename->to);
+        if ($from === $to) {
+            $diagnostics[] = VersionChangeCollector::unapplicable($class, sprintf(
+                'one of its %s declarations renames "%s" to itself',
+                $declaration,
+                PlainText::of($from),
+            ));
+
+            return false;
+        }
+
+        return true;
     }
 }

@@ -11,6 +11,8 @@ use Docuccino\Attributes\OperationId;
 use Docuccino\Attributes\Response;
 use Illuminate\Http\JsonResponse;
 use Workbench\App\Data\FormData;
+use Workbench\App\Http\Requests\SearchFormsRequest;
+use Workbench\App\Http\Requests\StoreVersionedFormRequest;
 
 /**
  * A forms list that really returns what it documents — `FormData` as the code publishes it today,
@@ -61,6 +63,37 @@ final class VersionedFormController
     #[HeaderParameter('X-Api-Version', description: 'Pin the API version, or take the current one.')]
     #[Response(status: 200, type: 'list<FormData>', description: 'The published forms.')]
     public function documented(): JsonResponse
+    {
+        return $this->index();
+    }
+
+    /**
+     * Create a form.
+     *
+     * Records a form under the title given and returns it, unpublished.
+     */
+    #[Group('Forms')]
+    #[OperationId('createVersionedForm')]
+    #[Response(status: 201, type: FormData::class, description: 'The form that was created.')]
+    #[Example(request: true, value: ['title' => 'Onboarding'])]
+    public function store(StoreVersionedFormRequest $request): JsonResponse
+    {
+        /** @var string $title */
+        $title = $request->validated('title');
+
+        return response()->json(new FormData(id: 3, title: $title, publishedAt: null), 201);
+    }
+
+    /**
+     * Search published forms.
+     *
+     * The read verb of the same resource, so its validation rules land as QUERY parameters rather than
+     * as a body — which is the only shape a parameter rename has anything to say about.
+     */
+    #[Group('Forms')]
+    #[OperationId('searchVersionedForms')]
+    #[Response(status: 200, type: 'list<FormData>', description: 'The matching forms.')]
+    public function search(SearchFormsRequest $request): JsonResponse
     {
         return $this->index();
     }

@@ -153,7 +153,7 @@ final readonly class RequiredEdit implements VersionVerb
                 '%s names "%s", which the %sschema for %s no longer publishes, so this version still says what the code says.',
                 PlainText::of($change->class),
                 PlainText::of($this->field),
-                $this->facet === SchemaFacet::Request ? 'request body ' : '',
+                $this->facet->schemaQualifier(),
                 PlainText::of($this->schema),
             ),
             help: 'Update the change to name the field as it is spelled today, or retire it if the field is gone.',

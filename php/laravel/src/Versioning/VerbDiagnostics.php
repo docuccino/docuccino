@@ -60,6 +60,6 @@ final class VerbDiagnostics
     /** The word that tells a response report from a request one, and nothing where there is nothing to tell. */
     private static function qualifier(VersionVerb $verb): string
     {
-        return $verb->facet() === SchemaFacet::Request ? 'request body ' : '';
+        return $verb->facet()->schemaQualifier();
     }
 }
