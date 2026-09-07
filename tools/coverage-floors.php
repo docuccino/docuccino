@@ -49,17 +49,18 @@ const FLOORS = [
     // does the trace's file bookkeeping (`TraceFiles`, 10/10) — while the `Tracer` wiring around them is
     // Scope-driven and pcov-invisible either way (0/86). Raising this floor means moving more of the
     // package into the first half; docs/testing.md records each move.
-    // Measured 49.09% (1209/2463) — RATCHETED 48 → 49, and the arithmetic is on the record because the
-    // margin is thin: 49% of this denominator is 1206.87 statements against the 1209 covered, so two
-    // lines of headroom, where `laravel` carries about thirty-five and `core` about thirty-nine. Taken
-    // anyway, for two reasons. The two decisions before it declined at four tenths of a statement
-    // (`laravel` at 96.00%) and at one (this package at 49.05%) — a next-line trigger and a one-line one,
-    // which is the hair-trigger the policy names — and this one tolerates two. And a floor of 48 leaves
-    // 26 statements of room, so a real regression in the measurable half would pass the gate in silence.
-    // When it fires, the answer is the one it has been five times: close a gap the standards were asking
-    // for anyway (docs/testing.md records each). The rise from 48.57% is the trace's file accounting
-    // moving into the in-process half (`TraceFiles` is pure bookkeeping, so the two questions it
-    // separates are unit-proven rather than subprocess-proven).
+    // Measured 49.70% (1253/2521) — the floor RATCHETED 48 → 49 when the figure was 49.09% (1209/2463),
+    // and the arithmetic went on the record because the margin was two lines: 49% of that denominator is
+    // 1206.87 statements against the 1209 covered, where `laravel` carries about thirty-five and `core`
+    // about thirty-nine. Taken anyway, for two reasons. The two decisions before it declined at four
+    // tenths of a statement (`laravel` at 96.00%) and at one (this package at 49.05%) — a next-line
+    // trigger and a one-line one, which is the hair-trigger the policy names — and that one tolerated
+    // two. And a floor of 48 leaves 26 statements of room, so a real regression in the measurable half
+    // would pass the gate in silence. It then very nearly fired: a fold of the throw analyser's status
+    // reads into one recording call deleted a fully covered class and grew a subprocess-only file,
+    // 49.30% → 49.11%, moving no golden. Taking that file's PUBLISHED half out into `UnreadStatuses` —
+    // records in, notices out, no Scope anywhere near it — is the sixth time the answer has been "close
+    // a gap the standards were asking for anyway" (docs/testing.md records each), and it leaves 17.
     // The floor got here as 44 → 46 → 47 → 48 → 49 by keeping the HttpException status
     // read's reflection and its decisions in process behind a source seam, so only the bodies-and-fold
     // adapter is subprocess-only; the hop into the static factory a throw names, the one rule both

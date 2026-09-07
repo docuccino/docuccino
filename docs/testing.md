@@ -264,7 +264,7 @@ Consequences:
   unit tests for its pure classes (translators, registries, config objects) — not more
   subprocess fixture tests.
 
-## Measured coverage (2026-09-02)
+## Measured coverage (2026-09-08)
 
 Line coverage (statements) over the suite excluding the `fixture` group. These are the numbers the
 floors are set from — measure, then set the floor to the measured integer, unless the measured integer
@@ -274,9 +274,9 @@ would sit a fraction of a statement above the figure (see `laravel` below).
 |---------------------|------------|-------|--------------------------------------------------|
 | `core`              | **97.31%** | 97    | fully in-process-measurable; 0.31pp behind it, ~39 statements |
 | `laravel`           | **96.30%** | 96    | ratcheted 95 → 96; 0.30pp behind it, ~35 statements |
-| `inference-phpstan` | **49.09%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.09pp, ~2 statements |
+| `inference-phpstan` | **49.70%** | 49    | real path is subprocess-only → `fixture`-proven; ratcheted 48 → 49; 0.70pp, ~17 statements |
 | `attributes`        | —          | —     | dep-free attribute classes, not in `<source>`    |
-| Overall             | 92.40%     | —     | informational only; no longer a gate             |
+| Overall             | 92.44%     | —     | informational only; no longer a gate             |
 
 Every figure here is one `composer test:coverage` run of the whole set, so the three read off the same
 clover report and the floors file quotes the same numerators. A record that disagrees with itself is the
@@ -351,6 +351,18 @@ and `core` floors carry. It is taken because the two decisions before it decline
 (`laravel` at 96.00%) and at 1.0 (this package at 49.05%), which are a next-line trigger and a one-line
 one, and because a floor of 48 would let 26 statements regress here without a word. When it does fire,
 the answer is the one it has been five times already: close a gap the standards were asking for anyway.
+
+It very nearly fired, and the sixth answer was the second shape again. Folding the throw analyser's status
+reads into one recording call deleted a small, fully covered class and grew `ThrowAnalyzer` — a file at 0
+covered statements, because nothing constructs it outside the engine — by five: 49.30% (1241/2517) became
+49.11% (1237/2519), which is **2** statements of headroom on a floor of 49. Nothing about the change was
+wrong, and the corpus said nothing about it either, because it moved no golden and the axis it acted on was
+the one the coverage job measures. So the published half came OUT: `UnreadStatuses` holds the records an
+analysis made and turns them into notices — which firings address somebody who can act, and the order they
+go out in — and no PHPStan scope drives any of it, so it is unit-drivable in the parent process where the
+analyser around it is not. 49.70% (1253/2521), and 17 statements of headroom. The tests that came with it
+are worth more than the ratio: the relativised throw site and the record-ordered notices were pinned only in
+the `fixture` group, so reverting either passed every one of the 10502 tests the coverage job ran at the time.
 
 `inference-phpstan`'s figure is **not** comparable to the others and must not be read as
 "untested": its real analysis runs out-of-process where pcov cannot see it (see above), and the
