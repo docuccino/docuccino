@@ -647,8 +647,12 @@ no remedy anyone owns — belongs to exactly that branch. Those firings are reco
 controller, in both directions: nothing published silently, and nothing reported that the document does not
 publish. Its hand-written ledger of the rows nobody can act on is itself checked — an entry is only
 excusable while the application does not declare the class, read off the fixture's own autoload map — so a
-row cannot be closed by pasting a sentence. That check is also why the ledger's unit is the class where the
-notice's is the site: what it proves is a property of the class, which every throw site reaching it
+row cannot be closed by pasting a sentence. Both directions are keyed on (action, class), which is the unit
+the DOCUMENT has: the result is deduped on `(fqcn, httpStatusHint)`, so one class thrown at two lines with
+neither status folding publishes ONE unplaced response and there is no per-site published fact to hold a
+notice against — a per-site key would read the second of two correct notices as reporting something the
+document does not carry. The test asserts that collapse rather than assuming it. The ledger's unit is the
+class for the same reason: what it proves is a property of the class, which every throw site reaching it
 inherits.
 
 **The `inference.http-exception-status-unread` notice.** Where it fires is what earns it its place. The

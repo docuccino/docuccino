@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Docuccino\Inference\PhpStan\Tests\Integration;
 
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 
 /**
  * The two conditions held against each other, in BOTH directions: what the document PUBLISHES under a
@@ -24,11 +27,19 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * row gives is CHECKED rather than trusted: the contract's own words make it a question about the
  * declaration the fold read, so the entry has to be a class this application does not declare.
  *
- * That check is also why the ledger's unit is the class where the notice's is the site. What it now
+ * Both directions are keyed on (action, class), which is the unit the DOCUMENT has: `ThrowAnalyzer`
+ * dedupes its result on `(fqcn, httpStatusHint)`, so an action throwing one class at two lines with
+ * neither status folding publishes ONE unplaced response, and there is no second published fact for a
+ * per-site comparison to hold a notice against. Keying the reverse direction by site would therefore
+ * fail on a shape that is ordinary and correct — two lines, two notices, one deduped response, one of
+ * them read as reporting something the document does not carry. The premise is asserted below rather
+ * than trusted, so if the result ever stops collapsing those the argument expires with a failure
+ * instead of quietly covering less.
+ *
+ * The ledger's unit is the class for the same reason, and its excuse survives the coarser key: what it
  * proves of an entry — the declarations that would have stated a status are somebody else's — is a
- * property of the CLASS, so every throw site that reaches one inherits the same proof; a second silent
- * site of a ledgered class is silent for the reason already written down. A silent site of any OTHER
- * class fails, whichever line it is written at.
+ * property of the CLASS, so every throw site that reaches one inherits the same proof. A silent class
+ * that is not written down fails, whichever line it is written at.
  */
 beforeEach(function (): void {
     ensureFixtureAvailable(FixtureRunner::available());
@@ -55,17 +66,33 @@ function unactionableUnplacedThrows(): array
  * Whether the fixture application declares a class, read off its own autoload map rather than listed
  * here — the same question the analyser's project filter asks, answered from the source of truth so
  * this states the rule independently of what the engine happens to do with it.
+ *
+ * Every section of the map is read, not just `psr-4`: an application autoloads its own classes by
+ * `classmap` and `files` too, and a reader that knew only one section would answer "not the
+ * application's" for a class it declares — which is the one answer that lets a silence be excused
+ * wrongly. The dev sections count as well; a class the application declares is its author's to edit
+ * whichever half of the map names it.
  */
 function fixtureDeclaresClass(string $fqcn): bool
 {
-    /** @var array{autoload?: array{psr-4?: array<string, string>}} $composer */
+    /** @var array<string, array{psr-4?: array<string, string>, classmap?: list<string>, files?: list<string>}> $composer */
     $composer = json_decode((string) file_get_contents(FixtureRunner::path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
-    $roots = $composer['autoload']['psr-4'] ?? [];
+
+    $roots = [];
+    $paths = [];
+    foreach (['autoload', 'autoload-dev'] as $section) {
+        $roots = [...$roots, ...array_map(
+            static fn (string $prefix, string $directory): array => [$prefix, $directory],
+            array_keys($composer[$section]['psr-4'] ?? []),
+            array_values($composer[$section]['psr-4'] ?? []),
+        )];
+        $paths = [...$paths, ...($composer[$section]['classmap'] ?? []), ...($composer[$section]['files'] ?? [])];
+    }
 
     // A map that stopped parsing would call every class foreign and pass this file forever.
     expect($roots)->not->toBeEmpty();
 
-    foreach ($roots as $prefix => $directory) {
+    foreach ($roots as [$prefix, $directory]) {
         if ($prefix === '' || ! str_starts_with($fqcn, $prefix)) {
             continue;
         }
@@ -76,7 +103,52 @@ function fixtureDeclaresClass(string $fqcn): bool
         }
     }
 
+    // The sections that name no namespace at all: the declaration has to be looked for.
+    $namespace = str_contains($fqcn, '\\') ? substr($fqcn, 0, (int) strrpos($fqcn, '\\')) : '';
+    $short = str_contains($fqcn, '\\') ? substr($fqcn, (int) strrpos($fqcn, '\\') + 1) : $fqcn;
+    $declares = '/^\s*(?:final\s+|abstract\s+|readonly\s+)*(?:class|interface|trait|enum)\s+'.preg_quote($short, '/').'\b/m';
+
+    foreach (fixtureAutoloadedFiles($paths) as $file) {
+        $source = (string) file_get_contents($file);
+        $declared = preg_match('/^\s*namespace\s+([^;{]+)/m', $source, $matches) === 1 ? trim($matches[1]) : '';
+        if ($declared === $namespace && preg_match($declares, $source) === 1) {
+            return true;
+        }
+    }
+
     return false;
+}
+
+/**
+ * The PHP files a list of `classmap`/`files` entries covers — an entry is a file or a directory.
+ *
+ * @param  list<string>  $paths
+ * @return list<string>
+ */
+function fixtureAutoloadedFiles(array $paths): array
+{
+    $files = [];
+    foreach ($paths as $entry) {
+        $path = FixtureRunner::path(rtrim($entry, '/'));
+        if (is_file($path)) {
+            $files[] = $path;
+
+            continue;
+        }
+
+        if (! is_dir($path)) {
+            continue;
+        }
+
+        /** @var SplFileInfo $found */
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS)) as $found) {
+            if ($found->isFile() && $found->getExtension() === 'php') {
+                $files[] = $found->getPathname();
+            }
+        }
+    }
+
+    return $files;
 }
 
 /**
@@ -110,6 +182,14 @@ function throwActionMethods(): array
  */
 function unplacedSweep(): array
 {
+    // Both tests below read the same sweep, and it is a real-engine analysis of the whole controller in
+    // a subprocess — so it is taken once per process rather than once per test.
+    /** @var array<string, array{named: array<string, true>, unplaced: array<string, list<string>>}>|null $memo */
+    static $memo = null;
+    if ($memo !== null) {
+        return $memo;
+    }
+
     $analyses = FixtureRunner::analyzeMany(
         'app/Http/Controllers/ThrowsController.php',
         'App\\Http\\Controllers\\ThrowsController',
@@ -149,7 +229,7 @@ function unplacedSweep(): array
         $sweep[(string) $method] = ['named' => $named, 'unplaced' => $unplaced];
     }
 
-    return $sweep;
+    return $memo = $sweep;
 }
 
 it('reports every unplaced status it publishes, bar the ones nobody can act on', function (): void {
@@ -159,6 +239,12 @@ it('reports every unplaced status it publishes, bar the ones nobody can act on',
 
     foreach (unplacedSweep() as $method => $sides) {
         foreach ($sides['unplaced'] as $fqcn => $sites) {
+            // The premise the (action, class) key rests on, executed rather than argued: a result
+            // deduped on `(fqcn, httpStatusHint)` cannot carry two unplaced responses for one class, so
+            // there is no second site for a notice to be held against. If that ever stops holding, the
+            // granularity question is reopened here rather than silently answered by this file.
+            expect($sites)->toHaveCount(1);
+
             $unplaced += count($sites);
 
             if (isset($sides['named'][$fqcn])) {
