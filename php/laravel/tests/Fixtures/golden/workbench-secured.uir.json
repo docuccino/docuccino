@@ -439,6 +439,63 @@
               }
             }
           },
+          "409": {
+            "x-docuccino": {
+              "id": "res:v1:6lovpxnzeeiy62bo",
+              "provenance": [
+                {
+                  "producer": "integration:framework-errors",
+                  "layer": "integration",
+                  "fields": [
+                    "component",
+                    "description"
+                  ],
+                  "source": {
+                    "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                    "line": 28,
+                    "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeArticle"
+                  }
+                }
+              ],
+              "facts": {
+                "component": "Conflict"
+              }
+            },
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "x-docuccino": {
+                    "provenance": [
+                      {
+                        "producer": "integration:framework-errors",
+                        "layer": "integration",
+                        "fields": [
+                          "properties",
+                          "required",
+                          "type"
+                        ],
+                        "source": {
+                          "file": "workbench/app/Http/Controllers/IntegrationsController.php",
+                          "line": 28,
+                          "symbol": "Workbench\\App\\Http\\Controllers\\IntegrationsController::storeArticle"
+                        }
+                      }
+                    ]
+                  },
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
           "422": {
             "x-docuccino": {
               "id": "res:v1:vvekqflzofr4yvyp",
@@ -2476,6 +2533,7 @@
                         "layer": "integration",
                         "fields": [
                           "properties",
+                          "required",
                           "type"
                         ],
                         "source": {
@@ -2491,7 +2549,10 @@
                     "message": {
                       "type": "string"
                     }
-                  }
+                  },
+                  "required": [
+                    "message"
+                  ]
                 }
               }
             }
@@ -4054,7 +4115,7 @@
     "document": {
       "id": "doc:secured",
       "configHash": "5ce1291fb113fe0f9cc8e7abdb8b501a7a5e66477f542fefa0655446f5b082cf",
-      "contentHash": "fc3be73a01090b1fb903d47a9ee3a5daa580150462471be3ac998a1c6b8e8681"
+      "contentHash": "cafa800b84d8a7f29c2a1b2b620c04db09b6e3f042d5085b4165335740d293e2"
     },
     "generator": {
       "name": "docuccino/laravel",
