@@ -1296,11 +1296,12 @@ takes one declaration per side.
 final class InvoiceRequestTitleReplacesName {}
 ```
 
-This one has a runtime half, and it is the half a per-version contract test can genuinely refuse. The
-older document now says a body spelling the field the old way is valid, and that is only true if your
-application still accepts it — so pin the version and replay a request written the old way: the
-assertion refuses an exchange the version documents as valid but the application turned away, which is
-a client locked out rather than a client merely misinformed.
+This one has a runtime half, and it is the half that costs the most when it is wrong. The older document
+now says a body spelling the field the old way is valid, and that is only true if your application still
+accepts it — a client pinned to that version is locked out rather than merely misinformed. So pin the
+version, replay a request written the old way, and assert the status you expected *beside* the contract
+assertions: those alone do not catch an inbound migration that stopped firing, for the reasons the
+[versioning guide](/laravel/guides/api-versioning/) sets out.
 
 Every example published beside that request body moves with the schema, so an example a consumer copies
 and posts back stays a body the version accepts. One the rewrite cannot follow is dropped and reported
