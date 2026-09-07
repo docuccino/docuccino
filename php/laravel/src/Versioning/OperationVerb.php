@@ -32,8 +32,10 @@ interface OperationVerb
     public function declares(): string;
 
     /**
-     * The edit, on one operation. `$outcome` accumulates the strongest thing seen across every
-     * operation in scope, so an implementation only ever raises it.
+     * The edit, on one operation. `$outcome` is that operation's OWN answer — the transformer hands a
+     * fresh one to every operation, because two operations are two declarations rather than two copies
+     * of one node — and an implementation only ever raises it, so one operation's several parameters
+     * cannot undo each other's answer.
      *
      * `$scope` is what the operation's nodes belong to: its own identity where it has one, and where it
      * stands where it does not — the same fallback a forked schema's ids are re-minted against. A verb
@@ -46,7 +48,16 @@ interface OperationVerb
     public function apply(array $operation, string $scope, IdentityGenerator $identity, VerbOutcome &$outcome): array;
 
     /**
-     * What an outcome has to say for itself. An applied verb says nothing.
+     * ONE operation the verb would not edit, and `$operation` is what a selector calls it. Per
+     * operation rather than per change, because a refusal is a fact about the operation it was refused
+     * for: an unscoped rename that edits `GET /b` and refuses `GET /a` has left the version document
+     * spelling one parameter two ways, and a report that collapsed the two would say nothing at all.
      */
-    public function diagnose(VerbOutcome $outcome, VersionChange $change): ?Diagnostic;
+    public function refused(string $operation, VersionChange $change): Diagnostic;
+
+    /**
+     * No operation in scope declared what the verb names — the one report the whole walk owes rather
+     * than any one operation, since most operations in scope will not declare it.
+     */
+    public function unreached(VersionChange $change): Diagnostic;
 }

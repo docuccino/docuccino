@@ -55,6 +55,14 @@ use Docuccino\Laravel\Support\ParameterLocations;
  *
  * `VersionChangeOrderTest` is the executed guard: swap the two halves of `read()` and it goes red.
  *
+ * **Every author-written word is normalised here, once, before anything compares or stores it.** A
+ * schema, a field and a rename's two ends are words somebody typed, and a factory that compared one as
+ * typed while storing it trimmed reads that word twice and gets two answers: `from: 'q', to: ' q'`
+ * moves nothing, and used to pass the self-rename refusal only to surface later as "would collapse two
+ * parameters into one" about a parameter the author never renamed. Each factory below trims first and
+ * every read after that is of the trimmed value, and the rename pair comes back out of
+ * {@see renameable()} already normalised so a caller cannot re-derive it a third way.
+ *
  * @internal
  */
 final class VerbOrder
@@ -107,7 +115,10 @@ final class VerbOrder
      */
     private static function required(string $schema, string $field, SchemaFacet $facet, bool $requiredBefore, string $declaration, string $class, array &$diagnostics): ?RequiredEdit
     {
-        if (trim($field) === '' || trim($schema) === '') {
+        $schema = trim($schema);
+        $field = trim($field);
+
+        if ($field === '' || $schema === '') {
             $diagnostics[] = VersionChangeCollector::unapplicable(
                 $class,
                 sprintf('one of its %s declarations leaves `schema:` or `field:` empty', $declaration),
@@ -125,7 +136,10 @@ final class VerbOrder
      */
     private static function removal(RemovedResponseField $removal, string $class, array &$diagnostics): ?RemovedEdit
     {
-        if (trim($removal->field) === '' || trim($removal->schema) === '') {
+        $schema = trim($removal->schema);
+        $field = trim($removal->field);
+
+        if ($field === '' || $schema === '') {
             $diagnostics[] = VersionChangeCollector::unapplicable(
                 $class,
                 'one of its #[RemovedResponseField] declarations leaves `schema:` or `field:` empty',
@@ -136,8 +150,8 @@ final class VerbOrder
         }
 
         return new RemovedEdit(
-            $removal->schema,
-            trim($removal->field),
+            $schema,
+            $field,
             $removal->type,
             $removal->required,
             $removal->description,
@@ -149,11 +163,13 @@ final class VerbOrder
      */
     private static function rename(string $schema, string $from, string $to, SchemaFacet $facet, string $declaration, string $class, array &$diagnostics): ?RenameEdit
     {
-        if (! self::renameable($from, $to, $declaration, $class, $diagnostics)) {
+        $pair = self::renameable($from, $to, $declaration, $class, $diagnostics);
+
+        if ($pair === null) {
             return null;
         }
 
-        return new RenameEdit($schema, $from, $to, $facet);
+        return new RenameEdit(trim($schema), $pair['from'], $pair['to'], $facet);
     }
 
     /**
@@ -161,7 +177,9 @@ final class VerbOrder
      */
     private static function parameterRename(RenamedParameter $rename, string $class, array &$diagnostics): ?ParameterRenameEdit
     {
-        if (! self::renameable($rename->from, $rename->to, '#[RenamedParameter]', $class, $diagnostics)) {
+        $pair = self::renameable($rename->from, $rename->to, '#[RenamedParameter]', $class, $diagnostics);
+
+        if ($pair === null) {
             return null;
         }
 
@@ -179,24 +197,46 @@ final class VerbOrder
             return null;
         }
 
-        return new ParameterRenameEdit($in, trim($rename->from), trim($rename->to));
+        // A path parameter is the one location whose name is stated TWICE — once on the parameter and
+        // once as the `{expression}` of the path it stands under — and only the parameter is something
+        // a version change can address. Renaming it alone publishes a template whose expression names
+        // no parameter beside a parameter no expression names, which is invalid in both directions and
+        // costs a generated client the operation or its URL builder. Refused rather than half-applied,
+        // and refused rather than rewritten: nothing on the wire carries a path parameter's name — a
+        // client sends `/things/42` — so no older version ever accepted another one, and moving the
+        // expression would re-spell the path every id under that operation is minted from.
+        if ($in === 'path') {
+            $diagnostics[] = VersionChangeCollector::unapplicable($class, sprintf(
+                'one of its #[RenamedParameter] declarations renames the path parameter "%s", and a path parameter is named by the URL template it stands under rather than by anything a client sends',
+                PlainText::of($pair['to']),
+            ), 'Nothing on the wire carries a path parameter\'s name, so no older version accepted it under another one. Rename a `query`, `header` or `cookie` parameter, and where the URL itself changed, publish the older one as a route of its own.');
+
+            return null;
+        }
+
+        return new ParameterRenameEdit($in, $pair['from'], $pair['to']);
     }
 
     /**
-     * The two refusals every rename shares: a pair with an empty end names nothing, and a pair with two
-     * equal ends declares a change nobody made.
+     * The two ends of a rename, normalised — or null where the pair names nothing to move. The two
+     * refusals every rename shares: a pair with an empty end names nothing, and a pair with two equal
+     * ends declares a change nobody made.
      *
      * @param  list<Diagnostic>  $diagnostics
+     * @return array{from: string, to: string}|null
      */
-    private static function renameable(string $from, string $to, string $declaration, string $class, array &$diagnostics): bool
+    private static function renameable(string $from, string $to, string $declaration, string $class, array &$diagnostics): ?array
     {
-        if (trim($from) === '' || trim($to) === '') {
+        $from = trim($from);
+        $to = trim($to);
+
+        if ($from === '' || $to === '') {
             $diagnostics[] = VersionChangeCollector::unapplicable($class, sprintf(
                 'one of its %s declarations leaves `from:` or `to:` empty',
                 $declaration,
             ));
 
-            return false;
+            return null;
         }
 
         if ($from === $to) {
@@ -206,9 +246,9 @@ final class VerbOrder
                 PlainText::of($from),
             ));
 
-            return false;
+            return null;
         }
 
-        return true;
+        return ['from' => $from, 'to' => $to];
     }
 }

@@ -2375,6 +2375,34 @@ function versionedSearchParameters(?string $dir): array
 }
 
 /**
+ * The parameters `GET /api/versioned-forms/{formId}` declares, as `<in>:<name>` in the order the
+ * document states them. That operation carries one parameter in every location OpenAPI has, so a verb
+ * that moves three of them and refuses the fourth is read against a document rather than against its
+ * own idea of a location. The version header is a `$ref` and states no name, so it is not one of these.
+ *
+ * @return list<string>
+ */
+function versionedLocateParameters(?string $dir): array
+{
+    versioningDiagnostics($dir, route: 'api/versioned-forms/*');
+
+    /** @var list<array<string, mixed>> $parameters */
+    $parameters = generateDocument(key: 'v')->document->toArray()['paths']['/api/versioned-forms/{formId}']['get']['parameters'];
+
+    $declared = [];
+    foreach ($parameters as $parameter) {
+        $name = $parameter['name'] ?? null;
+        $in = $parameter['in'] ?? null;
+
+        if (is_string($name) && is_string($in)) {
+            $declared[] = $in.':'.$name;
+        }
+    }
+
+    return $declared;
+}
+
+/**
  * The stub engine plus the two versioned FormRequests' `rules()` as it would recover them — constant
  * array shapes, never executed.
  *

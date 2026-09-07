@@ -70,6 +70,34 @@ it('re-mints the identity from where the operation stands when the operation car
         ->toBe($identity->parameterId('paths//api/things/get', 'query', 'q'));
 });
 
+/*
+ * The re-mint reads the DOCUMENT's `in`, never the author's word for it. The match folds case — `in:
+ * 'Query'` says what `in: 'query'` says — so a parameter published as `Query` is matched and renamed
+ * here, and minting from the author's lowercased word would leave it carrying an id that neither its
+ * old mint nor a fresh mint of its new name produces: a node the differ pairs with nothing. Only a
+ * parameter something other than this product's own recovery wrote is spelled that way, which is
+ * exactly why it is pinned rather than reasoned about.
+ */
+it('re-mints from the location the document spells, not the one the declaration spells', function (): void {
+    $identity = new IdentityGenerator;
+    $operation = ['parameters' => [[
+        'x-docuccino' => ['id' => $identity->parameterId('op:v1:one', 'Query', 'search')],
+        'name' => 'search',
+        'in' => 'Query',
+    ]]];
+    $outcome = VerbOutcome::Absent;
+
+    $edited = parameterRename()->apply($operation, 'op:v1:one', $identity, $outcome);
+
+    expect($outcome)->toBe(VerbOutcome::Applied)
+        ->and($edited['parameters'][0]['x-docuccino']['id'])
+        ->toBe($identity->parameterId('op:v1:one', 'Query', 'q'))
+        // And the two spellings really do mint different ids, so the line above says which one was read
+        // rather than merely naming a hash.
+        ->and($identity->parameterId('op:v1:one', 'Query', 'q'))
+        ->not->toBe($identity->parameterId('op:v1:one', 'query', 'q'));
+});
+
 it('raises the strongest outcome it saw rather than overwriting an earlier one', function (): void {
     // One verb is walked across every operation in scope, so an operation that had nothing to rename
     // must not undo the edit another one took.

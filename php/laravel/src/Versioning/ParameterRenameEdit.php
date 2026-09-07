@@ -40,7 +40,10 @@ use Docuccino\Laravel\Support\ParameterLocations;
 final readonly class ParameterRenameEdit implements OperationVerb
 {
     /**
-     * @param  string  $in  the location, already read against {@see ParameterLocations}
+     * @param  string  $in  the location, already read against {@see ParameterLocations} and never
+     *                      `path` — {@see VerbOrder} refuses that one, because a path parameter's name
+     *                      is stated on the parameter AND as the path's own `{expression}`, and only
+     *                      the first of the two is something a change can address
      * @param  string  $from  the name versions before the change accept
      * @param  string  $to  the name in the code today
      */
@@ -102,9 +105,14 @@ final readonly class ParameterRenameEdit implements OperationVerb
         // Assigned rather than rebuilt, so the member keeps its position and everything else it carries.
         $parameter['name'] = $this->from;
 
+        // Re-minted from the DOCUMENT's own `in`, never from the author's word for it. The id standing
+        // here was minted from this spelling, and the match above folds case — so a parameter published
+        // as `Query` would be re-minted under `query` and carry an id neither its old mint nor a fresh
+        // mint of its new name produces, which is a node the differ pairs with nothing.
         $docuccino = $parameter['x-docuccino'] ?? null;
-        if (is_array($docuccino) && is_string($docuccino['id'] ?? null)) {
-            $docuccino['id'] = $identity->parameterId($scope, $this->in, $this->from);
+        $published = $parameter['in'] ?? null;
+        if (is_array($docuccino) && is_string($docuccino['id'] ?? null) && is_string($published)) {
+            $docuccino['id'] = $identity->parameterId($scope, $published, $this->from);
             $parameter['x-docuccino'] = $docuccino;
         }
 
@@ -116,25 +124,24 @@ final readonly class ParameterRenameEdit implements OperationVerb
         return $operation;
     }
 
-    public function diagnose(VerbOutcome $outcome, VersionChange $change): ?Diagnostic
+    public function refused(string $operation, VersionChange $change): Diagnostic
     {
-        return match ($outcome) {
-            VerbOutcome::Applied => null,
-            VerbOutcome::Declined => VersionChangeCollector::unapplicable($change->class, sprintf(
-                'an operation already declares a %s parameter called "%s", so renaming "%s" onto it would collapse two parameters into one',
-                $this->in,
-                PlainText::of($this->from),
-                PlainText::of($this->to),
-            )),
-            // The two collapse into one sentence, and that is a fact about parameters rather than a
-            // shortcut. A schema verb can tell "the document publishes no such schema" from "it does,
-            // and the field is gone"; a parameter has no node of its own to be published or not, so
-            // there is exactly one thing to say — no operation in scope declares it.
-            VerbOutcome::Absent, VerbOutcome::Unresolved => $this->missing($change),
-        };
+        return VersionChangeCollector::unapplicable($change->class, sprintf(
+            'the operation "%s" already declares a %s parameter called "%s", so renaming "%s" onto it would collapse two parameters into one',
+            PlainText::of($operation),
+            $this->in,
+            PlainText::of($this->from),
+            PlainText::of($this->to),
+        ));
     }
 
-    private function missing(VersionChange $change): Diagnostic
+    /**
+     * Nothing in scope declares it — which is one sentence rather than two, and that is a fact about
+     * parameters rather than a shortcut. A schema verb can tell "the document publishes no such schema"
+     * from "it does, and the field is gone"; a parameter has no node of its own to be published or not,
+     * so there is exactly one thing to say.
+     */
+    public function unreached(VersionChange $change): Diagnostic
     {
         return new Diagnostic(
             severity: Severity::Warning,

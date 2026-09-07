@@ -413,6 +413,16 @@ half of every rename in a real version history undeclarable. `#[RenamedRequestFi
   query and in the path, so a rename that guessed would move a parameter the author never named. The
   four locations and the case-folding are stated once, shared with `#[IgnoreParam]`'s reading of the
   same word.
+- **`path` is one of the four locations and is not one of the renameable ones.** A path parameter's name
+  is stated TWICE — on the parameter and again as the `{expression}` of the path key it stands under —
+  and only the parameter is a node a version change addresses, so renaming it alone publishes an
+  expression naming no parameter beside a parameter naming no expression: invalid in both directions,
+  and a generated client loses the operation or its URL builder. Refused rather than made to work, and
+  the reason is not the cost of rewriting the template but that there is nothing to describe — nothing
+  on the wire carries a path parameter's name (a client sends `/things/42`), so no older version ever
+  accepted a different one. Rewriting the key would also re-spell the path every identity under that
+  operation is minted from, so the older document's operations would pair with nothing in the newer
+  one's diff: a version history reading as every operation removed and re-added.
 - **No example rewriter was needed, and one half of that was worth checking.** A request-body rename
   moves a key in `requestBody.content.*.example`, which `ChangedFieldExamples`' OAS descent already
   reaches — so the request rename inherited the rewriter whole, and what it owed was a test that the
@@ -431,14 +441,24 @@ half of every rename in a real version history undeclarable. `#[RenamedRequestFi
   path item through a `$ref` make both operations one node, so renaming its parameter would rename it
   for the path the scope excluded — the widening a scope exists to prevent. Refused for the same reason
   a private copy of a schema cannot be written there, under the same code, and it is why the parameter
-  walk is per NODE rather than per site: two sites over one node would otherwise apply the verb twice
-  and report the second pass as a rotted declaration.
-- **The contract check is at its most falsifiable here.** A response verb is caught by a response that
-  came out wrong; a request rename is caught by the application REFUSING a request its own document
-  calls valid — a client locked out rather than mildly misinformed, and the failure a version history
-  introduces most easily, because the inbound migration is the half nobody looks at. Disabling the
-  workbench's upgrade middleware makes the check fail with "responded 422, which the contract does not
-  document (it documents 201)".
+  walk is per NODE rather than per site: one node is one declaration and one edit, so it owes one
+  report, and asking it once per site names two operations for a refusal fixed once.
+- **The inbound half is the costliest to get wrong and the exchange assertions do NOT catch it.** A
+  response verb is caught by a response that came out wrong; a request rename is broken by the
+  application REFUSING a request its own document calls valid — a client locked out rather than mildly
+  misinformed, and the failure a version history introduces most easily, because the inbound migration
+  is the half nobody looks at. Both assertions are blind to it, each for its own reason.
+  `assertValidRequest()` is blind by construction: `CaptureRequestBody` is prepended GLOBALLY while a
+  migration is route middleware, so the body it holds to the document is the one that arrived — and an
+  old-shaped body is exactly what the older version documents as valid, whether the migration fired or
+  not. `assertValidResponse()` sees the 422, and on the shipped `error_responses => 'default'`
+  `ImplicitResponsesExtension` synthesises a 422 for any operation with a validated body, so the refusal
+  is a DOCUMENTED status and the check passes. Disabling the workbench's upgrade middleware makes the
+  check fail only because `versionedRequestDocuments()` sets `error_responses => 'none'`; the row beside
+  it at the shipped value passes every assertion, and is there to pin that. What catches it is a status
+  assertion — `->assertCreated()` — beside the contract assertions, which is what the guide now says.
+  The stronger oracle (assert the exchange is the documented SUCCESS rather than merely something the
+  document describes) is a real gap in the assertion API and is not a wording fix.
 
 ### Phase 2 — the production package
 

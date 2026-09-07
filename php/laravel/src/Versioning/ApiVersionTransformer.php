@@ -264,10 +264,13 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
      *
      * The one thing a scope cannot narrow is a path item two paths address through a `$ref`, because
      * both operations ARE one node — renaming its parameter would rename it for the path the scope
-     * excluded. Refused for the same reason {@see fork()} refuses to write a private copy there, and it
-     * is why the walk is per NODE rather than per site: two sites over one node would otherwise apply
-     * the verb twice, and the second pass over a parameter already carrying the older name would report
-     * a rotted declaration that is nothing of the kind.
+     * excluded. Refused for the same reason {@see fork()} refuses to write a private copy there.
+     *
+     * That shared node is also why the walk is per NODE rather than per site. One node is one
+     * declaration and one edit, so it owes one report: two sites over it would otherwise be asked
+     * twice and name TWO operations for a single refusal the author fixes once. (The second pass would
+     * edit nothing either way — a parameter already carrying the older name is no longer the one the
+     * verb looks for — so the dedupe is about what is reported rather than about what is written.)
      *
      * @param  array<string, mixed>  $doc
      * @param  array<string, true>  $said
@@ -295,8 +298,11 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             return $doc;
         }
 
-        $outcome = VerbOutcome::Absent;
         $written = [];
+        $applied = false;
+
+        /** @var list<string> $refused */
+        $refused = [];
 
         // Whether any operation was actually looked at. A run where every matched one was refused above
         // has said why already, and "no operation declares that parameter" on top of it would be a
@@ -326,17 +332,38 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             }
 
             $walked = true;
+
+            // One outcome PER OPERATION, and this is the half {@see VerbOutcome::strongest()} must not
+            // be asked for here. A schema is published more than once and the copies are one node, so
+            // the strongest answer over them is the answer; two operations are two declarations, and
+            // collapsing them lets a refusal on one hide under an edit on another — a version document
+            // that spells one logical parameter two ways, with nothing said.
+            $outcome = VerbOutcome::Absent;
             $edited = $verb->apply($operation, self::forkScope($operation, $site), $this->identity, $outcome);
 
             if ($edited !== $operation) {
                 $doc = DocumentGraph::with($doc, $site['keys'], $edited);
             }
+
+            if ($outcome === VerbOutcome::Applied) {
+                $applied = true;
+            }
+
+            if ($outcome === VerbOutcome::Declined) {
+                $refused[] = $site['signature'] ?? implode('/', $site['keys']);
+            }
         }
 
-        $diagnostic = $walked ? $verb->diagnose($outcome, $change) : null;
+        foreach ($refused as $operation) {
+            self::reportOnce($context, $verb->refused($operation, $change), $said);
+        }
 
-        if ($diagnostic !== null) {
-            self::reportOnce($context, $diagnostic, $said);
+        // Said only where the whole walk came to nothing. Most operations in scope will not declare the
+        // parameter — an unscoped verb visits every operation the document publishes — so "no operation
+        // declares it" is the walk's answer rather than any one operation's, and a run that edited or
+        // refused something has already said what it found.
+        if ($walked && ! $applied && $refused === []) {
+            self::reportOnce($context, $verb->unreached($change), $said);
         }
 
         return $doc;

@@ -290,7 +290,7 @@ to no class. There are seven:
 | --- | --- | --- |
 | [`#[RenamedResponseField]`](/laravel/reference/attributes/#renamedresponsefield) | this response field used to be called something else | publishes it under the old name |
 | [`#[RenamedRequestField]`](/laravel/reference/attributes/#renamedrequestfield) | this request field used to be called something else | accepts it under the old name |
-| [`#[RenamedParameter]`](/laravel/reference/attributes/#renamedparameter) | this query, path, header or cookie parameter used to be called something else | documents it under the old name |
+| [`#[RenamedParameter]`](/laravel/reference/attributes/#renamedparameter) | this query, header or cookie parameter used to be called something else | documents it under the old name |
 | [`#[MadeResponseFieldRequired]`](/laravel/reference/attributes/#maderesponsefieldrequired) | this response field is now always sent | leaves it out of `required` |
 | [`#[MadeResponseFieldOptional]`](/laravel/reference/attributes/#maderesponsefieldoptional) | this response field can now be absent | names it in `required` |
 | [`#[MadeRequestFieldOptional]`](/laravel/reference/attributes/#maderequestfieldoptional) | this request field is now optional | names it in `required`, and refuses a body without it |
@@ -331,9 +331,16 @@ field renamed on both sides therefore takes one declaration per side.
 
 `#[RenamedParameter]` is the one verb that names no class, because there is no class to name: a
 parameter stands on the **operation** rather than in a body, so where it travels and what it is called
-is all there is. `in:` is one of `query`, `path`, `header` or `cookie` — anything else names no location
-OpenAPI has and is refused, rather than widened to "wherever a parameter of that name turns up", which
-would move a `page` in the path when you meant the one in the query.
+is all there is. `in:` is one of `query`, `header` or `cookie` — anything else names no location OpenAPI
+has and is refused, rather than widened to "wherever a parameter of that name turns up", which would
+move a `page` in the path when you meant the one in the query.
+
+A **path** parameter is the one location this cannot move, and `in: 'path'` is refused with a reason. Its
+name is written twice — on the parameter and again as the `{expression}` of the path it stands under —
+and a change can address only the first, so moving it would publish an expression naming no parameter
+beside a parameter naming no expression. Nothing is lost by refusing it: a client sends `/invoices/42`
+and no name travels with it, so no older version ever accepted a different one. Where the URL itself
+changed you have an older *route*, and the honest way to describe one is to keep serving it.
 
 ```php
 #[ApiVersionChange(
@@ -351,10 +358,11 @@ Most of them have a runtime half you must write, and one does not:
   if it doesn't.
 - `#[RenamedRequestField]` and `#[RenamedParameter]` are the same claim on the way **in**: the older
   document now says a request spelling the field or the parameter the old way is valid, and that is only
-  true if your application still accepts it. This is the most falsifiable half of the vocabulary, and
-  the one that costs the most when it is wrong — a client pinned to that version is turned away rather
-  than merely misinformed. Replay a request written the old way with the version pinned; the assertion
-  refuses an exchange the document called valid and your app rejected.
+  true if your application still accepts it. It is the half that costs the most when it is wrong — a
+  client pinned to that version is turned away rather than merely misinformed. Replay a request written
+  the old way with the version pinned, and **assert the status you expected** beside the contract
+  assertions; the section on the contract test below says why that status assertion is the half that
+  goes red.
 - `#[MadeResponseFieldRequired]` only ever drops a `required` entry, which widens what the older
   document accepts. Nothing can serve a response that violates it, so no contract test can falsify
   it: it is safe by construction rather than by being checked.
@@ -463,6 +471,30 @@ thing and a runtime doing another, with nothing in between.
 It has to be able to fail, so make sure it does: send a response at today's shape and assert it against
 the older version's document. The assertion should refuse it and name the missing field. A per-version
 check that cannot fail is decoration.
+
+<Aside type="caution" title="The inbound half needs a status assertion">
+A response verb is caught by a response that came out wrong. A **request** verb is not, and the exchange
+assertions on their own will not catch an inbound migration that stopped firing:
+
+- `assertValidRequest()` holds the body that *arrived* to the document — captured before your own
+  middleware could rewrite it — and an old-shaped body is exactly what the older version documents as
+  valid. It passes whether the migration ran or not.
+- `assertValidResponse()` sees the `422` your validation returns when it didn't run, and on the shipped
+  `error_responses => 'default'` that 422 is a status the version's document already describes for any
+  operation with a validated body. A documented failure is still a pass.
+
+So assert what the request was supposed to *achieve*, beside the contract assertions:
+
+```php
+$this->withHeader('X-Api-Version', '2026-06-01')
+    ->postJson('/api/invoices', ['name' => 'Q3 retainer'])
+    ->assertCreated()
+    ->assertValidExchange();
+```
+
+`assertCreated()` is the line that goes red when a pinned client is turned away, and
+`assertValidExchange()` then holds the response it did get to that version's own schema.
+</Aside>
 
 <Aside type="caution" title="Two things this does not buy you">
 **Don't golden-freeze a past version's document.** Live versions legitimately change — a non-breaking
