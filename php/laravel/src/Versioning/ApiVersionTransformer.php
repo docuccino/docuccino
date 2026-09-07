@@ -186,7 +186,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         foreach ($change->selectors as $selector) {
             if (! self::namesAny([$selector], $reaching)) {
-                self::reportOnce($context, self::matchesNothing($change, $selector, $verb), $said);
+                self::reportOnce($context, VerbDiagnostics::scopeMatchesNothing($change, $selector, $verb), $said);
             }
         }
 
@@ -215,7 +215,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // would write it for that one too — the document-wide rename again in miniature, refused for
             // the same reason.
             if (self::sharedWithExcluded($reaching[$index], $reaching, $matched)) {
-                self::reportOnce($context, self::unforkable($change, sprintf(
+                self::reportOnce($context, VerbDiagnostics::unforkable($change, sprintf(
                     'the operation "%s" is published through a path item it shares with operations the scope leaves out, so it cannot be given a copy of the schema for %s and was left at the shape the code publishes',
                     PlainText::of($reaching[$index]['signature'] ?? implode('/', $reaching[$index]['keys'])),
                     PlainText::of($verb->schema()),
@@ -268,7 +268,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
 
         foreach ($selectors as $selector) {
             if (! self::namesAny([$selector], $sites)) {
-                self::reportOnce($context, self::selectorNamesNoOperation($change, $selector, $verb), $said);
+                self::reportOnce($context, VerbDiagnostics::scopeNamesNoOperation($change, $selector, $verb), $said);
             }
         }
 
@@ -295,7 +295,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             $written[$node] = true;
 
             if (self::sharedWithExcluded($site, $sites, $matched)) {
-                self::reportOnce($context, self::unnarrowable($change, sprintf(
+                self::reportOnce($context, VerbDiagnostics::unnarrowable($change, sprintf(
                     'the operation "%s" is published through a path item it shares with operations the scope leaves out, so %s cannot be renamed for it alone and was left at the name the code gives it',
                     PlainText::of($site['signature'] ?? implode('/', $site['keys'])),
                     $verb->declares(),
@@ -474,7 +474,7 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
             // that way is one route in; the other is a verb that PUTS a member back pointing at
             // something that leads here, which the expansion below meets on its way through the copy
             // and reports the same way, because it is the same fact.
-            self::reportOnce($context, self::unforkable($change, sprintf(
+            self::reportOnce($context, VerbDiagnostics::unforkable($change, sprintf(
                 'a copy of the schema for %s would point back at the shared component, so the operation "%s" cannot be given one and was left at the shape the code publishes',
                 PlainText::of($verb->schema()),
                 PlainText::of($site['signature'] ?? implode('/', $site['keys'])),
@@ -628,82 +628,5 @@ final readonly class ApiVersionTransformer implements DocumentTransformer
         foreach ($diagnostics as $diagnostic) {
             self::reportOnce($context, $diagnostic, $said);
         }
-    }
-
-    /**
-     * An operation the scope matched that cannot be given a private copy of the schema — the schema
-     * contains itself, or the node it is published through is shared with operations the scope leaves
-     * out. Its own code, because the remedy is the SCOPE rather than the declaration: nothing about the
-     * change is written wrong, and telling the author to fix the declaration sends them to a line that
-     * is already right.
-     */
-    private static function unforkable(VersionChange $change, string $problem): Diagnostic
-    {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'versioning.scope-unforkable',
-            message: sprintf('%s could not be narrowed as written: %s.', PlainText::of($change->class), $problem),
-            help: 'Drop the #[AppliesTo], or widen it to every operation that publishes the schema, and the shared component is renamed in place instead.',
-        );
-    }
-
-    /**
-     * A selector naming no operation this document publishes the schema for. Worth a warning because a
-     * scope that matches nothing is indistinguishable from a change that was never declared: a route
-     * renamed months later silently stops the change applying, and the version's document goes back to
-     * saying what the code says without anything having been edited.
-     */
-    private static function matchesNothing(VersionChange $change, string $selector, VersionVerb $verb): Diagnostic
-    {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'versioning.scope-matches-nothing',
-            message: sprintf(
-                '%s is scoped to "%s", which names no operation this document publishes %s for, so that part of the change applies to nothing.',
-                PlainText::of($change->class),
-                PlainText::of($selector),
-                PlainText::of($verb->schema()),
-            ),
-            help: 'Write the operation the way the document names it — `GET /api/things`, an operationId, or either with a `*` — and check the document publishes that schema for it.',
-        );
-    }
-
-    /**
-     * An operation a scope matched that cannot be narrowed at all, for a verb whose subject is the
-     * operation. Its own help rather than {@see unforkable()}'s, because there is no schema to widen the
-     * scope to: the remedy is the scope or the shared path item, not a component.
-     */
-    private static function unnarrowable(VersionChange $change, string $problem): Diagnostic
-    {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'versioning.scope-unforkable',
-            message: sprintf('%s could not be narrowed as written: %s.', PlainText::of($change->class), $problem),
-            help: 'Drop the #[AppliesTo], or widen it to every operation the shared path item publishes, and the rename is applied to it once.',
-        );
-    }
-
-    /**
-     * A selector naming no operation at all, for a verb that names no schema. Worth a warning for the
-     * same reason its schema-side sibling is: a scope that matches nothing is indistinguishable from a
-     * change that was never declared, so a route renamed months later silently stops the change
-     * applying and nobody edited anything.
-     *
-     * Its own wording rather than the schema one's, because there is no schema to say the document
-     * publishes it for — the operation either exists or it does not.
-     */
-    private static function selectorNamesNoOperation(VersionChange $change, string $selector, OperationVerb $verb): Diagnostic
-    {
-        return new Diagnostic(
-            severity: Severity::Warning,
-            code: 'versioning.scope-matches-nothing',
-            message: sprintf(
-                '%s is scoped to "%s", which names no operation this document publishes, so the rename of %s applies to nothing there.',
-                PlainText::of($change->class),
-                PlainText::of($selector),
-                $verb->declares(),
-            ),
-            help: 'Write the operation the way the document names it — `GET /api/things`, an operationId, or either with a `*`.',
-        );
     }
 }
