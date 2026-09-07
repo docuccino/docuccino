@@ -398,7 +398,30 @@ descriptions. Matching is subtype-aware, so your own subclass of any of these in
 | `Illuminate\Auth\Access\AuthorizationException` | `403` | `{ message }` |
 | `Illuminate\Database\Eloquent\ModelNotFoundException` | `404` | `{ message }` |
 | `Illuminate\Database\RecordsNotFoundException` | `404` | `{ message }` — so a bare `sole()` / `firstOrFail()` on the query builder is covered |
-| `Symfony\…\HttpKernel\Exception\NotFoundHttpException` | `404` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\BadRequestHttpException` | `400` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException` | `401` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException` | `403` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\NotFoundHttpException` | `404` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException` | `405` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\NotAcceptableHttpException` | `406` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\ConflictHttpException` | `409` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\GoneHttpException` | `410` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\LengthRequiredHttpException` | `411` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\PreconditionFailedHttpException` | `412` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException` | `415` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException` | `422` | `{ message }` — no `errors` map: that shape comes from a validator, and this exception carries none |
+| `Symfony\Component\HttpKernel\Exception\LockedHttpException` | `423` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\PreconditionRequiredHttpException` | `428` | `{ message }` |
+| `Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException` | `429` | `{ message }` — so Laravel's `ThrottleRequestsException` is covered by inheritance |
+| `Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException` | `503` | `{ message }` |
+| `Illuminate\Http\Exceptions\MalformedUrlException` | `400` | `{ message }` |
+| `Illuminate\Routing\Exceptions\InvalidSignatureException` | `403` | `{ message }` |
+| `Illuminate\Http\Exceptions\PostTooLargeException` | `413` | `{ message }` |
+
+The `HttpException` subclasses are there because each one fixes its status in its own constructor, where
+no analyser can read it — Docuccino knows the number the way you do, from the class you threw. The bare
+`HttpException` is not in the table: its status is an argument, so there is nothing about the class to
+look up.
 
 Anything outside that table still gets documented if its status is known: the final fallback tier emits
 `{ "message": string }` under the exception's status, or `500` when no status could be determined. Set
@@ -584,13 +607,22 @@ and can say which:
 
 | Status | Component | Produced for |
 | --- | --- | --- |
-| `400` | `BadRequest` | An unrecognized exception with a `400` status, and the [Query Builder](/laravel/packages/query-builder/) strict-mode rejection |
-| `401` | `Unauthorized` | `AuthenticationException`, and auth middleware |
-| `403` | `Forbidden` | `AuthorizationException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
+| `400` | `BadRequest` | `BadRequestHttpException`, `MalformedUrlException`, the [Query Builder](/laravel/packages/query-builder/) strict-mode rejection, and an unrecognized exception with a `400` status |
+| `401` | `Unauthorized` | `AuthenticationException`, `UnauthorizedHttpException`, and auth middleware |
+| `403` | `Forbidden` | `AuthorizationException`, `AccessDeniedHttpException`, `InvalidSignatureException`, `can:` / `signed` / `verified` middleware, a form request `authorize()` gate |
 | `404` | `NotFound` | `ModelNotFoundException`, `RecordsNotFoundException`, `NotFoundHttpException`, and route–model binding |
-| `422` | `UnprocessableEntity` | `ValidationException`, and any recovered request body |
-| `429` | `TooManyRequests` | [`throttle`](/laravel/documenting/rate-limiting/) middleware |
-| `405`, `409`, `500`, `503` | `MethodNotAllowed`, `Conflict`, `InternalServerError`, `ServiceUnavailable` | An unrecognized exception resolving to that status |
+| `413` | `ContentTooLarge` | `PostTooLargeException` |
+| `422` | `UnprocessableEntity` | `ValidationException`, `UnprocessableEntityHttpException`, and any recovered request body |
+| `429` | `TooManyRequests` | `ThrottleRequestsException`, `TooManyRequestsHttpException`, and [`throttle`](/laravel/documenting/rate-limiting/) middleware |
+| `500` | `InternalServerError` | An exception carrying no status anything could read |
+| `405`, `406`, `409`, `410`, `411`, `412`, `415`, `423`, `428`, `503` | `MethodNotAllowed`, `NotAcceptable`, `Conflict`, `Gone`, `LengthRequired`, `PreconditionFailed`, `UnsupportedMediaType`, `Locked`, `PreconditionRequired`, `ServiceUnavailable` | Symfony's `HttpException` subclass for that status — `MethodNotAllowedHttpException`, `ConflictHttpException` and the rest — or an unrecognized exception resolving to it |
+
+Every one of Symfony's `HttpException` subclasses is in that table, because each one fixes its status in
+its own constructor. Nothing has to read the number out of it: throw `GoneHttpException` and the
+operation documents a `410`. A subclass of your own inherits the status the same way — Laravel's
+`ThrottleRequestsException` is documented as a `429` because it extends `TooManyRequestsHttpException` —
+so the one that falls through to `500` is the bare `HttpException`, whose status is an argument rather
+than a fact about the class.
 
 An error nothing claims a name for still falls back to `Error<status>`, the statuses in that table
 included — the reason phrases belong to the tier documenting those errors, never to the status. A `402`

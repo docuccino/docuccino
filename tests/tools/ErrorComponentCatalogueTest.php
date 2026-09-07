@@ -113,3 +113,98 @@ it('holds the extension-authoring list to the same set', function (): void {
 
     expect(overridableNamesSentence(docsPage('extending/extension-authoring.mdx')))->toBe($published);
 });
+
+/**
+ * The errors page's OTHER catalogue: the framework-defaults table, which lists the exceptions rather
+ * than the statuses. It is a third hand-maintained statement of the same source of truth and it had
+ * been left short — the page named one `HttpException` subclass while the table mapped sixteen — so it
+ * is read back the same way: exception => status, in both directions.
+ *
+ * @return array<string, string>
+ */
+function frameworkDefaultsTableStatuses(string $page): array
+{
+    $header = '| Exception | Status | Body |';
+    $start = strpos($page, $header);
+
+    expect($start)->not->toBeFalse('the errors page no longer has a framework-defaults table');
+
+    $rows = [];
+    $lines = explode("\n", substr($page, (int) $start));
+    array_shift($lines);
+
+    foreach ($lines as $line) {
+        if (! str_starts_with($line, '|')) {
+            break;
+        }
+
+        $columns = array_map(trim(...), explode('|', trim($line, '|')));
+        if (count($columns) < 3 || str_starts_with($columns[0], '---')) {
+            continue;
+        }
+
+        if (preg_match('/^`([^`]+)`$/', $columns[0], $exception) !== 1) {
+            continue;
+        }
+
+        preg_match('/`([^`]+)`/', $columns[1], $status);
+        $rows[$exception[1]] = $status[1] ?? '';
+    }
+
+    ksort($rows, SORT_STRING);
+
+    return $rows;
+}
+
+/**
+ * The same map off the table itself.
+ *
+ * @return array<string, string>
+ */
+function frameworkDefaultsStatuses(): array
+{
+    $rows = [];
+    foreach (FrameworkExceptionTable::exceptions() as $fqcn) {
+        $facts = FrameworkExceptionTable::match($fqcn);
+
+        expect($facts)->not->toBeNull($fqcn.' is listed by exceptions() but matches nothing');
+
+        $rows[$fqcn] = (string) $facts['status'];
+    }
+
+    ksort($rows, SORT_STRING);
+
+    return $rows;
+}
+
+it('holds the framework-defaults table to the exceptions the code maps, in both directions', function (): void {
+    $documented = frameworkDefaultsTableStatuses(docsPage('laravel/documenting/errors.mdx'));
+
+    // A table that stopped parsing would satisfy an equality against an empty map. Both sides are real.
+    expect(count($documented))->toBeGreaterThanOrEqual(20)
+        ->and($documented)->toBe(frameworkDefaultsStatuses());
+});
+
+it('says which body shape each documented exception publishes', function (): void {
+    // The third column is the only place the page states the `errors` map, and the map is the one thing
+    // that differs between these rows. Stated here from the contract — a field-keyed `errors` object is
+    // a validator's output — rather than read off the code, so a row that stopped claiming it fails.
+    $page = docsPage('laravel/documenting/errors.mdx');
+    $validation = [];
+    foreach (FrameworkExceptionTable::exceptions() as $fqcn) {
+        $facts = FrameworkExceptionTable::match($fqcn);
+        if ($facts !== null && $facts['validation']) {
+            $validation[] = $fqcn;
+        }
+    }
+
+    expect($validation)->toBe(['Illuminate\\Validation\\ValidationException']);
+
+    foreach (array_keys(frameworkDefaultsTableStatuses($page)) as $fqcn) {
+        $row = strstr($page, '| `'.$fqcn.'` |');
+        $body = explode('|', (string) $row)[3] ?? '';
+        $shape = in_array($fqcn, $validation, true) ? '`{ message, errors }`' : '`{ message }`';
+
+        expect(trim($body))->toStartWith($shape);
+    }
+});

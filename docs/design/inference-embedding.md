@@ -608,6 +608,14 @@ asking for it primes that file, grows the analysed set and discards every walk t
 recorded. A folded value outside `100..599` is refused for the same reason a missing one is
 (`HttpStatusCode`): it would become a response key no consumer can read.
 
+That decline is why the ADAPTER carries a table of the framework's `HttpException` subclasses
+(`FrameworkExceptionTable`, held to the installed packages by `FrameworkHttpExceptionPinsTest`). The
+status such a class pins is a fact about the class rather than about the throw site, so a lookup loses
+nothing the fold would have found; without it, the engine's honest "nothing read this" reaches the
+document as a 500 the server never sends. The engine still reports nothing for these — the edit that
+would make the number readable is in `vendor/`, so nobody owns it — which is the ledger row
+`UnplacedStatusReconciliationTest` keeps for `ConflictHttpException`.
+
 Where nothing folds, the status is null — "an HTTP error whose status did not fold", which is neither the
 500 that means "not an HTTP error at all" nor evidence of one. A class the build could not read is
 therefore not automatically a Signal: `ThrowSignal` demotes a foreign declaration whose status nothing

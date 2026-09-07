@@ -10,11 +10,12 @@ use Docuccino\Inference\PhpStan\Tests\Support\FixtureRunner;
  * The two conditions held against each other: what the document PUBLISHES under a status nothing
  * stated, and what the build REPORTS about it.
  *
- * A signalled throw with no status hint is one the adapter files under
- * `FrameworkExceptionTable::UNPLACED_STATUS` — a 500 that stands in for a status nobody read. Where
- * the build says nothing about one, the reader is left with a response they cannot explain and no
- * line to go and look at. So every such throw is accounted for here: either the build reported it,
- * or it is written down below as one whose remedy nobody owns.
+ * A signalled throw with no status hint is one the adapter has to key by CLASSIFICATION rather than by
+ * a reading — `FrameworkExceptionTable`'s answer for the class where it has one, and
+ * `UNPLACED_STATUS` otherwise, a 500 that stands in for a status nobody read. Where the build says
+ * nothing about one, the reader is left with a response they cannot explain and no line to go and look
+ * at. So every such throw is accounted for here: either the build reported it, or it is written down
+ * below as one whose remedy nobody owns.
  *
  * The ledger is what makes this a guard rather than a mirror. It is stated from the CONTRACT — a
  * notice may only address somebody who can act, so silence is owed exactly where the fold gave up on
@@ -26,9 +27,11 @@ beforeEach(function (): void {
 });
 
 /**
- * The published-but-silent throws, by exception class, with the reason no notice is owed. The one
- * entry is Symfony's own: the status it pins is written in a `vendor/` constructor whose body PHPStan
- * strips, so nothing the reader could edit would have made it readable.
+ * The silent throws, by exception class, with the reason no notice is owed. The one entry is Symfony's
+ * own: the status it pins is written in a `vendor/` constructor whose body PHPStan strips, so nothing
+ * the reader could edit would have made it readable. The document does not lie about it — the framework
+ * table classifies the class at the 409 it pins — but that is the adapter's knowledge, not a reading,
+ * so the analyser's silence is what this ledger is about.
  *
  * @return array<string, string>
  */
