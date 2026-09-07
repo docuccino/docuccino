@@ -33,16 +33,26 @@ it('reads the ability and the arguments off a can: middleware', function (string
     'the middleware class name, ability only' => ['Illuminate\\Auth\\Middleware\\Authorize:viewAny', 'viewAny', []],
 ]);
 
-it('answers the same middlewares to the signal question as to the parse', function (string $middleware): void {
-    // One prefix list, one reader: the signal check and the gate reader used to spell `can:` out
-    // separately, and only one of them learnt the second spelling.
-    expect(CanGate::matches($middleware))->toBe(CanGate::parse($middleware) !== null);
+it('tells the signal question from the parse, and answers both off one name list', function (string $middleware, bool $isMiddleware, bool $isGate): void {
+    // One name list, one reader: the signal check and the gate reader used to spell `can:` out
+    // separately, and only one of them learnt the second spelling. The two questions are still not the
+    // same question, and the rows where they differ are the point — an authorization middleware naming
+    // no ability IS one, denies whatever meets it, and is not a gate any policy can be resolved for.
+    // That divergence is what `reportUndeniableGates()` bails on, so it is pinned rather than assumed.
+    expect(CanGate::matches($middleware))->toBe($isMiddleware)
+        ->and(CanGate::parse($middleware) !== null)->toBe($isGate);
 })->with([
-    'the can alias' => ['can:view,App\\Models\\Kiosk'],
-    'the middleware class name' => ['Illuminate\\Auth\\Middleware\\Authorize:view,App\\Models\\Kiosk'],
-    'another alias' => ['role:admin'],
-    'a signed url' => ['signed'],
-    'a prefix that only looks like one' => ['cancel:order'],
+    'the can alias' => ['can:view,App\\Models\\Kiosk', true, true],
+    'the middleware class name' => ['Illuminate\\Auth\\Middleware\\Authorize:view,App\\Models\\Kiosk', true, true],
+    'no ability at all' => ['can:', true, false],
+    'a blank ability' => ['can: ', true, false],
+    'the middleware class name with no ability' => ['Illuminate\\Auth\\Middleware\\Authorize:', true, false],
+    'the alias written bare' => ['can', true, false],
+    'the middleware class name written bare' => ['Illuminate\\Auth\\Middleware\\Authorize', true, false],
+    'another alias' => ['role:admin', false, false],
+    'a signed url' => ['signed', false, false],
+    'a prefix that only looks like one' => ['cancel:order', false, false],
+    'a class whose name only starts like one' => ['Illuminate\\Auth\\Middleware\\AuthorizeAll:view', false, false],
 ]);
 
 it('reads no gate out of a middleware that is not one', function (string $middleware): void {

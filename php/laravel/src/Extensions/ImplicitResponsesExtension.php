@@ -23,6 +23,9 @@ use Docuccino\Laravel\Support\CanGate;
 use Docuccino\Laravel\Support\GateBody;
 use Docuccino\Laravel\Support\GateDenial;
 use Docuccino\Laravel\Support\IgnoredResponses;
+use Docuccino\Laravel\Support\MiddlewareName;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
+use Illuminate\Routing\Middleware\ValidateSignature;
 use ReflectionClass;
 
 /**
@@ -125,8 +128,11 @@ final class ImplicitResponsesExtension implements OperationExtension
         foreach ($context->route->middleware as $middleware) {
             $gate = CanGate::parse($middleware);
             if ($gate === null) {
-                // A `signed` or `verified` middleware denies on its own, so the 403 is reachable however
-                // the gates read.
+                // Two shapes reach here having already accounted for the 403: a `signed` or `verified`
+                // middleware, which denies on its own; and the authorization middleware naming no
+                // ability, which {@see CanGate::matches()} answers to and which denies every request
+                // that meets it because no policy stands behind it. Returning on the second is also
+                // what leaves the report below at least one finding to name.
                 if (self::middlewareSignal($middleware) !== null) {
                     return;
                 }
@@ -221,10 +227,15 @@ final class ImplicitResponsesExtension implements OperationExtension
         if (CanGate::matches($middleware)) {
             return 'can-middleware';
         }
-        if ($middleware === 'signed' || str_starts_with($middleware, 'signed:')) {
+        // Each of these has the same two spellings the authorization middleware does, and the
+        // class-name one is what the framework's own static constructors write —
+        // `ValidateSignature::relative()` and `EnsureEmailIsVerified::redirectTo($route)`. Reading only
+        // the alias missed a middleware that really does produce the 403, which is worse than a missed
+        // signal: the reachability check then reports a route whose 403 the signature genuinely denies.
+        if (MiddlewareName::matches($middleware, 'signed', ValidateSignature::class)) {
             return 'signed-middleware';
         }
-        if ($middleware === 'verified' || str_starts_with($middleware, 'verified:')) {
+        if (MiddlewareName::matches($middleware, 'verified', EnsureEmailIsVerified::class)) {
             return 'verified-middleware';
         }
 

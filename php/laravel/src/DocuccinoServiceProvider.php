@@ -454,11 +454,6 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * The installed spatie/laravel-query-builder major, off Composer's runtime API. No extra cache
-     * keying: the app's composer.lock is already in {@see BuildFingerprint}, so an upgrade retires
-     * warm fragments on its own.
-     */
-    /**
      * The booted app's Gate, asked for only when somebody reads it. Both gate readers are built while
      * the extension set resolves, and an app that replaced the framework's auth providers has none to
      * give — an answer of null, not a build that throws.
@@ -476,6 +471,11 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         };
     }
 
+    /**
+     * The installed spatie/laravel-query-builder major, off Composer's runtime API. No extra cache
+     * keying: the app's composer.lock is already in {@see BuildFingerprint}, so an upgrade retires
+     * warm fragments on its own.
+     */
     private static function spatieQueryBuilderMajor(): int
     {
         if (! class_exists(InstalledVersions::class)) {
