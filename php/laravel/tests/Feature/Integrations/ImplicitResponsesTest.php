@@ -30,6 +30,9 @@ use Docuccino\Laravel\Registry\ExtensionRegistry;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\GateController;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\GateRequest;
 use Docuccino\Laravel\Tests\Fixtures\FormRequest\PlainRequest;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
+use Illuminate\Routing\Middleware\ValidateSignature;
 
 /**
  * The implicit-response matrix: 401/422/404/403 synthesized from statically visible middleware, binding
@@ -168,6 +171,12 @@ it('synthesizes a 403 for authorization middleware', function (string $middlewar
     'signed:relative' => ['signed:relative'],
     'verified' => ['verified'],
     'verified:route' => ['verified:route'],
+    // The class-name spelling, taken from the framework's own static constructors rather than typed out
+    // here: a row written against a string this suite invented is not reading the grammar it guards.
+    'Authorize::using()' => [Authorize::using('update', 'post')],
+    'ValidateSignature::relative()' => [ValidateSignature::relative()],
+    'ValidateSignature::absolute()' => [ValidateSignature::absolute()],
+    'EnsureEmailIsVerified::redirectTo()' => [EnsureEmailIsVerified::redirectTo('verification.notice')],
 ]);
 
 it('synthesizes a 403 for a FormRequest whose authorize() can deny', function (): void {
