@@ -42,8 +42,13 @@ it('resolves auth middleware to the drivers behind their guards', function (arra
     // scheme the server does enforce went unpublished.
     'an empty argument list names the default guard' => [['auth:'], ['web' => 'session'], 'web', ['session']],
     'an empty class-spelled argument list names the default guard' => [[Authenticate::class.':'], ['web' => 'session'], 'web', ['session']],
-    'a guard list of nothing but separators names the default guard' => [['auth: ,'], ['web' => 'session'], 'web', ['session']],
     'a named guard beside an empty one names both' => [['auth:api,'], ['api' => 'passport', 'web' => 'session'], 'web', ['passport', 'session']],
+    // Whitespace is a widening rather than the framework's rule, which is why it is a row of its own:
+    // the pipeline splits the parameter list untrimmed, so `auth: ` names the guard `' '`, and
+    // `AuthManager::guard(' ')` throws rather than falling back to the default. That route errors at
+    // runtime whatever the document says, so what is read is the name it was evidently meant to be.
+    'whitespace around a guard name is trimmed off' => [['auth: api'], ['api' => 'passport'], 'web', ['passport']],
+    'a guard list of nothing but separators falls back to the default' => [['auth: ,'], ['web' => 'session'], 'web', ['session']],
     'AuthenticateWithBasicAuth is not a guard driver' => [[AuthenticateWithBasicAuth::using('web')], ['web' => 'session'], 'web', []],
 ]);
 

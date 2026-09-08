@@ -23,7 +23,10 @@ final class MiddlewareResolution
      * The gathered entries an exclusion does not remove, mirroring `Router::resolveMiddleware()`: an
      * entry is dropped when its resolved name matches an excluded resolved name exactly, or — for a
      * name that is a class with no arguments — when it is a subclass of one. Both lists must already
-     * have their groups expanded, as the framework's do by this point.
+     * have their groups expanded, as the framework's do by this point. That stays a caller's contract
+     * rather than a check because it cannot be one: without the groups map a group name is
+     * indistinguishable from an alias, and taking the map would give this the expansion job the route
+     * resolver already owns.
      *
      * Matching in the framework's resolved-class space rather than on the literal strings is what makes
      * `withoutMiddleware(Authorize::using('view'))` remove a group's `can:view`, and what keeps

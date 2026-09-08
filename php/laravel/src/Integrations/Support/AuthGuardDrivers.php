@@ -17,8 +17,9 @@ use Docuccino\Laravel\Support\AuthMiddlewareNames;
 final class AuthGuardDrivers
 {
     /**
-     * The drivers the middleware resolve to, deduped in first-seen order. A guard missing from the map
-     * contributes nothing.
+     * The drivers the middleware resolve to, deduped in first-seen order — which is the only dedupe
+     * there is to do, since a guard named twice resolves to one driver either way. A guard missing from
+     * the map contributes nothing.
      *
      * @param  list<string>  $middleware
      * @param  array<string, string>  $drivers  guard name → driver
@@ -64,11 +65,17 @@ final class AuthGuardDrivers
      * The guards an entry names: the comma list for `auth:a,b`, and the default guard wherever the
      * entry names none — none otherwise.
      *
-     * An empty guard name IS the default guard, which is the whole of the rule: `AuthManager::guard()`
-     * opens with `$name = $name ?: $this->getDefaultDriver()`, so `auth`, `auth:` and `auth: ,` all
-     * authenticate against `config('auth.defaults.guard')` at runtime. Reading `auth:` as naming
-     * nothing left the route with its 401 and no integration claiming it, so a Sanctum or Passport
-     * scheme the server really does enforce went unpublished.
+     * An EMPTY guard name is the default guard, which is the framework's own rule:
+     * `AuthManager::guard()` opens with `$name = $name ?: $this->getDefaultDriver()`, so `auth`,
+     * `auth:` and the trailing name in `auth:api,` all authenticate against
+     * `config('auth.defaults.guard')` at runtime. Reading `auth:` as naming nothing left the route with
+     * its 401 and no integration claiming it, so a Sanctum or Passport scheme the server really does
+     * enforce went unpublished.
+     *
+     * Surrounding whitespace is a widening rather than that rule: the framework's pipeline splits the
+     * parameter list untrimmed and `guard(' web')` throws, so a route written `auth:web, api` errors
+     * instead of authenticating and no document is right about it. The author's evident intent is the
+     * more useful of two answers about a route that cannot answer at all.
      *
      * @return list<string>
      */
@@ -85,11 +92,7 @@ final class AuthGuardDrivers
         $guards = [];
         foreach (explode(',', $arguments) as $guard) {
             $guard = trim($guard);
-            $guard = $guard === '' ? $defaultGuard : $guard;
-
-            if (! in_array($guard, $guards, true)) {
-                $guards[] = $guard;
-            }
+            $guards[] = $guard === '' ? $defaultGuard : $guard;
         }
 
         return $guards;

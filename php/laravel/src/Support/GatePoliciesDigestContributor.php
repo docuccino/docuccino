@@ -47,10 +47,9 @@ final class GatePoliciesDigestContributor implements EnvironmentDigestContributo
         $records = [];
         $shadowable = [];
         foreach ($internals->policies as $class => $policy) {
-            $subject = (string) $class;
-            $record = $subject.'=>'.(is_string($policy) ? $policy : get_debug_type($policy));
+            $record = $class.'=>'.(is_string($policy) ? $policy : get_debug_type($policy));
             $records[] = $record;
-            if (GateInternals::shadowable($subject)) {
+            if (GateInternals::shadowable($class)) {
                 $shadowable[] = $record;
             }
         }
