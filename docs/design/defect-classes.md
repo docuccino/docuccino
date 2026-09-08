@@ -371,6 +371,15 @@ exclusion naming it removes nothing while a document that subtracted it anyway d
 does enforce. `class_exists` is a presence check and a hardcoded family is a guess at a map: the map has
 to be read off the router.
 
+*And the map cannot be the answer either, because normalising INTO one vocabulary is the same defect
+inside out.* Rewriting each gathered entry to the alias the application registered for its class fixed
+the authenticator and broke everything else at once: a route naming Sanctum's `CheckAbilities` under the
+application's own `token-abilities` alias came out under a name no reader has a row for, so the
+abilities, the scopes and the role all disappeared while the server went on enforcing them. A rewrite is
+lossless only for a reader that speaks the vocabulary it rewrites into, and these readers speak two.
+What the rewrite was reaching for was a fact about the CLASS — a middleware extending the framework's
+authenticator authenticates the way its parent does — which needs no map at all and so answers the same
+in the console context where the router holds none.
 *The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
 `fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no
 class name sits beside it. The related tell is a user-facing pattern over that vocabulary: it cannot be
@@ -392,15 +401,11 @@ agreement with the framework. The datasets assert both spellings against ONE exp
 each separately, because a reader that answers them differently is the defect; the hand-maintained
 family is read against the framework's own alias map so a fourth `auth*` alias cannot leave it short;
 the pattern is read with the product's one wildcard grammar rather than `fnmatch`, which treats a `\` in
-the pattern as an escape; and the corpus holds the two spellings of one middleware side by side, plus a
-route that opts out of its authenticator in the other spelling, which is the evidence that had been
-missing in all four instances.
-
-*What recognises it.* `AuthMiddlewareNamesTest` for the family and its spellings,
-`AuthMiddlewareDetectorTest` for the configured pattern over both of them, `MiddlewareResolutionTest`
-for the equivalence as a function of the alias map, `WithoutMiddlewareTest` and `MiddlewareAliasMapTest`
-for that same equivalence against the framework's own router, and the `workbench-auth-spelling` golden
-for the published bytes. See also
+the pattern as an escape; and the entry a route wrote is what is handed on, so the vocabulary is never
+narrowed on the way to a reader. What recognises the class is the corpus rather than a unit assertion:
+the two spellings of one middleware side by side under byte-lock, a differential against the real
+`Router` for every exclusion shape (`WithoutMiddlewareTest`), and a published-document guard per family
+of reader for a middleware the application aliased. See also
 [A partition that covers everything and agrees on nothing](#a-partition-that-covers-everything-and-agrees-on-nothing):
 the fix here is that entry's fix — one seam, every reader through it — and the family predicate that
 read the map a second way is exactly its tell.
