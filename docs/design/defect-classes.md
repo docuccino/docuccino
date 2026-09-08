@@ -509,3 +509,33 @@ claim rather than a vague one. What recognises the class is the harness rather t
 state against what a real console boot was measured to hold, and the suite standing in the population
 reads one application twice — once unsynced, once synced — against one golden, so a reader that only
 comes out right when something else constructed a kernel first cannot pass.
+## A digest that normalises away a distinction its reader keeps
+
+A digest stands in for a thing, and the normalisation that makes it stable is a claim about what does
+not matter. Where a reader downstream treats one of the dropped members as significant, the digest hands
+one name to two things — deterministically, so no byte comparison and no golden will ever see it — and
+the reader answers about whichever of the two it happened to meet.
+
+*Instances.* The id every id-less `components.schemas` entry published was minted by the INLINE-schema
+rule, which strips `description`, `title` and `example` and sorts `required` so an inline schema survives
+a cosmetic edit; the registry that decides whether two registrations are one component compares their
+bytes in full, so a pair differing only in prose stayed two published nodes under one id, and
+`ContractIndex::identities()` can address only one of them — a consumer asking which code produced a
+component is told about the other. See also
+[A digest that normalises what its reader walks in order](#a-digest-that-normalises-what-its-reader-walks-in-order),
+the sibling axis: there the dropped member is ORDER rather than content, and the reader walks the
+collection instead of comparing it.
+
+*The tell.* Two sites, one hashing and one comparing, with two statements of what makes two things
+different. The mint's own docblock is often the evidence: `IdentityGenerator::publishedSchemaId()` said
+in as many words that the inline mint "cannot serve here", beside a caller that used it. Ask, of any
+digest: name the reader, then name the member the digest drops that the reader keeps.
+
+*The fix that worked.* One statement of the difference, and every site derived from it.
+`ComponentRegistry::claim()` is the whole of what makes two registrations two components — the name asked
+for, the identity behind it, the bytes published — and the merge decision, the published name and the
+node id all read it, so a member added there reaches all three. The guard is stated off the DOCUMENT
+rather than off either site (`ComponentIdentityTest`): every entry of `components.schemas` is a published
+node, so an id two of them carry addresses neither, asserted over a dataset of pairs differing on each
+axis in turn, with rows for what the registry DOES merge so a mint that simply numbered its registrations
+would fail too. A guard that asks either site for its own rule agrees with whatever that site does.
