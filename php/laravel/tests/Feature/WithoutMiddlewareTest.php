@@ -157,7 +157,7 @@ it('publishes the 401 and the security requirement for exactly the routes that s
     $document = generateDocument(static function (array $raw): array {
         $raw['security'] = [
             'schemes' => ['bearer' => ['type' => 'http', 'scheme' => 'bearer']],
-            'auto_detect_middleware' => 'auth*',
+            'auth_middleware' => 'auth*',
             'default' => [['bearer' => []]],
         ];
 

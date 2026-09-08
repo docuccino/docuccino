@@ -393,7 +393,7 @@ route written the other way, and the route is documented as if the middleware we
 *Instances.* The authorization signal read `can` only, so a `403` the route really enforces went
 missing; `signed` and `verified` the same, and the reachability check then reported a `403` the signature
 genuinely denies. Worse, the authentication signal read the `auth` alias only — in three separate readers
-(the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
+(the `auth_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
 both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
 security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
 and by a generated client as needing no credential. The subtraction side had it too: a

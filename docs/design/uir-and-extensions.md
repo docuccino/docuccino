@@ -1295,7 +1295,7 @@ body matches the document's error style:
 
 | Status | Signal | Synthesized exception |
 |---|---|---|
-| 401 | auth middleware matches `security.auto_detect_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
+| 401 | auth middleware matches `security.auth_middleware`, and the route is not `#[Unauthenticated]` | `AuthenticationException` |
 | 422 | a request extension recovered a validated body (its integration producer owns `requestBody`) | `ValidationException` |
 
 > **Deliberate gap:** the 422 signal is body-verb only. A validated GET/HEAD applies its rules as query
@@ -1874,7 +1874,7 @@ return [
             'info' => ['title' => '…', 'version' => …, 'description' => ['file' => '…md']],
             'servers' => [['url' => 'https://{tenant}.example.com', 'variables' => [...]]],
             'routes' => ['include' => ['api/*'], 'exclude' => [...], 'filter' => PublicRoutes::class],
-            'security' => [...full scheme set..., 'auto_detect_middleware' => 'auth*'],
+            'security' => [...full scheme set..., 'auth_middleware' => 'auth*'],
             'error_responses' => 'default',
             'tags' => ['mapper' => PrefixTagMapper::class, 'map' => [...], 'default_strategy' => 'controller'],
             'content' => ['dir' => 'resources/docs/api'],

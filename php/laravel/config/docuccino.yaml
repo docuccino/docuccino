@@ -52,13 +52,13 @@ documents:
 
     security:
       # Routes whose middleware matches this wildcard get the `default` requirement below.
-      auto_detect_middleware: 'auth*'
+      auth_middleware: 'auth*'
       # Your own schemes, emitted as `components.securitySchemes`. Sanctum and Passport contribute
       # theirs automatically when installed.
       # schemes:
       #   bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
       #   apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' }
-      # The per-operation requirement applied to routes matched by auto_detect_middleware.
+      # The per-operation requirement applied to routes matched by auth_middleware.
       # default: [{ bearer: [] }]
       # A requirement applied to the whole document.
       # document: [{ bearer: [] }]

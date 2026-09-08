@@ -53,7 +53,7 @@ beforeEach(function (): void {
             'error_responses' => 'default',
             'security' => [
                 'schemes' => ['bearer' => ['type' => 'http', 'scheme' => 'bearer']],
-                'auto_detect_middleware' => 'auth*',
+                'auth_middleware' => 'auth*',
                 'default' => [['bearer' => []]],
             ],
         ],

@@ -165,21 +165,21 @@ breadth (`http` bearer/basic, `apiKey` in header/query/cookie, `oauth2` with any
 // config/docuccino.php → documents.default
 'security' => [
     // Routes whose middleware matches this wildcard get the `default` requirement below.
-    'auto_detect_middleware' => 'auth*',
+    'auth_middleware' => 'auth*',
 
     'schemes' => [
         'bearer' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'JWT'],
         'apiKey' => ['type' => 'apiKey', 'in' => 'header', 'name' => 'X-API-Key'],
     ],
 
-    // The per-operation requirement applied to routes matched by auto_detect_middleware.
+    // The per-operation requirement applied to routes matched by auth_middleware.
     'default' => [['bearer' => []]],
 ],
 ```
 
 Two things worth knowing:
 
-- `auto_detect_middleware` on its own does nothing visible — it decides **which** routes are
+- `auth_middleware` on its own does nothing visible — it decides **which** routes are
   "protected", and `default` decides **what** requirement they carry. Set both. The pattern is a
   wildcard matched against each route's middleware strings, so the shipped `auth*` covers `auth`,
   `auth:web`, `auth:sanctum` and friends.
@@ -331,7 +331,7 @@ or the alias on both — reads best either way.
 
 ## Implicit `401`
 
-When a route sits behind authentication middleware (matching `security.auto_detect_middleware`),
+When a route sits behind authentication middleware (matching `security.auth_middleware`),
 Docuccino also documents the `401` response an unauthenticated request receives — no annotation
 needed. Mark a route [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) to opt out. See
 [implicit responses](/laravel/documenting/errors/#implicit-responses-middleware-bindings--validation).

@@ -103,7 +103,7 @@ it('publishes the security requirement for a route authenticated under either al
     $paths = generateDocument(static function (array $raw): array {
         $raw['security'] = [
             'schemes' => ['bearer' => ['type' => 'http', 'scheme' => 'bearer']],
-            'auto_detect_middleware' => 'auth*',
+            'auth_middleware' => 'auth*',
             'default' => [['bearer' => []]],
         ];
 
