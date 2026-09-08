@@ -196,3 +196,24 @@ it('publishes the 401 and the security requirement for exactly the routes that s
             ->and($operation['security'])->toBe([['bearer' => []]]);
     }
 });
+
+/**
+ * The same answer for a router the HTTP kernel has never synced, which is the state a console build
+ * finds: the alias map is empty until that constructor runs. A reader of the router's own map alone
+ * stops equating the two spellings of one middleware there, and the workbench's `api/unguarded-forms`
+ * — which opts out of its authenticator in the other spelling — gets back a 401 it does not enforce.
+ */
+it('answers the same for a router the HTTP kernel has never synced', function (): void {
+    $this->refreshApplication();
+    bindStubEngine();
+
+    // The premise, from the framework: this really is what a console build reads.
+    expect(app('router')->getMiddleware())->toBe([]);
+
+    $paths = generateDocument()->document->toArray()['paths'];
+
+    expect($paths['/api/unguarded-forms']['get']['responses'])->not->toHaveKey('401')
+        // Anti-vacuity: this document does publish 401s, on the route beside it whose authenticator
+        // nothing excluded.
+        ->and($paths['/api/guarded-forms']['get']['responses'])->toHaveKey('401');
+});
