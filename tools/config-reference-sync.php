@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types=1);
-use Symfony\Component\Yaml\Yaml;
+use Docuccino\Laravel\Config\DeclaredSettings;
 
 // Configuration-reference sync guard.
 //
@@ -84,11 +84,11 @@ const CONFIG_REFERENCE_SECTIONS = [
 
 /**
  * Map keys whose names the application chooses. The segment below one of these is a name, not a key,
- * so it normalizes to `*` on both sides.
+ * so it normalizes to `*` on both sides. Off {@see DeclaredSettings}, because the PRODUCT reads the
+ * same surface — `config.unknown-setting` reports a key the shipped file does not declare — and two
+ * spellings of this rule would let this guard and that report disagree about what a key even is.
  */
-const CONFIG_REFERENCE_KEYED_MAPS = [
-    'documents',
-];
+const CONFIG_REFERENCE_KEYED_MAPS = DeclaredSettings::KEYED_MAPS;
 
 /**
  * Subtrees whose contents are the reader's own data or verbatim OpenAPI, never Docuccino keys. The
@@ -206,19 +206,10 @@ function config_reference_declared_keys(string $php, string $base = ''): array
  * sorted — the same answer {@see config_reference_declared_keys()} gives for the framework's PHP
  * config, so the page can be held to both files with one comparison.
  *
- * Accepts a whole configuration file or a fragment of one (a `yaml` block from the docs), which is
- * what `$base` is for: a fragment quoted in a section is read from that section's path.
- *
- * A commented-out key is still a key here for the same reason it is there: the shipped file shows
- * every option, with the optional ones commented, and an option nobody documented is the drift this
- * guard exists to catch. So the comment marker is removed IN PLACE — `#` plus the one space after it
- * become nothing, and the indentation on either side is untouched, which is what keeps a commented
- * child nested under its commented parent.
- *
- * Prose is dropped by being unable to look like YAML. The key pattern is deliberately strict —
- * lower-case, no spaces, a colon immediately after — because a sentence with a colon in it is the one
- * thing that would otherwise parse as a setting: "Declares that this document IS an API version:"
- * has a capital and spaces, and fails on both counts.
+ * The reading itself is {@see DeclaredSettings::of()}, in the package, for the reason above the keyed
+ * maps: the product derives its own settings surface from these bytes, and a second implementation
+ * of "what does the shipped file declare" would let the two answer differently. Every test below
+ * naming this function is that reader's test.
  *
  * @return list<string>
  *
@@ -226,103 +217,7 @@ function config_reference_declared_keys(string $php, string $base = ''): array
  */
 function config_reference_yaml_keys(string $yaml, string $base = ''): array
 {
-    $kept = [];
-
-    foreach (explode("\n", $yaml) as $line) {
-        $marker = strpos($line, '#');
-
-        if ($marker === false || trim($line) === '') {
-            $kept[] = $line;
-
-            continue;
-        }
-
-        if (trim(substr($line, 0, $marker)) !== '') {
-            // A live setting with a trailing comment: YAML reads it correctly as it stands.
-            $kept[] = $line;
-
-            continue;
-        }
-
-        $content = substr($line, 0, $marker).preg_replace('/^# ?/', '', substr($line, $marker));
-
-        if (preg_match('/^\s*(?:[A-Za-z_][A-Za-z0-9_.-]*:(?:\s|$)|- )/', $content) === 1) {
-            $kept[] = $content;
-        }
-    }
-
-    $parsed = Yaml::parse(implode("\n", config_reference_yaml_reopened($kept)));
-
-    return config_reference_normalize(config_reference_yaml_paths(is_array($parsed) ? $parsed : [], $base));
-}
-
-/**
- * The kept lines with a shipped empty collection re-opened where commented children follow it.
- *
- * `integrations: {}` beside a commented `api_resources:` bag is ONE key written two ways: the `{}` is
- * there because an empty value has to be spelled out — a blank one parses to null and hashes
- * differently — and the children are there because the file shows every option. Uncommenting them
- * would otherwise put a block under a value that is already closed, so the marker comes off and the
- * children nest where they were written to.
- *
- * @param  list<string>  $lines
- * @return list<string>
- *
- * @internal
- */
-function config_reference_yaml_reopened(array $lines): array
-{
-    $indent = static fn (string $line): int => strlen($line) - strlen(ltrim($line, ' '));
-
-    foreach ($lines as $index => $line) {
-        if (preg_match('/^(\s*[A-Za-z_][A-Za-z0-9_.-]*:)\s*(?:\{\}|\[\])\s*(?:#.*)?$/', $line, $match) !== 1) {
-            continue;
-        }
-
-        for ($next = $index + 1; $next < count($lines); $next++) {
-            if (trim($lines[$next]) === '') {
-                continue;
-            }
-
-            if ($indent($lines[$next]) > $indent($line)) {
-                $lines[$index] = $match[1];
-            }
-
-            break;
-        }
-    }
-
-    return $lines;
-}
-
-/**
- * Every dotted path in a parsed tree, with a list ENTRY contributing the wildcard segment its index
- * is not — which is how {@see config_reference_declared_keys()} reads the same shape on the PHP side,
- * so `export.targets.*.format` is the one answer both files give.
- *
- * @param  array<array-key, mixed>  $bag
- * @return list<string>
- *
- * @internal
- */
-function config_reference_yaml_paths(array $bag, string $prefix): array
-{
-    $paths = [];
-    $list = array_is_list($bag);
-
-    foreach ($bag as $key => $value) {
-        $path = $list ? config_reference_join($prefix, '*') : config_reference_join($prefix, (string) $key);
-
-        if (! $list) {
-            $paths[] = $path;
-        }
-
-        if (is_array($value)) {
-            $paths = array_merge($paths, config_reference_yaml_paths($value, $path));
-        }
-    }
-
-    return $paths;
+    return DeclaredSettings::of($yaml, $base);
 }
 
 /**
@@ -729,7 +624,8 @@ function config_reference_join(string $prefix, string $path): string
 
 /**
  * Application-chosen names collapse to `*`, so `documents.default.viewer` and `documents.*.viewer`
- * are the one key they describe.
+ * are the one key they describe. {@see DeclaredSettings::normalized()} owns the rule, so the PHP
+ * reader here and the product's own reader cannot part company over it.
  *
  * @param  list<string>  $paths
  * @return list<string>
@@ -738,22 +634,5 @@ function config_reference_join(string $prefix, string $path): string
  */
 function config_reference_normalize(array $paths): array
 {
-    $normalized = [];
-
-    foreach ($paths as $path) {
-        $segments = explode('.', $path);
-
-        foreach (array_keys($segments) as $index) {
-            if ($index > 0 && in_array($segments[$index - 1], CONFIG_REFERENCE_KEYED_MAPS, true)) {
-                $segments[$index] = '*';
-            }
-        }
-
-        $normalized[] = implode('.', $segments);
-    }
-
-    $normalized = array_values(array_unique($normalized));
-    sort($normalized);
-
-    return $normalized;
+    return DeclaredSettings::normalized($paths);
 }
