@@ -67,6 +67,7 @@ use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
@@ -79,6 +80,7 @@ use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
@@ -136,6 +138,68 @@ function stubDocumentArray(?callable $mutateConfig = null): array
     bindStubEngine();
 
     return generateDocument($mutateConfig)->document->toArray();
+}
+
+/**
+ * The middleware the route resolver hands on for every registered route under `$uriPrefix`, against
+ * what the framework's own `Router::gatherRouteMiddleware()` keeps for the same route. The mirror is
+ * only worth what it is compared to, so both sides are read back through the framework's OWN resolver —
+ * the comparison is in its vocabulary rather than in one of ours — and as a set of class identities,
+ * since a leading `\` names the same class and a short form and its class are one middleware.
+ *
+ * Fails when fewer than `$atLeast` routes were compared: a scan that stopped seeing its routes has to
+ * fail rather than pass.
+ */
+function assertMiddlewareAgreesWithRouter(string $uriPrefix, int $atLeast): void
+{
+    /** @var Router $router */
+    $router = app('router');
+    $aliases = $router->getMiddleware();
+    $groups = $router->getMiddlewareGroups();
+
+    /**
+     * @param  array<array-key, mixed>  $names
+     * @return list<string>
+     */
+    $identities = static function (array $names) use ($aliases, $groups): array {
+        $out = [];
+        foreach ($names as $name) {
+            if (! is_string($name)) {
+                continue;
+            }
+
+            foreach ((array) MiddlewareNameResolver::resolve($name, $aliases, $groups) as $resolved) {
+                if (is_string($resolved)) {
+                    $out[] = ltrim($resolved, '\\');
+                }
+            }
+        }
+        sort($out);
+
+        return array_values(array_unique($out));
+    };
+
+    /** @var array<string, mixed> $raw */
+    $raw = config('docuccino.documents.default');
+    $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+
+    $ours = [];
+    foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {
+        $ours[$descriptor->uri] = $descriptor->middleware;
+    }
+
+    $compared = 0;
+    foreach ($router->getRoutes() as $route) {
+        $uri = '/'.ltrim($route->uri(), '/');
+        if (! str_starts_with($uri, $uriPrefix) || ! array_key_exists($uri, $ours)) {
+            continue;
+        }
+
+        $compared++;
+        expect($identities($ours[$uri]))->toBe($identities($router->gatherRouteMiddleware($route)), $uri);
+    }
+
+    expect($compared)->toBeGreaterThanOrEqual($atLeast);
 }
 
 /**

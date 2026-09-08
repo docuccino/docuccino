@@ -342,3 +342,70 @@ consumer that has only a line an explicit ask that DECLINES when the line carrie
 degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
+
+## A middleware read by one of its two spellings
+
+A route names a middleware by its registered alias or by the middleware's own class name, and those are
+two spellings of one thing. Every static constructor the framework ships for a middleware that takes
+arguments renders `static::class.':'.$arguments` — `Authenticate::using('web')`, `Authorize::using()`,
+`ValidateSignature::relative()`, `EnsureEmailIsVerified::redirectTo()`, and a route may simply list
+`Middleware::class` besides. A reader that knows one spelling therefore sees no middleware at all on a
+route written the other way, and the route is documented as if the middleware were absent.
+
+*Instances.* The authorization signal read `can` only, so a `403` the route really enforces went
+missing; `signed` and `verified` the same, and the reachability check then reported a `403` the signature
+genuinely denies. Worse, the authentication signal read the `auth` alias only — in three separate readers
+(the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
+both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
+security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
+and by a generated client as needing no credential. The subtraction side had it too: a
+`withoutMiddleware()` exclusion was subtracted by literal string, so opting out of the authenticator in
+the spelling the group did not use left the `401` on a route that really does run unauthenticated.
+
+*Which spellings those are is the APPLICATION's fact, not the framework's.* An application registers
+`auth` against its own `Authenticate` subclass — the Laravel ≤10 skeleton does, and every application
+upgraded from one carries it — and a reader holding the framework's alias map then gets both directions
+wrong at once: the subclass spelled by class name is a middleware nobody recognises, so the route is
+published public; and the framework's own authenticator is no longer what `auth` resolves to, so an
+exclusion naming it removes nothing while a document that subtracted it anyway drops a `401` the server
+does enforce. `class_exists` is a presence check and a hardcoded family is a guess at a map: the map has
+to be read off the router.
+
+*And the map cannot be the answer either, because normalising INTO one vocabulary is the same defect
+inside out.* Rewriting each gathered entry to the alias the application registered for its class fixed
+the authenticator and broke everything else at once: a route naming Sanctum's `CheckAbilities` under the
+application's own `token-abilities` alias came out under a name no reader has a row for, so the
+abilities, the scopes and the role all disappeared while the server went on enforcing them. A rewrite is
+lossless only for a reader that speaks the vocabulary it rewrites into, and these readers speak two.
+What the rewrite was reaching for was a fact about the CLASS — a middleware extending the framework's
+authenticator authenticates the way its parent does — which needs no map at all and so answers the same
+in the console context where the router holds none.
+*The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
+`fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no
+class name sits beside it. The related tell is a user-facing pattern over that vocabulary: it cannot be
+asked to spell an FQCN, so the fix is to match it against every spelling of the middleware rather than to
+widen the pattern. And a third: an equivalence used for both of the two questions here, which are not
+the same question. "Does this string name authentication?" wants the generous reading, since a name that
+authenticates owes a `401` however it is spelled. "Are these two strings the same middleware?" wants the
+framework's own, which compares its resolved names with their arguments attached and gates its subclass
+fallback on `class_exists` — so `auth` and `auth:` are two middleware to it, and reading them as one
+subtracted a `401` nothing had excluded.
+
+*The fix that worked.* One reader of the grammar (`MiddlewareName`: alias or class name, bare or
+`:args`, a leading `\` trimmed), and one list per middleware read through it — `CanGate` for the
+authorization middleware, `AuthMiddlewareNames` for the authentication family, where every question is
+a function of `spellings()` so no two of them can answer one string differently. For the equivalence
+question, `MiddlewareResolution` mirrors `Router::resolveMiddleware()` through the application's alias
+map, which also brought the `throttle` and `can` exclusions — the same defect, never reported — into
+agreement with the framework. The datasets assert both spellings against ONE expectation rather than
+each separately, because a reader that answers them differently is the defect; the hand-maintained
+family is read against the framework's own alias map so a fourth `auth*` alias cannot leave it short;
+the pattern is read with the product's one wildcard grammar rather than `fnmatch`, which treats a `\` in
+the pattern as an escape; and the entry a route wrote is what is handed on, so the vocabulary is never
+narrowed on the way to a reader. What recognises the class is the corpus rather than a unit assertion:
+the two spellings of one middleware side by side under byte-lock, a differential against the real
+`Router` for every exclusion shape (`WithoutMiddlewareTest`), and a published-document guard per family
+of reader for a middleware the application aliased. See also
+[A partition that covers everything and agrees on nothing](#a-partition-that-covers-everything-and-agrees-on-nothing):
+the fix here is that entry's fix — one seam, every reader through it — and the family predicate that
+read the map a second way is exactly its tell.
