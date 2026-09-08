@@ -11,7 +11,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Support\Glob;
-use Docuccino\Laravel\Support\AuthMiddlewareNames;
+use Docuccino\Laravel\Support\MiddlewareResolution;
 use Docuccino\Laravel\Support\UnknownDocumentPins;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
@@ -106,23 +106,25 @@ final class LaravelRouteResolver implements RouteResolver
     /**
      * The route's middleware with kernel groups expanded to their members (recursively, cycle-guarded),
      * so something registered app-wide via a group — Sanctum's stateful middleware on `api`, a group's
-     * `throttle:` — is detected as if it were on the route. Aliases and `alias:params` are kept
-     * verbatim because the detectors read those short forms, so this widens detection without the
-     * wholesale alias resolution `Router::gatherRouteMiddleware()` does.
+     * `throttle:` — is detected as if it were on the route. The result stays in the short-form
+     * vocabulary the detectors read, so this widens detection without the wholesale alias resolution
+     * `Router::gatherRouteMiddleware()` does.
      *
-     * `withoutMiddleware(...)` exclusions are expanded through the same groups then subtracted, so a
-     * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never
-     * enforces. Matching happens in our short-form vocabulary, not Laravel's resolved-FQCN space —
-     * except that the authenticator is subtracted by any of its spellings, because Laravel resolves
-     * both sides to a class name before subtracting and so really does drop a group's `auth` for a
-     * `withoutMiddleware(Authenticate::class)`. Subtracting by the literal string alone left the 401
-     * and the security requirement on a route that enforces neither.
+     * The application's alias map is read for the two questions that cannot be answered without it, and
+     * this is the only place holding it ({@see MiddlewareResolution}): `withoutMiddleware(...)`
+     * exclusions are subtracted the way the framework subtracts them, in its resolved-class space, so a
+     * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never enforces
+     * and one that opts out in a spelling the framework does NOT equate keeps the response it does; and
+     * an entry naming a middleware by class comes back under the alias it is registered against, so a
+     * route written `Authenticate::using('web')` reads as the `auth:web` it resolves to whether the
+     * application aliased the framework's authenticator or its own subclass of it.
      *
      * @return list<string>
      */
     private function gatherMiddleware(Route $route): array
     {
         $groups = $this->router->getMiddlewareGroups();
+        $aliases = $this->router->getMiddleware();
 
         $out = [];
         foreach (self::strings($route->gatherMiddleware()) as $entry) {
@@ -134,26 +136,12 @@ final class LaravelRouteResolver implements RouteResolver
             $this->expandMiddleware($entry, $groups, $excluded, []);
         }
 
-        if ($excluded !== []) {
-            $spellings = [];
-            foreach ($excluded as $entry) {
-                foreach (AuthMiddlewareNames::spellings($entry) as $spelling) {
-                    $spellings[$spelling] = true;
-                }
-            }
-
-            $out = array_values(array_filter($out, static function (string $entry) use ($spellings): bool {
-                foreach (AuthMiddlewareNames::spellings($entry) as $spelling) {
-                    if (isset($spellings[$spelling])) {
-                        return false;
-                    }
-                }
-
-                return true;
-            }));
+        $kept = [];
+        foreach (MiddlewareResolution::subtract($out, $excluded, $aliases) as $entry) {
+            $kept[] = MiddlewareResolution::canonical($entry, $aliases);
         }
 
-        return array_values(array_unique($out));
+        return array_values(array_unique($kept));
     }
 
     /**
