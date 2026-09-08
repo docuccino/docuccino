@@ -1938,14 +1938,12 @@ export-only document is.
 
 `error_responses` says what is published for the exceptions the application does not render itself:
 `default` (framework-default JSON error shapes, plus the implicit responses) or `none` (neither). It is a
-closed set of two, and any other value is read as `default` and reported as
-`config.unknown-error-responses` — a document's whole error contract is not a thing to change on a
-misspelling, in either direction. There is no preset: what an application's own handler returns, down to
+closed set of two, and any other value is read as `default` and reported as `config.unknown-value` —
+a document's whole error contract is not a thing to change on a misspelling, in either direction. There is no preset: what an application's own handler returns, down to
 the media type it sends it as, is read from its code and published over both.
 `tags.default_strategy` chooses how an operation
 with no `#[Group]` gets its default tag: `controller` (the controller's short name → `tags.map`, the
-default) or `none` (no default tag); an unknown value coerces to `controller` and emits a
-`config.unknown-tag-strategy` info diagnostic. `tags.definitions` entries are full OAS 3.2 Tag
+default) or `none` (no default tag); an unknown value is read as `controller` and reported. `tags.definitions` entries are full OAS 3.2 Tag
 Objects (`name` + optional `summary`/`description`/`parent`/`kind`) plus Docuccino's own `weight`,
 which orders the emitted array (weight, then name) and is not emitted. Parents are resolved AFTER
 that sort, so the result never depends on definition order: a `parent` naming no defined tag emits

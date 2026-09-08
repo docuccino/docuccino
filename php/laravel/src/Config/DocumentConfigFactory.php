@@ -6,6 +6,7 @@ namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Support\ConfiguredFlag;
+use Docuccino\Core\Support\ConfiguredKeyword;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\LineEndings;
@@ -75,7 +76,12 @@ final readonly class DocumentConfigFactory
             // boot and every viewer request read it ({@see ViewerConfig}). It shapes no emitted byte,
             // so carrying it here lets the runtime ask the document config and not the config files.
             viewer: ViewerConfig::for($key),
-            versioning: is_string($config['versioning'] ?? null) ? $config['versioning'] : 'none',
+            versioning: ConfiguredKeyword::read(
+                $config,
+                'versioning',
+                DocumentConfig::VERSIONING_DEFAULT,
+                DocumentConfig::VERSIONING_POLICIES,
+            )->keyword,
             tagMapper: (new ConfiguredTagMapper($this->container))->resolve($tags),
             raw: $config,
         );
@@ -87,20 +93,25 @@ final readonly class DocumentConfigFactory
      * Absent and present-but-null are deliberately different readings. A document that never names the
      * key has expressed nothing, and `none` is the documented fallback it gets — the shipped file says
      * `default`, so a second document inherits none of the first's errors. A key that IS present has an
-     * author behind it, and `env('DOCUCCINO_ERRORS')` with the variable unset is exactly that: an intent
+     * author behind it, and a key written with nothing after the colon is exactly that: an intent
      * expressed and unreadable. Reading it as `none` would take every 4xx and 5xx out of the document
      * without a word, so it degrades the way every other value outside the set does — as the shipped
-     * `default`, with {@see ConfigDiagnostics} naming it.
+     * `default`, with {@see ConfiguredKeywords} naming it.
      *
      * @param  array<string, mixed>  $config
      */
     private static function errorResponses(array $config): string
     {
         if (! array_key_exists('error_responses', $config)) {
-            return 'none';
+            return DocumentConfig::ERROR_RESPONSES_ABSENT;
         }
 
-        return $config['error_responses'] === 'none' ? 'none' : 'default';
+        return ConfiguredKeyword::read(
+            $config,
+            'error_responses',
+            DocumentConfig::ERROR_RESPONSES_DEFAULT,
+            DocumentConfig::ERROR_RESPONSES,
+        )->keyword;
     }
 
     /**

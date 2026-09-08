@@ -15,12 +15,14 @@ use Docuccino\Core\Overlay\OverlayDocument;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Provenance\MessagePaths;
 use Docuccino\Core\Provenance\RootRelativeSourcePathResolver;
+use Docuccino\Core\Support\ConfiguredKeyword;
 use Docuccino\Core\Support\ConfinedPath;
 use Docuccino\Core\Support\Hydrate;
 use Docuccino\Core\Support\PlainText;
 use Docuccino\Laravel\Config\BuildConfig;
 use Docuccino\Laravel\Config\ConfiguredDocuments;
 use Docuccino\Laravel\Config\ConfiguredFlags;
+use Docuccino\Laravel\Config\ConfiguredKeywords;
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Engine\EngineConfigFile;
 use Docuccino\Laravel\Engine\EnginePackage;
@@ -90,9 +92,11 @@ final class DocumentBuilder
             // parsed, every setting whose type it refused, and what is left in the framework config
             // that nothing reads. First, because an unreadable file is why the rest of this is empty.
             ...$this->settings()->diagnostics(),
-            // The switches outside every document — the master one, the fragment cache, the lint rules.
-            // Reported here because they are read at container binds, where nothing can carry a report.
+            // The switches outside every document — the master one, the fragment cache, the lint rules —
+            // and the keyword settings beside them. Reported here because they are read at container
+            // binds and inside a viewer request, where nothing can carry a report.
             ...ConfiguredFlags::forInstall(),
+            ...ConfiguredKeywords::forInstall(),
             ...$this->engineDiagnostics(),
             ...$this->cachePathDiagnostics(),
             ...$this->descriptionFileDiagnostics($config),
@@ -308,9 +312,19 @@ final class DocumentBuilder
         )];
     }
 
+    /**
+     * `on_route_error`, read as the closed set it is. Through the keyword reader rather than the typed
+     * one, so a value it cannot use is reported ONCE, by the catalogue that knows the set, instead of
+     * twice by two readers with two different pieces of advice.
+     */
     private function onRouteError(): string
     {
-        return $this->settings()->values()->string('on_route_error', 'skeleton') ?? 'skeleton';
+        return ConfiguredKeyword::read(
+            $this->settings()->all(),
+            'on_route_error',
+            DocumentConfig::ON_ROUTE_ERROR_DEFAULT,
+            DocumentConfig::ON_ROUTE_ERRORS,
+        )->keyword;
     }
 
     /**

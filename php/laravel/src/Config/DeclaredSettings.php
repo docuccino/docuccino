@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Config\ConfigFile;
+use Docuccino\Core\Support\Arr;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -67,6 +68,29 @@ final class DeclaredSettings
      */
     public static function of(string $yaml, string $base = ''): array
     {
+        return self::normalized(self::paths(self::tree($yaml), $base));
+    }
+
+    /**
+     * The shipped file's settings as a TREE — every option it declares, commented ones uncommented,
+     * holding the value written beside it. The file shows every setting with its default, so this is
+     * where a guard reads what a setting's documented default actually is rather than trusting a
+     * constant to agree with the bytes an install writes.
+     *
+     * @return array<string, mixed>
+     */
+    public static function shippedTree(): array
+    {
+        return self::tree((string) @file_get_contents(self::path()));
+    }
+
+    /**
+     * A settings file's declarations as a parsed tree, live and commented-out alike.
+     *
+     * @return array<string, mixed>
+     */
+    public static function tree(string $yaml): array
+    {
         $kept = [];
 
         foreach (explode("\n", $yaml) as $line) {
@@ -95,7 +119,7 @@ final class DeclaredSettings
         /** @var mixed $parsed */
         $parsed = Yaml::parse(implode("\n", self::reopened($kept)));
 
-        return self::normalized(self::paths(is_array($parsed) ? $parsed : [], $base));
+        return is_array($parsed) ? Arr::stringKeyed($parsed) : [];
     }
 
     /**

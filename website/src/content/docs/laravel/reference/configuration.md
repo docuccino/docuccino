@@ -38,6 +38,16 @@ passed over, and the message names the one it was probably meant to be. That mat
 indentation: a block one level too far in doesn't misspell a key, it moves the whole bag under the
 wrong parent, and everything in it goes quiet together.
 
+A value is read as the type its setting takes, and refused rather than converted where it is not: a
+setting that takes text and holds a number is reported (`config.value-type`), a switch that holds
+anything but `true` or `false` is reported (`config.not-a-switch`), and a setting whose **Values**
+column lists a closed set — `error_responses`, `tags.default_strategy`, the `representation` policy
+keywords, `versioning`, `on_route_error`, `viewer.source` — holding none of them is reported
+(`config.unknown-value`). In every case the setting falls back to its documented default and the
+message names the setting, what you wrote and the value used instead. YAML is why this is worth
+saying: `nullable: no` is the *text* `no`, `1.10` is the number 1.1, and a bare date is a number too,
+so a value converted quietly would be a policy nobody chose.
+
 The **Default** column is the value the published file ships with. For most keys that is also the
 built-in fallback you get by deleting the key, but not for all of them: `error_responses` ships as
 `'default'` and falls back to `'none'` when a document omits it, which is why a second document
@@ -300,9 +310,9 @@ To drop some and keep others, leave this at `default` and name the ones you don'
 
 Deleting the key is how you ask for `none` — that is the fallback a document that doesn't name the key
 gets, and it is why a second document [inherits nothing](/laravel/guides/multiple-documents/) from the
-first. Keeping the key and giving it anything else — a misspelling, or a key with nothing after
-the colon, which reads as null — is reported as `config.unknown-error-responses` and read as
-`default`, so a value that can't be read never quietly empties the document of its errors.
+first. Keeping the key and giving it anything else — a misspelling, or a key with nothing after the
+colon, which reads as null — is reported as `config.unknown-value` and read as `default`, so a value
+that can't be read never quietly empties the document of its errors.
 
 ### `tags`
 
@@ -318,7 +328,8 @@ tags:
 
 `default_strategy` tags an operation that has no `#[Group]`: `controller` (the default — the
 controller's short name with a trailing `Controller` stripped, e.g. `FormController` → `Form`, then
-run through `map`) or `none` (leave it untagged). Closure routes are never auto-tagged.
+run through `map`) or `none` (leave it untagged). Anything else is read as `controller` and reported
+(`config.unknown-value`). Closure routes are never auto-tagged.
 `map` is a raw-tag → display-tag table (exact match wins, else the first matching prefix).
 `mapper` swaps in a custom `TagMapper`. `definitions` supplies OAS top-level tag objects.
 

@@ -47,7 +47,7 @@ return [
                 // Where the served spec comes from: `generate` rebuilds on every request (fine locally
                 // or behind a gate), `artifact` reads the document's export path, `cache` serves what
                 // `docuccino:cache` warmed — prefer one of those two for an exposed viewer.
-                'source' => 'generate',
+                'source' => 'generate', // generate | artifact | cache
                 // Which viewer renders the page. 'scalar' (the default) has a try-it-out console;
                 // 'redoc' is a reference-only three-panel layout. Both ship their script with the
                 // package. Your own driver registers with Docuccino::extend() and is named here.

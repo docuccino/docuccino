@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Config;
 
 use Docuccino\Core\Extensions\Context\DocumentConfig;
+use Docuccino\Core\Support\ConfiguredKeyword;
 use Docuccino\Core\Support\Hydrate;
 
 /**
@@ -26,6 +27,29 @@ use Docuccino\Core\Support\Hydrate;
  */
 final class ViewerConfig
 {
+    /**
+     * Where the served spec comes from — a closed set, ordered as the shipped framework config lists
+     * it. Declared here rather than at the request that switches on it, because the request has
+     * nowhere to put a diagnostic and the BUILD is what reports a value outside the set
+     * ({@see ConfiguredKeywords}).
+     *
+     * @var non-empty-list<string>
+     */
+    public const array SOURCES = ['generate', 'artifact', 'cache'];
+
+    public const string SOURCE_DEFAULT = 'generate';
+
+    /**
+     * One viewer bag's `source`, refused rather than coerced: a value outside the set is served the
+     * default, which is what the request's own `match` was already going to do, and the build says so.
+     *
+     * @param  array<string, mixed>  $viewer
+     */
+    public static function source(array $viewer): string
+    {
+        return ConfiguredKeyword::read($viewer, 'source', self::SOURCE_DEFAULT, self::SOURCES)->keyword;
+    }
+
     /**
      * The bag for `$key`, empty when the document configures no viewer — which is an ordinary shape,
      * because an export-only document has no page to serve.
