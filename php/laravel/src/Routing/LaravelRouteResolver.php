@@ -32,6 +32,9 @@ use Illuminate\Routing\Router;
  */
 final class LaravelRouteResolver implements RouteResolver
 {
+    /** @var list<Diagnostic> */
+    private array $middlewareDiagnostics = [];
+
     public function __construct(
         private readonly Router $router,
         private readonly RouteReflector $reflector = new RouteReflector,
@@ -41,9 +44,6 @@ final class LaravelRouteResolver implements RouteResolver
         private readonly ?VendorRoutePolicy $vendorPolicy = null,
         private readonly UnknownDocumentPins $pins = new UnknownDocumentPins,
     ) {}
-
-    /** @var list<Diagnostic> */
-    private array $middlewareDiagnostics = [];
 
     /**
      * What the walk found and could not say for itself, emptied as it is read: the `#[InDocs]` keys
