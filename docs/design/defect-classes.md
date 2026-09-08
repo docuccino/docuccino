@@ -658,3 +658,43 @@ for a manifest input asks the cache's own freshness. Getting these the wrong way
 passes on the unfixed code. The cost direction needs executing too, and can be: the same bytes written
 again with a newer timestamp must leave every fragment warm, which is what makes `composer install` free,
 and a re-ordered safelist must leave them warm, which is what the sort is for.
+
+## A message that names where a setting used to live
+
+Configuration moves. When it does, the reader that reads it is rewritten and every SENTENCE about it is
+not: a diagnostic, a console line or a page still names the old file, and the author who follows it edits
+a key nothing reads. That is worse than a stale doc page, because the message arrived from the tool
+itself and so carries the tool's authority — the author has no reason to doubt it, and the setting they
+just wrote is silently ignored.
+
+The asymmetry that makes it survive is that nothing fails. The reader is correct, the tests of the reader
+pass, and the string is a string: no type, no call, nothing an analyser or a golden can disagree with. So
+the population is not under-covered, it is unrepresented — a message is only ever wrong to the person
+holding it.
+
+*Instances.* Six printed strings survived the split between `docuccino.yaml` and `config/docuccino.php`:
+`docuccino:explain`'s top-rung hint, the `config.accept-unused` report's own header, the out-of-memory
+notice's two levers, the contract assertions' unknown-document failure, and the response recorder's
+"say where recordings live" — which also printed a PHP array for a YAML file, so following it produced
+neither the right file nor the right syntax. Thirty-two documentation pages carried the same defect, and
+three of them named no file at all, which is the shape a scan for the OLD filename walks straight past.
+
+*The tell.* A filename or a config path spelled as a literal inside a message. Every one of the six was
+a literal; not one of them had asked the reader that owns the setting where it lives. The second tell is
+a mechanism whose whole premise was the old location: `docuccino:watch` warned that `config:cache` bakes
+`DOCUCCINO_FRAGMENT_CACHE`, which was true while `cache.enabled` was in the config repository and became
+unreachable the moment it left — so the warning, its check, and both of its tests were asserting a state
+the product can no longer be in.
+
+*The fix that worked.* Name the file off the reader that owns it — `ConfigFile::NAME` — so a message
+cannot disagree with the file it points at, and delete the mechanisms whose premise moved rather than
+rewording them. For the pages, `DocsConfigSplitTest` reads the KEYS in every `php` fenced block on the
+site and refuses one that shows a setting the build reads from the YAML, with the boot surface derived
+from the shipped framework config rather than listed in the guard; the guard also asserts it agrees with
+`ConfigSplit::FRAMEWORK_KEYS`, because the build checks a leftover key against that list and a surface
+tightened in one place only would leave a page admitted here and reported by a build.
+
+The tell is a config PATH, not the token `docuccino.`. The emitted document's own extension keys
+(`x-docuccino.id`, `x-docuccino.provenance`, `x-docuccino.diagnostics`) share the prefix and are a
+different namespace, and a live `config('docuccino.enabled')` names a key that really is still there —
+so a find-and-replace on the prefix corrupts three readers to fix one comment.
