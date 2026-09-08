@@ -11,6 +11,7 @@ use Docuccino\Core\Extensions\Context\DocumentConfig;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
 use Docuccino\Core\Extensions\Contracts\RouteResolver;
 use Docuccino\Core\Support\Glob;
+use Docuccino\Laravel\Support\AuthMiddlewareNames;
 use Docuccino\Laravel\Support\UnknownDocumentPins;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
@@ -111,7 +112,11 @@ final class LaravelRouteResolver implements RouteResolver
      *
      * `withoutMiddleware(...)` exclusions are expanded through the same groups then subtracted, so a
      * route that opts out of `throttle:api` or `auth` isn't documented with a 429/401 it never
-     * enforces. Matching happens in our short-form vocabulary, not Laravel's resolved-FQCN space.
+     * enforces. Matching happens in our short-form vocabulary, not Laravel's resolved-FQCN space —
+     * except that the authenticator is subtracted by any of its spellings, because Laravel resolves
+     * both sides to a class name before subtracting and so really does drop a group's `auth` for a
+     * `withoutMiddleware(Authenticate::class)`. Subtracting by the literal string alone left the 401
+     * and the security requirement on a route that enforces neither.
      *
      * @return list<string>
      */
@@ -130,7 +135,22 @@ final class LaravelRouteResolver implements RouteResolver
         }
 
         if ($excluded !== []) {
-            $out = array_diff($out, $excluded);
+            $spellings = [];
+            foreach ($excluded as $entry) {
+                foreach (AuthMiddlewareNames::spellings($entry) as $spelling) {
+                    $spellings[$spelling] = true;
+                }
+            }
+
+            $out = array_values(array_filter($out, static function (string $entry) use ($spellings): bool {
+                foreach (AuthMiddlewareNames::spellings($entry) as $spelling) {
+                    if (isset($spellings[$spelling])) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }));
         }
 
         return array_values(array_unique($out));

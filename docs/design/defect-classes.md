@@ -358,7 +358,10 @@ genuinely denies. Worse, the authentication signal read the `auth` alias only �
 (the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
 both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
 security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
-and by a generated client as needing no credential.
+and by a generated client as needing no credential. The subtraction side had it too: a
+`withoutMiddleware()` exclusion was subtracted by literal string, so opting out of the authenticator in
+the spelling the group did not use left the `401` on a route that — Laravel resolving both sides to a
+class name before subtracting — really does run unauthenticated.
 
 *The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
 `fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no

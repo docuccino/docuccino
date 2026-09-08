@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Docuccino\Laravel\Config\DocumentConfigFactory;
 use Docuccino\Laravel\Routing\LaravelRouteResolver;
+use Illuminate\Auth\Middleware\Authenticate;
 use Workbench\App\Http\Controllers\FormController;
 
 /**
@@ -24,6 +25,15 @@ beforeEach(function (): void {
     $router->get('api/opt-out-auth', [FormController::class, 'index'])
         ->middleware('auth:web')
         ->withoutMiddleware('auth:web');
+    // The same opt-out written in the OTHER spelling of the same middleware, both ways round. Laravel
+    // resolves both sides to a class name before subtracting, so at runtime each of these really is
+    // unauthenticated — subtracting by the literal string left them carrying a 401 nothing enforces.
+    $router->get('api/opt-out-auth-by-class', [FormController::class, 'index'])
+        ->middleware('auth:web')
+        ->withoutMiddleware(Authenticate::using('web'));
+    $router->get('api/opt-out-auth-by-alias', [FormController::class, 'index'])
+        ->middleware(Authenticate::using('web'))
+        ->withoutMiddleware('auth:web');
     $router->getRoutes()->refreshNameLookups();
 });
 
@@ -37,7 +47,9 @@ it('drops excluded middleware from the resolved route descriptor', function (): 
     }
 
     expect($middlewareByUri['/api/opt-out-throttle'] ?? null)->not->toContain('throttle:60,1')
-        ->and($middlewareByUri['/api/opt-out-auth'] ?? null)->not->toContain('auth:web');
+        ->and($middlewareByUri['/api/opt-out-auth'] ?? null)->not->toContain('auth:web')
+        ->and($middlewareByUri['/api/opt-out-auth-by-class'] ?? null)->toBe([])
+        ->and($middlewareByUri['/api/opt-out-auth-by-alias'] ?? null)->toBe([]);
 });
 
 it('documents no 429 for a route that excludes its throttle middleware', function (): void {
@@ -47,10 +59,14 @@ it('documents no 429 for a route that excludes its throttle middleware', functio
     expect($responses)->not->toHaveKey('429');
 });
 
-it('documents no 401 and no security for a route that excludes its auth middleware', function (): void {
+it('documents no 401 and no security for a route that excludes its auth middleware', function (string $uri): void {
     $document = generateDocument()->document->toArray();
 
-    $operation = $document['paths']['/api/opt-out-auth']['get'] ?? [];
+    $operation = $document['paths'][$uri]['get'] ?? [];
     expect($operation['responses'] ?? [])->not->toHaveKey('401')
         ->and($operation)->not->toHaveKey('security');
-});
+})->with([
+    'same spelling both sides' => ['/api/opt-out-auth'],
+    'excluded by the class name' => ['/api/opt-out-auth-by-class'],
+    'excluded by the alias' => ['/api/opt-out-auth-by-alias'],
+]);
