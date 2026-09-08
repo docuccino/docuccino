@@ -107,3 +107,37 @@ it('reports every refused switch, not just the first', function (): void {
 
     expect(refusalDiagnostics())->toHaveCount(3);
 });
+
+/**
+ * A switch nothing reads is reported by the diagnostic that says nothing reads it, and not twice: an
+ * always-on producer's `enabled` and a bag naming no integration each already have a message that
+ * tells the author more than "that is not a switch" would.
+ */
+it('does not also refuse a switch that nothing reads', function (): void {
+    config()->set('docuccino.documents.default.integrations.validation.enabled', 'no');
+    config()->set('docuccino.documents.default.integrations.santcum.enabled', 'no');
+
+    $codes = array_map(
+        static fn (Diagnostic $diagnostic): string => $diagnostic->code,
+        app(DocumentBuilder::class)->build('default', app(TypeEngine::class))->diagnostics,
+    );
+
+    expect($codes)->toContain('config.enabled-ignored')
+        ->toContain('config.unknown-integration')
+        ->not->toContain(ConfiguredFlags::CODE);
+});
+
+/**
+ * A refused switch is not an author saying `false`. The discoverability report tells an untaken opt-in
+ * from a deliberate opt-out, and it must read a refusal as the former — the refusal diagnostic is what
+ * says the value was unreadable, and one message saying so beats two disagreeing about what was meant.
+ */
+it('keeps a refused switch out of what counts as explicitly set', function (): void {
+    config()->set('docuccino.documents.default.integrations.spatie_data.enabled', 'no');
+
+    $document = app(DocumentBuilder::class)->config('default');
+
+    expect($document->integrationEnabledExplicit('spatie_data'))->toBeFalse()
+        // And the integration is still ON, because that is its default.
+        ->and($document->integrationEnabled('spatie_data', true))->toBeTrue();
+});
