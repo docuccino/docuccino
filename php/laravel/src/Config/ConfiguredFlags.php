@@ -56,9 +56,10 @@ final class ConfiguredFlags
     ];
 
     /**
-     * Switches inside a `documents.<key>` bag, as dotted path => the default their reader uses.
-     * `integrations.<name>.enabled` is not here: its default is per-integration and
-     * {@see IntegrationToggles} owns it.
+     * Switches inside a `documents.<key>` bag in `docuccino.yaml`, as dotted path => the default their
+     * reader uses. `integrations.<name>.enabled` is not here: its default is per-integration and
+     * {@see IntegrationToggles} owns it. `viewer.cdn` is not here because it comes out of the other
+     * file — {@see VIEWER_FLAGS}.
      *
      * @var array<string, bool>
      */
@@ -67,7 +68,21 @@ final class ConfiguredFlags
         'representation.errors.components' => true,
         'representation.pagination.components' => true,
         'routes.include_vendor' => false,
-        'viewer.cdn' => false,
+    ];
+
+    /**
+     * Switches in the framework config's `viewer` bag, as leaf => default.
+     *
+     * Read off {@see DocumentConfig::$viewer} and not from the raw bag beside its neighbours, because
+     * that is the one member of a document config that comes from `config/docuccino.php`
+     * ({@see ViewerConfig}): a raw bag read out of `docuccino.yaml` carries no `viewer` at all, so a
+     * refusal looked for there could never fire. The reported PATH still reads `viewer.cdn`, which is
+     * where its author will go to fix it.
+     *
+     * @var array<string, bool>
+     */
+    private const array VIEWER_FLAGS = [
+        'cdn' => false,
     ];
 
     /**
@@ -108,8 +123,11 @@ final class ConfiguredFlags
     }
 
     /**
-     * Every switch in this document's own bag that holds no switch, as diagnostics — the fixed paths
-     * above plus one per integration bag, whose default the toggle table answers.
+     * Every switch this document configures that holds no switch, as diagnostics — the fixed paths
+     * above, the viewer's own, and one per integration bag whose default the toggle table answers.
+     *
+     * Two bags rather than one, because a document config is assembled from two files and only the
+     * raw bag is the build's own.
      *
      * @return list<Diagnostic>
      */
@@ -119,6 +137,13 @@ final class ConfiguredFlags
 
         foreach (self::DOCUMENT_FLAGS as $path => $default) {
             $diagnostic = self::report($document->raw, $path, $default);
+            if ($diagnostic !== null) {
+                $diagnostics[] = $diagnostic;
+            }
+        }
+
+        foreach (self::VIEWER_FLAGS as $leaf => $default) {
+            $diagnostic = self::report(['viewer' => $document->viewer], 'viewer.'.$leaf, $default);
             if ($diagnostic !== null) {
                 $diagnostics[] = $diagnostic;
             }

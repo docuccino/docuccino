@@ -36,16 +36,19 @@ it('reads a plausible number of lints, and reads only lints', function (): void 
 });
 
 /**
- * The rule keys the shipped config declares under `lint`, commented options included — the config
- * surface IS the set here, since a key the code reads has to appear there and `ConfigReferenceSyncTest`
- * holds it to that in both directions.
+ * The rule keys the shipped configuration declares under `lint`, commented options included — the
+ * config surface IS the set here, since a key the code reads has to appear there and
+ * `ConfigReferenceSyncTest` holds it to that in both directions.
+ *
+ * Read out of `docuccino.yaml`, because lint is a build setting: the framework's own config file has
+ * nothing to say about it.
  *
  * @return list<string>
  */
 function lintConfigRuleKeys(): array
 {
-    $declared = config_reference_declared_keys(
-        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/docuccino.php'),
+    $declared = config_reference_yaml_keys(
+        (string) file_get_contents(dirname(__DIR__, 2).'/php/laravel/config/'.CONFIG_REFERENCE_SETTINGS),
     );
 
     $keys = [];

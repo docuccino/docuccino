@@ -598,6 +598,21 @@ final class DocuccinoServiceProvider extends PackageServiceProvider
         // resolve the engine, and this listener is the last hook early enough (see MemoryLimitOption).
         Event::listen(CommandStarting::class, MemoryLimitOption::capture(...));
 
+        // The BUILD configuration, joining the framework config `hasConfigFile()` already put under
+        // this tag. Both of them, because the tag names the package's configuration and the package's
+        // configuration is two files: on its own, `config/docuccino.php` hands an author viewer wiring
+        // and a cache store and nothing that shapes a document, and the whole way to discover the
+        // build surface is to read the shipped file. `docuccino:install` writes these same two targets
+        // ({@see ConfigPublishers}); two writers with two different answers to "what is the
+        // configuration" is the drift this line exists to avoid.
+        //
+        // Ahead of the off-switch on purpose: publishing a config file is how an application turns
+        // that switch back on, so it cannot be a thing the switch takes away.
+        $this->publishes(
+            [dirname(__DIR__).'/config/'.ConfigFile::NAME => $this->app->basePath(ConfigFile::NAME)],
+            'docuccino-config',
+        );
+
         // The scaffold template, publishable the way every other publishable file in Laravel is. Not on
         // `docuccino:install`: that command runs once and idempotently, while editing a stub is a
         // repeatable act somebody takes when they want their own — so it rides `vendor:publish`, which
