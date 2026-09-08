@@ -72,13 +72,12 @@ Route selection is a filter chain, and every step must pass:
 
 <Tabs>
 	<TabItem label="By route glob">
-	```php
-	// documents.<key>.routes — include, then exclude, then an optional filter class
-	'routes' => [
-	    'include' => ['api/v2/*'],
-	    'exclude' => ['api/v2/internal/*'],
-	    'filter' => \App\Docs\NamedRoutes::class,
-	],
+	```yaml
+	# docuccino.yaml, under documents.<key> — include, then exclude, then an optional filter class
+	routes:
+	  include: ['api/v2/*']
+	  exclude: ['api/v2/internal/*']
+	  filter: App\Docs\NamedRoutes
 	```
 	Patterns match the URI **without** its leading slash, using Laravel's `Str::is` wildcards.
 	`filter` runs last, and is a class the container builds:
@@ -98,9 +97,9 @@ Route selection is a filter chain, and every step must pass:
 	}
 	```
 	It receives the discovered route — its `methods`, `uri`, `name`, `action`, `domain` and
-	fully-gathered `middleware` — and returning `false` omits it. Because the container builds it,
-	anything the decision needs (a tenant registry, a feature flag) is a constructor dependency, and
-	the whole config file stays `config:cache`-able.
+	fully-gathered `middleware` — and returning `false` omits it. The key names a class rather than
+	taking a predicate because a configuration file has no form for one; the container builds it, so
+	anything the decision needs (a tenant registry, a feature flag) is a constructor dependency.
 	</TabItem>
 	<TabItem label="By attribute">
 	```php
@@ -121,7 +120,7 @@ partner docs but not the admin one.
 
 Two more filters run for every document: `#[ExcludeFromDocs]` drops a route everywhere, and routes
 whose controller lives under `vendor/` are skipped unless the document sets
-`routes.include_vendor => true`.
+`routes.include_vendor: true`.
 
 ## Building them
 

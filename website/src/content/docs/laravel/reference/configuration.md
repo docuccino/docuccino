@@ -229,18 +229,17 @@ route set you'd get by skipping the filter is a superset you explicitly narrowed
 would describe a surface you'd said wasn't yours.
 
 :::caution[`routes.closure` is gone — use `filter`]
-`closure` took the same predicate inline, and **an application that filled it in could not run `php
-artisan config:cache`**: the framework serializes the config array with `var_export()`, a closure has
-no serializable form, and the command fails with *"your configuration files could not be serialized
-because the value at documents.default.routes.closure is non-serializable"*. There was no version in
-which the key both held a closure and survived a cached config, so it is removed outright rather than
-deprecated.
+`closure` took the same predicate inline, and no configuration file has a form for one. `config/`
+has to survive `config:cache`, which serializes the whole config array with `var_export()` and
+failed with *"your configuration files could not be serialized because the value at
+documents.default.routes.closure is non-serializable"*; `docuccino.yaml` has no callable at all.
+There was no version in which the key both held a closure and survived a cached config, so it is
+removed outright rather than deprecated.
 
 Move the predicate into a `filter` class — anything the closure closed over becomes a constructor
-dependency. A `closure` key still holding a value is reported as a
-[`config.route-closure-removed`](/laravel/reference/diagnostics/) error and the build refuses, for
-the same reason an unusable `filter` does: quietly ignoring it would publish exactly the routes it
-was written to keep out. A `closure` key left at `null` is read as unset and says nothing.
+dependency. Nothing reads `closure` any more, and neither file ships it, so a line left behind under
+it does nothing on its own; build settings still sitting in `config/docuccino.php` are named by
+[`config.stale-php-keys`](/laravel/reference/diagnostics/), at the file that holds them.
 :::
 
 Routes whose resolved controller class file lives under the application's `vendor/` directory are

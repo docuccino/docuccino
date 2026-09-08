@@ -82,9 +82,9 @@ it('spells every empty collection out rather than leaving it blank', function ()
     };
     $walk(shippedSettingsMap(), '');
 
-    // The only two keys that MEAN present-and-empty. Everything else that holds a collection has to
-    // be written `[]` or `{}`: a blank value parses to null, and null and [] hash differently.
-    expect($nulls)->toBe(['documents.default.routes.closure', 'documents.default.content.dir']);
+    // The one key that MEANS present-and-empty. Everything else that holds a collection has to be
+    // written `[]` or `{}`: a blank value parses to null, and null and [] hash differently.
+    expect($nulls)->toBe(['documents.default.content.dir']);
 });
 
 it('says exactly what the framework config says, for every setting a build reads', function (): void {
