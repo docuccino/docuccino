@@ -61,30 +61,38 @@ final class AuthGuardDrivers
     }
 
     /**
-     * The guards an entry names: the default for bare `auth`, the comma list for `auth:a,b`, none
-     * otherwise.
+     * The guards an entry names: the comma list for `auth:a,b`, and the default guard wherever the
+     * entry names none — none otherwise.
+     *
+     * An empty guard name IS the default guard, which is the whole of the rule: `AuthManager::guard()`
+     * opens with `$name = $name ?: $this->getDefaultDriver()`, so `auth`, `auth:` and `auth: ,` all
+     * authenticate against `config('auth.defaults.guard')` at runtime. Reading `auth:` as naming
+     * nothing left the route with its 401 and no integration claiming it, so a Sanctum or Passport
+     * scheme the server really does enforce went unpublished.
      *
      * @return list<string>
      */
     private static function guardsFor(string $entry, string $defaultGuard): array
     {
-        // Both spellings of the authenticator, read through the one list of them: a `passport` guard
-        // written `Authenticate::using('api')` names the same guard `auth:api` does, and a reader that
-        // knew only the alias resolved it to no driver at all — so the integration that owns the route
-        // never claimed it and the document published it as public.
+        // Both spellings of the authenticator, read through the one list of them ({@see
+        // AuthMiddlewareNames}): a `passport` guard written `Authenticate::using('api')` names the same
+        // guard `auth:api` does.
         $arguments = AuthMiddlewareNames::guardArguments($entry);
         if ($arguments === null) {
             return [];
         }
 
-        $named = array_values(array_filter(
-            array_map('trim', explode(',', $arguments)),
-            static fn (string $guard): bool => $guard !== '',
-        ));
+        $guards = [];
+        foreach (explode(',', $arguments) as $guard) {
+            $guard = trim($guard);
+            $guard = $guard === '' ? $defaultGuard : $guard;
 
-        // A bare authenticator names the default guard; an argument list that named none — `auth:` —
-        // names nothing. Only a bare entry can lack the separator, in either spelling.
-        return $named === [] && ! str_contains($entry, ':') ? [$defaultGuard] : $named;
+            if (! in_array($guard, $guards, true)) {
+                $guards[] = $guard;
+            }
+        }
+
+        return $guards;
     }
 
     /** The default guard from `config('auth.defaults.guard')`; Laravel's own fallback is `web`. */

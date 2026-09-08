@@ -35,9 +35,15 @@ it('resolves auth middleware to the drivers behind their guards', function (arra
     'Authenticate::using(web,api) resolves each' => [[Authenticate::using('web', 'api')], ['web' => 'session', 'api' => 'passport'], 'web', ['session', 'passport']],
     'the two spellings dedupe to one driver' => [['auth:api', Authenticate::using('api')], ['api' => 'passport'], 'web', ['passport']],
     'Authenticate::using with an unknown guard contributes nothing' => [[Authenticate::using('partner')], [], 'web', []],
-    // An argument list that named no guard names nothing — it does not fall back to the default.
-    'an empty argument list names nothing' => [['auth:'], ['web' => 'session'], 'web', []],
-    'an empty class-spelled argument list names nothing' => [[Authenticate::class.':'], ['web' => 'session'], 'web', []],
+    // An argument list that names no guard names the DEFAULT one, because that is what the framework
+    // resolves it to: `AuthManager::guard()` starts `$name = $name ?: $this->getDefaultDriver()`, so
+    // `auth:` authenticates against `config('auth.defaults.guard')` exactly as bare `auth` does.
+    // Reading it as naming nothing left the 401 in place with no integration claiming the route, so a
+    // scheme the server does enforce went unpublished.
+    'an empty argument list names the default guard' => [['auth:'], ['web' => 'session'], 'web', ['session']],
+    'an empty class-spelled argument list names the default guard' => [[Authenticate::class.':'], ['web' => 'session'], 'web', ['session']],
+    'a guard list of nothing but separators names the default guard' => [['auth: ,'], ['web' => 'session'], 'web', ['session']],
+    'a named guard beside an empty one names both' => [['auth:api,'], ['api' => 'passport', 'web' => 'session'], 'web', ['passport', 'session']],
     'AuthenticateWithBasicAuth is not a guard driver' => [[AuthenticateWithBasicAuth::using('web')], ['web' => 'session'], 'web', []],
 ]);
 
