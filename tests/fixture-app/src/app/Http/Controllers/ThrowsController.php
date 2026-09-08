@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\ExportProbeQuery;
 use App\Services\OrderService;
 use App\Services\PayloadValidator;
 use App\Support\Concerns\GuardsProbeState;
@@ -483,5 +484,32 @@ class ThrowsController extends Controller
     public function projectValidate(PayloadValidator $validator): JsonResponse
     {
         return response()->json($validator->validate(['sku' => 'abc-1']));
+    }
+
+    /**
+     * Case 1c: the same two calls with a status chosen at run time. The exception
+     * they raise is the framework's own, and the expression that will not fold is
+     * this line — so what says whether anyone can act on it is the file the FOLD
+     * read, never where the exception class is declared.
+     */
+    public function dynamicAbortStatus(int $chosen): void
+    {
+        abort($chosen);
+    }
+
+    /** Case 1c': the same at `abort_if`, whose status sits one argument along. */
+    public function dynamicAbortIfStatus(int $chosen, bool $flag): void
+    {
+        abort_if($flag, $chosen);
+    }
+
+    /**
+     * Case 10v: an unreadable status a call away. The throw is written in an
+     * injected collaborator, so the notice about it has to name that file and
+     * that line rather than the controller line the route entered by.
+     */
+    public function deepUnreadHttpStatus(ExportProbeQuery $query): void
+    {
+        $query->results(true);
     }
 }

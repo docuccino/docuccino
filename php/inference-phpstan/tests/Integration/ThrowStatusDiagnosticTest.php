@@ -22,6 +22,11 @@ it('names the class whose HTTP status it could not read', function (string $meth
     expect($reported)->toHaveCount(1)
         ->and($reported[0])->toContain($fqcn);
 })->with([
+    // The status handed to `abort()` chosen at run time. The exception is the FRAMEWORK's own, so
+    // this is the row a notice gated on where the exception class is declared reported nothing for —
+    // while the document published the unplaced status all the same.
+    'a status argument chosen at run time' => ['dynamicAbortStatus', 'Symfony\\Component\\HttpKernel\\Exception\\HttpException'],
+    'the same one argument along' => ['dynamicAbortIfStatus', 'Symfony\\Component\\HttpKernel\\Exception\\HttpException'],
     'a factory that builds the class two ways' => ['unreadHttpStatus', 'App\\Exceptions\\ExportConflictException'],
     'a constructor that moves the status it was handed' => ['movedHttpStatus', 'App\\Exceptions\\ExportPartialException'],
     'a constructor that reuses the status after forwarding it' => ['supersededHttpStatus', 'App\\Exceptions\\ExportSupersededException'],
@@ -35,7 +40,47 @@ it('names the class whose HTTP status it could not read', function (string $meth
     // trait — moving either into the class the status belongs to is what the notice asks for.
     'a constant reaching the parent that is no status' => ['unreadableConstantStatus', 'App\\Exceptions\\ExportRelayedException'],
     'a factory the class gets from a trait' => ['traitFactoryStatus', 'App\\Exceptions\\ExportThrottledException'],
+    // Reached through descent, which is what makes the SITE the notice names worth checking: the
+    // throw is a call away from the action.
+    'a throw a call away, in an injected collaborator' => ['deepUnreadHttpStatus', 'App\\Exceptions\\ExportConflictException'],
 ])->group('fixture');
+
+/**
+ * What the notice is FOR: the reader can see the response is filed under a status nothing stated, and
+ * cannot see which throw did it. So the sentence names the exception, the file and line the `throw` is
+ * written at, and which fold gave up — and the site is the deep one, never the action line the route
+ * entered by, which is the only part of this the provenance trail already carries.
+ */
+it('names the throw site and the fold that gave up, not the line the route entered by', function (): void {
+    $reported = unreadStatusDiagnostics('deepUnreadHttpStatus');
+
+    expect($reported)->toHaveCount(1)
+        ->and($reported[0])->toContain('ExportProbeQuery.php')
+        ->and($reported[0])->toContain('the construction the throw names does not fold to one status')
+        ->and($reported[0])->not->toContain('ThrowsController.php');
+})->group('fixture');
+
+/**
+ * The site the notice names is the last frame of the throw's own call chain — the same code the
+ * response's provenance is built from — so the two halves of the answer meet at one file and line
+ * rather than at two the reader has to relate.
+ */
+it('names the same site the throw itself carries', function (string $method): void {
+    $analysis = throwsAnalysis($method);
+
+    /** @var list<array<string, mixed>> $throws */
+    $throws = $analysis['throws'];
+    $unplaced = array_values(array_filter($throws, static fn (array $throw): bool => $throw['httpStatusHint'] === null));
+
+    expect($unplaced)->toHaveCount(1);
+
+    /** @var list<array{symbol: string, location: array{file: string, line: int}}> $chain */
+    $chain = $unplaced[0]['callChain'];
+    $deepest = $chain[count($chain) - 1]['location'];
+
+    expect(unreadStatusDiagnostics($method)[0] ?? '')
+        ->toContain($deepest['file'].':'.$deepest['line']);
+})->with(['deepUnreadHttpStatus', 'unreadHttpStatus', 'dynamicAbortStatus'])->group('fixture');
 
 it('says nothing where the status read, and nothing about a class the author does not own', function (string $method): void {
     expect(unreadStatusDiagnostics($method))->toBe([]);
