@@ -56,9 +56,9 @@ outside an export path. Four steps, in order:
 
 1. **Config.** Publishes both configuration files — `docuccino.yaml` at your project root, then
    `config/docuccino.php` — byte for byte the same two that
-   `vendor:publish --tag=docuccino-config` writes. Each is timid on its own account: an existing file
-   is left exactly as it is unless you pass `--force`, so an application that already keeps one gets
-   the other and a second run changes nothing.
+   `vendor:publish --tag=docuccino-config` writes. It decides that per file: an existing one is left
+   exactly as it is unless you pass `--force`, so an application that already keeps one gets the
+   other and a second run changes nothing.
 2. **Routes.** Reads your router and reports how many routes each configured document really matches.
    The count comes from the same resolver a build uses — attribute exclusions, closure filters and
    vendor package routes already subtracted — so it is the number your next export will document.
@@ -85,12 +85,12 @@ Routes
   v1/*     31
   admin/*  11
 
-Set documents.default.routes.include in config/docuccino.php — e.g. ['v1/*'].
+Set documents.default.routes.include in docuccino.yaml — e.g. ['v1/*'].
 ```
 
 An application with no routes to document yet gets a sentence saying so, not a failure.
 
-Exits `1` on a disabled install, a `config/docuccino.php` it could not write, or a failed first
+Exits `1` on a disabled install, a configuration file it could not write, or a failed first
 export — setup succeeding while the export fails is still a failure.
 
 ## `docuccino:export`
@@ -628,13 +628,13 @@ forever.
 
 Watch mode turns the [fragment cache](/laravel/guides/speeding-up-builds/) on for the builds it runs
 (via `DOCUCCINO_FRAGMENT_CACHE`), which is what makes a rebuild incremental and what gives it the
-list above.
+list above. `php artisan config:cache` cannot get in the way of that: `cache.enabled` is read from
+`docuccino.yaml` and the override from the environment the rebuild is handed, so neither goes through
+the config a cache would bake.
 
-If you have run `php artisan config:cache`, that env value was read and baked in when you cached, so
-the override reaches nothing: every rebuild re-analyzes your whole application and stores none of it,
-and editing a controller stops triggering one. Watch says so on startup, before the first build, so
-you can stop and fix it. Run `php artisan config:clear`, or set `DOCUCCINO_FRAGMENT_CACHE=true` and
-cache again.
+If nothing was stored anyway, watch says so before the first rebuild rather than leaving you to
+notice that editing a controller changed nothing — the fragment directory is unwritable, or the cache
+is off in a way the session could not reach.
 
 ### Live viewer refresh
 
@@ -820,7 +820,7 @@ gets one line saying how to take it:
 | `fallback`, `inference`, `integration`, `docblock`, and **no** attribute writes it | The generic truth — `no attribute writes this — an overlay outranks docblock` |
 | `attribute` | `edit the attribute above, or outrank it with an overlay` — the `file:line` above it is the attribute |
 | `overlay` | `edit the overlay that set it; only config outranks an overlay` |
-| `config` | `config is the top rung — edit config/docuccino.php` |
+| `config` | `config is the top rung — edit docuccino.yaml` |
 
 An attribute is named **only where it genuinely writes that field on that node**: `#[Group]` really is
 what sets `tags`, and the name a shared error body publishes under is written by `#[ErrorComponent]` or
@@ -1083,7 +1083,7 @@ What counts as failure:
 
 | Command | Exits `1` when |
 | --- | --- |
-| `install` | disabled; `config/docuccino.php` could not be written; the first export failed |
+| `install` | disabled; a configuration file could not be written; the first export failed |
 | `export` | disabled; unknown `--format`, `--fail-on` or `--provenance` value; `--out` given while exporting multiple documents, or without `--format` against a multi-target document; unknown document key; an unaccepted diagnostic matches `--fail-on` |
 | `validate` | disabled; unknown `--fail-on` value; unknown document key; **any** schema violation (regardless of `--fail-on`, and never acceptable — it's an error); an unaccepted diagnostic matches `--fail-on` |
 | `diff` | disabled; unknown document key; `old` missing, unreadable or not valid JSON; `git show` fails; a ref or path starting with `-`; the two documents are incomparable; `--enforce` with an unsatisfied verdict |

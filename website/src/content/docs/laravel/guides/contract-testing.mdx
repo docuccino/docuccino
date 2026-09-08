@@ -18,16 +18,16 @@ almost always where the fix is.
 
 <Steps>
 
-1. **Export the document as UIR.** Add a `uir` target beside whatever you already write:
+1. **Export the document as UIR.** Add a `uir` target beside whatever you already write, in
+   `docuccino.yaml`:
 
-   ```php
-   // config/docuccino.php → documents.default
-   'export' => [
-       'targets' => [
-           ['format' => 'openapi-3.2', 'path' => 'docs/openapi.json'],
-           ['format' => 'uir',         'path' => 'docs/api.uir.json'],
-       ],
-   ],
+   ```yaml
+   documents:
+     default:
+       export:
+         targets:
+           - { format: 'openapi-3.2', path: 'docs/openapi.json' }
+           - { format: 'uir', path: 'docs/api.uir.json' }
    ```
 
    ```bash

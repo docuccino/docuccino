@@ -73,13 +73,12 @@ php artisan docuccino:export --memory-limit=2G
 </TabItem>
 <TabItem label="Every build">
 
-```php
-// config/docuccino.php
-'engine' => [
-    'mode' => env('DOCUCCINO_ENGINE', 'in-process'),
-    'memory_limit' => '2G',
-    'project_paths' => ['app'],
-],
+```yaml
+# docuccino.yaml
+engine:
+  mode: 'in-process' # DOCUCCINO_ENGINE overrides this
+  memory_limit: '2G'
+  project_paths: ['app']
 ```
 
 Every console entry point picks it up — `export`, `validate`, `diff`, `cache` — so nobody has to
@@ -129,9 +128,10 @@ it. Nothing is remembered between runs.
 
 **Fix.** Turn on the fragment cache:
 
-```php
-// config/docuccino.php
-'cache' => ['enabled' => true],
+```yaml
+# docuccino.yaml
+cache:
+  enabled: true
 ```
 
 Subsequent builds re-analyze only the operations whose inputs changed, and a build where every route

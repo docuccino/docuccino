@@ -75,13 +75,15 @@ without the package pays nothing and sees nothing.
 
 ## Turning one off
 
-Every integration accepts an `enabled` switch, resolved per document — useful when a package is
-installed for one part of your app but you'd rather its parameters stayed out of a particular
-document:
+Every integration accepts an `enabled` switch, resolved per document in `docuccino.yaml` — useful
+when a package is installed for one part of your app but you'd rather its parameters stayed out of a
+particular document:
 
-```php
-// config/docuccino.php → documents.default.integrations
-'query_builder' => ['enabled' => false],
+```yaml
+documents:
+  default:
+    integrations:
+      query_builder: { enabled: false }
 ```
 
 See the [`integrations` reference](/laravel/reference/configuration/#integrations) for every

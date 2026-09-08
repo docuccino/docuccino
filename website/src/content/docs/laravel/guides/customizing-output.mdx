@@ -65,14 +65,14 @@ of the document, so it's the right place to record *why* a correction exists.
 
 ### Where overlays live
 
-Point the document's `overlays` config at one or more globs, relative to your application root. Files
+Point the document's `overlays` setting at one or more globs, relative to your application root. Files
 are applied in glob order, and the actions inside each file in the order written:
 
-```php
-// config/docuccino.php — documents.default
-'overlays' => [
-    'resources/docs/overlays/*.yaml',
-],
+```yaml
+documents:
+  default:
+    overlays:
+      - 'resources/docs/overlays/*.yaml'
 ```
 
 ### The golden rule: overlays edit what already exists
@@ -151,9 +151,10 @@ A billing package ships its own `/oauth/token` route. You can't annotate its con
 document it. First let the route into the document (routes whose controller lives under `vendor/` are
 excluded by default):
 
-```php
-// config/docuccino.php — documents.default
-'routes' => ['include' => ['api/*', 'oauth/*'], 'include_vendor' => true],
+```yaml
+documents:
+  default:
+    routes: { include: ['api/*', 'oauth/*'], include_vendor: true }
 ```
 
 Then give it a real summary, a description, and a usable example:
