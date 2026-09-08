@@ -159,8 +159,10 @@ it('404s a viewer route whose document is no longer configured', function (): vo
     config()->set('docuccino.documents.default.viewer.gate', 'viewApiDocs');
     Gate::before(static fn ($user = null): bool => true);
 
-    // The route was registered at boot but the document has since gone, so hasDocument() is false.
-    setDocuments([]);
+    // The route was registered at boot for `default` and docuccino.yaml has since been rewritten to
+    // name a different document, so hasDocument() is false. Which is a renamed document key with its
+    // viewer entry left behind under the old one — the shape `config.viewer-orphan` warns about.
+    setDocuments(['admin' => ['info' => ['title' => 'Admin', 'version' => '1.0.0']]]);
 
     $this->get('/docs/api.json')->assertNotFound();
 });

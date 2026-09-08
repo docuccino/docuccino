@@ -58,12 +58,6 @@ final class WatchCommand extends Command
             return self::FAILURE;
         }
 
-        if ($documents === []) {
-            $this->error('No documents are configured, so there is nothing to watch.');
-
-            return self::FAILURE;
-        }
-
         $this->listenForInterrupt();
 
         $this->line(sprintf(

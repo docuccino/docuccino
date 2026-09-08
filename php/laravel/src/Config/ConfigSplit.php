@@ -208,7 +208,10 @@ final class ConfigSplit
         $diagnostics = [];
 
         if ($build->present()) {
-            $defined = $build->documents();
+            // Asked of ConfiguredDocuments and not of the raw bag: the build's document set is the one
+            // with the fallback applied, and judging a viewer against the raw bag would report the
+            // `default` document's own viewer as an orphan on a file that declares no documents.
+            $defined = ConfiguredDocuments::of($build);
             $orphans = array_values(array_filter(
                 array_keys($viewers),
                 static fn (string $key): bool => ! array_key_exists($key, $defined),
