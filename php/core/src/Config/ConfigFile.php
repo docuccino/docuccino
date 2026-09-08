@@ -45,7 +45,7 @@ final class ConfigFile
      *
      * @var array<string, string>
      */
-    private const NEAR_MISSES = [
+    public const array NEAR_MISSES = [
         'docuccino.yml' => 'the extension is spelled ".yaml" in full',
         '.docuccino.yaml' => 'the name is not a dotfile',
         '.docuccino.yml' => 'the name is not a dotfile, and the extension is spelled ".yaml" in full',
@@ -65,7 +65,7 @@ final class ConfigFile
      * has no form for, and `PARSE_CUSTOM_TAGS` and `PARSE_CONSTANT` would each turn a stricter parse
      * error into a value. Refusing what we cannot represent is the whole design.
      */
-    private const FLAGS = Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE;
+    public const int FLAGS = Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE;
 
     /** No file of that name in the directory. Not an error: zero configuration is a supported state. */
     public const string ABSENT = 'absent';
