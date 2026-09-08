@@ -76,7 +76,9 @@ function implicitContext(
 function runImplicit(RouteContext $context, ?OperationDraft $operation = null): OperationDraft
 {
     $operation ??= new OperationDraft;
-    (new ImplicitResponsesExtension)->handle($operation, $context);
+    // Container-resolved, like the pipeline resolves it: the extension reads the booted app's gate
+    // registrations, and constructing it by hand would leave that half of it untested here.
+    app(ImplicitResponsesExtension::class)->handle($operation, $context);
 
     return $operation;
 }

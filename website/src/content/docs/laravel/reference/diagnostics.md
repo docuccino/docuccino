@@ -236,6 +236,22 @@ correct-but-vaguer document rather than dropping the endpoint.
 | `rate-limit.unregistered-limiter` | info | A route throttles on a named limiter nothing registers with `RateLimiter::for()`, so the allowance can't be documented | Register it in a service provider, or state the allowance inline as `throttle:60,1` — see [Named limiters](/laravel/documenting/rate-limiting/#named-limiters) |
 | `rate-limit.multiple-throttles` | info | A route carries more than one throttle middleware; one `429` is documented from the first | Nothing. The others are still enforced — they just aren't separately representable in OpenAPI |
 
+## Authorization
+
+A route's authorization is read from its middleware, so the `403` is documented from the presence of a
+gate. Usually that is the whole story; where it is not, this says so and the response stays put.
+
+| Code | Severity | What it means | What to do |
+|---|---|---|---|
+| `authorization.gate-cannot-deny` | info | A route's `->can()` gate resolves to a policy method whose whole body is `return true;`, and nothing else on the route produces a `403` — so the error the operation publishes is one no request can provoke, and it reaches a consumer as a dead `catch` branch in their generated client | Tighten the policy method, so the `403` describes something that can happen — or, if the gate is deliberately a formality, drop the response with [`#[IgnoreResponse(403)]`](/laravel/reference/attributes/#ignoreresponse) on the action. The response is published either way: dropping a real error needs certainty a build cannot have, so this reports and changes nothing |
+
+Only a literal, unconditional `return true;` counts. A method that reads anything at all — the user, a
+request, ambient state, a helper — can deny, and the notice stays quiet even where the body looks
+decorative: `return currentTeam() instanceof Team;` names neither a user nor a permission and denies
+perfectly well. It is quiet, too, wherever the gate's own answer is not the last word — a
+`Gate::before` or `Gate::after` hook, a policy `before()` method, a `signed` or `verified` middleware
+beside the gate, a `FormRequest` that authorizes, or a `403` your action throws for itself.
+
 ## Security schemes
 
 Checked over the finished document, so overlays, transformers and config all count. A
