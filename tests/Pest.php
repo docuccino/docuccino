@@ -53,6 +53,7 @@ use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
+use Docuccino\Core\Support\ConfiguredFlag;
 use Docuccino\Core\Support\JsonValue;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Inference\PhpStan\Tests\Support\FixtureEdit;
@@ -1541,6 +1542,78 @@ function globalCallSites(string $source, array $functions): array
     }
 
     return $found;
+}
+
+/**
+ * Every place a directory of PHP sources reads a value AS A SWITCH, as sorted
+ * `relative/path.php::function` strings — the scan behind the one-reading rule
+ * ({@see ConfiguredFlag}).
+ *
+ * Two shapes, because those are the two a switch read is written in: a boolean DEFAULT coalesced off a
+ * lookup (`$bag['k'] ?? false`, whatever boolean test follows it), and a `(bool)` CAST, which is the
+ * coercion the one reading exists to forbid. `ConfiguredFlag` uses neither — it asks
+ * `array_key_exists()` and `is_bool()` — so it never appears in its own scan, which is what makes the
+ * counter-proof in `SwitchReaderArchTest` possible.
+ *
+ * Tokenised rather than grepped, for the reason {@see associativeJsonDecodesIn} tokenises: it draws the
+ * string-and-comment line for free, so a `?? false` written inside a message or a docblock example is
+ * not a read.
+ *
+ * @return list<string>
+ */
+function switchReadsIn(string $directory): array
+{
+    return sourceSitesIn($directory, switchReadSites(...), dirname($directory, 3));
+}
+
+/**
+ * Every switch read in one source, as the line it sits on and the function it sits in.
+ *
+ * @return list<array{line: int, site: string}>
+ */
+function switchReads(string $source): array
+{
+    $tokens = significantTokens($source);
+    $found = [];
+
+    foreach ($tokens as $index => $token) {
+        if ($token->is(T_BOOL_CAST)) {
+            $found[] = ['line' => $token->line, 'site' => enclosingFunction($tokens, $index)];
+
+            continue;
+        }
+
+        if (! $token->is(T_COALESCE) && ! $token->is(T_COALESCE_EQUAL)) {
+            continue;
+        }
+
+        $next = $tokens[$index + 1] ?? null;
+        if ($next !== null && (namesGlobalSymbol($next, 'true') || namesGlobalSymbol($next, 'false'))) {
+            $found[] = ['line' => $token->line, 'site' => enclosingFunction($tokens, $index)];
+        }
+    }
+
+    return $found;
+}
+
+/**
+ * The line each switch read sits on. {@see switchReads}.
+ *
+ * @return list<int>
+ */
+function switchReadLines(string $source): array
+{
+    return array_column(switchReads($source), 'line');
+}
+
+/**
+ * The function each switch read sits in. {@see switchReads}.
+ *
+ * @return list<string>
+ */
+function switchReadSites(string $source): array
+{
+    return array_column(switchReads($source), 'site');
 }
 
 /**

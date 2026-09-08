@@ -337,6 +337,7 @@ it('reads the codes and severities a reference page publishes, and only those', 
  */
 it('names the construction sites whose code is not written beside it', function (): void {
     expect(diagnostic_code_sites(diagnosticSourceDirectories()))->toBe([
+        'Config/ConfiguredFlags.php',
         'Emit/OpenApi31DownlevelEmitter.php',
         'Extensions/BuiltIn/AttributeExamplesExtension.php',
         'Extensions/BuiltIn/AttributeOverridesExtension.php',
