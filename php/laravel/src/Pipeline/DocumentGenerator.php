@@ -15,6 +15,7 @@ use Docuccino\Core\Extensions\Context\RepresentationPolicy;
 use Docuccino\Core\Extensions\Context\RouteContext;
 use Docuccino\Core\Extensions\Context\RouteDependencies;
 use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\Context\TagMapperKeying;
 use Docuccino\Core\Extensions\ResolvedExtensions;
 use Docuccino\Core\Extensions\Schema\ComponentNames;
 use Docuccino\Core\Extensions\Schema\ComponentRegistry;
@@ -107,6 +108,11 @@ final class DocumentGenerator
         // Config-shape info diagnostics (design §9) — surfaced instead of silently coerced.
         $bag->addAll(ConfigDiagnostics::for($document));
 
+        $unhashableMapper = TagMapperKeying::unhashableMapper($document);
+        if ($this->cache->enabled() && $unhashableMapper !== null) {
+            $bag->add(self::unhashableTagMapper($unhashableMapper));
+        }
+
         // The narrative content tree is a document-level input, rebuilt every run and kept OUT of the
         // fragment cache key: fragments never read content, so a prose typo mustn't re-run PHPStan
         // across the whole route set. It reaches output via assembly and the document contentHash.
@@ -182,6 +188,29 @@ final class DocumentGenerator
         }
 
         return new GenerationResult(UirDocument::fromArray($assembly->document), $bag->sorted(), $assembly->schemaSources);
+    }
+
+    /**
+     * The one line a document owes its author when its `tags.mapper` resolves to a class no file holds:
+     * every operation that mapper tags is rebuilt on every build, because the manifest that decides
+     * freshness can only name files ({@see TagMapperKeying}). Nothing about the document is wrong, so
+     * this reads like its config neighbours — and it is raised once for the document rather than once per
+     * operation, since there is one thing to do about it.
+     *
+     * Gated on the cache being ON, because with it off there is no rebuild to warn about: an author who
+     * never turned the cache on would be reading about a cost they are not paying.
+     */
+    private static function unhashableTagMapper(string $mapper): Diagnostic
+    {
+        return new Diagnostic(
+            severity: Severity::Info,
+            code: 'config.tag-mapper-unhashable',
+            message: sprintf(
+                'tags.mapper resolved to %s, which is declared in no file this build can hash, so the fragment cache cannot keep the operations it tags — they are rebuilt every run.',
+                $mapper,
+            ),
+            help: 'Declare the mapper in a file of its own — an ordinary class the autoloader can find. A class defined by eval() has no file to key a cached answer against.',
+        );
     }
 
     /**
@@ -351,8 +380,10 @@ final class DocumentGenerator
             // …and so does what it found for the whole document to report, for the same reason.
             $fragment = new OperationFragment($path, $method, $frozen, $signature, $diagnostics, $referencedSchemas, $referencedSchemaIds, $referencedResponses, $context->actionRef->class, $referencedSchemaBases, $referencedSecuritySchemes, $referencedResponseBases, $referencedSchemeBases, $context->notes()->all());
             // Trace-derived dependency files widen the key, so a deep chain invalidates when any file
-            // it walked changes (design §10 seam).
-            if (! self::degraded($engine)) {
+            // it walked changes (design §10 seam). A reader that found an output-shaping input no file
+            // hash can express refuses the store outright, and this route rebuilds every build
+            // ({@see RouteDependencies::refuseCaching()}).
+            if (! self::degraded($engine) && ! $context->dependencies()->cachingRefused()) {
                 $this->cache->put($cacheKey, $fragment, $context->dependencyFiles());
             }
 
@@ -406,7 +437,7 @@ final class DocumentGenerator
             );
 
             $diagnostics = [];
-            $operation = $this->webhookBuilder->build($webhook, $document, $converter, $webhook->source, $diagnostics);
+            $operation = $this->webhookBuilder->build($webhook, $document, $converter, $dependencies, $webhook->source, $diagnostics);
 
             $operationId = $this->identity->webhookId($documentId, $webhook->method, $webhook->name);
             $operation->assignId($operationId);
@@ -436,7 +467,7 @@ final class DocumentGenerator
                 webhook: true,
             );
 
-            if (! self::degraded($engine)) {
+            if (! self::degraded($engine) && ! $dependencies->cachingRefused()) {
                 $files = array_values(array_unique($dependencies->files()));
                 sort($files);
                 $this->cache->put($cacheKey, $fragment, $files);

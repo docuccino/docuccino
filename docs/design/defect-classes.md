@@ -577,3 +577,36 @@ rather than off either site (`ComponentIdentityTest`): every entry of `component
 node, so an id two of them carry addresses neither, asserted over a dataset of pairs differing on each
 axis in turn, with rows for what the registry DOES merge so a mint that simply numbered its registrations
 would fail too. A guard that asks either site for its own rule agrees with whatever that site does.
+
+## A cached answer keyed by the name its author was resolved by
+
+A fragment holds what a collaborator ANSWERED, and the key holds how that collaborator was NAMED. The two
+move independently: swapping the name moves the key and the answer together, so the obvious edit is
+caught, while editing the collaborator's body — the edit its author makes far more often — moves the
+answer and nothing else. Determinism is untouched and every golden holds, because a golden is one build's
+bytes and this is the second build disagreeing with them.
+
+*Instances.* `documents.*.tags.mapper` names a class the container resolves, and `mapTag()` runs inside an
+`OperationExtension`, so the mapped tags live in the operation fragment; the config bag hashed into the key
+held the class-STRING, which an edit to that class never moves — a warm build published the tags the old
+body produced. The sibling is `ResolvedExtensions::cacheSignature()`, which pairs each resolved extension
+with its composer package's version as a proxy for its behaviour: sound for a package, and inert for a
+class in the application's own tree, whose "package" is the root and whose version does not move when the
+file is saved. Neither is the same defect as an input that reaches NO key input at all — `lint.leakage`
+decides whether a recorded example is published at all, and it is neither in a document's config bag nor
+in any digest contributor.
+
+*The tell.* Name the thing whose output a fragment holds, then ask what in the key changes when its code
+changes — not when its NAME or its VERSION changes. A collaborator resolved by string, a class-string in
+config, a `Closure` in a config bag (`Json::stable()` collapses any object to its class, and reads a
+closure as file plus line span), a package version standing in for a body: each answers "nothing".
+
+*The fix that worked.* Key the fragment on where the answer is WRITTEN, at the point the answer was read.
+`TagMapperKeying::record()` puts the mapper's `DeclarationFiles` — its own file, its parents', its traits'
+— into the route's dependency manifest, and it is called from the two places a tag actually goes through
+the mapper, so a route the mapper never answered for records nothing and stays warm. Where the mapper's
+declaration cannot be hashed back (`eval()`'d code reports a file no `is_file()` matches), the fragment is
+refused the cache rather than keyed on nothing: a manifest records an absent file as ABSENT, which
+compares FRESH for as long as it stays absent, so recording an unhashable path looks keyed and is not.
+The guard reads the manifest the cache STORED and the freshness the cache itself answers
+(`TagMapperCacheTest`), because a rebuild count cannot say which fragments an edit retired.

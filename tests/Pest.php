@@ -167,6 +167,19 @@ function generateDocument(?callable $mutateConfig = null, string $key = 'default
 }
 
 /**
+ * The `default` document with `$mapper` configured under `tags.mapper` — a class-string, or any string
+ * the container resolves a tag mapper from.
+ */
+function generateDocumentWithTagMapper(string $mapper): GenerationResult
+{
+    return generateDocument(static function (array $raw) use ($mapper): array {
+        $raw['tags']['mapper'] = $mapper;
+
+        return $raw;
+    });
+}
+
+/**
  * The full round-trip the feature suites lean on: bind the deterministic stub engine, generate the
  * `default` document (optionally mutating its raw config), and return the emitted array — so no suite
  * re-rolls the bindStubEngine + generate + toArray wiring.
@@ -2141,6 +2154,41 @@ function removeFragmentCacheDirs(string $slug): void
     foreach (FragmentCacheDirs::take($slug) as $dir) {
         removeFragmentCacheDir($dir);
     }
+}
+
+/**
+ * What the fragments in $dir recorded, read back as the cache stored it: the operation each entry holds
+ * (`method /path`) → the cache key it is filed under, and the dependency manifest freshness is checked
+ * against. A suite asserting WHICH fragments an input keys reads this rather than counting rebuilds.
+ *
+ * @return array<string, array{key: string, dependencies: list<string>}>
+ */
+function fragmentEntries(string $dir): array
+{
+    $entries = [];
+
+    foreach (glob($dir.'/*.json') ?: [] as $file) {
+        /** @var array{fragment: array{method: string, path: string}, dependencies: list<array{file: string, hash: string}>} $decoded */
+        $decoded = json_decode((string) file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
+
+        $entries[$decoded['fragment']['method'].' '.$decoded['fragment']['path']] = [
+            'key' => basename($file, '.json'),
+            'dependencies' => array_column($decoded['dependencies'], 'file'),
+        ];
+    }
+
+    return $entries;
+}
+
+/**
+ * Whether the entry filed under $key in $dir still reads FRESH — the cache's own answer, over a
+ * digest memo made now, so a row can ask which fragments an edit retired rather than inferring it
+ * from a rebuild count. Only the stored manifest decides freshness, so the version strings a key
+ * would be minted from are irrelevant here.
+ */
+function fragmentEntryFresh(string $dir, string $key): bool
+{
+    return (new FragmentCache(true, $dir, '', '', ''))->get($key) !== null;
 }
 
 /**
