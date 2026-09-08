@@ -68,6 +68,11 @@ it('resolves one default document out of a configuration that names none', funct
 it('builds and writes that document rather than exiting 0 with nothing to show', function (Closure $arrange): void {
     // The measured failure this closes: `forEachDocument` over an empty list never entered its
     // closure, so `docuccino:export --fail-on=error` exited 0, printed nothing and wrote no file.
+    //
+    // Every state but one, and the exception is not an omission: an application whose build settings
+    // are still in `config/docuccino.php` is refused before the build, because its document would be
+    // assembled from defaults rather than from what its author wrote. That row is checked in
+    // `UnreadConfigRefusalTest`, including that nothing reaches disk.
     $arrange();
     bindStubEngine();
 
@@ -81,7 +86,7 @@ it('builds and writes that document rather than exiting 0 with nothing to show',
     } finally {
         @unlink($out);
     }
-})->with(emptyDocumentBagStates());
+})->with(array_diff_key(emptyDocumentBagStates(), ['settings still in the framework config' => null]));
 
 it('names the file error a reader has to fix, which no build could reach before', function (): void {
     // Each of these prints from inside the build, so a build that never ran reported none of them.
@@ -108,7 +113,7 @@ it('names the unmigrated framework config from the command, on the population th
     try {
         test()->artisan('docuccino:export', ['--format' => 'uir', '--out' => $out])
             ->expectsOutputToContain('config.not-migrated')
-            ->run();
+            ->assertExitCode(1);
     } finally {
         @unlink($out);
     }

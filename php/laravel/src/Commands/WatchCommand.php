@@ -34,6 +34,8 @@ final class WatchCommand extends Command
 {
     use GuardsEnabled;
     use IteratesDocuments;
+    use RefusesUnreadConfig;
+    use RendersDiagnostics;
 
     protected $signature = 'docuccino:watch
         {document? : The configured document key (defaults to every document)}
@@ -47,7 +49,7 @@ final class WatchCommand extends Command
 
     public function handle(DocumentBuilder $builder, WatchSet $watched, WatchSignal $signal, BuildToken $tokens, BuildRunner $runner, Application $app, FragmentStore $fragments): int
     {
-        if ($this->abortIfDisabled()) {
+        if ($this->abortIfDisabled() || $this->abortIfConfigUnread()) {
             return self::FAILURE;
         }
 
