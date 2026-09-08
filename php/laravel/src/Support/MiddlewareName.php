@@ -71,6 +71,16 @@ final class MiddlewareName
     }
 
     /**
+     * The name half of an entry, normalised and with any arguments taken off — what a reader asks
+     * `class_exists()` about, since the grammar is `name[:args]` and the arguments are never part of
+     * the class.
+     */
+    public static function name(string $middleware): string
+    {
+        return self::normalize(explode(':', $middleware, 2)[0]);
+    }
+
+    /**
      * A group member's name the way `MiddlewareNameResolver::parseMiddlewareGroup()` reattaches its
      * parameters: on truthiness, where the top-level `resolve()` uses `! is_null()`. The two falsy
      * parameter strings are therefore dropped INSIDE a group and kept on a route, so a member written

@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+use Docuccino\Core\Extensions\Context\RouteDescriptor;
+use Docuccino\Core\Extensions\ResolvedExtensions;
+use Docuccino\Core\Extensions\Schema\ComponentRegistry;
+use Docuccino\Core\Inference\NullTypeEngine;
+use Docuccino\Laravel\Config\DocumentConfigFactory;
+use Docuccino\Laravel\Routing\RouteContextBuilder;
 use Docuccino\Laravel\Support\MiddlewareResolution;
 use Docuccino\Laravel\Tests\Fixtures\Middleware\ApplicationAuthenticate;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -107,4 +113,28 @@ it('publishes the security requirement for a route authenticated under either al
     expect($paths['/api/app-aliased/authenticator']['get']['security'])->toBe([['bearer' => []]])
         ->and($paths['/api/app-aliased/own-authenticator']['get']['security'])->toBe([['bearer' => []]])
         ->and($paths['/api/app-aliased/role']['get'])->not->toHaveKey('security');
+});
+
+/**
+ * The hierarchy those readings come off has FILES behind it, and they key the fragment: a middleware
+ * that stops extending the framework's authenticator publishes a different document while moving
+ * nothing else the key holds — not the route, not the action, not the middleware list.
+ */
+it('keys a route fragment on the files its middleware classes declare', function (): void {
+    $document = app(DocumentConfigFactory::class)
+        ->make('default', (array) config('docuccino.documents.default'), 'skeleton');
+
+    $context = app(RouteContextBuilder::class)->build(
+        new RouteDescriptor(['GET', 'HEAD'], '/api/app-aliased/own-authenticator', middleware: [ApplicationAuthenticate::using('web')]),
+        $document,
+        new NullTypeEngine,
+        new ResolvedExtensions,
+        new ComponentRegistry,
+    );
+
+    expect($context)->not->toBeNull()
+        ->and($context->dependencies()->files())
+        ->toContain((string) (new ReflectionClass(ApplicationAuthenticate::class))->getFileName())
+        // …and its parent's, since the parent is what makes it an authenticator at all.
+        ->toContain((string) (new ReflectionClass(Authenticate::class))->getFileName());
 });

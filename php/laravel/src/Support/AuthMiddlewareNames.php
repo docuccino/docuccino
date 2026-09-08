@@ -80,10 +80,9 @@ final class AuthMiddlewareNames
      */
     private static function subclassSpellings(string $middleware): array
     {
-        $name = MiddlewareName::normalize($middleware);
-        $separator = strpos($name, ':');
-        $class = $separator === false ? $name : substr($name, 0, $separator);
-        $suffix = $separator === false ? '' : substr($name, $separator);
+        $class = MiddlewareName::name($middleware);
+        $arguments = explode(':', $middleware, 2)[1] ?? null;
+        $suffix = $arguments === null ? '' : ':'.$arguments;
 
         if (class_exists($class)) {
             foreach (self::FAMILY as $alias => $parent) {

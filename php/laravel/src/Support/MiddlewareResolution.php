@@ -81,7 +81,7 @@ final class MiddlewareResolution
     {
         $unmatched = [];
         foreach ($excluded as $entry) {
-            $name = MiddlewareName::normalize(explode(':', $entry, 2)[0]);
+            $name = MiddlewareName::name($entry);
 
             if (isset($aliases[$name]) || class_exists($name)) {
                 continue;
