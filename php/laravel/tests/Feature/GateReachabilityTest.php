@@ -24,6 +24,7 @@ use Docuccino\Laravel\Tests\Fixtures\Authorization\Hoarding;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Illuminated;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Kiosk;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\KioskController;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Lightbox;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Marquee;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\MarqueeAccess;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Placard;
@@ -39,6 +40,7 @@ use Docuccino\Laravel\Tests\Fixtures\Authorization\Policies\WeatherproofPolicy;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Pylon;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\PylonAccess;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Signage;
+use Docuccino\Laravel\Tests\Fixtures\Authorization\Totem;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Turnstile;
 use Docuccino\Laravel\Tests\Fixtures\Authorization\Weatherproof;
 use Docuccino\Laravel\Tests\Support\CountingTypeEngine;
@@ -940,4 +942,32 @@ it('says nothing it cannot read, rather than guessing', function (): void {
         // Gate this cannot read and not about the fixture.
         ->and((new GateDenial(static fn (): GateContract => app(GateContract::class), static fn (): bool => false))->undeniablePolicyMethod($context, $gate))
         ->toBe(KioskPolicy::class.'::viewAny');
+});
+
+it('keys the fragment on every file a policy-naming attribute could be written into', function (): void {
+    // The `#[UsePolicy]` branches read a model's attributes, and Laravel 13's walks the PARENTS as well
+    // — so a base model is a file that decides which policy the gate resolves to. Keying only on the
+    // model's own file leaves a warm build replaying the verdict from before the attribute was added,
+    // and no route file reflects the edit either.
+    $context = new RouteContext(
+        route: new RouteDescriptor(['GET'], 'api/lightboxes', middleware: ['auth:web', 'can:viewAny,'.Lightbox::class]),
+        actionRef: new ActionRef('', KioskController::class, 'index'),
+        attributes: new AttributeSet([]),
+        engine: new NullTypeEngine,
+        document: new DocumentConfig('default', [], authMiddleware: 'auth*'),
+    );
+
+    $gate = CanGate::parse('can:viewAny,'.Lightbox::class);
+    expect($gate)->not->toBeNull();
+
+    (new GateDenial(static fn (): GateContract => app(GateContract::class), static fn (): bool => false))
+        ->undeniablePolicyMethod($context, $gate);
+
+    $files = $context->dependencies()->files();
+
+    // Recorded on every version, because where a fact can be WRITTEN is not a function of which
+    // framework happens to read it — and the row is the same on both, so it cannot quietly stop
+    // proving anything on the older one.
+    expect($files)->toContain((new ReflectionClass(Lightbox::class))->getFileName())
+        ->and($files)->toContain((new ReflectionClass(Totem::class))->getFileName());
 });
