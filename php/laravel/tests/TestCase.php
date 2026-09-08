@@ -101,6 +101,14 @@ abstract class TestCase extends Orchestra
         // above, whose `auth:web` is the same middleware, so the two 401s are byte-comparable here.
         $router->get('api/authenticated-forms', [FormController::class, 'index'])
             ->middleware(Authenticate::using('web'));
+        // And the same middleware opted OUT of, in the other spelling of it: the framework resolves both
+        // sides through its alias map before subtracting, so this route really is unauthenticated and
+        // owes no 401 and no security requirement — while `api/guarded-forms` above owes both. A golden
+        // pins the whole `responses` map, so an absent response is a byte fact like any other, and a 401
+        // creeping back onto this route moves committed bytes in five documents.
+        $router->get('api/unguarded-forms', [FormController::class, 'index'])
+            ->middleware('auth:web')
+            ->withoutMiddleware(Authenticate::using('web'));
 
         // Spatie Data, API Resources, JSON:API, Eloquent and status-code routes.
         $router->post('api/articles', [IntegrationsController::class, 'storeArticle']);

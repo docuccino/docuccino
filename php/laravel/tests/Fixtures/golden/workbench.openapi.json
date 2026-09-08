@@ -1040,6 +1040,30 @@
         }
       }
     },
+    "/api/unguarded-forms": {
+      "get": {
+        "summary": "List forms.",
+        "description": "Returns the collection of forms visible to the caller.",
+        "tags": [
+          "Forms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FormData"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/verified-forms": {
       "get": {
         "summary": "List forms.",
