@@ -75,9 +75,12 @@ it('names both levers, and the current ceiling, in the out-of-memory notice', fu
     $text = OutOfMemoryNotice::text('128M');
 
     expect($text)->toContain('128M')
-        ->and($text)->toContain('docuccino.engine.memory_limit')
+        ->and($text)->toContain('engine.memory_limit in docuccino.yaml')
         ->and($text)->toContain('--memory-limit=2G')
-        ->and($text)->toContain('docuccino.engine.project_paths');
+        ->and($text)->toContain('engine.project_paths')
+        // The settings moved out of the framework config, so a notice still sending an author there
+        // names a file that no longer holds either lever.
+        ->and($text)->not->toContain('config/docuccino.php');
 });
 
 it('declares the flag on every command that builds a document', function (string $command): void {
