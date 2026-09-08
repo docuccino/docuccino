@@ -244,10 +244,8 @@ Scribe's flat `config/scribe.php` maps onto Docuccino's per-document config:
 handed each route's `domain` along with its URI, name, action and middleware — so a domain match is
 one `return` statement, and a rule that needs to consult something (a tenant registry, a feature
 flag) takes it as a constructor dependency, because the container builds the class. It is also why
-the key names a class rather than taking an inline predicate: a closure in a config file cannot be
-serialized, so `php artisan config:cache` would fail for the whole application. See
-[`config/docuccino.php` survives
-`config:cache`](/laravel/guides/production/#configdocuccinophp-survives-configcache).
+the key names a class rather than taking an inline predicate: the setting lives in `docuccino.yaml`,
+and a configuration file has no form for a closure.
 
 See the [configuration reference](/laravel/reference/configuration/) for every option.
 
