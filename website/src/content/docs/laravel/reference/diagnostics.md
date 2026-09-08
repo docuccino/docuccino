@@ -185,11 +185,16 @@ type would be copied out of the document and rejected by your own API.
 
 ## Configuration
 
-Everything Docuccino read out of `config/docuccino.php` and couldn't use. Every code here names the
-exact key.
+Everything Docuccino read out of your configuration and couldn't use. Every code here names the exact
+key, or — for the four that are about the file itself — the file.
 
 | Code | Severity | What it means | What to do |
 |---|---|---|---|
+| `config.file-invalid` | error | `docuccino.yaml` isn't valid YAML, so nothing in it was applied and every document was built from defaults | Fix the line the message names. A duplicate key counts: YAML refuses two settings of the same name rather than quietly keeping the last |
+| `config.file-not-a-map` | error | `docuccino.yaml` holds something other than a map of settings — most often it's empty, or everything in it is commented out — so every document was built from defaults | Write the settings as top-level `key: value` pairs |
+| `config.file-unreadable` | error | `docuccino.yaml` is there and couldn't be read, so every document was built from defaults | Check the file's permissions |
+| `config.file-misnamed` | warning | There's no `docuccino.yaml`, but there is a file that was obviously meant to be it — `docuccino.yml`, a dotfile, a `.dist` template — and it was not read | Rename it to `docuccino.yaml`. That's the one name configuration is read from, so there's no precedence to work out |
+| `config.value-type` | warning | A setting holds a value of the wrong type, and it was refused rather than converted, so the setting fell back to its default. Usually YAML read the value as something other than what it looks like: `version: 1.10` is the number 1.1, and `enabled: no` is the text `no` rather than false | Do what the message says — usually quote it, or write `false`/`true`. Converting the value would be worse than refusing it: `1.10` would publish as `1.1`, a different version number, and a non-empty `no` would come out true |
 | `config.extension-missing` | warning | An entry in `extensions` names no autoloadable class, or isn't a class-string at all, so that extension contributed nothing | Fix the class name and namespace, and check it's autoloadable. `InvoiceExtension::class` still evaluates to a string when the class is missing, so a typo is otherwise silent |
 | `config.engine-neon-missing` | warning | `engine.neon` names a PHPStan config file that isn't there, so the analyzer ran without whatever it registers | Fix the path — it's read relative to your application root — or drop the key. See [Engine](/laravel/reference/configuration/#engine) |
 | `config.unknown-integration` | info | An `integrations.<key>` bag names no integration, so nothing reads it | Fix the key. The message suggests the one you probably meant, and [Integrations](/laravel/reference/configuration/#integrations) lists them all |
