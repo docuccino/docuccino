@@ -16,6 +16,12 @@ declare(strict_types=1);
  * written in — a boolean default coalesced off a lookup, and a `(bool)` cast — are scanned for. Every
  * one under a package's `src/` is either named below with what makes it something other than a
  * configured switch, or it is a defect.
+ *
+ * The third shape, `is_bool($v) ? $v : $default`, is deliberately NOT scanned. It answers exactly what
+ * the one reading answers, so a site rolling it would publish nothing wrong — only silence, which the
+ * refusal tests catch where the diagnostic is owed. Scanning it would add twenty allow-list entries
+ * for schema and document readers that have no author at the other end, and a guard whose population
+ * is four-fifths noise stops being read.
  */
 
 /**
