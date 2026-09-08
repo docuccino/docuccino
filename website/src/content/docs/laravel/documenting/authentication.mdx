@@ -15,6 +15,10 @@ compose in a fixed order:
 | Your **`security` config** | integration / config | You declared `schemes` — which also stands the integrations down — plus a `default` requirement for auth-detected routes, or a `document`-wide one. |
 | An **attribute** (`#[Security]`, `#[OptionallyAuthenticated]`, `#[Unauthenticated]`) | attribute | Always wins over both, per operation. |
 
+Middleware a route **inherits** counts the same as middleware written on it: a group's members are read
+as if each route in the group carried them, so an `api` group holding `auth:sanctum` protects every
+route in it as far as the document is concerned. Groups nested inside groups are expanded too.
+
 Routes marked [`#[Unauthenticated]`](/laravel/reference/attributes/#unauthenticated) are documented as
 public (`security: []`) whatever the middleware says.
 
@@ -179,6 +183,14 @@ Two things worth knowing:
   "protected", and `default` decides **what** requirement they carry. Set both. The pattern is a
   wildcard matched against each route's middleware strings, so the shipped `auth*` covers `auth`,
   `auth:web`, `auth:sanctum` and friends.
+- A route can name the same middleware two ways — the alias, or the middleware's own class name, which
+  is what `Authenticate::using('web')` writes — and the pattern is matched against **both**, so your
+  own narrower pattern keeps its meaning whichever spelling a route uses. Your app's own authenticator
+  counts as well: a middleware extending Laravel's `Authenticate` — the one
+  `app/Http/Middleware/Authenticate.php` every app upgraded from Laravel 10 still has — is read as
+  `auth`, whether or not you registered an alias for it. In the pattern, `*` stands for any run of
+  characters and everything else is literal, so a pattern naming a class can be written with single
+  backslashes.
 - Declaring any `schemes` stands the Sanctum and Passport integrations down entirely — explicit config
   wins, so you never get a surprise second scheme alongside your own.
 
@@ -302,6 +314,20 @@ environment sends every client to a URL only the build machine can reach.
 
 Run [`docuccino:export --fail-on=warning`](/laravel/reference/commands/#docuccinoexport) in CI to stop a
 document built against the wrong environment from ever being released.
+
+## Opting out of middleware
+
+`withoutMiddleware()` is honored, and subtracted the way Laravel subtracts it — through the alias map,
+so opting out of `auth:web` with `Authenticate::using('web')` really does remove it and the route is
+documented without its `401`.
+
+Your own aliases and your own middleware groups are read too: they are registered on the router when
+the HTTP kernel is constructed, and a build resolves that kernel so it reads the same map a request
+does. Where an exclusion still resolves to nothing and removed nothing — a typo, usually — the build
+says so with
+[`route.unmatched-exclusion`](/laravel/reference/diagnostics/#routes-operations-and-names) rather than
+leaving you to find it. Writing both sides of an opt-out in the same spelling — the class name on both,
+or the alias on both — reads best either way.
 
 ## Implicit `401`
 

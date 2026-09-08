@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Docuccino\Laravel\Support;
 
 use Illuminate\Contracts\Auth\Access\Gate;
+use ReflectionClass;
 use ReflectionMethod;
 use ReflectionObject;
 use Throwable;
@@ -43,7 +44,8 @@ final class GateInternals
     private const array METHODS = ['getPolicyFromAttribute', 'guessPolicyName'];
 
     /**
-     * @param  array<array-key, mixed>  $policies  the registered class → policy map, as the Gate holds it
+     * @param  array<string, mixed>  $policies  the registered class → policy map, keyed as {@see read()}
+     *                                          normalised it
      */
     private function __construct(
         private readonly Gate $gate,
@@ -75,14 +77,25 @@ final class GateInternals
                 }
             }
 
-            $policies = $reflection->getProperty('policies')->getValue($gate);
+            $rawPolicies = $reflection->getProperty('policies')->getValue($gate);
             $before = $reflection->getProperty('beforeCallbacks')->getValue($gate);
             $after = $reflection->getProperty('afterCallbacks')->getValue($gate);
 
             // Half-read is the one answer neither caller can use: a property that is there but holds
             // something else is a Gate this does not recognise, not one with no hooks.
-            if (! is_array($policies) || ! is_array($before) || ! is_array($after)) {
+            if (! is_array($rawPolicies) || ! is_array($before) || ! is_array($after)) {
                 return null;
+            }
+
+            // A registration key is a class name, so it is a string wherever it came from — but the
+            // property is somebody else's and reflection hands its keys over as `array-key`. Narrowed
+            // here, once, because a reader that took that union would not be told off for handing it to
+            // a `string` parameter: PHPStan treats a loose array's key as a benevolent union and lets
+            // the call through, so the type has to be made true at the read rather than trusted at the
+            // signature.
+            $policies = [];
+            foreach ($rawPolicies as $class => $policy) {
+                $policies[(string) $class] = $policy;
             }
 
             return new self(
@@ -128,7 +141,7 @@ final class GateInternals
 
             if (! is_string($policy)) {
                 foreach ($this->policies as $expected => $registered) {
-                    if (is_string($expected) && is_string($registered) && is_subclass_of($model, $expected)) {
+                    if (is_string($registered) && is_subclass_of($model, $expected)) {
                         $policy = $registered;
                         break;
                     }
@@ -138,6 +151,32 @@ final class GateInternals
             return is_string($policy) && class_exists($policy) ? ltrim($policy, '\\') : null;
         } catch (Throwable) {
             return null;
+        }
+    }
+
+    /**
+     * Whether a registered subject can be reached by the LAST branch of {@see policyClassFor()} — the
+     * walk over the map that takes the first registration the model is a subclass of. That branch is
+     * the only one whose answer depends on the map's ORDER: an exact registration is a keyed lookup,
+     * and the `#[UsePolicy]` and guesser branches read the model rather than the map. So it is the only
+     * branch whose registrations owe their sequence to anything keying a cache on the resolution
+     * ({@see GatePoliciesDigestContributor}), and the reason the rest can still be keyed as a set.
+     *
+     * `is_subclass_of()` is false for a class against itself, so a `final` class can never be reached
+     * here — and neither can a name that is no class or interface at all, a trait included, since
+     * nothing is a subclass of one. Anything this cannot decide answers yes: over-keying costs a
+     * rebuild, under-keying replays a resolution that is no longer true.
+     */
+    public static function shadowable(string $subject): bool
+    {
+        try {
+            if (interface_exists($subject)) {
+                return true;
+            }
+
+            return class_exists($subject) && ! (new ReflectionClass($subject))->isFinal();
+        } catch (Throwable) {
+            return true;
         }
     }
 

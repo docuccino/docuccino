@@ -13,6 +13,7 @@ use Docuccino\Core\Inference\DType\UnionT;
 use Docuccino\Core\Inference\PropertyMetadata;
 use Docuccino\Core\Tests\Support\StubTypeEngine;
 use Docuccino\Laravel\Integrations\Eloquent\ModelSchema;
+use Docuccino\Laravel\Integrations\Eloquent\MorphMapDigestContributor;
 use Docuccino\Laravel\Integrations\Eloquent\MorphToSchema;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Gadget;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Widget;
@@ -59,6 +60,63 @@ it('maps a model union to a discriminated oneOf keyed by every morph-map alias',
     'widget alias' => ['widget', Widget::class],
     'gadget alias' => ['gadget', Gadget::class],
 ]);
+
+it('keys the morph digest on the alias a model resolves to, not just on the pairs registered', function (): void {
+    // A model can carry several aliases — an application keeping legacy ones alongside the current one
+    // — and `Relation::getMorphAlias()` answers with whichever was registered FIRST, so that is the
+    // alias the discriminator publishes. The alias → model pairs are the same set in any order, so a
+    // digest keying the fragment cache on the pairs alone lets a warm build publish the alias the other
+    // order meant.
+    //
+    // THREE aliases for the one model, and the reorder moves the first two: with two, the first and the
+    // last are the same entry, so a digest that recorded the LAST alias per model would answer
+    // differently here too and the row would pass over the wrong rule.
+    $alias = static function (array $morphMap): string {
+        Relation::morphMap($morphMap, false);
+
+        // The premise from the framework's own resolution rather than from this package's reader: a
+        // test that asked our converter what the alias is would ratify whatever it answered.
+        return Relation::getMorphAlias(Widget::class);
+    };
+    $mapping = static function (array $morphMap): array {
+        Relation::morphMap($morphMap, false);
+
+        return morphConverter(new ComponentRegistry)->toSchema(morphUnion())->schema['discriminator']['mapping'];
+    };
+    $digest = static function (array $morphMap): string {
+        Relation::morphMap($morphMap, false);
+
+        return (new MorphMapDigestContributor)->digest();
+    };
+
+    $widgetFirst = ['widget' => Widget::class, 'legacy_widget' => Widget::class, 'ancient_widget' => Widget::class, 'gadget' => Gadget::class];
+    $legacyFirst = ['legacy_widget' => Widget::class, 'widget' => Widget::class, 'ancient_widget' => Widget::class, 'gadget' => Gadget::class];
+
+    // The premise: the framework resolves the model to a different alias under each order, and the
+    // published discriminator follows it — so the digest assertion below is not passing over a document
+    // that never changed.
+    expect($alias($widgetFirst))->toBe('widget')
+        ->and($alias($legacyFirst))->toBe('legacy_widget')
+        ->and($mapping($widgetFirst))->toHaveKey('widget')
+        ->and($mapping($widgetFirst))->not->toHaveKey('legacy_widget')
+        ->and($mapping($legacyFirst))->toHaveKey('legacy_widget')
+        ->and($mapping($legacyFirst))->not->toHaveKey('widget')
+        ->and($digest($legacyFirst))->not->toBe($digest($widgetFirst));
+});
+
+it('keys the morph digest on the pairs as a set where no model carries two aliases', function (): void {
+    // The other half, and the reason the pair list is still hashed sorted: where every model has one
+    // alias, the alias a discriminator publishes is a function of the map's CONTENT, so a reorder moves
+    // no byte. Keying that as a sequence would rebuild every fragment over a change nothing can see.
+    $digest = static function (array $morphMap): string {
+        Relation::morphMap($morphMap, false);
+
+        return (new MorphMapDigestContributor)->digest();
+    };
+
+    expect($digest(['gadget' => Gadget::class, 'widget' => Widget::class]))
+        ->toBe($digest(['widget' => Widget::class, 'gadget' => Gadget::class]));
+});
 
 it('drops the discriminator (bare oneOf) + raises an info diagnostic when a variant is unmapped', function (): void {
     Relation::morphMap(['widget' => Widget::class], false); // gadget deliberately unmapped

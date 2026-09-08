@@ -49,6 +49,7 @@ use Docuccino\Core\Inference\SourceLocation;
 use Docuccino\Core\Inference\TraceVisitor;
 use Docuccino\Core\Inference\TypeEngine;
 use Docuccino\Core\Patch\Contribution;
+use Docuccino\Core\Pipeline\Assembler;
 use Docuccino\Core\Pipeline\FragmentCache;
 use Docuccino\Core\Pipeline\GenerationResult;
 use Docuccino\Core\Pipeline\OperationFragment;
@@ -67,6 +68,7 @@ use Docuccino\Laravel\Integrations\Validation\RuleOrdering;
 use Docuccino\Laravel\Integrations\Validation\RuleSetNormalizer;
 use Docuccino\Laravel\Integrations\Validation\ValidationIntegration;
 use Docuccino\Laravel\Pipeline\DocumentGenerator;
+use Docuccino\Laravel\Routing\LaravelRouteResolver;
 use Docuccino\Laravel\Testing\ApiContract;
 use Docuccino\Laravel\Tests\Fixtures\Eloquent\Almanac;
 use Docuccino\Laravel\Tests\Fixtures\SpatieData\NestedWrapItemData;
@@ -77,8 +79,13 @@ use Docuccino\Laravel\Tests\Support\WorkbenchEngine;
 use Docuccino\Laravel\Tests\TestCase;
 use Docuccino\Laravel\Watch\BuildRunner;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
+use Illuminate\Foundation\Configuration\ApplicationBuilder;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Routing\MiddlewareNameResolver;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\Router;
 use Illuminate\Testing\TestResponse;
@@ -136,6 +143,126 @@ function stubDocumentArray(?callable $mutateConfig = null): array
     bindStubEngine();
 
     return generateDocument($mutateConfig)->document->toArray();
+}
+
+/**
+ * The middleware the route resolver hands on for every registered route under `$uriPrefix`, against
+ * what the framework's own `Router::gatherRouteMiddleware()` keeps for the same route. The mirror is
+ * only worth what it is compared to, so both sides are read back through the framework's OWN resolver —
+ * the comparison is in its vocabulary rather than in one of ours — and as a set of class identities,
+ * since a leading `\` names the same class and a short form and its class are one middleware.
+ *
+ * Fails when fewer than `$atLeast` routes were compared: a scan that stopped seeing its routes has to
+ * fail rather than pass.
+ */
+function assertMiddlewareAgreesWithRouter(string $uriPrefix, int $atLeast): void
+{
+    /** @var Router $router */
+    $router = app('router');
+    $aliases = $router->getMiddleware();
+    $groups = $router->getMiddlewareGroups();
+
+    /**
+     * @param  array<array-key, mixed>  $names
+     * @return list<string>
+     */
+    $identities = static function (array $names) use ($aliases, $groups): array {
+        $out = [];
+        foreach ($names as $name) {
+            if (! is_string($name)) {
+                continue;
+            }
+
+            foreach ((array) MiddlewareNameResolver::resolve($name, $aliases, $groups) as $resolved) {
+                if (is_string($resolved)) {
+                    $out[] = ltrim($resolved, '\\');
+                }
+            }
+        }
+        sort($out);
+
+        return array_values(array_unique($out));
+    };
+
+    /** @var array<string, mixed> $raw */
+    $raw = config('docuccino.documents.default');
+    $document = app(DocumentConfigFactory::class)->make('default', $raw, 'skeleton');
+
+    $ours = [];
+    foreach (app(LaravelRouteResolver::class)->resolve($document) as $descriptor) {
+        $ours[$descriptor->uri] = $descriptor->middleware;
+    }
+
+    $compared = 0;
+    foreach ($router->getRoutes() as $route) {
+        $uri = '/'.ltrim($route->uri(), '/');
+        if (! str_starts_with($uri, $uriPrefix) || ! array_key_exists($uri, $ours)) {
+            continue;
+        }
+
+        $compared++;
+        expect($identities($ours[$uri]))->toBe($identities($router->gatherRouteMiddleware($route)), $uri);
+    }
+
+    expect($compared)->toBeGreaterThanOrEqual($atLeast);
+}
+
+/**
+ * Rebuild the application the way a documentation build finds it: the HTTP kernel bound and never
+ * constructed, so the router holds NEITHER the alias map nor the middleware groups.
+ * `Illuminate\Foundation\Http\Kernel::__construct()` is what calls `syncMiddlewareToRouter()`, and a
+ * console process resolves no HTTP kernel — while testbench's own boot resolves one before the first
+ * test runs, which is why every other suite here reads a fully synced router.
+ *
+ * That is not an under-covered population, it is an unrepresented one: no route added to the standard
+ * harness reaches it, because the standard harness is already synced. Suites that mean to describe what
+ * the product publishes for a route INHERITING middleware start here.
+ *
+ * The premise is asserted rather than assumed, against the state measured on a real provisioned
+ * application booted through its console kernel — HTTP kernel bound but unresolved, application
+ * bootstrapped, no aliases, no groups, every route present. A harness that quietly stopped reproducing
+ * that would let everything built on it pass for the wrong reason.
+ *
+ * Routes and middleware registrations belong AFTER this call: it replaces the container, so anything
+ * written to the previous router is gone with it.
+ */
+function refreshWithoutHttpKernel(): void
+{
+    test()->refreshApplication();
+
+    /** @var Router $router */
+    $router = app('router');
+
+    expect(app()->bound(HttpKernelContract::class))->toBeTrue()
+        ->and(app()->resolved(HttpKernelContract::class))->toBeFalse()
+        ->and(app()->hasBeenBootstrapped())->toBeTrue()
+        ->and($router->getMiddleware())->toBe([])
+        ->and($router->getMiddlewareGroups())->toBe([])
+        ->and(count($router->getRoutes()))->toBeGreaterThan(0);
+}
+
+/**
+ * Register a middleware group the way an application's own `bootstrap/app.php` registers one: as a
+ * group on the `Illuminate\Foundation\Configuration\Middleware` object the framework applies when the
+ * HTTP kernel resolves ({@see ApplicationBuilder::withMiddleware()}).
+ *
+ * Writing it straight onto the router with `middlewareGroup()` would put it there without any kernel,
+ * which is the one thing a suite standing in this population must not do — the group's absence from an
+ * unsynced router is the whole fact under test.
+ *
+ * @param  list<string>  $middleware
+ */
+function registerAppMiddlewareGroup(string $name, array $middleware): void
+{
+    app()->afterResolving(
+        HttpKernelContract::class,
+        static function (HttpKernel $kernel) use ($name, $middleware): void {
+            $configuration = new Middleware;
+            $configuration->group($name, $middleware);
+
+            $kernel->setMiddlewareGroups($configuration->getMiddlewareGroups());
+        },
+    );
 }
 
 /**
@@ -793,6 +920,60 @@ function emptyCollectionPositions(): array
             'pathItems' => [],
         ],
     ];
+}
+
+/**
+ * Assemble one document over a filled component registry and hand back `components.schemas` as the
+ * document publishes it — the published names, the bodies, and the node id stamped on each.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function assembledComponentSchemas(ComponentRegistry $components): array
+{
+    $result = (new Assembler('docuccino'))->assemble(
+        [new OperationFragment('/api/reports', 'get', (new OperationDraft)->freeze(), 'GET /api/reports')],
+        new DocumentConfig('default', ['title' => 'T', 'version' => '1.0.0']),
+        'doc:default',
+        $components,
+        [],
+        [],
+        '1.0.0',
+    );
+
+    $schemas = $result->document['components']['schemas'] ?? null;
+
+    if (! is_array($schemas)) {
+        return [];
+    }
+
+    /** @var array<string, array<string, mixed>> $schemas */
+    return $schemas;
+}
+
+/**
+ * The node id each entry of a document's `components.schemas` carries, by published name — read off the
+ * document rather than asked of the code that minted it.
+ *
+ * @param  array<string, mixed>  $document
+ * @return array<string, string>
+ */
+function componentSchemaIds(array $document): array
+{
+    $components = $document['components'] ?? null;
+    $schemas = is_array($components) ? ($components['schemas'] ?? null) : null;
+
+    if (! is_array($schemas)) {
+        return [];
+    }
+
+    $ids = [];
+    foreach ($schemas as $name => $body) {
+        $docuccino = is_array($body) ? ($body['x-docuccino'] ?? null) : null;
+        $id = is_array($docuccino) ? ($docuccino['id'] ?? null) : null;
+        $ids[(string) $name] = is_string($id) ? $id : '';
+    }
+
+    return $ids;
 }
 
 /**

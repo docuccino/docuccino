@@ -342,3 +342,200 @@ consumer that has only a line an explicit ask that DECLINES when the line carrie
 degraded-but-true answer, since nothing at that call can tell them apart. Both halves are pinned by
 fixtures that put two of the thing on one line: two closures at one call, and two render callbacks in one
 `return`.
+
+## A middleware read by one of its two spellings
+
+A route names a middleware by its registered alias or by the middleware's own class name, and those are
+two spellings of one thing. Every static constructor the framework ships for a middleware that takes
+arguments renders `static::class.':'.$arguments` — `Authenticate::using('web')`, `Authorize::using()`,
+`ValidateSignature::relative()`, `EnsureEmailIsVerified::redirectTo()`, and a route may simply list
+`Middleware::class` besides. A reader that knows one spelling therefore sees no middleware at all on a
+route written the other way, and the route is documented as if the middleware were absent.
+
+*Instances.* The authorization signal read `can` only, so a `403` the route really enforces went
+missing; `signed` and `verified` the same, and the reachability check then reported a `403` the signature
+genuinely denies. Worse, the authentication signal read the `auth` alias only — in three separate readers
+(the `auto_detect_middleware` wildcard, Sanctum's mode detection, and the guard→driver resolution behind
+both Sanctum and Passport) — so a route behind `Authenticate::using('web')` published no `401` and no
+security scheme: not an under-described error but a misdescribed endpoint, read by a consumer as public
+and by a generated client as needing no credential. The subtraction side had it too: a
+`withoutMiddleware()` exclusion was subtracted by literal string, so opting out of the authenticator in
+the spelling the group did not use left the `401` on a route that really does run unauthenticated.
+
+*Which spellings those are is the APPLICATION's fact, not the framework's.* An application registers
+`auth` against its own `Authenticate` subclass — the Laravel ≤10 skeleton does, and every application
+upgraded from one carries it — and a reader holding the framework's alias map then gets both directions
+wrong at once: the subclass spelled by class name is a middleware nobody recognises, so the route is
+published public; and the framework's own authenticator is no longer what `auth` resolves to, so an
+exclusion naming it removes nothing while a document that subtracted it anyway drops a `401` the server
+does enforce. `class_exists` is a presence check and a hardcoded family is a guess at a map: the map has
+to be read off the router.
+
+*And the map cannot be the answer either, because normalising INTO one vocabulary is the same defect
+inside out.* Rewriting each gathered entry to the alias the application registered for its class fixed
+the authenticator and broke everything else at once: a route naming Sanctum's `CheckAbilities` under the
+application's own `token-abilities` alias came out under a name no reader has a row for, so the
+abilities, the scopes and the role all disappeared while the server went on enforcing them. A rewrite is
+lossless only for a reader that speaks the vocabulary it rewrites into, and these readers speak two.
+What the rewrite was reaching for was a fact about the CLASS — a middleware extending the framework's
+authenticator authenticates the way its parent does — which needs no map at all and so answers the same
+in the console context where the router holds none.
+*The tell.* A comparison against a middleware string — `===`, `str_starts_with($entry, 'x:')`, an
+`fnmatch` over a pattern written in alias vocabulary — where the name being matched is an alias and no
+class name sits beside it. The related tell is a user-facing pattern over that vocabulary: it cannot be
+asked to spell an FQCN, so the fix is to match it against every spelling of the middleware rather than to
+widen the pattern. And a third: an equivalence used for both of the two questions here, which are not
+the same question. "Does this string name authentication?" wants the generous reading, since a name that
+authenticates owes a `401` however it is spelled. "Are these two strings the same middleware?" wants the
+framework's own, which compares its resolved names with their arguments attached and gates its subclass
+fallback on `class_exists` — so `auth` and `auth:` are two middleware to it, and reading them as one
+subtracted a `401` nothing had excluded.
+
+*The fix that worked.* One reader of the grammar (`MiddlewareName`: alias or class name, bare or
+`:args`, a leading `\` trimmed), and one list per middleware read through it — `CanGate` for the
+authorization middleware, `AuthMiddlewareNames` for the authentication family, where every question is
+a function of `spellings()` so no two of them can answer one string differently. For the equivalence
+question, `MiddlewareResolution` mirrors `Router::resolveMiddleware()` through the application's alias
+map, which also brought the `throttle` and `can` exclusions — the same defect, never reported — into
+agreement with the framework. The datasets assert both spellings against ONE expectation rather than
+each separately, because a reader that answers them differently is the defect; the hand-maintained
+family is read against the framework's own alias map so a fourth `auth*` alias cannot leave it short;
+the pattern is read with the product's one wildcard grammar rather than `fnmatch`, which treats a `\` in
+the pattern as an escape; and the entry a route wrote is what is handed on, so the vocabulary is never
+narrowed on the way to a reader. What recognises the class is the corpus rather than a unit assertion:
+the two spellings of one middleware side by side under byte-lock, a differential against the real
+`Router` for every exclusion shape (`WithoutMiddlewareTest`), and a published-document guard per family
+of reader for a middleware the application aliased. See also
+[A partition that covers everything and agrees on nothing](#a-partition-that-covers-everything-and-agrees-on-nothing):
+the fix here is that entry's fix — one seam, every reader through it — and the family predicate that
+read the map a second way is exactly its tell.
+## A digest that normalises what its reader walks in order
+
+A cache key exists to say "this build is the same build". Sorting or deduping the records it hashes is
+how it stops churning on a change nobody can see — and it is also how it stops seeing the one property
+the reader actually consumes. Where the thing being keyed is resolved by walking a collection and
+taking the FIRST match, or by mutating through it in sequence, order is not noise: it is the answer.
+
+*Instances.* Policy resolution ends in `getPolicyFor()`'s subclass walk, which takes the first
+registration whose subject the model is a subclass of; morph aliasing ends in `array_search($fqcn,
+morphMap(), true)`, which takes the first alias for a class. Both mirror the framework correctly, both
+were keyed by a digest that sorted its records first, so two registration orders produced one digest and
+a warm build replayed a fragment computed under the other resolution — and the morph half reaches
+published bytes, since the alias it resolves to is a discriminator mapping key. The third is core's own:
+`ResolvedExtensions::cacheSignature()` sorted one entry per resolved instance while every chain reading
+those instances is first-match-wins (`RouteContext`'s six resolvers, `SchemaConverter`'s mappers) or
+sequential mutation (`OperationPipeline`). Its docblock had already closed identity and multiplicity
+deliberately; order was the property left open, and `ExtensionSorter` decides it from the registration
+index whenever two instances are of one class — which is every such pair, because `ExtensionOrder` is
+`TARGET_CLASS` and `before`/`after` name classes. The fourth was found by sweeping core for the tell and
+publishes a NAME rather than keying a cache: `ComponentNames::award()` sorted claims by discriminant
+alone, so two claims agreeing on it — one identity claimed twice, or two unidentified claims of one body
+— tied, and `usort` being stable handed the plain name to whichever registered first and the `_2` tail
+to the other. The class owning the rule that a published name is never a function of arrival was
+deciding one that way, and its own docblock said the tail was already settled by the contesting set.
+
+*The tell.* A `sort()`, `ksort()` or `array_unique()` immediately before a `hash()`, with a `foreach` in
+some other file that `return`s out of its first match over the same collection. The sharper form asks it
+of the ordering itself: where a sort's key can TIE, whatever produced the input decides — and a key
+derived from arrival is that tie by construction, so a docblock promising order-independence beside a
+tie-break on the original index is falsified by its own sentence. See also
+[A node located by line, where the offset is its identity](#a-node-located-by-line-where-the-offset-is-its-identity),
+which is the multiplicity half of the same shape: a key that collapses two records the reader needs apart.
+
+*The fix that worked.* Carry order only where order can be observed, because dropping the normalisation
+outright makes every reorder a cold rebuild for the overwhelming majority of applications, where it
+changes nothing. For the walks, that is the registrations the walk can reach at all; for the extension
+signature, the members of a same-class run, each carrying its position in that run while every other
+entry stays order-free. Anything undecidable answers yes: over-keying costs a rebuild, under-keying
+serves a stale document. Both directions need holding, and by separate guards — a fix that keys every
+order passes the recognising test and fails the product. `ExtensionSignatureTest` states the pair: two
+differently-configured instances of one class in both registration orders key differently and reach
+different fragment keys, while two instances of DIFFERENT classes, and two indistinguishable instances
+of one class, key alike whichever order they arrived in — asserted on the signature directly, since
+putting them through the sorter would pass whether the signature read order or not. Beside them, an
+entry no sibling contests is pinned as BYTES, so nobody pays a cold rebuild for a run they do not have.
+`ExtensionSorterTest` holds the other half, that the residual order is real and author-controlled, so
+the day the sort becomes arrival-free it says the position has gone redundant.
+
+Where the answer is a published NAME the trade-off does not apply, because there is no cache to churn:
+give the comparison somewhere intrinsic to fall through to instead. `ComponentNames::award()` reads the
+claim's content and then the registration name it arrived under — both data the claims map holds, the
+second being its keys — so the ordering is total over the set with nothing left to arrive. Its guard is
+a dataset of the pairs that actually tie, and it stands where no golden can: the registry upstream
+cannot form such a pair, so the reachable seam is the public `mint()` the test calls. A guard written
+over claims with different identities, which is what was there, never reaches the tie-break at all.
+
+## A map the test harness fills that the product's own context leaves empty
+
+The adapter reads facts off live framework objects, and which facts are ON those objects depends on how
+the application was booted. Testbench boots one way and `artisan` boots another, so a reader can be
+correct in every test and blind in production without a single test disagreeing with it. The corpus is
+then not under-covered but SILENT: the population the product runs in is unrepresented, and no route
+added to the standard harness reaches it.
+
+The concrete asymmetry is `Illuminate\Foundation\Http\Kernel::__construct()`, which is what calls
+`syncMiddlewareToRouter()` and so what writes the alias map, the middleware groups and the middleware
+priority onto the router. Testbench resolves that kernel before the first test. A documentation build is
+an artisan command and resolves the CONSOLE kernel, which writes none of it — measured on a stock
+Laravel 12 application booted that way: every route present, no aliases and no groups at all.
+
+*Instances.* The alias map first: a route naming its authenticator by class where the application had
+aliased its own subclass came out public, and a `withoutMiddleware()` written in the other spelling
+subtracted nothing. Then the group map, which is the same asymmetry one layer out and worse, because a
+group's contents are the application's own data and there is no default table to fall back on — so a
+route INHERITING its middleware, which is the idiomatic shape, had that middleware read as an opaque
+name. Measured on a conventional API surface: six of nine routes lost everything they inherited — the
+`api` group's `throttle` and therefore the `429` and its rate-limit headers, Sanctum's stateful
+middleware and therefore its scheme, `auth:sanctum` and therefore the `401` and the security
+requirement. The one route writing its middleware itself was unaffected, which is exactly why the
+defect survived: the harness's routes wrote theirs.
+
+*The tell.* A read of a live framework object whose contents were put there by a lifecycle step, where
+the step that puts them there is not the step the product performs. `$router->getMiddleware()`,
+`$router->getMiddlewareGroups()` and `$router->middlewarePriority` are the three this kernel writes;
+anything the kernel holds and never syncs — its global middleware — is invisible to both contexts alike
+and is a feature gap rather than an instance of this. The second tell is a golden that MOVED when the
+fix landed only under a boot no committed document performs: stillness across the corpus is then
+evidence that the corpus has no fixture in the population, not evidence that nothing changed.
+
+*The fix that worked.* Perform the lifecycle step rather than reconstruct what it would have written:
+`MiddlewareRegistrations` resolves the HTTP kernel once, for its effect on the router, and reads both
+maps off the ROUTER afterwards — which is also where a service provider's own registrations land, and
+which keeps the grammar a function of the version the application resolved rather than of a table copied
+into the adapter. A resolution that cannot be performed degrades to whatever the router holds and says
+so, because a route published with no middleware because a map could not be read is a confident false
+claim rather than a vague one. What recognises the class is the harness rather than an assertion:
+`refreshWithoutHttpKernel()` rebuilds the application in the product's own boot state and ASSERTS that
+state against what a real console boot was measured to hold, and the suite standing in the population
+reads one application twice — once unsynced, once synced — against one golden, so a reader that only
+comes out right when something else constructed a kernel first cannot pass.
+## A digest that normalises away a distinction its reader keeps
+
+A digest stands in for a thing, and the normalisation that makes it stable is a claim about what does
+not matter. Where a reader downstream treats one of the dropped members as significant, the digest hands
+one name to two things — deterministically, so no byte comparison and no golden will ever see it — and
+the reader answers about whichever of the two it happened to meet.
+
+*Instances.* The id every id-less `components.schemas` entry published was minted by the INLINE-schema
+rule, which strips `description`, `title` and `example` and sorts `required` so an inline schema survives
+a cosmetic edit; the registry that decides whether two registrations are one component compares their
+bytes in full, so a pair differing only in prose stayed two published nodes under one id, and
+`ContractIndex::identities()` can address only one of them — a consumer asking which code produced a
+component is told about the other. See also
+[A digest that normalises what its reader walks in order](#a-digest-that-normalises-what-its-reader-walks-in-order),
+the sibling axis: there the dropped member is ORDER rather than content, and the reader walks the
+collection instead of comparing it.
+
+*The tell.* Two sites, one hashing and one comparing, with two statements of what makes two things
+different. The mint's own docblock is often the evidence: `IdentityGenerator::publishedSchemaId()` said
+in as many words that the inline mint "cannot serve here", beside a caller that used it. Ask, of any
+digest: name the reader, then name the member the digest drops that the reader keeps.
+
+*The fix that worked.* One statement of the difference, and every site derived from it.
+`ComponentRegistry::claim()` is the whole of what makes two registrations two components — the name asked
+for, the identity behind it, the bytes published — and the merge decision, the published name and the
+node id all read it, so a member added there reaches all three. The guard is stated off the DOCUMENT
+rather than off either site (`ComponentIdentityTest`): every entry of `components.schemas` is a published
+node, so an id two of them carry addresses neither, asserted over a dataset of pairs differing on each
+axis in turn, with rows for what the registry DOES merge so a mint that simply numbered its registrations
+would fail too. A guard that asks either site for its own rule agrees with whatever that site does.
